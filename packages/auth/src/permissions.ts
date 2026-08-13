@@ -59,6 +59,11 @@ export const PERMISSIONS = {
     create: "report:create",
     download: "report:download",
   },
+  aiAssurance: {
+    view: "aiAssurance:view",
+    manage: "aiAssurance:manage",
+    review: "aiAssurance:review",
+  },
   notification: {
     view: "notification:view",
     manage: "notification:manage",
@@ -145,6 +150,9 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.agent.view,
     PERMISSIONS.agent.act,
     PERMISSIONS.agent.approve,
+    PERMISSIONS.aiAssurance.view,
+    PERMISSIONS.aiAssurance.manage,
+    PERMISSIONS.aiAssurance.review,
   ],
   SECURITY_ADMIN: [
     PERMISSIONS.scan.view,
@@ -177,6 +185,8 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.agent.view,
     PERMISSIONS.agent.act,
     PERMISSIONS.agent.approve,
+    PERMISSIONS.aiAssurance.view,
+    PERMISSIONS.aiAssurance.manage,
   ],
   APPSEC_MANAGER: [
     PERMISSIONS.scan.view,
@@ -201,6 +211,8 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.schedule.delete,
     PERMISSIONS.agent.view,
     PERMISSIONS.agent.act,
+    PERMISSIONS.aiAssurance.view,
+    PERMISSIONS.aiAssurance.manage,
   ],
   BILLING_ADMIN: [
     PERMISSIONS.billing.manage,
@@ -246,6 +258,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.schedule.create,
     PERMISSIONS.schedule.update,
     PERMISSIONS.agent.view,
+    PERMISSIONS.aiAssurance.view,
   ],
   EXTERNAL_PENTESTER: [
     PERMISSIONS.scan.view,
@@ -257,6 +270,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.notification.view,
     PERMISSIONS.schedule.view,
     PERMISSIONS.agent.view,
+    PERMISSIONS.aiAssurance.view,
   ],
   AUDITOR: [
     PERMISSIONS.scan.view,
@@ -269,6 +283,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.notification.view,
     PERMISSIONS.schedule.view,
     PERMISSIONS.agent.view,
+    PERMISSIONS.aiAssurance.view,
   ],
   VIEWER: [
     PERMISSIONS.scan.view,
@@ -277,6 +292,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.report.download,
     PERMISSIONS.notification.view,
     PERMISSIONS.agent.view,
+    PERMISSIONS.aiAssurance.view,
   ],
 }
 

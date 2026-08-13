@@ -73,3 +73,4 @@ The passive Lite Check launch gate is complete: the canonical site, isolated sca
 2. Full repository scans require BullMQ-compatible TLS Redis, private evidence storage, dedicated sandbox-capable worker compute, authorized models, and controlled egress; the Lite Scanner's Supabase/Upstash/Azure Container App deployment does not supply that pipeline.
 3. Public app scorecards still require real-origin card/badge, revocation, referral, human-event deduplication, and external-network unfurl checks.
 4. Logs must continue to exclude submitted query data, matched values, response bodies, and raw client IPs. Any change to the payload or crawl boundary requires a fresh privacy/security review.
+5. The Lite Check does not make LyraShield "SOC 2 compliant," "certified," "guaranteed secure," "AI safety tested," or "adversarially robust." See `docs/claims-readiness.md` for the full map of prohibited claims and what each would require.

@@ -84,6 +84,7 @@ describe("nav-items workspace destinations", () => {
       "/dashboard/notifications",
       "/dashboard/agents",
       "/dashboard/integrations",
+      "/dashboard/ai-assurance",
       "/dashboard/team",
       "/dashboard/settings",
     ])

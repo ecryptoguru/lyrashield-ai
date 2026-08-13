@@ -1,6 +1,7 @@
 {
   "extends": "../../packages/config/tsconfig/nextjs.json",
   "compilerOptions": {
+    "jsx": "react-jsx",
     "paths": {
       "@/*": ["./src/*"],
       "@lyrashield/db": ["../../packages/db/src/index.ts"],

@@ -70,6 +70,10 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "ScoreSnapshot",
   "FindingCandidate",
   "FindingVerification",
+  "AiSystemProfile",
+  "ThreatModel",
+  "ControlEvidence",
+  "AiSecurityScoreSnapshot",
 ])
 
 export const READ_OPS = new Set<string>([

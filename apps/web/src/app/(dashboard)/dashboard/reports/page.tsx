@@ -8,11 +8,11 @@ import { redirect } from "next/navigation"
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ scanId?: string }>
+  searchParams: Promise<{ scanId?: string; targetId?: string }>
 }) {
-  const { scanId } = await searchParams
-  const target = scanId
-    ? `/dashboard/findings?tab=reports&scanId=${encodeURIComponent(scanId)}`
-    : "/dashboard/findings?tab=reports"
-  redirect(target)
+  const { scanId, targetId } = await searchParams
+  const query = new URLSearchParams({ tab: "reports" })
+  if (scanId) query.set("scanId", scanId)
+  if (targetId) query.set("targetId", targetId)
+  redirect(`/dashboard/findings?${query.toString()}`)
 }

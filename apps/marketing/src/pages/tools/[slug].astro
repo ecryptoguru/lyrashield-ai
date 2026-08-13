@@ -1,5 +1,6 @@
 ---
 import ToolLayout from "@layouts/ToolLayout.astro"
+import AiAppSecurityScanner from "@components/tools/AiAppSecurityScanner.astro"
 import { tools } from "../../lib/tools"
 import { LAUNCH_CHECKLIST_VERSION, LAUNCH_CHECKS } from "../../lib/tool-checks"
 
@@ -74,6 +75,7 @@ const labelClass = "block text-sm font-medium text-text"
       <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
     </>
   )}
+  {tool.slug === "ai-app-security-scanner" && <AiAppSecurityScanner />}
 </ToolLayout>
 
 <script>

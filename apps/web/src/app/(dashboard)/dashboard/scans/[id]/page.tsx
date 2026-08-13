@@ -113,6 +113,26 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
             : null,
       })),
     },
+    aiSecurity: scan.aiSecurityScoreSnapshot
+      ? {
+          score: scan.aiSecurityScoreSnapshot.score,
+          methodology: scan.aiSecurityScoreSnapshot.methodology,
+          assessedCount: scan.aiSecurityScoreSnapshot.assessedCount,
+          totalControls: scan.aiSecurityScoreSnapshot.totalControls,
+          evidenceQuality:
+            scan.aiSecurityScoreSnapshot.evidenceQuality &&
+            typeof scan.aiSecurityScoreSnapshot.evidenceQuality === "object" &&
+            !Array.isArray(scan.aiSecurityScoreSnapshot.evidenceQuality)
+              ? (scan.aiSecurityScoreSnapshot.evidenceQuality as Record<string, number>)
+              : null,
+          reason:
+            (scan.aiSecurityScoreSnapshot.breakdown as { reason?: string } | null)?.reason ?? null,
+          ai03: (scan.aiSecurityScoreSnapshot.breakdown as { ai03?: unknown } | null)?.ai03 ?? null,
+          triage:
+            (scan.aiSecurityScoreSnapshot.breakdown as { triage?: unknown } | null)?.triage ?? null,
+          computedAt: scan.aiSecurityScoreSnapshot.computedAt.toISOString(),
+        }
+      : null,
   }
 
   const findingsData = findings.map((f) => ({

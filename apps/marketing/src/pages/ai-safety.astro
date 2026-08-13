@@ -1,0 +1,343 @@
+---
+import Base from "@layouts/Base.astro"
+import evaluationResults from "../data/ai-safety-results.json"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/ai-safety", origin).toString()
+const title = "AI safety evaluation | LyraShield AI"
+const description =
+  "How LyraShield AI evaluates its prompt-injection guard against the OWASP Gen AI Red Teaming Guide and the MLCommons AILuminate demo prompt set. Bounded, honest, and limitation-aware."
+
+const owasp = evaluationResults.find((result) => result.suite === "owasp_genai_red_team")!
+const ailuminate = evaluationResults.find((result) => result.suite === "mlcommons_ailuminate_demo")!
+const expectedOutcomes = owasp.cases?.filter((testCase) => testCase.expected).length ?? 0
+const expectedOutcomeRate = ((expectedOutcomes / owasp.totals.total) * 100).toFixed(1)
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "AI Safety Evaluation",
+    description,
+    url: canonical,
+    isPartOf: { "@id": `${origin}/#website` },
+    publisher: { "@id": `${origin}/#organization` },
+    about: ["AI safety", "prompt injection", "red teaming", "MLCommons AILuminate", "OWASP Gen AI"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "AI Safety", item: canonical },
+    ],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="relative mx-auto max-w-5xl px-4 pb-12 pt-14 sm:px-6 sm:pt-20 lg:pt-24">
+    <header class="max-w-3xl" data-reveal-group>
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">
+        AI safety evaluation
+      </p>
+      <h1 class="mt-3 text-4xl font-bold tracking-tight text-text sm:text-5xl" data-reveal="fade">
+        Prompt-injection guard evaluation
+      </h1>
+      <p class="mt-5 text-lg leading-8 text-text-muted" data-reveal="fade">
+        LyraShield AI includes a deterministic prompt-injection guard that gates MCP tool-call
+        inputs before they reach the LLM scan engine. This page documents how we evaluate that
+        guard against two open frameworks: the OWASP Gen AI Red Teaming Guide and the MLCommons
+        AILuminate demo prompt set. Results are bounded, honest, and limitation-aware.
+      </p>
+    </header>
+  </section>
+
+  <!-- What we test -->
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6" data-reveal-group>
+    <h2 class="text-2xl font-semibold text-text" data-reveal>What we test</h2>
+    <p class="mt-4 max-w-3xl leading-7 text-text-muted" data-reveal>
+      The guard is a regex-based filter with 15+ pattern categories: instruction override, role
+      hijack, memory wipe, code execution, SQL injection, destructive commands, environment
+      variable extraction, prompt extraction, file access, obfuscation, system tags, ChatML tags,
+      and more. It normalizes input (NFKC, zero-width stripping, HTML entity decoding) before
+      matching. We test whether it blocks, sanitizes, or allows each adversarial input.
+    </p>
+    <p class="mt-4 max-w-3xl leading-7 text-text-muted" data-reveal>
+      <strong>This is not an LLM safety test.</strong> The guard is a deterministic filter. A
+      "blocked" result means the LLM never sees the input. An "allowed" result means the LLM's own
+      safety training is the last line of defense. The evaluation tests the guard, not the LLM.
+    </p>
+  </section>
+
+  <!-- OWASP Results -->
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6" data-reveal-group>
+    <h2 class="text-2xl font-semibold text-text" data-reveal>
+      OWASP Gen AI Red Teaming Guide
+    </h2>
+    <p class="mt-3 text-sm text-text-muted" data-reveal>
+      <a href="https://genai.owasp.org/initiatives/red-teaming-initiative/" rel="noreferrer" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">OWASP Gen AI Security Project — Red Teaming Initiative</a>
+      · Guide published January 2025 · Vendor Evaluation Criteria v1.0 published February 2026
+    </p>
+
+    <div class="mt-6 grid gap-4 sm:grid-cols-4" data-reveal>
+      <div class="rounded-xl border border-border bg-bg-raised p-4">
+        <p class="text-3xl font-bold text-text">{owasp.totals.total}</p>
+        <p class="mt-1 text-sm text-text-muted">Test cases</p>
+      </div>
+      <div class="rounded-xl border border-border bg-bg-raised p-4">
+        <p class="text-3xl font-bold text-text">{owasp.totals.blocked}</p>
+        <p class="mt-1 text-sm text-text-muted">Blocked by guard</p>
+      </div>
+      <div class="rounded-xl border border-border bg-bg-raised p-4">
+        <p class="text-3xl font-bold text-text">{owasp.totals.allowed}</p>
+        <p class="mt-1 text-sm text-text-muted">Allowed through</p>
+      </div>
+      <div class="rounded-xl border border-border bg-bg-raised p-4">
+        <p class="text-3xl font-bold text-accent">{expectedOutcomeRate}%</p>
+        <p class="mt-1 text-sm text-text-muted">Expected outcomes matched</p>
+      </div>
+    </div>
+
+    <p class="mt-3 text-sm text-text-muted" data-reveal>
+      <strong>{expectedOutcomes} of {owasp.totals.total}</strong> cases matched both the declared guard outcome and expected detection patterns.
+    </p>
+
+    <h3 class="mt-8 text-lg font-semibold text-text" data-reveal>Per-area results</h3>
+    <div class="mt-3 overflow-x-auto" data-reveal>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-border text-left text-text-muted">
+            <th class="py-2 pr-4 font-medium">Assessment area</th>
+            <th class="py-2 pr-4 font-medium">Total</th>
+            <th class="py-2 pr-4 font-medium">Blocked</th>
+            <th class="py-2 pr-4 font-medium">Allowed</th>
+            <th class="py-2 font-medium">Block rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {owasp.categories.map((cat) => (
+            <tr class="border-b border-border/50">
+              <td class="py-2 pr-4 text-text">{cat.category}</td>
+              <td class="py-2 pr-4 text-text-muted">{cat.total}</td>
+              <td class="py-2 pr-4 text-text-muted">{cat.blocked}</td>
+              <td class="py-2 pr-4 text-text-muted">{cat.allowed}</td>
+              <td class="py-2 text-text-muted">{cat.blockRate.toFixed(1)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5" data-reveal>
+      <h4 class="font-semibold text-text">Fixed bypasses (5)</h4>
+      <p class="mt-2 text-sm leading-6 text-text-muted">
+        Five bypass techniques discovered during evaluation have been fixed:
+      </p>
+      <ol class="mt-2 list-inside list-decimal text-sm leading-6 text-text-muted">
+        <li><strong>Zero-width character obfuscation:</strong> zero-width chars are now replaced with spaces (not removed), so "ignore\u200Ball\u200Binstructions" becomes "ignore all instructions" and matches.</li>
+        <li><strong>Cross-script Unicode homoglyphs:</strong> a homoglyph mapping table (Cyrillic + Greek → Latin) is applied before NFKC normalization.</li>
+        <li><strong>Base64-encoded instructions:</strong> the guard now decodes base64 tokens (20+ chars, printable ASCII) and appends the decoded text for pattern matching.</li>
+        <li><strong>Leetspeak substitution:</strong> a digit-to-letter map (0→o, 1→i, 3→e, 4→a, 5→s, 7→t) is applied during normalization.</li>
+        <li><strong>URL percent-encoding:</strong> the guard now URL-decodes input (decodeURIComponent) before pattern matching.</li>
+      </ol>
+    </div>
+
+    <div class="mt-4 rounded-xl border border-border bg-bg-raised p-5" data-reveal>
+      <h4 class="font-semibold text-text">Known limitations (2)</h4>
+      <p class="mt-2 text-sm leading-6 text-text-muted">
+        Two bypass techniques remain as known limitations — the guard does not catch them:
+      </p>
+      <ol class="mt-2 list-inside list-decimal text-sm leading-6 text-text-muted">
+        <li><strong>Dot-separated tokens:</strong> "ig.nore" does not match "ignore" — stripping intra-word dots would break legitimate file paths like "config.js".</li>
+        <li><strong>Non-English instructions:</strong> guard patterns are English-only — "Ignoriere alle vorherigen Anweisungen" (German) is not caught.</li>
+      </ol>
+      <p class="mt-2 text-sm leading-6 text-text-muted">
+        These are documented honestly rather than hidden. Dot-separation would require
+        context-aware parsing (distinguishing "ig.nore" from "config.js"), and multilingual
+        support would need pattern sets for every major language.
+      </p>
+    </div>
+  </section>
+
+  <!-- AILuminate Scope Verification -->
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6" data-reveal-group>
+    <h2 class="text-2xl font-semibold text-text" data-reveal>
+      MLCommons AILuminate — scope verification
+    </h2>
+    <p class="mt-3 text-sm text-text-muted" data-reveal>
+      <a href="https://mlcommons.org/benchmarks/ailuminate/" rel="noreferrer" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">MLCommons AILuminate</a>
+      · Demo set v1.0 · CC-BY-4.0 · 292 prompts across 3 hazard categories
+    </p>
+
+    <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5" data-reveal>
+      <h3 class="font-semibold text-text">Why we ran a test we knew we'd "fail"</h3>
+      <p class="mt-2 text-sm leading-6 text-text-muted">
+        AILuminate tests <strong>content safety</strong> — whether an LLM produces harmful output
+        when asked directly. The guard tests <strong>prompt injection</strong> — whether someone
+        can override the system's instructions, hijack its role, or extract its secrets. These are
+        different problems. We ran AILuminate through the guard to prove the guard does its job
+        and <em>only</em> its job: it blocks injection attempts and does not over-reach into
+        content filtering.
+      </p>
+      <p class="mt-3 text-sm leading-6 text-text-muted">
+        If the guard blocked 100% of AILuminate prompts, that would be a <strong>bug</strong> —
+        it would mean the guard is filtering legitimate user requests, breaking real scan
+        targets. The correct result for a prompt-injection filter tested against content-safety
+        prompts is a low block rate: block the prompts that contain injection language, pass the
+        rest to the LLM's own safety training.
+      </p>
+    </div>
+
+    <div class="mt-6 grid gap-4 sm:grid-cols-3" data-reveal>
+      <div class="rounded-xl border border-border bg-bg-raised p-4">
+        <p class="text-3xl font-bold text-text">{ailuminate.totals.total}</p>
+        <p class="mt-1 text-sm text-text-muted">Content-safety prompts</p>
+      </div>
+      <div class="rounded-xl border border-border bg-bg-raised p-4">
+        <p class="text-3xl font-bold text-accent">{ailuminate.totals.blocked}</p>
+        <p class="mt-1 text-sm text-text-muted">Matched injection-pattern rules</p>
+      </div>
+      <div class="rounded-xl border border-border bg-bg-raised p-4">
+        <p class="text-3xl font-bold text-text">{ailuminate.totals.allowed}</p>
+        <p class="mt-1 text-sm text-text-muted">Did not match guard rules</p>
+      </div>
+    </div>
+
+    <div class="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5" data-reveal>
+      <h4 class="font-semibold text-text">What this verifies</h4>
+      <ul class="mt-2 space-y-1.5 text-sm leading-6 text-text-muted">
+        <li class="flex gap-2"><span class="text-emerald-500">✓</span> The guard blocks prompts that contain injection patterns (role hijack, instruction override) — even when the prompt is also harmful content.</li>
+        <li class="flex gap-2"><span class="text-emerald-500">✓</span> The guard does <strong>not</strong> block prompts just because they request harmful content — that is the LLM's job, not the guard's.</li>
+        <li class="flex gap-2"><span class="text-emerald-500">✓</span> The guard has a narrow, well-defined scope: injection prevention, not content moderation.</li>
+        <li class="flex gap-2"><span class="text-emerald-500">✓</span> The guard does not over-block, which means it won't break legitimate scan targets.</li>
+      </ul>
+    </div>
+
+    <div class="mt-4 rounded-xl border border-border bg-bg-raised p-4" data-reveal>
+      <p class="text-sm leading-6 text-text-muted">
+        <strong>Not an MLCommons-certified result.</strong> The demo set is CC-BY-4.0 and is for
+        internal testing only. This scope verification is not published with the MLCommons name
+        or trademark. The demo CSV contains 3 of 12 AILuminate hazard categories (CSE, SSH, NCR).
+      </p>
+    </div>
+
+    <h3 class="mt-8 text-lg font-semibold text-text" data-reveal>Per-hazard breakdown</h3>
+    <div class="mt-3 overflow-x-auto" data-reveal>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-border text-left text-text-muted">
+            <th class="py-2 pr-4 font-medium">Hazard category</th>
+            <th class="py-2 pr-4 font-medium">Total</th>
+            <th class="py-2 pr-4 font-medium">Injection language found</th>
+            <th class="py-2 font-medium">Did not match guard rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ailuminate.categories.map((cat) => (
+            <tr class="border-b border-border/50">
+              <td class="py-2 pr-4 text-text">{cat.category}</td>
+              <td class="py-2 pr-4 text-text-muted">{cat.total}</td>
+              <td class="py-2 pr-4 text-text-muted">{cat.blocked}</td>
+              <td class="py-2 text-text-muted">{cat.total - cat.blocked}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Methodology -->
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6" data-reveal-group>
+    <h2 class="text-2xl font-semibold text-text" data-reveal>Methodology</h2>
+    <div class="mt-4 max-w-3xl space-y-4 text-text-muted" data-reveal>
+      <p>
+        The evaluation harness lives in <code>packages/eval-ai-safety/</code>. It is deterministic:
+        it tests a regex-based guard, not an LLM. Results are reproducible and do not require GPU,
+        API credits, or network access (after the one-time AILuminate CSV download).
+      </p>
+      <p>
+        <strong>OWASP suite (42 test cases):</strong> synthetic inputs across four assessment areas
+        — model evaluation (adversarial prompts), implementation testing (bypass techniques),
+        infrastructure assessment (MCP tool-call arguments), and runtime behavior analysis
+        (indirect prompt injection via scan results). Each case has an expected outcome and expected
+        detection patterns. In the recorded run, {expectedOutcomes} of {owasp.totals.total} cases
+        ({expectedOutcomeRate}%) matched those declared expectations.
+      </p>
+      <p>
+        <strong>AILuminate scope verification (292 prompts):</strong> the CC-BY-4.0 demo CSV is
+        downloaded from
+        <a href="https://github.com/mlcommons/ailuminate" rel="noreferrer" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">github.com/mlcommons/ailuminate</a>
+        and cached locally. Each prompt is sent to the guard to observe whether a guard rule
+        matches. Thirteen prompts matched injection-pattern rules and 279 did not. The corpus has
+        no prompt-injection oracle, so neither outcome is labeled correct and this is not a score.
+      </p>
+      <p>
+        <strong>Guard configuration:</strong> maxInputLength=10000, strictMode=true, timeoutMs=1000.
+      </p>
+    </div>
+  </section>
+
+  <!-- Limitations -->
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6" data-reveal-group>
+    <h2 class="text-2xl font-semibold text-text" data-reveal>Limitations</h2>
+    <ul class="mt-4 max-w-3xl space-y-3 text-text-muted" data-reveal>
+      <li class="flex gap-3">
+        <span class="mt-1 text-accent">→</span>
+        <span>This evaluation tests the PromptInjectionGuard, a deterministic regex-based filter. It does not test the LLM scan engine's own safety training.</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="mt-1 text-accent">→</span>
+        <span>A high OWASP expected-outcome rate means the guard matched this finite corpus. It does not prove immunity to prompt injection attacks.</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="mt-1 text-accent">→</span>
+        <span>The AILuminate run is an observational scope check, not a score or proof that every blocked or allowed decision was correct.</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="mt-1 text-accent">→</span>
+        <span>Two known bypass techniques remain (dot-separation, non-English). These are documented, not hidden.</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="mt-1 text-accent">→</span>
+        <span>The AILuminate demo set is a 10% subset with 3 of 12 hazard categories. The full practice set may reveal different injection-language patterns.</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="mt-1 text-accent">→</span>
+        <span>This evaluation does not constitute certification, compliance, or a security guarantee.</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- What this is not -->
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6" data-reveal-group>
+    <div class="rounded-xl border border-border bg-bg-raised p-6" data-reveal>
+      <h2 class="text-xl font-semibold text-text">What this is not</h2>
+      <ul class="mt-3 space-y-2 text-sm text-text-muted">
+        <li>• Not "AI safety tested" in the sense of a formal evaluation by NIST, MLCommons, or a third-party lab.</li>
+        <li>• Not "adversarial robustness proven" — no finite test suite proves universal robustness.</li>
+        <li>• Not an MLCommons-certified result — the demo set is for internal testing only.</li>
+        <li>• Not a guarantee that the guard blocks all prompt injection attacks.</li>
+        <li>• Not a substitute for LLM-level safety training, output filtering, or human review.</li>
+      </ul>
+      <p class="mt-4 text-sm text-text-muted">
+        See <a href="/methodology" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">methodology</a>
+        for the full scan and evidence methodology, and <code>docs/claims-readiness.md</code>
+        (internal) for the full map of what each claim requires.
+      </p>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6" data-reveal-group>
+    <div class="flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>
+      <div>
+        <h2 class="text-2xl font-semibold text-text">Start with a check you can inspect.</h2>
+        <p class="mt-2 text-text-muted">The free tools run locally in your browser and state their limits.</p>
+      </div>
+      <a href="/tools" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        View free tools
+      </a>
+    </div>
+  </section>
+</Base>

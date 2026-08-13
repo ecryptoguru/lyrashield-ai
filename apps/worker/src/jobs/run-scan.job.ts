@@ -7,11 +7,13 @@ import {
   summarizeVibeSecurityCoverage,
   checkInstructionSafety,
   containsPromptInjection,
+  applyEngineTriageArtifact,
 } from "@lyrashield/security"
 import {
   updateScanStatus,
   addScanEvent,
   completeScanWithScore,
+  createAiSecurityScoreSnapshot,
   qualifyReferralForWorkspace,
   type ScanStatus,
 } from "@lyrashield/db"
@@ -23,8 +25,11 @@ import {
   interpretExitCode,
   resolveEngineProfile,
   resolveEngineTimeoutMs,
+  runEngineTriage,
   type EngineRunResult,
 } from "../engine/runner"
+import { mergeLlmUsage } from "../engine/output-parser"
+import { buildEngineTriageInput, eligibleForEngineTriage } from "../engine/ai-security-triage"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import {
   calculateGpt56CostUsd,
@@ -823,7 +828,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       // Persist usage before deterministic scanners or finding persistence can
       // fail, so provider spend is never lost behind a downstream error.
-      const { budgetExceeded, billedCostUsd, costReconciled, reconciliationReason } =
+      let { budgetExceeded, billedCostUsd, costReconciled, reconciliationReason } =
         await persistEngineUsageCheckpoint({
           scanId,
           maxBudgetUsd,
@@ -1041,6 +1046,129 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         urlProfile,
       })
 
+      let aiSecuritySignals = orchestratorResult.aiAppSecuritySignals ?? []
+      let triageSnapshot:
+        | {
+            status: "COMPLETED" | "DISABLED" | "FAILED" | "BUDGET_STOPPED"
+            terminalReason: string | null
+            policyVersion: string
+            modelRoute: string
+            inputChecksum: string
+            redactionReceipt: string
+            resultCount: number
+          }
+        | undefined
+      const triageInput = buildEngineTriageInput(aiSecuritySignals, engineResult.sourceRevision)
+      const triageFeatureEnabled = env.LYRASHIELD_AI_TRIAGE_ENABLED === "1"
+      const workspacePlan =
+        triageFeatureEnabled && triageInput
+          ? await prisma.workspace
+              .findFirst({
+                where: { id: workspaceId, deletedAt: null },
+                select: { plan: true },
+              })
+              .catch(() => null)
+          : null
+      const triageEligibility = eligibleForEngineTriage({
+        enabled: triageFeatureEnabled,
+        workspacePlan: workspacePlan?.plan ?? "FREE",
+        mode,
+        billedCostUsd,
+        costReconciled,
+        maxBudgetUsd,
+        triageCapUsd: env.LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD,
+      })
+      let triageTerminalReason = triageEligibility.reason
+      if (target.type === "REPO" && triageInput && triageEligibility.eligible) {
+        try {
+          const triageResult = await runEngineTriage({
+            scanId,
+            profile: resolveEngineProfile("STANDARD"),
+            input: triageInput,
+            maxBudgetUsd: triageEligibility.maxBudgetUsd!,
+            timeoutMs: resolveScannerPhaseTimeoutMs(
+              scanRuntimeBudgetMs,
+              Date.now() - scanStartedAtMs
+            ),
+            shouldCancel: isCancelledOrTimedOut,
+          })
+          const artifact = triageResult.artifact
+          if (artifact && triageResult.llmUsage) {
+            const mergedUsage = mergeLlmUsage(
+              engineResult.output.runRecord?.llm_usage,
+              triageResult.llmUsage
+            )
+            if (mergedUsage) {
+              const updatedAccounting = await persistEngineUsageCheckpoint({
+                scanId,
+                maxBudgetUsd,
+                llmUsage: mergedUsage,
+                webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
+                usageExpected: true,
+              })
+              budgetExceeded = updatedAccounting.budgetExceeded
+              billedCostUsd = updatedAccounting.billedCostUsd
+              costReconciled = updatedAccounting.costReconciled
+              reconciliationReason = updatedAccounting.reconciliationReason
+              aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
+              triageSnapshot = {
+                status: artifact.status,
+                terminalReason: artifact.terminalReason,
+                policyVersion: artifact.policyVersion,
+                modelRoute: artifact.modelRoute,
+                inputChecksum: artifact.inputChecksum,
+                redactionReceipt: artifact.redactionReceipt.inputChecksum,
+                resultCount: artifact.results.length,
+              }
+            } else {
+              triageSnapshot = {
+                status: "FAILED",
+                terminalReason: "TRIAGE_ACCOUNTING_UNAVAILABLE",
+                policyVersion: artifact.policyVersion,
+                modelRoute: artifact.modelRoute,
+                inputChecksum: artifact.inputChecksum,
+                redactionReceipt: artifact.redactionReceipt.inputChecksum,
+                resultCount: 0,
+              }
+            }
+          } else if (artifact) {
+            triageSnapshot = {
+              status: artifact.status,
+              terminalReason: artifact.terminalReason,
+              policyVersion: artifact.policyVersion,
+              modelRoute: artifact.modelRoute,
+              inputChecksum: artifact.inputChecksum,
+              redactionReceipt: artifact.redactionReceipt.inputChecksum,
+              resultCount: 0,
+            }
+          }
+          triageTerminalReason = triageSnapshot?.terminalReason ?? "TRIAGE_ARTIFACT_UNAVAILABLE"
+        } catch {
+          // An additive overlay can never fail the deterministic scan.
+          triageTerminalReason = "TRIAGE_COMMAND_FAILED"
+        }
+      }
+      if (target.type === "REPO" && triageFeatureEnabled && (triageSnapshot || triageInput)) {
+        await addScanEvent(
+          scanId,
+          "ai_security_triage",
+          triageSnapshot?.status === "FAILED" || triageSnapshot?.status === "BUDGET_STOPPED"
+            ? "warning"
+            : "info",
+          "AI-assisted triage overlay completed without changing deterministic findings",
+          {
+            status: triageSnapshot?.status ?? "DISABLED",
+            terminalReason: triageSnapshot?.terminalReason ?? triageTerminalReason,
+            resultCount: triageSnapshot?.resultCount ?? 0,
+          }
+        ).catch((eventErr) =>
+          log.warn("Failed to persist AI-assisted triage terminal state", {
+            scanId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          })
+        )
+      }
+
       try {
         await addScanEvent(
           scanId,
@@ -1199,6 +1327,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Retests may validate a pending fix and change the target's scoreable
       // state. Freeze the score only after those outcomes are persisted.
       await completeScanWithScore(scanId, workspaceId, engineResult.output.summary)
+
+      if (orchestratorResult.aiAppSecurityCoverage) {
+        try {
+          await createAiSecurityScoreSnapshot(scanId, workspaceId, {
+            signals: aiSecuritySignals,
+            coverage: orchestratorResult.aiAppSecurityCoverage,
+            ai03: orchestratorResult.ai03Coverage ?? {
+              resolutionStatus: "UNSUPPORTED",
+              advisoryStatus: "UNAVAILABLE",
+              fresh: false,
+            },
+            ...(triageSnapshot ? { triage: triageSnapshot } : {}),
+          })
+        } catch (aiScoreErr) {
+          log.warn("Failed to create AI security score snapshot", {
+            scanId,
+            error: aiScoreErr instanceof Error ? aiScoreErr.message : String(aiScoreErr),
+          })
+        }
+      }
       try {
         await qualifyReferralForWorkspace(workspaceId)
       } catch (referralError) {

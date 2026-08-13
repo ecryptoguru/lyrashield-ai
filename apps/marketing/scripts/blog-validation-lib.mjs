@@ -35,6 +35,7 @@ export const MAX_SHARED_IMAGE_USAGE = 3
 
 const ALL_FREE_TOOL_ROUTES = Object.freeze([
   "/tools/ai-app-security-checklist",
+  "/tools/ai-app-security-scanner",
   "/tools/security-headers-checker",
   "/tools/secret-exposure-scanner",
   "/tools/supabase-rls-checker",

@@ -152,6 +152,51 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     expect(name).toBe("RLS fail-closed target")
   })
 
+  it("keeps AI security score snapshots inside the owning workspace", async () => {
+    const scan = await prisma.scan.create({
+      data: {
+        workspaceId,
+        targetId,
+        goal: "LAUNCH_REVIEW",
+        status: "COMPLETED",
+        createdById: `rls-fc-score-user-${suffix}`,
+      },
+    })
+    const snapshot = await prisma.aiSecurityScoreSnapshot.create({
+      data: {
+        workspaceId,
+        targetId,
+        scanId: scan.id,
+        modelVersion: "ai-app-security-score/1.0.0",
+        score: 100,
+        breakdown: {},
+        evidenceQuality: {},
+        methodology: "ai-app-security-score/1.0.0",
+        assessedCount: 8,
+        totalControls: 8,
+        expiresAt: new Date("9999-12-31T23:59:59.999Z"),
+      },
+    })
+
+    const countSnapshot = async (
+      tx: Omit<PrismaClient, "$transaction" | "$connect" | "$disconnect">
+    ) => {
+      const rows = await tx.$queryRaw<
+        Array<{ count: bigint }>
+      >`SELECT count(*)::bigint AS count FROM "AiSecurityScoreSnapshot" WHERE id = ${snapshot.id}`
+      return Number(rows[0]?.count ?? 0)
+    }
+
+    try {
+      expect(await asWorkspace(workspaceId, countSnapshot)).toBe(1)
+      expect(await asWorkspace(null, countSnapshot)).toBe(0)
+      expect(await asWorkspace(otherWorkspaceId, countSnapshot)).toBe(0)
+    } finally {
+      await prisma.aiSecurityScoreSnapshot.delete({ where: { id: snapshot.id } })
+      await prisma.scan.delete({ where: { id: scan.id } })
+    }
+  })
+
   /**
    * `Target` carries workspaceId directly. The nine DB-07 child tables do not —
    * they are scoped through an EXISTS join to a parent, which is a structurally
@@ -186,6 +231,9 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       "Ticket",
       "ScorecardShare",
       "ScorecardEvent",
+      "AiSystemProfileVersion",
+      "ThreatModelVersion",
+      "ControlEvidenceVersion",
     ]
 
     it("has RLS both ENABLED and FORCED on every child table", async () => {
@@ -323,6 +371,111 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         await prisma.$executeRaw`DELETE FROM "ScanEvent" WHERE id = ${event.id}`
       } finally {
         await prisma.$executeRaw`DELETE FROM "Scan" WHERE id = ${scan.id}`
+      }
+    })
+
+    it("succeeds writing a ControlEvidenceVersion as the owning workspace through withWorkspaceRLS", async () => {
+      const { withWorkspaceRLS } = await import("./rls")
+
+      let evidenceId = ""
+
+      try {
+        // The root ControlEvidence row is workspace-scoped directly.
+        const evidence = await withWorkspaceRLS(workspaceId, async (tx) => {
+          return tx.controlEvidence.create({
+            data: {
+              workspaceId,
+              targetId,
+              controlId: "vibe-34",
+            },
+          })
+        })
+        evidenceId = evidence.id
+
+        // The child version is scoped through the parent via an EXISTS-join policy.
+        const version = await withWorkspaceRLS(workspaceId, async (tx) => {
+          return tx.controlEvidenceVersion.create({
+            data: {
+              controlEvidenceId: evidence.id,
+              version: 1,
+              status: "SUBMITTED",
+              attestation: "rls fail-closed probe",
+              artifactManifest: [],
+              checksum: "sha256-rls-probe",
+              createdById: `rls-fc-user-${suffix}`,
+            },
+          })
+        })
+
+        expect(version.id).toBeDefined()
+        expect(version.controlEvidenceId).toBe(evidence.id)
+
+        const count = async (
+          tx: Omit<PrismaClient, "$transaction" | "$connect" | "$disconnect">
+        ) => {
+          const rows = await tx.$queryRaw<
+            Array<{ count: bigint }>
+          >`SELECT count(*)::bigint AS count FROM "ControlEvidenceVersion" WHERE id = ${version.id}`
+          return Number(rows[0]?.count ?? 0)
+        }
+
+        expect(await asWorkspace(workspaceId, count)).toBe(1)
+        expect(await asWorkspace(null, count)).toBe(0)
+        expect(await asWorkspace(otherWorkspaceId, count)).toBe(0)
+
+        await prisma.$executeRaw`DELETE FROM "ControlEvidenceVersion" WHERE id = ${version.id}`
+      } finally {
+        if (evidenceId) {
+          await prisma.$executeRaw`DELETE FROM "ControlEvidence" WHERE id = ${evidenceId}`
+        }
+      }
+    })
+
+    it("keeps AI system profile versions inside the owning workspace", async () => {
+      const { withWorkspaceRLS } = await import("./rls")
+      let profileId = ""
+
+      try {
+        const profile = await withWorkspaceRLS(workspaceId, (tx) =>
+          tx.aiSystemProfile.create({
+            data: {
+              workspaceId,
+              targetId,
+              profile: { systemName: "RLS profile probe" },
+              createdById: `rls-fc-user-${suffix}`,
+              updatedById: `rls-fc-user-${suffix}`,
+            },
+          })
+        )
+        profileId = profile.id
+        const version = await withWorkspaceRLS(workspaceId, (tx) =>
+          tx.aiSystemProfileVersion.create({
+            data: {
+              aiSystemProfileId: profile.id,
+              version: 1,
+              profile: { systemName: "RLS profile probe" },
+              checksum: "sha256-rls-probe",
+              createdById: `rls-fc-user-${suffix}`,
+            },
+          })
+        )
+
+        const count = async (
+          tx: Omit<PrismaClient, "$transaction" | "$connect" | "$disconnect">
+        ) => {
+          const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "AiSystemProfileVersion" WHERE id = ${version.id}
+          `
+          return Number(rows[0]?.count ?? 0)
+        }
+
+        expect(await asWorkspace(workspaceId, count)).toBe(1)
+        expect(await asWorkspace(null, count)).toBe(0)
+        expect(await asWorkspace(otherWorkspaceId, count)).toBe(0)
+      } finally {
+        if (profileId) {
+          await prisma.$executeRaw`DELETE FROM "AiSystemProfile" WHERE id = ${profileId}`
+        }
       }
     })
   })

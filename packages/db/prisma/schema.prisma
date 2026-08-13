@@ -487,8 +487,12 @@ model Workspace {
   retests              Retest[]
   agentApprovals       AgentApproval[]
   scoreSnapshots       ScoreSnapshot[]
+  aiSecurityScoreSnapshots AiSecurityScoreSnapshot[]
   findingCandidates    FindingCandidate[]
   findingVerifications FindingVerification[]
+  aiSystemProfile      AiSystemProfile[]
+  threatModels         ThreatModel[]
+  controlEvidence      ControlEvidence[]
 }
 
 model WorkspaceMember {
@@ -560,7 +564,11 @@ model Target {
   credentials       CredentialSet[]
   schedules         Schedule[]
   scoreSnapshots    ScoreSnapshot[]
+  aiSecurityScoreSnapshots AiSecurityScoreSnapshot[]
   findingCandidates FindingCandidate[]
+  aiSystemProfile   AiSystemProfile?
+  threatModels      ThreatModel[]
+  controlEvidence   ControlEvidence[]
 
   @@unique([workspaceId, repoFullName])
   @@unique([workspaceId, url])
@@ -657,6 +665,7 @@ model Scan {
   retests              Retest[]
   reports              Report[]
   scoreSnapshot        ScoreSnapshot?
+  aiSecurityScoreSnapshot AiSecurityScoreSnapshot?
   resultManifest       ScanResultManifest?
   coverageReceipts     ScanCoverageReceipt[]
   findingCandidates    FindingCandidate[]
@@ -993,6 +1002,51 @@ model ScoreSnapshot {
   @@index([targetId, shareEligible, computedAt])
 }
 
+model AiSecurityScoreSnapshot {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  targetId         String
+  scanId           String   @unique
+  modelVersion     String
+  score            Int?
+  grade            String?
+  breakdown        Json
+  evidenceQuality  Json
+  methodology      String
+  assessedCount    Int
+  totalControls    Int
+  shareEligible    Boolean  @default(false)
+  computedAt       DateTime @default(now())
+  expiresAt        DateTime
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  scan      Scan      @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([workspaceId, computedAt])
+  @@index([workspaceId, targetId, computedAt])
+  @@index([targetId, computedAt])
+}
+
+// OSV responses are global, immutable source snapshots. They deliberately do
+// not carry a workspace ID: the key is the exact public package release.
+model AdvisoryCacheEntry {
+  id             String   @id @default(cuid())
+  ecosystem      String
+  normalizedName String
+  version        String
+  source         String
+  schemaVersion  String
+  snapshot       Json
+  checksum       String
+  fetchedAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([ecosystem, normalizedName, version, source, schemaVersion], map: "AdvisoryCacheEntry_ecosystem_normalizedName_version_source_sche")
+  @@index([expiresAt])
+}
+
 model ReferralCode {
   id        String   @id @default(cuid())
   userId    String   @unique
@@ -1290,4 +1344,108 @@ model NotificationPreference {
 
   @@index([userId])
   @@map("notification_preferences")
+}
+
+model AiSystemProfile {
+  id          String   @id @default(cuid())
+  workspaceId String
+  targetId    String   @unique
+  currentVersionId String? @unique
+  version     Int      @default(1)
+  profile     Json
+  createdById String
+  updatedById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  currentVersion AiSystemProfileVersion? @relation("AiSystemProfileCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions AiSystemProfileVersion[] @relation("AiSystemProfileVersions")
+
+  @@index([workspaceId, updatedAt])
+}
+
+model AiSystemProfileVersion {
+  id                String   @id @default(cuid())
+  aiSystemProfileId String
+  version           Int
+  profile           Json
+  checksum          String
+  createdById       String
+  createdAt         DateTime @default(now())
+
+  aiSystemProfile AiSystemProfile  @relation("AiSystemProfileVersions", fields: [aiSystemProfileId], references: [id], onDelete: Cascade)
+  currentFor      AiSystemProfile? @relation("AiSystemProfileCurrentVersion")
+
+  @@unique([aiSystemProfileId, version])
+}
+
+model ThreatModel {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  targetId         String
+  currentVersionId String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target         Target               @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  currentVersion ThreatModelVersion?  @relation("ThreatModelCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       ThreatModelVersion[] @relation("ThreatModelVersions")
+
+  @@unique([workspaceId, targetId])
+}
+
+model ThreatModelVersion {
+  id            String   @id @default(cuid())
+  threatModelId String
+  version       Int
+  content       Json
+  checksum      String
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  threatModel ThreatModel  @relation("ThreatModelVersions", fields: [threatModelId], references: [id], onDelete: Cascade)
+  currentFor  ThreatModel? @relation("ThreatModelCurrentVersion")
+
+  @@unique([threatModelId, version])
+}
+
+model ControlEvidence {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  targetId         String
+  controlId        String
+  currentVersionId String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace      Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target         Target                   @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  currentVersion ControlEvidenceVersion?  @relation("ControlEvidenceCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       ControlEvidenceVersion[] @relation("ControlEvidenceVersions")
+
+  @@unique([workspaceId, targetId, controlId])
+}
+
+model ControlEvidenceVersion {
+  id                String    @id @default(cuid())
+  controlEvidenceId String
+  version           Int
+  status            String
+  attestation       String
+  reviewedById      String?
+  reviewedAt        DateTime?
+  expiresAt         DateTime?
+  artifactManifest  Json      @default("[]")
+  checksum          String
+  createdById       String
+  createdAt         DateTime  @default(now())
+
+  evidence   ControlEvidence  @relation("ControlEvidenceVersions", fields: [controlEvidenceId], references: [id], onDelete: Cascade)
+  currentFor ControlEvidence? @relation("ControlEvidenceCurrentVersion")
+
+  @@unique([controlEvidenceId, version])
+  @@index([status, expiresAt])
 }

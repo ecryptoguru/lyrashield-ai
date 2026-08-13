@@ -12,9 +12,12 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:3100",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+      : undefined,
   },
   projects: [
-    { name: "chromium", testIgnore: /visual/, use: { ...devices["Desktop Chrome"] } },
+    { name: "chromium", testIgnore: /visual|marketing-/, use: { ...devices["Desktop Chrome"] } },
     { name: "visual-mobile", testMatch: /visual\/.*\.spec\.ts/, use: { ...devices["iPhone 13"] } },
     { name: "visual-tablet", testMatch: /visual\/.*\.spec\.ts/, use: { ...devices["iPad Mini"] } },
     {

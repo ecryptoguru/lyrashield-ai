@@ -68,3 +68,22 @@ export const targetSchema = z
     createdAt: dateString,
   })
   .passthrough()
+
+export const createAiAssuranceEvidenceSchema = z.object({
+  workspaceId: z.string(),
+  targetId: z.string(),
+  controlId: z.string(),
+  attestation: z.string().min(1).max(5000),
+  expiresAt: z.string().datetime().nullable().default(null),
+})
+
+export const reviseAiAssuranceEvidenceSchema = z.object({
+  workspaceId: z.string(),
+  attestation: z.string().min(1).max(5000),
+  expiresAt: z.string().datetime().nullable().default(null),
+})
+
+export const reviewAiAssuranceEvidenceSchema = z.object({
+  workspaceId: z.string(),
+  status: z.enum(["ACCEPTED", "REJECTED"]),
+})

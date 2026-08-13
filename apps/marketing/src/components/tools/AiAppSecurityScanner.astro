@@ -1,0 +1,229 @@
+---
+const dashboardOrigin = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || "https://app.lyrashieldai.com"
+const signupUrl = `${dashboardOrigin}/sign-up?source=ai-app-security-scanner`
+
+const labelClass = "block text-sm font-medium text-text"
+const fieldClass =
+  "mt-3 w-full rounded-xl border border-border bg-bg p-3 font-mono text-sm text-text shadow-sm transition-colors placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+const buttonClass =
+  "lift mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
+const mutedText = "mt-3 text-sm text-text-muted"
+const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-sm text-text-muted"
+---
+
+<div class="space-y-5">
+  <div class="flex gap-2 rounded-lg border border-border p-1" role="tablist" aria-label="Input source">
+    <button
+      type="button"
+      role="tab"
+      aria-selected="true"
+      aria-controls="ai-app-files-panel"
+      id="ai-app-files-tab"
+      class="ai-app-tab flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors"
+      data-tab="files"
+    >
+      Select files
+    </button>
+    <button
+      type="button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="ai-app-paste-panel"
+      id="ai-app-paste-tab"
+      class="ai-app-tab flex-1 rounded-md px-3 py-2 text-sm font-medium text-text-muted transition-colors"
+      data-tab="paste"
+    >
+      Paste code
+    </button>
+  </div>
+
+  <div id="ai-app-files-panel" role="tabpanel" aria-labelledby="ai-app-files-tab" class="ai-app-panel">
+    <label class={labelClass} for="ai-app-files">Choose source files to scan locally</label>
+    <input
+      id="ai-app-files"
+      type="file"
+      multiple
+      accept=".js,.jsx,.ts,.tsx,.py,.json,.toml,.yaml,.yml"
+      class="mt-3 block w-full cursor-pointer rounded-xl border border-dashed border-border bg-bg p-4 text-sm text-text-muted transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:font-semibold file:text-bg hover:file:opacity-90"
+    />
+    <p class={mutedText}>At most 25 files, 1 MiB each, 5 MiB total. Unsupported or truncated files are shown as inconclusive.</p>
+  </div>
+
+  <div id="ai-app-paste-panel" role="tabpanel" aria-labelledby="ai-app-paste-tab" class="ai-app-panel hidden">
+    <label class={labelClass} for="ai-app-paste">Paste code to scan</label>
+    <textarea id="ai-app-paste" rows={10} class={fieldClass} placeholder="// paste TypeScript, JavaScript, Python, JSON, TOML, or YAML"></textarea>
+    <p class={mutedText}>Pasted code is analyzed in your browser and is not uploaded.</p>
+  </div>
+
+  <button id="ai-app-run" class={buttonClass} type="button">Scan locally</button>
+
+  <output id="ai-app-result" class="mt-6 block" aria-live="polite">
+    <p class={warningText}>Results appear here. Everything runs locally — nothing is uploaded.</p>
+  </output>
+
+  <a
+    id="ai-app-cta"
+    href={signupUrl}
+    data-cta-id="ai-app-security-scanner-signup"
+    class="lift mt-5 hidden min-h-11 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+  >
+    Create account and scan the complete repository
+  </a>
+</div>
+
+<style>
+  .ai-app-tab[aria-selected="true"] {
+    background-color: var(--bg);
+    color: var(--text);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+</style>
+
+<script>
+  import type { AIScanFile } from "@lyrashield/security/ai-security"
+  import {
+    buildSummary,
+    pastedCodeForScan,
+    readFilesForScan,
+    runAiAppSecurityScan,
+    toUiSignals,
+  } from "../../lib/ai-app-security"
+
+  type Tab = "files" | "paste"
+  let activeTab: Tab = "files"
+
+  const tabs = document.querySelectorAll<HTMLButtonElement>(".ai-app-tab")
+  const panels = document.querySelectorAll<HTMLElement>(".ai-app-panel")
+  const filesInput = document.querySelector<HTMLInputElement>("#ai-app-files")
+  const pasteInput = document.querySelector<HTMLTextAreaElement>("#ai-app-paste")
+  const runButton = document.querySelector<HTMLButtonElement>("#ai-app-run")
+  const resultOutput = document.querySelector<HTMLOutputElement>("#ai-app-result")
+  const cta = document.querySelector<HTMLAnchorElement>("#ai-app-cta")
+
+  function switchTab(tab: Tab) {
+    activeTab = tab
+    for (const t of tabs) {
+      const selected = t.dataset.tab === tab
+      t.setAttribute("aria-selected", String(selected))
+      t.classList.toggle("text-text-muted", !selected)
+    }
+    for (const p of panels) {
+      const target = p.id === (tab === "files" ? "ai-app-files-panel" : "ai-app-paste-panel")
+      p.classList.toggle("hidden", !target)
+    }
+  }
+
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      const value = tab.dataset.tab
+      if (value === "files" || value === "paste") switchTab(value)
+    })
+  }
+
+  function renderEmpty() {
+    if (!resultOutput) return
+    resultOutput.innerHTML =
+      '<p class="mt-3 rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-sm text-text-muted">Results appear here. Everything runs locally — nothing is uploaded.</p>'
+  }
+
+  function escapeHtml(input: string): string {
+    return input
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;")
+  }
+
+  function renderBadge(state: string): string {
+    const styles: Record<string, string> = {
+      DETECTED: "bg-danger/10 text-danger border-danger/20",
+      NO_FINDING: "bg-success/10 text-success border-success/20",
+      INCONCLUSIVE: "bg-warning/10 text-warning border-warning/20",
+      NOT_ASSESSED: "bg-text-muted/10 text-text-muted border-text-muted/20",
+    }
+    const style = styles[state] ?? styles.INCONCLUSIVE
+    return `<span class="rounded border px-2 py-0.5 text-xs font-semibold ${style}">${state.replace(/_/g, " ")}</span>`
+  }
+
+  function renderResult(signals: ReturnType<typeof toUiSignals>, summary: ReturnType<typeof buildSummary>) {
+    if (!resultOutput) return
+
+    const wrap = document.createElement("div")
+    wrap.className = "space-y-5"
+
+    const head = document.createElement("div")
+    head.className = "mb-3 flex items-center justify-between gap-3"
+    const label = document.createElement("p")
+    label.className = "font-mono text-xs uppercase tracking-[.14em] text-text-muted"
+    label.textContent = `Evidence states · ${summary.detected} detected · ${summary.noFinding} no finding · ${summary.inconclusive} inconclusive · ${summary.notAssessed} not assessed`
+    head.appendChild(label)
+    wrap.appendChild(head)
+
+    for (const control of summary.controls) {
+      const section = document.createElement("section")
+      section.className = "rounded-xl border border-border bg-bg p-4"
+
+      const title = document.createElement("div")
+      title.className = "flex items-center justify-between gap-3"
+      title.innerHTML = `<h3 class="text-sm font-semibold text-text">${escapeHtml(control.id)} · ${escapeHtml(control.title)}</h3>${renderBadge(control.state)}`
+      section.appendChild(title)
+
+      const controlSignals = signals.filter((s) => s.controlId === control.id)
+      if (controlSignals.length > 0) {
+        const list = document.createElement("ul")
+        list.className = "mt-3 space-y-3"
+        for (const signal of controlSignals) {
+          const item = document.createElement("li")
+          item.className = "text-sm text-text-muted"
+          const fileLine = signal.file && signal.line ? `<span class="font-mono text-xs text-text-muted">${escapeHtml(signal.file)}:${signal.line}</span>` : ""
+          const snippet = signal.snippet ? `<pre class="mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text">${escapeHtml(signal.snippet)}</pre>` : ""
+          item.innerHTML = `${renderBadge(signal.state)} <span class="ml-1 font-medium text-text">${escapeHtml(signal.severity)}</span>${fileLine ? ` · ${fileLine}` : ""}<p class="mt-1 text-text">${escapeHtml(signal.remediation)}</p>${snippet}`
+          list.appendChild(item)
+        }
+        section.appendChild(list)
+      } else if (control.state === "NOT_ASSESSED") {
+        const note = document.createElement("p")
+        note.className = "mt-2 text-sm text-text-muted"
+        note.textContent = "Not assessed in the free local scan. The paid repository scan adds this control, dependency CVE checks, optional AI-assisted triage, and a versioned score."
+        section.appendChild(note)
+      }
+
+      wrap.appendChild(section)
+    }
+
+    const note = document.createElement("p")
+    note.className = "mt-4 text-sm text-text-muted"
+    note.innerHTML =
+      "This is a local static check, not a security guarantee. AI-03, full-repository context, optional LLM triage, persistent evidence, retest, reporting, and the numeric score require a <a href=\"https://app.lyrashieldai.com/sign-up?source=ai-app-security-scanner\" class=\"font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent\">paid repository scan</a>."
+    wrap.appendChild(note)
+
+    resultOutput.replaceChildren(wrap)
+
+    if (cta) {
+      cta.classList.remove("hidden")
+      cta.classList.add("inline-flex")
+    }
+  }
+
+  runButton?.addEventListener("click", async () => {
+    if (!resultOutput) return
+    resultOutput.innerHTML = '<p class="mt-3 rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-sm text-text-muted">Scanning…</p>'
+
+    let scanFiles: AIScanFile[] = []
+    try {
+      scanFiles =
+        activeTab === "files"
+          ? await readFilesForScan([...(filesInput?.files ?? [])])
+          : [pastedCodeForScan(pasteInput?.value ?? "")]
+
+      const result = runAiAppSecurityScan(scanFiles)
+      renderResult(toUiSignals(result), buildSummary(result))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      resultOutput.innerHTML = `<p class="mt-3 rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-sm text-text-muted">Scan failed: ${escapeHtml(message)}</p>`
+    }
+  })
+
+  renderEmpty()
+</script>

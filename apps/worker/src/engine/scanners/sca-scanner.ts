@@ -2,9 +2,11 @@
 import { lstat, readFile, readdir } from "fs/promises"
 import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
+import type { AdvisoryBatchResult } from "@lyrashield/db"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { fetchThreatSignals, type ThreatSignal } from "./threat-intelligence"
+import type { ResolvedDependencyInventory } from "./resolved-dependencies"
 
 export interface ScaScanConfig {
   repoPath: string
@@ -12,6 +14,8 @@ export interface ScaScanConfig {
   fetchFn?: typeof fetch
   coverageIssues?: ScannerCoverageIssue[]
   signal?: AbortSignal
+  resolvedDependencyInventory?: ResolvedDependencyInventory
+  advisoryBatch?: AdvisoryBatchResult
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -667,37 +671,55 @@ function formatThreatPriority(signal: ThreatSignal | undefined): string | null {
 }
 
 export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerability[]> {
-  const { repoPath, fetchFn, coverageIssues, signal } = config
+  const { repoPath, fetchFn, coverageIssues, signal, resolvedDependencyInventory, advisoryBatch } =
+    config
   throwIfAborted(signal)
   logger.info("Starting SCA scan", { repoPath })
 
-  const depFiles = await findDependencyFiles(
-    repoPath,
-    repoPath,
-    { entries: 0 },
-    0,
-    coverageIssues,
-    signal
-  )
-  if (depFiles.length === 0) {
-    logger.info("No dependency files found", { repoPath })
-    return []
-  }
-
   const allDeps: Dependency[] = []
-  for (const file of depFiles) {
-    throwIfAborted(signal)
-    const deps = await parseDependencyFile(file, repoPath, coverageIssues)
-    allDeps.push(...deps)
+  if (resolvedDependencyInventory) {
+    allDeps.push(
+      ...resolvedDependencyInventory.packages.map((pkg) => ({
+        name: pkg.name,
+        version: pkg.version,
+        ecosystem: pkg.ecosystem,
+        filePath: pkg.filePath,
+      }))
+    )
+  } else {
+    const depFiles = await findDependencyFiles(
+      repoPath,
+      repoPath,
+      { entries: 0 },
+      0,
+      coverageIssues,
+      signal
+    )
+    if (depFiles.length === 0) {
+      logger.info("No dependency files found", { repoPath })
+      return []
+    }
+    for (const file of depFiles) {
+      throwIfAborted(signal)
+      const deps = await parseDependencyFile(file, repoPath, coverageIssues)
+      allDeps.push(...deps)
+    }
   }
 
   const uniqueDeps = Array.from(new Map(allDeps.map((dep) => [dependencyKey(dep), dep])).values())
   logger.info("Dependencies parsed", {
     total: allDeps.length,
     unique: uniqueDeps.length,
-    files: depFiles.length,
+    sharedResolution: !!resolvedDependencyInventory,
   })
-  const osvResults = await queryOsvBatch(uniqueDeps, fetchFn, signal)
+  const osvResults = resolvedDependencyInventory
+    ? new Map(
+        (advisoryBatch?.results ?? []).map((result) => [
+          dependencyKey(result.package),
+          result.vulns as OsvVulnerability[],
+        ])
+      )
+    : await queryOsvBatch(uniqueDeps, fetchFn, signal)
 
   const seenDependencyVulnerabilities = new Set<string>()
   const findings: EngineVulnerability[] = []

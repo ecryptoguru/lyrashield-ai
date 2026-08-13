@@ -1,0 +1,254 @@
+---
+import Base from "@layouts/Base.astro"
+import Faq from "@components/landing/Faq.astro"
+import FinalCta from "@components/landing/FinalCta.astro"
+import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-security-controls"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/evidence-vault", origin).toString()
+
+const evidenceControls = [...VIBE_SECURITY_CONTROLS]
+  .filter((control) => control.strategy === "evidence")
+  .sort((a, b) => a.rank - b.rank)
+
+const title = "Operational Evidence Vault | LyraShield AI"
+const description =
+  "Collect, review, and version encrypted proof for the seven Vibe Security 50 controls that cannot be established by a repository or URL scan."
+
+const faq = [
+  {
+    q: "Why can't these controls be scanned?",
+    a: "Seven controls describe operational practice, not code: audit trails, monitoring, backup tests, sandboxing, test independence, multi-agent trust, and accountable review. A scanner can ask for evidence of these, but it cannot safely observe or prove them on its own.",
+  },
+  {
+    q: "What does the Operational Evidence Vault do?",
+    a: "It creates an append-only, workspace-scoped record for each evidence-required control. You submit an attestation and any supporting files; a reviewer accepts, rejects, or requests a revision; and every change creates a new immutable version rather than overwriting the last.",
+  },
+  {
+    q: "Are artifact files stored securely?",
+    a: "Artifacts are encrypted before storage and never returned with a raw storage URI. The dashboard and API expose only sanitized metadata — filename, media type, and byte length — inside the workspace RLS boundary.",
+  },
+  {
+    q: "Does accepted evidence mean the app is secure?",
+    a: "No. Accepted evidence means the submitted proof was reviewed and found adequate for that control. It is one input into an assurance report, not a guarantee that the app is secure, a formal attestation, or proof against every possible threat.",
+  },
+  {
+    q: "Does this make LyraShield SOC 2 compliant, certified, or adversarially robust?",
+    a: "No. LyraShield does not claim SOC 2 compliance, certification, security guarantees, AI safety testing (without a named framework), or adversarial robustness. Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate. The evidence vault supports release assurance; it does not produce those claims.",
+  },
+]
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "Operational Evidence Vault",
+    description,
+    url: canonical,
+    isPartOf: { "@id": `${origin}/#website` },
+    publisher: { "@id": `${origin}/#organization` },
+    about: [
+      "AI application security",
+      "security evidence",
+      "release assurance",
+      "Vibe Security 50",
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((entry) => ({
+      "@type": "Question",
+      name: entry.q,
+      acceptedAnswer: { "@type": "Answer", text: entry.a },
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Evidence Vault", item: canonical },
+    ],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="relative mx-auto max-w-5xl px-4 pb-12 pt-14 sm:px-6 sm:pt-20 lg:pt-24">
+    <header class="max-w-3xl" data-reveal-group>
+      <p
+        class="font-mono text-xs font-semibold tracking-wider text-accent uppercase"
+        data-reveal="fade"
+      >
+        Evidence workflow
+      </p>
+      <h1
+        class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl"
+        data-reveal
+      >
+        Operational Evidence Vault
+      </h1>
+      <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
+        Some security controls cannot be proven by a repository or URL scan. The
+        Operational Evidence Vault collects, reviews, and versions the proof for
+        the seven evidence-required Vibe Security 50 controls.
+      </p>
+      <div
+        class="mt-8 flex flex-wrap gap-4"
+        data-reveal
+        data-cta-id="evidence-vault-hero"
+      >
+        <a
+          href="/vibe-security-50"
+          class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="evidence-vault-see-controls"
+        >
+          See the 7 evidence controls
+        </a>
+        <a
+          href="/methodology"
+          class="inline-flex min-h-12 items-center justify-center rounded-lg border border-border px-5 text-sm font-semibold text-text transition-colors hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="evidence-vault-methodology"
+        >
+          Read the methodology
+        </a>
+      </div>
+    </header>
+
+    <section aria-labelledby="workflow-heading" class="mt-16 border-y border-border py-12">
+      <h2 id="workflow-heading" class="text-2xl font-semibold text-text" data-reveal>
+        How evidence becomes assurance
+      </h2>
+      <ol
+        class="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4"
+        data-reveal-group
+      >
+        <li class="rounded-lg border border-border bg-bg-raised p-5" data-reveal>
+          <span class="font-mono text-xs text-accent">01</span>
+          <h3 class="mt-2 font-semibold text-text">Submit</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">
+            Attach an attestation and encrypted artifacts for a control.
+          </p>
+        </li>
+        <li class="rounded-lg border border-border bg-bg-raised p-5" data-reveal>
+          <span class="font-mono text-xs text-accent">02</span>
+          <h3 class="mt-2 font-semibold text-text">Review</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">
+            A reviewer accepts, rejects, or requests a revision.
+          </p>
+        </li>
+        <li class="rounded-lg border border-border bg-bg-raised p-5" data-reveal>
+          <span class="font-mono text-xs text-accent">03</span>
+          <h3 class="mt-2 font-semibold text-text">Version</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">
+            Every action creates a new version; the prior record stays frozen.
+          </p>
+        </li>
+        <li class="rounded-lg border border-border bg-bg-raised p-5" data-reveal>
+          <span class="font-mono text-xs text-accent">04</span>
+          <h3 class="mt-2 font-semibold text-text">Snapshot</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">
+            Accepted evidence is frozen into the private assurance report.
+          </p>
+        </li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="controls-heading" class="mt-14">
+      <h2 id="controls-heading" class="text-2xl font-semibold text-text" data-reveal>
+        The seven evidence-required controls
+      </h2>
+      <p class="mt-3 leading-7 text-text-muted" data-reveal>
+        These are the Vibe Security 50 controls a scanner cannot establish on its
+        own. Each one becomes a card in the vault.
+      </p>
+      <ol
+        class="mt-8 divide-y divide-border border-y border-border"
+        data-reveal-group
+      >
+        {evidenceControls.map((control) => (
+          <li
+            class="grid gap-2 py-5 sm:grid-cols-[4rem_1fr] sm:gap-6"
+            data-reveal
+          >
+            <span class="font-mono text-xs text-text-muted" aria-hidden="true">
+              {String(control.rank).padStart(2, "0")}
+            </span>
+            <h3 class="font-medium text-text">{control.title}</h3>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section aria-labelledby="trust-heading" class="mt-14 border-t border-border pt-12">
+      <h2 id="trust-heading" class="text-2xl font-semibold text-text" data-reveal>
+        What stays private
+      </h2>
+      <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Encrypted artifacts</dt>
+          <dd class="mt-2 leading-7 text-text-muted">
+            Files are encrypted before they reach object storage. The API never
+            returns a raw storage URI.
+          </dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Workspace isolation</dt>
+          <dd class="mt-2 leading-7 text-text-muted">
+            RLS policies enforce that evidence is visible only inside the workspace
+            that owns it.
+          </dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Append-only versions</dt>
+          <dd class="mt-2 leading-7 text-text-muted">
+            Revisions and reviews create new versions instead of overwriting prior
+            evidence.
+          </dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Immutable snapshots</dt>
+          <dd class="mt-2 leading-7 text-text-muted">
+            Private assurance reports freeze the current evidence state at creation
+            time; public shared reports omit it entirely.
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <Faq items={faq} />
+
+    <section
+      aria-labelledby="start-heading"
+      class="mt-8 border-t border-border py-14"
+      data-reveal-group
+    >
+      <h2 id="start-heading" class="text-2xl font-semibold text-text" data-reveal>
+        Start with a free check
+      </h2>
+      <p class="mt-3 max-w-2xl leading-7 text-text-muted" data-reveal>
+        Run a passive Lite Check in 30 seconds, then create a workspace to collect
+        evidence for the controls that matter most.
+      </p>
+      <div class="mt-8 flex flex-wrap gap-4" data-reveal>
+        <a
+          href="/scan"
+          class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="evidence-vault-lite-check"
+        >
+          Run free Lite Check
+        </a>
+        <a
+          href="https://app.lyrashieldai.com/sign-up"
+          class="inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg-raised px-5 text-sm font-semibold text-text transition-colors hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="evidence-vault-create-account"
+        >
+          Create free account
+        </a>
+      </div>
+    </section>
+
+    <FinalCta />
+  </section>
+</Base>

@@ -124,6 +124,84 @@ describe("getShareableReport", () => {
       })
     )
   })
+
+  it("does not expose private AI assurance data in public share payloads", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      scanId: null,
+      title: "Shared report",
+      type: "executive",
+      status: "generated",
+      format: "html",
+      contentJson: {
+        version: 2,
+        totalFindings: 0,
+        assurance: {
+          verdict: "GO",
+          score: 95,
+          grade: "A",
+          narrative: "Ready.",
+          scoreTrend: [],
+          ageBuckets: {},
+          priorityActions: [],
+          methodology: ["Frozen."],
+        },
+        aiAssurance: {
+          controls: [
+            {
+              controlId: "vibe-34",
+              controlTitle: "Missing audit trails",
+              state: "EVIDENCE_ACCEPTED",
+              status: "ACCEPTED",
+              version: 1,
+              attestation: "audit log present",
+              artifacts: [
+                {
+                  filename: "proof.pdf",
+                  mediaType: "application/pdf",
+                  byteLength: 1234,
+                  checksum: "sha-1",
+                  storageUri: "s3://lyrashield-bucket/evidence/ws-1/...",
+                  encryptionKeyRef: "vault/lyrashield-evidence-key/v1",
+                },
+              ],
+            },
+          ],
+          generatedAt: "2026-07-14T00:00:00.000Z",
+        },
+        aiAppSecurity: {
+          score: 98,
+          methodology: "ai-app-security-score/1.0.0",
+          advisoryReceipt: { snapshotId: "private-advisory-snapshot" },
+          triage: { modelRoute: "private-model-route" },
+        },
+        aiSystemProfile: { systemName: "Private assistant" },
+        threatModel: { currentVersion: "private-threat-model-version" },
+      },
+      shareTokenHash: "hash",
+      shareExpiresAt: null,
+      revokedAt: null,
+      createdAt: new Date("2026-07-14T00:00:00.000Z"),
+    })
+    mockPrisma.scan.findFirst.mockResolvedValue(null)
+
+    const report = await getShareableReport("report-1", "ws-1")
+
+    expect(report).not.toBeNull()
+    expect(report).not.toHaveProperty("aiAssurance")
+    expect(report).not.toHaveProperty("aiAppSecurity")
+    expect(report).not.toHaveProperty("aiSystemProfile")
+    expect(report).not.toHaveProperty("threatModel")
+    expect(JSON.stringify(report)).not.toContain("aiAssurance")
+    expect(JSON.stringify(report)).not.toContain("private-advisory-snapshot")
+    expect(JSON.stringify(report)).not.toContain("private-model-route")
+    expect(JSON.stringify(report)).not.toContain("Private assistant")
+    expect(JSON.stringify(report)).not.toContain("private-threat-model-version")
+    expect(JSON.stringify(report)).not.toContain("s3://")
+    expect(JSON.stringify(report)).not.toContain("storageUri")
+  })
+
   it("runs the public-share read sequence inside workspace RLS", async () => {
     mockPrisma.report.findFirst.mockResolvedValue({
       id: "report-1",

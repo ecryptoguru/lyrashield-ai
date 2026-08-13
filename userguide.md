@@ -44,13 +44,14 @@ Before submitting a target, confirm that you own it or are authorized to test it
 
 ### 2.2 Browser-local tools
 
-The public Tools area provides five utilities whose inputs remain in the browser:
+The public Tools area provides six utilities whose inputs remain in the browser:
 
 1. AI app launch checklist.
 2. Security headers and CORS checker.
 3. Secret exposure scanner.
 4. Supabase row-level-security review helper.
 5. JWT and session inspector.
+6. **AI App Security scanner** (`/tools/ai-app-security-scanner`) — runs eight deterministic static-analysis signals (AI-01–AI-08) mapped to the OWASP Top 10 for LLM Applications (2025) entirely in the browser. Accepts pasted code or selected local files (≤25 files, 1 MiB/file, 5 MiB total) and reports `DETECTED`, `NO_FINDING`, `INCONCLUSIVE`, and `NOT_ASSESSED` coverage with file, line, bounded evidence, remediation, supported scope, and limitations. AI-03 (advisory), full-repository context, optional LLM triage, persistent evidence, retest, reporting, and the numeric score require the paid repository scan. The free tool shows no numeric score because selected-file coverage is user-controlled and incomplete. Files and pasted code never leave the browser.
 
 These utilities provide guidance and local analysis; they do not create authenticated scan evidence or an official score.
 
@@ -253,6 +254,7 @@ The scanner labels are:
 - **Secret scan** — bounded credential-pattern review.
 - **Agent configuration** — supported agent instruction and workflow checks.
 - **URL scan** — pinned deterministic public-surface review.
+- **AI App Security** — deterministic static-analysis signals (AI-01–AI-08) mapped to the OWASP Top 10 for LLM Applications (2025). Paid repository scans rerun the shared core and may add bounded AI-03 advisory enrichment when exact dependency resolution and a complete fresh advisory receipt are available. A private score is shown only when its coverage and AI-03 freshness gates pass, and it is excluded from public scorecards. Engine-bound LLM triage is planned; the generic in-process overlay is not a released customer capability.
 
 The Vibe Security 50 ledger contains one receipt for each control. Read `NO_FINDING` as “the assigned scanner returned no mapped finding,” not “passed.” Seven controls always require operational or human evidence.
 
@@ -489,7 +491,7 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 - `lyrashield_run_pr_scan` — start a PR-focused (CHECK_PR) scan. It has the same `repo` support, and local-stdio-only `auto` support, as `lyrashield_scan_target`;
 - `lyrashield_record_fix_proposal` — record a fix proposal on a finding;
 - `lyrashield_verify_fix` — queue a retest to verify a fix;
-- `lyrashield_create_report` — create an executive, developer, or compliance report.
+- `lyrashield_create_report` — create an executive, developer, or assurance report. (The internal type value is still `compliance` for backward compatibility; the UI label is "Assurance.")
 
 Read actions follow API-key scope and workspace permissions. Locally, mutating MCP actions require interactive approval on the controlling terminal (or your editor's own approval prompt, where the editor supports MCP elicitation) and fail closed when no approval channel is available.
 
@@ -513,6 +515,12 @@ The public marketing site, Lite Check, browser-local tools, methodology, and con
 The production application has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires application-level readiness/queue/provider alerts, capacity evidence, restore proof, and approved evidence for each additional review profile claimed. No recovery or RPO/RTO claim is made.
 
 Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
+
+LyraShield does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework), or "adversarial robustness proven." Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate. See `docs/claims-readiness.md` for the full map.
+
+## AI assurance workspace
+
+The private AI assurance workspace keeps operational evidence, an AI system profile, and a threat model per target. Profile and threat-model values are explicitly **Customer-declared**: completing required fields records an inventory version, not verified lineage, compliance, or certification. High and critical threat scenarios require a mitigation, test plan, and owner before a version can be created. Private reports freeze the evidence/profile/threat-model state present at creation; shared reports omit the entire AI assurance projection.
 
 ## 24. Troubleshooting
 

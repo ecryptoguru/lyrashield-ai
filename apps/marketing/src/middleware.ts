@@ -38,7 +38,12 @@ export const onRequest = defineMiddleware(async ({ url }, next) => {
   const headers = new Headers(response.headers)
 
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
-    headers.set(name, value)
+    const isCsp = name === "Content-Security-Policy"
+    const shouldUpgrade = url.protocol === "https:"
+    headers.set(
+      name,
+      isCsp && !shouldUpgrade ? value.replace("; upgrade-insecure-requests", "") : value
+    )
   }
 
   if (url.pathname.startsWith("/api/")) {

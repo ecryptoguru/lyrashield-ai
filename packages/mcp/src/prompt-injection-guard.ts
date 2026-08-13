@@ -147,15 +147,125 @@ const CONTEXT_BOUNDARY_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
 ]
 /* eslint-enable security/detect-unsafe-regex */
 
+/**
+ * Cross-script Unicode homoglyph mapping. NFKC normalization does not map
+ * characters across scripts (e.g. Cyrillic "а" U+0430 → Latin "a" U+0061),
+ * so without an explicit table an attacker can substitute lookalike
+ * characters to bypass keyword-based patterns.
+ *
+ * The table covers the most commonly confused Latin/Cyrillic/Greek pairs.
+ * It is intentionally conservative: only characters with a visually
+ * indistinguishable Latin equivalent are included, to minimise false
+ * positives on legitimate non-English input.
+ */
+const HOMOGLYPH_MAP: Record<string, string> = {
+  // Cyrillic → Latin
+  а: "a",
+  е: "e",
+  о: "o",
+  р: "p",
+  с: "c",
+  у: "y",
+  х: "x",
+  А: "A",
+  В: "B",
+  Е: "E",
+  К: "K",
+  М: "M",
+  Н: "H",
+  О: "O",
+  Р: "P",
+  С: "C",
+  Т: "T",
+  У: "Y",
+  Х: "X",
+  і: "i",
+  І: "I",
+  ј: "j",
+  Ј: "J",
+  ѕ: "s",
+  Ѕ: "S",
+  // Greek → Latin
+  ο: "o",
+  Ο: "O",
+  ρ: "p",
+  Ρ: "P",
+  ν: "v",
+  Ν: "N",
+  α: "a",
+  Α: "A",
+  ε: "e",
+  Ε: "E",
+  η: "e",
+  Η: "E",
+  ι: "i",
+  Ι: "I",
+  κ: "k",
+  Κ: "K",
+  μ: "m",
+  Μ: "M",
+  τ: "t",
+  Τ: "T",
+  γ: "g",
+  Γ: "G",
+  β: "b",
+  Β: "B",
+}
+
+/**
+ * Leetspeak mapping. Attackers substitute digits and symbols for letters
+ * to bypass keyword-based patterns. The table covers the most common
+ * substitutions used in prompt-injection payloads.
+ */
+const LEETSPEAK_MAP: Record<string, string> = {
+  "0": "o",
+  "1": "i",
+  "3": "e",
+  "4": "a",
+  "5": "s",
+  "7": "t",
+  "@": "a",
+  $: "s",
+  "!": "i",
+  "|": "l",
+}
+
+/**
+ * Decode a string that appears to be base64-encoded and return the decoded
+ * result. Returns null if the input does not look like base64 or if decoding
+ * fails. This is intentionally conservative: only standalone tokens that
+ * match the base64 alphabet and are long enough to be meaningful are decoded.
+ */
+function tryDecodeBase64(token: string): string | null {
+  // Must be at least 20 chars (enough to encode a meaningful phrase), only
+  // base64 alphabet characters, optional padding at the end.
+  if (!/^[A-Za-z0-9+/]{20,}={0,2}$/.test(token)) return null
+  try {
+    const decoded = Buffer.from(token, "base64").toString("utf-8")
+    // Reject if the decoded result is not mostly printable ASCII text.
+    if (!/^[\x20-\x7E\s]+$/.test(decoded)) return null
+    return decoded
+  } catch {
+    return null
+  }
+}
+
 export class PromptInjectionGuard {
   private maxInputLength: number
   private strictMode: boolean
   private timeoutMs: number
+  private logEvents: boolean
 
-  constructor(options?: { maxInputLength?: number; strictMode?: boolean; timeoutMs?: number }) {
+  constructor(options?: {
+    maxInputLength?: number
+    strictMode?: boolean
+    timeoutMs?: number
+    logEvents?: boolean
+  }) {
     this.maxInputLength = options?.maxInputLength ?? 10000
     this.strictMode = options?.strictMode ?? true
     this.timeoutMs = options?.timeoutMs ?? 1000
+    this.logEvents = options?.logEvents ?? true
   }
 
   private isDeadlineExceeded(deadline: number): boolean {
@@ -165,20 +275,43 @@ export class PromptInjectionGuard {
 
   /**
    * Normalize input so that trivial obfuscation (zero-width characters,
-   * Unicode homoglyphs, extra whitespace, HTML entities) cannot bypass the
-   * regex patterns.
+   * Unicode homoglyphs, leetspeak, URL-encoding, HTML entities, base64)
+   * cannot bypass the regex patterns.
    */
   private normalizeInput(input: string): string {
-    // Remove zero-width and invisible control characters commonly used to
-    // break string-based filters.
-    const withoutInvisible = input.replace(/[\u200B-\u200F\u2060\uFEFF\u00AD]/g, "")
+    // Replace zero-width and invisible control characters with a space so
+    // that obfuscated words like "ignore\u200Ball\u200Binstructions" become
+    // "ignore all instructions" (matching the pattern) rather than
+    // "ignoreallinstructions" (which would bypass it).
+    const withoutInvisible = input.replace(/[\u200B-\u200F\u2060\uFEFF\u00AD]/g, " ")
 
-    // Normalize Unicode (NFKC) to collapse homoglyphs such as "і" (Cyrillic)
-    // vs "i" (Latin).
-    const normalized = withoutInvisible.normalize("NFKC")
+    // Map cross-script Unicode homoglyphs to their Latin equivalents.
+    // NFKC normalization handles compatibility characters (e.g. "ﬁ" → "fi")
+    // but does NOT map cross-script lookalikes (Cyrillic "і" U+0456 ≠ Latin
+    // "i" U+0069). Without this step, "іgnore" stays "іgnore" and bypasses
+    // patterns that match "ignore".
+    let homoglyphMapped = ""
+    for (const char of withoutInvisible) {
+      homoglyphMapped += HOMOGLYPH_MAP[char] ?? char
+    }
+
+    // Normalize Unicode (NFKC) to collapse compatibility characters.
+    const normalized = homoglyphMapped.normalize("NFKC")
+
+    // Decode URL percent-encoding (e.g. %69%67%6E%6F%72%65 → ignore).
+    // Wrapped in try/catch because malformed sequences (e.g. "%xy") would
+    // throw; in that case we keep the original string.
+    let urlDecoded = normalized
+    if (normalized.includes("%")) {
+      try {
+        urlDecoded = decodeURIComponent(normalized)
+      } catch {
+        // Malformed percent-encoding — keep original.
+      }
+    }
 
     // Decode common HTML entities used to hide characters.
-    const decoded = normalized.replace(
+    const htmlDecoded = urlDecoded.replace(
       /&(?:#x([0-9a-fA-F]+);|#([0-9]+);|amp;|lt;|gt;|quot;|apos;)/g,
       (_match, hex, decimal) => {
         if (hex) return String.fromCharCode(parseInt(hex, 16))
@@ -189,8 +322,31 @@ export class PromptInjectionGuard {
       }
     )
 
+    // Attempt base64 decode on standalone tokens BEFORE leetspeak mapping,
+    // because leetspeak digit-to-letter substitution would corrupt base64
+    // content (e.g. "3" to "e" changes the base64 string). If a token
+    // decodes to readable text, append the decoded form so injection
+    // patterns can match against it.
+    const b64Tokens = htmlDecoded.split(/\s+/)
+    const b64Augmented: string[] = [htmlDecoded]
+    for (const token of b64Tokens) {
+      const decodedB64 = tryDecodeBase64(token)
+      if (decodedB64) {
+        b64Augmented.push(decodedB64)
+      }
+    }
+    const b64Joined = b64Augmented.join(" ")
+
+    // Map leetspeak digits/symbols to their letter equivalents. Applied
+    // after URL-decode, HTML-entity-decode, and base64-decode so that
+    // encoded leetspeak is also caught.
+    let leetspeakMapped = ""
+    for (const char of b64Joined) {
+      leetspeakMapped += LEETSPEAK_MAP[char] ?? char
+    }
+
     // Collapse repeated whitespace and trim.
-    return decoded.replace(/\s+/g, " ").trim()
+    return leetspeakMapped.replace(/\s+/g, " ").trim()
   }
 
   check(input: string): GuardResult {
@@ -209,10 +365,11 @@ export class PromptInjectionGuard {
 
     for (const { pattern, name } of INJECTION_PATTERNS) {
       if (this.isDeadlineExceeded(deadline)) {
-        logger.warn("Prompt injection guard exceeded time budget", {
-          inputLength: input.length,
-          timeoutMs: this.timeoutMs,
-        })
+        this.logEvents &&
+          logger.warn("Prompt injection guard exceeded time budget", {
+            inputLength: input.length,
+            timeoutMs: this.timeoutMs,
+          })
         return {
           allowed: false,
           reason: "Prompt injection guard exceeded time budget",
@@ -227,10 +384,11 @@ export class PromptInjectionGuard {
 
     for (const { pattern, name } of CONTEXT_BOUNDARY_PATTERNS) {
       if (this.isDeadlineExceeded(deadline)) {
-        logger.warn("Prompt injection guard exceeded time budget", {
-          inputLength: input.length,
-          timeoutMs: this.timeoutMs,
-        })
+        this.logEvents &&
+          logger.warn("Prompt injection guard exceeded time budget", {
+            inputLength: input.length,
+            timeoutMs: this.timeoutMs,
+          })
         return {
           allowed: false,
           reason: "Prompt injection guard exceeded time budget",
@@ -266,10 +424,11 @@ export class PromptInjectionGuard {
     const criticalPatterns = detectedPatterns.filter((p) => CRITICAL_PATTERN_NAMES.has(p))
 
     if (criticalPatterns.length > 0) {
-      logger.warn("Prompt injection detected", {
-        patterns: criticalPatterns,
-        inputLength: input.length,
-      })
+      this.logEvents &&
+        logger.warn("Prompt injection detected", {
+          patterns: criticalPatterns,
+          inputLength: input.length,
+        })
       return {
         allowed: false,
         reason: `Potential prompt injection detected: ${criticalPatterns.join(", ")}`,

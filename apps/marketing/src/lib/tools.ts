@@ -28,6 +28,34 @@ export const tools = [
     ],
   },
   {
+    slug: "ai-app-security-scanner",
+    title: "AI App Security Scanner",
+    seoTitle: "AI App Security Scanner | LyraShield AI",
+    description:
+      "Scan selected source files locally for AI-specific security signals mapped to the OWASP Top 10 for LLM Applications (2025).",
+    summary:
+      "This browser-local scanner checks up to 25 selected files for 8 static-analysis signals covering prompt injection, sensitive context, LLM output handling, agent permissions, system prompt exposure, vector/RAG access, and consumption limits.",
+    privacy: "Files and pasted code never leave your device.",
+    category: "Protect data and access",
+    checks: [
+      "Prompt injection, sensitive context, output handling, excessive agency, system prompt, vector access, and consumption-limit signals",
+      "OWASP LLM Top 10 2025 mappings with detected, no-finding, inconclusive, and not-assessed states",
+      "Browser-local analysis; files and pasted code are not uploaded",
+    ],
+    limitations: [
+      "It scans only the files you select and skips unsupported or truncated files; 1 MiB per file, 5 MiB total",
+      "It does not run live AI safety tests, dependency CVE checks, or full-repository contextual analysis",
+      "A clear result does not prove the AI application is secure; use it as a focused next-step guide",
+    ],
+    updatedDate: "2026-08-13",
+    references: [
+      {
+        label: "OWASP Top 10 for LLM Applications 2025",
+        url: "https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/",
+      },
+    ],
+  },
+  {
     slug: "security-headers-checker",
     title: "Security Headers and CORS Checker",
     seoTitle: "Security Headers and CORS Checker | LyraShield AI",

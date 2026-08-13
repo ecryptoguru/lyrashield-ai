@@ -1,5 +1,6 @@
 import { execFile, spawn, type ChildProcess } from "child_process"
-import { rm, mkdir, readdir, stat, lstat, realpath, open } from "fs/promises"
+import { constants as fsConstants } from "fs"
+import { rm, mkdir, readdir, stat, lstat, realpath, open, writeFile } from "fs/promises"
 import { join, relative, resolve, sep } from "path"
 import { tmpdir } from "os"
 import { promisify } from "util"
@@ -9,6 +10,10 @@ import { addScanEvent } from "@lyrashield/db"
 import { resolveScanProfile } from "@lyrashield/types"
 import { buildEngineCommand, type ScanConfig, type EngineCommand } from "./command-builder"
 import { parseEngineOutput, type ParsedScanOutput } from "./output-parser"
+import {
+  parseEngineTriageArtifact,
+  type EngineTriageArtifact,
+} from "@lyrashield/security/ai-security"
 
 export interface EngineRunResult {
   exitCode: number
@@ -123,6 +128,7 @@ export function interpretExitCode(
 
 const MAX_ENGINE_VULNERABILITIES_BYTES = 10 * 1024 * 1024
 const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
+const MAX_ENGINE_TRIAGE_ARTIFACT_BYTES = 128 * 1024
 const SIGKILL_GRACE_MS = 5000
 // Purely informational "still running" ScanEvent row. Each tick is a Postgres
 // insert competing with finding writes, and the UI polls on its own (slower)
@@ -662,10 +668,10 @@ export async function prepareEngineWorkspace(workDir: string): Promise<void> {
 
 async function readTextFileBounded(path: string, maxBytes: number): Promise<string> {
   // The artifact location is selected only from a validated engine output directory.
-  // Open first, then fstat the live handle: this avoids the TOCTOU window where an
-  // attacker swaps the path for a symlink between a prior lstat and the open.
+  // O_NOFOLLOW and fstat reject symlinked or special-file artifacts without a
+  // pre-open lstat/TOCTOU gap.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const handle = await open(path, "r")
+  const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW)
   try {
     const fileStat = await handle.stat()
     if (!fileStat.isFile()) {
@@ -844,6 +850,96 @@ export async function runEngine(
     sourceCheckoutPath,
     sourceRevision,
     sandboxRemoved,
+  }
+}
+
+export interface EngineTriageRunResult {
+  artifact: EngineTriageArtifact | null
+  /** Bounded private usage receipt, normalized by the worker before accounting. */
+  llmUsage?: Record<string, unknown>
+  exitCode: number
+  timedOut: boolean
+  cancelled: boolean
+}
+
+function isTriageUsage(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Runs the engine-owned triage command in an existing scan workspace. The
+ * command receives only redacted candidate data and has no repository target.
+ */
+export async function runEngineTriage(params: {
+  scanId: string
+  profile: EngineProfile
+  input: Record<string, unknown>
+  maxBudgetUsd: number
+  timeoutMs: number
+  shouldCancel?: () => Promise<boolean>
+}): Promise<EngineTriageRunResult> {
+  const { scanId, profile, input, maxBudgetUsd, timeoutMs, shouldCancel } = params
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(scanId) || scanId.includes("..")) {
+    throw new Error("Invalid scan id for triage workspace")
+  }
+  if (!Number.isFinite(maxBudgetUsd) || maxBudgetUsd <= 0) {
+    throw new Error("Triage requires a positive remaining scan budget")
+  }
+
+  const absWorkDir = resolve(ENGINE_WORK_ROOT, scanId)
+  const inputPath = join(absWorkDir, "ai-security-triage-input.json")
+  const outputPath = join(absWorkDir, "ai-security-triage.json")
+  // inputPath is constrained to the worker-owned per-scan workspace above.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(inputPath, JSON.stringify(input), { encoding: "utf8", mode: 0o600 })
+  await rm(outputPath, { force: true })
+
+  const processResult = await runEngineProcess(
+    {
+      executable: env.LYRASHIELD_ENGINE_PATH || "lyrashield",
+      args: [
+        "ai-security-triage",
+        "--input",
+        inputPath,
+        "--output",
+        outputPath,
+        "--enabled",
+        "--max-budget-usd",
+        String(maxBudgetUsd),
+      ],
+      workDir: absWorkDir,
+    },
+    absWorkDir,
+    scanId,
+    Math.min(timeoutMs, 90_000),
+    profile,
+    shouldCancel
+  )
+
+  let rawArtifact: unknown
+  try {
+    rawArtifact = JSON.parse(
+      await readTextFileBounded(outputPath, MAX_ENGINE_TRIAGE_ARTIFACT_BYTES)
+    )
+  } catch (error) {
+    logger.warn("AI security triage artifact unavailable or invalid JSON", {
+      scanId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return { artifact: null, ...processResult }
+  }
+  const artifact = parseEngineTriageArtifact(rawArtifact)
+  if (!artifact) {
+    logger.warn("AI security triage artifact violated its versioned contract", { scanId })
+    return { artifact: null, ...processResult }
+  }
+  const rawUsage = isTriageUsage(rawArtifact) ? rawArtifact.llmUsage : undefined
+  return {
+    artifact,
+    ...(isTriageUsage(rawUsage) ? { llmUsage: rawUsage } : {}),
+    exitCode: processResult.exitCode,
+    timedOut: processResult.timedOut,
+    cancelled: processResult.cancelled,
   }
 }
 

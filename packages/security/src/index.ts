@@ -76,3 +76,78 @@ export {
   checkOutputSafety,
   type InstructionSafetyResult,
 } from "./instruction-safety"
+
+export {
+  AI_SECURITY_CONTROLS,
+  AI_SECURITY_CONTROLS_BY_ID,
+  AI_SECURITY_CONTROL_IDS,
+} from "./ai-security/controls"
+
+export {
+  AI_SECURITY_DETECTOR_VERSION,
+  AI_SECURITY_SCORE_VERSION,
+  type AIControlId,
+  type AIControlCoverage,
+  type AIScanFile,
+  type AIScanFileLanguage,
+  type AIScanLimit,
+  type AIScanLimits,
+  type AIScanResult,
+  type AISecurityControlDefinition,
+  type AISecurityCoverage,
+  type AISecurityEvidenceSource,
+  type AISecurityProvenance,
+  type AISecuritySeverity,
+  type AISecuritySignal,
+  type AISecuritySignalState,
+  type AISecurityTriage,
+} from "./ai-security/types"
+
+export { AI_RULES, type AIRule } from "./ai-security/rules"
+
+export {
+  scanAiSecurityFiles,
+  summarizeAiSecurityCoverage,
+  type AIScanOptions,
+} from "./ai-security/scan"
+
+export { buildSignal, noFindingSignal, inconclusiveSignal, notAssessedSignal } from "./ai-security"
+
+export {
+  scanAiDataExposure,
+  type AiDataExposureFinding,
+  type AiDataExposureSource,
+} from "./ai-data-exposure"
+
+export {
+  evaluateFrameworkReadiness,
+  FRAMEWORK_MAPPINGS,
+  FRAMEWORK_MAPPING_VERSION,
+  type FrameworkAssessment,
+  type FrameworkId,
+  type FrameworkMapping,
+  type FrameworkReadiness,
+} from "./ai-assurance-frameworks"
+
+export {
+  computeAiSecurityScore,
+  type AISecurityScoreInput,
+  type AISecurityScoreResult,
+  type AIControlScore,
+  type AIScoreEvidenceQuality,
+  type AIScoreCandidate,
+} from "./ai-security/score"
+
+export {
+  AI_SECURITY_CALIBRATION_CORPUS_VERSION,
+  evaluateAiSecurityFixtures,
+  type AiSecurityCalibrationReport,
+} from "./ai-security/calibration"
+
+export {
+  ENGINE_TRIAGE_SCHEMA_VERSION,
+  applyEngineTriageArtifact,
+  parseEngineTriageArtifact,
+  type EngineTriageArtifact,
+  type EngineTriageStatus,
+} from "./ai-security/engine-triage"

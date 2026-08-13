@@ -1,0 +1,74 @@
+---
+interface Props {
+  compact?: boolean
+}
+
+const { compact = false } = Astro.props
+---
+
+<section
+  id="evidence-vault"
+  aria-labelledby="evidence-vault-heading"
+  class="px-4 py-14 sm:px-6 sm:py-16 lg:px-8"
+>
+  <div class="mx-auto max-w-5xl" data-reveal-group>
+    <header class="max-w-3xl">
+      <p
+        class="font-mono text-xs font-semibold tracking-wider text-accent uppercase"
+        data-reveal="fade"
+      >
+        Release assurance
+      </p>
+      <h2
+        id="evidence-vault-heading"
+        class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl"
+        data-reveal
+      >
+        Operational Evidence Vault
+      </h2>
+      <p class="mt-5 text-lg leading-8 text-text-muted" data-reveal>
+        Seven of the Vibe Security 50 controls describe practice, not code. The
+        vault collects, reviews, and versions encrypted evidence for audit
+        trails, monitoring, backup tests, sandboxing, test independence,
+        multi-agent trust, and accountable review.
+      </p>
+    </header>
+
+    <div class="mt-10 grid gap-6 md:grid-cols-2" data-reveal-group>
+      <div class="rounded-lg border border-border bg-bg-raised p-6" data-reveal>
+        <h3 class="font-semibold text-text">Submit and review</h3>
+        <p class="mt-2 leading-7 text-text-muted">
+          Upload an attestation and encrypted artifacts. A reviewer accepts,
+          rejects, or requests a revision. Every change creates a new version,
+          never an overwrite.
+        </p>
+      </div>
+      <div class="rounded-lg border border-border bg-bg-raised p-6" data-reveal>
+        <h3 class="font-semibold text-text">Freeze into reports</h3>
+        <p class="mt-2 leading-7 text-text-muted">
+          Accepted evidence is captured in immutable private assurance reports.
+          Public shared reports keep AI-assurance data out.
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-8 flex flex-wrap gap-4" data-reveal>
+      <a
+        href="/evidence-vault"
+        class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+        data-cta-id="homepage-evidence-vault"
+      >
+        How evidence works
+      </a>
+      {!compact && (
+        <a
+          href="/vibe-security-50"
+          class="inline-flex min-h-12 items-center justify-center rounded-lg border border-border px-5 text-sm font-semibold text-text transition-colors hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="homepage-vibe-security-50"
+        >
+          See the 7 evidence controls
+        </a>
+      )}
+    </div>
+  </div>
+</section>

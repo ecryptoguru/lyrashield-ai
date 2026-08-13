@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+export * from "./ai-safety-tests"
+
 export const WorkspaceModeSchema = z.enum(["VIBE", "TEAM", "ENTERPRISE"])
 export const WorkspacePlanSchema = z.enum([
   "FREE",

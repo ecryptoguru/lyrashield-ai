@@ -110,6 +110,10 @@ describe("RLS helpers", () => {
       "ScoreSnapshot",
       "FindingCandidate",
       "FindingVerification",
+      "AiSystemProfile",
+      "ThreatModel",
+      "ControlEvidence",
+      "AiSecurityScoreSnapshot",
     ]
 
     it("WORKSPACE_SCOPED_MODELS matches the RLS-protected table set exactly", () => {
@@ -151,6 +155,9 @@ describe("RLS helpers", () => {
       "Ticket",
       "ScorecardShare",
       "ScorecardEvent",
+      "AiSystemProfileVersion",
+      "ThreatModelVersion",
+      "ControlEvidenceVersion",
     ]
 
     it("excludes child RLS tables from WORKSPACE_SCOPED_MODELS (no workspaceId column)", () => {
