@@ -18,7 +18,7 @@ test("cycles and synchronizes the rendered marketing theme", async ({ page }) =>
   await expect(themeColor).toHaveAttribute("content", "#f5f9fc")
   await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgb(238, 246, 250)")
   await expect(page.locator(".hero-frame")).toHaveCSS("background-color", "rgb(245, 249, 252)")
-  await expect(page.locator("evidence-world")).toHaveCSS("background-color", "rgb(234, 243, 247)")
+  await expect(page.locator("evidence-world")).toHaveCSS("background-color", "rgb(8, 17, 28)")
 
   await toggle.click()
   await expect(root).toHaveAttribute("data-theme-preference", "light")
@@ -170,4 +170,30 @@ test("keeps a short landscape phone in the stable document flow", async ({ page 
   await expect(page.locator(".evidence-world__stage")).toHaveCSS("position", "relative")
   await expect(page.locator(".evidence-world__chapters")).toHaveCSS("margin-top", "0px")
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844)
+})
+
+test("keeps the compact mobile menu inside the visible viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 400 })
+  await page.goto("/")
+
+  const toggle = page.getByRole("button", { name: "Open navigation menu" })
+  await toggle.click()
+
+  const menu = page.locator("#mobile-menu")
+  await expect(menu).toBeVisible()
+  await expect(menu.getByText("Explore", { exact: true })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "Get started" })).toBeVisible()
+  const bounds = await menu.boundingBox()
+  expect(bounds).not.toBeNull()
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(384)
+  expect(await menu.evaluate((element) => element.scrollHeight)).toBeLessThanOrEqual(
+    await menu.evaluate((element) => element.clientHeight)
+  )
+
+  await page.keyboard.press("Escape")
+  await expect(menu).toBeHidden()
+
+  await toggle.click()
+  await page.getByRole("button", { name: "Close navigation menu" }).click()
+  await expect(menu).toBeHidden()
 })

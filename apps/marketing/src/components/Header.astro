@@ -66,21 +66,27 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       <dialog
         id="mobile-menu"
         aria-label="Mobile navigation"
-        aria-modal="true"
-        class="fixed m-0 w-56 max-w-[calc(100%-2rem)] gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 md:hidden"
-        style="top: 4.5rem; right: 1rem; bottom: auto; left: auto;"
+        class="fixed m-0 w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 md:hidden"
+        style="top: max(4.5rem, calc(4rem + env(safe-area-inset-top))); right: max(1rem, env(safe-area-inset-right)); bottom: auto; left: auto;"
       >
-        <a href="/#how-it-works" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">How it works</a>
-        <a href="/methodology" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Methodology</a>
-        <a href="/scan" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
-        <a href="/tools" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Tools</a>
-        <a href="/blog" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Resources</a>
-        <a href="/docs/integrations" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Docs</a>
+        <div class="mobile-menu__primary">
+          <a href="/#how-it-works" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">How it works</a>
+          <a href="/scan" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
+        </div>
+        <div class="mobile-menu__section">
+          <p>Explore</p>
+          <div class="mobile-menu__resources">
+            <a href="/methodology" class="menu-link mobile-menu__resource">Methodology</a>
+            <a href="/tools" class="menu-link mobile-menu__resource">Tools</a>
+            <a href="/blog" class="menu-link mobile-menu__resource">Resources</a>
+            <a href="/docs/integrations" class="menu-link mobile-menu__resource">Docs</a>
+          </div>
+        </div>
         {appUrl && (
-          <>
-            <a href={`${appUrl}/sign-in`} class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
-            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link mt-1 inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
-          </>
+          <div class="mobile-menu__account">
+            <a href={`${appUrl}/sign-in`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
+            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
+          </div>
         )}
       </dialog>
       <button id="theme-toggle" type="button" class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="System theme active. Change color theme" title="System theme">
@@ -152,18 +158,13 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         if (menu.open) {
           menu.close()
         } else {
-          menu.showModal()
+          menu.show()
           setMenuOpen(true)
-          document.body.dataset.previousOverflow = document.body.style.overflow || ""
-          document.body.style.overflow = "hidden"
         }
       })
 
       menu.addEventListener("close", () => {
         setMenuOpen(false)
-        if (document.body.dataset.previousOverflow) {
-          document.body.style.overflow = document.body.dataset.previousOverflow
-        }
       })
 
       menu.addEventListener("click", (event) => {
@@ -174,6 +175,24 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 
       menu.querySelectorAll<HTMLAnchorElement>(".menu-link").forEach((link) => {
         link.addEventListener("click", () => menu.close())
+      })
+
+      document.addEventListener("pointerdown", (event) => {
+        const target = event.target
+        if (!menu.open || (target instanceof Node && (menu.contains(target) || menuToggle.contains(target)))) return
+        menu.close()
+      })
+
+      addEventListener(
+        "scroll",
+        () => {
+          if (menu.open) menu.close()
+        },
+        { passive: true }
+      )
+
+      addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && menu.open) menu.close()
       })
 
       // The top navbar is visible from md up, so the mobile menu must never stay open
@@ -199,6 +218,68 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 
   #mobile-menu::backdrop {
     background: transparent;
+  }
+
+  #mobile-menu {
+    box-sizing: border-box;
+    max-height: calc(
+      100dvh - max(4.5rem, calc(4rem + env(safe-area-inset-top))) - max(1rem, env(safe-area-inset-bottom))
+    );
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+
+  #mobile-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-menu__primary,
+  .mobile-menu__account {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .mobile-menu__account {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    margin-top: 0.25rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .mobile-menu__section {
+    margin-top: 0.5rem;
+  }
+
+  .mobile-menu__section > p {
+    margin: 0 0 0.25rem;
+    padding: 0 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .mobile-menu__resources {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+  }
+
+  .mobile-menu__resource {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    border-radius: 0.75rem;
+    padding: 0 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+  }
+
+  .mobile-menu__resource:hover {
+    background: var(--bg);
+    color: var(--text);
   }
   /* The menu is mobile-only. When open (and only on small screens) lay it out as a
      vertical grid; on md+ it is hidden entirely by the md:hidden utility above. */
