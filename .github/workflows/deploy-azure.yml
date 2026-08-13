@@ -193,6 +193,9 @@ jobs:
     name: Deploy Azure Container Apps
     needs: build
     runs-on: ubuntu-24.04
+    # Azure control-plane calls occasionally stall without returning an error.
+    # Keep the deployment bounded so a later release is never blocked forever.
+    timeout-minutes: 30
     permissions:
       contents: read
     environment:
@@ -262,17 +265,22 @@ jobs:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
         run: |
-          if [ -n "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" ]; then
-            az containerapp secret set \
-              --name "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" \
+          sync_upstash_secrets() {
+            local container_app="$1"
+            if ! timeout --foreground 180s az containerapp secret set \
+              --only-show-errors \
+              --name "$container_app" \
               --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --secrets "upstash-redis-rest-url=${UPSTASH_REDIS_REST_URL}" "upstash-redis-rest-token=${UPSTASH_REDIS_REST_TOKEN}"
+              --secrets "upstash-redis-rest-url=${UPSTASH_REDIS_REST_URL}" "upstash-redis-rest-token=${UPSTASH_REDIS_REST_TOKEN}"; then
+              echo "::error::Timed out or failed while syncing Upstash secrets to ${container_app}."
+              exit 1
+            fi
+          }
+          if [ -n "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" ]; then
+            sync_upstash_secrets "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}"
           fi
           if [ -n "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" ]; then
-            az containerapp secret set \
-              --name "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --secrets "upstash-redis-rest-url=${UPSTASH_REDIS_REST_URL}" "upstash-redis-rest-token=${UPSTASH_REDIS_REST_TOKEN}"
+            sync_upstash_secrets "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}"
           fi
 
       # Garbage-collect GitHub App secrets so rotation deletes what is no longer needed.

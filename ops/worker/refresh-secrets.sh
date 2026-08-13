@@ -91,6 +91,11 @@ write_secret LYRASHIELD_EGRESS_PROXY_URL worker-egress-proxy-url
 write_secret LYRASHIELD_EGRESS_PROXY_SECRET worker-egress-proxy-secret
 # Optional. When present and LYRASHIELD_WEB_SEARCH_ENABLED=1, enables Parallel Search.
 write_secret_optional LYRASHIELD_WEB_SEARCH_API_KEY worker-web-search-api-key
+# Optional paid-scan overlay. The worker defaults to disabled when these are
+# absent, while a controlled production activation can use the existing Key
+# Vault refresh path without adding a second configuration channel.
+write_secret_optional LYRASHIELD_AI_TRIAGE_ENABLED worker-ai-triage-enabled
+write_secret_optional LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD worker-ai-triage-max-budget-usd
 
 uses_ghcr=false
 for image in "${LYRASHIELD_WORKER_IMAGE:-}" "${LYRASHIELD_SANDBOX_IMAGE:-}"; do
