@@ -173,11 +173,14 @@ class EvidenceWorldElement extends HTMLElement {
       this.updatePosters(nextIndex)
       this.updateChapters(nextIndex)
       this.updateCards(nextIndex, 0)
-      this.showPoster()
     }
 
     const cards = this.chapters[nextIndex].querySelectorAll<HTMLElement>("[data-story-card-index]")
-    const nextCardIndex = cards.length > 1 && chapterProgress >= 0.55 ? 1 : 0
+    const nextCardIndex =
+      cards.length > 1 &&
+      (this.activeCardIndex === 1 ? chapterProgress > 0.48 : chapterProgress >= 0.58)
+        ? 1
+        : 0
     if (nextCardIndex !== this.activeCardIndex) {
       this.activeCardIndex = nextCardIndex
       this.updateCards(nextIndex, nextCardIndex)
@@ -189,7 +192,9 @@ class EvidenceWorldElement extends HTMLElement {
       chapter.start + chapterProgress * Math.max(chapter.end - chapter.start - frame, 0)
     this.queueSeek()
 
-    const totalProgress = this.clamp(this.targetTime / this.manifest.desktop.duration)
+    const totalProgress = this.clamp(
+      this.targetTime / this.manifest[this.sourceKind ?? this.selectedSourceKind()].duration
+    )
     if (this.progressLabel)
       this.progressLabel.textContent = `${String(nextIndex + 1).padStart(2, "0")} / ${String(this.chapters.length).padStart(2, "0")}`
     if (this.progressBar)
