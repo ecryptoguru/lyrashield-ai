@@ -22,11 +22,12 @@ pnpm --filter @lyrashield/marketing-motion render:web
 pnpm --filter @lyrashield/marketing-motion render:determinism
 pnpm --filter @lyrashield/marketing-motion verify:determinism
 
-# Derive seven MP4/WebM chapters, AVIF/WebP/JPEG posters, and launch edits
+# Derive one continuous H.264 track per aspect ratio, AVIF/WebP/JPEG posters,
+# and short launch edits
 pnpm --filter @lyrashield/marketing-motion derive
 
 # Validate masters, codecs, dimensions, fps, GOP, pixel format, faststart,
-# silence, budgets, exact boundary frames, and decoded seam SSIM
+# silence, budgets, chapter poster frames, and six-frame seek GOPs
 pnpm --filter @lyrashield/marketing-motion verify
 
 # Copy web assets into the ignored localhost media directory
@@ -36,7 +37,7 @@ pnpm --filter @lyrashield/marketing-motion prepare:local
 pnpm --filter @lyrashield/marketing preview
 ```
 
-Review `http://localhost:8787/premium-preview`. Local masters remain under ignored `renders/`; browser media remains under ignored `apps/marketing/public/media-local/`.
+Review `http://localhost:8787/`. Local masters remain under ignored `renders/`; browser media remains under ignored `apps/marketing/public/media-local/`.
 
 ## Production publication gate
 

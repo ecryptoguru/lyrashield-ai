@@ -1,21 +1,29 @@
 import { mkdirSync, rmSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
+import {
+  MOTION_CHAPTERS,
+  MOTION_CHAPTER_DURATION,
+  MOTION_DURATION,
+  MOTION_FPS,
+  MOTION_GOP,
+  MOTION_VARIANTS,
+  motionPosterRelativePath,
+  motionTrackRelativePath,
+} from "./motion-media-contract.mjs"
 
 const root = resolve(import.meta.dirname, "..")
 const masters = resolve(root, "renders/masters")
 const output = resolve(root, "renders/web")
-const encoded = resolve(output, ".encoded")
-const chapters = ["gateway", "target", "scan", "evidence-state", "fix-proposal", "retest", "report"]
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit" })
   if (result.status !== 0) throw new Error(`${command} failed with status ${result.status}`)
 }
 
-function encodeMaster(input, target, scale, format) {
+function encodeTrack(input, target, scale) {
   mkdirSync(dirname(target), { recursive: true })
-  const common = [
+  run("ffmpeg", [
     "-y",
     "-hide_banner",
     "-loglevel",
@@ -23,70 +31,24 @@ function encodeMaster(input, target, scale, format) {
     "-i",
     input,
     "-vf",
-    `scale=${scale}:force_original_aspect_ratio=decrease,fps=30`,
+    `scale=${scale}:force_original_aspect_ratio=decrease,fps=${MOTION_FPS}`,
     "-an",
-  ]
-
-  if (format === "mp4") {
-    run("ffmpeg", [
-      ...common,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "slow",
-      "-crf",
-      "25",
-      "-pix_fmt",
-      "yuv420p",
-      "-g",
-      "6",
-      "-keyint_min",
-      "6",
-      "-sc_threshold",
-      "0",
-      "-movflags",
-      "+faststart",
-      target,
-    ])
-    return
-  }
-
-  run("ffmpeg", [
-    ...common,
     "-c:v",
-    "libvpx-vp9",
+    "libx264",
+    "-preset",
+    "slow",
     "-crf",
-    "34",
-    "-b:v",
-    "0",
+    "26",
+    "-pix_fmt",
+    "yuv420p",
     "-g",
-    "6",
-    "-row-mt",
-    "1",
-    target,
-  ])
-}
-
-function splitClip(input, target, start, duration, format) {
-  mkdirSync(dirname(target), { recursive: true })
-  const faststart = format === "mp4" ? ["-movflags", "+faststart"] : []
-  run("ffmpeg", [
-    "-y",
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-ss",
-    start.toFixed(3),
-    "-i",
-    input,
-    "-t",
-    duration.toFixed(3),
-    "-map",
-    "0:v:0",
-    "-an",
-    "-c",
-    "copy",
-    ...faststart,
+    String(MOTION_GOP),
+    "-keyint_min",
+    String(MOTION_GOP),
+    "-sc_threshold",
+    "0",
+    "-movflags",
+    "+faststart",
     target,
   ])
 }
@@ -99,10 +61,10 @@ function makePoster(input, targetBase, time, scale) {
     "-hide_banner",
     "-loglevel",
     "error",
-    "-i",
-    input,
     "-ss",
     time.toFixed(3),
+    "-i",
+    input,
     "-frames:v",
     "1",
     "-vf",
@@ -125,26 +87,23 @@ function makePoster(input, targetBase, time, scale) {
   rmSync(png)
 }
 
-function deriveVariant(name, input, scale) {
-  const encodedMp4 = resolve(encoded, `${name}.mp4`)
-  const encodedWebm = resolve(encoded, `${name}.webm`)
-  encodeMaster(input, encodedMp4, scale, "mp4")
-  encodeMaster(input, encodedWebm, scale, "webm")
+rmSync(output, { recursive: true, force: true })
 
-  chapters.forEach((chapter, index) => {
-    const start = index * 6
-    const duration = index === chapters.length - 1 ? 6 : 6 + 1 / 30
-    const base = resolve(output, name, chapter)
-    splitClip(encodedMp4, `${base}.mp4`, start, duration, "mp4")
-    splitClip(encodedWebm, `${base}.webm`, start, duration, "webm")
-    makePoster(input, resolve(output, "posters", `${chapter}-${name}`), start + 3, scale)
+for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
+  const input = resolve(masters, contract.master)
+  const target = resolve(output, motionTrackRelativePath(variant))
+  encodeTrack(input, target, contract.scale)
+
+  MOTION_CHAPTERS.forEach((chapter, index) => {
+    const poster = resolve(output, motionPosterRelativePath(chapter, variant, "webp"))
+    makePoster(
+      target,
+      poster.slice(0, -".webp".length),
+      index * MOTION_CHAPTER_DURATION + MOTION_CHAPTER_DURATION / 2,
+      contract.scale
+    )
   })
 }
-
-rmSync(output, { recursive: true, force: true })
-deriveVariant("desktop", resolve(masters, "assurance-world-desktop-web.mp4"), "1600:900")
-deriveVariant("portrait", resolve(masters, "assurance-world-portrait-web.mp4"), "720:1280")
-rmSync(encoded, { recursive: true, force: true })
 
 mkdirSync(resolve(output, "launch"), { recursive: true })
 run("ffmpeg", [
@@ -195,3 +154,5 @@ run("ffmpeg", [
   "+faststart",
   resolve(output, "launch/lyrashield-launch-15s-portrait.mp4"),
 ])
+
+console.log(`Derived ${MOTION_DURATION}-second continuous Motion V2 tracks and chapter posters.`)

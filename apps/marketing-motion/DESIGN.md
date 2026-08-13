@@ -24,17 +24,20 @@ The display face carries human confidence. The mono face carries machine-verifia
 
 ## Motion
 
-- Continuous Catmull-Rom camera travel with controlled dolly and orbit.
+- Continuous Catmull-Rom camera travel with controlled dolly and restrained lateral drift.
+- Desktop alternates label-safe left/right focal fields. Portrait keeps active geometry in the upper 58% and reserves the lower field for HTML copy.
 - Focus-pull transitions at chapter boundaries.
 - One cinematic zoom for the evidence-state reveal.
 - Slow color dip at the report payoff.
 - Entrances use varied transform, opacity, and easing. No pre-transition exits.
+- Six fixed signal pulses mark movement between named stages. They are schematic transitions, never quantities.
 
 ## What NOT to Do
 
 - No purple gradients, neon grids, barrel rolls, shake, or glitch montage.
 - No generated text, fake dashboards, customer claims, pricing, or performance metrics.
 - No people, logos, repeated card grids, or decorative pills.
+- No decorative particle clouds, baked-in factual labels, or motion that implies scan volume, risk, coverage, or performance.
 - No `Math.random()`, wall-clock animation, `THREE.Clock`, or network-loaded runtime modules.
 
 ## Reference Concepts

@@ -14,12 +14,11 @@ const { manifest } = Astro.props
       {
         manifest.chapters.map((chapter, index) => (
           <picture class:list={["evidence-world__poster", { "is-active": index === 0 }]} data-poster-index={index}>
-            <source media="(max-width: 767px)" srcset={chapter.portrait.poster} />
-            <img src={chapter.desktop.poster} data-poster-chapter={chapter.id} alt="" width="1600" height="900" loading={index === 0 ? "eager" : "lazy"} decoding="async" />
+            <source media="(max-width: 767px)" srcset={chapter.portraitPoster} />
+            <img src={chapter.desktopPoster} data-poster-chapter={chapter.id} alt="" width="1600" height="900" loading={index === 0 ? "eager" : "lazy"} decoding="async" />
           </picture>
         ))
       }
-      <video class="evidence-world__video is-front" muted playsinline preload="none" tabindex="-1"></video>
       <video class="evidence-world__video" muted playsinline preload="none" tabindex="-1"></video>
       <div class="evidence-world__media-veil"></div>
     </div>
@@ -181,7 +180,7 @@ const { manifest } = Astro.props
 
   .evidence-world__chapter {
     display: grid;
-    min-height: min(720px, 76svh);
+    min-height: max(680px, 92svh);
     align-items: center;
     padding: 3.25rem max(1rem, calc((100% - 1280px) / 2));
   }
@@ -192,11 +191,12 @@ const { manifest } = Astro.props
   }
 
   .evidence-world__copy {
-    width: min(46rem, 54%);
+    width: min(36rem, 46%);
     padding: clamp(1.25rem, 3vw, 2.5rem);
     border: 1px solid rgba(84, 214, 223, 0.18);
-    border-radius: 0.35rem;
-    background: rgba(8, 17, 28, 0.9);
+    border-radius: 0.75rem;
+    background: rgba(8, 17, 28, 0.78);
+    backdrop-filter: blur(14px);
     box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.24);
   }
 
@@ -260,7 +260,7 @@ const { manifest } = Astro.props
   .evidence-world__copy h2 {
     margin: 0;
     font-family: "Bricolage Grotesque Variable", sans-serif;
-    font-size: clamp(2.6rem, 5.4vw, 5.8rem);
+    font-size: clamp(2.5rem, 4.6vw, 5rem);
     font-weight: 800;
     line-height: 0.94;
     letter-spacing: -0.05em;
@@ -333,10 +333,16 @@ const { manifest } = Astro.props
   }
 
   @media (max-width: 767px) {
+    .evidence-world__media-veil {
+      background:
+        radial-gradient(circle at 50% 30%, transparent 22%, rgba(8, 17, 28, 0.24) 72%),
+        linear-gradient(180deg, rgba(8, 17, 28, 0.04) 38%, rgba(8, 17, 28, 0.92) 76%);
+    }
+
     .evidence-world__chapter {
-      min-height: min(600px, 76svh);
-      align-items: center;
-      padding: 2.75rem 1rem;
+      min-height: max(700px, 100svh);
+      align-items: end;
+      padding: 48svh 1rem calc(1rem + var(--safe-area-inset-bottom));
     }
 
     .evidence-world__chapter .evidence-world__copy,
@@ -345,13 +351,15 @@ const { manifest } = Astro.props
       margin: 0;
       padding: 1.1rem 1.2rem 1.2rem;
       text-align: left;
-      background: rgba(8, 17, 28, 0.94);
+      background: rgba(8, 17, 28, 0.9);
     }
 
     evidence-world.is-enhanced.is-pinned .evidence-world__chapter .evidence-world__copy,
     evidence-world.is-enhanced.is-pinned .evidence-world__chapter:nth-child(even) .evidence-world__copy {
       right: 1rem;
       left: 1rem;
+      top: auto;
+      bottom: calc(1rem + var(--safe-area-inset-bottom));
       width: auto;
     }
 
@@ -360,7 +368,7 @@ const { manifest } = Astro.props
     }
 
     .evidence-world__copy h2 {
-      font-size: clamp(2.15rem, 10.5vw, 3.25rem);
+      font-size: clamp(2rem, 9.2vw, 3.1rem);
       line-height: 0.98;
     }
 
@@ -371,8 +379,8 @@ const { manifest } = Astro.props
 
     .evidence-world__copy > p:last-of-type {
       margin-top: 0.9rem;
-      font-size: 0.85rem;
-      line-height: 1.55;
+      font-size: 1rem;
+      line-height: 1.6;
     }
 
     .evidence-world__rule {
@@ -393,7 +401,35 @@ const { manifest } = Astro.props
     }
 
     .evidence-world__chrome {
+      top: 1rem;
+      bottom: auto;
       grid-template-columns: auto 1fr;
+    }
+
+    evidence-world.is-enhanced.is-pinned .evidence-world__chapter.is-active .evidence-world__copy {
+      transform: none;
+    }
+  }
+
+  @media (max-width: 767px) and (orientation: landscape), (max-height: 599px) {
+    evidence-world.is-enhanced .evidence-world__stage {
+      position: relative;
+      height: 28rem;
+    }
+
+    evidence-world.is-enhanced .evidence-world__chapters {
+      margin-top: 0;
+    }
+
+    evidence-world.is-enhanced .evidence-world__chapter {
+      min-height: auto;
+      padding: 1rem;
+    }
+
+    evidence-world.is-enhanced.is-pinned .evidence-world__copy {
+      position: relative;
+      inset: auto;
+      transform: none;
     }
   }
 

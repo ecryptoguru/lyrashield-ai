@@ -310,26 +310,6 @@ const signal = new THREE.Mesh(new THREE.TubeGeometry(signalCurve, 220, 0.075, 10
 scene.add(signal)
 
 const random = seededRandom(719)
-const particlePositions = new Float32Array(850 * 3)
-for (let index = 0; index < 850; index += 1) {
-  particlePositions[index * 3] = (random() - 0.5) * 28
-  particlePositions[index * 3 + 1] = random() * 13 - 3
-  particlePositions[index * 3 + 2] = random() * -72 + 9
-}
-const particleGeometry = new THREE.BufferGeometry()
-particleGeometry.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3))
-const particles = new THREE.Points(
-  particleGeometry,
-  new THREE.PointsMaterial({
-    color: 0x54d6df,
-    size: 0.035,
-    transparent: true,
-    opacity: 0.42,
-    depthWrite: false,
-  })
-)
-scene.add(particles)
-
 const artifacts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), graphite, 42)
 const matrix = new THREE.Matrix4()
 for (let index = 0; index < 42; index += 1) {
@@ -338,16 +318,28 @@ for (let index = 0; index < 42; index += 1) {
 }
 scene.add(artifacts)
 
-const cameraPath = new THREE.CatmullRomCurve3([
+const portrait = __COMPOSITION_HEIGHT__ > __COMPOSITION_WIDTH__
+const desktopCameraPoints = [
   new THREE.Vector3(8.5, 4.2, 11),
   new THREE.Vector3(6.8, 3.4, 2.5),
-  new THREE.Vector3(-6.5, 3.2, -6),
-  new THREE.Vector3(5.8, 3.6, -15),
-  new THREE.Vector3(-6.3, 3.25, -24),
-  new THREE.Vector3(6.1, 3.7, -33),
-  new THREE.Vector3(-5.8, 3.4, -42),
-  new THREE.Vector3(5, 4.1, -52),
-])
+  new THREE.Vector3(-4.8, 3.2, -6),
+  new THREE.Vector3(4.5, 3.6, -15),
+  new THREE.Vector3(-4.6, 3.25, -24),
+  new THREE.Vector3(4.4, 3.7, -33),
+  new THREE.Vector3(-4.1, 3.4, -42),
+  new THREE.Vector3(3.8, 4.1, -52),
+]
+const portraitCameraPoints = [
+  new THREE.Vector3(2.8, 5.6, 12.5),
+  new THREE.Vector3(2.2, 5.1, 3.1),
+  new THREE.Vector3(-2.1, 4.9, -5.6),
+  new THREE.Vector3(1.9, 5.2, -14.7),
+  new THREE.Vector3(-1.8, 5, -23.8),
+  new THREE.Vector3(1.7, 5.3, -32.8),
+  new THREE.Vector3(-1.6, 5.1, -41.9),
+  new THREE.Vector3(1.5, 5.7, -51.8),
+]
+const cameraPath = new THREE.CatmullRomCurve3(portrait ? portraitCameraPoints : desktopCameraPoints)
 const targetPath = new THREE.CatmullRomCurve3(
   stations.map((station) => new THREE.Vector3(0, 0.55, station.position.z))
 )
@@ -365,12 +357,13 @@ window.__timelines = window.__timelines || {}
 const timeline = gsap.timeline({ paused: true, defaults: { duration: 0.55, ease: "power2.out" } })
 
 timeline.to(cameraState, { progress: 1, duration: DURATION, ease: "none" }, 0)
-timeline.to(particles.rotation, { y: 0.34, duration: DURATION, ease: "none" }, 0)
-timeline.to(
-  signal.material,
-  { emissiveIntensity: 3.1, duration: DURATION / 2, repeat: 1, yoyo: true, ease: "sine.inOut" },
-  0
-)
+for (let beat = 1; beat <= 6; beat += 1) {
+  timeline.to(
+    signal.material,
+    { emissiveIntensity: 3.1, duration: 0.24, repeat: 1, yoyo: true, ease: "sine.inOut" },
+    beat * CHAPTER_LENGTH - 0.24
+  )
+}
 
 chapterIds.forEach((chapter, index) => {
   const start = index * CHAPTER_LENGTH

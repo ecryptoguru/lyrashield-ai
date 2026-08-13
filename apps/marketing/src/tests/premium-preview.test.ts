@@ -42,10 +42,22 @@ describe("premium assurance-world homepage", () => {
     expect(hero).toContain("Passive + read-only")
   })
 
-  it("builds all seven typed desktop and portrait media variants", () => {
+  it("builds one immutable desktop and portrait track with seven timed chapters", () => {
     const manifest = createMotionMediaManifest("/media-local/", "test-render")
     const ids = manifest.chapters.map((chapter) => chapter.id)
-    expect(manifest.version).toBe("1")
+    expect(manifest.version).toBe("2")
+    expect(manifest.desktop).toEqual({
+      src: "/media-local/assurance-world/v2/test-render/desktop/assurance-world.mp4",
+      width: 1600,
+      height: 900,
+      duration: 42,
+    })
+    expect(manifest.portrait).toEqual({
+      src: "/media-local/assurance-world/v2/test-render/portrait/assurance-world.mp4",
+      width: 720,
+      height: 1280,
+      duration: 42,
+    })
     expect(ids).toHaveLength(7)
     expect(new Set(ids).size).toBe(7)
     expect(ids).toEqual([
@@ -57,12 +69,18 @@ describe("premium assurance-world homepage", () => {
       "retest",
       "report",
     ])
+    expect(manifest.chapters.map(({ start, end }) => [start, end])).toEqual([
+      [0, 6],
+      [6, 12],
+      [12, 18],
+      [18, 24],
+      [24, 30],
+      [30, 36],
+      [36, 42],
+    ])
     for (const chapter of manifest.chapters) {
-      expect(chapter.desktop.mp4).toMatch(
-        /^\/media-local\/assurance-world\/v1\/test-render\/desktop\/.+\.mp4$/
-      )
-      expect(chapter.desktop.webm).toMatch(/\.webm$/)
-      expect(chapter.portrait.poster).toMatch(/-portrait\.webp$/)
+      expect(chapter.desktopPoster).toMatch(/-desktop\.webp$/)
+      expect(chapter.portraitPoster).toMatch(/-portrait\.webp$/)
     }
   })
 
@@ -82,19 +100,27 @@ describe("premium assurance-world homepage", () => {
     expect(worldModule).not.toContain("userAgent")
     expect(worldModule).toContain('matchMedia("(prefers-reduced-motion: reduce)")')
     expect(worldModule).toContain("connection?.saveData")
+    expect(worldModule.indexOf("if (!this.motionEnabled)")).toBeLessThan(
+      worldModule.indexOf('this.classList.add("is-enhanced")')
+    )
     expect(worldModule).toContain('rootMargin: "50% 0px"')
-    expect(worldModule).toContain("URL.revokeObjectURL")
+    expect(worldModule).not.toContain("URL.createObjectURL")
   })
 
   it("coalesces scroll seeks and keeps exactly one decoded video layer in front", () => {
+    expect(world.match(/<video/g)).toHaveLength(1)
     expect(worldModule).toContain("if (video.seeking) return")
-    expect(worldModule).toContain('video.addEventListener("seeked", this.queueSeek)')
+    expect(worldModule).toContain("requestVideoFrameCallback")
+    expect(worldModule).toContain("setTimeout(painted, 120)")
+    expect(worldModule).toContain('addEventListener("loadeddata", this.queueUpdate)')
     expect(worldModule).toContain("HTMLMediaElement.HAVE_CURRENT_DATA")
     expect(worldModule).toContain("this.showPoster()")
-    expect(worldModule).toContain("this.showVideo(slot)")
+    expect(worldModule).toContain("this.showVideo()")
     expect(worldModule).toContain("Math.max(this.targetTime, 0)")
     expect(worldModule).not.toContain("video.currentTime + delta *")
-    expect(worldModule).toContain('video.classList.toggle("is-front", videoIndex === slot)')
+    expect(worldModule).not.toContain("response.blob()")
+    expect(worldModule).not.toContain("URL.createObjectURL")
+    expect(worldModule).not.toContain("loadPair")
     expect(worldModule).toContain("if (innerWidth === this.viewportWidth)")
     expect(worldModule).toContain('chapter.classList.toggle("is-active", chapterIndex === index)')
   })

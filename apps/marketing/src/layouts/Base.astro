@@ -102,8 +102,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
       article={article}
     />
     {allJsonLd.length > 0 && <JsonLd data={allJsonLd} />}
-    <meta name="theme-color" content="#08111c" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#f5f9fc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#f5f9fc" data-theme-color />
     <link rel="preload" as="font" type="font/woff2" href={bricolageWoff2} crossorigin="anonymous" />
     <script is:inline>
       (() => {
@@ -114,6 +113,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
             (preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
           document.documentElement.dataset.theme = dark ? "dark" : "light"
           document.documentElement.dataset.themePreference = preference
+          document.querySelector('meta[data-theme-color]')?.setAttribute("content", dark ? "#08111c" : "#f5f9fc")
         } catch {}
       })()
     </script>

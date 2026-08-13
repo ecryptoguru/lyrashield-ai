@@ -124,28 +124,28 @@ const jsonLd = [
 
 <style>
   .cinematic-threshold {
-    min-height: clamp(1.25rem, 2.5vw, 2rem);
+    min-height: clamp(3rem, 7vw, 7rem);
     pointer-events: none;
   }
 
   .cinematic-threshold--to-light {
     background:
-      radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--terminal-cyan) 8%, transparent), transparent 62%),
+      radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--terminal-cyan) 10%, transparent), transparent 64%),
       linear-gradient(
         to bottom,
         var(--hero-void),
-        color-mix(in srgb, var(--hero-void) 42%, var(--bg)) 58%,
+        color-mix(in srgb, var(--hero-void) 28%, var(--bg)) 62%,
         var(--bg)
       );
   }
 
   .cinematic-threshold--to-dark {
     background:
-      radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--terminal-cyan) 8%, transparent), transparent 62%),
+      radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--terminal-cyan) 10%, transparent), transparent 64%),
       linear-gradient(
         to bottom,
         var(--bg),
-        color-mix(in srgb, var(--hero-void) 42%, var(--bg)) 42%,
+        color-mix(in srgb, var(--hero-void) 28%, var(--bg)) 38%,
         var(--hero-void)
       );
   }
