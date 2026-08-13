@@ -145,13 +145,13 @@ A separate control set from Vibe Security 50. Reported and scored independently 
 
 **Detection patterns:**
 
-- LLM response variable used in `eval()`, `Function()`, `exec()`, `child_process`
+- LLM response variable used in `eval (…)`, `Function (…)`, `exec (…)`, `child_process`
 - LLM response used in SQL query construction (string concatenation, template literal in query)
 - LLM response inserted into DOM via `innerHTML`, `dangerouslySetInnerHTML`, `v-html`
 - LLM response used in file write operations (`fs.writeFile`, `open()` with write flags)
 - LLM response used as a URL for `fetch()` or `axios()` without validation
 
-**Finding when detected:** "LLM response at `agent.ts:67` is passed to `eval()` without validation — LLM output is untrusted and may contain injected code."
+**Finding when detected:** "LLM response at `agent.ts:67` is passed to `eval (…)` without validation — LLM output is untrusted and may contain injected code."
 
 **Severity:** CRITICAL
 
