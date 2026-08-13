@@ -538,7 +538,7 @@ jobs:
           # that window.
           markers=(
             'data-cta-id="premium-hero-lite-check"'
-            'data-cta-id="v2launch_open_beta"'
+            'data-cta-id="story-report-create-account"'
           )
 
           for attempt in $(seq 1 8); do
