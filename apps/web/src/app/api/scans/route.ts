@@ -8,6 +8,7 @@ import {
   resolveScanProfile,
   resolveTargetScanMode,
 } from "@lyrashield/types"
+import { normalizeDomainForProof } from "@lyrashield/security"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
@@ -84,6 +85,38 @@ export async function POST(request: Request) {
     })
     if (!target) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+    }
+
+    // Browser-local tools never enter this route. A paid remote review does,
+    // so require one current workspace proof before the first server-side
+    // request. DNS proof is deliberately reusable for the domain rather than
+    // creating an approval chore for every scan.
+    if (target.type === "WEB_APP" || target.type === "API") {
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { plan: true },
+      })
+      if (workspace && workspace.plan !== "FREE") {
+        const domain = target.url ? normalizeDomainForProof(target.url) : null
+        const proof = domain
+          ? await prisma.targetDomainVerification.findFirst({
+              where: {
+                workspaceId,
+                domain,
+                status: "VERIFIED",
+                expiresAt: { gt: new Date() },
+              },
+              select: { id: true },
+            })
+          : null
+        if (!proof) {
+          return apiError(
+            "DOMAIN_VERIFICATION_REQUIRED",
+            "Verify control of this domain once before starting a paid remote review.",
+            403
+          )
+        }
+      }
     }
 
     if (target.type === "WEB_APP" || target.type === "API") {

@@ -12,6 +12,8 @@ vi.mock("next/cache", () => ({
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     target: { findFirst: vi.fn() },
+    workspace: { findUnique: vi.fn() },
+    targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
     scan: { count: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
@@ -100,6 +102,10 @@ describe("POST /api/scans", () => {
     vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
     vi.mocked(enqueueScanJob).mockResolvedValue("job-1")
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({ id: "default-policy" } as never)
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "FREE" } as never)
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+      id: "proof-1",
+    } as never)
     vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
   })
 
@@ -259,6 +265,35 @@ describe("POST /api/scans", () => {
     expect(res.status).toBe(201)
     expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ mode: "SAFE" }))
     expect(enqueueScanJob).toHaveBeenCalledWith(expect.objectContaining({ mode: "SAFE" }))
+  })
+
+  it("requires a current domain proof before a paid remote scan", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "web-verified",
+      type: "WEB_APP",
+      url: "https://staging.example.com/safety",
+      apiSpecUrl: null,
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-paid-proof",
+        targetId: "web-verified",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+
+    expect(res.status).toBe(403)
+    expect((await res.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(createScan).not.toHaveBeenCalled()
+    expect(prisma.targetDomainVerification.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ domain: "staging.example.com", status: "VERIFIED" }),
+      })
+    )
   })
 
   /**
