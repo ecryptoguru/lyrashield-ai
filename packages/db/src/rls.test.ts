@@ -114,6 +114,10 @@ describe("RLS helpers", () => {
       "ThreatModel",
       "ControlEvidence",
       "AiSecurityScoreSnapshot",
+      "TargetDomainVerification",
+      "LiveAiSafetySettings",
+      "LiveAiSafetyPlan",
+      "LiveAiSafetyRun",
     ]
 
     it("WORKSPACE_SCOPED_MODELS matches the RLS-protected table set exactly", () => {

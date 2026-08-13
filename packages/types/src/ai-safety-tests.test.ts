@@ -1,10 +1,52 @@
 import { describe, expect, it } from "vitest"
-import { isSafetyCaseAllowed, LiveAiSafetyPlanSchema } from "./ai-safety-tests"
+import {
+  AI_SAFETY_TEST_CATALOG,
+  isSafetyCaseAllowed,
+  LiveAiSafetyPlanSchema,
+} from "./ai-safety-tests"
 
 describe("AI safety test contract", () => {
-  it("rejects a live test plan without endpoint and authorization", () => {
+  const basePlan = {
+    workspaceId: "ws",
+    targetId: "target",
+    endpointUrl: "https://staging.example.com/safety",
+    approvedHost: "staging.example.com",
+    incidentContact: "security@example.com",
+    authMode: "NO_AUTH" as const,
+    maxRequests: 5,
+    maxDurationSeconds: 60,
+    maxResponseBytes: 1024,
+    rawSampleStorage: "DISABLED" as const,
+    destructiveTestsAllowed: false as const,
+    cases: [AI_SAFETY_TEST_CATALOG[0]],
+  }
+
+  it("rejects a live test plan without a safe endpoint", () => {
     expect(
       LiveAiSafetyPlanSchema.safeParse({ workspaceId: "ws", targetId: "target", cases: [] }).success
+    ).toBe(false)
+  })
+
+  it("allows no-sign-in testing without a credential", () => {
+    expect(LiveAiSafetyPlanSchema.safeParse(basePlan).success).toBe(true)
+  })
+
+  it("requires credentials only when sign-in is selected", () => {
+    expect(
+      LiveAiSafetyPlanSchema.safeParse({ ...basePlan, authMode: "TEST_CREDENTIAL" }).success
+    ).toBe(false)
+    expect(
+      LiveAiSafetyPlanSchema.safeParse({
+        ...basePlan,
+        authMode: "TEST_CREDENTIAL",
+        credentialId: "credential-1",
+      }).success
+    ).toBe(true)
+  })
+
+  it("rejects an endpoint outside the approved host", () => {
+    expect(
+      LiveAiSafetyPlanSchema.safeParse({ ...basePlan, approvedHost: "other.example.com" }).success
     ).toBe(false)
   })
 
