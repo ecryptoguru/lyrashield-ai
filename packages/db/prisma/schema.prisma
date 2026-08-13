@@ -337,6 +337,35 @@ enum TargetEnvironment {
   PRODUCTION
 }
 
+enum DomainVerificationMethod {
+  DNS_TXT
+  GOOGLE_SEARCH_CONSOLE
+}
+
+enum DomainVerificationStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+}
+
+enum LiveAiSafetyPlanStatus {
+  DRAFT
+  READY
+  PENDING_APPROVAL
+  RUNNING
+  STOPPED
+  COMPLETED
+  FAILED
+}
+
+enum LiveAiSafetyRunStatus {
+  QUEUED
+  RUNNING
+  STOPPED
+  COMPLETED
+  FAILED
+}
+
 enum ScanGoal {
   CHECK_PR
   TEST_APP
@@ -493,6 +522,10 @@ model Workspace {
   aiSystemProfile      AiSystemProfile[]
   threatModels         ThreatModel[]
   controlEvidence      ControlEvidence[]
+  domainVerifications  TargetDomainVerification[]
+  liveAiSafetySettings LiveAiSafetySettings?
+  liveAiSafetyPlans    LiveAiSafetyPlan[]
+  liveAiSafetyRuns     LiveAiSafetyRun[]
 }
 
 model WorkspaceMember {
@@ -569,6 +602,7 @@ model Target {
   aiSystemProfile   AiSystemProfile?
   threatModels      ThreatModel[]
   controlEvidence   ControlEvidence[]
+  liveAiSafetyPlans LiveAiSafetyPlan[]
 
   @@unique([workspaceId, repoFullName])
   @@unique([workspaceId, url])
@@ -595,6 +629,96 @@ model CredentialSet {
 
   @@index([workspaceId])
   @@index([targetId])
+}
+
+model TargetDomainVerification {
+  id             String                   @id @default(cuid())
+  workspaceId    String
+  domain         String
+  method         DomainVerificationMethod
+  status         DomainVerificationStatus @default(PENDING)
+  challengeToken String?
+  challengeId    String?
+  expiresAt      DateTime
+  verifiedAt     DateTime?
+  lastCheckedAt  DateTime?
+  createdById    String
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plans     LiveAiSafetyPlan[]
+
+  @@unique([workspaceId, domain])
+  @@index([workspaceId, status, expiresAt])
+}
+
+model LiveAiSafetySettings {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  incidentContact String?
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model LiveAiSafetyPlan {
+  id                   String                 @id @default(cuid())
+  workspaceId          String
+  targetId             String
+  domainVerificationId String
+  endpointUrl          String
+  approvedHost         String
+  authMode             String
+  credentialId         String?
+  incidentContact      String
+  maxRequests          Int
+  maxDurationSeconds   Int
+  maxResponseBytes     Int
+  rawSampleStorage     String
+  cases                Json                   @db.JsonB
+  status               LiveAiSafetyPlanStatus @default(DRAFT)
+  approvalId           String?
+  approvedById         String?
+  approvedAt           DateTime?
+  startedAt            DateTime?
+  terminalReason       String?
+  createdById          String
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  workspace          Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target             Target                   @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  domainVerification TargetDomainVerification @relation(fields: [domainVerificationId], references: [id], onDelete: Restrict)
+  runs               LiveAiSafetyRun[]
+
+  @@index([workspaceId, targetId, createdAt])
+  @@index([workspaceId, status])
+  @@index([domainVerificationId])
+}
+
+model LiveAiSafetyRun {
+  id             String                @id @default(cuid())
+  workspaceId    String
+  targetId       String
+  planId         String
+  status         LiveAiSafetyRunStatus @default(QUEUED)
+  requestCount   Int                   @default(0)
+  terminalReason String?
+  receipts       Json?                 @db.JsonB
+  startedAt      DateTime?
+  endedAt        DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      LiveAiSafetyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, targetId, createdAt])
+  @@index([workspaceId, status])
+  @@index([planId])
 }
 
 model Policy {

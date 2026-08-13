@@ -28,23 +28,56 @@ function hasSafeEndpoint(value: string): boolean {
   }
 }
 
-export const LiveAiSafetyPlanSchema = z.object({
-  workspaceId: z.string().min(1),
-  targetId: z.string().min(1),
-  authorizationId: z.string().min(1),
-  endpointUrl: z
-    .string()
-    .refine(hasSafeEndpoint, "Endpoint must be HTTPS and contain no credentials"),
-  credentialId: z.string().min(1),
-  incidentContact: z.string().email(),
-  approvedHost: z.string().min(1).max(253),
-  maxRequests: z.number().int().min(1).max(25),
-  maxDurationSeconds: z.number().int().min(1).max(900),
-  maxResponseBytes: z.number().int().min(1).max(1_048_576),
-  rawSampleStorage: z.enum(["DISABLED", "ENCRYPTED_PRIVATE"]),
-  destructiveTestsAllowed: z.literal(false),
-  cases: z.array(AiSafetyCaseSchema).min(1).max(5),
-})
+export const LiveAiSafetyPlanSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    targetId: z.string().min(1),
+    endpointUrl: z
+      .string()
+      .refine(hasSafeEndpoint, "Endpoint must be HTTPS and contain no credentials"),
+    authMode: z.enum(["NO_AUTH", "TEST_CREDENTIAL"]),
+    credentialId: z.string().min(1).optional(),
+    incidentContact: z.string().email(),
+    approvedHost: z.string().min(1).max(253),
+    maxRequests: z.number().int().min(1).max(25),
+    maxDurationSeconds: z.number().int().min(1).max(900),
+    maxResponseBytes: z.number().int().min(1).max(1_048_576),
+    rawSampleStorage: z.enum(["DISABLED", "ENCRYPTED_PRIVATE"]),
+    destructiveTestsAllowed: z.literal(false),
+    cases: z.array(AiSafetyCaseSchema).min(1).max(5),
+  })
+  .superRefine((plan, ctx) => {
+    let endpoint: URL
+    try {
+      endpoint = new URL(plan.endpointUrl)
+    } catch {
+      return
+    }
+
+    const approvedHost = plan.approvedHost.toLowerCase().replace(/\.$/, "")
+    if (endpoint.hostname.toLowerCase().replace(/\.$/, "") !== approvedHost) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["approvedHost"],
+        message: "Approved host must match the endpoint hostname",
+      })
+    }
+
+    if (plan.authMode === "TEST_CREDENTIAL" && !plan.credentialId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["credentialId"],
+        message: "A test credential is required when sign-in is enabled",
+      })
+    }
+    if (plan.authMode === "NO_AUTH" && plan.credentialId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["credentialId"],
+        message: "Do not attach a credential when sign-in is not required",
+      })
+    }
+  })
 export type LiveAiSafetyPlan = z.infer<typeof LiveAiSafetyPlanSchema>
 
 export const AI_SAFETY_TEST_CATALOG: readonly AiSafetyCase[] = [

@@ -74,6 +74,10 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "ThreatModel",
   "ControlEvidence",
   "AiSecurityScoreSnapshot",
+  "TargetDomainVerification",
+  "LiveAiSafetySettings",
+  "LiveAiSafetyPlan",
+  "LiveAiSafetyRun",
 ])
 
 export const READ_OPS = new Set<string>([

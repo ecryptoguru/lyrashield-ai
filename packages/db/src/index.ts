@@ -263,3 +263,10 @@ export {
   type ControlEvidenceWithVersion,
   type AddControlEvidenceArtifactsInput,
 } from "./ai-assurance-service"
+export {
+  issueDnsDomainVerification,
+  verifyDnsDomainVerification,
+  upsertLiveAiSafetySettings,
+  createLiveAiSafetyPlan,
+  LiveAiSafetyError,
+} from "./live-ai-safety-service"

@@ -28,6 +28,14 @@ export {
 export { createEgressProxyFetchFn, type EgressProxyFetchFnOptions } from "./egress-proxy-client"
 
 export {
+  normalizeDomainForProof,
+  domainProofTxtName,
+  hasDomainProofToken,
+  verifyDomainProofToken,
+  type TxtResolver,
+} from "./domain-proof"
+
+export {
   analyzeLiteSurface,
   LITE_CHECK_VERSION,
   LITE_PUBLIC_VALUE_ALLOWLIST,
