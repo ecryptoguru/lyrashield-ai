@@ -73,9 +73,7 @@ describe("signup attribution", () => {
       "?source=Landing_Hero&cta=create_account&target_url=https://private.example"
     )
     expect(attribution).toEqual({ source: "landing_hero", cta: "create_account" })
-    expect(signupErrorUrl(attribution)).toBe(
-      "/sign-up?source=landing_hero&cta=create_account"
-    )
+    expect(signupErrorUrl(attribution)).toBe("/sign-up?source=landing_hero&cta=create_account")
     expect(readSignupAttribution(`?source=${"a".repeat(65)}&cta=%2Fbad`)).toEqual({
       source: undefined,
       cta: undefined,

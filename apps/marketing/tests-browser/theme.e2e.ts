@@ -67,7 +67,9 @@ for (const viewport of [
     await page.setViewportSize(viewport)
     await page.goto("/")
     const expectedChapterHeight = viewport.name === "mobile" ? 1055 : 1035
-    expect(await page.locator('[data-chapter-index="0"]').evaluate((el) => el.clientHeight)).toBeGreaterThanOrEqual(expectedChapterHeight)
+    expect(
+      await page.locator('[data-chapter-index="0"]').evaluate((el) => el.clientHeight)
+    ).toBeGreaterThanOrEqual(expectedChapterHeight)
     await page.locator("evidence-world").scrollIntoViewIfNeeded()
     await page.evaluate(() => customElements.whenDefined("evidence-world"))
 
