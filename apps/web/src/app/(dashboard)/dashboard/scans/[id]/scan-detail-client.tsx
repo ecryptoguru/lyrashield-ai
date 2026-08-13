@@ -27,6 +27,7 @@ import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
+import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel } from "@/lib/labels"
 
 interface ScanEvent {
@@ -71,6 +72,17 @@ interface ScanData {
       metadata: Record<string, unknown> | null
     }>
   }
+  aiSecurity: {
+    score: number | null
+    methodology: string
+    assessedCount: number
+    totalControls: number
+    evidenceQuality: Record<string, number> | null
+    reason: string | null
+    ai03: unknown
+    triage: unknown
+    computedAt: string
+  } | null
 }
 
 interface ScanPollData {
@@ -365,6 +377,7 @@ export function ScanDetailClient({
               metadata: asMetadata(receipt.metadata),
             })),
           },
+          aiSecurity: scan.aiSecurity,
         }
         let refreshedFindings: FindingItem[] | null = null
         if (
@@ -392,7 +405,7 @@ export function ScanDetailClient({
         // Network errors during polling are non-fatal — keep showing stale data
       }
     },
-    [scan.id, scan.target, scan.workspaceId, scan.integrity]
+    [scan.aiSecurity, scan.id, scan.target, scan.workspaceId, scan.integrity]
   )
 
   useEffect(() => {
@@ -600,7 +613,7 @@ export function ScanDetailClient({
               </Button>
             </div>
           )}
-          <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-5">
+          <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-6">
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <Clock className="h-4 w-4" aria-hidden="true" />
@@ -645,6 +658,7 @@ export function ScanDetailClient({
                 {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
               </p>
             </Card>
+            <AiSecurityScoreCard data={scan.aiSecurity} />
           </div>
 
           {scan.target && (

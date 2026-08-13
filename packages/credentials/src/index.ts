@@ -258,9 +258,9 @@ export async function tryReadCredentialsFile(): Promise<StoredCredentials | unde
 export async function resolveCredentials(
   options: { tolerateUnreadableFile?: boolean } = {}
 ): Promise<ResolvedCredentials> {
-  const envKey = getEnvApiKey()
-  const envOAuth = getEnvOAuthAccessToken()
-  const envUrl = getEnvApiUrl()
+  const envKey = getEnvApiKey() || undefined
+  const envOAuth = getEnvOAuthAccessToken() || undefined
+  const envUrl = getEnvApiUrl() || undefined
   const stored = options.tolerateUnreadableFile
     ? await tryReadCredentialsFile()
     : await readCredentialsFile()

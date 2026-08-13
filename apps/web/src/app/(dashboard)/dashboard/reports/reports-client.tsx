@@ -93,12 +93,20 @@ const reportRevokeSchema = z
   })
   .passthrough()
 
+const REPORT_TYPE_LABEL: Record<string, string> = {
+  executive: "Executive",
+  developer: "Developer",
+  compliance: "Assurance",
+}
+
 export function ReportsClient({
   workspaceId,
   initialScanId,
+  initialTargetId,
 }: {
   workspaceId: string
   initialScanId?: string
+  initialTargetId?: string
 }) {
   const [reports, setReports] = useState<ReportItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -145,15 +153,15 @@ export function ReportsClient({
     let cancelled = false
     async function loadCompletedScans() {
       try {
+        const params: Record<string, string> = { workspaceId, status: "COMPLETED" }
+        if (initialTargetId) {
+          params.targetId = initialTargetId
+        }
         const res = await apiGetPaginated<{
           id: string
           target: { name: string }
           status: string
-        }>(
-          `/api/scans`,
-          { workspaceId, status: "COMPLETED" },
-          { schema: reportScansPaginatedSchema }
-        )
+        }>(`/api/scans`, params, { schema: reportScansPaginatedSchema })
         const completedScans = res.items
         let linkedScanAvailable =
           !initialScanId || completedScans.some((scan) => scan.id === initialScanId)
@@ -178,6 +186,12 @@ export function ReportsClient({
 
         if (cancelled) return
         if (!linkedScanAvailable) setSelectedScanId("")
+        // Pre-select the latest completed scan for the requested target when no
+        // explicit scan was supplied.
+        else if (initialTargetId && !initialScanId && completedScans.length > 0) {
+          const first = completedScans[0]
+          if (first) setSelectedScanId(first.id)
+        }
         setScans(
           completedScans.map((scan) => ({
             id: scan.id,
@@ -193,7 +207,7 @@ export function ReportsClient({
     return () => {
       cancelled = true
     }
-  }, [workspaceId, initialScanId])
+  }, [workspaceId, initialScanId, initialTargetId])
 
   const handleCreateReport = async () => {
     setCreatingReport(true)
@@ -314,7 +328,7 @@ export function ReportsClient({
                   Developer
                 </TabsTrigger>
                 <TabsTrigger className="min-h-11 px-3" value="compliance">
-                  Compliance
+                  Assurance
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="executive" className="text-muted-foreground text-xs">
@@ -467,7 +481,7 @@ export function ReportsClient({
                     <h3 className="truncate font-medium" title={report.title}>
                       {report.title}
                     </h3>
-                    <Badge variant="info">{report.type}</Badge>
+                    <Badge variant="info">{REPORT_TYPE_LABEL[report.type] ?? report.type}</Badge>
                     <Badge
                       variant={
                         report.status === "generated" || report.status === "downloaded"

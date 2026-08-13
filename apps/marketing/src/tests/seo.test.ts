@@ -10,6 +10,13 @@ function source(path: string): string {
 
 describe("marketing SEO metadata", () => {
   it("gives every free tool unique, intent-specific search metadata", () => {
+    const aiAppSecurityScanner = tools.find((tool) => tool.slug === "ai-app-security-scanner")
+    expect(aiAppSecurityScanner, "AI App Security scanner must be registered").toBeDefined()
+    if (aiAppSecurityScanner) {
+      expect(aiAppSecurityScanner.category).toBe("Protect data and access")
+      expect(aiAppSecurityScanner.privacy).toContain("never leave your device")
+    }
+
     expect(new Set(tools.map((tool) => tool.seoTitle)).size).toBe(tools.length)
     expect(new Set(tools.map((tool) => tool.description)).size).toBe(tools.length)
 

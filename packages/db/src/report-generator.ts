@@ -1,4 +1,18 @@
 import { prisma } from "./client"
+import {
+  AI_ASSURANCE_CONTROL_IDS,
+  listControlEvidence,
+  aiAssuranceStateForVersion,
+  type ControlEvidenceVersionSummary,
+} from "./ai-assurance-service"
+import { getAiSecurityScoreSnapshot } from "./ai-security-score-service"
+import { getAiSystemProfile } from "./ai-system-profile-service"
+import { getThreatModel } from "./threat-model-service"
+import { VIBE_SECURITY_CONTROLS } from "@lyrashield/security"
+
+const CONTROL_TITLE_BY_ID: Record<string, string> = Object.fromEntries(
+  VIBE_SECURITY_CONTROLS.map((control) => [`vibe-${control.rank}`, control.title])
+)
 
 export interface ReportData {
   version?: 2
@@ -66,6 +80,46 @@ export interface ReportData {
     ageBuckets: Record<string, number>
     priorityActions: Array<{ label: string; detail: string; severity: string }>
     methodology: string[]
+  }
+  aiAssurance?: {
+    version: "ai-assurance/1.0.0"
+    profileState: "COMPLETE" | "INCOMPLETE" | "NOT_ASSESSED"
+    threatModelState: "CURRENT" | "MISSING" | "NOT_ASSESSED"
+    evidence: Array<{
+      controlId: string
+      state: string
+      evidenceVersionId: string | null
+      expiresAt: Date | null
+    }>
+    frameworkVersion: string
+    controls: Array<{
+      controlId: string
+      controlTitle: string
+      state: string
+      status: string | null
+      version: number | null
+      attestation: string | null
+      expiresAt: Date | null
+      reviewedById: string | null
+      reviewedAt: Date | null
+      artifacts: Array<{
+        filename: string
+        mediaType: string
+        byteLength: number
+        checksum: string
+      }>
+    }>
+    generatedAt: Date
+    methodology: string[]
+  }
+  aiAppSecurity?: {
+    score: number | null
+    methodology: string | null
+    assessedCount: number | null
+    totalControls: number | null
+    reason: string | null
+    generatedAt: Date
+    methodologyWording: string[]
   }
 }
 
@@ -261,6 +315,92 @@ export async function gatherReportData(
       severity: "INFO",
     })
 
+  const aiAssuranceEvidence = targetId ? await listControlEvidence({ workspaceId, targetId }) : []
+  const evidenceByControlId = new Map(
+    aiAssuranceEvidence.map((evidence) => [evidence.controlId, evidence.currentVersion])
+  )
+
+  const aiSecurityScoreSnapshot = scanId
+    ? await getAiSecurityScoreSnapshot(scanId, workspaceId).catch(() => null)
+    : null
+
+  const [aiSystemProfile, threatModel] = targetId
+    ? await Promise.all([
+        getAiSystemProfile(workspaceId, targetId),
+        getThreatModel(workspaceId, targetId),
+      ])
+    : [null, null]
+
+  const aiAppSecurity = aiSecurityScoreSnapshot
+    ? {
+        score: aiSecurityScoreSnapshot.score,
+        methodology: aiSecurityScoreSnapshot.methodology,
+        assessedCount: aiSecurityScoreSnapshot.assessedCount,
+        totalControls: aiSecurityScoreSnapshot.totalControls,
+        reason: (aiSecurityScoreSnapshot.breakdown as { reason?: string } | null)?.reason ?? null,
+        generatedAt: aiSecurityScoreSnapshot.computedAt,
+        methodologyWording: [
+          "AI App Security Score is a private, versioned interpretation of deterministic and advisory signals.",
+          "It is displayed only when minimum coverage is met; stale advisory data blocks the numeric score.",
+          "This score is not a certification, compliance attestation, or universal security guarantee.",
+        ],
+      }
+    : undefined
+
+  const aiAssuranceControls = AI_ASSURANCE_CONTROL_IDS.map((controlId) => {
+    const version = evidenceByControlId.get(controlId) as ControlEvidenceVersionSummary | undefined
+    const state = aiAssuranceStateForVersion(version ?? null)
+    return {
+      controlId,
+      controlTitle: CONTROL_TITLE_BY_ID[controlId] ?? controlId,
+      state,
+      status: version?.status ?? null,
+      version: version?.version ?? null,
+      attestation: version?.attestation ?? null,
+      expiresAt: version?.expiresAt ?? null,
+      reviewedById: version?.reviewedById ?? null,
+      reviewedAt: version?.reviewedAt ?? null,
+      artifacts: (version?.artifactManifest ?? []).map((artifact) => ({
+        filename: artifact.filename,
+        mediaType: artifact.mediaType,
+        byteLength: artifact.byteLength,
+        checksum: artifact.checksum,
+      })),
+    }
+  })
+
+  const aiAssurance: NonNullable<ReportData["aiAssurance"]> = {
+    version: "ai-assurance/1.0.0" as const,
+    profileState: !targetId
+      ? "NOT_ASSESSED"
+      : aiSystemProfile?.currentVersion
+        ? "COMPLETE"
+        : aiSystemProfile
+          ? "INCOMPLETE"
+          : "NOT_ASSESSED",
+    threatModelState: !targetId
+      ? "NOT_ASSESSED"
+      : threatModel?.currentVersion
+        ? "CURRENT"
+        : "MISSING",
+    evidence: aiAssuranceControls.map((control) => ({
+      controlId: control.controlId,
+      state: control.state,
+      evidenceVersionId:
+        control.version === null ? null : (evidenceByControlId.get(control.controlId)?.id ?? null),
+      expiresAt: control.expiresAt,
+    })),
+    // Framework mappings are intentionally withheld until owner-approved mappings are enabled.
+    frameworkVersion: "not-enabled",
+    controls: aiAssuranceControls,
+    generatedAt: new Date(),
+    methodology: [
+      "AI assurance control evidence is frozen at report creation time.",
+      "Evidence versions are append-only, encrypted, and workspace-scoped.",
+      "This section is not included in public or shared report payloads.",
+    ],
+  }
+
   return {
     version: 2,
     audience,
@@ -313,6 +453,8 @@ export async function gatherReportData(
         "Public shares exclude evidence, repository coordinates, and technical finding details.",
       ],
     },
+    aiAssurance,
+    aiAppSecurity,
   }
 }
 
@@ -431,6 +573,30 @@ export function generateReportHTML(data: ReportData): string {
         .join("")}</ul></div>`
     : ""
 
+  const aiAppSecuritySection = data.aiAppSecurity
+    ? `<div class="section"><h2>AI App Security Score</h2>
+        <div class="assurance-hero" style="background:linear-gradient(135deg,#1a2e3b,#1e3a4c);">
+          <div>
+            <div class="eyebrow">Private score</div>
+            <h2 style="color:#f5fbff;">${data.aiAppSecurity.score === null ? "Not scored" : `${data.aiAppSecurity.score} / 100`}</h2>
+            <p style="color:#c8dce8;">${data.aiAppSecurity.assessedCount ?? 0} of ${data.aiAppSecurity.totalControls ?? 8} controls assessed</p>
+            <p style="color:#a9c5d2;font-size:12px;margin-top:8px;">${escapeHtml(data.aiAppSecurity.reason ?? "Coverage or advisory data was insufficient for a numeric score.")}</p>
+          </div>
+          <div class="score-ring" style="--score:${data.aiAppSecurity.score ?? 0};"><div><strong>${data.aiAppSecurity.score ?? "—"}</strong><span>AI APP</span></div></div>
+        </div>
+        <ul class="methodology">${data.aiAppSecurity.methodologyWording.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      </div>`
+    : ""
+
+  const aiAssuranceSection = data.aiAssurance
+    ? `<div class="section"><h2>AI Assurance Controls</h2><p style="color:#4b5563;font-size:13px;">Customer-declared profile: ${escapeHtml(data.aiAssurance.profileState)} · Threat model: ${escapeHtml(data.aiAssurance.threatModelState)}. This is private evidence context, not a certification or guarantee.</p><ul>${data.aiAssurance.controls
+        .map(
+          (control) =>
+            `<li><strong>${escapeHtml(control.controlTitle)}</strong> <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#f3f4f6;font-size:12px;">${escapeHtml(control.state)}</span>${control.attestation ? `<p style="margin:6px 0 0;font-size:13px;color:#4b5563;">${escapeHtml(control.attestation)}</p>` : ""}${control.artifacts.length > 0 ? `<p style="margin:4px 0 0;font-size:12px;color:#6b7280;">Artifacts: ${control.artifacts.map((a) => escapeHtml(a.filename)).join(", ")}</p>` : ""}</li>`
+        )
+        .join("")}</ul></div>`
+    : ""
+
   const urlExecution = data.scanInfo?.urlExecution
   const urlExecutionSection = urlExecution
     ? `<div class="section"><h2>URL Execution Scope</h2>
@@ -533,6 +699,10 @@ export function generateReportHTML(data: ReportData): string {
     ${methodologySection}
 
     ${urlExecutionSection}
+
+    ${aiAppSecuritySection}
+
+    ${aiAssuranceSection}
 
     <div class="section">
       <h2>Findings by Severity</h2>

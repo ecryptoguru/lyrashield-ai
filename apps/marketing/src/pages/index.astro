@@ -4,6 +4,8 @@ import PremiumHero from "@components/landing/PremiumHero.astro"
 import HeroProductFrame from "@components/landing/HeroProductFrame.astro"
 import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
 import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
+import EvidenceVaultPromo from "@components/landing/EvidenceVaultPromo.astro"
+import AiSafetyPromo from "@components/landing/AiSafetyPromo.astro"
 import TwoDepths from "@components/landing/TwoDepths.astro"
 import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
@@ -30,6 +32,18 @@ const faqItems = [
   {
     q: "Does LyraShield automatically fix my code?",
     a: "No. LyraShield creates approval-gated fix proposals that explain the issue and stage a server-generated patch. Every code change requires your explicit review and approval. Nothing auto-merges.",
+  },
+  {
+    q: "Is this a replacement for my other security scanners?",
+    a: "No. SCA, secrets scanning, dependency checks, and repo review are coverage layers inside a wider release-assurance workflow. Specialist tools may still provide deeper coverage in their own category. The value here is the combined loop and evidence record, not claiming depth parity alone.",
+  },
+  {
+    q: "What is the Operational Evidence Vault?",
+    a: "It is a private workspace where you collect, review, and version proof for the seven Vibe Security 50 controls that cannot be established by a repository or URL scan: audit trails, monitoring, backup tests, sandboxing, test independence, multi-agent trust, and accountable review. Accepted evidence is frozen into immutable private assurance reports; public shared reports do not include it.",
+  },
+  {
+    q: "What is live today and what is on the roadmap?",
+    a: "Live today: free Lite Check (passive public URL scan), five browser-local tools, the full release-assurance platform in open beta with open registration (target, review, evidence, fix proposal, retest, report), the Operational Evidence Vault for the seven evidence-required controls, the MCP server for agent-native use, and GitHub integration. Near-term roadmap: deeper deterministic coverage, richer SARIF interop, a reusable GitHub Action with a diff-aware gate, and expanded shareable report variants. Pricing and plan limits will be announced as the beta matures.",
   },
   {
     q: "Do you store my codebase?",
@@ -96,6 +110,8 @@ const jsonLd = [
   <EvidenceWorld manifest={motionManifest} />
   <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
   <HomeLiteScan />
+  <EvidenceVaultPromo />
+  <AiSafetyPromo />
   <TwoDepths />
   <Faq items={faqItems} />
   <FinalCta />

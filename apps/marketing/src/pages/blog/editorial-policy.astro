@@ -110,12 +110,26 @@ const jsonLd = [
           text-free and cannot imply customers, certifications, live findings, or security guarantees.
         </p>
       </section>
+
+      <section aria-labelledby="claims-heading">
+        <h2 id="claims-heading">Prohibited claims</h2>
+        <p>
+          LyraShield AI does not claim "SOC 2 compliant," "certified," "guarantees security,"
+          "AI safety tested" (without a named framework), or "adversarial robustness proven."
+          Each of those requires external attestation, a reproducible evaluation corpus, a defined
+          threat model, or a formal certificate that LyraShield has not yet obtained. The internal
+          map of what each claim requires, what is honest today, and the sequencing to get there
+          lives in <code>docs/claims-readiness.md</code>. Public copy must stay evidence-backed,
+          scope-bounded, and limitation-aware.
+        </p>
+      </section>
     </div>
 
     <footer class="editorial-policy__footer">
       <p>
         Product-specific evidence terms are defined on the <a href="/methodology">methodology page</a>.
         The <a href="/sample-report">sample assurance report</a> is illustrative, not a customer result.
+        The claims-readiness map is maintained internally in <code>docs/claims-readiness.md</code>.
       </p>
     </footer>
   </article>

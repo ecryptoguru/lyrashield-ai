@@ -17,6 +17,28 @@ vi.mock("./client", () => ({
   },
 }))
 
+vi.mock("./ai-assurance-service", () => ({
+  listControlEvidence: vi.fn().mockResolvedValue([]),
+  aiAssuranceStateForVersion: vi.fn().mockReturnValue("EVIDENCE_REQUIRED"),
+  AI_ASSURANCE_CONTROL_IDS: [
+    "vibe-34",
+    "vibe-35",
+    "vibe-36",
+    "vibe-43",
+    "vibe-46",
+    "vibe-48",
+    "vibe-50",
+  ],
+}))
+
+vi.mock("./ai-system-profile-service", () => ({
+  getAiSystemProfile: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock("./threat-model-service", () => ({
+  getThreatModel: vi.fn().mockResolvedValue(null),
+}))
+
 import { prisma } from "./client"
 import { gatherReportData, generateReportHTML } from "./report-generator"
 
@@ -124,6 +146,95 @@ describe("report-generator", () => {
       expect(data.findingsByStatus).toEqual({ FIXED: 1, OPEN: 1 })
       expect(data.findingsByCategory).toEqual({ injection: 2 })
       expect(data.scanInfo?.coverage).toEqual({ completed: 1, limited: 1, notApplicable: 1 })
+      expect(data.aiAssurance).toBeDefined()
+      expect(data.aiAssurance?.controls).toHaveLength(7)
+      expect(data.aiAssurance?.controls.every((c) => c.state === "EVIDENCE_REQUIRED")).toBe(true)
+    })
+
+    it("freezes AI assurance state without exposing private artifact storage URIs", async () => {
+      const { listControlEvidence, aiAssuranceStateForVersion } =
+        await import("./ai-assurance-service")
+      const { getAiSystemProfile } = await import("./ai-system-profile-service")
+      const { getThreatModel } = await import("./threat-model-service")
+      mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
+      mockPrisma.scan.findFirst.mockResolvedValue({
+        id: "scan-1",
+        status: "completed",
+        summary: "Full scan",
+        target: { name: "example.com", type: "url", url: "https://example.com" },
+        startedAt: new Date("2026-01-01"),
+        endedAt: new Date("2026-01-02"),
+        targetId: "target-1",
+        resultManifest: { checksum: "manifest-checksum" },
+        coverageReceipts: [],
+      })
+      mockPrisma.finding.findMany.mockResolvedValue([])
+      mockPrisma.scoreSnapshot.findMany.mockResolvedValue([])
+      vi.mocked(listControlEvidence).mockResolvedValue([
+        {
+          id: "ce-1",
+          workspaceId: "ws-1",
+          targetId: "target-1",
+          controlId: "vibe-34",
+          currentVersion: {
+            id: "v-1",
+            controlEvidenceId: "ce-1",
+            version: 1,
+            status: "ACCEPTED",
+            attestation: "audit log present",
+            expiresAt: null,
+            artifactManifest: [
+              {
+                id: "art-1",
+                filename: "proof.pdf",
+                mediaType: "application/pdf",
+                byteLength: 1234,
+                storageUri: "s3://lyrashield-bucket/evidence/ws-1/...",
+                checksum: "sha-1",
+                encryptionKeyRef: "vault/lyrashield-evidence-key/v1",
+              },
+            ],
+            checksum: "sha-version",
+            createdById: "user-1",
+            createdAt: new Date(),
+            reviewedById: null,
+            reviewedAt: null,
+          } as never,
+        },
+      ])
+      vi.mocked(aiAssuranceStateForVersion).mockImplementation((version) => {
+        if (version && (version as { status: string }).status === "ACCEPTED")
+          return "EVIDENCE_ACCEPTED"
+        return "EVIDENCE_REQUIRED"
+      })
+      vi.mocked(getAiSystemProfile).mockResolvedValue({
+        currentVersion: { id: "profile-v1" },
+      } as never)
+      vi.mocked(getThreatModel).mockResolvedValue({
+        currentVersion: { id: "threat-model-v1" },
+      } as never)
+
+      const data = await gatherReportData("ws-1", "scan-1")
+
+      const control = data.aiAssurance?.controls.find((c) => c.controlId === "vibe-34")
+      const snapshotEvidence = data.aiAssurance?.evidence.find((c) => c.controlId === "vibe-34")
+      expect(data.aiAssurance).toMatchObject({
+        version: "ai-assurance/1.0.0",
+        profileState: "COMPLETE",
+        threatModelState: "CURRENT",
+      })
+      expect(snapshotEvidence).toMatchObject({
+        evidenceVersionId: "v-1",
+        state: "EVIDENCE_ACCEPTED",
+        expiresAt: null,
+      })
+      expect(control?.state).toBe("EVIDENCE_ACCEPTED")
+      expect(control?.artifacts).toHaveLength(1)
+      expect(control?.artifacts[0]?.filename).toBe("proof.pdf")
+      expect(control?.artifacts[0]?.byteLength).toBe(1234)
+      expect(control?.artifacts[0]).not.toHaveProperty("storageUri")
+      expect(control?.artifacts[0]).not.toHaveProperty("encryptionKeyRef")
+      expect(data.aiAssurance?.controls).toHaveLength(7)
     })
 
     it("includes urlExecution from the result manifest", async () => {

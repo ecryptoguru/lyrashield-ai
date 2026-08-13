@@ -43,6 +43,7 @@ The beta is ready only after:
 - Arbitrary URL execution through the repository engine.
 - General scanning of untrusted targets before transport-level egress controls are proven.
 - Enterprise SSO, SCIM, private workers, BYOK/BYOM, or compliance claims.
+- Any of the five prohibited claims documented in `docs/claims-readiness.md`: "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework), or "adversarial robustness proven."
 - Vector embeddings/RAG until an evaluation shows that they improve quality or reduce total model cost.
 
 ## 3. Proposed minimum architecture

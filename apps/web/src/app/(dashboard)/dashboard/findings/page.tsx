@@ -25,7 +25,7 @@ function normalizeTab(value: string | undefined): FindingsTab {
 export default async function FindingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ finding?: string; tab?: string; scanId?: string }>
+  searchParams: Promise<{ finding?: string; tab?: string; scanId?: string; targetId?: string }>
 }) {
   const session = await getCachedSession()
   if (!session) return null
@@ -75,7 +75,11 @@ export default async function FindingsPage({
           tabs={tabs}
           activeTab={tab}
         />
-        <ReportsClient workspaceId={workspaceId} initialScanId={params.scanId} />
+        <ReportsClient
+          workspaceId={workspaceId}
+          initialScanId={params.scanId}
+          initialTargetId={params.targetId}
+        />
       </div>
     )
   }

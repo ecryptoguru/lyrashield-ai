@@ -74,9 +74,13 @@ const CONTROL_SCANNERS: Readonly<Record<number, readonly string[]>> = {
   29: ["url"],
   31: ["url"],
   32: ["url"],
+  33: ["engine", "ai_app_security"],
   37: ["sca"],
   38: ["sca", "engine"],
-  39: ["sca", "engine"],
+  39: ["sca", "engine", "ml_supply_chain"],
+  40: ["engine", "ai_app_security"],
+  42: ["engine", "ai_app_security"],
+  44: ["engine", "ai_app_security"],
   45: ["agent_config"],
   47: ["agent_config", "engine"],
 }
@@ -181,7 +185,7 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
         ...engineStatus.metadata,
       },
     },
-    ...["sca", "secrets", "agent_config"].map((scanner) => {
+    ...["sca", "secrets", "agent_config", "ml_supply_chain"].map((scanner) => {
       const status = scannerStatus(
         scanner,
         repositoryTarget && input.sourceCheckoutAvailable,

@@ -9,6 +9,7 @@ import {
   Plug,
   Bot,
   ClipboardCheck,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -128,6 +129,12 @@ const WORKSPACE_NAV_ITEMS: NavItem[] = [
     label: INTEGRATION_PLURAL,
     shortLabel: INTEGRATION_PLURAL,
     icon: Plug,
+  },
+  {
+    href: "/dashboard/ai-assurance",
+    label: "Evidence Vault",
+    shortLabel: "Evidence",
+    icon: ShieldCheck,
   },
   { href: "/dashboard/team", label: TEAM_PLURAL, shortLabel: TEAM_PLURAL, icon: Users },
   {

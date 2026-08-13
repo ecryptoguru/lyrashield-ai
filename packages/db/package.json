@@ -21,6 +21,7 @@
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/score": "workspace:*",
+    "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*"
   },
   "devDependencies": {
@@ -29,6 +30,6 @@
     "typescript": "^6.0.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.20.4",
-    "dotenv": "^17.4.2"
+    "dotenv": "16.4.7"
   }
 }

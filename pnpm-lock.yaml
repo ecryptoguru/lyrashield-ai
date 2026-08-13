@@ -88,6 +88,9 @@ importers:
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@lyrashield/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       '@lyrashield/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -183,6 +186,9 @@ importers:
       '@lyrashield/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@lyrashield/evidence-storage':
+        specifier: workspace:*
+        version: link:../../packages/evidence-storage
       '@lyrashield/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
@@ -296,6 +302,9 @@ importers:
       '@lyrashield/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@lyrashield/evidence-storage':
+        specifier: workspace:*
+        version: link:../../packages/evidence-storage
       '@lyrashield/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
@@ -535,6 +544,9 @@ importers:
       '@lyrashield/score':
         specifier: workspace:*
         version: link:../score
+      '@lyrashield/security':
+        specifier: workspace:*
+        version: link:../security
       '@lyrashield/types':
         specifier: workspace:*
         version: link:../types
@@ -555,8 +567,8 @@ importers:
         specifier: ^8.20.4
         version: 8.20.4
       dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
+        specifier: 16.4.7
+        version: 16.4.7
       prisma:
         specifier: 7.9.1
         version: 7.9.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(magicast@0.5.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3)
@@ -591,6 +603,50 @@ importers:
       tsx:
         specifier: ^4.23.8
         version: 4.23.8
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+
+  packages/eval-ai-safety:
+    dependencies:
+      '@lyrashield/logger':
+        specifier: workspace:*
+        version: link:../logger
+      '@lyrashield/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      tsx:
+        specifier: ^4.19.0
+        version: 4.23.8
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.8)(yaml@2.9.0)
+
+  packages/evidence-storage:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1096.0
+        version: 3.1096.0
+      '@lyrashield/config':
+        specifier: workspace:*
+        version: link:../config
+      '@lyrashield/db':
+        specifier: workspace:*
+        version: link:../db
+      '@lyrashield/logger':
+        specifier: workspace:*
+        version: link:../logger
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
       typescript:
         specifier: ^6.0.0
         version: 6.0.3
@@ -4204,6 +4260,10 @@ packages:
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
+
+  dotenv@16.4.7:
+    resolution: {integrity: sha512-47qPchRCykZC03FhkYAhrvwU4xDBFIj1QPqaarj6mdM/hgUzfPHcpkHJOn3mJAufFeeAxAzeGsr5X0M4k6fLZQ==}
+    engines: {node: '>=12'}
 
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
@@ -10643,6 +10703,8 @@ snapshots:
       dom-serializer: 2.0.0
       domelementtype: 2.3.0
       domhandler: 5.0.3
+
+  dotenv@16.4.7: {}
 
   dotenv@17.4.2: {}
 

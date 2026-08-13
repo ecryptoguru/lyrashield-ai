@@ -82,6 +82,10 @@ const faq = [
     q: "Does every scan check all 50 controls?",
     a: "No, and the record says which. Applicability depends on the target: a URL or API scan cannot exercise repository or operational controls, and each control gets a receipt recording whether it completed, was limited, did not apply, or still needs evidence.",
   },
+  {
+    q: "Where is evidence for the 7 operational controls stored?",
+    a: "In the LyraShield Operational Evidence Vault. Each workspace keeps its own encrypted, versioned evidence behind row-level security. Accepted evidence is frozen into private assurance reports; shared public reports do not include it.",
+  },
 ]
 
 const jsonLd = [
@@ -206,6 +210,17 @@ const jsonLd = [
               </span>
             </h2>
             <p class="mt-3 leading-7 text-text-muted" data-reveal>{group.blurb}</p>
+            {group.strategy === "evidence" && (
+              <div class="mt-6" data-reveal>
+                <a
+                  href="/evidence-vault"
+                  class="inline-flex min-h-10 items-center justify-center rounded-lg border border-border bg-bg-raised px-4 text-sm font-semibold text-text transition-colors hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  data-cta-id="vibe50-evidence-vault"
+                >
+                  See how the Operational Evidence Vault works
+                </a>
+              </div>
+            )}
           </div>
           <ol class="mt-8 divide-y divide-border border-y border-border" data-reveal-group>
             {group.items.map((control) => (

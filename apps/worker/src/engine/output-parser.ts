@@ -39,9 +39,12 @@ export interface EngineVulnerability {
   agent_id?: string
   agent_name?: string
   /** Internal detector provenance, attached by the orchestrator after parsing. */
-  scannerSource?: "engine" | "sca" | "secrets" | "url" | "agent_config"
+  scannerSource?:
+    "engine" | "sca" | "secrets" | "url" | "agent_config" | "ai_app_security" | "ml_supply_chain"
   /** Every detector that independently produced the normalized finding. */
-  corroboratingSources?: Array<"engine" | "sca" | "secrets" | "url" | "agent_config">
+  corroboratingSources?: Array<
+    "engine" | "sca" | "secrets" | "url" | "agent_config" | "ai_app_security" | "ml_supply_chain"
+  >
 }
 
 export interface EngineRunRecord {
@@ -296,7 +299,7 @@ function findUsageMetric(
   return visited.truncated ? undefined : total
 }
 
-function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
+export function normalizeLlmUsage(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
   const inputTokenDetails =
@@ -357,6 +360,7 @@ function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
     .map((key) => usageCost(record[key]))
     .find((candidate) => candidate !== undefined)
   const requestUsageBuckets = normalizeRequestUsageBuckets(record.request_usage_entries)
+  const reportedModelUsageBuckets = normalizeModelUsageBuckets(record.model_usage_buckets)
   const normalized = {
     ...(requestCount !== undefined ? { request_count: requestCount } : {}),
     ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
@@ -368,8 +372,86 @@ function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
     ...(totalTokens !== undefined ? { total_tokens: totalTokens } : {}),
     ...(totalCostUsd !== undefined ? { total_cost_usd: totalCostUsd } : {}),
     ...requestUsageBuckets,
+    ...(requestUsageBuckets.model_usage_buckets
+      ? {}
+      : reportedModelUsageBuckets
+        ? { model_usage_buckets: reportedModelUsageBuckets }
+        : {}),
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+const USAGE_COUNTER_KEYS = [
+  "request_count",
+  "input_tokens",
+  "cached_input_tokens",
+  "cache_write_input_tokens",
+  "output_tokens",
+  "total_tokens",
+] as const
+const USAGE_BUCKET_KEYS = [
+  "standard_input_tokens",
+  "standard_cached_input_tokens",
+  "standard_cache_write_input_tokens",
+  "standard_output_tokens",
+  "long_input_tokens",
+  "long_cached_input_tokens",
+  "long_cache_write_input_tokens",
+  "long_output_tokens",
+] as const
+
+/**
+ * Combines independently metered engine phases only when both receipts expose
+ * exact per-request GPT-5.6 buckets. An incomplete receipt stays unpriceable.
+ */
+export function mergeLlmUsage(
+  base: Record<string, unknown> | undefined,
+  overlay: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  const normalizedBase = normalizeLlmUsage(base)
+  const normalizedOverlay = normalizeLlmUsage(overlay)
+  if (!normalizedBase || !normalizedOverlay) return undefined
+
+  const merged: Record<string, unknown> = {}
+  for (const key of USAGE_COUNTER_KEYS) {
+    const baseValue = usageInteger(normalizedBase[key])
+    const overlayValue = usageInteger(normalizedOverlay[key])
+    if (baseValue === undefined || overlayValue === undefined) return undefined
+    const total = usageInteger(baseValue + overlayValue)
+    if (total === undefined) return undefined
+    merged[key] = total
+  }
+
+  const baseBuckets = normalizedBase.model_usage_buckets
+  const overlayBuckets = normalizedOverlay.model_usage_buckets
+  if (!Array.isArray(baseBuckets) || !Array.isArray(overlayBuckets)) return undefined
+  const byModel = new Map<string, Record<(typeof USAGE_BUCKET_KEYS)[number], number>>()
+  for (const bucket of [...baseBuckets, ...overlayBuckets]) {
+    if (typeof bucket !== "object" || bucket === null || Array.isArray(bucket)) return undefined
+    const record = bucket as Record<string, unknown>
+    const model = boundedGpt56Model(record.model)?.trim()
+    if (!model) return undefined
+    const current = byModel.get(model) ?? ({} as Record<(typeof USAGE_BUCKET_KEYS)[number], number>)
+    for (const key of USAGE_BUCKET_KEYS) {
+      const value = usageInteger(record[key])
+      if (value === undefined) return undefined
+      const total = usageInteger((current[key] ?? 0) + value)
+      if (total === undefined) return undefined
+      current[key] = total
+    }
+    byModel.set(model, current)
+  }
+  if (byModel.size === 0 || byModel.size > 3) return undefined
+  merged.model_usage_buckets = [...byModel].map(([model, buckets]) => ({ model, ...buckets }))
+
+  const baseCost = usageCost(normalizedBase.total_cost_usd)
+  const overlayCost = usageCost(normalizedOverlay.total_cost_usd)
+  if (baseCost !== undefined && overlayCost !== undefined) {
+    const cost = usageCost(baseCost + overlayCost)
+    if (cost === undefined) return undefined
+    merged.total_cost_usd = cost
+  }
+  return merged
 }
 
 function detailInteger(value: unknown, key: string): number | undefined {
@@ -470,6 +552,26 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
         }
       : {}),
   }
+}
+
+/** Validates the already-normalized buckets persisted in a prior engine receipt. */
+function normalizeModelUsageBuckets(value: unknown): Array<Record<string, unknown>> | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 3) return undefined
+  const normalized: Array<Record<string, unknown>> = []
+  for (const bucket of value) {
+    if (typeof bucket !== "object" || bucket === null || Array.isArray(bucket)) return undefined
+    const record = bucket as Record<string, unknown>
+    const model = boundedGpt56Model(record.model)?.trim()
+    if (!model) return undefined
+    const entry: Record<string, unknown> = { model }
+    for (const key of USAGE_BUCKET_KEYS) {
+      const amount = usageInteger(record[key])
+      if (amount === undefined) return undefined
+      entry[key] = amount
+    }
+    normalized.push(entry)
+  }
+  return normalized
 }
 
 function validateVulnerability(v: Record<string, unknown>): EngineVulnerability | null {
@@ -750,9 +852,20 @@ export function mapSeverity(
 export function generateDedupeKey(vuln: EngineVulnerability, targetId: string): string {
   const location = vuln.code_locations?.[0]
   const dependency = vuln.dependency_metadata
-  const isDependencyFinding = Boolean(vuln.cve && dependency?.package_name)
+  // OSV advisories are not always assigned a CVE. The OSV id is still stable,
+  // so use it together with the resolved package identity for every dependency
+  // scanner rather than letting SCA and AI-03 duplicate the same advisory.
+  const isDependencyFinding = Boolean(
+    dependency?.package_name &&
+    (vuln.finding_class === "dependency_cve" || vuln.finding_class === "dependency_advisory")
+  )
   const identity = isDependencyFinding
-    ? ["dependency", vuln.cve, dependency?.package_ecosystem ?? "", dependency?.package_name ?? ""]
+    ? [
+        "dependency",
+        vuln.cve ?? vuln.id,
+        dependency?.package_ecosystem ?? "",
+        dependency?.package_name ?? "",
+      ]
     : [
         vuln.finding_class ?? "dynamic",
         vuln.cve ?? "",

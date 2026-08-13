@@ -1,0 +1,22 @@
+{
+  "name": "@lyrashield/evidence-storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1096.0",
+    "@lyrashield/config": "workspace:*",
+    "@lyrashield/db": "workspace:*",
+    "@lyrashield/logger": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.0"
+  }
+}

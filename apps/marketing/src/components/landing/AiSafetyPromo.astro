@@ -1,0 +1,92 @@
+---
+/**
+ * AI Safety evaluation promo section for the homepage.
+ * Shows bounded, honest results from the OWASP and MLCommons AILuminate
+ * evaluations with a link to the full /ai-safety page.
+ */
+interface Props {
+  compact?: boolean
+}
+
+const { compact = false } = Astro.props
+
+const owaspExpectedOutcomeRate = "85.7%"
+---
+
+<section
+  id="ai-safety"
+  aria-labelledby="ai-safety-heading"
+  class="px-4 py-14 sm:px-6 sm:py-16 lg:px-8"
+>
+  <div class="mx-auto max-w-5xl" data-reveal-group>
+    <header class="max-w-3xl">
+      <p
+        class="font-mono text-xs font-semibold tracking-wider text-accent uppercase"
+        data-reveal="fade"
+      >
+        AI safety evaluation
+      </p>
+      <h2
+        id="ai-safety-heading"
+        class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl"
+        data-reveal
+      >
+        Prompt-injection guard, tested in the open
+      </h2>
+      <p class="mt-5 text-lg leading-8 text-text-muted" data-reveal>
+        The MCP guard is evaluated against two open frameworks: the OWASP Gen
+        AI Red Teaming Guide and the MLCommons AILuminate demo prompt set.
+        Results, methodology, known limitations, and what this is
+        <em>not</em> are all public.
+      </p>
+    </header>
+
+    <div class="mt-10 grid gap-6 sm:grid-cols-2" data-reveal-group>
+      <div class="rounded-lg border border-border bg-bg-raised p-6" data-reveal>
+        <div class="flex items-baseline justify-between">
+          <h3 class="font-semibold text-text">OWASP Gen AI Red Teaming</h3>
+          <span class="text-2xl font-bold text-accent">{owaspExpectedOutcomeRate}</span>
+        </div>
+        <p class="mt-2 text-sm leading-6 text-text-muted">
+          42 test cases across 4 assessment areas. {owaspExpectedOutcomeRate}
+          expected-outcome match rate. 5 bypasses fixed, 2 limitations documented.
+        </p>
+        <p class="mt-2 text-xs text-text-muted">
+          Not "OWASP certified." Evaluated against their guidance.
+        </p>
+      </div>
+      <div class="rounded-lg border border-border bg-bg-raised p-6" data-reveal>
+        <div class="flex items-baseline justify-between">
+          <h3 class="font-semibold text-text">MLCommons AILuminate</h3>
+          <span class="text-2xl font-bold text-accent">Scope check</span>
+        </div>
+        <p class="mt-2 text-sm leading-6 text-text-muted">
+          292 content-safety prompts run through the guard to verify it
+          filters injection and does not over-reach into content moderation.
+        </p>
+        <p class="mt-2 text-xs text-text-muted">
+          Not MLCommons-certified. Not a score — a scope boundary check.
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-8 flex flex-wrap gap-4" data-reveal>
+      <a
+        href="/ai-safety"
+        class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+        data-cta-id="homepage-ai-safety"
+      >
+        See the full results
+      </a>
+      {!compact && (
+        <a
+          href="/methodology"
+          class="inline-flex min-h-12 items-center justify-center rounded-lg border border-border px-5 text-sm font-semibold text-text transition-colors hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="homepage-methodology"
+        >
+          Read the methodology
+        </a>
+      )}
+    </div>
+  </div>
+</section>

@@ -5,6 +5,7 @@ import type {
   ScanStatus,
   ScanResultManifest,
   ScanCoverageReceipt,
+  AiSecurityScoreSnapshot,
 } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import { DeterminismModeSchema, type DeterminismMode } from "@lyrashield/types"
@@ -33,6 +34,7 @@ export interface ScanWithEvents extends Scan {
    */
   resultManifest: Pick<ScanResultManifest, "checksum"> | null
   coverageReceipts: ScanCoverageReceipt[]
+  aiSecurityScoreSnapshot: AiSecurityScoreSnapshot | null
   target: {
     id: string
     name: string
@@ -243,6 +245,7 @@ export async function getScanWithEvents(
         coverageReceipts: {
           orderBy: { controlId: "asc" },
         },
+        aiSecurityScoreSnapshot: true,
         target: {
           select: { id: true, name: true, type: true, url: true, repoFullName: true },
         },

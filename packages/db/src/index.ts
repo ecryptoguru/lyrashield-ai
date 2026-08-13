@@ -172,6 +172,47 @@ export {
   type ScheduleWithDetails,
 } from "./schedule-service"
 export {
+  getAdvisoryCache,
+  setAdvisoryCache,
+  InMemoryAdvisoryCache,
+  PostgresAdvisoryCache,
+  type AdvisoryCache,
+  type AdvisoryEntry,
+  type AdvisoryEcosystem,
+} from "./advisory-cache-service"
+export {
+  queryOsvWithCache,
+  type OsvQueryPackage,
+  type OsvVulnerability,
+  type OsvQueryResult,
+  type AdvisoryBatchResult,
+  type OsvQueryOptions,
+} from "./osv-client"
+
+export {
+  createAiSecurityScoreSnapshot,
+  getAiSecurityScoreSnapshot,
+  getLatestAiSecurityScoreSnapshot,
+  type AiSecurityScoreInput,
+} from "./ai-security-score-service"
+
+export {
+  upsertAiSystemProfile,
+  getAiSystemProfile,
+  validateAiSystemProfile,
+  buildAiSystemInventorySummary,
+  type AiSystemProfileInput,
+} from "./ai-system-profile-service"
+export {
+  saveThreatModel,
+  getThreatModel,
+  validateThreatModel,
+  threatModelMarkdown,
+  type ThreatModelInput,
+  type ThreatModelThreat,
+} from "./threat-model-service"
+
+export {
   createApproval,
   getApproval,
   findPendingApprovalByHash,
@@ -203,3 +244,22 @@ export {
   type PublicApiKey,
   type VerifiedApiKey,
 } from "./api-key-service"
+export {
+  createControlEvidence,
+  reviseControlEvidence,
+  reviewControlEvidence,
+  acceptControlEvidence,
+  rejectControlEvidence,
+  markControlEvidenceNotApplicable,
+  listControlEvidence,
+  addControlEvidenceArtifacts,
+  aiAssuranceStateForVersion,
+  AI_ASSURANCE_CONTROL_IDS,
+  type AiAssuranceControlId,
+  type AiAssuranceState,
+  type ControlEvidenceVersionStatus,
+  type ArtifactManifestItem,
+  type ControlEvidenceVersionSummary,
+  type ControlEvidenceWithVersion,
+  type AddControlEvidenceArtifactsInput,
+} from "./ai-assurance-service"

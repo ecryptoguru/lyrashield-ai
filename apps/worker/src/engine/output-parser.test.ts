@@ -3,6 +3,7 @@ import {
   parseVulnerabilitiesJson,
   parseRunJson,
   parseEngineOutput,
+  mergeLlmUsage,
   mapSeverity,
   generateDedupeKey,
   buildFindingSummary,
@@ -34,6 +35,88 @@ const SAMPLE_VULN = {
     },
   ],
 }
+
+describe("mergeLlmUsage", () => {
+  it("combines only complete per-request GPT-5.6 accounting buckets", () => {
+    const usage = (input: number, output: number) => ({
+      request_count: 1,
+      input_tokens: input,
+      cached_input_tokens: 0,
+      cache_write_input_tokens: 0,
+      output_tokens: output,
+      total_tokens: input + output,
+      request_usage_entries: [
+        {
+          model: "azure_ai/gpt-5.6-luna",
+          input_tokens: input,
+          output_tokens: output,
+          input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+        },
+      ],
+    })
+
+    expect(mergeLlmUsage(usage(10, 2), usage(5, 1))).toMatchObject({
+      request_count: 2,
+      input_tokens: 15,
+      output_tokens: 3,
+      model_usage_buckets: [
+        expect.objectContaining({
+          model: "azure_ai/gpt-5.6-luna",
+          standard_input_tokens: 15,
+          standard_output_tokens: 3,
+        }),
+      ],
+    })
+    expect(mergeLlmUsage(usage(10, 2), { request_count: 1 })).toBeUndefined()
+  })
+
+  it("retains exact already-normalized buckets from the completed engine phase", () => {
+    const completedScanUsage = {
+      request_count: 1,
+      input_tokens: 10,
+      cached_input_tokens: 0,
+      cache_write_input_tokens: 0,
+      output_tokens: 2,
+      total_tokens: 12,
+      model_usage_buckets: [
+        {
+          model: "azure_ai/gpt-5.6-luna",
+          standard_input_tokens: 10,
+          standard_cached_input_tokens: 0,
+          standard_cache_write_input_tokens: 0,
+          standard_output_tokens: 2,
+          long_input_tokens: 0,
+          long_cached_input_tokens: 0,
+          long_cache_write_input_tokens: 0,
+          long_output_tokens: 0,
+        },
+      ],
+    }
+
+    expect(
+      mergeLlmUsage(completedScanUsage, {
+        request_count: 1,
+        input_tokens: 5,
+        cached_input_tokens: 0,
+        cache_write_input_tokens: 0,
+        output_tokens: 1,
+        total_tokens: 6,
+        request_usage_entries: [
+          {
+            model: "azure_ai/gpt-5.6-luna",
+            input_tokens: 5,
+            output_tokens: 1,
+            input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+          },
+        ],
+      })
+    ).toMatchObject({
+      request_count: 2,
+      input_tokens: 15,
+      output_tokens: 3,
+    })
+  })
+})
 
 describe("output-parser", () => {
   describe("parseVulnerabilitiesJson", () => {
@@ -588,6 +671,33 @@ describe("output-parser", () => {
       )
       expect(engine).toBe(sca)
     })
+  })
+
+  it("correlates an OSV advisory without a CVE across SCA and AI-03", () => {
+    const sca = generateDedupeKey(
+      {
+        id: "GHSA-example-1234",
+        title: "Vulnerable dependency: lodash",
+        severity: "HIGH",
+        timestamp: "2026-08-14T00:00:00.000Z",
+        finding_class: "dependency_cve",
+        dependency_metadata: { package_name: "lodash", package_ecosystem: "npm" },
+      },
+      "target-1"
+    )
+    const ai03 = generateDedupeKey(
+      {
+        id: "GHSA-example-1234",
+        title: "AI-03 dependency advisory",
+        severity: "HIGH",
+        timestamp: "2026-08-14T00:00:00.000Z",
+        finding_class: "dependency_advisory",
+        dependency_metadata: { package_name: "lodash", package_ecosystem: "npm" },
+      },
+      "target-1"
+    )
+
+    expect(ai03).toBe(sca)
   })
 
   describe("buildFindingSummary", () => {

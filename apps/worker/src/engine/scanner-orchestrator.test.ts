@@ -5,7 +5,40 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 vi.mock("@lyrashield/config", () => ({ env: { SCANNER_PHASE_TIMEOUT_MS: 600_000 } }))
 
-vi.mock("@lyrashield/db", () => ({ addScanEvent: vi.fn().mockResolvedValue(undefined) }))
+vi.mock("@lyrashield/db", () => ({
+  addScanEvent: vi.fn().mockResolvedValue(undefined),
+  queryOsvWithCache: vi.fn().mockResolvedValue({
+    status: "COMPLETE",
+    source: "OSV",
+    requestedCount: 1,
+    resolvedCount: 1,
+    results: [],
+    fetchedAt: "2026-08-14T00:00:00.000Z",
+    snapshotId: "snapshot",
+    snapshotChecksum: "snapshot",
+    cacheAgeSeconds: 0,
+    supportedEcosystems: ["npm"],
+    unresolved: [],
+  }),
+}))
+
+vi.mock("./scanners/resolved-dependencies", () => ({
+  resolveExactDependencies: vi.fn().mockResolvedValue({
+    status: "COMPLETE",
+    packages: [
+      { ecosystem: "npm", name: "lodash", version: "4.17.20", filePath: "package-lock.json" },
+    ],
+    unresolved: [],
+    truncated: false,
+    evidenceFile: {
+      path: "package-lock.json",
+      content: "{}",
+      size: 2,
+      extension: ".json",
+      language: "json",
+    },
+  }),
+}))
 
 vi.mock("./scanners/sca-scanner", () => ({
   scanSca: vi.fn().mockResolvedValue([
@@ -71,6 +104,40 @@ vi.mock("./scanners/agent-config-scanner", () => ({
   scanAgentConfig: vi.fn().mockResolvedValue([]),
 }))
 
+vi.mock("./scanners/ml-supply-chain-scanner", () => ({
+  scanMlSupplyChain: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock("./scanners/ai-app-security", () => ({
+  scanAiAppSecurity: vi.fn().mockResolvedValue({
+    findings: [],
+    aiScanResult: {
+      signals: [],
+      coverage: {
+        version: "ai-app-security/2026-08-13.1",
+        totalControls: 8,
+        assessedCount: 0,
+        notAssessedCount: 8,
+        detectedCount: 0,
+        noFindingCount: 0,
+        inconclusiveCount: 0,
+        controls: {},
+        limitsReached: [],
+        unsupportedFiles: [],
+        truncatedFiles: [],
+      },
+      provenance: {
+        files: 0,
+        bytes: 0,
+        scannedAt: new Date().toISOString(),
+        limitsReached: [],
+        detectorVersion: "ai-app-security/2026-08-13.1",
+      },
+    },
+    ai03AdvisoryFresh: false,
+  }),
+}))
+
 vi.mock("fs/promises", () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
 }))
@@ -80,7 +147,10 @@ import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
-import { addScanEvent } from "@lyrashield/db"
+import { scanMlSupplyChain } from "./scanners/ml-supply-chain-scanner"
+import { scanAiAppSecurity } from "./scanners/ai-app-security"
+import { addScanEvent, queryOsvWithCache } from "@lyrashield/db"
+import { resolveExactDependencies } from "./scanners/resolved-dependencies"
 import type { EngineVulnerability } from "./output-parser"
 
 const engineFindings: EngineVulnerability[] = [
@@ -125,13 +195,35 @@ describe("runScannerOrchestrator", () => {
     expect(scanSca).toHaveBeenCalled()
     expect(scanSecrets).toHaveBeenCalled()
     expect(scanAgentConfig).toHaveBeenCalled()
+    expect(scanMlSupplyChain).toHaveBeenCalled()
 
     expect(result.engineFindings.length).toBe(1)
     expect(result.scaFindings.length).toBe(1)
     expect(result.secretsFindings.length).toBe(1)
     expect(result.urlFindings.length).toBe(0)
     expect(result.agentConfigFindings).toEqual([])
+    expect(result.mlSupplyChainFindings).toEqual([])
     expect(result.allFindings.length).toBe(3)
+  })
+
+  it("resolves and queries exact advisory packages once for SCA and AI-03", async () => {
+    await runScannerOrchestrator({
+      scanId: "scan-shared-advisory",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "REPO", name: "Test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+      workspaceDir: sourceCheckout,
+    })
+
+    expect(resolveExactDependencies).toHaveBeenCalledTimes(1)
+    expect(queryOsvWithCache).toHaveBeenCalledTimes(1)
+    const scaConfig = vi.mocked(scanSca).mock.calls.at(-1)?.[0]
+    const aiConfig = vi.mocked(scanAiAppSecurity).mock.calls.at(-1)?.[0]
+    expect(scaConfig?.resolvedDependencyInventory).toBe(aiConfig?.dependencyInventory)
+    expect(scaConfig?.advisoryBatch).toBe(aiConfig?.advisoryBatch)
   })
 
   it("runs the URL scanner for web targets when a profile is provided", async () => {
@@ -241,13 +333,14 @@ describe("runScannerOrchestrator", () => {
     expect(scanSca).not.toHaveBeenCalled()
     expect(scanSecrets).not.toHaveBeenCalled()
     expect(scanAgentConfig).not.toHaveBeenCalled()
+    expect(scanMlSupplyChain).not.toHaveBeenCalled()
     expect(result.scaFindings).toEqual([])
     expect(result.secretsFindings).toEqual([])
     expect(addScanEvent).toHaveBeenCalledWith(
       "scan-1",
       "scanner",
       "info",
-      "SCA/secrets skipped — no source checkout for this target type",
+      "SCA/secrets/AI app security skipped — no source checkout for this target type",
       expect.any(Object)
     )
   })
@@ -266,6 +359,7 @@ describe("runScannerOrchestrator", () => {
     expect(scanSca).not.toHaveBeenCalled()
     expect(scanSecrets).not.toHaveBeenCalled()
     expect(scanAgentConfig).not.toHaveBeenCalled()
+    expect(scanMlSupplyChain).not.toHaveBeenCalled()
     expect(result.coverageIssues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ scanner: "sca", status: "unsupported" }),
@@ -276,7 +370,7 @@ describe("runScannerOrchestrator", () => {
       "scan-missing-checkout",
       "scanner",
       "warning",
-      "SCA/secrets skipped — validated source checkout unavailable for repository target",
+      "SCA/secrets/AI app security skipped — validated source checkout unavailable for repository target",
       expect.any(Object)
     )
   })

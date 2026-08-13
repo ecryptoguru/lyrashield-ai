@@ -42,6 +42,7 @@ vi.mock("@lyrashield/db", () => ({
   })),
   updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
   completeScanWithScore: vi.fn().mockResolvedValue({}),
+  createAiSecurityScoreSnapshot: vi.fn().mockResolvedValue({}),
   qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),
   addScanEvent: vi.fn().mockResolvedValue(undefined),
   runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
@@ -131,6 +132,7 @@ vi.mock("../engine/scanner-orchestrator", () => ({
     secretsFindings: [],
     urlFindings: [],
     agentConfigFindings: [],
+    aiAppSecurityFindings: [],
     coverageIssues: [],
     stats: {
       total: 0,
