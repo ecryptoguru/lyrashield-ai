@@ -206,6 +206,19 @@ textarea {
     opacity: 1;
     transform: none;
   }
+
+  @media (max-width: 767px) {
+    html.reveal-ready [data-reveal] {
+      --reveal-shift: 1rem;
+      transition-duration: 0.52s;
+      transition-delay: calc(var(--reveal-index, 0) * 55ms);
+    }
+
+    html.reveal-ready [data-reveal="left"],
+    html.reveal-ready [data-reveal="right"] {
+      transform: translateY(var(--reveal-shift));
+    }
+  }
 }
 
 /* Reusable micro-interaction helpers (opt-in via class). Transitions collapse
@@ -219,6 +232,11 @@ textarea {
 
 .lift:hover {
   transform: translateY(-3px);
+}
+
+.lift:active {
+  transform: translateY(0) scale(0.98);
+  transition-duration: 80ms;
 }
 
 /* Accent underline that grows from the left on hover/focus. */

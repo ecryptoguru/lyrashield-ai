@@ -2,22 +2,17 @@
 import Base from "@layouts/Base.astro"
 import PremiumHero from "@components/landing/PremiumHero.astro"
 import HeroProductFrame from "@components/landing/HeroProductFrame.astro"
-import V2Launch from "@components/landing/V2Launch.astro"
 import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
-import AssuranceRecord from "@components/landing/AssuranceRecord.astro"
-import AssuranceLoop from "@components/landing/AssuranceLoop.astro"
 import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
-import WhereYouWork from "@components/landing/WhereYouWork.astro"
 import TwoDepths from "@components/landing/TwoDepths.astro"
-import FreeToolsPreview from "@components/landing/FreeToolsPreview.astro"
 import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
 
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = new URL("/", siteOrigin).toString()
-const mediaUrl = import.meta.env.DEV ? "/media-local" : import.meta.env.PUBLIC_MEDIA_URL
-const renderHash = import.meta.env.DEV ? "local" : import.meta.env.PUBLIC_MOTION_RENDER_HASH
+const renderHash = import.meta.env.PUBLIC_MOTION_RENDER_HASH as string
+const mediaUrl = renderHash === "local" ? "/media-local" : import.meta.env.PUBLIC_MEDIA_URL
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
 
 const description =
@@ -25,8 +20,8 @@ const description =
 
 const faqItems = [
   {
-    q: "What is release assurance for an AI-built app?",
-    a: "One reviewable record that states which authorized targets you checked, what coverage ran, the evidence behind each finding, and what a retest actually confirmed before release. It is a record of what was tested, not a guarantee there are no issues.",
+    q: "What happens after I create an account?",
+    a: "Create a workspace, add an authorized repository, public URL, or API target, then choose the review depth. LyraShield keeps the resulting scope, findings, evidence states, fix proposals, and fresh retest outcomes in one release record.",
   },
   {
     q: "What does a LyraShield result actually prove?",
@@ -37,16 +32,12 @@ const faqItems = [
     a: "No. LyraShield creates approval-gated fix proposals that explain the issue and stage a server-generated patch. Every code change requires your explicit review and approval. Nothing auto-merges.",
   },
   {
-    q: "Is this a replacement for my other security scanners?",
-    a: "No. SCA, secrets scanning, dependency checks, and repo review are coverage layers inside a wider release-assurance workflow. Specialist tools may still provide deeper coverage in their own category. The value here is the combined loop and evidence record, not claiming depth parity alone.",
-  },
-  {
-    q: "What is live today and what is on the roadmap?",
-    a: "Live today: free Lite Check (passive public URL scan), five browser-local tools, the full release-assurance platform in open beta with open registration (target, review, evidence, fix proposal, retest, report), the MCP server for agent-native use, and GitHub integration. Near-term roadmap: deeper deterministic coverage, richer SARIF interop, a reusable GitHub Action with a diff-aware gate, and expanded shareable report variants. Pricing and plan limits will be announced as the beta matures.",
-  },
-  {
     q: "Do you store my codebase?",
-    a: "No. Scans run in hardened, short-lived environments. The Lite Check is passive and read-only. The full platform retains scope, receipts, findings, and evidence states, not a copy of your source.",
+    a: "Scans run in hardened, short-lived environments. The full platform retains scope, receipts, findings, and evidence states, not a copy of your source. Shared reports exclude repository coordinates, file paths, and raw secrets.",
+  },
+  {
+    q: "How is the Lite Check different from the full review?",
+    a: "The Lite Check passively reads an authorized public URL for a bounded set of surface signals. The full platform can review repositories, URLs, and APIs, retain control-level evidence, stage approval-gated fixes, run fresh retests, and produce a shareable release record.",
   },
 ]
 
@@ -100,24 +91,11 @@ const jsonLd = [
 >
   <PremiumHero />
   <HeroProductFrame />
-  <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
-  <V2Launch />
-  <HomeLiteScan />
-  {/* Anchor for the "How it works" nav link. The Assurance World walkthrough
-      below (Target → Scan → Evidence → Fix → Retest → Report) is the how-it-works
-      loop; this keeps the shareable /#how-it-works URL resolving on the homepage. */}
   <div id="how-it-works" aria-hidden="true" style="scroll-margin-top: 4.5rem"></div>
-  <div class="cinematic-threshold cinematic-threshold--to-dark" aria-hidden="true"></div>
-  {/* The loop diagram orients the visitor before the cinematic walkthrough: map
-      first, then territory. It is an addition to the Assurance World narrative,
-      never a replacement for it — the seven scroll chapters below stay. */}
-  <AssuranceLoop />
   <EvidenceWorld manifest={motionManifest} />
   <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
-  <AssuranceRecord />
+  <HomeLiteScan />
   <TwoDepths />
-  <FreeToolsPreview />
-  <WhereYouWork />
   <Faq items={faqItems} />
   <FinalCta />
 </Base>
@@ -139,14 +117,4 @@ const jsonLd = [
       );
   }
 
-  .cinematic-threshold--to-dark {
-    background:
-      radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--terminal-cyan) 10%, transparent), transparent 64%),
-      linear-gradient(
-        to bottom,
-        var(--bg),
-        color-mix(in srgb, var(--hero-void) 28%, var(--bg)) 38%,
-        var(--hero-void)
-      );
-  }
 </style>

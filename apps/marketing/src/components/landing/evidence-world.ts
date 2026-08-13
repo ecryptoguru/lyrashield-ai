@@ -10,6 +10,7 @@ class EvidenceWorldElement extends HTMLElement {
   private progressLabel?: HTMLElement
   private progressBar?: HTMLElement
   private activeIndex = 0
+  private activeCardIndex = 0
   private frame = 0
   private seekFrame = 0
   private paintPending = false
@@ -42,6 +43,7 @@ class EvidenceWorldElement extends HTMLElement {
 
     this.updatePosters(0)
     this.updateChapters(0)
+    this.updateCards(0, 0)
     this.showPoster()
     this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) =>
       image.addEventListener("error", this.handlePosterError)
@@ -167,9 +169,18 @@ class EvidenceWorldElement extends HTMLElement {
 
     if (nextIndex !== this.activeIndex) {
       this.activeIndex = nextIndex
+      this.activeCardIndex = 0
       this.updatePosters(nextIndex)
       this.updateChapters(nextIndex)
+      this.updateCards(nextIndex, 0)
       this.showPoster()
+    }
+
+    const cards = this.chapters[nextIndex].querySelectorAll<HTMLElement>("[data-story-card-index]")
+    const nextCardIndex = cards.length > 1 && chapterProgress >= 0.55 ? 1 : 0
+    if (nextCardIndex !== this.activeCardIndex) {
+      this.activeCardIndex = nextCardIndex
+      this.updateCards(nextIndex, nextCardIndex)
     }
 
     const chapter = this.manifest.chapters[nextIndex]
@@ -256,6 +267,19 @@ class EvidenceWorldElement extends HTMLElement {
     this.chapters.forEach((chapter, chapterIndex) =>
       chapter.classList.toggle("is-active", chapterIndex === index)
     )
+  }
+
+  private updateCards(chapterIndex: number, cardIndex: number) {
+    this.chapters.forEach((chapter, index) => {
+      chapter
+        .querySelectorAll<HTMLElement>("[data-story-card-index]")
+        .forEach((card) =>
+          card.classList.toggle(
+            "is-card-active",
+            index === chapterIndex && Number(card.dataset.storyCardIndex) === cardIndex
+          )
+        )
+    })
   }
 
   private seekEpsilon() {

@@ -1,22 +1,18 @@
----
-import WaitlistForm from "@components/WaitlistForm.astro"
----
-
-<section id="waitlist" aria-labelledby="waitlist-heading" class="px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-  <div class="mx-auto max-w-3xl text-center" data-reveal-group>
-    <h2 id="waitlist-heading" data-reveal class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
-      Ready to ship something you can stand behind?
+<section aria-labelledby="final-cta-heading" class="px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+  <div class="mx-auto max-w-3xl rounded-2xl border border-border bg-bg-raised px-6 py-10 text-center shadow-sm sm:px-10" data-reveal-group>
+    <p class="font-mono text-xs font-semibold tracking-[.18em] text-accent uppercase" data-reveal>Target → review → evidence → retest</p>
+    <h2 id="final-cta-heading" data-reveal class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">
+      Create your first release record.
     </h2>
-    <p data-reveal class="mt-5 text-lg leading-8 text-text-muted">
-      Most AI apps work before they are safe to ship. Start with the free check that takes 30 seconds and no signup. When you are ready for the full loop, from what you are shipping to a report you can share, create a free account. We are in open beta, building in public.
+    <p data-reveal class="mx-auto mt-5 max-w-2xl text-lg leading-8 text-text-muted">
+      Create a workspace, add the target you are shipping, and choose the depth of review. Nothing auto-merges and missing evidence stays visible.
     </p>
-  </div>
-  <div class="mt-9 flex flex-wrap items-center justify-center gap-4" data-reveal>
-    <a href="/scan" data-cta-id="final-cta-lite-check" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Run free Lite Check</a>
-    <a href="https://app.lyrashieldai.com/sign-up" data-cta-id="final-cta-create-account" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg-raised px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create free account, join open beta</a>
-  </div>
-  <p class="mx-auto mt-5 max-w-3xl text-center text-sm leading-6 text-text-muted" data-reveal>Passive + read-only · Browser-local tools available · No guarantees, just honest evidence. Pricing coming later as beta matures.</p>
-  <div class="mt-12" data-reveal>
-    <WaitlistForm />
+    <ol class="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted" data-reveal aria-label="First steps">
+      <li>Create workspace</li><li aria-hidden="true">→</li><li>Add target</li><li aria-hidden="true">→</li><li>Choose review</li>
+    </ol>
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-4" data-reveal>
+      <a href="https://app.lyrashieldai.com/sign-up?source=landing_final&cta=create_account" data-cta-id="final-cta-create-account" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create account</a>
+      <a href="/sample-report" data-cta-id="final-cta-sample-report" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">View sample report</a>
+    </div>
   </div>
 </section>

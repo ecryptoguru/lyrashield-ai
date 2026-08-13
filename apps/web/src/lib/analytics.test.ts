@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { sanitizeProperties, EVENT_ALLOWLIST, track } from "./analytics"
+import {
+  sanitizeProperties,
+  EVENT_ALLOWLIST,
+  readSignupAttribution,
+  signupErrorUrl,
+  track,
+} from "./analytics"
 
 describe("sanitizeProperties", () => {
   it("returns only allowed properties for an event", () => {
@@ -35,6 +41,17 @@ describe("sanitizeProperties", () => {
     expect(result).toBeNull()
   })
 
+  it("keeps bounded signup attribution without accepting a target URL", () => {
+    expect(
+      sanitizeProperties("signup_started", {
+        method: "github",
+        source: "landing_hero",
+        cta: "create_account",
+        target_url: "https://private.example",
+      })
+    ).toEqual({ method: "github", source: "landing_hero", cta: "create_account" })
+  })
+
   it("has an exhaustive event allowlist", () => {
     const events = Object.keys(EVENT_ALLOWLIST)
     expect(events.length).toBeGreaterThan(0)
@@ -47,5 +64,19 @@ describe("sanitizeProperties", () => {
 describe("track", () => {
   it("does not throw when posthog is not loaded", () => {
     expect(() => track("landing_view", { utm_source: "x" })).not.toThrow()
+  })
+})
+
+describe("signup attribution", () => {
+  it("keeps only bounded campaign tokens across an OAuth error return", () => {
+    const attribution = readSignupAttribution(
+      "?source=Landing_Hero&cta=create_account&target_url=https://private.example"
+    )
+    expect(attribution).toEqual({ source: "landing_hero", cta: "create_account" })
+    expect(signupErrorUrl(attribution)).toBe("/sign-up?source=landing_hero&cta=create_account")
+    expect(readSignupAttribution(`?source=${"a".repeat(65)}&cta=%2Fbad`)).toEqual({
+      source: undefined,
+      cta: undefined,
+    })
   })
 })

@@ -1,7 +1,8 @@
 export const EVENT_ALLOWLIST = {
   landing_view: ["utm_source", "utm_medium", "utm_campaign", "referrer_host"],
-  signup_started: ["method"],
-  account_created: ["method"],
+  signup_page_viewed: ["source", "cta"],
+  signup_started: ["method", "source", "cta"],
+  account_created: ["method", "source", "cta"],
   github_connect_started: [],
   github_connected: ["repo_count_bucket", "account_type"],
   onboarding_path_chosen: ["path"],
@@ -28,6 +29,22 @@ export const EVENT_ALLOWLIST = {
 } as const
 
 export type EventName = keyof typeof EVENT_ALLOWLIST
+export type SignupAttribution = { source?: string; cta?: string }
+
+export function readSignupAttribution(search: string): SignupAttribution {
+  const params = new URLSearchParams(search)
+  const clean = (value: string | null) =>
+    value && /^[a-z0-9_-]{1,64}$/i.test(value) ? value.toLowerCase() : undefined
+  return { source: clean(params.get("source")), cta: clean(params.get("cta")) }
+}
+
+export function signupErrorUrl(attribution: SignupAttribution): string {
+  const params = new URLSearchParams()
+  if (attribution.source) params.set("source", attribution.source)
+  if (attribution.cta) params.set("cta", attribution.cta)
+  const query = params.toString()
+  return `/sign-up${query ? `?${query}` : ""}`
+}
 
 // Property keys that must never reach analytics, regardless of event.
 const FORBIDDEN_PROPERTY_KEYS = new Set([

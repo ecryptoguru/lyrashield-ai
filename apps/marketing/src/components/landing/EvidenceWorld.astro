@@ -33,21 +33,42 @@ const { manifest } = Astro.props
     {
       manifest.chapters.map((chapter, index) => (
         <section class="evidence-world__chapter" data-chapter-index={index} aria-labelledby={`chapter-${chapter.id}`}>
-          <div class="evidence-world__copy">
-            <p>{chapter.eyebrow}</p>
-            <h2 id={`chapter-${chapter.id}`}>{chapter.title}</h2>
-            <div class="evidence-world__rule"></div>
-            <p>{chapter.body}</p>
-            {chapter.id === "evidence-state" && (
-              <ul>
-                <li><i class="state-detected" />Detected</li>
-                <li><i class="state-verified" />Independently verified</li>
-                <li><i class="state-confirmed" />Retest-confirmed</li>
-                <li><i class="state-inconclusive" />Inconclusive</li>
-              </ul>
-            )}
-            {chapter.id === "report" && <span class="evidence-world__status">Scope stated · limitations retained</span>}
-          </div>
+          {[
+            { eyebrow: chapter.eyebrow, title: chapter.title, body: chapter.body },
+            chapter.supportingCard,
+          ].filter(Boolean).map((card, cardIndex) => card && (
+            <div
+              class:list={["evidence-world__copy", { "is-card-active": cardIndex === 0 }]}
+              data-story-card-index={cardIndex}
+              data-story-card-id={`${chapter.id}-${cardIndex === 0 ? "primary" : "support"}`}
+            >
+              <p>{card.eyebrow}</p>
+              <h2 id={cardIndex === 0 ? `chapter-${chapter.id}` : undefined}>{card.title}</h2>
+              <div class="evidence-world__rule"></div>
+              <p>{card.body}</p>
+              {cardIndex === 0 && chapter.id === "evidence-state" && (
+                <ul>
+                  <li><i class="state-detected" />Detected</li>
+                  <li><i class="state-verified" />Independently verified</li>
+                  <li><i class="state-confirmed" />Retest-confirmed</li>
+                  <li><i class="state-inconclusive" />Inconclusive</li>
+                </ul>
+              )}
+              {"items" in card && card.items && (
+                <ul class="evidence-world__points">
+                  {card.items.map((item) => <li>{item}</li>)}
+                </ul>
+              )}
+              {cardIndex === 0 && chapter.id === "report" && <span class="evidence-world__status">Scope stated · limitations retained</span>}
+              {"status" in card && card.status && <span class="evidence-world__status">{card.status}</span>}
+              {"primaryCta" in card && card.primaryCta && (
+                <div class="evidence-world__actions">
+                  <a href={card.primaryCta.href} data-cta-id={card.primaryCta.id}>{card.primaryCta.label}</a>
+                  {card.secondaryCta && <a class="is-secondary" href={card.secondaryCta.href} data-cta-id={card.secondaryCta.id}>{card.secondaryCta.label}</a>}
+                </div>
+              )}
+            </div>
+          ))}
         </section>
       ))
     }
@@ -61,6 +82,11 @@ const { manifest } = Astro.props
   }
 
   const el = document.getElementById("assurance-world")
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
+  const saveData =
+    (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData ===
+    true
+  if (el && !reduced && !saveData) el.classList.add("is-motion-layout")
   if (el && "IntersectionObserver" in window) {
     const observer = new IntersectionObserver(
       (entries, obs) => {
@@ -179,8 +205,9 @@ const { manifest } = Astro.props
   }
 
   .evidence-world__chapter {
+    position: relative;
     display: grid;
-    min-height: max(680px, 92svh);
+    min-height: max(840px, 115svh);
     align-items: center;
     padding: 3.25rem max(1rem, calc((100% - 1280px) / 2));
   }
@@ -200,11 +227,28 @@ const { manifest } = Astro.props
     box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.24);
   }
 
+  evidence-world.is-motion-layout .evidence-world__copy {
+    position: absolute;
+    top: 50%;
+    left: max(1rem, calc((100% - 1280px) / 2));
+    transform: translateY(-50%);
+  }
+
+  evidence-world.is-motion-layout .evidence-world__chapter:nth-child(even) .evidence-world__copy {
+    right: max(1rem, calc((100% - 1280px) / 2));
+    left: auto;
+  }
+
+  evidence-world.is-motion-layout:not(.is-enhanced) .evidence-world__copy:not(.is-card-active) {
+    visibility: hidden;
+    opacity: 0;
+  }
+
   evidence-world.is-enhanced .evidence-world__copy {
     visibility: hidden;
     opacity: 0;
     pointer-events: none;
-    transform: translateY(1.25rem) scale(0.985);
+    transform: translateY(calc(-50% + 1.25rem)) scale(0.985);
     transition:
       opacity 180ms ease-in,
       transform 240ms ease-in,
@@ -212,11 +256,11 @@ const { manifest } = Astro.props
     will-change: opacity, transform;
   }
 
-  evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy {
+  evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy.is-card-active {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;
-    transform: scale(1);
+    transform: translateY(-50%) scale(1);
     transition:
       opacity 280ms ease-out,
       transform 460ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -237,7 +281,7 @@ const { manifest } = Astro.props
     left: auto;
   }
 
-  evidence-world.is-enhanced.is-pinned .evidence-world__chapter.is-active .evidence-world__copy {
+  evidence-world.is-enhanced.is-pinned .evidence-world__chapter.is-active .evidence-world__copy.is-card-active {
     transform: translateY(-50%) scale(1);
   }
 
@@ -246,6 +290,50 @@ const { manifest } = Astro.props
   .evidence-world__status,
   .evidence-world__copy ul {
     font-family: "JetBrains Mono Variable", monospace;
+  }
+
+  .evidence-world__points li {
+    justify-content: flex-start;
+  }
+
+  .evidence-world__points li::before {
+    width: 0.35rem;
+    height: 0.35rem;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--world-cyan);
+    content: "";
+  }
+
+  .evidence-world__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.35rem;
+  }
+
+  .evidence-world__actions a {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--world-cyan);
+    border-radius: 0.35rem;
+    padding: 0.65rem 0.9rem;
+    color: #08111c;
+    background: var(--world-cyan);
+    font-weight: 750;
+    text-decoration: none;
+  }
+
+  .evidence-world__actions a.is-secondary {
+    color: #edf6fb;
+    background: rgba(8, 17, 28, 0.62);
+  }
+
+  .evidence-world__actions a:focus-visible {
+    outline: 3px solid #f5b84b;
+    outline-offset: 3px;
   }
 
   .evidence-world__copy > p:first-child {
@@ -336,11 +424,11 @@ const { manifest } = Astro.props
     .evidence-world__media-veil {
       background:
         radial-gradient(circle at 50% 30%, transparent 22%, rgba(8, 17, 28, 0.24) 72%),
-        linear-gradient(180deg, rgba(8, 17, 28, 0.04) 38%, rgba(8, 17, 28, 0.92) 76%);
+        linear-gradient(180deg, rgba(8, 17, 28, 0.03) 42%, rgba(8, 17, 28, 0.8) 82%);
     }
 
     .evidence-world__chapter {
-      min-height: max(700px, 100svh);
+      min-height: max(840px, 125svh);
       align-items: end;
       padding: 48svh 1rem calc(1rem + var(--safe-area-inset-bottom));
     }
@@ -349,9 +437,19 @@ const { manifest } = Astro.props
     .evidence-world__chapter:nth-child(even) .evidence-world__copy {
       width: 100%;
       margin: 0;
-      padding: 1.1rem 1.2rem 1.2rem;
+      padding: 0.95rem 1.05rem 1.05rem;
       text-align: left;
-      background: rgba(8, 17, 28, 0.9);
+      background: rgba(8, 17, 28, 0.84);
+    }
+
+    evidence-world.is-motion-layout .evidence-world__chapter .evidence-world__copy,
+    evidence-world.is-motion-layout .evidence-world__chapter:nth-child(even) .evidence-world__copy {
+      top: auto;
+      right: 1rem;
+      bottom: calc(1rem + var(--safe-area-inset-bottom));
+      left: 1rem;
+      width: auto;
+      transform: none;
     }
 
     evidence-world.is-enhanced.is-pinned .evidence-world__chapter .evidence-world__copy,
@@ -368,28 +466,28 @@ const { manifest } = Astro.props
     }
 
     .evidence-world__copy h2 {
-      font-size: clamp(2rem, 9.2vw, 3.1rem);
-      line-height: 0.98;
+      font-size: clamp(1.6rem, 7.4vw, 2.5rem);
+      line-height: 1;
     }
 
     .evidence-world__copy > p:first-child {
-      margin-bottom: 0.7rem;
-      font-size: 0.68rem;
+      margin-bottom: 0.6rem;
+      font-size: 0.65rem;
     }
 
     .evidence-world__copy > p:last-of-type {
-      margin-top: 0.9rem;
-      font-size: 1rem;
-      line-height: 1.6;
+      margin-top: 0.75rem;
+      font-size: 0.93rem;
+      line-height: 1.55;
     }
 
     .evidence-world__rule {
-      margin-top: 1rem;
+      margin-top: 0.85rem;
     }
 
     .evidence-world__copy ul,
     .evidence-world__status {
-      margin-top: 0.9rem;
+      margin-top: 0.75rem;
     }
 
     .evidence-world__copy li {
@@ -406,7 +504,7 @@ const { manifest } = Astro.props
       grid-template-columns: auto 1fr;
     }
 
-    evidence-world.is-enhanced.is-pinned .evidence-world__chapter.is-active .evidence-world__copy {
+    evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy.is-card-active {
       transform: none;
     }
   }
@@ -426,6 +524,13 @@ const { manifest } = Astro.props
       padding: 1rem;
     }
 
+    evidence-world.is-motion-layout .evidence-world__copy,
+    evidence-world.is-motion-layout .evidence-world__chapter:nth-child(even) .evidence-world__copy {
+      position: relative;
+      inset: auto;
+      transform: none;
+    }
+
     evidence-world.is-enhanced.is-pinned .evidence-world__copy {
       position: relative;
       inset: auto;
@@ -433,38 +538,37 @@ const { manifest } = Astro.props
     }
   }
 
-  /* No-JS and reduced-motion fallback: content must be visible without JS.
-     Without is-enhanced (no-JS), stack chapters normally and avoid the -100svh trick.
-     With reduced motion, show all copies and un-stick the stage. */
-  evidence-world:not(.is-enhanced) .evidence-world__stage {
+  /* No-JS, reduced-motion, and Save-Data fallback. Normal-motion visitors get
+     is-motion-layout before the lazy controller loads so the page never jumps. */
+  evidence-world:not(.is-motion-layout) .evidence-world__stage {
     position: relative;
     height: auto;
     min-height: 420px;
   }
 
-  evidence-world:not(.is-enhanced) .evidence-world__chapters {
+  evidence-world:not(.is-motion-layout) .evidence-world__chapters {
     margin-top: 0;
   }
 
-  evidence-world:not(.is-enhanced) .evidence-world__chapter {
+  evidence-world:not(.is-motion-layout) .evidence-world__chapter {
     min-height: auto;
     padding-block: 1.75rem;
   }
 
-  evidence-world:not(.is-enhanced) .evidence-world__media {
+  evidence-world:not(.is-motion-layout) .evidence-world__media {
     position: relative;
     height: 420px;
   }
 
-  evidence-world:not(.is-enhanced) .evidence-world__poster {
+  evidence-world:not(.is-motion-layout) .evidence-world__poster {
     opacity: 1;
   }
 
-  evidence-world:not(.is-enhanced) .evidence-world__poster:not(.is-active) {
+  evidence-world:not(.is-motion-layout) .evidence-world__poster:not(.is-active) {
     display: none;
   }
 
-  evidence-world:not(.is-enhanced) .evidence-world__video {
+  evidence-world:not(.is-motion-layout) .evidence-world__video {
     display: none;
   }
 
@@ -472,7 +576,7 @@ const { manifest } = Astro.props
     .evidence-world__poster,
     .evidence-world__video,
     evidence-world.is-enhanced .evidence-world__copy,
-    evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy {
+    evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy.is-card-active {
       transition: none;
     }
 

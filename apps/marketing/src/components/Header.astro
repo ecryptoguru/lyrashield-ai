@@ -14,11 +14,6 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
     <nav aria-label="Main" class="flex items-center gap-1 sm:gap-2">
       <ul class="hidden items-center gap-1 md:flex md:gap-2">
         <li>
-          <a href="/methodology" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Methodology
-          </a>
-        </li>
-        <li>
           <a href="/#how-it-works" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             How it works
           </a>
@@ -28,20 +23,18 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
             Free scan
           </a>
         </li>
-        <li>
-          <a href="/tools" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Tools
-          </a>
-        </li>
-        <li>
-          <a href="/blog" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Resources
-          </a>
-        </li>
-        <li>
-          <a href="/docs/integrations" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Docs
-          </a>
+        <li class="relative">
+          <details class="group">
+            <summary class="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              Resources <span aria-hidden="true">⌄</span>
+            </summary>
+            <div class="absolute right-0 grid w-48 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
+              <a href="/methodology" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Methodology</a>
+              <a href="/tools" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Browser-local tools</a>
+              <a href="/blog" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Guides</a>
+              <a href="/docs/integrations" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Integration docs</a>
+            </div>
+          </details>
         </li>
         {appUrl && (
           <li>
@@ -49,7 +42,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
               Sign in
             </a>
             <a
-              href={`${appUrl}/sign-up`}
+              href={`${appUrl}/sign-up?source=marketing_header&cta=get_started`}
               class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
               data-cta-id="header_get_started"
             >
@@ -77,6 +70,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         class="fixed m-0 w-56 max-w-[calc(100%-2rem)] gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 md:hidden"
         style="top: 4.5rem; right: 1rem; bottom: auto; left: auto;"
       >
+        <a href="/#how-it-works" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">How it works</a>
         <a href="/methodology" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Methodology</a>
         <a href="/scan" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
         <a href="/tools" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Tools</a>
@@ -85,7 +79,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         {appUrl && (
           <>
             <a href={`${appUrl}/sign-in`} class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
-            <a href={`${appUrl}/sign-up`} class="menu-link mt-1 inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
+            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link mt-1 inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
           </>
         )}
       </dialog>
@@ -204,5 +198,19 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
      vertical grid; on md+ it is hidden entirely by the md:hidden utility above. */
   #mobile-menu[open] {
     display: grid;
+    animation: mobile-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @keyframes mobile-menu-in {
+    from {
+      opacity: 0;
+      transform: translateY(-0.5rem) scale(0.98);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #mobile-menu[open] {
+      animation: none;
+    }
   }
 </style>
