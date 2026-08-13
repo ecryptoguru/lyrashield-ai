@@ -13,6 +13,7 @@
     "pretypecheck": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",
     "typecheck": "astro check",
     "lint": "eslint src --max-warnings 0",
+    "test:browser": "playwright test --config playwright.config.ts",
     "deploy": "astro build && wrangler deploy --config dist/server/wrangler.json",
     "deploy:preview": "astro build && wrangler versions upload --config dist/server/wrangler.json",
     "blog:validate": "node scripts/validate-blog-content.mjs",

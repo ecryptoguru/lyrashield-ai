@@ -112,6 +112,7 @@ describe("premium assurance-world homepage", () => {
     expect(worldModule).toContain("if (video.seeking) return")
     expect(worldModule).toContain("requestVideoFrameCallback")
     expect(worldModule).toContain("setTimeout(painted, 120)")
+    expect(worldModule).toContain('addEventListener("loadeddata", this.queueUpdate)')
     expect(worldModule).toContain("HTMLMediaElement.HAVE_CURRENT_DATA")
     expect(worldModule).toContain("this.showPoster()")
     expect(worldModule).toContain("this.showVideo()")

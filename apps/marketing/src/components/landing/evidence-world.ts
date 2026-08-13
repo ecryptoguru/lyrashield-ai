@@ -54,6 +54,7 @@ class EvidenceWorldElement extends HTMLElement {
 
     this.classList.add("is-enhanced")
     this.video.addEventListener("loadedmetadata", this.queueUpdate)
+    this.video.addEventListener("loadeddata", this.queueUpdate)
     this.video.addEventListener("seeked", this.handleSeeked)
     this.video.addEventListener("error", this.handleVideoError)
     this.observer = new IntersectionObserver(this.handleIntent, { rootMargin: "50% 0px" })
@@ -68,14 +69,15 @@ class EvidenceWorldElement extends HTMLElement {
     removeEventListener("resize", this.handleResize)
     removeEventListener("orientationchange", this.handleOrientation)
     removeEventListener("pointerdown", this.primeIos)
-    this.video.removeEventListener("loadedmetadata", this.queueUpdate)
-    this.video.removeEventListener("seeked", this.handleSeeked)
-    this.video.removeEventListener("error", this.handleVideoError)
+    this.video?.removeEventListener("loadedmetadata", this.queueUpdate)
+    this.video?.removeEventListener("loadeddata", this.queueUpdate)
+    this.video?.removeEventListener("seeked", this.handleSeeked)
+    this.video?.removeEventListener("error", this.handleVideoError)
     this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) =>
       image.removeEventListener("error", this.handlePosterError)
     )
-    this.video.removeAttribute("src")
-    this.video.load()
+    this.video?.removeAttribute("src")
+    this.video?.load()
   }
 
   private handleIntent = (entries: IntersectionObserverEntry[]) => {

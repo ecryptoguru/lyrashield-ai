@@ -268,6 +268,10 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Marketing browser E2E
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm --filter @lyrashield/marketing test:browser
+
       - name: Browser E2E
         if: needs.changes.outputs.docs-only != 'true'
         run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" pnpm exec playwright test --grep-invert '@visual'

@@ -11,6 +11,7 @@ export const MOTION_CHAPTERS = [
   "retest",
   "report",
 ]
+export const MOTION_CHAPTER_DURATION = MOTION_DURATION / MOTION_CHAPTERS.length
 
 export const MOTION_VARIANTS = {
   desktop: {
@@ -19,6 +20,8 @@ export const MOTION_VARIANTS = {
     scale: "1600:900",
     budgetBytes: 8 * 1024 * 1024,
     master: "assurance-world-desktop-web.mp4",
+    masterWidth: 1920,
+    masterHeight: 1080,
   },
   portrait: {
     width: 720,
@@ -26,21 +29,26 @@ export const MOTION_VARIANTS = {
     scale: "720:1280",
     budgetBytes: 5 * 1024 * 1024,
     master: "assurance-world-portrait-web.mp4",
+    masterWidth: 1080,
+    masterHeight: 1920,
   },
 }
 
 export function motionTrackRelativePath(variant) {
-  if (!Object.hasOwn(MOTION_VARIANTS, variant)) throw new Error(`Unknown motion variant: ${variant}`)
+  if (!Object.hasOwn(MOTION_VARIANTS, variant))
+    throw new Error(`Unknown motion variant: ${variant}`)
   return `${variant}/assurance-world.mp4`
 }
 
 export function motionPosterRelativePath(chapter, variant, format = "webp") {
   if (!MOTION_CHAPTERS.includes(chapter)) throw new Error(`Unknown motion chapter: ${chapter}`)
-  if (!Object.hasOwn(MOTION_VARIANTS, variant)) throw new Error(`Unknown motion variant: ${variant}`)
+  if (!Object.hasOwn(MOTION_VARIANTS, variant))
+    throw new Error(`Unknown motion variant: ${variant}`)
   return `posters/${chapter}-${variant}.${format}`
 }
 
 export function motionPublishRoot(renderHash) {
-  if (!/^[a-f0-9]{16}$/.test(renderHash)) throw new Error("Render hash must be 16 lowercase hex characters")
+  if (!/^[a-f0-9]{16}$/.test(renderHash))
+    throw new Error("Render hash must be 16 lowercase hex characters")
   return `assurance-world/v${MOTION_VERSION}/${renderHash}`
 }

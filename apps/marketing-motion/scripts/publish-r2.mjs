@@ -19,8 +19,8 @@ const files = readdirSync(source, { recursive: true, withFileTypes: true })
   .sort((left, right) => {
     const leftRelative = relative(source, left)
     const rightRelative = relative(source, right)
-    if (leftRelative === sentinelRelativePath) return -1
-    if (rightRelative === sentinelRelativePath) return 1
+    if (leftRelative === sentinelRelativePath) return 1
+    if (rightRelative === sentinelRelativePath) return -1
     return leftRelative.localeCompare(rightRelative)
   })
 const hash = createHash("sha256")

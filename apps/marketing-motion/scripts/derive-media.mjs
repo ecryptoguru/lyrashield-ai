@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import {
   MOTION_CHAPTERS,
+  MOTION_CHAPTER_DURATION,
   MOTION_DURATION,
   MOTION_FPS,
   MOTION_GOP,
@@ -95,7 +96,12 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
 
   MOTION_CHAPTERS.forEach((chapter, index) => {
     const poster = resolve(output, motionPosterRelativePath(chapter, variant, "webp"))
-    makePoster(target, poster.slice(0, -".webp".length), index * 6 + 3, contract.scale)
+    makePoster(
+      target,
+      poster.slice(0, -".webp".length),
+      index * MOTION_CHAPTER_DURATION + MOTION_CHAPTER_DURATION / 2,
+      contract.scale
+    )
   })
 }
 

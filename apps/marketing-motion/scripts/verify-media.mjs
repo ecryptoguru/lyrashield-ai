@@ -77,18 +77,15 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
   assertShortGop(file)
 }
 
-for (const [variant, width, height] of [
-  ["desktop", 1920, 1080],
-  ["portrait", 1080, 1920],
-]) {
+for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
   for (const suffix of ["", "-web"]) {
     const master = resolve(root, "renders/masters", `assurance-world-${variant}${suffix}.mp4`)
     const details = probe(master)
     const video = details.streams.find((stream) => stream.codec_type === "video")
     if (
       !video ||
-      video.width !== width ||
-      video.height !== height ||
+      video.width !== contract.masterWidth ||
+      video.height !== contract.masterHeight ||
       Math.abs(Number(details.format.duration) - MOTION_DURATION) > 0.04
     )
       throw new Error(`${master} does not match the master contract`)
