@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { readdirSync, readFileSync } from "node:fs"
 import { relative, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
+import { motionPublishRoot, motionTrackRelativePath } from "./motion-media-contract.mjs"
 
 if (!process.argv.includes("--confirm-production")) {
   throw new Error(
@@ -11,7 +12,7 @@ if (!process.argv.includes("--confirm-production")) {
 
 const root = resolve(import.meta.dirname, "..")
 const source = resolve(root, "renders/web")
-const sentinelRelativePath = "desktop/gateway.mp4"
+const sentinelRelativePath = motionTrackRelativePath("desktop")
 const files = readdirSync(source, { recursive: true, withFileTypes: true })
   .filter((entry) => entry.isFile())
   .map((entry) => resolve(entry.parentPath, entry.name))
@@ -26,7 +27,7 @@ const hash = createHash("sha256")
 for (const file of files) hash.update(relative(source, file)).update(readFileSync(file))
 const renderHash = hash.digest("hex").slice(0, 16)
 
-const publishRoot = `assurance-world/v1/${renderHash}`
+const publishRoot = motionPublishRoot(renderHash)
 const sentinelProbe = spawnSync(
   "pnpm",
   [
@@ -55,7 +56,6 @@ const contentTypes = {
   avif: "image/avif",
   jpg: "image/jpeg",
   mp4: "video/mp4",
-  webm: "video/webm",
   webp: "image/webp",
 }
 

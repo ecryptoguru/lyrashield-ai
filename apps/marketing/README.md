@@ -99,7 +99,7 @@ node apps/marketing/scripts/crawl-built-blog.mjs --origin http://localhost:8787
 
 The crawler validates local blog URLs and sitemap membership, 200 responses, unique canonicals, titles and descriptions, one H1 and main landmark, internal anchors, images, parseable JSON-LD, draft exclusion, RSS membership, and tag-archive membership. Error reports strip query strings and fragments. Every subsequent release still requires the complete release gate, local approval, focused PR, green CI, guarded deployment, and live verification.
 
-The deployed motion media is immutable R2 content at `https://media.lyrashieldai.com/assurance-world/v1/14cdcb1b53692d73/`. The bucket permits only `GET`/`HEAD` CORS from `https://lyrashieldai.com`, serves range requests, and uses `public, max-age=31536000, immutable` object caching.
+The deployed motion media is immutable R2 content at `https://media.lyrashieldai.com/assurance-world/v2/65fc3ecb6416b366/`. The bucket permits only `GET`/`HEAD` CORS from `https://lyrashieldai.com`, serves range requests, and uses `public, max-age=31536000, immutable` object caching.
 
 PR #91 hardened the production scrub controller without regenerating that media. The runtime waits for decoded frames, coalesces and serializes seeks, keeps one foreground layer, holds only the active/next blob URLs, and ignores height-only mobile viewport changes. Desktop and portrait browser QA must cover rapid and reverse scrolling, width/orientation changes, reduced motion, Save-Data/media fallback, no JavaScript, cinematic exit, console errors, and horizontal overflow. The approved creative pipeline remains Codex-generated source artwork plus HyperFrames/Three.js; Higgsfield is not used.
 

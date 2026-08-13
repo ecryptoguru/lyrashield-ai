@@ -89,8 +89,10 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
           </>
         )}
       </dialog>
-      <button id="theme-toggle" type="button" class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Change color theme">
-        <svg viewBox="0 0 24 24" class="size-4.5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2m-3.64-6.36-1.42 1.42M8.06 15.94l-1.42 1.42m0-11.72 1.42 1.42m7.88 8.88 1.42 1.42"/><circle cx="12" cy="12" r="4"/></svg>
+      <button id="theme-toggle" type="button" class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="System theme active. Change color theme" title="System theme">
+        <svg data-theme-icon="system" viewBox="0 0 24 24" class="size-4.5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <svg data-theme-icon="light" viewBox="0 0 24 24" class="hidden size-4.5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2m-3.64-6.36-1.42 1.42M8.06 15.94l-1.42 1.42m0-11.72 1.42 1.42m7.88 8.88 1.42 1.42"/><circle cx="12" cy="12" r="4"/></svg>
+        <svg data-theme-icon="dark" viewBox="0 0 24 24" class="hidden size-4.5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20.5 14.1A7.5 7.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z"/></svg>
       </button>
     </nav>
   </div>
@@ -99,15 +101,43 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 <script>
   const button = document.querySelector<HTMLButtonElement>("#theme-toggle")
   const preferences = ["system", "light", "dark"] as const
+  type ThemePreference = (typeof preferences)[number]
+  const systemTheme = matchMedia("(prefers-color-scheme: dark)")
+
+  function applyTheme(preference: ThemePreference) {
+    const dark = preference === "dark" || (preference === "system" && systemTheme.matches)
+    document.documentElement.dataset.theme = dark ? "dark" : "light"
+    document.documentElement.dataset.themePreference = preference
+    document.querySelector('meta[data-theme-color]')?.setAttribute("content", dark ? "#08111c" : "#f5f9fc")
+    button?.querySelectorAll<SVGElement>("[data-theme-icon]").forEach((icon) =>
+      icon.classList.toggle("hidden", icon.dataset.themeIcon !== preference)
+    )
+    const label = `${preference[0].toUpperCase()}${preference.slice(1)} theme`
+    button?.setAttribute("aria-label", `${label} active. Change color theme`)
+    button?.setAttribute("title", label)
+  }
+
   button?.addEventListener("click", () => {
     const current = document.documentElement.dataset.themePreference || "system"
-    const next = preferences[(preferences.indexOf(current as (typeof preferences)[number]) + 1) % preferences.length] ?? "system"
+    const next = preferences[(preferences.indexOf(current as ThemePreference) + 1) % preferences.length] ?? "system"
     localStorage.setItem("lyrashield-theme", next)
-    const dark = next === "dark" || (next === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
-    document.documentElement.dataset.theme = dark ? "dark" : "light"
-    document.documentElement.dataset.themePreference = next
-    button.setAttribute("aria-label", `${next} theme active. Change color theme`)
+    applyTheme(next)
   })
+  systemTheme.addEventListener("change", () => {
+    if (document.documentElement.dataset.themePreference === "system") applyTheme("system")
+  })
+  addEventListener("storage", (event) => {
+    if (event.key !== "lyrashield-theme") return
+    const next = preferences.includes(event.newValue as ThemePreference)
+      ? (event.newValue as ThemePreference)
+      : "system"
+    applyTheme(next)
+  })
+  applyTheme(
+    preferences.includes(document.documentElement.dataset.themePreference as ThemePreference)
+      ? (document.documentElement.dataset.themePreference as ThemePreference)
+      : "system"
+  )
 
   const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle")
   const menu = document.querySelector<HTMLDialogElement>("#mobile-menu")

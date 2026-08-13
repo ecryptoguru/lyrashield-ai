@@ -1,46 +1,35 @@
-import type {
-  EvidenceChapterId,
-  MotionMediaManifest,
-  MotionVariant,
-} from "../../lib/motion-manifest"
+import type { EvidenceChapterId, MotionMediaManifest } from "../../lib/motion-manifest"
 
-type IdleWindow = Window &
-  typeof globalThis & {
-    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
-    cancelIdleCallback?: (handle: number) => void
-  }
+type SourceKind = "desktop" | "portrait"
 
 class EvidenceWorldElement extends HTMLElement {
   private manifest!: MotionMediaManifest
   private posters: HTMLElement[] = []
   private chapters: HTMLElement[] = []
-  private videos: HTMLVideoElement[] = []
+  private video!: HTMLVideoElement
   private progressLabel?: HTMLElement
   private progressBar?: HTMLElement
   private activeIndex = 0
-  private frontVideo = 0
   private frame = 0
   private seekFrame = 0
-  private idleHandle = 0
+  private paintPending = false
   private initialized = false
   private motionEnabled = true
   private viewportWidth = 0
   private targetTime = 0
-  private targetProgress = 0
+  private sourceKind?: SourceKind
   private observer?: IntersectionObserver
-  private fetchController?: AbortController
-  private objectUrls = new Map<number, string>()
-  private videoIndexes = new Map<number, number>()
   private mediaErrors = new Set<string>()
   private viewed = new Set<string>()
 
   connectedCallback() {
     const raw = this.dataset.manifest
     if (!raw) return
+
     this.manifest = JSON.parse(raw) as MotionMediaManifest
     this.posters = Array.from(this.querySelectorAll<HTMLElement>("[data-poster-index]"))
     this.chapters = Array.from(this.querySelectorAll<HTMLElement>("[data-chapter-index]"))
-    this.videos = Array.from(this.querySelectorAll<HTMLVideoElement>("video"))
+    this.video = this.querySelector<HTMLVideoElement>("video")!
     this.progressLabel = this.querySelector<HTMLElement>("[data-progress-label]") ?? undefined
     this.progressBar = this.querySelector<HTMLElement>("[data-progress-bar]") ?? undefined
     this.viewportWidth = innerWidth
@@ -50,65 +39,49 @@ class EvidenceWorldElement extends HTMLElement {
       (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData ===
       true
     this.motionEnabled = !reduced && !saveData
-    if (!this.motionEnabled) this.captureView(0, "poster")
+
     this.updatePosters(0)
     this.updateChapters(0)
     this.showPoster()
-    this.classList.add("is-enhanced")
-    this.videos.forEach((video) => video.addEventListener("seeked", this.queueSeek))
     this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) =>
       image.addEventListener("error", this.handlePosterError)
     )
 
-    if (this.motionEnabled) {
-      this.observer = new IntersectionObserver(this.handleIntent, { rootMargin: "50% 0px" })
-      this.observer.observe(this)
+    if (!this.motionEnabled) {
+      this.captureView(0, "poster")
+      return
     }
+
+    this.classList.add("is-enhanced")
+    this.video.addEventListener("loadedmetadata", this.queueUpdate)
+    this.video.addEventListener("seeked", this.handleSeeked)
+    this.video.addEventListener("error", this.handleVideoError)
+    this.observer = new IntersectionObserver(this.handleIntent, { rootMargin: "50% 0px" })
+    this.observer.observe(this)
   }
 
   disconnectedCallback() {
     this.observer?.disconnect()
-    this.fetchController?.abort()
     cancelAnimationFrame(this.frame)
     cancelAnimationFrame(this.seekFrame)
-    const idleWindow = window as IdleWindow
-    if (this.idleHandle) idleWindow.cancelIdleCallback?.(this.idleHandle)
     removeEventListener("scroll", this.queueUpdate)
     removeEventListener("resize", this.handleResize)
     removeEventListener("orientationchange", this.handleOrientation)
     removeEventListener("pointerdown", this.primeIos)
-    removeEventListener("touchstart", this.primeIos)
-    this.videos.forEach((video) => video.removeEventListener("seeked", this.queueSeek))
+    this.video.removeEventListener("loadedmetadata", this.queueUpdate)
+    this.video.removeEventListener("seeked", this.handleSeeked)
+    this.video.removeEventListener("error", this.handleVideoError)
     this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) =>
       image.removeEventListener("error", this.handlePosterError)
     )
-    this.objectUrls.forEach((url) => URL.revokeObjectURL(url))
-    this.objectUrls.clear()
-    this.videos.forEach((video) => {
-      video.removeAttribute("src")
-      video.load()
-    })
+    this.video.removeAttribute("src")
+    this.video.load()
   }
 
   private handleIntent = (entries: IntersectionObserverEntry[]) => {
-    if (!entries.some((entry) => entry.isIntersecting) || this.initialized) return
+    if (this.initialized || !entries.some((entry) => entry.isIntersecting)) return
     this.observer?.disconnect()
-    const idleWindow = window as IdleWindow
-    const begin = () => this.initializeMotion()
-    if (document.readyState === "complete") {
-      this.idleHandle =
-        idleWindow.requestIdleCallback?.(begin, { timeout: 1200 }) ?? window.setTimeout(begin, 250)
-    } else {
-      addEventListener(
-        "load",
-        () => {
-          this.idleHandle =
-            idleWindow.requestIdleCallback?.(begin, { timeout: 1200 }) ??
-            window.setTimeout(begin, 250)
-        },
-        { once: true }
-      )
-    }
+    this.initializeMotion()
   }
 
   private initializeMotion() {
@@ -118,16 +91,31 @@ class EvidenceWorldElement extends HTMLElement {
     addEventListener("resize", this.handleResize, { passive: true })
     addEventListener("orientationchange", this.handleOrientation, { passive: true })
     addEventListener("pointerdown", this.primeIos, { once: true, passive: true })
-    addEventListener("touchstart", this.primeIos, { once: true, passive: true })
-    void this.loadPair(this.activeIndex)
+    this.assignSource()
     this.queueUpdate()
   }
 
+  private selectedSourceKind(): SourceKind {
+    return matchMedia("(max-width: 767px)").matches ? "portrait" : "desktop"
+  }
+
+  private assignSource() {
+    if (!this.motionEnabled) return
+    const nextKind = this.selectedSourceKind()
+    const nextTrack = this.manifest[nextKind]
+    if (this.sourceKind === nextKind && this.video.src) return
+
+    this.sourceKind = nextKind
+    this.showPoster()
+    this.paintPending = false
+    this.video.preload = "metadata"
+    this.video.src = nextTrack.src
+    this.video.load()
+  }
+
   private primeIos = () => {
-    this.videos.forEach((video) => {
-      const attempt = video.play()
-      if (attempt) attempt.then(() => video.pause()).catch(() => undefined)
-    })
+    const attempt = this.video.play()
+    if (attempt) attempt.then(() => this.video.pause()).catch(() => undefined)
   }
 
   private handleResize = () => {
@@ -135,9 +123,9 @@ class EvidenceWorldElement extends HTMLElement {
       this.queueUpdate()
       return
     }
+
     this.viewportWidth = innerWidth
-    this.resetMedia()
-    void this.loadPair(this.activeIndex)
+    this.assignSource()
     this.queueUpdate()
   }
 
@@ -155,46 +143,43 @@ class EvidenceWorldElement extends HTMLElement {
   }
 
   private updateFromScroll() {
-    const rect = this.getBoundingClientRect()
-    const scrollable = Math.max(this.offsetHeight - innerHeight, 1)
-    const progress = Math.min(1, Math.max(0, -rect.top / scrollable))
-    this.classList.toggle("is-pinned", rect.top <= 0 && rect.bottom >= innerHeight)
-    const chapterCount = this.manifest.chapters.length
-    const scaled = Math.min(chapterCount - 0.000001, progress * chapterCount)
-    const nextIndex = progress === 1 ? chapterCount - 1 : Math.floor(scaled)
-    const chapterProgress = progress === 1 ? 1 : Math.min(1, Math.max(0, scaled - nextIndex))
-    this.targetProgress = chapterProgress
+    const worldRect = this.getBoundingClientRect()
+    this.classList.toggle("is-pinned", worldRect.top <= 0 && worldRect.bottom >= innerHeight)
+
+    const anchor = innerHeight * (this.selectedSourceKind() === "portrait" ? 0.68 : 0.5)
+    let nextIndex = this.activeIndex
+    let chapterProgress = 0
+
+    for (let index = 0; index < this.chapters.length; index += 1) {
+      const rect = this.chapters[index].getBoundingClientRect()
+      if (anchor >= rect.top && anchor <= rect.bottom) {
+        nextIndex = index
+        chapterProgress = this.clamp((anchor - rect.top) / Math.max(rect.height, 1))
+        break
+      }
+      if (rect.bottom < anchor) {
+        nextIndex = index
+        chapterProgress = 1
+      }
+    }
 
     if (nextIndex !== this.activeIndex) {
-      const previousFront = this.frontVideo
       this.activeIndex = nextIndex
       this.updatePosters(nextIndex)
       this.updateChapters(nextIndex)
-      const readySlot = this.findReadySlot(nextIndex)
-      if (!this.motionEnabled || readySlot === undefined) {
-        this.showPoster()
-      } else {
-        const video = this.videos[readySlot]
-        this.targetTime = chapterProgress * Math.max(video.duration - 1 / 30, 0)
-        if (Math.abs(this.targetTime - video.currentTime) <= this.seekEpsilon())
-          this.showVideo(readySlot)
-        else this.showPoster()
-      }
-      if (this.motionEnabled) void this.loadPair(nextIndex, previousFront)
-      if (!this.motionEnabled) this.captureView(nextIndex, "poster")
+      this.showPoster()
     }
 
-    const currentSlot = this.findReadySlot(nextIndex)
-    if (currentSlot !== undefined) {
-      const video = this.videos[currentSlot]
-      const duration = Math.max(video.duration - 1 / 30, 0)
-      this.targetTime = chapterProgress * duration
-      this.queueSeek()
-    }
+    const chapter = this.manifest.chapters[nextIndex]
+    const frame = 1 / 30
+    this.targetTime = chapter.start + chapterProgress * Math.max(chapter.end - chapter.start - frame, 0)
+    this.queueSeek()
 
+    const totalProgress = this.clamp(this.targetTime / this.manifest.desktop.duration)
     if (this.progressLabel)
-      this.progressLabel.textContent = `${String(nextIndex + 1).padStart(2, "0")} / ${String(chapterCount).padStart(2, "0")}`
-    if (this.progressBar) this.progressBar.style.transform = `scaleX(${Math.max(0.02, progress)})`
+      this.progressLabel.textContent = `${String(nextIndex + 1).padStart(2, "0")} / ${String(this.chapters.length).padStart(2, "0")}`
+    if (this.progressBar)
+      this.progressBar.style.transform = `scaleX(${Math.max(0.02, totalProgress)})`
   }
 
   private queueSeek = () => {
@@ -204,18 +189,58 @@ class EvidenceWorldElement extends HTMLElement {
 
   private performSeek = () => {
     this.seekFrame = 0
-    if (!this.motionEnabled) return
-    const slot = this.findReadySlot(this.activeIndex)
-    if (slot === undefined) return
-    const video = this.videos[slot]
+    if (!this.motionEnabled || this.video.readyState < HTMLMediaElement.HAVE_METADATA) return
+
+    const video = this.video
     if (video.seeking) return
-    const delta = this.targetTime - video.currentTime
-    if (!Number.isFinite(delta)) return
-    if (Math.abs(delta) <= this.seekEpsilon()) {
-      this.showVideo(slot)
+
+    const duration = Math.max(video.duration - 1 / 30, 0)
+    const target = Math.min(Math.max(this.targetTime, 0), duration)
+    if (Math.abs(target - video.currentTime) <= this.seekEpsilon()) {
+      this.showVideo()
       return
     }
-    video.currentTime = Math.min(Math.max(this.targetTime, 0), Math.max(video.duration - 1 / 30, 0))
+
+    try {
+      video.currentTime = target
+    } catch {
+      this.showPoster()
+    }
+  }
+
+  private handleSeeked = () => {
+    if (Math.abs(this.targetTime - this.video.currentTime) > this.seekEpsilon()) {
+      this.queueSeek()
+      return
+    }
+    this.showVideo()
+  }
+
+  private showVideo() {
+    if (
+      this.paintPending ||
+      this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      this.video.seeking
+    )
+      return
+
+    this.paintPending = true
+    const painted = () => {
+      if (!this.paintPending) return
+      this.paintPending = false
+      if (this.video.seeking || !this.isConnected) return
+      this.video.classList.add("is-front")
+      this.captureView(this.activeIndex, "motion-v2")
+    }
+    if ("requestVideoFrameCallback" in this.video) {
+      this.video.requestVideoFrameCallback(painted)
+      // A paused seek can present a frame without dispatching rVFC on some browsers.
+      setTimeout(painted, 120)
+    } else requestAnimationFrame(painted)
+  }
+
+  private showPoster() {
+    this.video.classList.remove("is-front")
   }
 
   private updatePosters(index: number) {
@@ -230,188 +255,29 @@ class EvidenceWorldElement extends HTMLElement {
     )
   }
 
-  private showPoster() {
-    this.videos.forEach((video) => video.classList.remove("is-front"))
-  }
-
-  private showVideo(slot: number) {
-    this.frontVideo = slot
-    this.videos.forEach((video, videoIndex) =>
-      video.classList.toggle("is-front", videoIndex === slot)
-    )
-  }
-
-  private findReadySlot(index: number) {
-    for (const [slot, loadedIndex] of this.videoIndexes) {
-      if (
-        loadedIndex === index &&
-        this.videos[slot].readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-      )
-        return slot
-    }
-    return undefined
-  }
-
-  private isMobile() {
-    return matchMedia("(max-width: 767px)").matches
-  }
-
   private seekEpsilon() {
-    return this.isMobile() ? 2 / 30 : 1 / 30
+    return this.selectedSourceKind() === "portrait" ? 2 / 30 : 1 / 30
   }
 
-  private getVariant(index: number): MotionVariant {
-    const chapter = this.manifest.chapters[index]
-    return this.isMobile() ? chapter.portrait : chapter.desktop
+  private clamp(value: number) {
+    return Math.min(1, Math.max(0, value))
   }
 
-  private async loadPair(index: number, previousFront?: number) {
-    this.fetchController?.abort()
-    const controller = new AbortController()
-    this.fetchController = controller
-    const currentSlot = this.findReadySlot(index) ?? this.frontVideo
-    const nextSlot = 1 - currentSlot
-    const nextIndex = Math.min(index + 1, this.manifest.chapters.length - 1)
-
-    try {
-      await this.loadVideo(index, currentSlot, controller.signal)
-      if (controller.signal.aborted) return
-      if (index === this.activeIndex) {
-        this.updateFromScroll()
-      }
-
-      if (nextIndex !== index) {
-        if (previousFront === nextSlot && previousFront !== currentSlot) {
-          await this.waitForCrossfade(controller.signal)
-        }
-        await this.loadVideo(nextIndex, nextSlot, controller.signal)
-      }
-      if (controller.signal.aborted) return
-      this.releaseUnusedMedia(new Set([index, nextIndex]))
-    } catch (error) {
-      if ((error as DOMException).name === "AbortError") return
-      this.motionEnabled = false
-      this.showPoster()
-      this.captureError(this.manifest.chapters[index].id, "video")
-      this.captureView(this.activeIndex, "poster")
-    }
-  }
-
-  private async waitForCrossfade(signal: AbortSignal) {
-    await new Promise<void>((resolve, reject) => {
-      const timeout = window.setTimeout(finish, 240)
-      const abort = () => finish(new DOMException("Aborted", "AbortError"))
-      function finish(error?: DOMException) {
-        clearTimeout(timeout)
-        signal.removeEventListener("abort", abort)
-        if (error) reject(error)
-        else resolve()
-      }
-      signal.addEventListener("abort", abort, { once: true })
-    })
-  }
-
-  private async loadVideo(index: number, slot: number, signal: AbortSignal) {
-    const video = this.videos[slot]
-    if (
-      this.videoIndexes.get(slot) === index &&
-      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-    )
-      return
-
-    let objectUrl = this.objectUrls.get(index)
-    if (!objectUrl) {
-      const variant = this.getVariant(index)
-      const blob = await this.fetchVideo(variant, signal)
-      objectUrl = URL.createObjectURL(blob)
-      this.objectUrls.set(index, objectUrl)
-    }
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError")
-
-    this.videoIndexes.delete(slot)
-    video.preload = "auto"
-    video.src = objectUrl
-    video.load()
-    await this.waitForLoadedData(video, signal)
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError")
-    this.videoIndexes.set(slot, index)
-    if (index === this.activeIndex) {
-      const duration = Math.max(video.duration - 1 / 30, 0)
-      this.targetTime = this.targetProgress * duration
-      this.queueSeek()
-      this.captureView(index, "motion")
-    }
-  }
-
-  private async fetchVideo(variant: MotionVariant, signal: AbortSignal) {
-    let lastError: unknown
-    for (const asset of [variant.mp4, variant.webm]) {
-      try {
-        const response = await fetch(asset, { signal })
-        if (!response.ok) throw new Error("media response failed")
-        return await response.blob()
-      } catch (error) {
-        if (signal.aborted) throw new DOMException("Aborted", "AbortError")
-        lastError = error
-      }
-    }
-    throw lastError ?? new Error("media response failed")
-  }
-
-  private waitForLoadedData(video: HTMLVideoElement, signal: AbortSignal) {
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return Promise.resolve()
-    return new Promise<void>((resolve, reject) => {
-      const ready = () => finish()
-      const failed = () => finish(new Error("decode failed"))
-      const aborted = () => finish(new DOMException("Aborted", "AbortError"))
-      const finish = (error?: Error) => {
-        video.removeEventListener("loadeddata", ready)
-        video.removeEventListener("error", failed)
-        signal.removeEventListener("abort", aborted)
-        if (error) reject(error)
-        else resolve()
-      }
-      video.addEventListener("loadeddata", ready, { once: true })
-      video.addEventListener("error", failed, { once: true })
-      signal.addEventListener("abort", aborted, { once: true })
-    })
-  }
-
-  private releaseUnusedMedia(allowed: Set<number>) {
-    for (const [slot, index] of this.videoIndexes) {
-      if (allowed.has(index)) continue
-      const video = this.videos[slot]
-      video.removeAttribute("src")
-      video.load()
-      this.videoIndexes.delete(slot)
-    }
-    for (const [index, url] of this.objectUrls) {
-      if (allowed.has(index)) continue
-      URL.revokeObjectURL(url)
-      this.objectUrls.delete(index)
-    }
-  }
-
-  private resetMedia() {
-    this.fetchController?.abort()
+  private handleVideoError = () => {
+    this.motionEnabled = false
     this.showPoster()
-    this.targetTime = 0
-    this.videoIndexes.clear()
-    this.objectUrls.forEach((url) => URL.revokeObjectURL(url))
-    this.objectUrls.clear()
-    this.videos.forEach((video) => {
-      video.removeAttribute("src")
-      video.load()
-    })
+    this.captureError(this.manifest.chapters[this.activeIndex].id, "video")
+    this.captureView(this.activeIndex, "poster")
   }
 
   private handlePosterError = (event: Event) => {
     const chapterId = (event.currentTarget as HTMLImageElement).dataset.posterChapter as
-      EvidenceChapterId | undefined
+      | EvidenceChapterId
+      | undefined
     if (chapterId) this.captureError(chapterId, "poster")
   }
 
-  private captureView(index: number, mode: "poster" | "motion") {
+  private captureView(index: number, mode: "poster" | "motion-v2") {
     const chapterId = this.manifest.chapters[index]?.id
     const key = `${chapterId}:${mode}`
     if (!chapterId || this.viewed.has(key)) return
@@ -426,6 +292,7 @@ class EvidenceWorldElement extends HTMLElement {
     window.posthog?.capture("cinematic_media_error", {
       chapter_id: chapterId,
       asset_type: assetType,
+      source_kind: this.sourceKind,
     })
   }
 }

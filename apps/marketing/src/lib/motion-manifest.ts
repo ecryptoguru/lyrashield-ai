@@ -1,92 +1,136 @@
 export type EvidenceChapterId =
   "gateway" | "target" | "scan" | "evidence-state" | "fix-proposal" | "retest" | "report"
 
-export interface MotionVariant {
-  poster: string
-  mp4: string
-  webm: string
+export interface MotionTrack {
+  src: string
+  width: number
+  height: number
+  duration: 42
 }
 
 export interface EvidenceWorldChapter {
   id: EvidenceChapterId
+  start: number
+  end: number
   eyebrow: string
   title: string
   body: string
-  desktop: MotionVariant
-  portrait: MotionVariant
+  desktopPoster: string
+  portraitPoster: string
 }
 
 export interface MotionMediaManifest {
-  version: "1"
+  version: "2"
   renderHash: string
+  desktop: MotionTrack
+  portrait: MotionTrack
   chapters: readonly EvidenceWorldChapter[]
 }
 
-const chapterCopy: ReadonlyArray<Pick<EvidenceWorldChapter, "id" | "eyebrow" | "title" | "body">> =
-  [
+const chapterCopy: ReadonlyArray<
+  Pick<EvidenceWorldChapter, "id" | "start" | "end" | "eyebrow" | "title" | "body">
+> = [
     {
       id: "gateway",
+      start: 0,
+      end: 6,
       eyebrow: 'From "it works" to "ready to ship"',
       title: "One reviewable record of what you checked, fixed, and retested before you ship.",
-      body: "AI builds fast. Shipping safely means you know what you checked, how you checked it, and what changed after. LyraShield keeps all of that in one place, instead of scattered across chat logs and manual checks.",
+      body: "AI builds fast. LyraShield keeps what you checked, how you checked it, and what changed after in one reviewable record instead of scattered chats and manual checks.",
     },
     {
       id: "target",
+      start: 6,
+      end: 12,
       eyebrow: "01 / Target",
       title: "Choose what you are actually shipping.",
-      body: "Name your repo, live URL, or API and set the boundary before anything runs. Nothing gets tested you did not explicitly approve, so scope starts honest.",
+      body: "Name your repo, live URL, or API before anything runs. Nothing is tested outside the boundary you explicitly approve.",
     },
     {
       id: "scan",
+      start: 12,
+      end: 18,
       eyebrow: "02 / Review",
       title: "Run checks that do not blur together.",
-      body: "Fast deterministic scanners catch the known stuff: secrets in code, misconfigurations, dependency signals. AI-assisted review looks at logic, auth flows, and data handling. We keep them as separate coverage layers, never a single safe score, so you know what kind of evidence you have.",
+      body: "Deterministic checks find known signals. AI-assisted review examines logic, auth flows, and data handling. Separate coverage layers show what kind of evidence you actually have.",
     },
     {
       id: "evidence-state",
+      start: 18,
+      end: 24,
       eyebrow: "03 / Evidence",
       title: 'Keep "we saw it" separate from "we proved it".',
-      body: "Results stay in four honest states: detected when a pattern is seen, independently verified when a separate check confirms it, retest-confirmed when a fresh scan shows it fixed, and inconclusive when we could not fully check it. Missing proof stays visible; it does not become a silent pass.",
+      body: "Detected, independently verified, retest-confirmed, and inconclusive remain distinct. Missing proof stays visible; it never becomes a silent pass.",
     },
     {
       id: "fix-proposal",
+      start: 24,
+      end: 30,
       eyebrow: "04 / Fix",
       title: "Get a fix proposal you review. Nothing auto-merges.",
-      body: "For each finding you can get a plain-English explanation plus a staged patch proposal. PR execution is blocked until a server-generated patch is bound to your exact approval on your terminal. Fail-closed if no terminal, and no background fixes.",
+      body: "Review a plain-English explanation and staged patch proposal. PR execution stays blocked until a server-generated patch is bound to your exact approval.",
     },
     {
       id: "retest",
+      start: 30,
+      end: 36,
       eyebrow: "05 / Retest",
       title: "Confirm with a fresh check, not the same conversation.",
-      body: "When you mark something fixed, we re-run from a clean, server-owned scan. A clean result can confirm a fix when deterministic coverage is complete; engine-only absence stays inconclusive, and we tell you.",
+      body: "A fresh, server-owned scan checks the fix. Complete deterministic coverage can confirm it; engine-only absence stays inconclusive.",
     },
     {
       id: "report",
+      start: 36,
+      end: 42,
       eyebrow: "06 / Report",
       title: "Ship one report that shows limits too.",
-      body: "Scope, coverage, findings, evidence states, fixes, retest outcomes, and what we could not check, assembled into one immutable release record you can share internally or with clients. No repo coordinates or raw secrets in the shared version.",
+      body: "Scope, coverage, findings, fixes, retest outcomes, and limits become one immutable release record. Shared versions exclude repository coordinates and raw secrets.",
     },
   ]
+
+function assertChapterContract() {
+  const ids = new Set<EvidenceChapterId>()
+  let expectedStart = 0
+
+  for (const chapter of chapterCopy) {
+    if (ids.has(chapter.id)) throw new Error(`Duplicate motion chapter: ${chapter.id}`)
+    if (chapter.start !== expectedStart || chapter.end <= chapter.start)
+      throw new Error(`Invalid motion chapter range: ${chapter.id}`)
+    ids.add(chapter.id)
+    expectedStart = chapter.end
+  }
+
+  if (expectedStart !== 42) throw new Error("Motion chapters must span exactly 42 seconds")
+}
+
+assertChapterContract()
 
 export function createMotionMediaManifest(
   mediaUrl: string,
   renderHash = "local"
 ): MotionMediaManifest {
   const base = mediaUrl.replace(/\/$/, "")
-  const root = `${base}/assurance-world/v1/${renderHash}`
-  const variant = (id: EvidenceChapterId, format: "desktop" | "portrait"): MotionVariant => ({
-    poster: `${root}/posters/${id}-${format}.webp`,
-    mp4: `${root}/${format}/${id}.mp4`,
-    webm: `${root}/${format}/${id}.webm`,
-  })
+  const root = `${base}/assurance-world/v2/${renderHash}`
 
   return {
-    version: "1",
+    version: "2",
     renderHash,
+    desktop: {
+      src: `${root}/desktop/assurance-world.mp4`,
+      width: 1600,
+      height: 900,
+      duration: 42,
+    },
+    portrait: {
+      src: `${root}/portrait/assurance-world.mp4`,
+      width: 720,
+      height: 1280,
+      duration: 42,
+    },
     chapters: chapterCopy.map((chapter) => ({
       ...chapter,
-      desktop: variant(chapter.id, "desktop"),
-      portrait: variant(chapter.id, "portrait"),
+      desktopPoster: `${root}/posters/${chapter.id}-desktop.webp`,
+      portraitPoster: `${root}/posters/${chapter.id}-portrait.webp`,
     })),
   }
 }

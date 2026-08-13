@@ -37,7 +37,7 @@
     "PUBLIC_APP_URL": "https://app.lyrashieldai.com",
     "PUBLIC_SCANNER_URL": "https://scanner.lyrashieldai.com",
     "PUBLIC_MEDIA_URL": "https://media.lyrashieldai.com",
-    "PUBLIC_MOTION_RENDER_HASH": "14cdcb1b53692d73",
+    "PUBLIC_MOTION_RENDER_HASH": "65fc3ecb6416b366",
     "PUBLIC_X_URL": "",
     "PUBLIC_INDEXABLE": "true",
     "PUBLIC_POSTHOG_HOST": "https://pulse.lyrashieldai.com",
