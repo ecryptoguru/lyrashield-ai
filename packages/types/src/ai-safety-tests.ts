@@ -77,6 +77,36 @@ export const LiveAiSafetyPlanSchema = z
         message: "Do not attach a credential when sign-in is not required",
       })
     }
+
+    let allowedRequests = 0
+    for (const [index, testCase] of plan.cases.entries()) {
+      const catalogCase = AI_SAFETY_TEST_CATALOG.find(
+        (candidate) =>
+          candidate.kind === testCase.kind && candidate.fixtureId === testCase.fixtureId
+      )
+      if (
+        !catalogCase ||
+        catalogCase.expectedPredicate !== testCase.expectedPredicate ||
+        catalogCase.maxRequests !== testCase.maxRequests ||
+        catalogCase.stopCondition !== testCase.stopCondition ||
+        catalogCase.destructive !== testCase.destructive
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["cases", index],
+          message: "Only the fixed non-destructive AI safety catalog may be run",
+        })
+        continue
+      }
+      allowedRequests += catalogCase.maxRequests
+    }
+    if (plan.maxRequests > allowedRequests) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["maxRequests"],
+        message: "Request budget cannot exceed the selected fixed safety cases",
+      })
+    }
   })
 export type LiveAiSafetyPlan = z.infer<typeof LiveAiSafetyPlanSchema>
 
