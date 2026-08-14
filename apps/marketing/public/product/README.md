@@ -48,6 +48,7 @@ for x in range(200, 320):
         print(x, prev, "->", px)
     prev = px
 ```
+
 Look for a consistent edge across several `y` values before picking the crop
 `x`; a single sampled row can catch a card border instead of the sidebar edge.
 
