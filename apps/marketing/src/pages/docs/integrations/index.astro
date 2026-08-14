@@ -1,5 +1,6 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
+import ProductShot from "@components/ProductShot.astro"
 import { listPreferredAgents } from "@lyrashield/agent-registry"
 import type { AgentEntry } from "@lyrashield/agent-registry"
 
@@ -129,6 +130,18 @@ npx lyrashield init</code></pre>
     safely write. Every per-agent guide below still documents the manual path — useful to see exactly
     what gets written, or if you'd rather not use Node.js.
   </p>
+
+  <ProductShot
+    src="/product/console-coding-agents.webp"
+    alt="The Coding Agents page in the LyraShield console. A grid of cards for Devin, VS Code, Cline, OpenCode, Kilo Code, Zed, Gemini CLI, JetBrains and Amp. Each card states whether it auto-installs a config file or shows values to paste, names the config and rules files it uses, and offers a copyable install command."
+    width={1400}
+    height={883}
+    chrome="app.lyrashieldai.com/coding-agents"
+  >
+    <b>The same information, in the app.</b> Signed in, the Coding Agents page names the config file
+    your client reads, the rules file to keep in sync, and the exact install command to copy — so you
+    do not have to work out which of the paths below applies to you. Account details are blurred.
+  </ProductShot>
 
   <h2>Agent Plugin (Agent Plugins v1.0.0)</h2>
   <p>

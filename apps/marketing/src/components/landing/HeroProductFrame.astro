@@ -5,20 +5,21 @@
  * Renders on the same theme-aware canvas as PremiumHero and rises into it, so
  * it reads as the second half of the hero rather than a separate band.
  *
- * Today this is a deliberate PLACEHOLDER, not a screenshot — see
- * `public/product/README.md` for the swap procedure. The <figure>/<img>/
- * <figcaption> structure and the explicit width/height are the point: the slot
- * is crawlable, captioned, and layout-stable now, so dropping the real capture
- * in later is a one-file change with no markup churn.
+ * This is a REAL capture of the evidence console, redacted before it entered the
+ * repo: the account block was pixelated and blurred destructively, so the
+ * original pixels are gone from the file rather than hidden behind a CSS filter.
+ * See `public/product/README.md` for the capture-and-scrub rule that governs
+ * every product image on this site.
  *
- * Guardrail: while `heroProductIsPlaceholder` is true the caption must keep
- * saying so. Never let a mock read as a real product screenshot.
+ * The frame deliberately shows an INCONCLUSIVE launch verdict. That is the
+ * product's whole argument stated in its own UI: a run completed, nothing could
+ * be evaluated, and the verdict says so rather than rounding up to a pass. Do
+ * not swap it for a greener, emptier-looking state.
  */
 
-const heroProductImage = "/product/dashboard-placeholder.svg"
-const heroProductIsPlaceholder: boolean = true
+const heroProductImage = "/product/console-home.webp"
 const heroProductAlt =
-  "Placeholder illustration of the LyraShield release record: a findings ledger with each row tagged by evidence state — detected, independently verified, retest-confirmed, or inconclusive."
+  "The LyraShield evidence console home view. A launch verdict reads \"Inconclusive — nothing was checked\", above a four-step readiness track of target ready, evidence captured, blockers cleared and assurance shared. The security score shows as unavailable, and 46 open findings are broken down as 3 critical, 6 high, 37 medium and 0 low."
 ---
 
 <section class="hero-frame" aria-labelledby="hero-frame-caption">
@@ -26,34 +27,22 @@ const heroProductAlt =
     <div class="hero-frame__window">
       <div class="hero-frame__chrome" aria-hidden="true">
         <span></span><span></span><span></span>
-        <p>app.lyrashieldai.com — release record</p>
+        <p>app.lyrashieldai.com/dashboard</p>
       </div>
       <img
         class="hero-frame__img"
         src={heroProductImage}
         alt={heroProductAlt}
         width="1600"
-        height="1000"
+        height="1009"
         loading="lazy"
         decoding="async"
       />
     </div>
     <figcaption id="hero-frame-caption" class="hero-frame__caption">
-      {
-        heroProductIsPlaceholder ? (
-          <Fragment>
-            <b>Illustrative placeholder — product screenshot coming.</b> This is a mock of the
-            release record, not a capture of a real account. What it stands in for: every finding
-            carried with its evidence state, so a fix is only "confirmed" when a fresh retest says
-            so.
-          </Fragment>
-        ) : (
-          <Fragment>
-            The release record: findings grouped by evidence state, with retest outcomes and the
-            checks that were limited or not applicable kept visible.
-          </Fragment>
-        )
-      }
+      <b>The evidence console.</b> This verdict reads <i>inconclusive — nothing was checked</i>: the
+      run completed, but no scanner could evaluate the target, so there is no evidence to judge. It
+      is reported as inconclusive, not as a clean result. Account details are blurred.
     </figcaption>
   </figure>
 </section>
@@ -110,9 +99,6 @@ const heroProductAlt =
     display: block;
     width: 100%;
     height: auto;
-    aspect-ratio: 8 / 5;
-    object-fit: cover;
-    object-position: top center;
   }
 
   .hero-frame__caption {
@@ -128,35 +114,27 @@ const heroProductAlt =
     font-weight: 700;
   }
 
+  /* Light theme: the page goes light, but the WINDOW stays dark. What it frames
+     is a capture of a dark application, so whitening the chrome around it — or
+     fading the image to blend in, which is what this block used to do while the
+     contents were a placeholder SVG — makes a real screenshot look broken. The
+     dark card on a light page is the intended "app window" treatment; only the
+     shadow softens to suit the lighter surface, and the caption (which sits on
+     the page, not the card) takes page colours. */
   :global(:root[data-theme="light"]) .hero-frame {
     --frame-cyan: #087f78;
     background: var(--bg);
   }
 
   :global(:root[data-theme="light"]) .hero-frame__window {
-    border-color: rgba(8, 127, 120, 0.24);
-    background: #ffffff;
+    border-color: rgba(16, 34, 53, 0.14);
     box-shadow:
-      0 2rem 5rem rgba(39, 75, 94, 0.16),
+      0 2rem 5rem rgba(39, 75, 94, 0.22),
       0 0 0 1px rgba(217, 228, 236, 0.9);
   }
 
-  :global(:root[data-theme="light"]) .hero-frame__chrome {
-    border-color: #d9e4ec;
-    background: #eef4f7;
-  }
-
-  :global(:root[data-theme="light"]) .hero-frame__chrome span {
-    background: #9db3c1;
-  }
-
-  :global(:root[data-theme="light"]) .hero-frame__chrome p,
   :global(:root[data-theme="light"]) .hero-frame__caption {
     color: #5f7081;
-  }
-
-  :global(:root[data-theme="light"]) .hero-frame__img {
-    opacity: 0.42;
   }
 
   :global(:root[data-theme="light"]) .hero-frame__caption b {
