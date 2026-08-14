@@ -23,6 +23,9 @@ test("cycles and synchronizes the rendered marketing theme", async ({ page }) =>
   await toggle.click()
   await expect(root).toHaveAttribute("data-theme-preference", "light")
   await expect(activeIcon("light")).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => document.cookie.includes("lyrashield-theme=light")))
+    .toBe(true)
 
   await toggle.click()
   await expect(root).toHaveAttribute("data-theme-preference", "dark")

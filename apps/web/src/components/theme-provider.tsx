@@ -6,6 +6,20 @@ const THEME_EVENT = "lyrashield-theme-change"
 
 export type ThemePreference = "system" | "light" | "dark"
 
+function getThemeCookie(): ThemePreference | null {
+  const value = document.cookie.match(/(?:^|; )lyrashield-theme=(system|light|dark)(?:;|$)/)?.[1]
+  return value === "system" || value === "light" || value === "dark" ? value : null
+}
+
+function setThemeCookie(preference: ThemePreference) {
+  const domain =
+    window.location.hostname === "lyrashieldai.com" ||
+    window.location.hostname.endsWith(".lyrashieldai.com")
+      ? "; Domain=.lyrashieldai.com"
+      : ""
+  document.cookie = `lyrashield-theme=${preference}; Max-Age=31536000; Path=/${domain}; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`
+}
+
 export function applyTheme(preference: ThemePreference) {
   const dark =
     preference === "dark" ||
@@ -17,11 +31,14 @@ export function applyTheme(preference: ThemePreference) {
 
 export function setThemePreference(preference: ThemePreference) {
   window.localStorage.setItem("lyrashield-theme", preference)
+  setThemeCookie(preference)
   applyTheme(preference)
   window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: preference }))
 }
 
 export function getThemePreference(): ThemePreference {
+  const cookie = getThemeCookie()
+  if (cookie) return cookie
   const stored = window.localStorage.getItem("lyrashield-theme")
   return stored === "light" || stored === "dark" ? stored : "system"
 }
