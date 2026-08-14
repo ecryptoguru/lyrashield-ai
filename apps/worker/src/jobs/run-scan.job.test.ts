@@ -80,12 +80,6 @@ vi.mock("../engine/runner", () => ({
     delegateModel: "azure_ai/gpt-5.6-luna",
     delegateReasoningEffort: "medium",
   })),
-  resolveEngineTimeoutMs: vi.fn((minutes?: number | null, mode?: string) => {
-    const profileLimitMs = mode === "DEEP" || mode === "CUSTOM" ? 40 * 60 * 1000 : 12 * 60 * 1000
-    return typeof minutes === "number" && minutes > 0
-      ? Math.min(minutes * 60 * 1000, profileLimitMs)
-      : profileLimitMs
-  }),
   interpretExitCode: vi.fn((code: number) => {
     if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }
     if (code === 2) return { status: "COMPLETED", category: "VULNERABILITIES_FOUND" }
@@ -385,7 +379,7 @@ describe("processScanJob", () => {
         instruction: expect.stringContaining("vibe-security-50/1.1.0"),
       }),
       "scan-1",
-      12 * 60 * 1000,
+      null,
       expect.any(Function)
     )
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -424,12 +418,12 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 1.2 }),
       "scan-1",
-      12 * 60 * 1000,
+      null,
       expect.any(Function)
     )
   })
 
-  it("applies the policy deep scan timeout budget to engine and scanner phases", async () => {
+  it("does not apply a profile-duration cutoff to a progressing Deep engine", async () => {
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 3.2 },
       maxDurationMinutes: 75,
@@ -456,7 +450,7 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 3.2 }),
       "scan-1",
-      40 * 60 * 1000,
+      null,
       expect.any(Function)
     )
     expect(runScannerOrchestrator).toHaveBeenCalledWith(
@@ -896,6 +890,32 @@ describe("processScanJob", () => {
       expect.objectContaining({
         scanId: "scan-1",
         coverageIssues: [expect.objectContaining({ scanner: "engine", status: "bounded" })],
+      })
+    )
+  })
+
+  it("reports a stalled engine distinctly from an elapsed-duration timeout", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: -1,
+      timedOut: true,
+      timeoutReason: "INACTIVITY",
+      output: {
+        vulnerabilities: [],
+        runRecord: null,
+        summary: "Stalled",
+        findingCount: 0,
+      },
+    } as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result).toMatchObject({ status: "failed", errorCategory: "ENGINE_INACTIVE" })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({
+        errorCategory: "ENGINE_INACTIVE",
+        errorMessage: "Scan engine stopped after no durable progress was observed",
       })
     )
   })

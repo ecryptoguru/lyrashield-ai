@@ -220,13 +220,13 @@ Keep `LYRASHIELD_WEB_SEARCH_ENABLED="0"` unless the key is configured. When enab
 
 Repository profiles are defined once in `packages/types/src/scan-profile.ts`:
 
-| Product mode                     | AI route                               | Budget ceiling | Total ceiling | Engine ceiling | Scanner reserve |
-| -------------------------------- | -------------------------------------- | -------------: | ------------: | -------------: | --------------: |
-| Quick / Safe compatibility alias | Luna, medium                           |          $1.20 |        15 min |         12 min |           3 min |
-| Standard                         | Luna, medium                           |          $3.20 |        15 min |         12 min |           3 min |
-| Deep / Custom                    | Terra, medium + Luna, high specialists |          $5.00 |        45 min |         40 min |           5 min |
+| Product mode                     | AI route                               | Budget ceiling | Typical estimate |
+| -------------------------------- | -------------------------------------- | -------------: | ---------------: |
+| Quick / Safe compatibility alias | Luna, medium                           |          $1.20 |           15 min |
+| Standard                         | Luna, medium                           |          $3.20 |           15 min |
+| Deep / Custom                    | Terra, medium + Luna, high specialists |          $5.00 |           45 min |
 
-A finite positive workspace `Policy.maxBudgetUsd` or `maxDurationMinutes` may lower the selected profile ceiling but cannot raise it. The worker passes the resolved amount through `--max-budget-usd`; an explicit zero budget fails closed, while invalid or missing values fall back to the profile limit. Web-app/API scans use deterministic profiles with no AI model and a $0 AI budget.
+The repository estimates are not elapsed-time termination limits: an engine continues while its bounded `run.json` receipt advances. It still stops on user cancellation, its protected provider budget, or 20 minutes without durable receipt progress. A finite positive workspace `Policy.maxBudgetUsd` may lower the selected provider budget but cannot raise it; an explicit zero budget fails closed. `Policy.maxDurationMinutes` continues to bound deterministic URL/API profiles, which have their own request and egress limits and no AI model or AI budget.
 
 The dashboard names these modes Release Check (Quick), Code Review (Standard), and Deep Security Review (Deep); Weekly Monitor schedules use Quick. Safe is a compatibility alias for Quick. URL/API targets skip the external engine. Model cost, spend, cap, and accounting events remain private and are not rendered in the dashboard. See `userguide.md` for the user-facing option matrix and `PRODUCTION_DEPLOYMENT.md` for the operator rate card.
 

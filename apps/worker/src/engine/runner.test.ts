@@ -40,7 +40,7 @@ import {
   resolveEngineSourceRevision,
   resolveEngineProfile,
   resolveEngineSandboxNetwork,
-  resolveEngineTimeoutMs,
+  readEngineProgressFingerprint,
   terminateActiveEngineProcesses,
   trackActiveEngineProcess,
 } from "./runner"
@@ -426,27 +426,49 @@ describe("buildEngineEnv", () => {
   })
 })
 
-describe("resolveEngineTimeoutMs", () => {
-  it.each(["SAFE", "QUICK", "STANDARD"])(
-    "reserves scanner time within %s's fifteen-minute profile",
-    (mode) => {
-      expect(resolveEngineTimeoutMs(60, mode)).toBe(12 * 60 * 1000)
-    }
-  )
+describe("readEngineProgressFingerprint", () => {
+  it("reads only the bounded monotonic progress fields from the active run receipt", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+    cleanupPaths.push(workDir)
+    const runDir = await createRun(
+      workDir,
+      "strix_runs",
+      "scan-progress",
+      "run.json",
+      new Date(1_000)
+    )
+    // runDir is created in the worker-owned temporary test workspace above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await writeFile(
+      join(runDir, "run.json"),
+      JSON.stringify({ seq: 7, turn_count: 4, phase: "running", instruction: "must not leak" }),
+      "utf8"
+    )
 
-  it.each([undefined, null, 0, -1, Number.NaN])(
-    "uses the Quick profile default for invalid duration %s",
-    (duration) => {
-      expect(resolveEngineTimeoutMs(duration, "QUICK")).toBe(12 * 60 * 1000)
-    }
-  )
-
-  it("caps an excessive Quick duration at the profile limit", () => {
-    expect(resolveEngineTimeoutMs(10_000, "QUICK")).toBe(12 * 60 * 1000)
+    await expect(readEngineProgressFingerprint(workDir, "scan-progress")).resolves.toBe(
+      "7:4:running"
+    )
   })
 
-  it("allows Deep scans to use the forty-five-minute release limit", () => {
-    expect(resolveEngineTimeoutMs(60, "DEEP")).toBe(40 * 60 * 1000)
+  it("does not treat malformed or incomplete receipts as progress", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+    cleanupPaths.push(workDir)
+    const runDir = await createRun(
+      workDir,
+      "strix_runs",
+      "scan-progress",
+      "run.json",
+      new Date(1_000)
+    )
+    // runDir is created in the worker-owned temporary test workspace above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await writeFile(
+      join(runDir, "run.json"),
+      JSON.stringify({ seq: "7", phase: "running" }),
+      "utf8"
+    )
+
+    await expect(readEngineProgressFingerprint(workDir, "scan-progress")).resolves.toBeNull()
   })
 })
 
