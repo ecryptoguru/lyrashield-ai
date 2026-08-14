@@ -8,6 +8,7 @@ vi.mock("./client", () => ({
       findUnique: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
+      update: vi.fn(),
       updateMany: vi.fn(),
     },
     scanEvent: { create: vi.fn(), findMany: vi.fn() },
@@ -27,6 +28,7 @@ import {
   createScan,
   getScanWithEvents,
   listScans,
+  removeScan,
   updateScanStatus,
 } from "./scan-service"
 
@@ -37,6 +39,7 @@ const mockPrisma = prisma as unknown as {
     findUnique: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
     findMany: ReturnType<typeof vi.fn>
+    update: ReturnType<typeof vi.fn>
     updateMany: ReturnType<typeof vi.fn>
   }
   scanEvent: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> }
@@ -182,6 +185,51 @@ describe("createScan", () => {
     ).rejects.toThrow("Target already has an active scan")
     expect(tx.$executeRaw).toHaveBeenCalled()
     expect(tx.scan.create).not.toHaveBeenCalled()
+  })
+})
+
+describe("removeScan", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+  })
+
+  it("removes a terminal scan only from its owning workspace", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", status: "FAILED" })
+    mockPrisma.scan.update.mockResolvedValue({ id: "scan-1" })
+
+    await expect(removeScan("scan-1", "ws-1")).resolves.toEqual({ id: "scan-1" })
+
+    expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith({
+      where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
+      select: { id: true, status: true },
+    })
+    expect(mockPrisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: { deletedAt: expect.any(Date) },
+      select: { id: true },
+    })
+  })
+
+  it("refuses to remove an active scan", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", status: "RUNNING" })
+
+    await expect(removeScan("scan-1", "ws-1")).rejects.toThrow("active scan")
+    expect(mockPrisma.scan.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects a missing scan without updating another workspace's row", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue(null)
+
+    await expect(removeScan("scan-missing", "ws-1")).rejects.toThrow("Scan not found")
+
+    expect(mockPrisma.scan.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects an invalid scan id before opening a database transaction", async () => {
+    await expect(removeScan("   ", "ws-1")).rejects.toThrow()
+
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled()
   })
 })
 

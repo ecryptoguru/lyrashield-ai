@@ -1,5 +1,5 @@
 import { createHash } from "crypto"
-import { getScanWithEvents, cancelScan } from "@lyrashield/db"
+import { getScanWithEvents, cancelScan, prisma, removeScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -7,6 +7,7 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { ScanIdSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
 
 function scanEtag(scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>): string {
@@ -96,5 +97,48 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     logger.error("Failed to cancel scan", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to cancel scan", 500)
+  }
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await params
+  const parsedId = ScanIdSchema.safeParse(rawId)
+  if (!parsedId.success) {
+    return apiError("VALIDATION_ERROR", "scan id is required", 400)
+  }
+  const id = parsedId.data
+  const parsedWorkspace = WorkspaceSchema.safeParse(
+    new URL(request.url).searchParams.get("workspaceId")
+  )
+  if (!parsedWorkspace.success) {
+    return apiError("MISSING_PARAM", "workspaceId is required", 400)
+  }
+  const workspaceId = parsedWorkspace.data
+
+  try {
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.cancel)
+    await removeScan(id, workspaceId)
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId: session.userId,
+        action: "scan.removed",
+        resourceType: "scan",
+        resourceId: id,
+      },
+    })
+    revalidateDashboardAggregates()
+    return apiSuccess({ id, removed: true })
+  } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
+    if (error instanceof Error && error.message.includes("not found")) {
+      return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
+    }
+    if (error instanceof Error && error.message.includes("active scan")) {
+      return apiError("SCAN_ACTIVE", "Cancel an active scan before removing it.", 409)
+    }
+    logger.error("Failed to remove scan", { error: String(error) })
+    return apiError("INTERNAL_ERROR", "Failed to remove scan", 500)
   }
 }

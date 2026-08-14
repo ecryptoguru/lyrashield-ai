@@ -41,6 +41,7 @@ export const ScanGoalSchema = z.enum([
   "COMPLIANCE_REVIEW",
 ])
 export const ScanModeSchema = z.enum(["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"])
+export const ScanIdSchema = z.string().trim().min(1).max(128)
 export const ScanStatusSchema = z.enum([
   "QUEUED",
   "PREFLIGHT",

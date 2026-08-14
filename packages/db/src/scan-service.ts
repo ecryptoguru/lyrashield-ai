@@ -8,7 +8,7 @@ import type {
   AiSecurityScoreSnapshot,
 } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
-import { DeterminismModeSchema, type DeterminismMode } from "@lyrashield/types"
+import { DeterminismModeSchema, ScanIdSchema, type DeterminismMode } from "@lyrashield/types"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
 import { withWorkspaceRLS } from "./rls"
 import { getWorkspaceContext } from "./extension"
@@ -400,4 +400,23 @@ export async function cancelScan(scanId: string, workspaceId: string): Promise<S
   }
 
   return updateScanStatus(scanId, "CANCELLED", undefined, workspaceId)
+}
+
+export async function removeScan(scanId: string, workspaceId: string): Promise<Pick<Scan, "id">> {
+  const validatedScanId = ScanIdSchema.parse(scanId)
+
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const scan = await tx.scan.findFirst({
+      where: { id: validatedScanId, workspaceId, deletedAt: null },
+      select: { id: true, status: true },
+    })
+    if (!scan) throw new Error(`Scan not found: ${validatedScanId}`)
+    if (!isTerminalScanStatus(scan.status)) throw new Error("Cannot remove an active scan")
+
+    return tx.scan.update({
+      where: { id: scan.id },
+      data: { deletedAt: new Date() },
+      select: { id: true },
+    })
+  })
 }

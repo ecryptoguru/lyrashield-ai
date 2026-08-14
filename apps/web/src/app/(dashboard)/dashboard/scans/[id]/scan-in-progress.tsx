@@ -245,8 +245,8 @@ export function ScanInProgress({
               </div>
 
               <p className="text-muted-foreground mt-3 max-w-prose text-sm">
-                Scans typically complete in a few minutes. Deeper goals such as full pentest or
-                launch review may take longer. This page updates automatically.
+                Most scans finish sooner; large repositories can use the full selected review limit.
+                This page updates automatically.
               </p>
             </div>
 
