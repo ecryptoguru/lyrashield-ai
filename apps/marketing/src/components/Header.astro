@@ -289,6 +289,32 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
     background: var(--bg);
     color: var(--text);
   }
+
+  @media (max-height: 25rem) {
+    #mobile-menu {
+      gap: 0.125rem;
+      padding: 0.25rem;
+    }
+
+    .mobile-menu__primary,
+    .mobile-menu__resources {
+      gap: 0.125rem;
+    }
+
+    .mobile-menu__section {
+      margin-top: 0;
+    }
+
+    .mobile-menu__section > p {
+      margin-bottom: 0;
+    }
+
+    .mobile-menu__account {
+      margin-top: 0;
+      padding-top: 0.25rem;
+    }
+  }
+
   /* The menu is mobile-only. When open (and only on small screens) lay it out as a
      vertical grid; on md+ it is hidden entirely by the md:hidden utility above. */
   #mobile-menu[open] {
