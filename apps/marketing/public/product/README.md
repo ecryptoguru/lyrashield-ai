@@ -35,7 +35,7 @@ The hero uses its own frame component; everything else goes through
 ## Theme-paired hero images
 
 `HeroProductFrame.astro` is the one component on the site that needs to show
-the app UI in whichever theme the *page* is currently in — every other
+the app UI in whichever theme the page is currently in — every other
 product shot on the site is a fixed dark capture regardless of page theme.
 For each of its three frames it renders both a dark and a light `<img>` and
 lets CSS pick one via `:root[data-theme="light"]`, matching the same
@@ -110,8 +110,8 @@ the same page at different scroll positions**, joined into one file:
 The flat-fill used here is erasing a **duplicate, contentless UI region**
 (the second sidebar), not redacting live information — it is a different
 technique from, and not an exception to, the "never redact with a flat fill"
-rule below, which is about hiding *content* that is otherwise still present
-in the file.
+rule below, which is about hiding content that is otherwise still present in
+the file.
 
 ## The redaction rule
 
