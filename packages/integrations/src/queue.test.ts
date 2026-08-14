@@ -43,13 +43,14 @@ const mocks = vi.hoisted(() => {
       return members.delete(member) ? 1 : 0
     },
   }
-  return { redis, queueAdd: vi.fn() }
+  return { redis, queueAdd: vi.fn(), queueWorkersCount: vi.fn() }
 })
 
 vi.mock("./redis", () => ({ getRedis: () => mocks.redis }))
 vi.mock("bullmq", () => ({
   Queue: class {
     add = mocks.queueAdd
+    getWorkersCount = mocks.queueWorkersCount
   },
 }))
 
@@ -67,6 +68,8 @@ describe("scan worker availability", () => {
   beforeEach(() => {
     mocks.redis.members.clear()
     mocks.queueAdd.mockReset()
+    mocks.queueWorkersCount.mockReset()
+    mocks.queueWorkersCount.mockResolvedValue(1)
   })
 
   it("supports multiple workers and expires stale heartbeats", async () => {
@@ -93,5 +96,12 @@ describe("scan worker availability", () => {
       })
     ).rejects.toBeInstanceOf(ScanWorkerUnavailableError)
     expect(mocks.queueAdd).not.toHaveBeenCalled()
+  })
+
+  it("does not treat a heartbeat as ready when no BullMQ consumer is connected", async () => {
+    await registerScanWorker("worker-1", 1_000)
+    mocks.queueWorkersCount.mockResolvedValue(0)
+
+    expect(await isScanWorkerAvailable(2_000)).toBe(false)
   })
 })

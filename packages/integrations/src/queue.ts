@@ -47,7 +47,11 @@ export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> 
       .zremrangebyscore(SCAN_WORKER_REGISTRY_KEY, "-inf", now)
       .zcard(SCAN_WORKER_REGISTRY_KEY)
       .exec()
-    return Number(results?.[1]?.[1] ?? 0) > 0
+    if (Number(results?.[1]?.[1] ?? 0) === 0) return false
+
+    // A heartbeat alone only proves that a process reached Redis. Require an
+    // actual BullMQ consumer on this queue before admitting a billable scan.
+    return (await getScanQueue().getWorkersCount()) > 0
   } catch {
     return false
   }
