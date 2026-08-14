@@ -1236,6 +1236,23 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const newFindings = persistedFindings.filter((f) => f.isNew).length
       const dupFindings = persistedFindings.length - newFindings
 
+      // engineResult.output.summary describes only the agentic engine's own
+      // vulnerabilities.json artifact (see parseEngineOutput). It never sees the
+      // SCA, secrets, agent-config, or URL scanner findings that the
+      // orchestrator merges in, nor the false-positive filtering and dedup that
+      // happen afterward — so on a run where the engine layer alone found
+      // nothing, it reads "0 finding(s) reported" next to a persisted finding
+      // count that can be dozens. That text becomes scan.summary, which the
+      // dashboard, the private assurance report, and completion notifications
+      // all display verbatim, so the mismatch is user-facing, not just internal.
+      // Leave the engine's own text untouched when it already matches what was
+      // persisted; only correct it when the two disagree, so this stays a
+      // targeted fix rather than a rewrite of copy that was already accurate.
+      const scanSummary =
+        persistedFindings.length !== engineResult.output.findingCount
+          ? `${engineResult.output.summary} ${persistedFindings.length} finding(s) retained after all scanner layers and deduplication.`
+          : engineResult.output.summary
+
       try {
         await addScanEvent(
           scanId,
@@ -1266,7 +1283,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // incomplete engine, so coverage receipts are always available.
       await prisma.scan.update({
         where: { id: scanId },
-        data: { summary: engineResult.output.summary },
+        data: { summary: scanSummary },
       })
       await persistResultManifest({
         scanId,
@@ -1329,7 +1346,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
       // Retests may validate a pending fix and change the target's scoreable
       // state. Freeze the score only after those outcomes are persisted.
-      await completeScanWithScore(scanId, workspaceId, engineResult.output.summary)
+      await completeScanWithScore(scanId, workspaceId, scanSummary)
 
       if (orchestratorResult.aiAppSecurityCoverage) {
         try {
@@ -1372,12 +1389,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       try {
         const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
         const notifications = await Promise.allSettled([
-          notifyScanCompleted(
-            workspaceId,
-            scanId,
-            engineResult.output.summary,
-            persistedFindings.length
-          ),
+          notifyScanCompleted(workspaceId, scanId, scanSummary, persistedFindings.length),
           ...criticalFindings.map((finding) =>
             notifyCriticalFinding(workspaceId, finding.id, finding.title, target.name)
           ),
@@ -1409,7 +1421,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       return {
         status: "completed",
-        summary: engineResult.output.summary,
+        summary: scanSummary,
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
