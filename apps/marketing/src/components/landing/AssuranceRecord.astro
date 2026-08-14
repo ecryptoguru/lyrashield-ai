@@ -1,3 +1,7 @@
+---
+import ProductShot from "@components/landing/ProductShot.astro"
+---
+
 <section aria-labelledby="assurance-heading" class="border-y border-border bg-bg-raised/70 px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
   <div class="mx-auto max-w-6xl">
     <div class="max-w-3xl" data-reveal-group>
@@ -100,6 +104,21 @@
         </div>
       </div>
     </figure>
+
+    <ProductShot
+      class="mt-10"
+      src="/product/console-issues.webp"
+      alt="The Issues view in the LyraShield console. Findings are listed with a severity, an evidence state, an open status and a CWE and CVSS reference. A side drawer for the selected finding shows tabs for what to do, technical detail and history, a plain-language explanation, and a button to create a fix proposal."
+      width={1400}
+      height={883}
+      chrome="app.lyrashieldai.com/issues"
+    >
+      <b>The same ledger in the product.</b> Every finding carries a severity, an evidence state —
+      both <i>detected</i> and <i>inconclusive</i> appear here — and a CWE reference. The drawer
+      opens on what to do next rather than raw scanner output, and a fix proposal is something you
+      create and review; nothing auto-merges. Finding titles, file paths and target names are
+      blurred.
+    </ProductShot>
 
     <div class="mt-7 flex flex-wrap gap-5 text-sm font-semibold">
       <a href="/sample-report" data-cta-id="assurance_sample_report" class="inline-flex min-h-11 items-center text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">See the sample assurance report</a>

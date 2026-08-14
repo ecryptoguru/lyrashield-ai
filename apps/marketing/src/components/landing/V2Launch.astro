@@ -1,4 +1,6 @@
 ---
+import ProductShot from "@components/landing/ProductShot.astro"
+
 const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
 ---
 
@@ -52,5 +54,18 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         </a>
       </div>
     </div>
+
+    <ProductShot
+      class="mt-12"
+      src="/product/console-trust-runs.webp"
+      alt="The Trust Runs list in the LyraShield console. Five completed runs are listed — release checks, a code review and a deep security review — each showing the engine status, the start and end timestamps, and a retained finding count."
+      width={1400}
+      height={883}
+      chrome="app.lyrashieldai.com/trust-runs"
+    >
+      <b>Runs are kept, not overwritten.</b> Each row records what ran, when it started and ended,
+      and two counts held separately: what the engine reported, and what was retained after
+      review. Target and repository names are blurred.
+    </ProductShot>
   </div>
 </section>
