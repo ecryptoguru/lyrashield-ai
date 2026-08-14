@@ -1,8 +1,35 @@
 import type { APIRoute } from "astro"
 import { getCollection, getEntry } from "astro:content"
 import { tools } from "../lib/tools"
+// Relative filesystem import on purpose, not "@lyrashield/security" — see the
+// identical note in vibe-security-50.astro. The package index re-exports the
+// SSRF/fetch helpers, which pull in undici and break the Cloudflare Worker
+// bundle; a pnpm "workspace:*" dependency here also broke the production
+// marketing deploy previously, because wrangler-action's own npm install step
+// runs inside apps/marketing with plain npm, which does not understand the
+// "workspace:" protocol. A relative import reads the file directly and needs
+// no package.json entry.
+import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-security-controls"
 
 export const prerender = false
+
+// Same registry vibe-security-50.astro builds its own counts from — hardcoding
+// "43"/"7" here as separate prose would let this file silently disagree with
+// the page it's meant to summarize the moment the control list changes.
+const reviewControlCount = VIBE_SECURITY_CONTROLS.filter(
+  (control) => control.strategy !== "evidence"
+).length
+const evidenceControlCount = VIBE_SECURITY_CONTROLS.filter(
+  (control) => control.strategy === "evidence"
+).length
+
+// Bump this by hand only when a section's CONTENT changes, not on every
+// deploy. `new Date()` here would print "today" on every build regardless of
+// whether anything moved, which trains an LLM fetching this file on a
+// schedule to either believe the site changes constantly or to stop trusting
+// the field. See astro.config.mjs's sitemap lastmod comment for the same
+// principle applied to the sitemap.
+const LLMS_TXT_CONTENT_DATE = "2026-08-15"
 
 const docsPaths = [
   "/docs/api",
@@ -89,6 +116,9 @@ export const GET: APIRoute = async (context) => {
     `${origin}/evidence-vault`,
     `${origin}/ai-safety`,
     `${origin}/sample-report`,
+    `${origin}/support`,
+    `${origin}/security-reporting`,
+    `${origin}/privacy`,
     `${origin}/blog`,
     `${origin}/blog/editorial-policy`,
     ...docsPaths
@@ -100,12 +130,14 @@ export const GET: APIRoute = async (context) => {
     ]),
   ]
 
+  const toolList = tools.map((tool) => tool.title).join(", ")
+
   const sections = [
     "# LyraShield AI — llms.txt",
     "",
-    `Last updated: ${new Date().toISOString().split("T")[0]}`,
+    `Last updated: ${LLMS_TXT_CONTENT_DATE}`,
     "",
-    "LyraShield AI is a release-assurance platform for AI-built apps. It is in open beta with open registration.",
+    "LyraShield AI is a SaaS release-assurance platform for AI-built apps. The same review-and-evidence engine also ships as a published CLI, a GitHub Action, and an MCP server inside coding agents — it is one product across four surfaces, not four separate tools. It is in open beta with open registration; there is no waitlist.",
     "Core loop: target an authorized repo, URL, or API; run deterministic and AI-assisted review as separate coverage layers; record every finding with an explicit evidence state; prepare an approval-gated fix proposal; retest from a clean server-owned run; and assemble one reviewable release report.",
     "",
     "## The six stages",
@@ -121,7 +153,8 @@ export const GET: APIRoute = async (context) => {
     "Independently verified: a separate verification receipt supports the finding.",
     "Retest-confirmed: a server-owned deterministic retest found the relevant condition absent with complete applicable coverage.",
     "Inconclusive: the retained evidence cannot establish that the condition is gone.",
-    "Vibe Security 50: 43 controls are routed to code or URL review where applicable and 7 require operational or human evidence outside the scan.",
+    `Release assurance: a reviewable record combining scope, coverage, findings and their evidence states, fix proposals, and retest outcomes that supports a release decision — it is not a certification or a guarantee that an application has no vulnerabilities.`,
+    `Vibe Security 50: ${reviewControlCount} controls are routed to code or URL review where applicable and ${evidenceControlCount} require operational or human evidence outside the scan.`,
     "Operational Evidence Vault: a private, workspace-scoped, encrypted, and versioned place to submit, review, and accept evidence for the 7 evidence-required Vibe Security 50 controls. Accepted evidence is frozen into private assurance reports; public/shared reports do not expose AI-assurance data or raw storage URIs.",
     "",
     "## Public URLs",
@@ -133,12 +166,14 @@ export const GET: APIRoute = async (context) => {
     "",
     "## Copy-safe summary for LLM context",
     "No automatic Fix PR claim, no benchmark claims, no customer names. Pricing and plan limits are not yet announced.",
+    "Joining the open beta and using the full platform today costs nothing: registration is free with no card required. LyraShield has not announced what paid plans or limits will look like once the beta matures.",
     "Do not interpret a clean or high-scoring result as a guarantee that an application has no vulnerabilities.",
-    "LyraShield does not claim 'SOC 2 compliant,' 'certified,' 'guarantees security,' 'AI safety tested' (without a named framework), or 'adversarial robustness proven.' Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate. See docs/claims-readiness.md for the full map.",
+    "LyraShield does not claim 'SOC 2 compliant,' 'certified,' 'guarantees security,' 'AI safety tested' (without a named framework), or 'adversarial robustness proven.' Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate LyraShield has not yet obtained.",
     "Fix proposals are approval-gated: they require explicit human review on the controlling terminal and fail closed when no terminal is present. Nothing auto-merges.",
-    "The passive Lite Check and the five browser-local tools are free and need no account.",
+    `The passive Lite Check and these ${tools.length} free browser-local tools need no account and run entirely client-side: ${toolList}.`,
     "The full release-assurance platform is in open beta with open registration: create a free account at https://app.lyrashieldai.com/sign-up. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.",
     "LyraShield also runs as an MCP server inside coding agents. Setup is `npx lyrashield init`; the CLI is published on npm.",
+    "LyraShield AI's application source code is public on GitHub (github.com/ecryptoguru/lyrashield-ai) under the MIT License; the LyraShield AI name and logos are not included in that license. This covers the published source, not separately hosted backend services.",
   ]
 
   return new Response(sections.join("\n"), {

@@ -6,6 +6,7 @@ import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-s
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/evidence-vault", origin).toString()
+const reviewed = "2026-08-15"
 
 const evidenceControls = [...VIBE_SECURITY_CONTROLS]
   .filter((control) => control.strategy === "evidence")
@@ -42,6 +43,7 @@ const jsonLd = [
   {
     "@context": "https://schema.org",
     "@type": "WebPage",
+    dateModified: reviewed,
     name: "Operational Evidence Vault",
     description,
     url: canonical,
@@ -71,6 +73,43 @@ const jsonLd = [
       { "@type": "ListItem", position: 2, name: "Evidence Vault", item: canonical },
     ],
   },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "How evidence becomes assurance in the Operational Evidence Vault",
+    description:
+      "Submit an attestation and encrypted artifacts, a reviewer accepts or requests a revision, every action creates a new version, and accepted evidence is frozen into the private assurance report.",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Submit",
+        text: "Attach an attestation and encrypted artifacts for a control.",
+        url: `${canonical}#workflow-heading`,
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Review",
+        text: "A reviewer accepts, rejects, or requests a revision.",
+        url: `${canonical}#workflow-heading`,
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Version",
+        text: "Every action creates a new version; the prior record stays frozen.",
+        url: `${canonical}#workflow-heading`,
+      },
+      {
+        "@type": "HowToStep",
+        position: 4,
+        name: "Snapshot",
+        text: "Accepted evidence is frozen into the private assurance report.",
+        url: `${canonical}#workflow-heading`,
+      },
+    ],
+  },
 ]
 ---
 
@@ -93,6 +132,9 @@ const jsonLd = [
         Some security controls cannot be proven by a repository or URL scan. The
         Operational Evidence Vault collects, reviews, and versions the proof for
         the seven evidence-required Vibe Security 50 controls.
+      </p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
+        Last reviewed: <time datetime={reviewed}>August 15, 2026</time>
       </p>
       <div
         class="mt-8 flex flex-wrap gap-4"

@@ -10,7 +10,7 @@ const turnstileSiteKey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | 
 const title = "Free AI App Security Check — Passive URL Scan | LyraShield AI"
 const description = "Run a free, passive URL security check for AI-built apps. Review exposed secrets, browser security headers, data-layer signals, and HTTPS basics. No signup."
 const faqs = [
-  { question: "What does the free security check inspect?", answer: "It reads the public page, response headers, and up to six same-origin JavaScript or CSS assets linked by that page. It checks for high-confidence secret patterns, baseline security headers, data-layer signals, HTTPS consistency, and supported framework fingerprints." },
+  { question: "What does the LyraShield free security check look for?", answer: "It reads the public page, response headers, and up to six same-origin JavaScript or CSS assets linked by that page. It checks for high-confidence secret patterns, baseline security headers, data-layer signals, HTTPS consistency, and supported framework fingerprints." },
   { question: "Is the LyraShield Lite Check safe?", answer: "It is passive and read-only. It does not log in, send attack payloads, query databases, enumerate private paths, exploit a finding, or actively test row-level security. Scan only apps you own or have permission to test." },
   { question: "Do you store my app data or exposed secrets?", answer: "The scanner does not persist page bodies, matched secret values, or findings. Analytics receives only a one-way hash of the target hostname plus coarse funnel data. A public scorecard contains aggregate counters only and never the target URL or finding detail." },
   { question: "Does a clean Lite Check mean my app is secure?", answer: "No. A clean result means no surface issues were found in this limited, outside-only check. Business-logic flaws, authenticated access issues, server-side code, and exploit validation require a deeper authorized assessment." },
@@ -24,6 +24,11 @@ const jsonLd = [
     operatingSystem: "Web",
     url: canonical,
     description,
+    // Links this free tool back to the main SoftwareApplication entity
+    // (index.astro's #application) so a crawler building a knowledge graph
+    // from JSON-LD sees one product with a free entry point, not two
+    // unrelated applications.
+    isPartOf: { "@id": `${origin}/#application` },
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     featureList: ["Passive public-page check", "Exposed secret pattern detection", "Security header review", "Data-layer risk signals", "HTTPS and mixed-content basics"],
   },

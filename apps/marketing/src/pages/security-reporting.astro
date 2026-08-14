@@ -3,7 +3,7 @@ import Base from "@layouts/Base.astro"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/security-reporting", origin).toString()
 const securityEmail = (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "security@lyrashieldai.com"
-const description = "How to report a suspected LyraShield AI security vulnerability safely."
+const description = "How to report a suspected LyraShield AI security vulnerability: what to include, testing boundaries to respect, and what response to expect."
 ---
 <Base title="Security reporting | LyraShield AI" description={description} canonical={canonical}>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">

@@ -4,7 +4,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/support", origin).toString()
 const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
 const securityEmail = (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "security@lyrashieldai.com"
-const description = "LyraShield AI setup, OAuth, MCP, CLI, and security-reporting support."
+const description = "Get help with LyraShield AI: OAuth and MCP setup for coding agents, CLI and API key issues, and where to report a suspected security vulnerability."
 const appUrl =
   (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
   "https://app.lyrashieldai.com"
