@@ -6,7 +6,7 @@ import Base from "@layouts/Base.astro"
 import { tools, toolUrl } from "../../lib/tools"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/tools", origin).toString()
-const description = "Use five free browser-local security tools to review AI app launch controls, HTTP headers, exposed secrets, Supabase RLS policies, and JWT sessions."
+const description = "Use seven free browser-local security tools to review AI app launch controls, HTTP headers, exposed secrets, Supabase RLS policies, and JWT sessions."
 const faq = [
   { q: "How do these free security tools work?", a: "Each tool performs a focused deterministic check in your browser. The page explains exactly what input it reviews, what signals it reports, and what the result cannot establish." },
   { q: "Are inputs uploaded?", a: "No. The checklist, pasted headers, selected files, SQL, JWTs, and cookie values are processed on your device by the page code. Use non-production tokens and review each tool's stated limits." },

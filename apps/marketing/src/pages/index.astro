@@ -18,7 +18,7 @@ const mediaUrl = renderHash === "local" ? "/media-local" : import.meta.env.PUBLI
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
 
 const description =
-  "Ship AI-built apps with evidence, not hope. One reviewable record of what you checked, what you fixed, and what a fresh retest confirmed before release. Open beta."
+  "Ship AI-built apps with evidence, not hope: one record of what you checked, fixed, and retested before release. Open beta."
 
 const faqItems = [
   {
@@ -35,7 +35,7 @@ const faqItems = [
   },
   {
     q: "Is this a replacement for my other security scanners?",
-    a: "No. SCA, secrets scanning, dependency checks, and repo review are coverage layers inside a wider release-assurance workflow. Specialist tools may still provide deeper coverage in their own category. The value here is the combined loop and evidence record, not claiming depth parity alone.",
+    a: "No. LyraShield complements specialist scanners rather than replacing them: SCA, secrets scanning, dependency checks, and repo review are coverage layers inside a wider release-assurance workflow that adds evidence states, approval-gated fix proposals, and retests. Specialist tools may still provide deeper coverage in their own category.",
   },
   {
     q: "What is the Operational Evidence Vault?",
@@ -43,7 +43,7 @@ const faqItems = [
   },
   {
     q: "What is live today and what is on the roadmap?",
-    a: "Live today: free Lite Check (passive public URL scan), five browser-local tools, the full release-assurance platform in open beta with open registration (target, review, evidence, fix proposal, retest, report), the Operational Evidence Vault for the seven evidence-required controls, the MCP server for agent-native use, GitHub integration, the published CLI, and a reusable GitHub Action with a diff-aware gate and SARIF output that runs in your own CI. Near-term roadmap: deeper deterministic coverage, richer SARIF interop, and expanded shareable report variants. Pricing and plan limits will be announced as the beta matures.",
+    a: "Live today: the free Lite Check, seven browser-local tools, the full release-assurance platform in open beta, the Operational Evidence Vault, an MCP server, GitHub integration, a published CLI, and a GitHub Action with a diff-aware gate and SARIF output. In detail: free Lite Check (passive public URL scan); the full platform with open registration covering target, review, evidence, fix proposal, retest, and report; the Operational Evidence Vault for the seven evidence-required controls; the MCP server for agent-native use; and the GitHub Action running in your own CI. Near-term roadmap: deeper deterministic coverage, richer SARIF interop, and expanded shareable report variants. Pricing and plan limits will be announced as the beta matures.",
   },
   {
     q: "Do you store my codebase?",
@@ -64,7 +64,7 @@ const jsonLd = [
     description,
     url: pageUrl,
     inLanguage: "en-US",
-    dateModified: "2026-08-13",
+    dateModified: "2026-08-15",
     isPartOf: { "@id": `${siteOrigin}/#website` },
     about: { "@id": `${pageUrl}#application` },
     mainEntity: { "@id": `${pageUrl}#faq` },

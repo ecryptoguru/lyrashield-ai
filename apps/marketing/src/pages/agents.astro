@@ -5,7 +5,7 @@ import { agentOnboarding } from "../lib/agent-onboarding"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/agents", origin).toString()
 const pageUrl = canonical
-const title = "LyraShield AI for Coding Agents"
+const title = "LyraShield AI for Coding Agents — MCP Setup & Approval-Gated Tools"
 const description = agentOnboarding.description
 
 const howToSteps = [
@@ -46,7 +46,7 @@ const jsonLd = [
     headline: title,
     description,
     url: pageUrl,
-    dateModified: "2026-08-14",
+    dateModified: "2026-08-15",
     author: { "@id": `${origin}/#organization` },
     publisher: { "@id": `${origin}/#organization` },
     inLanguage: "en-US",
@@ -130,6 +130,44 @@ const jsonLd = [
       <p class="mt-4 max-w-2xl text-sm text-text-muted" data-reveal>
         Log in with OAuth first, then run the init command to detect and configure your agent.
       </p>
+      {/* Real numbered markup matching the HowTo schema's four steps 1:1. The
+          schema previously described four steps (OAuth, install, choose agent,
+          use tools with approval) with nothing on the page rendered as an
+          actual <ol> — Google's HowTo/list-snippet feature wants the visible
+          markup and the schema to correspond, not just the schema alone. */}
+      <ol class="mt-8 space-y-4 border-t border-border pt-8" data-reveal-group>
+        <li class="flex gap-3" data-reveal>
+          <span class="font-mono text-sm text-accent">1</span>
+          <span class="text-sm text-text-muted">
+            <span class="font-medium text-text">Sign in with OAuth</span> — run{" "}
+            <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text">{agentOnboarding.commands[0]}</code>{" "}
+            to select a workspace and save the local credential.
+          </span>
+        </li>
+        <li class="flex gap-3" data-reveal>
+          <span class="font-mono text-sm text-accent">2</span>
+          <span class="text-sm text-text-muted">
+            <span class="font-medium text-text">Install the Agent Plugin</span> — run{" "}
+            <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text">{agentOnboarding.commands[1]}</code>{" "}
+            to detect and configure your coding agent.
+          </span>
+        </li>
+        <li class="flex gap-3" data-reveal>
+          <span class="font-mono text-sm text-accent">3</span>
+          <span class="text-sm text-text-muted">
+            <span class="font-medium text-text">Choose your supported coding agent</span> — use the
+            matching <a href="#clients" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">integration guide</a> for your client.
+          </span>
+        </li>
+        <li class="flex gap-3" data-reveal>
+          <span class="font-mono text-sm text-accent">4</span>
+          <span class="text-sm text-text-muted">
+            <span class="font-medium text-text">Use review tools with approval</span> — read-only
+            tools are available after authentication; mutations require write scope and{" "}
+            <a href="#safety" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">explicit human approval</a>.
+          </span>
+        </li>
+      </ol>
     </div>
   </section>
 

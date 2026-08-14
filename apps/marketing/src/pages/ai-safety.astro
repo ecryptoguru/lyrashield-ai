@@ -6,12 +6,38 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/ai-safety", origin).toString()
 const title = "AI safety evaluation | LyraShield AI"
 const description =
-  "How LyraShield AI evaluates its prompt-injection guard against the OWASP Gen AI Red Teaming Guide and the MLCommons AILuminate demo prompt set. Bounded, honest, and limitation-aware."
+  "How LyraShield AI evaluates its prompt-injection guard against the OWASP Gen AI Red Teaming Guide and the MLCommons AILuminate demo prompt set."
+const reviewed = "2026-08-15"
 
 const owasp = evaluationResults.find((result) => result.suite === "owasp_genai_red_team")!
 const ailuminate = evaluationResults.find((result) => result.suite === "mlcommons_ailuminate_demo")!
 const expectedOutcomes = owasp.cases?.filter((testCase) => testCase.expected).length ?? 0
 const expectedOutcomeRate = ((expectedOutcomes / owasp.totals.total) * 100).toFixed(1)
+
+// Every sibling trust page (methodology, vibe-security-50, evidence-vault,
+// scan, sample-report) answers "what is/isn't this" as an FAQ; this page had
+// the same content as prose in "What this is not" below but no FAQPage
+// schema, so it was invisible to the People-Also-Ask / snippet surfaces the
+// other pages compete for. Answers here are restatements of that existing
+// prose, not new claims.
+const faq = [
+  {
+    q: "Is LyraShield's AI safety evaluation certified by MLCommons or OWASP?",
+    a: "No. LyraShield's prompt-injection guard is evaluated against the OWASP Gen AI Red Teaming Guide and the MLCommons AILuminate demo prompt set, but neither organization has certified the result. The AILuminate demo set is for internal testing only, not their production benchmark.",
+  },
+  {
+    q: "Does the guard block all prompt injection attacks?",
+    a: "No. No finite test suite can prove that, so LyraShield does not claim it. The evaluation states what was tested, what passed, and what is still a known limitation.",
+  },
+  {
+    q: "Does the prompt-injection guard also filter harmful content?",
+    a: "No. It blocks attempts to override, hijack, or extract instructions from the agent. Filtering harmful-but-non-injection content is the responsibility of the underlying LLM's own safety training, not this guard.",
+  },
+  {
+    q: "Can this replace human security review or LLM-level safety training?",
+    a: "No. It is a bounded, scoped check against two named public frameworks, not a substitute for LLM-level safety training, output filtering, or human review.",
+  },
+]
 
 const jsonLd = [
   {
@@ -20,6 +46,7 @@ const jsonLd = [
     name: "AI Safety Evaluation",
     description,
     url: canonical,
+    dateModified: reviewed,
     isPartOf: { "@id": `${origin}/#website` },
     publisher: { "@id": `${origin}/#organization` },
     about: ["AI safety", "prompt injection", "red teaming", "MLCommons AILuminate", "OWASP Gen AI"],
@@ -31,6 +58,15 @@ const jsonLd = [
       { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
       { "@type": "ListItem", position: 2, name: "AI Safety", item: canonical },
     ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
   },
 ]
 ---
@@ -49,6 +85,9 @@ const jsonLd = [
         inputs before they reach the LLM scan engine. This page documents how we evaluate that
         guard against two open frameworks: the OWASP Gen AI Red Teaming Guide and the MLCommons
         AILuminate demo prompt set. Results are bounded, honest, and limitation-aware.
+      </p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
+        Last reviewed: <time datetime={reviewed}>August 15, 2026</time>
       </p>
     </header>
   </section>
@@ -313,6 +352,12 @@ const jsonLd = [
   <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6" data-reveal-group>
     <div class="rounded-xl border border-border bg-bg-raised p-6" data-reveal>
       <h2 class="text-xl font-semibold text-text">What this is not</h2>
+      <p class="mt-3 text-sm leading-6 text-text-muted">
+        LyraShield's prompt-injection guard does not perform content moderation or filter
+        harmful-but-non-injection content. It only blocks attempts to override, hijack, or extract
+        instructions from the agent, and treats content-safety filtering as the responsibility of
+        the underlying LLM's own safety training.
+      </p>
       <ul class="mt-3 space-y-2 text-sm text-text-muted">
         <li>• Not "AI safety tested" in the sense of a formal evaluation by NIST, MLCommons, or a third-party lab.</li>
         <li>• Not "adversarial robustness proven" — no finite test suite proves universal robustness.</li>
@@ -322,9 +367,21 @@ const jsonLd = [
       </ul>
       <p class="mt-4 text-sm text-text-muted">
         See <a href="/methodology" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">methodology</a>
-        for the full scan and evidence methodology, and <code>docs/claims-readiness.md</code>
-        (internal) for the full map of what each claim requires.
+        for the full scan and evidence methodology.
       </p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section aria-labelledby="ai-safety-faq-heading" class="mx-auto max-w-5xl px-4 py-12 sm:px-6">
+    <h2 id="ai-safety-faq-heading" class="text-2xl font-semibold text-text" data-reveal>AI safety questions</h2>
+    <div class="mt-6 divide-y divide-border rounded-xl border border-border bg-bg-raised" data-reveal="scale">
+      {faq.map((item, i) => (
+        <details class="faq-item p-4" data-question-id={`ai-safety-faq-${i + 1}`}>
+          <summary class="cursor-pointer font-medium text-text">{item.q}</summary>
+          <p class="mt-3 text-sm leading-6 text-text-muted">{item.a}</p>
+        </details>
+      ))}
     </div>
   </section>
 

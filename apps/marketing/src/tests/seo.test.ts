@@ -54,9 +54,25 @@ describe("marketing SEO metadata", () => {
     expect(home).toContain('"@id": `${pageUrl}#faq`')
     expect(home).toContain('inLanguage: "en-US"')
     expect(methodology).toContain('dateModified: "2026-07-29"')
+    // The 43/7 split is derived from the same control registry
+    // vibe-security-50.astro builds its own counts from, not a hardcoded
+    // literal here — hardcoding it as separate prose would let this file
+    // silently disagree with the page it summarizes the moment the control
+    // list changes. Assert the registry wiring instead of a fixed string:
+    // the relative import (not the "@lyrashield/security" package alias,
+    // which pulls in undici and breaks the Cloudflare Worker bundle — see
+    // the identical guard in vibe-security-50.astro) and the computed counts
+    // actually appearing in the rendered sentence.
     expect(llms).toContain(
-      "43 controls are routed to code or URL review where applicable and 7 require operational or human evidence outside the scan"
+      'import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-security-controls"'
     )
+    expect(llms).not.toContain('from "@lyrashield/security"')
+    expect(llms).toContain("reviewControlCount")
+    expect(llms).toContain("evidenceControlCount")
+    expect(llms).toContain(
+      "controls are routed to code or URL review where applicable and"
+    )
+    expect(llms).toContain("require operational or human evidence outside the scan")
     expect(llms).toContain("`${origin}/vibe-security-50`")
     expect(llms).toContain('"/docs/integrations/goose"')
     expect(llms).not.toContain("`${origin}/scan`")
