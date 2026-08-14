@@ -5,11 +5,21 @@
  * Renders on the same theme-aware canvas as PremiumHero and rises into it, so
  * it reads as the second half of the hero rather than a separate band.
  *
- * Three REAL captures of the evidence console, redacted before they entered
- * the repo: the account block on each was pixelated and blurred destructively,
- * so the original pixels are gone from the file rather than hidden behind a
- * CSS filter. See `public/product/README.md` for the capture-and-scrub rule that
- * governs every product image on this site.
+ * Six REAL captures of the evidence console — one dark-theme and one
+ * light-theme shot per frame — redacted before they entered the repo: the
+ * account block and any private scan-target names on each were pixelated
+ * and blurred destructively, so the original pixels are gone from the file
+ * rather than hidden behind a CSS filter. See `public/product/README.md`
+ * for the capture-and-scrub rule that governs every product image on this
+ * site.
+ *
+ * Each frame renders BOTH its dark and light capture as separate <img>
+ * elements; `:root[data-theme="light"]` toggles which one is visible (see
+ * the .hero-frame__img--dark / --light rules below). This is CSS-only, no
+ * JS: the browser fetches both images (the light one at low priority via
+ * `loading="lazy"`), so the hero's image payload is roughly double a
+ * single-theme collage in exchange for the screenshots always matching the
+ * page's current theme.
  *
  * Layout: the dashboard view runs large on the left; two more (Issues, Coding
  * Agents) stack on the right, in that order. Trust Runs was cut from the
@@ -18,15 +28,15 @@
  * side columns would be illegible at 390px, so this is a genuine reflow, not
  * just a shrink.
  *
- * The two small frames use dedicated `*-thumb.webp` files with the app
- * sidebar cropped out (see public/product/README.md) — at thumbnail width the
- * sidebar was mostly wasted space, and cropping leaves more of the room for
- * the content that actually makes the point. This is a DIFFERENT crop from
- * the full-width captures the same pages' content uses elsewhere (methodology,
- * docs/integrations): those keep the sidebar, this collage does not. Don't
- * point this component at the non-thumb files, and don't overwrite the
- * shared non-thumb files with a sidebar-cropped version — other pages depend
- * on their current dimensions.
+ * The two small frames use dedicated `*-thumb.webp` / `*-thumb-light.webp`
+ * files with the app sidebar cropped out (see public/product/README.md) —
+ * at thumbnail width the sidebar was mostly wasted space, and cropping
+ * leaves more of the room for the content that actually makes the point.
+ * This is a DIFFERENT crop from the full-width captures the same pages'
+ * content uses elsewhere (methodology, docs/integrations): those keep the
+ * sidebar, this collage does not. Don't point this component at the
+ * non-thumb files, and don't overwrite the shared non-thumb files with a
+ * sidebar-cropped version — other pages depend on their current dimensions.
  *
  * console-trust-runs-thumb.webp is intentionally NOT built — nothing
  * references it. If Trust Runs comes back into this collage, regenerate it
@@ -37,38 +47,61 @@
  * the product's whole argument stated in its own UI: a run completed, nothing
  * could be evaluated, and the verdict says so rather than rounding up to a
  * pass. Do not swap it for a greener, emptier-looking state.
+ *
+ * console-home.webp runs the full dashboard height (readiness track through
+ * "Recent scan activity") by design — it's a stitch of two captures at
+ * different scroll positions, joined at a card boundary, with the app's
+ * fixed sidebar de-duplicated by flat-filling the second capture's sidebar
+ * column before the join. Regenerate BOTH theme variants together from
+ * fresh captures if this page's layout changes; don't patch one half.
  */
 
 interface Shot {
   src: string
   alt: string
+  lightSrc: string
+  lightAlt: string
   route: string
   width: number
   height: number
+  lightWidth: number
+  lightHeight: number
 }
 
 const primary: Shot = {
   src: "/product/console-home.webp",
-  alt: 'The LyraShield evidence console home view. A launch verdict reads "Inconclusive — nothing was checked", above a four-step readiness track of target ready, evidence captured, blockers cleared and assurance shared. The security score shows as unavailable, and 46 open findings are broken down as 3 critical, 6 high, 37 medium and 0 low.',
+  alt: 'The LyraShield evidence console home view in dark mode. A launch verdict reads "Inconclusive — nothing was checked", above a four-step readiness track of target ready, evidence captured, blockers cleared and assurance shared. The security score shows as unavailable, and 46 open findings are broken down as 3 critical, 6 high, 37 medium and 0 low.',
+  lightSrc: "/product/console-home-light.webp",
+  lightAlt: 'The LyraShield evidence console home view in light mode, showing the same "Inconclusive — nothing was checked" launch verdict, readiness track, and 46 open findings broken down as 3 critical, 6 high, 37 medium and 0 low.',
   route: "app.lyrashieldai.com/dashboard",
   width: 1600,
-  height: 1009,
+  height: 1587,
+  lightWidth: 1600,
+  lightHeight: 1584,
 }
 
 const secondary: Shot[] = [
   {
     src: "/product/console-issues-thumb.webp",
-    alt: "The Issues view in the LyraShield console. Findings are listed with a severity, an evidence state, an open status, and a CWE and CVSS reference.",
+    alt: "The Issues view in the LyraShield console in dark mode. Findings are listed with a severity, an evidence state, an open status, and a CWE and CVSS reference.",
+    lightSrc: "/product/console-issues-thumb-light.webp",
+    lightAlt: "The Issues view in the LyraShield console in light mode. Findings are listed with a severity, an evidence state, an open status, and a CWE and CVSS reference.",
     route: "app.lyrashieldai.com/issues",
     width: 1133,
     height: 883,
+    lightWidth: 1133,
+    lightHeight: 878,
   },
   {
     src: "/product/console-coding-agents-thumb.webp",
-    alt: "The Coding Agents page in the LyraShield console. Cards for Devin, VS Code, Cline, OpenCode, Kilo Code, Zed and more each show a copyable install command.",
+    alt: "The Coding Agents page in the LyraShield console in dark mode. Cards for Devin, VS Code, Cline, OpenCode, Kilo Code, Zed and more each show a copyable install command.",
+    lightSrc: "/product/console-coding-agents-thumb-light.webp",
+    lightAlt: "The Coding Agents page in the LyraShield console in light mode. Cards for Devin, VS Code, Cline, OpenCode, Kilo Code, Zed and more each show a copyable install command.",
     route: "app.lyrashieldai.com/coding-agents",
     width: 1133,
     height: 883,
+    lightWidth: 1133,
+    lightHeight: 878,
   },
 ]
 ---
@@ -82,12 +115,21 @@ const secondary: Shot[] = [
           <p>{primary.route}</p>
         </div>
         <img
-          class="hero-frame__img"
+          class="hero-frame__img hero-frame__img--dark"
           src={primary.src}
           alt={primary.alt}
           width={primary.width}
           height={primary.height}
           loading="eager"
+          decoding="async"
+        />
+        <img
+          class="hero-frame__img hero-frame__img--light"
+          src={primary.lightSrc}
+          alt={primary.lightAlt}
+          width={primary.lightWidth}
+          height={primary.lightHeight}
+          loading="lazy"
           decoding="async"
         />
       </div>
@@ -101,11 +143,20 @@ const secondary: Shot[] = [
                 <p>{shot.route}</p>
               </div>
               <img
-                class="hero-frame__img"
+                class="hero-frame__img hero-frame__img--dark"
                 src={shot.src}
                 alt={shot.alt}
                 width={shot.width}
                 height={shot.height}
+                loading="lazy"
+                decoding="async"
+              />
+              <img
+                class="hero-frame__img hero-frame__img--light"
+                src={shot.lightSrc}
+                alt={shot.lightAlt}
+                width={shot.lightWidth}
+                height={shot.lightHeight}
                 loading="lazy"
                 decoding="async"
               />
@@ -216,6 +267,12 @@ const secondary: Shot[] = [
     height: auto;
   }
 
+  /* Both theme captures are always in the DOM; only one is ever visible.
+     See the light-theme override below for the swap. */
+  .hero-frame__img--light {
+    display: none;
+  }
+
   /* The two thumbnails share equal-height rows in .hero-frame__stack; crop
      each capture to fill its row instead of letterboxing at an odd height. */
   .hero-frame__window--thumb {
@@ -259,19 +316,29 @@ const secondary: Shot[] = [
     }
   }
 
-  /* Light theme: the page goes light, but the WINDOWS stay dark. What they
-     frame are captures of a dark application, so whitening the chrome around
-     them — or fading them to blend in, which is what this block used to do
-     while the contents were a placeholder SVG — makes a real screenshot look
-     broken. Dark cards on a light page are the intended "app window"
-     treatment; only the shadow softens to suit the lighter surface, and the
-     caption (which sits on the page, not the cards) takes page colours. */
+  /* Light theme: the page goes light AND the windows now frame real
+     light-theme captures of the app (see .hero-frame__img--dark/--light
+     above for the swap) — so the chrome goes light too, matching what it's
+     actually framing. This replaces the earlier "windows always stay dark"
+     rule, written back when only dark-theme captures existed: forcing a
+     dark toolbar onto a light screenshot would look like a mismatched frame
+     now that both variants are real. The caption (which sits on the page,
+     not the cards) keeps taking page colours as before. */
   :global(:root[data-theme="light"]) .hero-frame {
     --frame-cyan: #087f78;
     background: var(--bg);
   }
 
+  :global(:root[data-theme="light"]) .hero-frame__img--dark {
+    display: none;
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__img--light {
+    display: block;
+  }
+
   :global(:root[data-theme="light"]) .hero-frame__window {
+    background: #fff;
     border-color: rgba(16, 34, 53, 0.14);
     box-shadow:
       0 2rem 5rem rgba(39, 75, 94, 0.22),
@@ -282,6 +349,19 @@ const secondary: Shot[] = [
     box-shadow:
       0 1rem 2.5rem rgba(39, 75, 94, 0.18),
       0 0 0 1px rgba(217, 228, 236, 0.9);
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__chrome {
+    border-bottom-color: rgba(16, 34, 53, 0.1);
+    background: #f4f7fa;
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__chrome span {
+    background: #c3d0da;
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__chrome p {
+    color: #5f7081;
   }
 
   :global(:root[data-theme="light"]) .hero-frame__caption {
