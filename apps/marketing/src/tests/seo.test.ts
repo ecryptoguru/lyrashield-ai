@@ -69,9 +69,7 @@ describe("marketing SEO metadata", () => {
     expect(llms).not.toContain('from "@lyrashield/security"')
     expect(llms).toContain("reviewControlCount")
     expect(llms).toContain("evidenceControlCount")
-    expect(llms).toContain(
-      "controls are routed to code or URL review where applicable and"
-    )
+    expect(llms).toContain("controls are routed to code or URL review where applicable and")
     expect(llms).toContain("require operational or human evidence outside the scan")
     expect(llms).toContain("`${origin}/vibe-security-50`")
     expect(llms).toContain('"/docs/integrations/goose"')
