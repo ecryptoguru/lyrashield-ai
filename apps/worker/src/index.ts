@@ -15,6 +15,7 @@ import {
 import { reconcileFailedQueueJob, reconcileScanQueue } from "./queue-reconciliation"
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 import { reapStaleScanResources } from "./engine/stale-resource-reaper"
+import { observeWorkerRun } from "./worker-lifecycle"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
@@ -174,11 +175,19 @@ async function main(): Promise<void> {
   }
   await registerScanWorker(workerId)
   await refreshWorkerReadiness()
-  void worker.run().catch((error) => {
+  observeWorkerRun(worker.run(), (termination) => {
     logger.error("BullMQ worker stopped unexpectedly", {
-      error: error instanceof Error ? error.message : String(error),
+      reason: termination.reason,
+      ...("error" in termination
+        ? {
+            error:
+              termination.error instanceof Error
+                ? termination.error.message
+                : String(termination.error),
+          }
+        : {}),
     })
-    void shutdown("BULLMQ_RUN_FAILURE", 1)
+    void shutdown(termination.reason, 1)
   })
   logger.info("Worker ready — processing scan jobs", {
     queue: SCAN_QUEUE_NAME,

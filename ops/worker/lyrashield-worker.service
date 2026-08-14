@@ -12,7 +12,7 @@ ExecStartPre=/usr/bin/env LYRASHIELD_REFRESH_PINNED_HOSTS=1 /usr/local/libexec/l
 ExecStart=/usr/local/libexec/lyrashield-run-worker
 ExecStop=/usr/bin/docker stop --time 35 lyrashield-worker
 ExecStopPost=-/usr/bin/docker rm --force lyrashield-worker
-Restart=on-failure
+Restart=always
 RestartSec=10s
 TimeoutStartSec=120s
 TimeoutStopSec=45s
