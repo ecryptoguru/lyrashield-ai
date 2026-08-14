@@ -23,4 +23,20 @@ describe("agent onboarding contract", () => {
     expect(markdownRoute).toContain('"Content-Type": "text/markdown; charset=utf-8"')
     expect(markdownRoute).toContain("renderAgentOnboardingMarkdown(origin)")
   })
+
+  it("keeps a human-first funnel while exposing agent setup", () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const header = readFileSync(new URL("../components/Header.astro", import.meta.url), "utf8")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const hero = readFileSync(new URL("../components/landing/PremiumHero.astro", import.meta.url), "utf8")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const finalCta = readFileSync(new URL("../components/landing/FinalCta.astro", import.meta.url), "utf8")
+
+    expect(header.match(/href="\/agents"/g)).toHaveLength(2)
+    expect(header).toContain('data-cta-id="header-for-agents"')
+    expect(header).toContain('data-cta-id="header-for-agents-mobile"')
+    expect(hero).toContain('data-cta-id="premium-hero-agent-setup"')
+    expect(finalCta).toContain('data-cta-id="final-cta-agent-setup"')
+    expect(hero).not.toContain("data-switch-mode")
+  })
 })

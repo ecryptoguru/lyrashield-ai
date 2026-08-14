@@ -47,6 +47,12 @@ describe("premium assurance-world homepage", () => {
     expect(hero).toContain("Missing evidence stays visible")
   })
 
+  it("keeps agent setup subordinate to existing homepage conversions", () => {
+    const agentLink = hero.indexOf("premium-hero-agent-setup")
+    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-lite-check"))
+    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-create-account"))
+  })
+
   it("builds one immutable desktop and portrait track with seven timed chapters", () => {
     const manifest = createMotionMediaManifest("/media-local/", "test-render")
     const ids = manifest.chapters.map((chapter) => chapter.id)

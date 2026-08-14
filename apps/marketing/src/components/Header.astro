@@ -23,6 +23,15 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
             Free scan
           </a>
         </li>
+        <li>
+          <a
+            href="/agents"
+            class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            data-cta-id="header-for-agents"
+          >
+            For agents
+          </a>
+        </li>
         <li class="relative">
           <details class="group">
             <summary class="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
@@ -70,6 +79,13 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         style="top: max(4.5rem, calc(4rem + env(safe-area-inset-top))); right: max(1rem, env(safe-area-inset-right)); bottom: auto; left: auto;"
       >
         <div class="mobile-menu__primary">
+          <a
+            href="/agents"
+            class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            data-cta-id="header-for-agents-mobile"
+          >
+            For agents
+          </a>
           <a href="/#how-it-works" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">How it works</a>
           <a href="/scan" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
         </div>

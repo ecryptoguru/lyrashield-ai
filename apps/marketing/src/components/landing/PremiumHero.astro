@@ -45,6 +45,13 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
         Run Lite Check
       </a>
     </div>
+    <a
+      class="premium-hero__agent-link"
+      href="/agents"
+      data-cta-id="premium-hero-agent-setup"
+    >
+      Using a coding agent? Set up LyraShield →
+    </a>
     <a class="premium-hero__sample" href="/sample-report" data-cta-id="premium-hero-sample-report">See a sample release record</a>
     <p class="premium-hero__boundary">
       Evidence is limited to the authorized scope and checks that ran. No security guarantee.
@@ -235,6 +242,22 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     color: #edf6fb;
   }
 
+  .premium-hero__agent-link {
+    display: inline-flex;
+    margin-top: 0.85rem;
+    color: var(--hero-cyan);
+    font-size: 0.85rem;
+    font-weight: 650;
+    text-decoration: underline;
+    text-decoration-color: rgba(84, 214, 223, 0.45);
+    text-underline-offset: 0.3rem;
+  }
+
+  .premium-hero__agent-link:hover,
+  .premium-hero__agent-link:focus-visible {
+    color: #edf6fb;
+  }
+
   .premium-hero__boundary {
     margin: 0.9rem 0 0;
     color: #91a7b8;
@@ -336,12 +359,16 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       padding: 0.7rem 1.05rem;
     }
 
-    .premium-hero__sample {
+    .premium-hero__agent-link {
       order: 5;
     }
 
-    .premium-hero__boundary {
+    .premium-hero__sample {
       order: 6;
+    }
+
+    .premium-hero__boundary {
+      order: 7;
     }
   }
 
@@ -483,6 +510,15 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 
   :global(:root[data-theme="light"]) .premium-hero__sample:hover {
+    color: #102235;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__agent-link {
+    color: #087f78;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__agent-link:hover,
+  :global(:root[data-theme="light"]) .premium-hero__agent-link:focus-visible {
     color: #102235;
   }
 
