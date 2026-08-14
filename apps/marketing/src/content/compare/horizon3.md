@@ -4,13 +4,13 @@ description: "How LyraShield AI compares to Horizon3.ai for autonomous infra pen
 competitor: "Horizon3.ai"
 heading: "LyraShield AI vs Horizon3.ai"
 disclaimer: "Factual comparison. [Horizon3.ai's NodeZero](https://www.horizon3.ai/nodezero/) is an autonomous, production-safe pentest platform that runs real attack techniques across web apps, infrastructure, cloud, data, and identity — chaining weaknesses into attack paths and verifying fixes, with no agents. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. NodeZero validates production resilience across the whole environment; LyraShield AI gates AI-generated-code releases. Neither replaces the other."
-updatedDate: 2026-08-15
+updatedDate: 2026-08-07
 draft: false
 faq:
   - q: "Does LyraShield replace Horizon3 NodeZero?"
     a: "No. NodeZero is an autonomous, production-safe pentest that chains weaknesses across internal, external, cloud, Kubernetes, Active Directory, and identity, with attack-path diagrams and Quick Verify retests. LyraShield in open beta is app-layer release assurance for AI-built apps with evidence states, coverage receipts, and approval-gated fixes."
   - q: "Can I use Horizon3 NodeZero and LyraShield together?"
-    a: "Yes. Use NodeZero to prove production resilience across your environment and meet CTEM goals, and use LyraShield to gate releases of AI-built apps with an immutable assurance record. NodeZero offers Docker and OVA deploy for internal tests and publishes tiered annual pricing plus a 30-day trial on its own site; LyraShield is live open beta."
+    a: "Yes. Use NodeZero to prove production resilience across your environment and meet CTEM goals, and use LyraShield to gate releases of AI-built apps with an immutable assurance record. NodeZero offers Docker and OVA deploy for internal tests and publishes Core $25,000, Pro $32,500, Elite $42,500 per 500 assets per year plus a 30-day trial; LyraShield is live open beta."
   - q: "When should I choose Horizon3 NodeZero over LyraShield?"
     a: "Choose NodeZero when you need continuous exposure validation across networks, identities, and cloud, not just one app, with FedRAMP High options for federal environments. Its strength is proving what an attacker can actually achieve across environments. Choose LyraShield when your bottleneck is AI-specific patterns, MCP configs, and a ship or no-ship decision."
 ---
@@ -45,11 +45,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | Horizon3 NodeZero                                                                                                                                               |
-| ------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS; internal Docker/OVA + external cloud; AWS Marketplace + other clouds                                                                                      |
-| Pricing            | Open beta; pricing announced as it matures        | Tiered annual and one-time plans published on AWS Marketplace; 30-day free trial available; enterprise by quote — see Horizon3.ai's listing for current figures |
-| Compliance posture | Assurance-record orientation for release sign-off | Trusted by governments, Fortune 10, healthcare; FedRAMP High variant for federal                                                                                |
+| Aspect             | LyraShield AI                                     | Horizon3 NodeZero                                                                                                                                                                               |
+| ------------------ | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS; internal Docker/OVA + external cloud; AWS Marketplace + other clouds                                                                                                                      |
+| Pricing            | Open beta; pricing announced as it matures        | Published on AWS Marketplace (per 12-mo, 500 assets): Core $25,000; Pro $32,500; Elite $42,500. NodeZero Flex one-time (1,000 assets) $15,000. 30-day free trial available; enterprise by quote |
+| Compliance posture | Assurance-record orientation for release sign-off | Trusted by governments, Fortune 10, healthcare; FedRAMP High variant for federal                                                                                                                |
 
 ## When to use which
 

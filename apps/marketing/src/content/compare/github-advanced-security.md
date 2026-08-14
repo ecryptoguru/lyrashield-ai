@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to GitHub Advanced Security (GHAS). Evi
 competitor: "GitHub Advanced Security"
 heading: "LyraShield AI vs GitHub Advanced Security"
 disclaimer: "Factual comparison. GitHub Advanced Security is GitHub's security suite (CodeQL, secret scanning, Dependabot). LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. The LyraShield GitHub Action complements GHAS rather than replacing it — it adds diff-aware pattern checks that run in your own runner with no account required."
-updatedDate: 2026-08-15
+updatedDate: 2026-08-07
 draft: false
 faq:
   - q: "Does LyraShield replace GitHub Advanced Security?"
@@ -12,7 +12,7 @@ faq:
   - q: "Can I use LyraShield and GitHub Advanced Security together?"
     a: "Yes. LyraShield ships a GitHub Action with SARIF output and a diff-aware gate that writes to the same code scanning view GHAS uses. Run GHAS for continuous deterministic scanning and Dependabot updates, then run LyraShield for the target, review, evidence, fix, retest, report loop before release. LyraShield is live with open registration."
   - q: "When should I choose GitHub Advanced Security over LyraShield?"
-    a: "Choose GHAS when you are already on GitHub and want proven, low-friction CodeQL SAST and secret scanning inline in pull requests, with governance features like delegated bypass and security campaigns. Its strength is continuous detection at scale for public repos free, with private-repo add-ons priced per active committer — see GitHub's pricing page for current figures."
+    a: "Choose GHAS when you are already on GitHub and want proven, low-friction CodeQL SAST and secret scanning inline in pull requests, with governance features like delegated bypass and security campaigns. Its strength is continuous detection at scale for public repos free, private via Code Security $30 and Secret Protection $19 per active committer."
   - q: "Is LyraShield free?"
     a: "LyraShield is live in open beta with open registration at lyrashieldai.com. Pricing will be announced as the platform matures, with some v1 features like broader compliance mappings on the near-term roadmap. That honesty matters: you can run the agentic pentest plus SCA and secrets today, but check the site for current capabilities."
 ---
@@ -48,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | GHAS                                                                                                             |
-| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action (any CI)          | GitHub.com or GitHub Enterprise Server                                                                           |
-| Pricing    | Open beta; pricing announced as it matures           | Free for public repos; private-repo add-ons priced per committer — see GitHub's pricing page for current figures |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | C/C++, C#, Go, Java, Kotlin, JS, TS, Python, Ruby, Rust, Swift (no PHP, Scala)                                   |
+| Aspect     | LyraShield AI                                        | GHAS                                                                                      |
+| ---------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action (any CI)          | GitHub.com or GitHub Enterprise Server                                                    |
+| Pricing    | Open beta; pricing announced as it matures           | Free for public repos; Secret Protection $19/committer/mo; Code Security $30/committer/mo |
+| Languages  | Language-agnostic (deterministic + agentic coverage) | C/C++, C#, Go, Java, Kotlin, JS, TS, Python, Ruby, Rust, Swift (no PHP, Scala)            |
 
 ## When to use which
 

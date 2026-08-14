@@ -4,13 +4,13 @@ description: "How LyraShield AI compares to XBOW for autonomous web-app pentest.
 competitor: "XBOW"
 heading: "LyraShield AI vs XBOW"
 disclaimer: "Factual comparison. [XBOW](https://xbow.com/) by XBOW, Inc. is an autonomous offensive security platform that uses AI agents to continuously pentest applications and APIs, independently proving exploitability with working exploits before a finding reaches your team. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop that separates detection from proof and produces immutable assurance records with approval-gated fixes. Both independently verify findings before surfacing them. Neither replaces the other — they optimize for different deliverables (XBOW: continuous exploit-proof; LyraShield AI: ship-ready assurance for AI-generated code)."
-updatedDate: 2026-08-15
+updatedDate: 2026-08-07
 draft: false
 faq:
   - q: "Does LyraShield replace XBOW?"
     a: "No. XBOW is an autonomous offensive platform that proves exploitability with working exploits, decision logs, and complete case files at portfolio scale across apps and APIs. LyraShield in open beta is a focused release assurance loop for AI-built apps that separates detection from proof and adds SCA, secrets, and approval-gated fixes with immutable reports."
   - q: "Can I use XBOW and LyraShield together?"
-    a: "Yes. Teams often run XBOW for continuous autonomous pentesting across a broad estate, and add LyraShield for the per-build release gate. XBOW delivers exploit-proof case files; LyraShield delivers target, review, evidence, fix, retest, report with evidence states. XBOW offers usage-based on-demand pricing on its own site; LyraShield is live in open beta with open registration."
+    a: "Yes. Teams often run XBOW for continuous autonomous pentesting across a broad estate, and add LyraShield for the per-build release gate. XBOW delivers exploit-proof case files; LyraShield delivers target, review, evidence, fix, retest, report with evidence states. XBOW offers on-demand from $4,000; LyraShield is live in open beta with open registration."
   - q: "When should I choose XBOW over LyraShield?"
     a: "Choose XBOW when you need continuous, attacker-style validation across many apps and APIs, reproducible exploits for SOC 2, ISO 27001, PCI DSS, and NIS 2 evidence, and API-driven testing on every merge. Its strength is portfolio-scale proof. Choose LyraShield when the app is AI-built and the bottleneck is a defensible release decision with coverage receipts."
   - q: "How does reporting differ between XBOW and LyraShield?"
@@ -47,11 +47,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | XBOW                                                                                                                            |
-| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted SaaS (XBOW Console); available on AWS, Google, Oracle, Microsoft cloud marketplaces                                      |
-| Pricing            | Open beta; pricing announced as it matures        | Usage-based, scoped to your environment; no published tier table — see XBOW's site for current on-demand and enterprise figures |
-| Compliance posture | Assurance-record orientation for release sign-off | SOC 2, ISO 27001, PCI DSS, NIS 2 alignment; auditable scope and logging                                                         |
+| Aspect             | LyraShield AI                                     | XBOW                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted SaaS (XBOW Console); available on AWS, Google, Oracle, Microsoft cloud marketplaces                                                                               |
+| Pricing            | Open beta; pricing announced as it matures        | Usage-based, scoped to your environment; no published tier table. XBOW Pentest On-Demand starts at $4,000 (one-time per engagement); ongoing enterprise pricing by quote |
+| Compliance posture | Assurance-record orientation for release sign-off | SOC 2, ISO 27001, PCI DSS, NIS 2 alignment; auditable scope and logging                                                                                                  |
 
 ## When to use which
 

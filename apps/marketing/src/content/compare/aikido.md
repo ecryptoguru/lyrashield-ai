@@ -4,13 +4,13 @@ description: "How LyraShield AI compares to Aikido for developer-centric CI/CD s
 competitor: "Aikido"
 heading: "LyraShield AI vs Aikido"
 disclaimer: "Factual comparison. [Aikido Security](https://www.aikido.dev/) is a unified security platform covering code, cloud, and runtime from one interface — SAST, SCA, secrets, IaC/container scanning, CSPM, DAST, AI pentesting, and runtime protection — with auto-generated fix PRs. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. Aikido is a broad AppSec platform with a pentest layer; LyraShield AI is a focused release-assurance loop purpose-built for AI-generated code. Neither replaces the other."
-updatedDate: 2026-08-15
+updatedDate: 2026-08-07
 draft: false
 faq:
   - q: "Does LyraShield replace Aikido?"
     a: "No. Aikido is a unified code to cloud to runtime platform covering SAST, SCA, secrets, IaC, containers, CSPM, DAST, AI pentesting, and runtime protection, with AutoFix PRs and a free forever tier. LyraShield in open beta is not a broad AppSec stack; it is a focused loop for AI-built apps with approval-gated fixes and immutable assurance."
   - q: "Can I use Aikido and LyraShield together?"
-    a: "Yes. Use Aikido for broad, continuous scanning and runtime protection across your estate, and add LyraShield for the release assurance run before you ship AI-built apps. Both support GitHub integrations, so findings can coexist. Aikido publishes tiered pricing on its own site; LyraShield pricing will be announced as it matures."
+    a: "Yes. Use Aikido for broad, continuous scanning and runtime protection across your estate, and add LyraShield for the release assurance run before you ship AI-built apps. Both support GitHub integrations, so findings can coexist. Aikido offers transparent pricing from $300 per month for small teams; LyraShield pricing will be announced as it matures."
   - q: "When should I choose Aikido over LyraShield?"
     a: "Choose Aikido when you want one platform for code, cloud, and runtime, with auto-generated fix PRs, malware detection in dependencies, and published pricing including a free tier. Its 200+ AI agents for continuous pentesting are a genuine strength for coverage. Choose LyraShield when you need explicit approval gates and immutable evidence for release decisions."
   - q: "How do their fix models differ?"
@@ -49,11 +49,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | Aikido                                                                                                                  |
-| ------------------ | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS + IDE + CI integrations; broker for internal apps; local code scanning option                                      |
-| Pricing            | Open beta; pricing announced as it matures        | Free tier plus paid team plans and a separately priced pentest offering — see Aikido's pricing page for current figures |
-| Compliance posture | Assurance-record orientation for release sign-off | SOC 2 Type II + ISO 27001:2022 attested                                                                                 |
+| Aspect             | LyraShield AI                                     | Aikido                                                                                                                                                                   |
+| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS + IDE + CI integrations; broker for internal apps; local code scanning option                                                                                       |
+| Pricing            | Open beta; pricing announced as it matures        | Free (forever, no card); $300/mo small teams; $600/mo growing teams; Enterprise custom. Pentest: typical from $4,000; rightsized $50–$30,000+; continuous testing custom |
+| Compliance posture | Assurance-record orientation for release sign-off | SOC 2 Type II + ISO 27001:2022 attested                                                                                                                                  |
 
 ## When to use which
 

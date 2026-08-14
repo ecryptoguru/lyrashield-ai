@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to SonarQube for AI-built application s
 competitor: "SonarQube"
 heading: "LyraShield AI vs SonarQube"
 disclaimer: "Factual comparison. SonarQube by SonarSource provides static analysis, code quality, and security hotspot review. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. Neither replaces the other."
-updatedDate: 2026-08-15
+updatedDate: 2026-08-07
 draft: false
 faq:
   - q: "Does LyraShield replace SonarQube?"
@@ -12,7 +12,7 @@ faq:
   - q: "Can I use SonarQube and LyraShield together?"
     a: "Yes. Run SonarQube Cloud or Server for continuous quality and security hotspots with SonarLint in the IDE, and add LyraShield for the release gate that proves exploitability and records what was fixed and retested. LyraShield emits SARIF, so its results can sit alongside SonarQube's issues without replacing Quality Gates."
   - q: "When should I choose SonarQube over LyraShield?"
-    a: "Choose SonarQube when your priority is enforceable quality plus security in one platform, especially for self-hosted requirements, IaC checks, and coverage metrics. SonarQube Cloud starts free at a lines-of-code threshold, with paid tiers above that — see SonarQube's pricing page for current figures. Use LyraShield when you need approval-gated fixes and an immutable assurance record for AI-built apps."
+    a: "Choose SonarQube when your priority is enforceable quality plus security in one platform, especially for self-hosted requirements, IaC checks, and coverage metrics. SonarQube Cloud starts free for 50k lines of code, Team at $34 per month for 100k lines. Use LyraShield when you need approval-gated fixes and an immutable assurance record for AI-built apps."
   - q: "Does LyraShield have Quality Gates like SonarQube?"
     a: "Not in SonarQube's sense. SonarQube Quality Gates block merges on metrics like coverage and smells. LyraShield blocks release differently: fixes are approval-gated, PR execution stays blocked until a server-generated patch is bound to exact approval, and the loop requires a fresh deterministic retest before close. LyraShield is in open beta, so gate behavior is still maturing."
 ---
@@ -48,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | SonarQube                                                                                                                              |
-| ---------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                   | SonarQube Cloud (SaaS) or SonarQube Server (self-hosted) + SonarLint IDE                                                               |
-| Pricing    | Open beta; pricing announced as it matures           | Cloud: free tier plus paid tiers by lines of code; Server: per-instance/year by LOC — see SonarQube's pricing page for current figures |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | 40+ languages                                                                                                                          |
+| Aspect     | LyraShield AI                                        | SonarQube                                                                                            |
+| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                   | SonarQube Cloud (SaaS) or SonarQube Server (self-hosted) + SonarLint IDE                             |
+| Pricing    | Open beta; pricing announced as it matures           | Cloud: Free (50k LOC), Team $34/mo (100k LOC), Enterprise (custom); Server: per-instance/year by LOC |
+| Languages  | Language-agnostic (deterministic + agentic coverage) | 40+ languages                                                                                        |
 
 ## When to use which
 
