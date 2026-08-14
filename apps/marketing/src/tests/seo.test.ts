@@ -179,4 +179,13 @@ describe("marketing SEO metadata", () => {
     expect(toolLayout).toContain('target="_blank"')
     expect(toolLayout).toContain("opens in a new tab")
   })
+
+  it("publishes the coding-agent entry in human and machine-readable discovery", () => {
+    const llms = source("../pages/llms.txt.ts")
+    const agents = source("../pages/agents.astro")
+    expect(llms).toContain("origin}/agents")
+    expect(llms).toContain("origin}/agents.md")
+    expect(agents).toContain('new URL("/agents", origin).toString()')
+    expect(agents).not.toContain("noindex")
+  })
 })
