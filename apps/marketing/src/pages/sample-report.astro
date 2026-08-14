@@ -1,4 +1,7 @@
 ---
+const appUrl =
+  (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://app.lyrashieldai.com"
 import Base from "@layouts/Base.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -143,5 +146,47 @@ const jsonLd = [
     </section>
 
     <p class="mt-10 rounded-xl border border-border bg-bg-raised p-5 leading-7 text-text-muted" data-reveal="fade">This page is a sanitized mock for product evaluation. It contains no customer data, benchmark, production result, or claim that the full workflow is currently available.</p>
+
+    {/* This page is the proof artifact a sceptical reader is sent to, and it
+        previously ended here with no way onward — no link of any kind in the
+        page body. Give the reader the two next steps that match their intent:
+        produce a record of their own, or read how the evidence states are
+        defined. */}
+    <section
+      class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between"
+      aria-labelledby="sample-report-next-heading"
+      data-reveal
+    >
+      <div>
+        <h2 id="sample-report-next-heading" class="text-2xl font-semibold text-text">
+          Produce one of these for your own release.
+        </h2>
+        <p class="mt-2 text-text-muted">
+          Registration is open in the beta. Start with a free passive check, or create an account
+          for the full target-to-report loop.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={`${appUrl}/sign-up?source=sample_report&cta=create_account`}
+          data-cta-id="sample-report-create-account"
+          class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >Create a free account</a
+        >
+        <a
+          href="/scan"
+          data-cta-id="sample-report-lite-check"
+          class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >Run a free Lite Check</a
+        >
+      </div>
+    </section>
+
+    <p class="mt-8 text-sm leading-6 text-text-muted" data-reveal="fade">
+      How the four evidence states are defined:{" "}
+      <a href="/methodology" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">read the methodology</a>{" "}
+      or see the{" "}
+      <a href="/vibe-security-50" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">Vibe Security 50 control registry</a>.
+    </p>
   </article>
 </Base>

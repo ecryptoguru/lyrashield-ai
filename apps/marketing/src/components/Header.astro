@@ -37,8 +37,12 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
             <summary class="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
               Resources <span aria-hidden="true">⌄</span>
             </summary>
-            <div class="absolute right-0 grid w-48 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
+            <div class="absolute right-0 grid w-56 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
               <a href="/methodology" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Methodology</a>
+              <a href="/vibe-security-50" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Vibe Security 50</a>
+              <a href="/evidence-vault" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Evidence Vault</a>
+              <a href="/ai-safety" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">AI safety evaluation</a>
+              <a href="/sample-report" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Sample report</a>
               <a href="/tools" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Browser-local tools</a>
               <a href="/blog" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Guides</a>
               <a href="/docs/integrations" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Integration docs</a>
@@ -91,10 +95,17 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         </div>
         <div class="mobile-menu__section">
           <p>Explore</p>
+          {/* Deliberately fewer items than the desktop Resources dropdown below.
+              Vibe Security 50 / Evidence Vault / AI safety / Sample report are
+              one tap away via the Footer (unconstrained, scrolls with the page)
+              and the desktop dropdown. Adding them here regressed
+              tests-browser/theme.e2e.ts's "keeps the compact mobile menu inside
+              the visible viewport" check at 390x400 — a real short-viewport
+              phone case. Re-verify that test before growing this list again. */}
           <div class="mobile-menu__resources">
             <a href="/methodology" class="menu-link mobile-menu__resource">Methodology</a>
             <a href="/tools" class="menu-link mobile-menu__resource">Tools</a>
-            <a href="/blog" class="menu-link mobile-menu__resource">Resources</a>
+            <a href="/blog" class="menu-link mobile-menu__resource">Guides</a>
             <a href="/docs/integrations" class="menu-link mobile-menu__resource">Docs</a>
           </div>
         </div>

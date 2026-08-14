@@ -136,26 +136,39 @@ const jsonLd = [
   <section class="px-4 py-12 sm:px-6 lg:px-8" id="clients">
     <div class="mx-auto max-w-5xl">
       <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
-        Supported coding agents
+        Supported coding agents ({agentOnboarding.clients.length})
       </h2>
-      <ul
-        class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-        aria-label="Supported coding agents"
-        data-reveal-group
-      >
-        {
-          agentOnboarding.clients.map(([name, path]) => (
-            <li data-reveal>
-              <a
-                href={path}
-                class="flex min-h-[4.5rem] items-center rounded-xl border border-border bg-bg-raised p-4 font-semibold text-text transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                {name}
-              </a>
-            </li>
-          ))
-        }
-      </ul>
+      <p class="mt-4 max-w-2xl leading-7 text-text-muted" data-reveal>
+        <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text"
+          >npx lyrashield init</code
+        > detects which of these you have installed and configures each one. The badge says what setup
+        looks like for that client; every name links to its own guide.
+      </p>
+      {
+        agentOnboarding.clientGroups.map((group) => (
+          <div class="mt-10" data-reveal-group>
+            <h3 class="font-mono text-xs tracking-[0.12em] text-accent uppercase" data-reveal>
+              {group.label} · {group.clients.length}
+            </h3>
+            <ul
+              class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+              aria-label={`Coding agents: ${group.label}`}
+            >
+              {group.clients.map((client) => (
+                <li data-reveal>
+                  <a
+                    href={client.href}
+                    class="flex min-h-[4.5rem] flex-col justify-center gap-1 rounded-xl border border-border bg-bg-raised p-4 transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    <span class="font-semibold text-text">{client.name}</span>
+                    <span class="text-xs text-text-muted">{client.strategyLabel}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
     </div>
   </section>
 

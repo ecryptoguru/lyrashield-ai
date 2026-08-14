@@ -59,6 +59,19 @@ class EvidenceWorldElement extends HTMLElement {
     this.video.addEventListener("loadeddata", this.queueUpdate)
     this.video.addEventListener("seeked", this.handleSeeked)
     this.video.addEventListener("error", this.handleVideoError)
+
+    // Start fetching the scrubbed timeline as soon as this element upgrades,
+    // which the bootstrap in EvidenceWorld.astro now does on idle after load —
+    // in parallel with the rest of the page rather than on approach. The story
+    // is scroll-scrubbed, so a seek into an unbuffered range stalls and drops
+    // back to the poster; that was the first-pass glitch on both desktop and
+    // mobile. Buffering ahead of arrival is the fix.
+    //
+    // Note this is only the network fetch. Scroll/resize listeners still wait
+    // for the IntersectionObserver below, so an unvisited story costs no
+    // per-frame work.
+    this.assignSource()
+
     this.observer = new IntersectionObserver(this.handleIntent, { rootMargin: "50% 0px" })
     this.observer.observe(this)
   }
@@ -112,7 +125,12 @@ class EvidenceWorldElement extends HTMLElement {
     this.sourceKind = nextKind
     this.showPoster()
     this.paintPending = false
-    this.video.preload = "metadata"
+    // "auto", not "metadata": metadata alone gives duration and dimensions but
+    // no frames, so the first scrub seeks into an unbuffered range and stalls.
+    // The markup still ships preload="none" so a no-JS or reduced-motion visit
+    // fetches nothing at all — this upgrade only happens once we know motion is
+    // actually wanted.
+    this.video.preload = "auto"
     this.video.src = nextTrack.src
     this.video.load()
   }
@@ -298,8 +316,14 @@ class EvidenceWorldElement extends HTMLElement {
   private handleVideoError = () => {
     this.motionEnabled = false
     this.showPoster()
+    // The error itself is always worth knowing — warm-up means we now hear
+    // about broken media even from visitors who never scroll this far.
     this.captureError(this.manifest.chapters[this.activeIndex].id, "video")
-    this.captureView(this.activeIndex, "poster")
+    // The poster fallback only counts as a view if the visitor actually got
+    // here, so a warm-up failure on a story nobody scrolled to does not
+    // inflate view counts. The reduced-motion capture in connectedCallback is
+    // a separate, deliberate signal and stays unconditional.
+    if (this.initialized) this.captureView(this.activeIndex, "poster")
   }
 
   private handlePosterError = (event: Event) => {
@@ -309,6 +333,14 @@ class EvidenceWorldElement extends HTMLElement {
   }
 
   private captureView(index: number, mode: "poster" | "motion-v2") {
+    // Warm-up buffers and paints the first frame before the visitor has come
+    // anywhere near the story, which would otherwise report chapter 01 as
+    // viewed on every single page load. A chapter only counts once scroll
+    // tracking is live (initializeMotion), which is the same threshold that
+    // governed this before warm-up existed. The reduced-motion poster capture
+    // never reaches initializeMotion, so it stays exempt.
+    if (mode === "motion-v2" && !this.initialized) return
+
     const chapterId = this.manifest.chapters[index]?.id
     const key = `${chapterId}:${mode}`
     if (!chapterId || this.viewed.has(key)) return

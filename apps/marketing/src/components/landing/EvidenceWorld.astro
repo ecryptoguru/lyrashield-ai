@@ -82,10 +82,15 @@ const { manifest } = Astro.props
   }
 
   const el = document.getElementById("assurance-world")
+  const connection = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string }
+    }
+  ).connection
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
-  const saveData =
-    (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData ===
-    true
+  const saveData = connection?.saveData === true
+  const slowNetwork =
+    connection?.effectiveType === "2g" || connection?.effectiveType === "slow-2g"
   if (el && !reduced && !saveData) el.classList.add("is-motion-layout")
   if (el && "IntersectionObserver" in window) {
     const observer = new IntersectionObserver(
@@ -101,6 +106,33 @@ const { manifest } = Astro.props
       { rootMargin: "50% 0px" }
     )
     observer.observe(el)
+
+    // Warm the story in parallel with the rest of the page instead of waiting
+    // for the observer above. The timeline is scroll-scrubbed, so arriving at
+    // the story with an empty buffer meant the first pass stuttered while the
+    // browser range-requested each seek — visible on desktop and mobile alike.
+    // Upgrading the element early lets it start fetching (see assignSource);
+    // the observer still owns when scroll listeners attach, and whichever path
+    // fires first wins because bootstrapEvidenceWorld is idempotent.
+    //
+    // Deliberately gated: this pulls a multi-megabyte video on a visit that may
+    // never reach the story, so skip it when the visitor has asked for less
+    // (reduced motion, Save-Data) or is on a 2g-class connection, where the
+    // poster fallback is the better experience anyway. It is also scheduled
+    // after load and on idle so it never competes with the hero for bandwidth.
+    if (!reduced && !saveData && !slowNetwork) {
+      const idle = (
+        window as unknown as {
+          requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+        }
+      ).requestIdleCallback
+      const schedule = () => {
+        if (idle) idle(bootstrapEvidenceWorld, { timeout: 2500 })
+        else setTimeout(bootstrapEvidenceWorld, 900)
+      }
+      if (document.readyState === "complete") schedule()
+      else addEventListener("load", schedule, { once: true })
+    }
   } else {
     bootstrapEvidenceWorld()
   }

@@ -105,6 +105,31 @@ describe("premium assurance-world homepage", () => {
     expect(world).toContain("font-size: clamp(1.6rem, 7.4vw, 2.5rem)")
   })
 
+  it("warms the scrubbed timeline in parallel with the page, but only when wanted", () => {
+    // The story is scroll-scrubbed, so arriving with an empty buffer stutters on
+    // the first pass. The element upgrades early and fetches ahead of arrival.
+    expect(worldModule).toContain('this.video.preload = "auto"')
+    expect(worldModule).not.toContain('this.video.preload = "metadata"')
+    // Only the fetch moves early; per-frame scroll work still waits for the
+    // observer, so the module must still assign the source before observing.
+    expect(worldModule.indexOf("this.assignSource()")).toBeLessThan(
+      worldModule.indexOf("this.observer = new IntersectionObserver")
+    )
+
+    // Scheduled off the critical path so it never competes with the hero.
+    expect(world).toContain("requestIdleCallback")
+    expect(world).toContain('document.readyState === "complete"')
+    expect(world).toContain('addEventListener("load", schedule, { once: true })')
+
+    // A multi-megabyte prefetch has to stay opt-out-able.
+    expect(world).toContain("if (!reduced && !saveData && !slowNetwork)")
+    expect(world).toContain('connection?.effectiveType === "slow-2g"')
+
+    // The markup itself must stay preload="none" so a no-JS or reduced-motion
+    // visit fetches no video at all.
+    expect(world).toContain('preload="none"')
+  })
+
   it("keeps telemetry privacy-bounded and includes resilient media fallbacks", () => {
     expect(worldModule).toContain('"cinematic_chapter_view"')
     expect(worldModule).toContain("{ chapter_id: chapterId, mode }")

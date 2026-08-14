@@ -5,16 +5,24 @@ const canonical = new URL("/support", origin).toString()
 const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
 const securityEmail = (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "security@lyrashieldai.com"
 const description = "LyraShield AI setup, OAuth, MCP, CLI, and security-reporting support."
+const appUrl =
+  (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://app.lyrashieldai.com"
 ---
-<Base title="Support | LyraShield AI" description={description} canonical={canonical} noindex>
+<Base title="Support | LyraShield AI" description={description} canonical={canonical}>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
-    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Support · draft for approval</p>
+    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Support</p>
     <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Connect with confidence.</h1>
-    <p class="mt-6 text-lg leading-8 text-text-muted">This support page is a marketplace-ready draft. Founder approval and mailbox monitoring are required before publishing it as a final support commitment.</p>
+    <p class="mt-6 text-lg leading-8 text-text-muted">Setup help, contact routes, and how to report a vulnerability. LyraShield is in open beta, so response times are best-effort rather than a contractual SLA.</p>
     <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
       <h2>Setup help</h2><p>Start with the <a href="/docs/integrations">integration guides</a>. Marketplace clients use OAuth discovery and workspace consent; CLI and CI clients can use an API key stored in <code>~/.lyrashield/credentials.json</code>.</p>
       <h2>Contact</h2><p>General support: <a href={`mailto:${supportEmail}`}>{supportEmail}</a>. Include the client name, connection type, and a timestamp—never include tokens, prompts, or customer data.</p>
       <h2>Security reports</h2><p>Use the <a href="/security-reporting">security-reporting instructions</a> to send vulnerability reports to <a href={`mailto:${securityEmail}`}>{securityEmail}</a>. Use encrypted attachments only when requested and do not test systems without authorization.</p>
     </div>
+
+    <section class="mt-12 flex flex-wrap gap-3 border-t border-border pt-8">
+      <a href={`${appUrl}/sign-up?source=support&cta=create_account`} class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free account</a>
+      <a href="/docs/integrations" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Integration guides</a>
+    </section>
   </article>
 </Base>

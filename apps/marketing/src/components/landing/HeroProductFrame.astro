@@ -1,48 +1,125 @@
 ---
 /**
- * The hero product-image slot.
+ * The hero product-image collage.
  *
  * Renders on the same theme-aware canvas as PremiumHero and rises into it, so
  * it reads as the second half of the hero rather than a separate band.
  *
- * This is a REAL capture of the evidence console, redacted before it entered the
- * repo: the account block was pixelated and blurred destructively, so the
- * original pixels are gone from the file rather than hidden behind a CSS filter.
- * See `public/product/README.md` for the capture-and-scrub rule that governs
- * every product image on this site.
+ * Three REAL captures of the evidence console, redacted before they entered
+ * the repo: the account block on each was pixelated and blurred destructively,
+ * so the original pixels are gone from the file rather than hidden behind a
+ * CSS filter. See `public/product/README.md` for the capture-and-scrub rule that
+ * governs every product image on this site.
  *
- * The frame deliberately shows an INCONCLUSIVE launch verdict. That is the
- * product's whole argument stated in its own UI: a run completed, nothing could
- * be evaluated, and the verdict says so rather than rounding up to a pass. Do
- * not swap it for a greener, emptier-looking state.
+ * Layout: the dashboard view runs large on the left; two more (Issues, Coding
+ * Agents) stack on the right, in that order. Trust Runs was cut from the
+ * collage on purpose — two taller frames read better than three cramped ones.
+ * On narrow viewports all three stack full-width in the same order — small
+ * side columns would be illegible at 390px, so this is a genuine reflow, not
+ * just a shrink.
+ *
+ * The two small frames use dedicated `*-thumb.webp` files with the app
+ * sidebar cropped out (see public/product/README.md) — at thumbnail width the
+ * sidebar was mostly wasted space, and cropping leaves more of the room for
+ * the content that actually makes the point. This is a DIFFERENT crop from
+ * the full-width captures the same pages' content uses elsewhere (methodology,
+ * docs/integrations): those keep the sidebar, this collage does not. Don't
+ * point this component at the non-thumb files, and don't overwrite the
+ * shared non-thumb files with a sidebar-cropped version — other pages depend
+ * on their current dimensions.
+ *
+ * console-trust-runs-thumb.webp is intentionally NOT built — nothing
+ * references it. If Trust Runs comes back into this collage, regenerate it
+ * from console-trust-runs.webp per the crop recipe in the README rather than
+ * assuming a stale copy still matches the current sidebar boundary.
+ *
+ * The large frame deliberately shows an INCONCLUSIVE launch verdict. That is
+ * the product's whole argument stated in its own UI: a run completed, nothing
+ * could be evaluated, and the verdict says so rather than rounding up to a
+ * pass. Do not swap it for a greener, emptier-looking state.
  */
 
-const heroProductImage = "/product/console-home.webp"
-const heroProductAlt =
-  "The LyraShield evidence console home view. A launch verdict reads \"Inconclusive — nothing was checked\", above a four-step readiness track of target ready, evidence captured, blockers cleared and assurance shared. The security score shows as unavailable, and 46 open findings are broken down as 3 critical, 6 high, 37 medium and 0 low."
+interface Shot {
+  src: string
+  alt: string
+  route: string
+  width: number
+  height: number
+}
+
+const primary: Shot = {
+  src: "/product/console-home.webp",
+  alt: 'The LyraShield evidence console home view. A launch verdict reads "Inconclusive — nothing was checked", above a four-step readiness track of target ready, evidence captured, blockers cleared and assurance shared. The security score shows as unavailable, and 46 open findings are broken down as 3 critical, 6 high, 37 medium and 0 low.',
+  route: "app.lyrashieldai.com/dashboard",
+  width: 1600,
+  height: 1009,
+}
+
+const secondary: Shot[] = [
+  {
+    src: "/product/console-issues-thumb.webp",
+    alt: "The Issues view in the LyraShield console. Findings are listed with a severity, an evidence state, an open status, and a CWE and CVSS reference.",
+    route: "app.lyrashieldai.com/issues",
+    width: 1133,
+    height: 883,
+  },
+  {
+    src: "/product/console-coding-agents-thumb.webp",
+    alt: "The Coding Agents page in the LyraShield console. Cards for Devin, VS Code, Cline, OpenCode, Kilo Code, Zed and more each show a copyable install command.",
+    route: "app.lyrashieldai.com/coding-agents",
+    width: 1133,
+    height: 883,
+  },
+]
 ---
 
 <section class="hero-frame" aria-labelledby="hero-frame-caption">
   <figure class="hero-frame__figure">
-    <div class="hero-frame__window">
-      <div class="hero-frame__chrome" aria-hidden="true">
-        <span></span><span></span><span></span>
-        <p>app.lyrashieldai.com/dashboard</p>
+    <div class="hero-frame__collage">
+      <div class="hero-frame__window hero-frame__window--primary">
+        <div class="hero-frame__chrome" aria-hidden="true">
+          <span></span><span></span><span></span>
+          <p>{primary.route}</p>
+        </div>
+        <img
+          class="hero-frame__img"
+          src={primary.src}
+          alt={primary.alt}
+          width={primary.width}
+          height={primary.height}
+          loading="eager"
+          decoding="async"
+        />
       </div>
-      <img
-        class="hero-frame__img"
-        src={heroProductImage}
-        alt={heroProductAlt}
-        width="1600"
-        height="1009"
-        loading="lazy"
-        decoding="async"
-      />
+
+      <div class="hero-frame__stack">
+        {
+          secondary.map((shot) => (
+            <div class="hero-frame__window hero-frame__window--thumb">
+              <div class="hero-frame__chrome hero-frame__chrome--thumb" aria-hidden="true">
+                <span />
+                <p>{shot.route}</p>
+              </div>
+              <img
+                class="hero-frame__img"
+                src={shot.src}
+                alt={shot.alt}
+                width={shot.width}
+                height={shot.height}
+                loading="lazy"
+                decoding="async"
+              />
+            </div>
+          ))
+        }
+      </div>
     </div>
+
     <figcaption id="hero-frame-caption" class="hero-frame__caption">
-      <b>The evidence console.</b> This verdict reads <i>inconclusive — nothing was checked</i>: the
-      run completed, but no scanner could evaluate the target, so there is no evidence to judge. It
-      is reported as inconclusive, not as a clean result. Account details are blurred.
+      <b>The evidence console, three ways.</b> Dashboard: this run's verdict reads
+      <i>inconclusive — nothing was checked</i>, reported honestly instead of rounded up to a
+      pass. Issues: findings carried with their evidence state, not just a severity. Coding
+      Agents: setup for the client you already use. Account details are blurred throughout.
     </figcaption>
   </figure>
 </section>
@@ -60,13 +137,35 @@ const heroProductAlt =
     margin: 0;
   }
 
+  .hero-frame__collage {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: clamp(0.65rem, 1.4vw, 1.1rem);
+    align-items: stretch;
+  }
+
+  .hero-frame__stack {
+    display: grid;
+    grid-template-rows: repeat(2, 1fr);
+    gap: clamp(0.65rem, 1.4vw, 1.1rem);
+  }
+
   .hero-frame__window {
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid rgba(84, 214, 223, 0.22);
     border-radius: 0.6rem;
     background: #0b1723;
     box-shadow:
       0 2rem 5rem rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(8, 17, 28, 0.6);
+  }
+
+  .hero-frame__window--thumb {
+    border-radius: 0.5rem;
+    box-shadow:
+      0 1rem 2.5rem rgba(0, 0, 0, 0.45),
       0 0 0 1px rgba(8, 17, 28, 0.6);
   }
 
@@ -79,11 +178,22 @@ const heroProductAlt =
     background: #0e1a28;
   }
 
+  .hero-frame__chrome--thumb {
+    gap: 0.3rem;
+    padding: 0.4rem 0.6rem;
+  }
+
   .hero-frame__chrome span {
     width: 0.55rem;
     height: 0.55rem;
     border-radius: 50%;
     background: #2b4258;
+    flex: none;
+  }
+
+  .hero-frame__chrome--thumb span {
+    width: 0.4rem;
+    height: 0.4rem;
   }
 
   .hero-frame__chrome p {
@@ -95,10 +205,30 @@ const heroProductAlt =
     white-space: nowrap;
   }
 
+  .hero-frame__chrome--thumb p {
+    margin-left: 0.4rem;
+    font-size: 0.62rem;
+  }
+
   .hero-frame__img {
     display: block;
     width: 100%;
     height: auto;
+  }
+
+  /* The two thumbnails share equal-height rows in .hero-frame__stack; crop
+     each capture to fill its row instead of letterboxing at an odd height. */
+  .hero-frame__window--thumb {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .hero-frame__window--thumb .hero-frame__img {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
   }
 
   .hero-frame__caption {
@@ -114,13 +244,28 @@ const heroProductAlt =
     font-weight: 700;
   }
 
-  /* Light theme: the page goes light, but the WINDOW stays dark. What it frames
-     is a capture of a dark application, so whitening the chrome around it — or
-     fading the image to blend in, which is what this block used to do while the
-     contents were a placeholder SVG — makes a real screenshot look broken. The
-     dark card on a light page is the intended "app window" treatment; only the
-     shadow softens to suit the lighter surface, and the caption (which sits on
-     the page, not the card) takes page colours. */
+  @media (max-width: 767px) {
+    .hero-frame__collage {
+      grid-template-columns: 1fr;
+    }
+
+    .hero-frame__stack {
+      grid-template-rows: none;
+    }
+
+    .hero-frame__window--thumb .hero-frame__img {
+      height: auto;
+      object-fit: initial;
+    }
+  }
+
+  /* Light theme: the page goes light, but the WINDOWS stay dark. What they
+     frame are captures of a dark application, so whitening the chrome around
+     them — or fading them to blend in, which is what this block used to do
+     while the contents were a placeholder SVG — makes a real screenshot look
+     broken. Dark cards on a light page are the intended "app window"
+     treatment; only the shadow softens to suit the lighter surface, and the
+     caption (which sits on the page, not the cards) takes page colours. */
   :global(:root[data-theme="light"]) .hero-frame {
     --frame-cyan: #087f78;
     background: var(--bg);
@@ -130,6 +275,12 @@ const heroProductAlt =
     border-color: rgba(16, 34, 53, 0.14);
     box-shadow:
       0 2rem 5rem rgba(39, 75, 94, 0.22),
+      0 0 0 1px rgba(217, 228, 236, 0.9);
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__window--thumb {
+    box-shadow:
+      0 1rem 2.5rem rgba(39, 75, 94, 0.18),
       0 0 0 1px rgba(217, 228, 236, 0.9);
   }
 

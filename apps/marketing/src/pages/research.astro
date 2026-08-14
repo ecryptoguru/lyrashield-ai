@@ -1,4 +1,7 @@
 ---
+const appUrl =
+  (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://app.lyrashieldai.com"
 import Base from "@layouts/Base.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -126,10 +129,13 @@ const jsonLd: unknown[] = [
 
     <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>
       <div>
-        <h2 class="text-2xl font-semibold text-text">Get notified when research is published.</h2>
-        <p class="mt-2 text-text-muted">Join the waitlist for early access to scans and research updates.</p>
+        <h2 class="text-2xl font-semibold text-text">Put this research to work on your own app.</h2>
+        <p class="mt-2 text-text-muted">Registration is open in the beta. New research is published to the guides feed.</p>
       </div>
-      <a href="/#waitlist" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Join the waitlist</a>
+      <div class="flex flex-wrap gap-3">
+        <a href={`${appUrl}/sign-up?source=research&cta=create_account`} class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free account</a>
+        <a href="/blog" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Read the guides</a>
+      </div>
     </section>
   </section>
 </Base>

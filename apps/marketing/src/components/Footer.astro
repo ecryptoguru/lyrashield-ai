@@ -1,30 +1,139 @@
 ---
+/**
+ * Site footer — also the site map.
+ *
+ * This is deliberately a full multi-column footer rather than the single row it
+ * used to be. Several real pages were reachable only by typing the URL:
+ * /ai-safety, /evidence-vault, /vibe-security-50, /sample-report, /compare,
+ * /research, /about and /privacy all rendered fine but were linked from
+ * nowhere. That is a discoverability bug, not a content gap — every link below
+ * points at a page that already exists.
+ *
+ * If you add a page under src/pages, add it here too, or it is invisible.
+ */
 const xUrl = __MARKETING_X_URL__
+
+// On the homepage the free scan is an in-page section; elsewhere it is a route.
+const freeScanHref = Astro.url.pathname === "/" ? "#free-scan" : "/scan"
+
+const columns = [
+  {
+    id: "footer-product",
+    title: "Product",
+    links: [
+      { label: "Free Lite Check", href: freeScanHref },
+      { label: "Browser-local tools", href: "/tools" },
+      { label: "For coding agents", href: "/agents" },
+      { label: "Sample report", href: "/sample-report" },
+      { label: "How it works", href: "/#how-it-works" },
+    ],
+  },
+  {
+    id: "footer-evidence",
+    title: "Evidence & trust",
+    links: [
+      { label: "Methodology", href: "/methodology" },
+      { label: "Vibe Security 50", href: "/vibe-security-50" },
+      { label: "Operational Evidence Vault", href: "/evidence-vault" },
+      { label: "AI safety evaluation", href: "/ai-safety" },
+      { label: "Research", href: "/research" },
+    ],
+  },
+  {
+    id: "footer-developers",
+    title: "Developers",
+    links: [
+      { label: "Integration docs", href: "/docs/integrations" },
+      { label: "Agent Plugin guide", href: "/docs/integrations/agent-plugins" },
+      { label: "GitHub Action", href: "/docs/integrations/github-action" },
+      { label: "REST API", href: "/docs/api" },
+      { label: "Approvals", href: "/docs/approvals" },
+    ],
+  },
+  {
+    id: "footer-company",
+    title: "Company",
+    links: [
+      { label: "About", href: "/about" },
+      { label: "Compare", href: "/compare" },
+      { label: "Guides", href: "/blog" },
+      { label: "Support", href: "/support" },
+      { label: "Report a vulnerability", href: "/security-reporting" },
+    ],
+  },
+] as const
 ---
 
-<footer class="border-t border-border bg-bg py-8 text-text-muted">
-  <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6 lg:px-8">
-    <p class="max-w-md text-center text-sm sm:text-left">LyraShield AI · Release assurance for AI-built software. In active development.</p>
-    <nav aria-label="Footer" class="flex flex-wrap items-center justify-center gap-x-6 gap-y-1">
-      <a href="/methodology" class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-        Methodology
-      </a>
-      <a href="/blog" class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-        Resources
-      </a>
-      <a href="/tools" class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-        Tools
-      </a>
-      <a href={Astro.url.pathname === "/" ? "#free-scan" : "/scan"} class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
-      <a href="/terms" class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Terms</a>
-      <a href="/rss.xml" class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-        RSS
-      </a>
-      {xUrl && (
-        <a href={xUrl} rel="me noreferrer noopener" target="_blank" class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-          X
-        </a>
-      )}
-    </nav>
+<footer class="border-t border-border bg-bg pt-12 pb-8 text-text-muted">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+    <div class="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_repeat(4,1fr)]">
+      <div class="max-w-xs">
+        <p class="text-sm font-semibold text-text">LyraShield AI</p>
+        <p class="mt-3 text-sm leading-6">
+          Release assurance for AI-built software. One reviewable record of what you checked, what
+          you fixed, and what a fresh retest confirmed.
+        </p>
+        <p class="mt-3 font-mono text-xs tracking-wide text-accent uppercase">Open beta</p>
+      </div>
+
+      {
+        columns.map((column) => (
+          <nav aria-labelledby={column.id}>
+            <p id={column.id} class="text-sm font-semibold text-text">
+              {column.title}
+            </p>
+            <ul class="mt-3 space-y-0.5">
+              {column.links.map((link) => (
+                <li>
+                  <a
+                    href={link.href}
+                    class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))
+      }
+    </div>
+
+    <div
+      class="mt-10 flex flex-col items-center justify-between gap-4 border-t border-border pt-6 sm:flex-row"
+    >
+      <p class="text-center text-xs sm:text-left">
+        Evidence is limited to the authorized scope and the checks that ran. No security guarantee.
+      </p>
+      <nav aria-label="Legal and social" class="flex flex-wrap items-center justify-center gap-x-6">
+        <a
+          href="/privacy"
+          class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >Privacy</a
+        >
+        <a
+          href="/terms"
+          class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >Terms</a
+        >
+        <a
+          href="/rss.xml"
+          class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >RSS</a
+        >
+        {
+          xUrl && (
+            <a
+              href={xUrl}
+              rel="me noreferrer noopener"
+              target="_blank"
+              class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              X
+            </a>
+          )
+        }
+      </nav>
+    </div>
   </div>
 </footer>
