@@ -1,5 +1,5 @@
 import { createHash } from "crypto"
-import { getScanWithEvents, cancelScan } from "@lyrashield/db"
+import { getScanWithEvents, cancelScan, removeScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -96,5 +96,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     logger.error("Failed to cancel scan", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to cancel scan", 500)
+  }
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const parsedWorkspace = WorkspaceSchema.safeParse(
+    new URL(request.url).searchParams.get("workspaceId")
+  )
+  if (!parsedWorkspace.success) {
+    return apiError("MISSING_PARAM", "workspaceId is required", 400)
+  }
+  const workspaceId = parsedWorkspace.data
+
+  try {
+    await requirePermission(workspaceId, PERMISSIONS.scan.cancel)
+    const { id } = await params
+    await removeScan(id, workspaceId)
+    revalidateDashboardAggregates()
+    return apiSuccess({ id, removed: true })
+  } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
+    if (error instanceof Error && error.message.includes("not found")) {
+      return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
+    }
+    if (error instanceof Error && error.message.includes("active scan")) {
+      return apiError("SCAN_ACTIVE", "Cancel an active scan before removing it.", 409)
+    }
+    logger.error("Failed to remove scan", { error: String(error) })
+    return apiError("INTERNAL_ERROR", "Failed to remove scan", 500)
   }
 }

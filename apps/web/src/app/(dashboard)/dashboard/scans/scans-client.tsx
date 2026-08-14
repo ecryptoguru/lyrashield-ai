@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown, Check, Clock } from "lucide-react"
+import {
+  Radar,
+  Play,
+  X,
+  RefreshCw,
+  ChevronRight,
+  ChevronDown,
+  Check,
+  Clock,
+  Trash2,
+} from "lucide-react"
 import {
   Button,
   buttonVariants,
@@ -17,7 +27,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
-import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
+import { apiDelete, apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { getReviewSetupGuidance, mergePolledScans } from "./scans-client.utils"
@@ -137,6 +147,7 @@ export function ScansClient({
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
 
   async function handleCreateScan() {
     if (!selectedTarget) {
@@ -188,6 +199,19 @@ export function ScansClient({
       setError(err instanceof Error ? err.message : "Failed to cancel scan")
     } finally {
       setCancelling(null)
+    }
+  }
+
+  async function handleRemoveScan(scanId: string) {
+    setRemoving(scanId)
+    setError(null)
+    try {
+      await apiDelete(`/api/scans/${scanId}?workspaceId=${encodeURIComponent(workspaceId)}`)
+      setScans((prev) => prev.filter((scan) => scan.id !== scanId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove scan")
+    } finally {
+      setRemoving(null)
     }
   }
 
@@ -700,6 +724,20 @@ export function ScansClient({
                           message="Stop this scan?"
                           aria-label="Cancel this scan"
                           onConfirm={() => handleCancelScan(scan.id)}
+                        />
+                      ))}
+                    {!isActiveScan(scan.status) &&
+                      (removing === scan.id ? (
+                        <Button variant="ghost" size="sm" disabled aria-label="Removing scan">
+                          <Spinner className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <InlineConfirm
+                          triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+                          aria-label="Remove scan"
+                          message="Remove this run from the workspace?"
+                          confirmLabel="Remove"
+                          onConfirm={() => handleRemoveScan(scan.id)}
                         />
                       ))}
                     <Link

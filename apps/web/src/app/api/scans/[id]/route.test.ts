@@ -12,6 +12,7 @@ vi.mock("next/cache", () => ({
 vi.mock("@lyrashield/db", () => ({
   getScanWithEvents: vi.fn(),
   cancelScan: vi.fn(),
+  removeScan: vi.fn(),
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
@@ -26,8 +27,8 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { error: vi.fn() },
 }))
 
-import { GET, POST } from "./route"
-import { cancelScan, getScanWithEvents } from "@lyrashield/db"
+import { DELETE, GET, POST } from "./route"
+import { cancelScan, getScanWithEvents, removeScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
@@ -77,5 +78,18 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:cancel")
     expect(cancelScan).toHaveBeenCalledWith("scan-1", "ws-1")
+  })
+
+  it("removes a terminal scan from the authorized workspace", async () => {
+    vi.mocked(removeScan).mockResolvedValue({ id: "scan-1" } as never)
+
+    const response = await DELETE(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1", { method: "DELETE" }),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:cancel")
+    expect(removeScan).toHaveBeenCalledWith("scan-1", "ws-1")
   })
 })
