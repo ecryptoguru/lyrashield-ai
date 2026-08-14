@@ -8,13 +8,36 @@ const pageUrl = canonical
 const title = "LyraShield AI for Coding Agents"
 const description = agentOnboarding.description
 
-const howToSteps = agentOnboarding.workflow.map((name, index) => ({
-  "@type": "HowToStep" as const,
-  position: index + 1,
-  name,
-  text: `Step ${index + 1}: ${name}.`,
-  url: `${pageUrl}#step-${index + 1}`,
-}))
+const howToSteps = [
+  {
+    "@type": "HowToStep" as const,
+    position: 1,
+    name: "Sign in with OAuth",
+    text: `Run ${agentOnboarding.commands[0]} to select a workspace and save the local credential.`,
+    url: `${pageUrl}#setup`,
+  },
+  {
+    "@type": "HowToStep" as const,
+    position: 2,
+    name: "Install the Agent Plugin",
+    text: `Run ${agentOnboarding.commands[1]} to detect and configure your coding agent.`,
+    url: `${pageUrl}#setup`,
+  },
+  {
+    "@type": "HowToStep" as const,
+    position: 3,
+    name: "Choose your supported coding agent",
+    text: "Use the matching integration guide for your coding agent.",
+    url: `${pageUrl}#clients`,
+  },
+  {
+    "@type": "HowToStep" as const,
+    position: 4,
+    name: "Use review tools with approval",
+    text: "Read-only tools are available after authentication; mutations require write scope and explicit human approval.",
+    url: `${pageUrl}#safety`,
+  },
+]
 
 const jsonLd = [
   {
