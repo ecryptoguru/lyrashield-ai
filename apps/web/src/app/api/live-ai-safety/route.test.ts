@@ -102,6 +102,7 @@ describe("live AI safety route", () => {
     )
     const response = await POST(jsonRequest("POST", plan))
     expect(response.status).toBe(409)
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store")
     expect((await response.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
   })
 })

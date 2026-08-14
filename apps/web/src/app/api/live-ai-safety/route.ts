@@ -36,12 +36,18 @@ function privateResponse(data: unknown, status = 200) {
   return response
 }
 
+function privateError(code: string, message: string, status: number) {
+  const response = apiError(code, message, status)
+  response.headers.set("Cache-Control", "private, no-store")
+  return response
+}
+
 export async function GET(request: Request) {
   try {
     const parsed = WorkspaceSchema.safeParse({
       workspaceId: new URL(request.url).searchParams.get("workspaceId"),
     })
-    if (!parsed.success) return apiError("MISSING_PARAM", "workspaceId is required", 400)
+    if (!parsed.success) return privateError("MISSING_PARAM", "workspaceId is required", 400)
     await requirePermission(parsed.data.workspaceId, PERMISSIONS.agent.view)
     const [settings, plans] = await Promise.all([
       prisma.liveAiSafetySettings.findUnique({
@@ -71,7 +77,7 @@ export async function GET(request: Request) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     logger.error("Failed to load live AI safety state", { error: String(error) })
-    return apiError("INTERNAL_ERROR", "Failed to load live safety settings", 500)
+    return privateError("INTERNAL_ERROR", "Failed to load live safety settings", 500)
   }
 }
 
@@ -79,7 +85,7 @@ export async function PUT(request: Request) {
   try {
     const parsed = SettingsSchema.safeParse(await request.json().catch(() => ({})))
     if (!parsed.success)
-      return apiError("INVALID_PARAM", "A valid incident contact is required", 400)
+      return privateError("INVALID_PARAM", "A valid incident contact is required", 400)
     const { session } = await requirePermission(
       parsed.data.workspaceId,
       PERMISSIONS.aiAssurance.manage
@@ -91,16 +97,16 @@ export async function PUT(request: Request) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     if (error instanceof LiveAiSafetyError)
-      return apiError(error.code, "Invalid safety settings", 400)
+      return privateError(error.code, "Invalid safety settings", 400)
     logger.error("Failed to update live AI safety settings", { error: String(error) })
-    return apiError("INTERNAL_ERROR", "Failed to update live safety settings", 500)
+    return privateError("INTERNAL_ERROR", "Failed to update live safety settings", 500)
   }
 }
 
 export async function POST(request: Request) {
   try {
     const parsed = PlanRequestSchema.safeParse(await request.json().catch(() => ({})))
-    if (!parsed.success) return apiError("INVALID_PARAM", "Invalid live safety plan", 400)
+    if (!parsed.success) return privateError("INVALID_PARAM", "Invalid live safety plan", 400)
     const { session } = await requirePermission(parsed.data.workspaceId, PERMISSIONS.agent.act)
     const plan = await createLiveAiSafetyPlan({
       ...parsed.data,
@@ -111,9 +117,9 @@ export async function POST(request: Request) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     if (error instanceof LiveAiSafetyError) {
-      return apiError(error.code, "This target is not ready for a safe live test", 409)
+      return privateError(error.code, "This target is not ready for a safe live test", 409)
     }
     logger.error("Failed to create live AI safety plan", { error: String(error) })
-    return apiError("INTERNAL_ERROR", "Failed to create live safety plan", 500)
+    return privateError("INTERNAL_ERROR", "Failed to create live safety plan", 500)
   }
 }
