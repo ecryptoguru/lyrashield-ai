@@ -3,12 +3,14 @@
 These are real captures of the LyraShield evidence console. They are **redacted at
 the file level** before they enter the repo.
 
-| File | Used by | Route captured |
-| --- | --- | --- |
-| `console-home.webp` | `components/landing/HeroProductFrame.astro` | `/dashboard` |
-| `console-trust-runs.webp` | `pages/methodology.astro` | `/trust-runs` |
-| `console-issues.webp` | `pages/methodology.astro` | `/issues` |
-| `console-coding-agents.webp` | `pages/docs/integrations/index.astro` | `/coding-agents` |
+- `console-home.webp` — captured at `/dashboard`, used by
+  `components/landing/HeroProductFrame.astro`.
+- `console-trust-runs.webp` — captured at `/trust-runs`, used by
+  `pages/methodology.astro` under "What every new scan record preserves".
+- `console-issues.webp` — captured at `/issues`, used by `pages/methodology.astro`
+  under "Evidence states are not interchangeable".
+- `console-coding-agents.webp` — captured at `/coding-agents`, used by
+  `pages/docs/integrations/index.astro` under "Fastest path: the CLI".
 
 The hero uses its own frame component; everything else goes through
 `components/ProductShot.astro`, which supplies the browser chrome and caption.
