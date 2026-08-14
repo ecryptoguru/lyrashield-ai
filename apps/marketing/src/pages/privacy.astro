@@ -4,18 +4,47 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/privacy", origin).toString()
 const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
 const description = "LyraShield AI privacy practices for the hosted dashboard, OAuth connections, MCP, CLI, and public tools."
+const reviewed = "2026-08-15"
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "LyraShield AI privacy practices",
+    description,
+    url: canonical,
+    dateModified: reviewed,
+    isPartOf: { "@id": `${origin}/#website` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Privacy", item: canonical },
+    ],
+  },
+]
 ---
-<Base title="Privacy | LyraShield AI" description={description} canonical={canonical} noindex>
+<Base title="Privacy | LyraShield AI" description={description} canonical={canonical} jsonLd={jsonLd}>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
-    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Privacy · draft for approval</p>
+    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Privacy</p>
     <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Privacy at LyraShield AI</h1>
-    <p class="mt-6 text-lg leading-8 text-text-muted">This draft describes the current data flows and remains subject to founder and counsel approval before marketplace submission.</p>
+    <p class="mt-6 text-lg leading-8 text-text-muted">This describes what LyraShield AI processes across the hosted dashboard, OAuth connections, the MCP server, the CLI, and the public tools, and the choices you have over it.</p>
+    <p class="mt-4 text-sm text-text-muted">Last reviewed: <time datetime={reviewed}>August 15, 2026</time></p>
     <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
       <h2>Data we process</h2><p>The dashboard processes account, workspace membership, integration, scan, finding, evidence, approval, and audit records needed to provide release assurance. OAuth stores client, consent, refresh-token, and access-token records; tokens are not placed in prompts or configuration snippets.</p>
       <h2>Agent connections</h2><p>Hosted MCP requests carry a short-lived OAuth bearer or an API key. Each OAuth connection is bound to one workspace. We record privacy-safe connection and error events without token values, prompts, targets, findings, or report contents.</p>
+      <h2>Cookies</h2><p>The marketing site sets one first-party cookie to remember your light/dark theme choice; it carries no identifier and is not used for tracking. The dashboard sets the session cookie needed to keep you signed in. We do not use third-party advertising cookies.</p>
+      <h2>Analytics</h2><p>We use privacy-bounded product analytics (PostHog) on the marketing site and the dashboard to understand feature usage and improve the product. Autocapture and session recording are disabled; page URLs are stripped of query strings and fragments before being recorded; and analytics honors your browser's Do Not Track setting and Global Privacy Control signal by not collecting from you at all when either is set.</p>
+      <h2>Bot verification</h2><p>The free public Lite Check uses Cloudflare Turnstile to distinguish real visitors from automated abuse before running a scan. Turnstile is loaded from Cloudflare and operates under Cloudflare's own privacy terms; we do not receive raw biometric or device-fingerprint data from it, only a pass/fail verification result.</p>
+      <h2>Who else processes data on our behalf</h2><p>We use third-party service providers to run LyraShield: cloud hosting and content delivery, the OAuth identity providers you choose to connect, the analytics and bot-verification providers named above, and email delivery for account and support messages. Each is used only to provide the service, under its own applicable terms, and none is authorized to use your data for its own purposes.</p>
       <h2>Retention and sharing</h2><p>Customer records are retained according to the account and service configuration. Public scorecards are explicitly privacy-bounded. We do not sell customer data.</p>
-      <h2>Your choices</h2><p>You can disconnect OAuth clients, revoke tokens, delete API keys, and request account or workspace deletion through the dashboard or <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.</p>
+      <h2>International users</h2><p>LyraShield is available globally and the service providers above may process data in countries other than your own. If you are in the European Economic Area, the United Kingdom, or another jurisdiction with its own transfer requirements, we take reasonable steps to ensure any such transfer is protected consistent with applicable law.</p>
+      <h2>Children's privacy</h2><p>LyraShield is a developer tool intended for professional and business use. It is not directed at children, and we do not knowingly collect personal information from anyone under 16.</p>
+      <h2>Your choices</h2><p>You can disconnect OAuth clients, revoke tokens, delete API keys, and request account or workspace deletion through the dashboard or <a href={`mailto:${supportEmail}`}>{supportEmail}</a>. Setting Do Not Track or Global Privacy Control in your browser opts you out of analytics automatically, with no need to contact us.</p>
       <h2>Security reports</h2><p>Report suspected vulnerabilities through the <a href="/security-reporting">security-reporting channel</a>. Do not include credentials or customer data.</p>
+      <h2>Changes to this policy</h2><p>We will update the "Last reviewed" date above when this policy changes and, for material changes, make a reasonable effort to notify account holders directly.</p>
+      <h2>Contact</h2><p>Questions about this policy: <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.</p>
     </div>
   </article>
 </Base>
