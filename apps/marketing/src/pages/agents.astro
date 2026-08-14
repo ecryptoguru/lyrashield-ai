@@ -1,0 +1,175 @@
+---
+import Base from "@layouts/Base.astro"
+import { agentOnboarding } from "../lib/agent-onboarding"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/agents", origin).toString()
+const pageUrl = canonical
+const title = "LyraShield AI for Coding Agents"
+const description = agentOnboarding.description
+
+const howToSteps = agentOnboarding.workflow.map((name, index) => ({
+  "@type": "HowToStep" as const,
+  position: index + 1,
+  name,
+  text: `Step ${index + 1}: ${name}.`,
+  url: `${pageUrl}#step-${index + 1}`,
+}))
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: pageUrl,
+    dateModified: "2026-08-14",
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield for your coding agent",
+    description:
+      "Start with OAuth, then run the Agent Plugin installer. Read-only tools are available after authentication; mutations need a write scope and human out-of-band approval.",
+    step: howToSteps,
+    totalTime: "PT2M",
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="px-4 py-16 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-5xl">
+      <p class="font-mono text-sm uppercase tracking-[0.14em] text-accent" data-reveal>
+        For coding agents
+      </p>
+      <h1
+        class="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-text sm:text-5xl lg:text-6xl"
+        data-reveal
+      >
+        Release assurance your coding agent can act on.
+      </h1>
+      <p class="mt-5 max-w-2xl text-lg leading-8 text-text-muted" data-reveal>
+        {description}
+      </p>
+      <a
+        href="/docs/integrations/agent-plugins"
+        data-cta-id="agents-start-setup"
+        class="lift mt-7 inline-flex min-h-12 items-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        data-reveal
+      >
+        Set up LyraShield for your agent
+      </a>
+    </div>
+  </section>
+
+  <section class="px-4 py-12 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-5xl">
+      <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
+        Six-stage release loop
+      </h2>
+      <ol
+        class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        aria-label="Release assurance workflow"
+        data-reveal-group
+      >
+        {
+          agentOnboarding.workflow.map((name, index) => (
+            <li class="rounded-xl border border-border bg-bg-raised p-5" data-reveal>
+              <span class="font-mono text-xs text-accent">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <p class="mt-1 font-semibold text-text">{name}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <section class="px-4 py-12 sm:px-6 lg:px-8" id="setup">
+    <div class="mx-auto max-w-5xl">
+      <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
+        Two-command setup
+      </h2>
+      <div
+        class="mt-6 overflow-hidden rounded-xl border border-border bg-bg-raised"
+        data-reveal
+        aria-label="Setup commands"
+      >
+        <pre class="p-5 font-mono text-sm leading-relaxed text-text"><code
+          >{agentOnboarding.commands.join("\n")}</code
+        ></pre>
+      </div>
+      <p class="mt-4 max-w-2xl text-sm text-text-muted" data-reveal>
+        Log in with OAuth first, then run <code class="font-mono text-accent">npx lyrashield init</code> to
+        detect and configure your agent.
+      </p>
+    </div>
+  </section>
+
+  <section class="px-4 py-12 sm:px-6 lg:px-8" id="clients">
+    <div class="mx-auto max-w-5xl">
+      <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
+        Supported coding agents
+      </h2>
+      <ul
+        class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        aria-label="Supported coding agents"
+        data-reveal-group
+      >
+        {
+          agentOnboarding.clients.map(([name, path]) => (
+            <li data-reveal>
+              <a
+                href={path}
+                class="flex min-h-[4.5rem] items-center rounded-xl border border-border bg-bg-raised p-4 font-semibold text-text transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {name}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="px-4 py-12 sm:px-6 lg:px-8" id="safety">
+    <div class="mx-auto max-w-5xl rounded-2xl border border-border bg-bg-raised p-6 sm:p-10" data-reveal>
+      <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
+        What an agent can and cannot do
+      </h2>
+      <ul class="mt-6 space-y-3" data-reveal-group>
+        {
+          agentOnboarding.safety.map((item) => (
+            <li class="flex gap-3 text-text" data-reveal>
+              <span class="text-accent" aria-hidden="true">
+                —
+              </span>
+              <span>{item}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="px-4 py-12 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-5xl" data-reveal>
+      <p class="text-text-muted">
+        Read the{" "}
+        <a href="/docs/integrations/agent-plugins" class="font-semibold text-accent underline underline-offset-4">
+          Agent Plugin guide
+        </a>{" "}
+        or the{" "}
+        <a href="/docs/integrations/remote-mcp" class="font-semibold text-accent underline underline-offset-4">
+          Remote MCP docs
+        </a>{" "}
+        for the full setup and safety model.
+      </p>
+    </div>
+  </section>
+</Base>
