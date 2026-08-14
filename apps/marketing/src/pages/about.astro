@@ -1,4 +1,12 @@
 ---
+// Contact routing: the abuse mailbox is the one actually configured in
+// wrangler.jsonc (PUBLIC_ABUSE_EMAIL). Security vulnerabilities are routed
+// through /security-reporting rather than a raw mailto so the disclosure
+// policy and the monitored address stay in one place.
+const abuseEmail = (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || "abuse@lyrashieldai.com"
+const appUrl =
+  (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://app.lyrashieldai.com"
 import Base from "@layouts/Base.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -219,9 +227,14 @@ const jsonLd: unknown[] = [
     <section aria-labelledby="contact-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
       <h2 id="contact-heading" class="text-2xl font-semibold text-text" data-reveal>Contact</h2>
       <p class="mt-5 leading-7 text-text-muted" data-reveal>
-        For security reports, partnership inquiries, or product questions, contact us at{" "}
-        <a href="mailto:abuse@lyrashieldai.com" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">abuse@lyrashieldai.com</a>.
-        For the latest product updates, join the <a href="/#waitlist" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">waitlist</a>.
+        For a security vulnerability, follow the{" "}
+        <a href="/security-reporting" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">coordinated disclosure process</a>{" "}
+        so the report reaches the monitored mailbox with the detail we need. For partnership or
+        product questions, email{" "}
+        <a href={`mailto:${abuseEmail}`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{abuseEmail}</a>.
+        Registration is open in the beta &mdash;{" "}
+        <a href={`${appUrl}/sign-up?source=about&cta=create_account`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">create a free account</a>{" "}
+        to start a release record.
       </p>
     </section>
 

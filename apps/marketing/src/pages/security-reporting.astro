@@ -5,18 +5,23 @@ const canonical = new URL("/security-reporting", origin).toString()
 const securityEmail = (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "security@lyrashieldai.com"
 const description = "How to report a suspected LyraShield AI security vulnerability safely."
 ---
-<Base title="Security reporting | LyraShield AI" description={description} canonical={canonical} noindex>
+<Base title="Security reporting | LyraShield AI" description={description} canonical={canonical}>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
-    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Security reporting · draft for approval</p>
+    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Security reporting</p>
     <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Report a suspected vulnerability.</h1>
-    <p class="mt-6 text-lg leading-8 text-text-muted">This channel is a marketplace-ready draft and requires founder/counsel approval and active mailbox monitoring before publication.</p>
+    <p class="mt-6 text-lg leading-8 text-text-muted">Coordinated disclosure for LyraShield itself. Report privately using the steps below; please do not open a public issue for a suspected vulnerability.</p>
     <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
       <h2>Safe reporting</h2>
       <p>Email <a href={`mailto:${securityEmail}`}>{securityEmail}</a> with a concise description, impact, reproduction steps, and a safe contact method. Do not include credentials, customer data, tokens, prompts, targets, findings, or report contents.</p>
       <h2>Testing boundaries</h2>
       <p>Only test systems you own or have explicit authorization to assess. Do not perform denial-of-service, social engineering, automated high-volume scanning, or destructive actions.</p>
       <h2>Response</h2>
-      <p>The team will acknowledge reports after mailbox monitoring and triage procedures are approved. This page does not promise a response time or bounty.</p>
+      <p>Reports are acknowledged by a human and triaged by severity. LyraShield is in open beta: this page states no response-time commitment and runs no bounty programme, and we will tell you plainly if a report falls outside our scope.</p>
     </div>
+
+    <section class="mt-12 flex flex-wrap gap-3 border-t border-border pt-8">
+      <a href="/support" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Support</a>
+      <a href="/methodology" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Evidence methodology</a>
+    </section>
   </article>
 </Base>

@@ -266,3 +266,71 @@ summary {
 summary::-webkit-details-marker {
   display: none;
 }
+
+/* Callout / disclaimer boxes.
+   These previously existed only as scoped rules inside DocsLayout, so the same
+   markup rendered as unstyled prose on any page using the Base layout — which
+   included the load-bearing "not a replacement for specialist scanners"
+   disclaimer on /compare and every /compare/<slug>. A disclosure that reads as
+   plain text is a disclosure nobody notices. DocsLayout keeps its own scoped
+   copy; these are the global fallbacks and are intentionally identical so a
+   callout looks the same wherever it appears. */
+.callout {
+  margin-top: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--bg-raised);
+  padding: 1rem 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+.callout strong {
+  color: var(--text);
+}
+
+.callout--warn {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 5%, var(--bg-raised));
+}
+
+.callout--warn strong {
+  color: var(--danger);
+}
+
+/* Rendered-markdown comparison tables.
+   The compare pages render 7-column tables from markdown. `body` sets
+   `overflow-x: clip`, so without an explicit scroll container the right-hand
+   columns were cut off on narrow viewports rather than reachable — the content
+   was there but unreadable on a phone. Make the table itself the scroll
+   container so the surrounding prose still wraps normally. */
+.compare-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  /* Momentum scrolling on iOS, and a hint that there is more to the right. */
+  -webkit-overflow-scrolling: touch;
+}
+
+.compare-body table th,
+.compare-body table td {
+  border: 1px solid var(--border);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  text-align: left;
+  vertical-align: top;
+}
+
+.compare-body table th {
+  background: var(--bg-raised);
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.compare-body table td {
+  color: var(--text-muted);
+}
