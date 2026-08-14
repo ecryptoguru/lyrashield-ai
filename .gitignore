@@ -76,3 +76,9 @@ docs/devpost/video/TEST_RECORDING*.md
 
 # Engine source belongs in the sibling ../lyrashield-engine repo; never commit an extracted copy here.
 extracted-engine/
+
+.playwright-mcp/
+.playwright-cli/
+.planning/
+.superpowers/
+docs/superpowers/
