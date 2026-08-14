@@ -1,0 +1,124 @@
+---
+/**
+ * A captioned product screenshot in browser chrome, for light content surfaces
+ * anywhere on the site (landing sections, /methodology, the docs pages). The
+ * homepage hero has its own variant, landing/HeroProductFrame.astro, because it
+ * sits on the dark hero canvas and is the LCP-adjacent frame.
+ *
+ * Every image passed here must already be redacted at the file level — see
+ * `public/product/README.md`. Do not rely on CSS to hide anything: this markup
+ * ships the image as-is to anyone who opens it directly.
+ *
+ * `width`/`height` are required, not optional, because omitting them reintroduces
+ * layout shift on a page we have already tuned for it.
+ */
+
+interface Props {
+  src: string
+  alt: string
+  width: number
+  height: number
+  /** Shown in the fake address bar. Keep it a real route. */
+  chrome: string
+  /** Extra classes for placement (margins, max-width). */
+  class?: string
+}
+
+const { src, alt, width, height, chrome, class: className } = Astro.props
+---
+
+<figure class:list={["product-shot", className]} data-reveal="scale">
+  <div class="product-shot__chrome" aria-hidden="true">
+    <span></span><span></span><span></span>
+    <p>{chrome}</p>
+  </div>
+  <img
+    class="product-shot__img"
+    src={src}
+    alt={alt}
+    width={width}
+    height={height}
+    loading="lazy"
+    decoding="async"
+  />
+  <figcaption class="product-shot__caption">
+    <slot />
+  </figcaption>
+</figure>
+
+<style>
+  .product-shot {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: #0b1723;
+    box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+    /* Some calling sections centre their prose; a caption must not inherit it. */
+    text-align: left;
+  }
+
+  /* Deliberate: this card stays dark in BOTH themes, including its caption. It
+     frames a capture of a dark application, so a dark window on a light page is
+     the correct "app screenshot" treatment — re-theming the chrome to white, or
+     fading the image to blend in, makes a real screenshot look broken. Only the
+     shadow softens for the lighter surface. */
+  :global(:root[data-theme="light"]) .product-shot {
+    border-color: rgba(16, 34, 53, 0.14);
+    box-shadow: 0 1.5rem 4rem rgba(39, 75, 94, 0.2);
+  }
+
+  .product-shot__chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-bottom: 1px solid rgba(32, 50, 70, 0.9);
+    padding: 0.65rem 0.9rem;
+    background: #0e1a28;
+  }
+
+  .product-shot__chrome span {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #2b4258;
+  }
+
+  .product-shot__chrome p {
+    margin: 0 0 0 0.7rem;
+    overflow: hidden;
+    color: #5f7081;
+    font: 500 0.7rem/1 "JetBrains Mono Variable", monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .product-shot__img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .product-shot__caption {
+    border-top: 1px solid rgba(32, 50, 70, 0.9);
+    padding: 0.9rem 1.15rem 1rem;
+    color: #91a7b8;
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+
+  /* Slotted caption content is authored by the calling section, so these need
+     :global() to reach it. */
+  .product-shot .product-shot__caption :global(b) {
+    color: #b7cad8;
+    font-weight: 700;
+  }
+
+  .product-shot .product-shot__caption :global(code) {
+    border-radius: 0.2rem;
+    padding: 0.1rem 0.3rem;
+    background: rgba(84, 214, 223, 0.1);
+    color: #b7cad8;
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.92em;
+  }
+</style>

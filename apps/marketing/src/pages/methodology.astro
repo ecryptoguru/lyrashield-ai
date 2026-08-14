@@ -1,5 +1,6 @@
 ---
 import Base from "@layouts/Base.astro"
+import ProductShot from "@components/ProductShot.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/methodology", origin).toString()
@@ -124,6 +125,19 @@ const jsonLd = [
         <div data-reveal><dt class="font-semibold text-text">Provenance</dt><dd class="mt-2 leading-7 text-text-muted">Which scanner produced a candidate and whether an independent verification receipt exists.</dd></div>
         <div data-reveal><dt class="font-semibold text-text">Outcome</dt><dd class="mt-2 leading-7 text-text-muted">The server-owned retest result and the evidence boundary behind validated or inconclusive status.</dd></div>
       </dl>
+
+      <ProductShot
+        class="mt-10"
+        src="/product/console-trust-runs.webp"
+        alt="The Trust Runs list in the LyraShield console. Five completed runs are listed — release checks, a code review and a deep security review — each showing the engine status, the start and end timestamps, and a retained finding count."
+        width={1400}
+        height={883}
+        chrome="app.lyrashieldai.com/trust-runs"
+      >
+        <b>Records accumulate; they are not overwritten.</b> Each run keeps what ran, when it started
+        and ended, and two counts held separately: what the engine reported, and what was retained
+        after review. Target and repository names are blurred.
+      </ProductShot>
     </section>
 
     <section aria-labelledby="states-heading" class="py-16">
@@ -137,6 +151,20 @@ const jsonLd = [
           </article>
         ))}
       </div>
+
+      <ProductShot
+        class="mt-10"
+        src="/product/console-issues.webp"
+        alt="The Issues view in the LyraShield console. Findings are listed with a severity, an evidence state, an open status and a CWE and CVSS reference. A side drawer for the selected finding shows tabs for what to do, technical detail and history, a plain-language explanation, and a button to create a fix proposal."
+        width={1400}
+        height={883}
+        chrome="app.lyrashieldai.com/issues"
+      >
+        <b>The states, carried on real findings.</b> Severity and evidence state are separate columns —
+        <i>detected</i> and <i>inconclusive</i> both appear here — and the drawer opens on what to do
+        next rather than raw scanner output. A fix proposal is something you create and review;
+        nothing auto-merges. Finding titles, file paths and target names are blurred.
+      </ProductShot>
     </section>
 
     <section aria-labelledby="verdict-heading" class="py-16" data-reveal-group>
