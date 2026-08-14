@@ -39,7 +39,7 @@ const plan = {
   approvedHost: "staging.example.com",
   authMode: "NO_AUTH" as const,
   incidentContact: "security@example.com",
-  maxRequests: 5,
+  maxRequests: 1,
   maxDurationSeconds: 60,
   maxResponseBytes: 1024,
   rawSampleStorage: "DISABLED" as const,
