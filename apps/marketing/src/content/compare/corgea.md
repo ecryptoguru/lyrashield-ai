@@ -4,13 +4,13 @@ description: "How LyraShield AI compares to Corgea for LLM-core SAST and auto-fi
 competitor: "Corgea"
 heading: "LyraShield AI vs Corgea"
 disclaimer: "Factual comparison. Corgea is an AI-native application security platform spanning AI SAST, SCA, secrets detection, IaC, container scanning, and a multi-agent AI pentest, delivering review-ready fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports, and gates fixes behind approvals. The two overlap on pentest, SCA, and secrets; neither fully replaces the other."
-updatedDate: 2026-08-07
+updatedDate: 2026-08-15
 draft: false
 faq:
   - q: "Does LyraShield replace Corgea?"
-    a: "No. Corgea is an AI-native AppSec platform spanning AI SAST with BLAST for business-logic detection, SCA with reachability and dead-package analysis, secrets, IaC, containers, plus pre-code PRD security design reviews and a multi-agent AI pentest from $4,000. LyraShield in open beta is a focused release assurance loop with immutable evidence and approval-gated fixes."
+    a: "No. Corgea is an AI-native AppSec platform spanning AI SAST with BLAST for business-logic detection, SCA with reachability and dead-package analysis, secrets, IaC, containers, plus pre-code PRD security design reviews and a multi-agent AI pentest offering. LyraShield in open beta is a focused release assurance loop with immutable evidence and approval-gated fixes."
   - q: "Can I use Corgea and LyraShield together?"
-    a: "Yes. Use Corgea for continuous AI SAST, dependency reachability, and fast auditor-ready pentest reports, with free tier for up to two members and 10 repos, Growth at $39 per developer per month. Add LyraShield for the evidence-backed release gate where fixes are blocked until a server-bound approval and retest confirms closure."
+    a: "Yes. Use Corgea for continuous AI SAST, dependency reachability, and fast auditor-ready pentest reports, with a free tier for small teams and paid tiers above that — see Corgea's pricing page for current figures. Add LyraShield for the evidence-backed release gate where fixes are blocked until a server-bound approval and retest confirms closure."
   - q: "When should I choose Corgea over LyraShield?"
     a: "Choose Corgea when you want one vendor for code plus compliance pentests, business-logic testing, and review-ready fix PRs with IDE plugins for VS Code, Cursor, and IntelliJ. Its pre-code design review is a genuine differentiator. Choose LyraShield when you need coverage receipts per control, explicit evidence states, and immutable assurance for AI-built app releases."
 ---
@@ -46,11 +46,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                              | Corgea                                                                                                                                                        |
-| ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS, GitHub App, GitLab/Azure DevOps/Bitbucket/Harness, IDE plugins, CLI, GitHub Action                                                                      |
-| Pricing    | Open beta; pricing announced as it matures | Free ($0, ≤2 members, 10 repos); Growth $39/dev/mo; Scale $49/dev/mo; Enterprise custom. AI Pentest: Standard $4,000, Comprehensive $8,000, Enterprise custom |
-| Languages  | Language-agnostic                          | 20+ (JS, Ruby, C++, Python, C, PHP, Java, Go, C#, TypeScript, and more)                                                                                       |
+| Aspect     | LyraShield AI                              | Corgea                                                                                                                             |
+| ---------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS, GitHub App, GitLab/Azure DevOps/Bitbucket/Harness, IDE plugins, CLI, GitHub Action                                           |
+| Pricing    | Open beta; pricing announced as it matures | Free tier plus paid Growth/Scale tiers and a separately priced AI pentest offering — see Corgea's pricing page for current figures |
+| Languages  | Language-agnostic                          | 20+ (JS, Ruby, C++, Python, C, PHP, Java, Go, C#, TypeScript, and more)                                                            |
 
 ## When to use which
 

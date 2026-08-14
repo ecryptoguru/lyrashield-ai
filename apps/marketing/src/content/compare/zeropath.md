@@ -4,13 +4,13 @@ description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto
 competitor: "ZeroPath"
 heading: "LyraShield AI vs ZeroPath"
 disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC, and DAST-style runtime validation into a single reasoning engine, and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports, and gates fixes behind approvals. Neither replaces the other."
-updatedDate: 2026-08-07
+updatedDate: 2026-08-15
 draft: false
 faq:
   - q: "Does LyraShield replace ZeroPath?"
     a: "No. ZeroPath is a unified AI-native SAST plus SCA, secrets, IaC, and DAST-style runtime validation with taint tracking, natural-language policy, CycloneDX AI-BOM across 17 component kinds, and an open-source MCP server and CLI. LyraShield in open beta focuses on agentic pentest as core with SCA, secrets, evidence states, and approval-gated fixes."
   - q: "Can I use ZeroPath and LyraShield together?"
-    a: "Yes. ZeroPath can serve as your broad AI-native scanner replacing multiple detectors, with Team pricing at $1,000 per month plus $60 per developer and an open-source CLI with SARIF. Add LyraShield for the release assurance loop that requires approval before fixes merge and produces an immutable snapshot. Both support MCP, so they can run inside AI coding agents."
+    a: "Yes. ZeroPath can serve as your broad AI-native scanner replacing multiple detectors, with a paid Team tier plus per-developer pricing and an open-source CLI with SARIF — see ZeroPath's pricing page for current figures. Add LyraShield for the release assurance loop that requires approval before fixes merge and produces an immutable snapshot. Both support MCP, so they can run inside AI coding agents."
   - q: "When should I choose ZeroPath over LyraShield?"
     a: "Choose ZeroPath when you need business-logic and authorization flaw detection, AI-component inventory, one-click fix PRs with natural-language refinement, and broad language coverage with 700+ secret detectors. Its strength is consolidating SAST, SCA, secrets, and runtime validation. Choose LyraShield when release proof and approval gates are the priority."
 ---
@@ -46,11 +46,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                              | ZeroPath                                                                                                              |
-| ---------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
-| Pricing    | Open beta; pricing announced as it matures | Team $1,000/mo + $60/developer; Enterprise custom; usage-based option available                                       |
-| Languages  | Language-agnostic                          | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin, and more)                                  |
+| Aspect     | LyraShield AI                              | ZeroPath                                                                                                                                     |
+| ---------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin                        |
+| Pricing    | Open beta; pricing announced as it matures | Paid Team tier plus per-developer pricing; Enterprise custom; usage-based option available — see ZeroPath's pricing page for current figures |
+| Languages  | Language-agnostic                          | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin, and more)                                                         |
 
 ## When to use which
 

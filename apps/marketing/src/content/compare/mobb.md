@@ -4,13 +4,13 @@ description: "How LyraShield AI compares to Mobb for remediation-first auto-fix.
 competitor: "Mobb"
 heading: "LyraShield AI vs Mobb"
 disclaimer: "Factual comparison. Mobb is an AI-powered remediation platform that takes SAST scanner results as input and generates fix PRs, with a newer IDE layer (Mobb Vibe Shield) for AI-coding security. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA, and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two target different parts of the workflow; neither replaces the other."
-updatedDate: 2026-08-07
+updatedDate: 2026-08-15
 draft: false
 faq:
   - q: "Does LyraShield replace Mobb?"
     a: "No. Mobb is an AI-powered remediation platform that ingests SAST results from Checkmarx, Fortify, Snyk, CodeQL, SonarQube, and Opengrep, auto-triages into Fixable, Irrelevant, Remaining, and generates fixes re-scanned to confirm clearance. LyraShield in open beta is a full assurance loop with its own agentic pentest, SCA, and secrets."
   - q: "Can I use Mobb and LyraShield together?"
-    a: "Yes. LyraShield can provide detection with SARIF output for the assurance record, while Mobb fixes existing SAST backlog with deterministic rules plus GenAI validation. Mobb offers Community free for public repos and paid from $20 per developer per month. LyraShield is live open beta with open registration at lyrashieldai.com, with some features on near-term roadmap."
+    a: "Yes. LyraShield can provide detection with SARIF output for the assurance record, while Mobb fixes existing SAST backlog with deterministic rules plus GenAI validation. Mobb offers a free Community tier for public repos and paid per-developer tiers above that — see Mobb's pricing page for current figures. LyraShield is live open beta with open registration at lyrashieldai.com, with some features on near-term roadmap."
   - q: "When should I choose Mobb over LyraShield?"
     a: "Choose Mobb when you have a large SAST backlog and want anti-hallucination fix methodology with real-time IDE protection via Mobb Vibe Shield across Copilot, Cursor, Claude, and JetBrains through MCP. Its ROI dashboard tracks fixes. Choose LyraShield when you need immutable assurance reports, coverage receipts, and approval-gated execution for AI-built app releases."
 ---
@@ -46,11 +46,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                              | Mobb                                                                                                                       |
-| ---------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS (multi-tenant), single-tenant, on-prem (AWS); GitHub/GitLab/Azure DevOps/Bitbucket; CLI, API, IDE/MCP                 |
-| Pricing    | Open beta; pricing announced as it matures | Community free (public repos); Development Teams $20/dev/mo; Team $40/dev/mo (5–15 contributors); Enterprise contact-sales |
-| Languages  | Language-agnostic                          | Fixes in Java, JavaScript/TypeScript, C#, Python (Opengrep scans 30+)                                                      |
+| Aspect     | LyraShield AI                              | Mobb                                                                                                       |
+| ---------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS (multi-tenant), single-tenant, on-prem (AWS); GitHub/GitLab/Azure DevOps/Bitbucket; CLI, API, IDE/MCP |
+| Pricing    | Open beta; pricing announced as it matures | Free Community tier plus paid per-developer tiers — see Mobb's pricing page for current figures            |
+| Languages  | Language-agnostic                          | Fixes in Java, JavaScript/TypeScript, C#, Python (Opengrep scans 30+)                                      |
 
 ## When to use which
 

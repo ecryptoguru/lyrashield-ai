@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to Snyk for AI-built application securi
 competitor: "Snyk"
 heading: "LyraShield AI vs Snyk"
 disclaimer: "Factual comparison. This page compares publicly documented capabilities. Snyk is a mature vulnerability scanning platform. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. Neither replaces the other."
-updatedDate: 2026-08-07
+updatedDate: 2026-08-15
 draft: false
 faq:
   - q: "Does LyraShield replace Snyk?"
@@ -12,7 +12,7 @@ faq:
   - q: "Can I use Snyk and LyraShield together?"
     a: "Yes, many teams do. Use Snyk for continuous scanning throughout the SDLC and automated fix PRs, then run LyraShield for the release assurance run that validates exploitability, records evidence states, retests fixes, and produces an immutable report. Both ship SARIF and a GitHub Action, so results consolidate."
   - q: "When should I choose Snyk over LyraShield?"
-    a: "Choose Snyk when you need one platform for continuous scanning across code, dependencies, containers, and infrastructure, with broad language support and risk-based prioritization. Its free tier and paid Team from $25 per developer per month lower friction. Choose LyraShield when you need proof before a release decision for AI-built apps."
+    a: "Choose Snyk when you need one platform for continuous scanning across code, dependencies, containers, and infrastructure, with broad language support and risk-based prioritization. Its free tier and paid per-developer plans above that lower friction — see Snyk's pricing page for current figures. Choose LyraShield when you need proof before a release decision for AI-built apps."
   - q: "What does LyraShield add over Snyk Code?"
     a: "Snyk Code finds vulnerabilities in source and suggests AI autofixes. LyraShield adds a target, review, evidence, fix, retest, report loop: it attempts to exercise findings against the live target, records detected versus independently verified versus retest-confirmed states, requires approval before any fix merges, and produces an immutable assurance snapshot."
 ---
@@ -48,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | Snyk                                                                   |
-| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                   | SaaS, Private Cloud (AWS), CLI, IDE plugins, CI/CD                     |
-| Pricing    | Open beta; pricing announced as it matures           | Free tier (test limits), Team $25/dev/month, Enterprise (custom)       |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | 19+ languages (Java, JS, Python, Go, C/C++, PHP, Ruby, .NET, and more) |
+| Aspect     | LyraShield AI                                        | Snyk                                                                                                               |
+| ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Deployment | Hosted + CLI + MCP + GitHub Action                   | SaaS, Private Cloud (AWS), CLI, IDE plugins, CI/CD                                                                 |
+| Pricing    | Open beta; pricing announced as it matures           | Free tier (test limits) plus paid per-developer and Enterprise plans — see Snyk's pricing page for current figures |
+| Languages  | Language-agnostic (deterministic + agentic coverage) | 19+ languages (Java, JS, Python, Go, C/C++, PHP, Ruby, .NET, and more)                                             |
 
 ## When to use which
 
