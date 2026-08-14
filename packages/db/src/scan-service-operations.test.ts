@@ -217,6 +217,20 @@ describe("removeScan", () => {
     await expect(removeScan("scan-1", "ws-1")).rejects.toThrow("active scan")
     expect(mockPrisma.scan.update).not.toHaveBeenCalled()
   })
+
+  it("rejects a missing scan without updating another workspace's row", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue(null)
+
+    await expect(removeScan("scan-missing", "ws-1")).rejects.toThrow("Scan not found")
+
+    expect(mockPrisma.scan.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects an invalid scan id before opening a database transaction", async () => {
+    await expect(removeScan("   ", "ws-1")).rejects.toThrow()
+
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+  })
 })
 
 describe("getScanWithEvents", () => {

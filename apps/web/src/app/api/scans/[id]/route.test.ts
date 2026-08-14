@@ -13,6 +13,7 @@ vi.mock("@lyrashield/db", () => ({
   getScanWithEvents: vi.fn(),
   cancelScan: vi.fn(),
   removeScan: vi.fn(),
+  prisma: { auditLog: { create: vi.fn() } },
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
@@ -28,7 +29,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { DELETE, GET, POST } from "./route"
-import { cancelScan, getScanWithEvents, removeScan } from "@lyrashield/db"
+import { cancelScan, getScanWithEvents, prisma, removeScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
@@ -91,5 +92,55 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:cancel")
     expect(removeScan).toHaveBeenCalledWith("scan-1", "ws-1")
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          workspaceId: "ws-1",
+          actorUserId: "user-1",
+          action: "scan.removed",
+          resourceType: "scan",
+          resourceId: "scan-1",
+        }),
+      })
+    )
+  })
+
+  it("returns SCAN_NOT_FOUND when the scan is not in the authorized workspace", async () => {
+    vi.mocked(removeScan).mockRejectedValue(new Error("Scan not found: scan-1"))
+
+    const response = await DELETE(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1", { method: "DELETE" }),
+      routeParams
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "SCAN_NOT_FOUND" },
+    })
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("returns SCAN_ACTIVE without removing an active scan", async () => {
+    vi.mocked(removeScan).mockRejectedValue(new Error("Cannot remove an active scan"))
+
+    const response = await DELETE(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1", { method: "DELETE" }),
+      routeParams
+    )
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "SCAN_ACTIVE" } })
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects a blank scan id before authorizing or querying the database", async () => {
+    const response = await DELETE(
+      new Request("http://localhost/api/scans/%20%20%20?workspaceId=ws-1", { method: "DELETE" }),
+      { params: Promise.resolve({ id: "   " }) }
+    )
+
+    expect(response.status).toBe(400)
+    expect(requirePermission).not.toHaveBeenCalled()
+    expect(removeScan).not.toHaveBeenCalled()
   })
 })

@@ -1,5 +1,5 @@
 import { createHash } from "crypto"
-import { getScanWithEvents, cancelScan, removeScan } from "@lyrashield/db"
+import { getScanWithEvents, cancelScan, prisma, removeScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -7,6 +7,7 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { ScanIdSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
 
 function scanEtag(scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>): string {
@@ -100,6 +101,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await params
+  const parsedId = ScanIdSchema.safeParse(rawId)
+  if (!parsedId.success) {
+    return apiError("VALIDATION_ERROR", "scan id is required", 400)
+  }
+  const id = parsedId.data
   const parsedWorkspace = WorkspaceSchema.safeParse(
     new URL(request.url).searchParams.get("workspaceId")
   )
@@ -109,9 +116,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const workspaceId = parsedWorkspace.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.scan.cancel)
-    const { id } = await params
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.cancel)
     await removeScan(id, workspaceId)
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId: session.userId,
+        action: "scan.removed",
+        resourceType: "scan",
+        resourceId: id,
+      },
+    })
     revalidateDashboardAggregates()
     return apiSuccess({ id, removed: true })
   } catch (error) {
