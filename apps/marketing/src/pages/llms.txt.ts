@@ -73,6 +73,8 @@ export const GET: APIRoute = async (context) => {
 
   const publicPaths = [
     `${origin}/`,
+    `${origin}/agents`,
+    `${origin}/agents.md`,
     `${origin}/about`,
     `${origin}/methodology`,
     `${origin}/research`,
@@ -124,6 +126,10 @@ export const GET: APIRoute = async (context) => {
     "",
     "## Public URLs",
     ...publicPaths,
+    "",
+    "## Agent-native setup",
+    "Start with `npx lyrashield login --oauth`, then `npx lyrashield init` to install the Agent Plugin for your coding agent. Read-only tools are available after workspace authentication; mutating tools require write scope and explicit human approval outside the agent.",
+    "Human-facing setup: ${origin}/agents. Machine-readable setup contract: ${origin}/agents.md. Full guide: ${origin}/docs/integrations/agent-plugins.",
     "",
     "## Copy-safe summary for LLM context",
     "No automatic Fix PR claim, no benchmark claims, no customer names. Pricing and plan limits are not yet announced.",
