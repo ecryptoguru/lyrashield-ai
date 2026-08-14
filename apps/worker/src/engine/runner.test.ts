@@ -34,6 +34,7 @@ import {
   findRunOutputDir,
   interpretExitCode,
   prepareEngineWorkspace,
+  signalEngineProcessTree,
   assertRepositoryScanRuntimeConfigured,
   buildEngineEnv,
   resolveEngineSourceCheckout,
@@ -539,6 +540,18 @@ describe("createKillEscalation (S5)", () => {
     vi.advanceTimersByTime(5000)
     expect(kills).toEqual(["SIGTERM"])
     vi.useRealTimers()
+  })
+})
+
+describe("signalEngineProcessTree", () => {
+  it("signals the detached engine process group so child processes cannot outlive a timeout", () => {
+    const childKill = vi.fn(() => true)
+    const processKill = vi.fn(() => true)
+
+    signalEngineProcessTree({ pid: 42, kill: childKill }, "SIGTERM", processKill)
+
+    expect(processKill).toHaveBeenCalledWith(-42, "SIGTERM")
+    expect(childKill).not.toHaveBeenCalled()
   })
 })
 

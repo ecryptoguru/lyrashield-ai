@@ -161,7 +161,30 @@ export function collectEngineFailureType(
 }
 
 export interface KillableChild {
+  pid?: number
   kill(signal?: NodeJS.Signals): boolean
+}
+
+type ProcessSignal = (pid: number, signal: NodeJS.Signals) => boolean
+
+/**
+ * The engine CLI can start child processes. On Unix it runs in its own process
+ * group, so a timeout must signal the group rather than leave descendants alive.
+ */
+export function signalEngineProcessTree(
+  child: KillableChild,
+  signal: NodeJS.Signals,
+  sendSignal: ProcessSignal = process.kill
+): void {
+  if (process.platform !== "win32" && typeof child.pid === "number" && child.pid > 0) {
+    try {
+      sendSignal(-child.pid, signal)
+      return
+    } catch {
+      // The child may not have created a process group yet; signal it directly.
+    }
+  }
+  child.kill(signal)
 }
 
 const activeEngineTerminators = new Set<() => void>()
@@ -192,9 +215,9 @@ export function createKillEscalation(
   let killTimer: ReturnType<typeof setTimeout> | null = null
   return {
     onTimeout() {
-      child.kill("SIGTERM")
+      signalEngineProcessTree(child, "SIGTERM")
       killTimer = setTimeout(() => {
-        if (!exited) child.kill("SIGKILL")
+        if (!exited) signalEngineProcessTree(child, "SIGKILL")
       }, graceMs)
     },
     markExited() {
@@ -427,6 +450,7 @@ async function runEngineProcess(
       cwd: absWorkDir,
       env: buildEngineEnv(profile, scanId),
       stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
     })
 
     let stdoutBytes = 0
