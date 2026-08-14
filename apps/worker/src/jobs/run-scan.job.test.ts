@@ -1170,6 +1170,135 @@ describe("processScanJob", () => {
     )
   })
 
+  it("corrects the summary when scanner-layer findings outnumber the engine's own count", async () => {
+    // The agentic engine itself finds nothing, but SCA/secrets/agent-config
+    // findings still get merged in by the orchestrator and persisted. The
+    // engine-only summary text must not stand alone as "0 finding(s) reported"
+    // next to a persisted count of 3 — this is the exact shape of the bug found
+    // in a real Trust Runs screenshot (badge said 39, summary said 0).
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        findingsComplete: true,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "completed",
+          llm_usage: completeUsage,
+        },
+        summary: "Engine status: completed. 0 finding(s) reported.",
+        findingCount: 0,
+      },
+    } as never)
+    vi.mocked(runScannerOrchestrator).mockResolvedValue({
+      allFindings: [
+        { id: "sca-1", title: "Vulnerable dependency", severity: "high" },
+        { id: "secret-1", title: "Hardcoded credential", severity: "critical" },
+        { id: "agent-config-1", title: "Poisoned agent instruction", severity: "high" },
+      ],
+      engineFindings: [],
+      scaFindings: [{ id: "sca-1", title: "Vulnerable dependency", severity: "high" }],
+      secretsFindings: [{ id: "secret-1", title: "Hardcoded credential", severity: "critical" }],
+      urlFindings: [],
+      agentConfigFindings: [
+        { id: "agent-config-1", title: "Poisoned agent instruction", severity: "high" },
+      ],
+      coverageIssues: [],
+      stats: {
+        total: 3,
+        bySeverity: { high: 2, critical: 1 },
+        byConfidence: { high: 3, medium: 0, low: 0 },
+        verified: 0,
+        unverified: 3,
+        falsePositiveRisk: { low: 3, medium: 0, high: 0 },
+      },
+      filteredFalsePositives: 0,
+    } as never)
+    vi.mocked(persistFindings).mockResolvedValue([
+      { id: "f1", title: "Vulnerable dependency", severity: "HIGH", dedupeKey: "d1", isNew: true },
+      {
+        id: "f2",
+        title: "Hardcoded credential",
+        severity: "CRITICAL",
+        dedupeKey: "d2",
+        isNew: true,
+      },
+      {
+        id: "f3",
+        title: "Poisoned agent instruction",
+        severity: "HIGH",
+        dedupeKey: "d3",
+        isNew: true,
+      },
+    ] as never)
+
+    const result = await processScanJob(mockJob)
+
+    const expectedSummary =
+      "Engine status: completed. 0 finding(s) reported." +
+      " 3 finding(s) retained after all scanner layers and deduplication."
+
+    expect(result.summary).toBe(expectedSummary)
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: { summary: expectedSummary },
+    })
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", expectedSummary)
+    expect(notifyScanCompleted).toHaveBeenCalledWith("ws-1", "scan-1", expectedSummary, 3)
+  })
+
+  it("leaves the engine's summary untouched when the persisted count already matches", async () => {
+    // Guardrail for the fix above: when the engine-only count and the persisted
+    // count already agree (the common case), the summary must pass through
+    // verbatim rather than always appending a second sentence.
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 2,
+      output: {
+        vulnerabilities: [{ id: "v1", title: "XSS", severity: "high", timestamp: "now" }],
+        findingsComplete: true,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "completed",
+          llm_usage: completeUsage,
+        },
+        summary: "Engine status: completed. 1 finding(s) reported.",
+        findingCount: 1,
+      },
+    } as never)
+    vi.mocked(interpretExitCode).mockReturnValue({
+      status: "COMPLETED" as const,
+      category: "VULNERABILITIES_FOUND",
+      message: "",
+    })
+    vi.mocked(runScannerOrchestrator).mockResolvedValue({
+      allFindings: [{ id: "v1", title: "XSS", severity: "high" }],
+      engineFindings: [{ id: "v1", title: "XSS", severity: "high" }],
+      scaFindings: [],
+      secretsFindings: [],
+      urlFindings: [],
+      agentConfigFindings: [],
+      coverageIssues: [],
+      stats: {
+        total: 1,
+        bySeverity: { high: 1 },
+        byConfidence: { high: 1, medium: 0, low: 0 },
+        verified: 0,
+        unverified: 1,
+        falsePositiveRisk: { low: 1, medium: 0, high: 0 },
+      },
+      filteredFalsePositives: 0,
+    } as never)
+    vi.mocked(persistFindings).mockResolvedValue([
+      { id: "f1", title: "XSS", severity: "HIGH", dedupeKey: "d1", isNew: true },
+    ] as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.summary).toBe("Engine status: completed. 1 finding(s) reported.")
+  })
+
   it("does not bill aggregate usage when the payload names no model", async () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
