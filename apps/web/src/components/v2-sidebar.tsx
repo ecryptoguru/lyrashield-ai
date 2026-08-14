@@ -94,7 +94,11 @@ export function V2Sidebar({
   return (
     <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r md:block">
       <div className="bg-sidebar flex h-full min-h-0 flex-col">
-        <div className="flex h-16 shrink-0 items-center gap-3 border-b px-5">
+        <a
+          href="https://lyrashieldai.com"
+          aria-label="Go to the LyraShield AI landing page"
+          className="focus-visible:ring-ring flex h-16 shrink-0 items-center gap-3 border-b px-5 transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
+        >
           <div className="shadow-primary-glow bg-card flex size-9 items-center justify-center rounded-xl border p-1">
             <Image
               src="/icon.svg"
@@ -116,7 +120,7 @@ export function V2Sidebar({
               Evidence console
             </span>
           </div>
-        </div>
+        </a>
 
         {workspaces.length > 0 && (
           <div className="shrink-0 border-b p-2.5">
