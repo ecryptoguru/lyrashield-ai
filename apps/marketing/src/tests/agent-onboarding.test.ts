@@ -4,7 +4,10 @@ import { agentOnboarding, renderAgentOnboardingMarkdown } from "../lib/agent-onb
 
 describe("agent onboarding contract", () => {
   it("keeps the OAuth-first, approval-gated workflow in one source of truth", () => {
-    expect(agentOnboarding.commands).toEqual(["npx lyrashield login --oauth", "npx lyrashield init"])
+    expect(agentOnboarding.commands).toEqual([
+      "npx lyrashield login --oauth",
+      "npx lyrashield init",
+    ])
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")
     expect(agentOnboarding.safety.join(" ")).toContain("explicit human approval")
     expect(renderAgentOnboardingMarkdown("https://lyrashieldai.com")).toContain(
@@ -28,9 +31,15 @@ describe("agent onboarding contract", () => {
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const header = readFileSync(new URL("../components/Header.astro", import.meta.url), "utf8")
     // eslint-disable-next-line security/detect-non-literal-fs-filename
-    const hero = readFileSync(new URL("../components/landing/PremiumHero.astro", import.meta.url), "utf8")
+    const hero = readFileSync(
+      new URL("../components/landing/PremiumHero.astro", import.meta.url),
+      "utf8"
+    )
     // eslint-disable-next-line security/detect-non-literal-fs-filename
-    const finalCta = readFileSync(new URL("../components/landing/FinalCta.astro", import.meta.url), "utf8")
+    const finalCta = readFileSync(
+      new URL("../components/landing/FinalCta.astro", import.meta.url),
+      "utf8"
+    )
 
     expect(header.match(/href="\/agents"/g)).toHaveLength(2)
     expect(header).toContain('data-cta-id="header-for-agents"')
