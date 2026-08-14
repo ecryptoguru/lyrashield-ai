@@ -81,13 +81,13 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         <div class="mobile-menu__primary">
           <a
             href="/agents"
-            class="menu-link inline-flex min-h-10 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             data-cta-id="header-for-agents-mobile"
           >
             For agents
           </a>
-          <a href="/#how-it-works" class="menu-link inline-flex min-h-10 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">How it works</a>
-          <a href="/scan" class="menu-link inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
+          <a href="/#how-it-works" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">How it works</a>
+          <a href="/scan" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
         </div>
         <div class="mobile-menu__section">
           <p>Explore</p>
@@ -100,8 +100,8 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         </div>
         {appUrl && (
           <div class="mobile-menu__account">
-            <a href={`${appUrl}/sign-in`} class="menu-link inline-flex min-h-10 items-center justify-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
-            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link inline-flex min-h-10 items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
+            <a href={`${appUrl}/sign-in`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
+            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
           </div>
         )}
       </dialog>
@@ -199,14 +199,6 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         menu.close()
       })
 
-      addEventListener(
-        "scroll",
-        () => {
-          if (menu.open) menu.close()
-        },
-        { passive: true }
-      )
-
       addEventListener("keydown", (event) => {
         if (event.key === "Escape" && menu.open) menu.close()
       })
@@ -285,7 +277,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 
   .mobile-menu__resource {
     display: inline-flex;
-    min-height: 2.5rem;
+    min-height: 2.75rem;
     align-items: center;
     border-radius: 0.75rem;
     padding: 0 0.75rem;

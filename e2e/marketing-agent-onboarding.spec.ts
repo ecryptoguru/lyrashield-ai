@@ -29,3 +29,12 @@ test("machine-readable onboarding response is Markdown", async ({ request }) => 
   expect(response.headers()["content-type"]).toContain("text/markdown")
   await expect(response.text()).resolves.toContain("# Release assurance for coding agents")
 })
+
+test("llms.txt publishes concrete agent setup URLs", async ({ request }) => {
+  const response = await request.get("/llms.txt")
+  const body = await response.text()
+
+  expect(body).toContain("https://lyrashieldai.com/agents")
+  expect(body).toContain("https://lyrashieldai.com/agents.md")
+  expect(body).not.toContain("${origin}")
+})
