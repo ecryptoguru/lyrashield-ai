@@ -75,7 +75,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       <dialog
         id="mobile-menu"
         aria-label="Mobile navigation"
-        class="fixed m-0 w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 md:hidden"
+        class="fixed z-50 m-0 w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 md:hidden"
         style="top: max(4.5rem, calc(4rem + env(safe-area-inset-top))); right: max(1rem, env(safe-area-inset-right)); bottom: auto; left: auto;"
       >
         <div class="mobile-menu__primary">
