@@ -107,7 +107,17 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
     <script is:inline>
       (() => {
         try {
-          const preference = localStorage.getItem("lyrashield-theme") || "system"
+          const cookiePreference = document.cookie.match(
+            /(?:^|; )lyrashield-theme=(system|light|dark)(?:;|$)/
+          )?.[1]
+          const storedPreference = localStorage.getItem("lyrashield-theme")
+          const preference = cookiePreference || storedPreference || "system"
+          if (!cookiePreference && (storedPreference === "system" || storedPreference === "light" || storedPreference === "dark")) {
+            const domain = location.hostname === "lyrashieldai.com" || location.hostname.endsWith(".lyrashieldai.com")
+              ? "; Domain=.lyrashieldai.com"
+              : ""
+            document.cookie = `lyrashield-theme=${storedPreference}; Max-Age=31536000; Path=/${domain}; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`
+          }
           const dark =
             preference === "dark" ||
             (preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches)

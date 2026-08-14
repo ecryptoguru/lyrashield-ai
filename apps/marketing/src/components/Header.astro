@@ -120,6 +120,15 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
   type ThemePreference = (typeof preferences)[number]
   const systemTheme = matchMedia("(prefers-color-scheme: dark)")
 
+  function persistTheme(preference: ThemePreference) {
+    localStorage.setItem("lyrashield-theme", preference)
+    const domain =
+      location.hostname === "lyrashieldai.com" || location.hostname.endsWith(".lyrashieldai.com")
+        ? "; Domain=.lyrashieldai.com"
+        : ""
+    document.cookie = `lyrashield-theme=${preference}; Max-Age=31536000; Path=/${domain}; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`
+  }
+
   function applyTheme(preference: ThemePreference) {
     const dark = preference === "dark" || (preference === "system" && systemTheme.matches)
     document.documentElement.dataset.theme = dark ? "dark" : "light"
@@ -136,7 +145,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
   button?.addEventListener("click", () => {
     const current = document.documentElement.dataset.themePreference || "system"
     const next = preferences[(preferences.indexOf(current as ThemePreference) + 1) % preferences.length] ?? "system"
-    localStorage.setItem("lyrashield-theme", next)
+    persistTheme(next)
     applyTheme(next)
   })
   systemTheme.addEventListener("change", () => {

@@ -48,7 +48,7 @@ export default async function RootLayout({
           suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html:
-              "(()=>{try{const t=localStorage.getItem('lyrashield-theme')||'system';const d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=d?'dark':'light'}catch{}})()",
+              "(()=>{try{const c=document.cookie.match(/(?:^|; )lyrashield-theme=(system|light|dark)(?:;|$)/)?.[1];const s=localStorage.getItem('lyrashield-theme');const t=c||s||'system';const d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=d?'dark':'light'}catch{}})()",
           }}
         />
       </head>
