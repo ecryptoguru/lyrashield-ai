@@ -95,12 +95,15 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         </div>
         <div class="mobile-menu__section">
           <p>Explore</p>
+          {/* Deliberately fewer items than the desktop Resources dropdown below.
+              Vibe Security 50 / Evidence Vault / AI safety / Sample report are
+              one tap away via the Footer (unconstrained, scrolls with the page)
+              and the desktop dropdown. Adding them here regressed
+              tests-browser/theme.e2e.ts's "keeps the compact mobile menu inside
+              the visible viewport" check at 390x400 — a real short-viewport
+              phone case. Re-verify that test before growing this list again. */}
           <div class="mobile-menu__resources">
             <a href="/methodology" class="menu-link mobile-menu__resource">Methodology</a>
-            <a href="/vibe-security-50" class="menu-link mobile-menu__resource">Vibe Security 50</a>
-            <a href="/evidence-vault" class="menu-link mobile-menu__resource">Evidence Vault</a>
-            <a href="/ai-safety" class="menu-link mobile-menu__resource">AI safety</a>
-            <a href="/sample-report" class="menu-link mobile-menu__resource">Sample report</a>
             <a href="/tools" class="menu-link mobile-menu__resource">Tools</a>
             <a href="/blog" class="menu-link mobile-menu__resource">Guides</a>
             <a href="/docs/integrations" class="menu-link mobile-menu__resource">Docs</a>
