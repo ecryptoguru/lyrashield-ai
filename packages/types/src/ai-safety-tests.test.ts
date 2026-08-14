@@ -13,7 +13,7 @@ describe("AI safety test contract", () => {
     approvedHost: "staging.example.com",
     incidentContact: "security@example.com",
     authMode: "NO_AUTH" as const,
-    maxRequests: 5,
+    maxRequests: 1,
     maxDurationSeconds: 60,
     maxResponseBytes: 1024,
     rawSampleStorage: "DISABLED" as const,
@@ -48,6 +48,16 @@ describe("AI safety test contract", () => {
     expect(
       LiveAiSafetyPlanSchema.safeParse({ ...basePlan, approvedHost: "other.example.com" }).success
     ).toBe(false)
+  })
+
+  it("rejects modified or over-budget safety cases", () => {
+    expect(
+      LiveAiSafetyPlanSchema.safeParse({
+        ...basePlan,
+        cases: [{ ...AI_SAFETY_TEST_CATALOG[0], fixtureId: "custom-fixture" }],
+      }).success
+    ).toBe(false)
+    expect(LiveAiSafetyPlanSchema.safeParse({ ...basePlan, maxRequests: 2 }).success).toBe(false)
   })
 
   it("does not permit destructive cases under the non-destructive beta policy", () => {
