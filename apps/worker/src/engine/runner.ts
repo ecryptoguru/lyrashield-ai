@@ -7,7 +7,6 @@ import { promisify } from "util"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
-import { resolveScanProfile } from "@lyrashield/types"
 import { buildEngineCommand, type ScanConfig, type EngineCommand } from "./command-builder"
 import { parseEngineOutput, type ParsedScanOutput } from "./output-parser"
 import {
@@ -19,6 +18,7 @@ export interface EngineRunResult {
   exitCode: number
   cancelled: boolean
   timedOut: boolean
+  timeoutReason?: "DURATION" | "INACTIVITY" | null
   output: ParsedScanOutput
   /** Validated host-side checkout for deterministic repository scanners. */
   sourceCheckoutPath: string | null
@@ -30,7 +30,6 @@ export interface EngineRunResult {
 
 const execFileAsync = promisify(execFile)
 
-const DEFAULT_ENGINE_TIMEOUT_MS = 12 * 60 * 1000
 const SANDBOX_RECEIPT_TIMEOUT_MS = 10_000
 
 async function verifySandboxRemoved(scanId: string): Promise<boolean | undefined> {
@@ -51,22 +50,6 @@ async function verifySandboxRemoved(scanId: string): Promise<boolean | undefined
     })
     return undefined
   }
-}
-
-export function resolveEngineTimeoutMs(
-  maxDurationMinutes?: number | null,
-  mode?: ScanConfig["mode"]
-): number {
-  const profile = resolveScanProfile({ targetType: "REPO", mode: mode ?? "QUICK" })
-  const engineMaxMs = profile.maxEngineMinutes * 60 * 1000
-  if (
-    typeof maxDurationMinutes !== "number" ||
-    !Number.isFinite(maxDurationMinutes) ||
-    maxDurationMinutes <= 0
-  ) {
-    return engineMaxMs
-  }
-  return Math.min(Math.floor(maxDurationMinutes * 60 * 1000), engineMaxMs)
 }
 
 const EXIT_CODE_MAP: Record<
@@ -135,6 +118,10 @@ const SIGKILL_GRACE_MS = 5000
 // cadence, so 30s bought nothing: 2 minutes keeps the feed alive for a long scan
 // at a quarter of the writes.
 const ENGINE_HEARTBEAT_MS = 120_000
+// A repository scan is allowed to continue while its engine receipt advances.
+// This only terminates a process that has produced no durable progress at all.
+const ENGINE_PROGRESS_POLL_MS = 15_000
+const ENGINE_PROGRESS_STALL_MS = 20 * 60 * 1000
 const MAX_ENGINE_ERROR_TAIL_BYTES = 4096
 const MAX_ENGINE_FAILURE_MARKER_WINDOW = 512
 
@@ -413,12 +400,14 @@ async function runEngineProcess(
   cmd: EngineCommand,
   absWorkDir: string,
   scanId: string,
-  timeoutMs: number,
+  timeoutMs: number | null,
   profile: EngineProfile,
-  shouldCancel?: () => Promise<boolean>
+  shouldCancel?: () => Promise<boolean>,
+  readProgressFingerprint?: () => Promise<string | null>
 ): Promise<{
   exitCode: number
   timedOut: boolean
+  timeoutReason: "DURATION" | "INACTIVITY" | null
   cancelled: boolean
   failureType: string | null
 }> {
@@ -435,9 +424,13 @@ async function runEngineProcess(
     let failureMarkerWindow = ""
     let failureType: string | null = null
     let timedOut = false
+    let timeoutReason: "DURATION" | "INACTIVITY" | null = null
     let cancelled = false
     let closed = false
     let terminationRequested = false
+    let progressFingerprint: string | null = null
+    let lastProgressAt = Date.now()
+    let progressCheckInFlight = false
 
     const escalation = createKillEscalation(child, SIGKILL_GRACE_MS)
     const terminate = () => {
@@ -447,10 +440,14 @@ async function runEngineProcess(
     }
     const stopTracking = trackActiveEngineProcess(terminate)
 
-    const timer = setTimeout(() => {
-      timedOut = true
-      terminate()
-    }, timeoutMs)
+    const timer =
+      typeof timeoutMs === "number"
+        ? setTimeout(() => {
+            timedOut = true
+            timeoutReason = "DURATION"
+            terminate()
+          }, timeoutMs)
+        : null
     const cancellationTimer = shouldCancel
       ? setInterval(() => {
           void shouldCancel()
@@ -464,9 +461,40 @@ async function runEngineProcess(
         }, 1000)
       : null
     const startedAt = Date.now()
+    const pollProgress = () => {
+      if (!readProgressFingerprint || closed || progressCheckInFlight) return
+      progressCheckInFlight = true
+      void readProgressFingerprint()
+        .then((nextFingerprint) => {
+          if (closed) return
+          if (nextFingerprint && nextFingerprint !== progressFingerprint) {
+            progressFingerprint = nextFingerprint
+            lastProgressAt = Date.now()
+            return
+          }
+          if (Date.now() - lastProgressAt >= ENGINE_PROGRESS_STALL_MS) {
+            timedOut = true
+            timeoutReason = "INACTIVITY"
+            terminate()
+          }
+        })
+        .catch(() => {
+          // A transient receipt read failure is not evidence that the engine stopped.
+        })
+        .finally(() => {
+          progressCheckInFlight = false
+        })
+    }
+    const progressTimer = readProgressFingerprint
+      ? setInterval(pollProgress, ENGINE_PROGRESS_POLL_MS)
+      : null
+    pollProgress()
     const heartbeatTimer = setInterval(() => {
       void emitScanEvent(scanId, "engine_activity", "info", "AI analysis is still running", {
         elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
+        ...(readProgressFingerprint
+          ? { secondsSinceDurableProgress: Math.round((Date.now() - lastProgressAt) / 1000) }
+          : {}),
       })
     }, ENGINE_HEARTBEAT_MS)
 
@@ -484,8 +512,9 @@ async function runEngineProcess(
 
     child.on("close", (code) => {
       closed = true
-      clearTimeout(timer)
+      if (timer) clearTimeout(timer)
       clearInterval(heartbeatTimer)
+      if (progressTimer) clearInterval(progressTimer)
       if (cancellationTimer) clearInterval(cancellationTimer)
       escalation.markExited()
       stopTracking()
@@ -494,6 +523,7 @@ async function runEngineProcess(
       resolvePromise({
         exitCode,
         timedOut,
+        timeoutReason,
         cancelled,
         failureType: failureType ?? extractEngineFailureType(stderrTail.toString("utf8")),
       })
@@ -501,8 +531,9 @@ async function runEngineProcess(
 
     child.on("error", (err) => {
       closed = true
-      clearTimeout(timer)
+      if (timer) clearTimeout(timer)
       clearInterval(heartbeatTimer)
+      if (progressTimer) clearInterval(progressTimer)
       if (cancellationTimer) clearInterval(cancellationTimer)
       escalation.markExited()
       stopTracking()
@@ -692,6 +723,38 @@ async function readTextFileBounded(path: string, maxBytes: number): Promise<stri
   }
 }
 
+/** Reads only the engine's bounded monotonic liveness fields. */
+export async function readEngineProgressFingerprint(
+  workDir: string,
+  expectedRunName: string
+): Promise<string | null> {
+  const outputDir = await findRunOutputDir(workDir, expectedRunName)
+  if (!outputDir) return null
+
+  let raw: string
+  try {
+    raw = await readTextFileBounded(join(outputDir, "run.json"), MAX_ENGINE_RUN_BYTES)
+  } catch {
+    return null
+  }
+
+  try {
+    const record = JSON.parse(raw) as { seq?: unknown; turn_count?: unknown; phase?: unknown }
+    if (
+      !Number.isInteger(record.seq) ||
+      (record.seq as number) < 0 ||
+      !Number.isInteger(record.turn_count) ||
+      (record.turn_count as number) < 0 ||
+      !["setup", "running", "finalizing", "completed", "stopped"].includes(record.phase as string)
+    ) {
+      return null
+    }
+    return `${record.seq}:${record.turn_count}:${record.phase}`
+  } catch {
+    return null
+  }
+}
+
 async function readEngineOutput(outputDir: string): Promise<{
   vulnerabilitiesRaw: string
   runJsonRaw: string
@@ -726,7 +789,7 @@ async function readEngineOutput(outputDir: string): Promise<{
 export async function runEngine(
   config: ScanConfig,
   scanId: string,
-  timeoutMs = DEFAULT_ENGINE_TIMEOUT_MS,
+  timeoutMs: number | null = null,
   shouldCancel?: () => Promise<boolean>
 ): Promise<EngineRunResult> {
   const cmd = buildEngineCommand(config)
@@ -757,7 +820,8 @@ export async function runEngine(
       scanId,
       timeoutMs,
       profile,
-      shouldCancel
+      shouldCancel,
+      () => readEngineProgressFingerprint(absWorkDir, scanId)
     )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
@@ -768,23 +832,27 @@ export async function runEngine(
     processResult = {
       exitCode: -2,
       timedOut: false,
+      timeoutReason: null,
       cancelled: false,
       failureType: null,
     }
   }
-  const { exitCode, timedOut, cancelled, failureType } = processResult
+  const { exitCode, timedOut, timeoutReason, cancelled, failureType } = processResult
 
   if (timedOut) {
     await emitScanEvent(
       scanId,
       "engine_timeout",
       "error",
-      `Engine timed out after ${timeoutMs / 1000}s`,
+      timeoutReason === "INACTIVITY"
+        ? "Engine stopped after no durable progress was observed"
+        : `Engine timed out after ${(timeoutMs ?? 0) / 1000}s`,
       {
-        timeoutMs,
+        timeoutReason,
+        ...(typeof timeoutMs === "number" ? { timeoutMs } : {}),
       }
     )
-    logger.error("Engine timed out", { scanId, timeoutMs })
+    logger.error("Engine timed out", { scanId, timeoutMs, timeoutReason })
   } else {
     await emitScanEvent(scanId, "engine_exit", "info", `Engine exited with code ${exitCode}`, {
       exitCode,
@@ -795,6 +863,7 @@ export async function runEngine(
     scanId,
     exitCode,
     timedOut,
+    timeoutReason,
     failureType,
   })
 
@@ -846,6 +915,7 @@ export async function runEngine(
     exitCode,
     cancelled,
     timedOut,
+    timeoutReason,
     output,
     sourceCheckoutPath,
     sourceRevision,

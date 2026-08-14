@@ -366,7 +366,7 @@ The worker selects one profile before each engine subprocess:
 | Deep         | deep        | `LYRASHIELD_TERRA_LLM` | medium    |       $5.00 |
 | Custom       | deep        | `LYRASHIELD_TERRA_LLM` | medium    |       $5.00 |
 
-Safe and Quick are aliases of the same repository profile. Safe/Quick/Standard have a 15-minute wall-clock ceiling: at most 12 minutes for the AI engine plus a 3-minute deterministic-scanner reserve. Deep/Custom have a 45-minute ceiling: at most 40 minutes for the engine plus a 5-minute scanner reserve. A positive workspace duration policy may lower but cannot raise these ceilings. URL and API targets use their own deterministic capability profiles, never the repository AI engine, and have a $0 AI budget.
+Safe and Quick are aliases of the same repository profile. The 15-minute Safe/Quick/Standard and 45-minute Deep/Custom values are dashboard estimates, not elapsed-time engine cutoffs: an advancing repository engine keeps running. The worker stops a repository engine only for user cancellation, its protected provider budget, or 20 minutes without a changing bounded `run.json` receipt. URL and API targets retain their own deterministic wall-time, request, and egress limits; they never invoke the repository AI engine and have a $0 AI budget.
 
 The worker permanently versions the official Azure GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-08-06; USD per 1 million tokens):
 

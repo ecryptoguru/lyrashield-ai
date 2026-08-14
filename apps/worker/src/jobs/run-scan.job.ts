@@ -24,7 +24,6 @@ import {
   cleanupEngineWorkspace,
   interpretExitCode,
   resolveEngineProfile,
-  resolveEngineTimeoutMs,
   runEngineTriage,
   type EngineRunResult,
 } from "../engine/runner"
@@ -687,7 +686,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       const isCancelledOrTimedOut = async () => {
-        if (hasGlobalScanTimeout()) return true
+        if (target.type !== "REPO" && hasGlobalScanTimeout()) return true
         return isScanCancelled()
       }
 
@@ -785,7 +784,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             maxBudgetUsd,
           },
           scanId,
-          Math.min(resolveEngineTimeoutMs(policy?.maxDurationMinutes, mode), scanRuntimeBudgetMs),
+          null,
           isScanCancelled
         )
       } else if (target.type === "WEB_APP" || target.type === "API") {
@@ -810,7 +809,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
-      if (globalScanTimeoutReached) {
+      if (target.type !== "REPO" && globalScanTimeoutReached) {
         const timeoutMessage = timeoutErrorMessage(scanRuntimeBudgetMs)
         await failWithScanTimeout(timeoutMessage)
         return { status: "failed", errorCategory: "TIMEOUT", errorMessage: timeoutMessage }
@@ -888,7 +887,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       if (engineResult.timedOut) {
-        const timeoutMessage = "Scan engine timed out before completing"
+        const inactive = engineResult.timeoutReason === "INACTIVITY"
+        const timeoutMessage = inactive
+          ? "Scan engine stopped after no durable progress was observed"
+          : "Scan engine timed out before completing"
         await persistResultManifest({
           scanId,
           target: {
@@ -910,7 +912,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           },
         })
         await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: "TIMEOUT",
+          errorCategory: inactive ? "ENGINE_INACTIVE" : "TIMEOUT",
           errorMessage: timeoutMessage,
         })
         try {
@@ -924,7 +926,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 : String(notificationError),
           })
         }
-        return { status: "failed", errorCategory: "TIMEOUT", errorMessage: timeoutMessage }
+        return {
+          status: "failed",
+          errorCategory: inactive ? "ENGINE_INACTIVE" : "TIMEOUT",
+          errorMessage: timeoutMessage,
+        }
       }
 
       // Capture the engine's real terminal cause, but do not return early.
@@ -1020,10 +1026,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
-      const scannerPhaseTimeoutMs = resolveScannerPhaseTimeoutMs(
-        scanRuntimeBudgetMs,
-        Date.now() - scanStartedAtMs
-      )
+      const scannerPhaseTimeoutMs =
+        target.type === "REPO"
+          ? env.SCANNER_PHASE_TIMEOUT_MS
+          : resolveScannerPhaseTimeoutMs(scanRuntimeBudgetMs, Date.now() - scanStartedAtMs)
 
       const orchestratorResult = await runScannerOrchestrator({
         scanId,
@@ -1042,7 +1048,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         engineFindings: engineResult.output.vulnerabilities,
         workspaceDir: engineResult.sourceCheckoutPath ?? undefined,
         scannerPhaseTimeoutMs,
-        isCancelled: isCancelledOrTimedOut,
+        isCancelled: target.type === "REPO" ? isScanCancelled : isCancelledOrTimedOut,
         urlProfile,
       })
 
@@ -1086,11 +1092,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             profile: resolveEngineProfile("STANDARD"),
             input: triageInput,
             maxBudgetUsd: triageEligibility.maxBudgetUsd!,
-            timeoutMs: resolveScannerPhaseTimeoutMs(
-              scanRuntimeBudgetMs,
-              Date.now() - scanStartedAtMs
-            ),
-            shouldCancel: isCancelledOrTimedOut,
+            timeoutMs: env.SCANNER_PHASE_TIMEOUT_MS,
+            shouldCancel: isScanCancelled,
           })
           const artifact = triageResult.artifact
           if (artifact && triageResult.llmUsage) {
