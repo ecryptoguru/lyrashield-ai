@@ -3,17 +3,53 @@
 These are real captures of the LyraShield evidence console. They are **redacted at
 the file level** before they enter the repo.
 
-- `console-home.webp` — captured at `/dashboard`, used by
-  `components/landing/HeroProductFrame.astro`.
-- `console-trust-runs.webp` — captured at `/trust-runs`, used by
+- `console-home.webp` — captured at `/dashboard`, used full-width by
+  `components/landing/HeroProductFrame.astro` as the large frame in the hero
+  collage.
+- `console-trust-runs.webp` — captured at `/trust-runs`, used full-width by
   `pages/methodology.astro` under "What every new scan record preserves".
-- `console-issues.webp` — captured at `/issues`, used by `pages/methodology.astro`
-  under "Evidence states are not interchangeable".
-- `console-coding-agents.webp` — captured at `/coding-agents`, used by
-  `pages/docs/integrations/index.astro` under "Fastest path: the CLI".
+- `console-issues.webp` — captured at `/issues`, used full-width by
+  `pages/methodology.astro` under "Evidence states are not interchangeable".
+- `console-coding-agents.webp` — captured at `/coding-agents`, used full-width
+  by `pages/docs/integrations/index.astro` under "Fastest path: the CLI".
+- `console-issues-thumb.webp`, `console-coding-agents-thumb.webp` — the
+  matching captures with the app sidebar cropped off (see "Thumbnail crop"
+  below). Used only by `HeroProductFrame.astro`, as the two small frames
+  stacked beside the dashboard view in the hero collage. There is
+  deliberately no `console-trust-runs-thumb.webp`: Trust Runs was cut from the
+  collage so the remaining two frames could run taller. If it comes back,
+  regenerate its thumb from `console-trust-runs.webp` rather than assuming a
+  stale copy is lying around.
 
 The hero uses its own frame component; everything else goes through
 `components/ProductShot.astro`, which supplies the browser chrome and caption.
+
+## Thumbnail crop
+
+The `*-thumb.webp` files are cropped from the corresponding full capture: the
+app's left sidebar (0 to x=267 in the original 1400px-wide export) is removed,
+leaving a 1133×883 image of just the content pane. At hero-thumbnail size the
+sidebar was mostly wasted width; the content is what makes each frame's point.
+
+**This is a separate file, not an edit of the shared original.** The full
+1400×883 captures stay untouched because `pages/methodology.astro` and
+`pages/docs/integrations/index.astro` render them full-width, sidebar
+included, at a size where the sidebar reads fine. If you need to redo a crop,
+verify the sidebar/content border position first — do not assume x=267 holds
+for a differently-styled future capture:
+
+```python
+from PIL import Image
+im = Image.open("console-x.webp").convert("RGB")
+prev = None
+for x in range(200, 320):
+    px = im.getpixel((x, 400))
+    if prev and sum(abs(a - b) for a, b in zip(px, prev)) > 15:
+        print(x, prev, "->", px)
+    prev = px
+```
+Look for a consistent edge across several `y` values before picking the crop
+`x`; a single sampled row can catch a card border instead of the sidebar edge.
 
 ## The redaction rule
 
