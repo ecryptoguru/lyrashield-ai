@@ -886,6 +886,51 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
+      if (engineResult.budgetKilled) {
+        const budgetMessage = "Protected run limit reached"
+        await persistResultManifest({
+          scanId,
+          target: {
+            id: target.id,
+            type: target.type,
+            repoFullName: target.repoFullName,
+            branch: target.branch,
+            url: target.url,
+          },
+          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
+          engineFindingCount: 0,
+          coverageIssues: [{ scanner: "engine", status: "bounded", reason: budgetMessage }],
+          engineExecution,
+          accounting: {
+            maxBudgetUsd,
+            billedCostUsd,
+            reconciled: costReconciled,
+            ...(reconciliationReason ? { reconciliationReason } : {}),
+          },
+        })
+        await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+          errorCategory: "BUDGET_EXCEEDED",
+          errorMessage: budgetMessage,
+          ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
+        })
+        try {
+          await notifyScanFailed(workspaceId, scanId, budgetMessage)
+        } catch (notificationError) {
+          log.warn("Failed to send budget-stop notification", {
+            scanId,
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
+          })
+        }
+        return {
+          status: "failed",
+          errorCategory: "BUDGET_EXCEEDED",
+          errorMessage: budgetMessage,
+        }
+      }
+
       if (engineResult.timedOut) {
         const inactive = engineResult.timeoutReason === "INACTIVITY"
         const timeoutMessage = inactive
