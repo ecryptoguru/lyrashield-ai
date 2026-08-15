@@ -53,6 +53,9 @@ export default function SignInPage() {
   }
 
   useEffect(() => {
+    // Reference the retry key so react-hooks/exhaustive-deps sees it as used —
+    // it is a re-trigger signal, not a data dependency. (Deep Review v13.)
+    void providersRetryKey
     let active = true
     const oauthError = new URLSearchParams(window.location.search).get("error")
     let oauthErrorTimer: number | undefined
@@ -88,10 +91,29 @@ export default function SignInPage() {
       })
 
     void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
-      .then((response) =>
-        response.ok
-          ? response.json().then((data) => ({ ok: true, data }))
-          : Promise.resolve({ ok: false, data: null })
+      .then(
+        async (
+          response
+        ): Promise<{
+          ok: boolean
+          data: {
+            github?: boolean
+            google?: boolean
+            microsoft?: boolean
+            passwordReset?: boolean
+          } | null
+        }> => {
+          if (!response.ok) return { ok: false, data: null }
+          return {
+            ok: true,
+            data: (await response.json()) as {
+              github?: boolean
+              google?: boolean
+              microsoft?: boolean
+              passwordReset?: boolean
+            },
+          }
+        }
       )
       .then(({ ok, data }) => {
         if (!active) return
@@ -350,7 +372,7 @@ export default function SignInPage() {
 
           {!providersLoading && providersError && (
             <p className="text-muted-foreground mt-6 text-sm" role="alert">
-              Sign-in options couldn&apos;t load.{" "}
+              Sign-in options could not be loaded.{" "}
               <button
                 type="button"
                 className="text-primary underline underline-offset-2"
