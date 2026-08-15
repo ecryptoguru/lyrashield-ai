@@ -14,5 +14,5 @@ export default async function ReportsPage({
   const query = new URLSearchParams({ tab: "reports" })
   if (scanId) query.set("scanId", scanId)
   if (targetId) query.set("targetId", targetId)
-  redirect(`/dashboard/findings?${query.toString()}`)
+  permanentRedirect(`/dashboard/findings?${query.toString()}`)
 }

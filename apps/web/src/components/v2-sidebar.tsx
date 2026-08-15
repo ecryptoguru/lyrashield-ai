@@ -63,17 +63,19 @@ export function V2Sidebar({
   workspaces,
   activeWorkspaceId: initialWorkspaceId,
   pendingApprovals = 0,
+  canViewEvidenceVault = false,
 }: {
   userName: string
   userEmail: string
   workspaces: Workspace[]
   activeWorkspaceId: string | null
   pendingApprovals?: number
+  canViewEvidenceVault?: boolean
 }) {
   const pathname = usePathname()
   const router = useRouter()
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(initialWorkspaceId)
-  const { secondary } = resolveNav({ pendingApprovals })
+  const { secondary } = resolveNav({ pendingApprovals, canViewEvidenceVault })
 
   async function handleSelectWorkspace(id: string) {
     try {

@@ -1,5 +1,10 @@
 "use client"
 
+// useSearchParams() requires a Suspense boundary or force-dynamic to avoid a
+// build-time prerender error on this route (users land here from email links).
+// Matches the pattern in oauth/consent/page.tsx. (Deep Review v13.)
+export const dynamic = "force-dynamic"
+
 import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
