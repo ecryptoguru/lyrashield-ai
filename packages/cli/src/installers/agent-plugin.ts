@@ -91,8 +91,12 @@ export async function installAgentPlugin(
 
   // Confirmation gate: the `yes` option is threaded through from the CLI
   // --yes flag. Without it, a plugin install would silently overwrite an
-  // existing install (including user customizations). Require explicit consent.
-  if (!opts.yes) {
+  // existing install (including user customizations). Require explicit consent
+  // only when the destination already exists; fresh installs proceed directly.
+  const destExists = await stat(dest)
+    .then(() => true)
+    .catch(() => false)
+  if (destExists && !opts.yes) {
     return {
       agent: agent.id,
       displayName: agent.displayName,
@@ -109,10 +113,11 @@ export async function installAgentPlugin(
   // to a partial copy.
   let backupPath: string | undefined
   try {
-    await stat(dest)
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-")
-    backupPath = `${dest}.lyrashield-backup-${stamp}`
-    await rename(dest, backupPath)
+    if (destExists) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+      backupPath = `${dest}.lyrashield-backup-${stamp}`
+      await rename(dest, backupPath)
+    }
   } catch {
     // dest does not exist — no backup needed
   }

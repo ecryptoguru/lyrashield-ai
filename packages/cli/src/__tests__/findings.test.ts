@@ -20,7 +20,7 @@ describe("lyrashield findings command URL construction", () => {
       ok: true,
       status: 200,
       headers: new Headers(),
-      json: async () => ({ success: true, data: [] }),
+      json: async () => ({ success: true, data: { items: [], nextCursor: null } }),
     })
     globalThis.fetch = mockFetch
 

@@ -11,7 +11,7 @@ import {
 
 export async function handleApprovals(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["action", "input", "id"],
+    string: ["action", "input", "id", "status"],
     boolean: ["help"],
     alias: { a: "action", i: "input", h: "help" },
     default: { help: false },

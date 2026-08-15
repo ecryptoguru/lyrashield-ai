@@ -349,14 +349,23 @@ export class PromptInjectionGuard {
     return leetspeakMapped.replace(/\s+/g, " ").trim()
   }
 
-  check(input: string): GuardResult {
+  check(input: string): GuardResult
+  check(
+    input: string,
+    overrides?: { maxInputLength?: number; skipPatterns?: Set<string> }
+  ): GuardResult
+  check(
+    input: string,
+    overrides?: { maxInputLength?: number; skipPatterns?: Set<string> }
+  ): GuardResult {
     const detectedPatterns: string[] = []
     const deadline = this.timeoutMs > 0 ? Date.now() + this.timeoutMs : 0
+    const effectiveMaxLength = overrides?.maxInputLength ?? this.maxInputLength
 
-    if (input.length > this.maxInputLength) {
+    if (input.length > effectiveMaxLength) {
       return {
         allowed: false,
-        reason: `Input exceeds maximum length of ${this.maxInputLength} characters`,
+        reason: `Input exceeds maximum length of ${effectiveMaxLength} characters`,
         detectedPatterns: ["input_too_long"],
       }
     }
@@ -364,6 +373,7 @@ export class PromptInjectionGuard {
     const normalized = this.normalizeInput(input)
 
     for (const { pattern, name } of INJECTION_PATTERNS) {
+      if (overrides?.skipPatterns?.has(name)) continue
       if (this.isDeadlineExceeded(deadline)) {
         this.logEvents &&
           logger.warn("Prompt injection guard exceeded time budget", {
@@ -465,7 +475,20 @@ export class PromptInjectionGuard {
 
   checkToolCall(toolName: string, args: Record<string, unknown>): GuardResult {
     const serialized = JSON.stringify({ tool: toolName, args })
-    const result = this.check(serialized)
+
+    // The check_diff tool receives raw PR diffs that routinely exceed the
+    // default 10000-char limit and legitimately contain code-execution and
+    // env-extraction patterns. Raise the limit and skip those pattern classes
+    // so the advisory scanner (which intentionally detects those patterns) sees
+    // the diff instead of being blocked by the injection guard.
+    const overrides =
+      toolName === "lyrashield_check_diff"
+        ? {
+            maxInputLength: 200000,
+            skipPatterns: new Set(["code_execution", "env_extraction"]),
+          }
+        : undefined
+    const result = this.check(serialized, overrides)
 
     if (result.allowed && result.sanitizedInput) {
       try {
