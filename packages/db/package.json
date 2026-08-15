@@ -17,7 +17,7 @@
   "dependencies": {
     "@prisma/client": "7.9.1",
     "@prisma/adapter-pg": "7.9.1",
-    "pg": "^8.13.0",
+    "pg": "^8.23.0",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/score": "workspace:*",
@@ -26,10 +26,10 @@
   },
   "devDependencies": {
     "prisma": "7.9.1",
-    "tsx": "^4.23.8",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.0",
     "@types/node": "^24.0.0",
-    "@types/pg": "^8.20.4",
+    "@types/pg": "^8.21.0",
     "dotenv": "16.4.7"
   }
 }
