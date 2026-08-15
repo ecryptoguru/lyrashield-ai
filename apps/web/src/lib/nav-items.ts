@@ -224,6 +224,8 @@ export interface ResolvedNav {
   more: NavItem[]
   /** The Review Queue item, or null when no pending approvals exist. */
   reviewQueue: NavItem | null
+  /** The Evidence Vault item, or null when the active role lacks aiAssurance:view. */
+  evidenceVault: NavItem | null
 }
 
 /**

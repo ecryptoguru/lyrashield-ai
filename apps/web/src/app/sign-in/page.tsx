@@ -91,10 +91,29 @@ export default function SignInPage() {
       })
 
     void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
-      .then((response) =>
-        response.ok
-          ? response.json().then((data) => ({ ok: true, data }))
-          : Promise.resolve({ ok: false, data: null })
+      .then(
+        async (
+          response
+        ): Promise<{
+          ok: boolean
+          data: {
+            github?: boolean
+            google?: boolean
+            microsoft?: boolean
+            passwordReset?: boolean
+          } | null
+        }> => {
+          if (!response.ok) return { ok: false, data: null }
+          return {
+            ok: true,
+            data: (await response.json()) as {
+              github?: boolean
+              google?: boolean
+              microsoft?: boolean
+              passwordReset?: boolean
+            },
+          }
+        }
       )
       .then(({ ok, data }) => {
         if (!active) return
