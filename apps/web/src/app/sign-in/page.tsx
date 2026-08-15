@@ -53,6 +53,9 @@ export default function SignInPage() {
   }
 
   useEffect(() => {
+    // Reference the retry key so react-hooks/exhaustive-deps sees it as used —
+    // it is a re-trigger signal, not a data dependency. (Deep Review v13.)
+    void providersRetryKey
     let active = true
     const oauthError = new URLSearchParams(window.location.search).get("error")
     let oauthErrorTimer: number | undefined
