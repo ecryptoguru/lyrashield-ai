@@ -95,13 +95,15 @@ function MoreNavRow({
 export function BottomNav({
   unreadNotifications = 0,
   pendingApprovals = 0,
+  canViewEvidenceVault = false,
 }: {
   unreadNotifications?: number
   pendingApprovals?: number
+  canViewEvidenceVault?: boolean
 }) {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
-  const { mobilePrimary, more } = resolveNav({ pendingApprovals })
+  const { mobilePrimary, more } = resolveNav({ pendingApprovals, canViewEvidenceVault })
 
   return (
     <nav

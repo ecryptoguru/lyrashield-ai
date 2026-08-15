@@ -84,10 +84,18 @@ describe("nav-items workspace destinations", () => {
       "/dashboard/notifications",
       "/dashboard/agents",
       "/dashboard/integrations",
-      "/dashboard/ai-assurance",
       "/dashboard/team",
       "/dashboard/settings",
     ])
+  })
+
+  it("surfaces Evidence Vault only when the active role has aiAssurance:view", () => {
+    expect(
+      resolveNav({ canViewEvidenceVault: false }).secondary.map((item) => item.href)
+    ).not.toContain("/dashboard/ai-assurance")
+    expect(resolveNav({ canViewEvidenceVault: true }).secondary.map((item) => item.href)).toContain(
+      "/dashboard/ai-assurance"
+    )
   })
 })
 

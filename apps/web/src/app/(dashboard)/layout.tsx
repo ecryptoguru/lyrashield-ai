@@ -11,6 +11,7 @@ import {
   getCachedPendingApprovals,
 } from "@/lib/cache"
 import type { MemberRole } from "@lyrashield/db"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getCachedSession()
@@ -44,6 +45,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
       : Promise.resolve(0),
   ])
 
+  // The Evidence Vault nav link 404s for roles that lack aiAssurance:view
+  // (DEVELOPER, BILLING_ADMIN). Gate the nav item on that permission so the
+  // link is only advertised to roles that can actually open the page. The
+  // route itself stays reachable by URL for authorized users. (Deep Review v13.)
+  const canViewEvidenceVault = active
+    ? hasPermission(active.role as MemberRole, PERMISSIONS.aiAssurance.view)
+    : false
+
   return (
     <div className="bg-background flex min-h-screen flex-col md:flex-row">
       <V2Sidebar
@@ -52,6 +61,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         pendingApprovals={pendingApprovals}
+        canViewEvidenceVault={canViewEvidenceVault}
       />
       {/* Title derives from the current route via NAV_ITEMS. On a phone the header
             is the only place a screen can be named, so it must not spend that slot

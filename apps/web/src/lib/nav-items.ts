@@ -110,6 +110,19 @@ function reviewQueueItem(pendingApprovals: number): NavItem {
   }
 }
 
+/**
+ * The Evidence Vault item. It is rendered only when the active workspace role
+ * holds `aiAssurance:view` — otherwise the nav link 404s on click for roles
+ * that lack the permission (DEVELOPER, BILLING_ADMIN). The route itself stays
+ * reachable by URL for authorized users. (Deep Review v13 P1-2.)
+ */
+const EVIDENCE_VAULT_BASE: NavItem = {
+  href: "/dashboard/ai-assurance",
+  label: "Evidence Vault",
+  shortLabel: "Evidence",
+  icon: ShieldCheck,
+}
+
 /** Secondary / Workspace destinations that are always present. */
 const WORKSPACE_NAV_ITEMS: NavItem[] = [
   {
@@ -130,12 +143,6 @@ const WORKSPACE_NAV_ITEMS: NavItem[] = [
     shortLabel: INTEGRATION_PLURAL,
     icon: Plug,
   },
-  {
-    href: "/dashboard/ai-assurance",
-    label: "Evidence Vault",
-    shortLabel: "Evidence",
-    icon: ShieldCheck,
-  },
   { href: "/dashboard/team", label: TEAM_PLURAL, shortLabel: TEAM_PLURAL, icon: Users },
   {
     href: "/dashboard/settings",
@@ -152,12 +159,20 @@ export interface NavState {
    * gating this on `agent:view` permission before passing it in.
    */
   pendingApprovals?: number
+  /**
+   * Whether the active workspace role may view the Evidence Vault
+   * (`aiAssurance:view`). The Evidence Vault nav item is only surfaced when
+   * true; the route itself remains reachable by URL for authorized users.
+   * The layout gates this on `aiAssurance:view` permission before passing it in.
+   */
+  canViewEvidenceVault?: boolean
 }
 
 function resolveNavItems(state: NavState = {}): NavItem[] {
   const pending = state.pendingApprovals ?? 0
   const items = [...LIFECYCLE_NAV_ITEMS]
   if (pending > 0) items.push(reviewQueueItem(pending))
+  if (state.canViewEvidenceVault) items.push(EVIDENCE_VAULT_BASE)
   items.push(...WORKSPACE_NAV_ITEMS)
   return items
 }
@@ -209,6 +224,8 @@ export interface ResolvedNav {
   more: NavItem[]
   /** The Review Queue item, or null when no pending approvals exist. */
   reviewQueue: NavItem | null
+  /** The Evidence Vault item, or null when the active role lacks aiAssurance:view. */
+  evidenceVault: NavItem | null
 }
 
 /**
@@ -219,8 +236,12 @@ export interface ResolvedNav {
 export function resolveNav(state: NavState = {}): ResolvedNav {
   const pending = state.pendingApprovals ?? 0
   const reviewQueue = pending > 0 ? reviewQueueItem(pending) : null
-  const secondary = reviewQueue ? [reviewQueue, ...WORKSPACE_NAV_ITEMS] : WORKSPACE_NAV_ITEMS
-  const more = reviewQueue ? [reviewQueue, ...WORKSPACE_NAV_ITEMS] : WORKSPACE_NAV_ITEMS
+  const evidenceVault = state.canViewEvidenceVault ? EVIDENCE_VAULT_BASE : null
+  const conditional: NavItem[] = []
+  if (reviewQueue) conditional.push(reviewQueue)
+  if (evidenceVault) conditional.push(evidenceVault)
+  const secondary = [...conditional, ...WORKSPACE_NAV_ITEMS]
+  const more = [...conditional, ...WORKSPACE_NAV_ITEMS]
   const items = [...LIFECYCLE_NAV_ITEMS, ...secondary]
   return {
     items,
@@ -229,5 +250,6 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
     mobilePrimary: LIFECYCLE_NAV_ITEMS,
     more,
     reviewQueue,
+    evidenceVault,
   }
 }

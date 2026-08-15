@@ -19,6 +19,13 @@ export interface EngineRunResult {
   cancelled: boolean
   timedOut: boolean
   timeoutReason?: "DURATION" | "INACTIVITY" | null
+  /**
+   * The worker backstop killed the engine because the polled run.json
+   * llm_usage.cost crossed the protected budget ceiling (maxBudgetUsd ×
+   * (1 + OVERSHOOT_GRACE)). This is NOT an error — it maps to STOPPED_BUDGET,
+   * the same terminal status the engine's own exit-3 self-stop uses.
+   */
+  budgetKilled?: boolean
   output: ParsedScanOutput
   /** Validated host-side checkout for deterministic repository scanners. */
   sourceCheckoutPath: string | null
@@ -122,6 +129,15 @@ const ENGINE_HEARTBEAT_MS = 120_000
 // This only terminates a process that has produced no durable progress at all.
 const ENGINE_PROGRESS_POLL_MS = 15_000
 const ENGINE_PROGRESS_STALL_MS = 20 * 60 * 1000
+
+/**
+ * Grace margin above maxBudgetUsd before the worker backstop terminates the
+ * engine. The engine normally self-stops at exit 3 (STOPPED_BUDGET) first;
+ * this is the backstop for when it doesn't. The margin absorbs the lag between
+ * the engine's last write and the next 15 s poll tick so a scan that is
+ * legitimately approaching the cap is not killed prematurely. Founder-tunable.
+ */
+export const OVERSHOOT_GRACE = 0.075
 const MAX_ENGINE_ERROR_TAIL_BYTES = 4096
 const MAX_ENGINE_FAILURE_MARKER_WINDOW = 512
 
@@ -403,12 +419,15 @@ async function runEngineProcess(
   timeoutMs: number | null,
   profile: EngineProfile,
   shouldCancel?: () => Promise<boolean>,
-  readProgressFingerprint?: () => Promise<string | null>
+  readProgressFingerprint?: () => Promise<string | null>,
+  maxBudgetUsd?: number,
+  readSpendUsd?: () => Promise<number | null>
 ): Promise<{
   exitCode: number
   timedOut: boolean
   timeoutReason: "DURATION" | "INACTIVITY" | null
   cancelled: boolean
+  budgetKilled: boolean
   failureType: string | null
 }> {
   return new Promise((resolvePromise, reject) => {
@@ -426,6 +445,7 @@ async function runEngineProcess(
     let timedOut = false
     let timeoutReason: "DURATION" | "INACTIVITY" | null = null
     let cancelled = false
+    let budgetKilled = false
     let closed = false
     let terminationRequested = false
     let progressFingerprint: string | null = null
@@ -461,6 +481,10 @@ async function runEngineProcess(
         }, 1000)
       : null
     const startedAt = Date.now()
+    const spendCeilingUsd =
+      typeof maxBudgetUsd === "number" && Number.isFinite(maxBudgetUsd) && maxBudgetUsd > 0
+        ? maxBudgetUsd * (1 + OVERSHOOT_GRACE)
+        : null
     const pollProgress = () => {
       if (!readProgressFingerprint || closed || progressCheckInFlight) return
       progressCheckInFlight = true
@@ -470,12 +494,23 @@ async function runEngineProcess(
           if (nextFingerprint && nextFingerprint !== progressFingerprint) {
             progressFingerprint = nextFingerprint
             lastProgressAt = Date.now()
-            return
-          }
-          if (Date.now() - lastProgressAt >= ENGINE_PROGRESS_STALL_MS) {
+          } else if (Date.now() - lastProgressAt >= ENGINE_PROGRESS_STALL_MS) {
             timedOut = true
             timeoutReason = "INACTIVITY"
             terminate()
+            return
+          }
+          // Budget backstop: read the live cumulative spend from the same
+          // receipt and terminate when it crosses the grace-adjusted ceiling.
+          // A null read (missing/malformed) is fail-open — no trip.
+          if (spendCeilingUsd !== null && readSpendUsd && !closed) {
+            return readSpendUsd().then((observedSpend) => {
+              if (closed || observedSpend === null) return
+              if (observedSpend >= spendCeilingUsd) {
+                budgetKilled = true
+                terminate()
+              }
+            })
           }
         })
         .catch(() => {
@@ -518,13 +553,14 @@ async function runEngineProcess(
       if (cancellationTimer) clearInterval(cancellationTimer)
       escalation.markExited()
       stopTracking()
-      const exitCode = code ?? (timedOut || cancelled ? -1 : 1)
+      const exitCode = code ?? (timedOut || cancelled || budgetKilled ? -1 : 1)
       logger.info("Engine streams consumed", { scanId, stdoutBytes, stderrBytes })
       resolvePromise({
         exitCode,
         timedOut,
         timeoutReason,
         cancelled,
+        budgetKilled,
         failureType: failureType ?? extractEngineFailureType(stderrTail.toString("utf8")),
       })
     })
@@ -755,6 +791,38 @@ export async function readEngineProgressFingerprint(
   }
 }
 
+/**
+ * Reads the live cumulative LLM spend (run.json -> llm_usage -> cost) from the
+ * same engine receipt the fingerprint poll already opens. Returns null when the
+ * file, the llm_usage object, or the cost field is missing or malformed —
+ * treated as "no spend signal yet", NEVER as "over budget" (fail-open on read).
+ */
+export async function readEngineSpendUsd(
+  workDir: string,
+  expectedRunName: string
+): Promise<number | null> {
+  const outputDir = await findRunOutputDir(workDir, expectedRunName)
+  if (!outputDir) return null
+
+  let raw: string
+  try {
+    raw = await readTextFileBounded(join(outputDir, "run.json"), MAX_ENGINE_RUN_BYTES)
+  } catch {
+    return null
+  }
+
+  try {
+    const record = JSON.parse(raw) as { llm_usage?: unknown }
+    const usage = record.llm_usage
+    if (typeof usage !== "object" || usage === null || Array.isArray(usage)) return null
+    const cost = (usage as { cost?: unknown }).cost
+    if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) return null
+    return cost
+  } catch {
+    return null
+  }
+}
+
 async function readEngineOutput(outputDir: string): Promise<{
   vulnerabilitiesRaw: string
   runJsonRaw: string
@@ -821,7 +889,9 @@ export async function runEngine(
       timeoutMs,
       profile,
       shouldCancel,
-      () => readEngineProgressFingerprint(absWorkDir, scanId)
+      () => readEngineProgressFingerprint(absWorkDir, scanId),
+      config.maxBudgetUsd,
+      () => readEngineSpendUsd(absWorkDir, scanId)
     )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
@@ -834,10 +904,11 @@ export async function runEngine(
       timedOut: false,
       timeoutReason: null,
       cancelled: false,
+      budgetKilled: false,
       failureType: null,
     }
   }
-  const { exitCode, timedOut, timeoutReason, cancelled, failureType } = processResult
+  const { exitCode, timedOut, timeoutReason, cancelled, budgetKilled, failureType } = processResult
 
   if (timedOut) {
     await emitScanEvent(
@@ -916,6 +987,7 @@ export async function runEngine(
     cancelled,
     timedOut,
     timeoutReason,
+    budgetKilled,
     output,
     sourceCheckoutPath,
     sourceRevision,
