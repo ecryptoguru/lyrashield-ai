@@ -478,13 +478,7 @@ describe("readEngineSpendUsd", () => {
   it("reads the live cumulative llm_usage.cost from the active run receipt", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
-    const runDir = await createRun(
-      workDir,
-      "strix_runs",
-      "scan-spend",
-      "run.json",
-      new Date(1_000)
-    )
+    const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
     // runDir is created in the worker-owned temporary test workspace above.
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
@@ -499,13 +493,7 @@ describe("readEngineSpendUsd", () => {
   it("returns null when llm_usage is absent (fail-open on read)", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
-    const runDir = await createRun(
-      workDir,
-      "strix_runs",
-      "scan-spend",
-      "run.json",
-      new Date(1_000)
-    )
+    const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
@@ -519,17 +507,16 @@ describe("readEngineSpendUsd", () => {
   it("returns null when llm_usage.cost is malformed (fail-open on read)", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
-    const runDir = await createRun(
-      workDir,
-      "strix_runs",
-      "scan-spend",
-      "run.json",
-      new Date(1_000)
-    )
+    const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
-      JSON.stringify({ seq: 1, turn_count: 1, phase: "running", llm_usage: { cost: "not-a-number" } }),
+      JSON.stringify({
+        seq: 1,
+        turn_count: 1,
+        phase: "running",
+        llm_usage: { cost: "not-a-number" },
+      }),
       "utf8"
     )
 
@@ -546,13 +533,7 @@ describe("readEngineSpendUsd", () => {
   it("returns null when run.json is not valid JSON", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
-    const runDir = await createRun(
-      workDir,
-      "strix_runs",
-      "scan-spend",
-      "run.json",
-      new Date(1_000)
-    )
+    const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(join(runDir, "run.json"), "{ broken json", "utf8")
 
@@ -562,13 +543,7 @@ describe("readEngineSpendUsd", () => {
   it("returns null for a negative cost (fail-open on read, never over-budget)", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
-    const runDir = await createRun(
-      workDir,
-      "strix_runs",
-      "scan-spend",
-      "run.json",
-      new Date(1_000)
-    )
+    const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
