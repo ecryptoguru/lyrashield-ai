@@ -454,7 +454,7 @@ jobs:
   deploy-marketing:
     name: Deploy Marketing to Cloudflare
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true')
-    needs: [security, lint-and-typecheck, changes]
+    needs: [security, lint-and-typecheck, changes, rls-child-write-repro]
     runs-on: ubuntu-latest
     environment:
       name: cloudflare-production
@@ -569,7 +569,7 @@ jobs:
   deploy-azure:
     name: Deploy to Azure
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
-    needs: [security, lint-and-typecheck, changes]
+    needs: [security, lint-and-typecheck, changes, rls-child-write-repro]
     uses: ./.github/workflows/deploy-azure.yml
     secrets: inherit
     permissions:

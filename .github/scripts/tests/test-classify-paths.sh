@@ -79,6 +79,25 @@ out=$(run_classify $'.github/workflows/ci.yml')
 assert_eq "github: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "github: shared" "true" "$(get_field "$out" "shared")"
 
+# --- Test 7: an uncovered path falls back to shared (fail-closed, v13 P1-7) ---
+# ops/, e2e/, root tooling, and new root configs must not silently skip deploys.
+out=$(run_classify $'ops/worker/refresh-egress.sh')
+assert_eq "ops: docs-only" "false" "$(get_field "$out" "docs-only")"
+assert_eq "ops: marketing" "false" "$(get_field "$out" "marketing")"
+assert_eq "ops: app" "false" "$(get_field "$out" "app")"
+assert_eq "ops: shared (fallback)" "true" "$(get_field "$out" "shared")"
+
+out=$(run_classify $'e2e/visual/home.spec.ts')
+assert_eq "e2e: shared (fallback)" "true" "$(get_field "$out" "shared")"
+
+out=$(run_classify $'run-all-tests.mjs')
+assert_eq "run-all-tests: shared (fallback)" "true" "$(get_field "$out" "shared")"
+
+# --- Test 8: ops/ is also matched directly by shared_pattern now ---
+out=$(run_classify $'ops/worker/refresh-egress.sh\napps/web/src/app/page.tsx')
+assert_eq "ops+app: app" "true" "$(get_field "$out" "app")"
+assert_eq "ops+app: shared" "true" "$(get_field "$out" "shared")"
+
 # --- Test 7: agent config dirs are docs-only ---
 out=$(run_classify $'.devin/rules/AGENTS.md\n.claude/skills/foo/SKILL.md')
 assert_eq "agent-config: docs-only" "true" "$(get_field "$out" "docs-only")"
