@@ -224,6 +224,8 @@ export interface ResolvedNav {
   more: NavItem[]
   /** The Review Queue item, or null when no pending approvals exist. */
   reviewQueue: NavItem | null
+  /** The Evidence Vault item, or null when the active role lacks aiAssurance:view. */
+  evidenceVault: NavItem | null
 }
 
 /**
@@ -249,12 +251,5 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
     more,
     reviewQueue,
     evidenceVault,
-  }
-}
-_NAV_ITEMS,
-    secondary,
-    mobilePrimary: LIFECYCLE_NAV_ITEMS,
-    more,
-    reviewQueue,
   }
 }

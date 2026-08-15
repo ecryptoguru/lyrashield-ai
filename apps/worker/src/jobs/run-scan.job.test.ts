@@ -920,6 +920,115 @@ describe("processScanJob", () => {
     )
   })
 
+  it("maps a worker-initiated budget kill to STOPPED_BUDGET, not FAILED/TIMEOUT", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: -1,
+      budgetKilled: true,
+      output: {
+        vulnerabilities: [],
+        findingsComplete: false,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "stopped",
+          llm_usage: {
+            model: "azure_ai/gpt-5.6-luna",
+            request_count: 5,
+            input_tokens: 5_000_000,
+            cached_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            output_tokens: 50_000,
+            standard_input_tokens: 5_000_000,
+            standard_cached_input_tokens: 0,
+            standard_cache_write_input_tokens: 0,
+            standard_output_tokens: 50_000,
+            long_input_tokens: 0,
+            long_cached_input_tokens: 0,
+            long_cache_write_input_tokens: 0,
+            long_output_tokens: 0,
+            total_cost_usd: 1.3,
+          },
+        },
+        summary: "Engine stopped above budget",
+        findingCount: 0,
+      },
+    } as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result).toEqual({
+      status: "failed",
+      errorCategory: "BUDGET_EXCEEDED",
+      errorMessage: "Protected run limit reached",
+    })
+
+    // Must NOT map to TIMEOUT or generic FAILED
+    expect(result.errorCategory).not.toBe("TIMEOUT")
+    expect(result.errorCategory).not.toBe("ENGINE_ERROR")
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "STOPPED_BUDGET",
+      expect.objectContaining({
+        errorCategory: "BUDGET_EXCEEDED",
+        errorMessage: "Protected run limit reached",
+      })
+    )
+    // Budget kill is terminal — must not proceed to scanner/verify phase
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "VERIFYING")
+    expect(persistFindings).not.toHaveBeenCalled()
+    expect(completeScanWithScore).not.toHaveBeenCalled()
+    // A result manifest is persisted for coverage receipts
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanId: "scan-1",
+        coverageIssues: [expect.objectContaining({ scanner: "engine", status: "bounded" })],
+      })
+    )
+  })
+
+  it("does not trip the budget backstop on a scan that stays under the cap", async () => {
+    // A normal completed scan with spend well below the budget must not be
+    // touched by the mid-run ceiling. The default SAFE budget is $1.20.
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      budgetKilled: false,
+      output: {
+        vulnerabilities: [],
+        findingsComplete: true,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "completed",
+          llm_usage: {
+            model: "azure_ai/gpt-5.6-luna",
+            request_count: 3,
+            input_tokens: 18_420,
+            cached_input_tokens: 6_100,
+            cache_write_input_tokens: 0,
+            output_tokens: 2_310,
+            standard_input_tokens: 18_420,
+            standard_cached_input_tokens: 6_100,
+            standard_cache_write_input_tokens: 0,
+            standard_output_tokens: 2_310,
+            long_input_tokens: 0,
+            long_cached_input_tokens: 0,
+            long_cache_write_input_tokens: 0,
+            long_output_tokens: 0,
+            total_cost_usd: 0.005358,
+          },
+        },
+        summary: "Scan completed with 0 findings",
+        findingCount: 0,
+      },
+    } as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("completed")
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", expect.anything())
+    expect(completeScanWithScore).toHaveBeenCalled()
+  })
+
   it("maps scanner timeout errors to TIMEOUT", async () => {
     vi.mocked(runScannerOrchestrator).mockRejectedValueOnce(
       new Error("Scanner phase timed out") as never
