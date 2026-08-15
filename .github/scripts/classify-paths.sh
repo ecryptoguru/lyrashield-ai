@@ -21,7 +21,7 @@ set -euo pipefail
 docs_pattern='^(\.gitignore|\.prettierignore|\.prettierrc\.json|\.editorconfig|\.gitattributes|\.nvmrc|\.python-version|LICENSE|renovate\.json|.*\.md|\.devin/|\.claude/|\.codeium/|\.cursor/|\.agents/|\.windsurf/)$'
 marketing_pattern='^apps/(marketing|marketing-motion)/'
 app_pattern='^apps/(web|worker)/'
-shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|\.github/)'
+shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|playwright\.marketing\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|run-all-tests\.mjs|\.github/)'
 
 docs_only=true
 marketing=false
@@ -43,6 +43,18 @@ while IFS= read -r f; do
     shared=true
   fi
 done
+
+# Fail-closed fallback: if a change matched none of the four buckets, treat it
+# as shared so CI still runs. Without this, an uncovered path (e.g. a new root
+# config file, an ops/ script, an e2E/ fixture, or run-all-tests.mjs itself)
+# classifies as all-false — which preserves the main lint/typecheck/test/build
+# job (it gates on docs-only != 'true') but silently skips BOTH deploy jobs and
+# the engine-worker-contract gate (they need marketing|shared or app|shared).
+# Routing unknowns to shared is the safe direction: it over-runs CI rather than
+# under-deploying. (Deep Review v13, P1-7.)
+if [[ "$docs_only" == "false" && "$marketing" == "false" && "$app" == "false" && "$shared" == "false" ]]; then
+  shared=true
+fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
