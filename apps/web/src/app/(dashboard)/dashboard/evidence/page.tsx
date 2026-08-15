@@ -6,5 +6,5 @@ import { redirect } from "next/navigation"
  * existing bookmarks and internal links.
  */
 export default function EvidencePage() {
-  redirect("/dashboard/findings?tab=evidence")
+  permanentRedirect("/dashboard/findings?tab=evidence")
 }

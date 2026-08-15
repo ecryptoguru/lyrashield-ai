@@ -6,5 +6,5 @@ import { redirect } from "next/navigation"
  * existing bookmarks and internal links.
  */
 export default function AutomationsPage() {
-  redirect("/dashboard/scans?tab=monitoring")
+  permanentRedirect("/dashboard/scans?tab=monitoring")
 }
