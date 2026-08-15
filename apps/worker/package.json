@@ -19,7 +19,7 @@
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "bullmq": "^5.81.2",
-    "ioredis": "^5.4.0",
+    "ioredis": "^5.11.1",
     "tsx": "^4.23.8",
     "yaml": "^2.9.0",
     "zod": "^4.0.0"
