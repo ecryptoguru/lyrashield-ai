@@ -41,6 +41,8 @@ import {
   resolveEngineProfile,
   resolveEngineSandboxNetwork,
   readEngineProgressFingerprint,
+  readEngineSpendUsd,
+  OVERSHOOT_GRACE,
   terminateActiveEngineProcesses,
   trackActiveEngineProcess,
 } from "./runner"
@@ -469,6 +471,118 @@ describe("readEngineProgressFingerprint", () => {
     )
 
     await expect(readEngineProgressFingerprint(workDir, "scan-progress")).resolves.toBeNull()
+  })
+})
+
+describe("readEngineSpendUsd", () => {
+  it("reads the live cumulative llm_usage.cost from the active run receipt", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+    cleanupPaths.push(workDir)
+    const runDir = await createRun(
+      workDir,
+      "strix_runs",
+      "scan-spend",
+      "run.json",
+      new Date(1_000)
+    )
+    // runDir is created in the worker-owned temporary test workspace above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await writeFile(
+      join(runDir, "run.json"),
+      JSON.stringify({ seq: 3, turn_count: 2, phase: "running", llm_usage: { cost: 0.84 } }),
+      "utf8"
+    )
+
+    await expect(readEngineSpendUsd(workDir, "scan-spend")).resolves.toBeCloseTo(0.84)
+  })
+
+  it("returns null when llm_usage is absent (fail-open on read)", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+    cleanupPaths.push(workDir)
+    const runDir = await createRun(
+      workDir,
+      "strix_runs",
+      "scan-spend",
+      "run.json",
+      new Date(1_000)
+    )
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await writeFile(
+      join(runDir, "run.json"),
+      JSON.stringify({ seq: 0, turn_count: 0, phase: "setup" }),
+      "utf8"
+    )
+
+    await expect(readEngineSpendUsd(workDir, "scan-spend")).resolves.toBeNull()
+  })
+
+  it("returns null when llm_usage.cost is malformed (fail-open on read)", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+    cleanupPaths.push(workDir)
+    const runDir = await createRun(
+      workDir,
+      "strix_runs",
+      "scan-spend",
+      "run.json",
+      new Date(1_000)
+    )
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await writeFile(
+      join(runDir, "run.json"),
+      JSON.stringify({ seq: 1, turn_count: 1, phase: "running", llm_usage: { cost: "not-a-number" } }),
+      "utf8"
+    )
+
+    await expect(readEngineSpendUsd(workDir, "scan-spend")).resolves.toBeNull()
+  })
+
+  it("returns null when the run output directory does not exist", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+    cleanupPaths.push(workDir)
+
+    await expect(readEngineSpendUsd(workDir, "no-such-run")).resolves.toBeNull()
+  })
+
+  it("returns null when run.json is not valid JSON", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+    cleanupPaths.push(workDir)
+    const runDir = await createRun(
+      workDir,
+      "strix_runs",
+      "scan-spend",
+      "run.json",
+      new Date(1_000)
+    )
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await writeFile(join(runDir, "run.json"), "{ broken json", "utf8")
+
+    await expect(readEngineSpendUsd(workDir, "scan-spend")).resolves.toBeNull()
+  })
+
+  it("returns null for a negative cost (fail-open on read, never over-budget)", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+    cleanupPaths.push(workDir)
+    const runDir = await createRun(
+      workDir,
+      "strix_runs",
+      "scan-spend",
+      "run.json",
+      new Date(1_000)
+    )
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await writeFile(
+      join(runDir, "run.json"),
+      JSON.stringify({ seq: 1, turn_count: 1, phase: "running", llm_usage: { cost: -0.5 } }),
+      "utf8"
+    )
+
+    await expect(readEngineSpendUsd(workDir, "scan-spend")).resolves.toBeNull()
+  })
+})
+
+describe("OVERSHOOT_GRACE", () => {
+  it("is the founder-tunable 7.5% grace margin", () => {
+    expect(OVERSHOOT_GRACE).toBe(0.075)
   })
 })
 
