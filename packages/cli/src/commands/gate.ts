@@ -4,6 +4,7 @@ import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import { resolveDiffRange, runRiskyPatternChecks, buildSarif, rankSeverity } from "../diff-core.js"
 import type { Output } from "../output.js"
+import { listAll, FindingSchema } from "@lyrashield/sdk"
 
 export async function handleGate(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
@@ -47,11 +48,13 @@ export async function handleGate(args: string[], output: Output): Promise<number
     if (creds.apiKey) {
       const workspaceId = requireWorkspace(creds)
       const client = await createClient()
-      const res = (await client.request(
+      const items = await listAll(
+        client,
         "GET",
-        `/findings?workspaceId=${encodeURIComponent(workspaceId)}`
-      )) as { severity: string; message?: string }[]
-      apiFindings = res
+        `/findings?workspaceId=${encodeURIComponent(workspaceId)}&status=OPEN`,
+        FindingSchema
+      )
+      apiFindings = items.map((f) => ({ severity: f.severity, message: f.title }))
     }
   } catch (err) {
     hadError = true

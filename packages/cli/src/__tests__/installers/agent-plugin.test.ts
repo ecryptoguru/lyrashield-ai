@@ -114,17 +114,16 @@ describe("installAgentPlugin", () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it("requires --yes to proceed without confirmation", async () => {
+  it("installs to a fresh destination without --yes", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
     const dest = path.join(tempDir, "lyrashield")
     const agent = makeAgent(dest)
 
     const result = await installAgentPlugin({ agent })
-    expect(result.outcome).toBe("MANUAL_REQUIRED")
-    expect(result.message).toContain("--yes")
+    expect(result.outcome).toBe("CONFIGURED")
+    expect(result.path).toBe(dest)
 
-    // Nothing should have been written
-    await expect(access(dest)).rejects.toThrow()
+    await expect(access(dest)).resolves.toBeUndefined()
 
     await rm(tempDir, { recursive: true, force: true })
   })
