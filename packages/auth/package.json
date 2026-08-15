@@ -14,7 +14,7 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@better-auth/oauth-provider": "1.7.0-beta.10",
+    "@better-auth/oauth-provider": "1.7.0-rc.5",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
     "@lyrashield/logger": "workspace:*",
