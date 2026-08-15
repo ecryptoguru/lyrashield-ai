@@ -19,7 +19,7 @@
     "@lyrashield/db": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "better-auth": "1.7.0-beta.10"
+    "better-auth": "1.7.0-rc.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
