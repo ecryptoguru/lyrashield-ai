@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation"
+import { permanentRedirect } from "next/navigation"
 
 /**
  * Compatibility route. Reports now live under the Issues → Reports tab at
@@ -14,5 +14,5 @@ export default async function ReportsPage({
   const query = new URLSearchParams({ tab: "reports" })
   if (scanId) query.set("scanId", scanId)
   if (targetId) query.set("targetId", targetId)
-  redirect(`/dashboard/findings?${query.toString()}`)
+  permanentRedirect(`/dashboard/findings?${query.toString()}`)
 }

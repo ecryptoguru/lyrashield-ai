@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import {
   getAdvisoryCache,
+  type AdvisoryCache,
   type AdvisoryEcosystem,
   type AdvisoryEntry,
 } from "./advisory-cache-service"
@@ -52,6 +53,12 @@ export interface AdvisoryBatchResult {
 export interface OsvQueryOptions {
   fetchFn?: typeof fetch
   now?: Date
+  /**
+   * Optional cache instance. Tests pass a dedicated cache to avoid the
+   * module-global advisory cache racing across parallel test files; production
+   * callers omit this and use the global cache via getAdvisoryCache().
+   */
+  cache?: AdvisoryCache
 }
 
 const OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
@@ -144,7 +151,7 @@ export async function queryOsvWithCache(
     }
   }
 
-  const cache = getAdvisoryCache()
+  const cache = options.cache ?? getAdvisoryCache()
   const results: OsvQueryResult[] = []
   const uncached: OsvQueryPackage[] = []
   let oldestFreshCache: Date | undefined

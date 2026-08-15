@@ -1,5 +1,10 @@
 "use client"
 
+// useSearchParams() requires a Suspense boundary or force-dynamic to avoid a
+// build-time prerender error on this route. Matches oauth/consent/page.tsx.
+// (Deep Review v13.)
+export const dynamic = "force-dynamic"
+
 import { useSearchParams, useRouter } from "next/navigation"
 import { useState } from "react"
 import { authClient } from "@lyrashield/auth"

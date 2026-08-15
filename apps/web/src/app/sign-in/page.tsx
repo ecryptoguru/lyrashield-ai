@@ -38,6 +38,12 @@ export default function SignInPage() {
   // page renders as a bare credentials form and reads as broken rather than
   // loading. Show a skeleton for the OAuth row while the probe is pending.
   const [providersLoading, setProvidersLoading] = useState(true)
+  // Set when the /api/auth/providers probe fails (non-OK or network error).
+  // Without this, a failed probe leaves the OAuth section absent with no
+  // explanation — an OAuth-only user sees only a credentials form. (Deep Review v13.)
+  const [providersError, setProvidersError] = useState(false)
+  // Incremented by the Retry button to re-trigger the provider probe effect.
+  const [providersRetryKey, setProvidersRetryKey] = useState(0)
 
   function callbackURL(): string {
     const requested = new URLSearchParams(window.location.search).get("callbackURL")
@@ -47,6 +53,9 @@ export default function SignInPage() {
   }
 
   useEffect(() => {
+    // Reference the retry key so react-hooks/exhaustive-deps sees it as used —
+    // it is a re-trigger signal, not a data dependency. (Deep Review v13.)
+    void providersRetryKey
     let active = true
     const oauthError = new URLSearchParams(window.location.search).get("error")
     let oauthErrorTimer: number | undefined
@@ -54,7 +63,16 @@ export default function SignInPage() {
       oauthErrorTimer = window.setTimeout(() => {
         setError("Social sign in could not be completed. Please try again.")
       }, 0)
-      window.history.replaceState(null, "", "/sign-in")
+      // Strip only the error param so a valid callbackURL (e.g. /oauth/consent?…)
+      // survives a sign-in retry. Previously the whole URL was rewritten,
+      // dropping the caller's destination. (Deep Review v13.)
+      const remaining = new URLSearchParams(window.location.search)
+      remaining.delete("error")
+      window.history.replaceState(
+        null,
+        "",
+        "/sign-in" + (remaining.size ? `?${remaining.toString()}` : "")
+      )
     }
 
     void authClient
@@ -73,28 +91,48 @@ export default function SignInPage() {
       })
 
     void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
-      .then((response) => (response.ok ? response.json() : null))
       .then(
-        (
+        async (
+          response
+        ): Promise<{
+          ok: boolean
           data: {
             github?: boolean
             google?: boolean
             microsoft?: boolean
             passwordReset?: boolean
           } | null
-        ) => {
-          if (!active) return
-          if (data) {
-            setProviders({
-              github: Boolean(data.github),
-              google: Boolean(data.google),
-              microsoft: Boolean(data.microsoft),
-              passwordReset: Boolean(data.passwordReset),
-            })
+        }> => {
+          if (!response.ok) return { ok: false, data: null }
+          return {
+            ok: true,
+            data: (await response.json()) as {
+              github?: boolean
+              google?: boolean
+              microsoft?: boolean
+              passwordReset?: boolean
+            },
           }
         }
       )
-      .catch(() => {})
+      .then(({ ok, data }) => {
+        if (!active) return
+        if (data) {
+          setProviders({
+            github: Boolean(data.github),
+            google: Boolean(data.google),
+            microsoft: Boolean(data.microsoft),
+            passwordReset: Boolean(data.passwordReset),
+          })
+        } else if (!ok) {
+          // A null body on a non-OK response is a probe failure, not "no OAuth".
+          // Surface it so the OAuth row doesn't silently vanish. (Deep Review v13.)
+          setProvidersError(true)
+        }
+      })
+      .catch(() => {
+        if (active) setProvidersError(true)
+      })
       .finally(() => {
         if (active) setProvidersLoading(false)
       })
@@ -103,7 +141,7 @@ export default function SignInPage() {
       active = false
       if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
     }
-  }, [router])
+  }, [router, providersRetryKey])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -158,10 +196,14 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "google",
         callbackURL: callbackURL(),
+        errorCallbackURL: "/sign-in",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Google sign in failed. Please try again.")
+      }
     } catch {
       setError("Google sign in failed. Please try again.")
     } finally {
@@ -308,20 +350,41 @@ export default function SignInPage() {
           </form>
 
           {providersLoading && (
-            <div aria-hidden="true" data-testid="oauth-skeleton">
-              <div className="my-6 flex items-center gap-3">
-                <div className="bg-border h-px flex-1" />
-                <span className="text-muted-foreground text-xs font-medium">OR</span>
-                <div className="bg-border h-px flex-1" />
+            <>
+              <div aria-hidden="true" data-testid="oauth-skeleton">
+                <div className="my-6 flex items-center gap-3">
+                  <div className="bg-border h-px flex-1" />
+                  <span className="text-muted-foreground text-xs font-medium">OR</span>
+                  <div className="bg-border h-px flex-1" />
+                </div>
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
               </div>
-              <div className="space-y-3">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
+              {/* sr-only announcement lives outside the aria-hidden skeleton so
+                  screen readers actually announce the loading state. (Deep Review v13.) */}
               <span className="sr-only" role="status">
                 Loading sign-in options
               </span>
-            </div>
+            </>
+          )}
+
+          {!providersLoading && providersError && (
+            <p className="text-muted-foreground mt-6 text-sm" role="alert">
+              Sign-in options could not be loaded.{" "}
+              <button
+                type="button"
+                className="text-primary underline underline-offset-2"
+                onClick={() => {
+                  setProvidersError(false)
+                  setProvidersLoading(true)
+                  setProvidersRetryKey((k) => k + 1)
+                }}
+              >
+                Retry
+              </button>
+            </p>
           )}
 
           {!providersLoading && (providers.github || providers.google || providers.microsoft) && (

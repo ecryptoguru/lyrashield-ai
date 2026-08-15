@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation"
+import { permanentRedirect } from "next/navigation"
 
 /**
  * Compatibility route. Automations now live under the Trust Runs → Monitoring tab
@@ -6,5 +6,5 @@ import { redirect } from "next/navigation"
  * existing bookmarks and internal links.
  */
 export default function AutomationsPage() {
-  redirect("/dashboard/scans?tab=monitoring")
+  permanentRedirect("/dashboard/scans?tab=monitoring")
 }

@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation"
+import { permanentRedirect } from "next/navigation"
 
 /**
  * Compatibility route. Evidence now lives under the Issues → Evidence tab at
@@ -6,5 +6,5 @@ import { redirect } from "next/navigation"
  * existing bookmarks and internal links.
  */
 export default function EvidencePage() {
-  redirect("/dashboard/findings?tab=evidence")
+  permanentRedirect("/dashboard/findings?tab=evidence")
 }
