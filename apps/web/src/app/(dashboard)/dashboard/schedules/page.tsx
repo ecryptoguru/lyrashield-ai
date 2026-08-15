@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation"
+import { permanentRedirect } from "next/navigation"
 
 /**
  * Compatibility route. Schedules now live under the Trust Runs → Monitoring tab

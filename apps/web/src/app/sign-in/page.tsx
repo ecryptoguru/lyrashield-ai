@@ -350,7 +350,7 @@ export default function SignInPage() {
 
           {!providersLoading && providersError && (
             <p className="text-muted-foreground mt-6 text-sm" role="alert">
-              Sign-in options couldn&apos;t load.{" "}
+              Sign-in options could not be loaded.{" "}
               <button
                 type="button"
                 className="text-primary underline underline-offset-2"
