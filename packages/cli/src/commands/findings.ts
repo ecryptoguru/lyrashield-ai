@@ -2,6 +2,7 @@ import minimist from "minimist"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import type { Output } from "../output.js"
+import { listFindings } from "@lyrashield/sdk"
 
 export async function handleFindings(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
@@ -10,22 +11,20 @@ export async function handleFindings(args: string[], output: Output): Promise<nu
   })
 
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
-  const params = new URLSearchParams({ workspaceId })
-  if (parsed.severity) params.set("severity", parsed.severity as string)
-  if (parsed.status) params.set("status", parsed.status as string)
-  if (parsed.target) params.set("targetId", parsed.target as string)
-  if (parsed.scan) params.set("scanId", parsed.scan as string)
-  if (parsed.verified) params.set("verified", parsed.verified as string)
-
   const client = await createClient()
-  const res = await client.request("GET", `/findings?${params.toString()}`)
+  const res = await listFindings(client, {
+    workspaceId,
+    severity: parsed.severity as string | undefined,
+    status: parsed.status as string | undefined,
+    targetId: parsed.target as string | undefined,
+  })
 
-  if (parsed.stats && Array.isArray(res)) {
+  if (parsed.stats) {
     const bySeverity = new Map<string, number>()
-    for (const f of res as { severity: string }[]) {
+    for (const f of res.items) {
       bySeverity.set(f.severity, (bySeverity.get(f.severity) ?? 0) + 1)
     }
-    output.result({ findings: res, stats: Object.fromEntries(bySeverity) })
+    output.result({ findings: res.items, stats: Object.fromEntries(bySeverity) })
   } else {
     output.result(res)
   }

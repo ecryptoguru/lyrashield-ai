@@ -181,6 +181,15 @@ async function runVendorCli(
 export async function installAgent(opts: InstallAgentOptions): Promise<InstallAgentResult> {
   const { agent, all, cwd } = opts
 
+  if (!agent.transports.includes(opts.transport)) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      message: `\`${agent.displayName}\` supports only \`${agent.transports.join(", ")}\`; omit \`--transport ${opts.transport}\``,
+    }
+  }
+
   if (agent.installStrategy === "agent-plugin") {
     const { installAgentPlugin } = await import("./agent-plugin.js")
     return installAgentPlugin({
