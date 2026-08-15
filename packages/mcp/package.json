@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^3.25.76"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@lyrashield/credentials": "workspace:*",
@@ -55,6 +55,6 @@
     "@types/node": "^24.0.0",
     "tsup": "^8.5.1",
     "typescript": "6.0.3",
-    "vitest": "^3.2.7"
+    "vitest": "^4.1.9"
   }
 }
