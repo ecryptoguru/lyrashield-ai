@@ -66,7 +66,9 @@ export async function mergeJson(opts: JsonMergeOptions): Promise<JsonMergeResult
     try {
       parsed = JSON.parse(original) as Record<string, unknown>
     } catch {
-      throw new Error(`${filePath} is not valid JSON. Fix or remove the file, then re-run the install.`)
+      throw new Error(
+        `${filePath} is not valid JSON. Fix or remove the file, then re-run the install.`
+      )
     }
   } else {
     parsed = {}

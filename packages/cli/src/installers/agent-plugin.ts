@@ -93,7 +93,9 @@ export async function installAgentPlugin(
   // --yes flag. Without it, a plugin install would silently overwrite an
   // existing install (including user customizations). Require explicit consent
   // only when the destination already exists; fresh installs proceed directly.
-  const destExists = await stat(dest).then(() => true).catch(() => false)
+  const destExists = await stat(dest)
+    .then(() => true)
+    .catch(() => false)
   if (destExists && !opts.yes) {
     return {
       agent: agent.id,
