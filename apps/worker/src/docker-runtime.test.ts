@@ -108,7 +108,7 @@ describe("worker Docker runtime", () => {
     expect(deployWorkflow).toContain(
       "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
     )
-    expect(deployWorkflow).toContain("astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990")
+    expect(deployWorkflow).toContain("astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d")
     expect(deployWorkflow).toContain('node-version: "24"')
     expect(deployWorkflow).toContain('python-version: "3.12"')
     expect(deployWorkflow).toContain("Verify engine-worker contract")
