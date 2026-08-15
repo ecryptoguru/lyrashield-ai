@@ -251,10 +251,3 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
     evidenceVault,
   }
 }
-_NAV_ITEMS,
-    secondary,
-    mobilePrimary: LIFECYCLE_NAV_ITEMS,
-    more,
-    reviewQueue,
-  }
-}
