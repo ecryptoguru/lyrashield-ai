@@ -53,7 +53,11 @@ describe("POST /api/team", () => {
       ...data,
     }))
     mockPrisma.workspace.findUnique.mockResolvedValue({ name: "Acme Security" })
-    checkInvitationCreateRateLimit.mockResolvedValue({ limited: false, remaining: 9, retryAfter: 0 })
+    checkInvitationCreateRateLimit.mockResolvedValue({
+      limited: false,
+      remaining: 9,
+      retryAfter: 0,
+    })
   })
 
   it("sends the invitation email with an accept URL built from the invitation token", async () => {

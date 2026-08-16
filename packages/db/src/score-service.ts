@@ -300,10 +300,7 @@ export async function completeScanWithScore(
  * driver/driver-version dependent (and localised), the code is contractual.
  */
 function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002"
-  )
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
 }
 
 export async function getOrCreateReferralCode(userId: string) {
