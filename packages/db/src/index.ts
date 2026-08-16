@@ -82,6 +82,7 @@ export {
   updateScanStatus,
   addScanEvent,
   getScanWithEvents,
+  getScanResultManifestDetail,
   getScanForWorkspace,
   listScans,
   cancelScan,

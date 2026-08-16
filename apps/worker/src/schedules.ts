@@ -8,8 +8,8 @@ import {
   updateScanStatus,
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
+import { MAX_CONCURRENT_WORKSPACE_SCANS, resolveTargetScanMode } from "@lyrashield/types"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
-import { resolveTargetScanMode } from "@lyrashield/types"
 
 const ACTIVE_SCAN_STATUSES = [
   "QUEUED",
@@ -68,6 +68,28 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
             scheduleId: schedule.id,
             targetId: schedule.targetId,
           })
+          return
+        }
+
+        // Schedules must not bypass the workspace concurrency cap that the
+        // scan-create API enforces: N schedules on N targets due in the same
+        // minute would otherwise launch N concurrent billable scans at once.
+        const activeWorkspaceScans = await prisma.scan.count({
+          where: {
+            workspaceId: schedule.workspaceId,
+            status: { in: [...ACTIVE_SCAN_STATUSES] },
+          },
+        })
+        if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
+          logger.info(
+            "Skipping scheduled scan because workspace is at its concurrent scan cap",
+            {
+              scheduleId: schedule.id,
+              workspaceId: schedule.workspaceId,
+              activeWorkspaceScans,
+              cap: MAX_CONCURRENT_WORKSPACE_SCANS,
+            }
+          )
           return
         }
 
