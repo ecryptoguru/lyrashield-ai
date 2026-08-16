@@ -236,6 +236,24 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
+  // The egress proxy authenticates the worker with the bearer token in
+  // LYRASHIELD_EGRESS_PROXY_SECRET; an http:// proxy URL would transmit that
+  // secret in cleartext. Dev/test keep http:// for local proxies. Unlike the
+  // BREVO rule below this needs no NEXT_PHASE build carve-out: the variable is
+  // runtime-only, so a production build that sets it to an http:// URL is a
+  // genuine misconfiguration and should fail rather than ship.
+  .refine(
+    (val) =>
+      val.NODE_ENV !== "production" ||
+      !val.LYRASHIELD_EGRESS_PROXY_URL ||
+      val.LYRASHIELD_EGRESS_PROXY_URL.startsWith("https:"),
+    {
+      path: ["LYRASHIELD_EGRESS_PROXY_URL"],
+      message:
+        "LYRASHIELD_EGRESS_PROXY_URL must use https:// in production — the proxy is authenticated " +
+        "with the LYRASHIELD_EGRESS_PROXY_SECRET bearer token, which an http:// URL would send in cleartext",
+    }
+  )
   // Claiming to verify email addresses without a way to send the mail is worse than not
   // claiming it: sign-up would either break or silently fall through unverified.
   //
