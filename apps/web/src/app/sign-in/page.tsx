@@ -18,6 +18,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthSplitLayout } from "@/components/auth-split-layout"
 import { PasswordInput } from "@/components/password-input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { storePendingInvitation } from "@/lib/pending-invitation"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -52,11 +53,22 @@ export default function SignInPage() {
       : "/dashboard"
   }
 
+  const [invited, setInvited] = useState(false)
+
   useEffect(() => {
     // Reference the retry key so react-hooks/exhaustive-deps sees it as used —
     // it is a re-trigger signal, not a data dependency. (Deep Review v13.)
     void providersRetryKey
     let active = true
+    // Team invitation link: stash the token for the post-auth bridge so an
+    // invited member with an existing account joins on sign-in.
+    const signInParams = new URLSearchParams(window.location.search)
+    const inviteToken = signInParams.get("invite")
+    let inviteTimer: number | undefined
+    if (inviteToken) {
+      storePendingInvitation(inviteToken)
+      inviteTimer = window.setTimeout(() => setInvited(true), 0)
+    }
     const oauthError = new URLSearchParams(window.location.search).get("error")
     let oauthErrorTimer: number | undefined
     if (oauthError) {
@@ -140,6 +152,7 @@ export default function SignInPage() {
     return () => {
       active = false
       if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
+      if (inviteTimer !== undefined) window.clearTimeout(inviteTimer)
     }
   }, [router, providersRetryKey])
 
@@ -281,6 +294,15 @@ export default function SignInPage() {
         subheading="Sign in to your LyraShield account"
         footer={
           <p className="text-muted-foreground mt-6 text-center text-sm md:text-left">
+            {invited ? (
+              <div
+                role="status"
+                className="mb-4 rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm"
+              >
+                You have a pending team invitation — it will be accepted automatically once you sign
+                in.
+              </div>
+            ) : null}
             Don&apos;t have an account?{" "}
             <Link href="/sign-up" className="text-primary font-medium hover:underline">
               Sign up

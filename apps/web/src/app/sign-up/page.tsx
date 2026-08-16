@@ -24,6 +24,7 @@ import {
   track,
   type SignupAttribution,
 } from "@/lib/analytics"
+import { storePendingInvitation } from "@/lib/pending-invitation"
 
 const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
   /\/$/,
@@ -52,9 +53,23 @@ export default function SignUpPage() {
   // page look like a bare credentials form. Show a skeleton instead.
   const [providersLoading, setProvidersLoading] = useState(true)
   const attribution = useRef<SignupAttribution>({})
+  const [invited, setInvited] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    // Team invitation link: stash the token for the post-auth bridge and
+    // strip it from the URL so it cannot leak into redirects or analytics.
+    const inviteToken = params.get("invite")
+    let inviteTimer: number | undefined
+    if (inviteToken) {
+      storePendingInvitation(inviteToken)
+      params.delete("invite")
+      const cleaned = params.toString()
+      window.history.replaceState(null, "", cleaned ? `?${cleaned}` : window.location.pathname)
+      // Deferred like the OAuth error banner below: setState must not fire
+      // synchronously inside the effect body.
+      inviteTimer = window.setTimeout(() => setInvited(true), 0)
+    }
     const nextAttribution = readSignupAttribution(window.location.search)
     const oauthError = params.get("error")
     attribution.current = nextAttribution
@@ -93,6 +108,7 @@ export default function SignUpPage() {
 
     return () => {
       if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
+      if (inviteTimer !== undefined) window.clearTimeout(inviteTimer)
     }
   }, [])
 
@@ -277,6 +293,15 @@ export default function SignUpPage() {
         subheading="Start your evidence-backed release workflow."
         footer={
           <p className="text-muted-foreground mt-6 text-center text-sm md:text-left">
+            {invited ? (
+              <div
+                role="status"
+                className="mb-4 rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm"
+              >
+                You have a pending team invitation — it will be accepted automatically once you
+                create your account and sign in.
+              </div>
+            ) : null}
             Already have an account?{" "}
             <Link href="/sign-in" className="text-primary font-medium hover:underline">
               Sign in

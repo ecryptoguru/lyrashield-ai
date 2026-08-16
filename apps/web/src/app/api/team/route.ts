@@ -3,9 +3,12 @@ import { prisma } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS, canGrantRole } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
+import { env } from "@lyrashield/config"
+import { sendNotification } from "@lyrashield/integrations"
 import { z } from "zod"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
+import { checkInvitationCreateRateLimit } from "../../../lib/rate-limit"
 
 const InviteMemberSchema = z.object({
   workspaceId: z.string().min(1),
@@ -24,6 +27,44 @@ const InviteMemberSchema = z.object({
     ])
     .default("MEMBER"),
 })
+
+/**
+ * The accept link an invited member follows. It points at sign-up with the
+ * invitation token as a query param — invited members have no account yet.
+ */
+function inviteAcceptUrl(token: string): string {
+  const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
+  return `${base}/sign-up?invite=${token}`
+}
+
+/**
+ * Best-effort invite email. Never throws: a missing Brevo config or a failed
+ * send must not fail the invitation itself — the accept URL is returned to the
+ * inviter in the POST response either way so the link can be shared manually.
+ */
+async function sendInvitationEmail(params: {
+  email: string
+  workspaceName: string | null
+  role: string
+  acceptUrl: string
+}): Promise<boolean> {
+  const workspaceLabel = params.workspaceName ?? "a workspace"
+  try {
+    return await sendNotification(
+      "email",
+      {
+        type: "team.invitation",
+        title: `You've been invited to join ${workspaceLabel} on LyraShield AI`,
+        body: `You've been invited to join ${workspaceLabel} on LyraShield AI as ${params.role}. Accept the invitation with this link (valid for 7 days): ${params.acceptUrl}`,
+        workspaceName: params.workspaceName ?? undefined,
+      },
+      [params.email]
+    )
+  } catch (error) {
+    logger.error("Invitation email send threw", { error: String(error), email: params.email })
+    return false
+  }
+}
 
 export async function POST(request: Request) {
   let body: unknown
@@ -69,12 +110,33 @@ export async function POST(request: Request) {
       )
     }
 
-    const [existingMember, existingInvitation] = await Promise.all([
+    // Invitation creation mints a 7-day bearer token and triggers an outbound
+    // email — bound it per workspace so a runaway client cannot flood either.
+    const inviteRate = await checkInvitationCreateRateLimit(workspaceId)
+    if (inviteRate.limited) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "INVITE_RATE_LIMITED",
+            message:
+              "Too many invitations created in the last minute. Please wait a moment and try again.",
+          },
+        },
+        { status: 429, headers: { "Retry-After": String(Math.max(inviteRate.retryAfter, 1)) } }
+      )
+    }
+
+    const [existingMember, existingInvitation, workspaceRow] = await Promise.all([
       prisma.workspaceMember.findFirst({
         where: { workspaceId, invitedEmail: email },
       }),
       prisma.invitation.findFirst({
         where: { workspaceId, email, status: "pending" },
+      }),
+      prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { name: true },
       }),
     ])
 
@@ -115,6 +177,25 @@ export async function POST(request: Request) {
 
     logger.info("Member invited", { workspaceId, email, role, userId: session.userId })
 
+    // Best-effort: the invitation row already exists and is authoritative — an
+    // email failure is logged, never surfaced as a failed invite. The inviter
+    // gets the accept URL in the response regardless, so the link can be shared
+    // manually when email is unconfigured or the send fails.
+    const acceptUrl = inviteAcceptUrl(token)
+    const emailSent = await sendInvitationEmail({
+      email,
+      workspaceName: workspaceRow?.name ?? null,
+      role,
+      acceptUrl,
+    })
+    if (!emailSent) {
+      logger.warn("Invitation email not delivered — share the accept URL manually", {
+        workspaceId,
+        invitationId: invitation.id,
+        email,
+      })
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -122,6 +203,8 @@ export async function POST(request: Request) {
         email: invitation.email,
         role: invitation.role,
         expiresAt: invitation.expiresAt,
+        inviteUrl: acceptUrl,
+        emailSent,
       },
     })
   } catch (error) {

@@ -14,6 +14,12 @@ const API_MAX = 30
 const LITE_SCAN_MAX = 5
 const APPROVAL_CREATE_MAX = 10
 /**
+ * Team invitations created per workspace per minute. Each invitation mints a
+ * 7-day bearer token and (when configured) triggers an outbound email, so an
+ * unbounded loop here floods a recipient list and Brevo's quota.
+ */
+const INVITATION_CREATE_MAX = 10
+/**
  * Scan starts per workspace per minute.
  *
  * The general API limit is per-IP and generous (30/min) because most API calls are cheap
@@ -198,4 +204,11 @@ export async function checkApprovalCreateRateLimit(workspaceId: string) {
   const upstash = await checkUpstash(APPROVAL_CREATE_MAX, "60 s", `approval-create:${workspaceId}`)
   if (upstash) return upstash
   return checkInMemory(`approval-create:${workspaceId}`, APPROVAL_CREATE_MAX, WINDOW_MS)
+}
+
+/** Bounds team invitation creation per workspace. See INVITATION_CREATE_MAX. */
+export async function checkInvitationCreateRateLimit(workspaceId: string) {
+  const upstash = await checkUpstash(INVITATION_CREATE_MAX, "60 s", `invite-create:${workspaceId}`)
+  if (upstash) return upstash
+  return checkInMemory(`invite-create:${workspaceId}`, INVITATION_CREATE_MAX, WINDOW_MS)
 }

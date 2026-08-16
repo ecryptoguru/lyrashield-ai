@@ -35,6 +35,7 @@ onlyBuiltDependencies:
   - "unrs-resolver"
 allowBuilds:
   "@prisma/engines": true
+  "@sentry/cli": false
   core-js: true
   esbuild: true
   msgpackr-extract: true

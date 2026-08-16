@@ -17,6 +17,7 @@ const evidenceEnv = vi.hoisted(() => ({
   LYRASHIELD_LOCAL_EVIDENCE_STORAGE: "0",
   LYRASHIELD_LOCAL_EVIDENCE_DIR: "",
   BETTER_AUTH_SECRET: "a".repeat(32),
+  LYRASHIELD_EVIDENCE_KEK: undefined as string | undefined,
 }))
 
 vi.mock("@aws-sdk/client-s3", () => ({
@@ -54,6 +55,7 @@ describe("uploadEvidence", () => {
       LYRASHIELD_LOCAL_EVIDENCE_STORAGE: "0",
       LYRASHIELD_LOCAL_EVIDENCE_DIR: localDir,
       BETTER_AUTH_SECRET: "a".repeat(32),
+      LYRASHIELD_EVIDENCE_KEK: undefined,
     })
   })
 
@@ -140,6 +142,7 @@ describe("uploadEvidence", () => {
       S3_ACCESS_KEY: "access-key",
       S3_SECRET_KEY: "secret-key",
       NODE_ENV: "production",
+      LYRASHIELD_EVIDENCE_KEK: Buffer.alloc(32, 5).toString("base64"),
     })
 
     await uploadEvidence({
@@ -156,6 +159,10 @@ describe("uploadEvidence", () => {
       ServerSideEncryption: "AES256",
       ChecksumSHA256: expect.any(String),
     })
+    // The bucket only ever receives envelope ciphertext, never the plaintext.
+    const body = send.mock.calls[0]?.[0].input.Body as Buffer
+    expect(body.subarray(0, 5).toString("latin1")).toBe("LSEV1")
+    expect(body.indexOf(Buffer.from("sensitive proof"))).toBe(-1)
   })
 
   it("uses R2 provider-managed encryption without sending its unsupported S3 option", async () => {
@@ -165,6 +172,7 @@ describe("uploadEvidence", () => {
       S3_ACCESS_KEY: "access-key",
       S3_SECRET_KEY: "secret-key",
       NODE_ENV: "production",
+      LYRASHIELD_EVIDENCE_KEK: Buffer.alloc(32, 5).toString("base64"),
     })
 
     await uploadEvidence({
@@ -181,5 +189,29 @@ describe("uploadEvidence", () => {
       ChecksumSHA256: expect.any(String),
     })
     expect(send.mock.calls[0]?.[0].input).not.toHaveProperty("ServerSideEncryption")
+    const body = send.mock.calls[0]?.[0].input.Body as Buffer
+    expect(body.subarray(0, 5).toString("latin1")).toBe("LSEV1")
+    expect(body.indexOf(Buffer.from("sensitive proof"))).toBe(-1)
+  })
+
+  it("fails closed in production when the evidence KEK is not configured", async () => {
+    Object.assign(evidenceEnv, {
+      S3_ENDPOINT: "https://s3.example.test",
+      S3_BUCKET: "evidence",
+      S3_ACCESS_KEY: "access-key",
+      S3_SECRET_KEY: "secret-key",
+      NODE_ENV: "production",
+      LYRASHIELD_EVIDENCE_KEK: undefined,
+    })
+
+    await expect(
+      uploadEvidence({
+        workspaceId: "ws-1",
+        findingId: "finding-1",
+        type: "poc",
+        content: "proof",
+      })
+    ).rejects.toThrow(/LYRASHIELD_EVIDENCE_KEK/)
+    expect(send).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { V2Sidebar } from "@/components/v2-sidebar"
 import { BottomNav } from "@/components/bottom-nav"
+import { InvitationAcceptBridge } from "@/components/invitation-accept-bridge"
 import { MobilePageHeader } from "@/components/mobile-page-header"
 import {
   getCachedSession,
@@ -83,6 +84,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <div className="mx-auto w-full max-w-368 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
       </main>
       <BottomNav unreadNotifications={unreadNotifications} pendingApprovals={pendingApprovals} />
+      <InvitationAcceptBridge />
     </div>
   )
 }

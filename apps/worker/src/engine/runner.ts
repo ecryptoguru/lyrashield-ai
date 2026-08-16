@@ -18,7 +18,7 @@ export interface EngineRunResult {
   exitCode: number
   cancelled: boolean
   timedOut: boolean
-  timeoutReason?: "DURATION" | "INACTIVITY" | null
+  timeoutReason?: "DURATION" | "INACTIVITY" | "LLM_STALL" | null
   /**
    * The worker backstop killed the engine because the polled run.json
    * llm_usage.cost crossed the protected budget ceiling (maxBudgetUsd ×
@@ -44,9 +44,12 @@ async function verifySandboxRemoved(scanId: string): Promise<boolean | undefined
     return undefined
   }
   try {
+    // Use `docker ps -a` (all containers), not just running ones. A sandbox that
+    // exited but was never removed must still count as "not removed" — otherwise a
+    // stopped container reports sandboxRemoved:true and leaks the resource receipt.
     const { stdout } = await execFileAsync(
       "docker",
-      ["ps", "--filter", `label=strix-run-id=${scanId}`, "--quiet"],
+      ["ps", "-a", "--filter", `label=strix-run-id=${scanId}`, "--quiet"],
       { timeout: SANDBOX_RECEIPT_TIMEOUT_MS, maxBuffer: 16 * 1024 }
     )
     return stdout.trim() === ""
@@ -129,6 +132,10 @@ const ENGINE_HEARTBEAT_MS = 120_000
 // This only terminates a process that has produced no durable progress at all.
 const ENGINE_PROGRESS_POLL_MS = 15_000
 const ENGINE_PROGRESS_STALL_MS = 20 * 60 * 1000
+// Generous by design: a single long tool execution (e.g. a slow port scan) can
+// legitimately span tens of minutes without an LLM turn, so this must stay
+// comfortably above ENGINE_PROGRESS_STALL_MS to only catch a true model hang.
+const ENGINE_LLM_STALL_MS = 30 * 60 * 1000
 
 /**
  * Grace margin above maxBudgetUsd before the worker backstop terminates the
@@ -425,7 +432,7 @@ async function runEngineProcess(
 ): Promise<{
   exitCode: number
   timedOut: boolean
-  timeoutReason: "DURATION" | "INACTIVITY" | null
+  timeoutReason: "DURATION" | "INACTIVITY" | "LLM_STALL" | null
   cancelled: boolean
   budgetKilled: boolean
   failureType: string | null
@@ -443,7 +450,7 @@ async function runEngineProcess(
     let failureMarkerWindow = ""
     let failureType: string | null = null
     let timedOut = false
-    let timeoutReason: "DURATION" | "INACTIVITY" | null = null
+    let timeoutReason: "DURATION" | "INACTIVITY" | "LLM_STALL" | null = null
     let cancelled = false
     let budgetKilled = false
     let closed = false
@@ -451,6 +458,13 @@ async function runEngineProcess(
     let progressFingerprint: string | null = null
     let lastProgressAt = Date.now()
     let progressCheckInFlight = false
+    // LLM stall detector: the liveness fingerprint advances on ANY run.json
+    // save, so an engine that keeps persisting artifacts while its model calls
+    // hang never trips the INACTIVITY stall, and a frozen self-reported spend
+    // never trips the budget backstop. Turn-count movement is the distinct
+    // "model is still doing work" signal.
+    let lastLlmTurnCount: number | null = null
+    let lastLlmProgressAt = Date.now()
 
     const escalation = createKillEscalation(child, SIGKILL_GRACE_MS)
     const terminate = () => {
@@ -499,6 +513,27 @@ async function runEngineProcess(
             timeoutReason = "INACTIVITY"
             terminate()
             return
+          }
+          // Model-progress stall: while the run reports itself RUNNING, a
+          // turn count that stops advancing means the engine is persisting
+          // artifacts (liveness fingerprint keeps moving) without any model
+          // activity — a hang the spend backstop and INACTIVITY stall both miss.
+          if (nextFingerprint) {
+            const progress = parseEngineProgressFingerprint(nextFingerprint)
+            if (progress) {
+              if (progress.turnCount !== lastLlmTurnCount) {
+                lastLlmTurnCount = progress.turnCount
+                lastLlmProgressAt = Date.now()
+              } else if (
+                progress.phase === "running" &&
+                Date.now() - lastLlmProgressAt >= ENGINE_LLM_STALL_MS
+              ) {
+                timedOut = true
+                timeoutReason = "LLM_STALL"
+                terminate()
+                return
+              }
+            }
           }
           // Budget backstop: read the live cumulative spend from the same
           // receipt and terminate when it crosses the grace-adjusted ceiling.
@@ -792,6 +827,24 @@ export async function readEngineProgressFingerprint(
 }
 
 /**
+ * Inverse of the fingerprint string readEngineProgressFingerprint emits, for
+ * detectors that need the individual liveness fields (turn count, phase).
+ * Returns null for a fingerprint from an unexpected format.
+ */
+export function parseEngineProgressFingerprint(
+  fingerprint: string
+): { seq: number; turnCount: number; phase: string } | null {
+  const parts = fingerprint.split(":")
+  if (parts.length !== 3) return null
+  const seq = Number(parts[0])
+  const turnCount = Number(parts[1])
+  if (!Number.isInteger(seq) || seq < 0) return null
+  if (!Number.isInteger(turnCount) || turnCount < 0) return null
+  if (!["setup", "running", "finalizing", "completed", "stopped"].includes(parts[2]!)) return null
+  return { seq, turnCount, phase: parts[2]! }
+}
+
+/**
  * Reads the live cumulative LLM spend (run.json -> llm_usage -> cost) from the
  * same engine receipt the fingerprint poll already opens. Returns null when the
  * file, the llm_usage object, or the cost field is missing or malformed —
@@ -911,18 +964,16 @@ export async function runEngine(
   const { exitCode, timedOut, timeoutReason, cancelled, budgetKilled, failureType } = processResult
 
   if (timedOut) {
-    await emitScanEvent(
-      scanId,
-      "engine_timeout",
-      "error",
+    const timeoutMessage =
       timeoutReason === "INACTIVITY"
         ? "Engine stopped after no durable progress was observed"
-        : `Engine timed out after ${(timeoutMs ?? 0) / 1000}s`,
-      {
-        timeoutReason,
-        ...(typeof timeoutMs === "number" ? { timeoutMs } : {}),
-      }
-    )
+        : timeoutReason === "LLM_STALL"
+          ? `Engine stopped after ${ENGINE_LLM_STALL_MS / 60000} minutes without model activity`
+          : `Engine timed out after ${(timeoutMs ?? 0) / 1000}s`
+    await emitScanEvent(scanId, "engine_timeout", "error", timeoutMessage, {
+      timeoutReason,
+      ...(typeof timeoutMs === "number" ? { timeoutMs } : {}),
+    })
     logger.error("Engine timed out", { scanId, timeoutMs, timeoutReason })
   } else {
     await emitScanEvent(scanId, "engine_exit", "info", `Engine exited with code ${exitCode}`, {

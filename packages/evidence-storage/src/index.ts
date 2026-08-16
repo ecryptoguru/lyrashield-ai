@@ -1,10 +1,31 @@
 import { createHash, randomUUID } from "node:crypto"
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3"
 import { env } from "@lyrashield/config"
 import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
+import {
+  ENVELOPE_KEY_REF,
+  EvidenceEnvelopeError,
+  isEnvelope,
+  openEnvelope,
+  resolveEnvelopeKek,
+  sealEnvelope,
+  verifyEnvelopeShape,
+} from "./envelope"
 
-export const EVIDENCE_KEY_REF = "vault/lyrashield-evidence-key/v1"
+export { EvidenceEnvelopeError, isEnvelope, verifyEnvelopeShape } from "./envelope"
+
+/**
+ * Key reference recorded for new artifacts. Objects are envelope-encrypted
+ * client-side (per-object data key wrapped under the configured KEK) before
+ * they reach the bucket; see ./envelope.ts.
+ */
+export const EVIDENCE_KEY_REF = ENVELOPE_KEY_REF
 const LOCAL_EVIDENCE_KEY_REF = "local-hkdf/better-auth-secret/lyrashield-evidence/v1"
 
 export interface UploadEncryptedArtifactInput {
@@ -51,6 +72,9 @@ export function assertEvidenceStorageConfigured(): void {
     return
   }
   if (isS3Configured()) {
+    // Fail closed: without a valid KEK the artifact could only be stored
+    // unencrypted, and evidence holds PoC exploit code and captured secrets.
+    resolveEnvelopeKek(env.LYRASHIELD_EVIDENCE_KEK || undefined)
     assertEvidenceEncrypted(EVIDENCE_KEY_REF)
     return
   }
@@ -143,21 +167,40 @@ export async function uploadEncryptedArtifact(
 
   const client = getS3Client()
   assertEvidenceEncrypted(encryptionKeyRef)
+  const kek = resolveEnvelopeKek(env.LYRASHIELD_EVIDENCE_KEK || undefined)
+
+  // Envelope-encrypt before the object leaves this process: the bucket only
+  // ever receives ciphertext sealed under a per-object data key, wrapped by
+  // the configured KEK. Provider-managed SSE alone would leave the plaintext
+  // readable by the storage operator.
+  const envelope = sealEnvelope(payload, kek, encryptionKeyRef)
+  if (!verifyEnvelopeShape(envelope)) {
+    throw new EvidenceEnvelopeError(
+      "Refusing to store evidence: envelope failed shape verification"
+    )
+  }
 
   try {
     await client.send(
       new PutObjectCommand({
         Bucket: env.S3_BUCKET,
         Key: key,
-        Body: payload,
+        Body: envelope,
         ContentType: contentType,
         // R2 applies AES-256 encryption at rest automatically and rejects the
         // S3 per-object ServerSideEncryption option. Other S3-compatible stores
-        // retain the explicit fail-closed encryption request.
+        // retain the explicit fail-closed encryption request as defense in
+        // depth beneath the client-side envelope.
         ...(isCloudflareR2Endpoint(env.S3_ENDPOINT)
           ? {}
           : { ServerSideEncryption: "AES256" as const }),
-        ChecksumSHA256: Buffer.from(checksum, "hex").toString("base64"),
+        // Object integrity covers the bytes actually uploaded (the envelope);
+        // the plaintext checksum below is the content digest recorded in the
+        // evidence manifest.
+        ChecksumSHA256: Buffer.from(
+          createHash("sha256").update(envelope).digest("hex"),
+          "hex"
+        ).toString("base64"),
       })
     )
 
@@ -177,6 +220,61 @@ export async function uploadEncryptedArtifact(
     })
     throw new Error("Failed to store evidence", { cause: err })
   }
+}
+
+export interface ReadEncryptedArtifactResult {
+  content: Buffer
+  /** sha256 of the decrypted plaintext. */
+  checksum: string
+  /**
+   * True when the stored object predates envelope encryption (provider-SSE
+   * only). Returned for backward compatibility; flag callers so migration
+   * coverage is observable.
+   */
+  legacy: boolean
+}
+
+/**
+ * Read an evidence artifact back and decrypt it. Envelope-encrypted objects
+ * are authenticated with both GCM tags; a tampered object fails closed.
+ * Objects written before envelope encryption (provider-SSE only) are returned
+ * as-is and flagged `legacy` — they decrypt trivially because they were never
+ * client-side encrypted.
+ */
+export async function readEncryptedArtifact(
+  storageUri: string
+): Promise<ReadEncryptedArtifactResult> {
+  if (storageUri.startsWith("file:")) {
+    if (!isLocalEvidenceConfigured()) throw new EvidenceStorageConfigurationError()
+    const { readLocalEvidence } = await import(/* turbopackIgnore: true */ "./local.js")
+    const content = await readLocalEvidence(storageUri)
+    return { content, checksum: computeChecksum(content), legacy: false }
+  }
+
+  const parsed = new URL(storageUri)
+  const key = parsed.pathname.slice(1)
+  if (
+    parsed.protocol !== "s3:" ||
+    parsed.hostname !== env.S3_BUCKET ||
+    !key.startsWith("evidence/")
+  ) {
+    throw new Error("Invalid evidence storage URI")
+  }
+  if (!isS3Configured()) throw new EvidenceStorageConfigurationError()
+
+  const response = await getS3Client().send(
+    new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key })
+  )
+  const body = Buffer.from(await response.Body!.transformToByteArray())
+
+  if (!isEnvelope(body)) {
+    logger.warn("Read legacy non-envelope evidence object", { key })
+    return { content: body, checksum: computeChecksum(body), legacy: true }
+  }
+
+  const kek = resolveEnvelopeKek(env.LYRASHIELD_EVIDENCE_KEK || undefined)
+  const { plaintext } = openEnvelope(body, kek)
+  return { content: plaintext, checksum: computeChecksum(plaintext), legacy: false }
 }
 
 /**
