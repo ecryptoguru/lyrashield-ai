@@ -84,6 +84,15 @@ describe("tryReadCredentialsFile", () => {
   })
 })
 
+describe("DEFAULT_API_URL", () => {
+  it("pins the default to the production app origin", () => {
+    // This is the single source of truth for the app API base URL; the CLI,
+    // MCP server, and SDK fallbacks must all agree with it. Pin the literal so
+    // an accidental change here is a deliberate, reviewed edit.
+    expect(DEFAULT_API_URL).toBe("https://app.lyrashieldai.com")
+  })
+})
+
 describe("resolveCredentials", () => {
   it("prefers environment variables over the stored file", async () => {
     process.env.LYRASHIELD_API_KEY = "env-key"

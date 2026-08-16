@@ -20,7 +20,11 @@ import {
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
-import { checkScanCreateRateLimit } from "../../../lib/rate-limit"
+import {
+  checkFreeUrlScanRateLimit,
+  checkScanCreateRateLimit,
+  clientIpFromRequest,
+} from "../../../lib/rate-limit"
 
 const ACTIVE_SCAN_STATUSES = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] as const
 
@@ -58,7 +62,10 @@ function scanListEtag(
   items: ReturnType<typeof serializeScanListItem>[],
   nextCursor: string | null
 ): string {
-  const payload = JSON.stringify({ items, nextCursor })
+  // Hash the exact response representation, envelope included: the body is
+  // { success, data: { items, nextCursor } }, so any envelope change also
+  // invalidates the tag instead of serving a stale-shaped 304.
+  const payload = JSON.stringify({ success: true, data: { items, nextCursor } })
   return `"${createHash("sha256").update(payload).digest("hex")}"`
 }
 
@@ -97,6 +104,20 @@ export async function POST(request: Request) {
         where: { id: workspaceId },
         select: { plan: true },
       })
+      if (!workspace || workspace.plan === "FREE") {
+        // Free tier skips domain verification, so a free account could
+        // otherwise drive server-side reviews of arbitrary third-party
+        // sites. Bound it per client IP; Turnstile is the follow-up.
+        const freeUrlLimit = await checkFreeUrlScanRateLimit(clientIpFromRequest(request))
+        if (freeUrlLimit.limited) {
+          return apiError(
+            "FREE_URL_SCAN_RATE_LIMITED",
+            "Free-plan remote URL reviews are temporarily limited for your network. Verify the domain or upgrade for unrestricted reviews.",
+            429,
+            { "Retry-After": String(Math.max(freeUrlLimit.retryAfter, 1)) }
+          )
+        }
+      }
       if (workspace && workspace.plan !== "FREE") {
         const domain = target.url ? normalizeDomainForProof(target.url) : null
         const proof = domain

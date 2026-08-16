@@ -307,13 +307,14 @@ export function ScansClient({
 
   useEffect(() => {
     if (!hasActiveScans) return
+    // SSR safety: the polling loop touches `document`; never assume a DOM.
+    if (typeof document === "undefined") return
     const controller = new AbortController()
     let timeoutId: number | undefined
     let isAborted = false
     let pollEtag: string | undefined
     const pollStartedAt = Date.now()
 
-    const HIDDEN_POLL_INTERVAL_MS = 1_000
     const INITIAL_POLL_DELAY_MS = 10_000
     const VISIBILITY_POLL_DELAY_MS = 0
     const POLL_FAST_INTERVAL_MS = 10_000
@@ -328,11 +329,12 @@ export function ScansClient({
       return POLL_SLOW_INTERVAL_MS
     }
 
+    // Battery/network: while the tab is hidden the poll loop suspends entirely
+    // — no timer spin and no requests. `onVisibility` below resumes it with one
+    // immediate refetch when the tab becomes visible, so the list catches up
+    // right away instead of waiting out the (up to 60s) backoff interval.
     const poll = async () => {
-      if (document.hidden) {
-        timeoutId = window.setTimeout(poll, HIDDEN_POLL_INTERVAL_MS)
-        return
-      }
+      if (document.hidden) return
       try {
         // Poll only active-status scans to keep the payload small. Merge the
         // refreshed active rows into the full list so completed scans are preserved.

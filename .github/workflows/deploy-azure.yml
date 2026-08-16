@@ -15,7 +15,7 @@ env:
   REGISTRY: ghcr.io
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
-  ENGINE_REVISION: 99d8772421eb51baf525a48a497374d01a3982ed
+  ENGINE_REVISION: 1f911b6aa0ad5ea78db80dfaa1ec7cf1e56619f0
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -256,6 +256,43 @@ jobs:
           fi
           echo "Shared rate-limiting credentials present."
 
+      - name: Verify evidence envelope key
+        env:
+          LYRASHIELD_EVIDENCE_KEK: ${{ secrets.LYRASHIELD_EVIDENCE_KEK }}
+        run: |
+          if [ -z "${LYRASHIELD_EVIDENCE_KEK}" ]; then
+            echo "::error::LYRASHIELD_EVIDENCE_KEK is not set. Evidence uploads fail closed without it (each artifact is client-side envelope-encrypted under this key-encryption key). Generate once with: node packages/evidence-storage/scripts/generate-kek.mjs — store the value durably (loss makes envelope-encrypted evidence unreadable), add it as the GitHub secret LYRASHIELD_EVIDENCE_KEK, and as worker-evidence-kek in Key Vault for the worker VM."
+            exit 1
+          fi
+          # Must be base64 for exactly 32 bytes (AES-256 KEK after HKDF).
+          decoded_bytes=$(printf '%s' "${LYRASHIELD_EVIDENCE_KEK}" | base64 -d 2>/dev/null | wc -c | tr -d ' ')
+          if [ "${decoded_bytes}" != "32" ]; then
+            echo "::error::LYRASHIELD_EVIDENCE_KEK must be base64 encoding exactly 32 bytes (got ${decoded_bytes}). Regenerate with: node packages/evidence-storage/scripts/generate-kek.mjs"
+            exit 1
+          fi
+          echo "Evidence envelope key present and valid."
+
+      - name: Sync evidence envelope key to app Container App
+        id: sync-evidence-kek
+        env:
+          LYRASHIELD_EVIDENCE_KEK: ${{ secrets.LYRASHIELD_EVIDENCE_KEK }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: |
+          # Only the app Container App uploads evidence (control-evidence
+          # artifacts); the scanner app does not and the worker VM receives the
+          # key via Key Vault (ops/worker/refresh-secrets.sh).
+          if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
+            if ! timeout --foreground 180s az containerapp secret set \
+              --only-show-errors \
+              --name "$AZURE_APP_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets "lyrashield-evidence-kek=${LYRASHIELD_EVIDENCE_KEK}"; then
+              echo "::error::Failed to sync the evidence envelope key to ${AZURE_APP_CONTAINER_APP_NAME}."
+              exit 1
+            fi
+          fi
+
       # secretref: below requires the Container App to already define secrets named
       # upstash-redis-rest-url / upstash-redis-rest-token. Nothing provisioned those, so the
       # secretref would fail az containerapp update outright on a fresh app. This step
@@ -395,6 +432,7 @@ jobs:
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
+              "LYRASHIELD_EVIDENCE_KEK=secretref:lyrashield-evidence-kek" \
               "GITHUB_APP_ID=secretref:github-app-id" \
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \

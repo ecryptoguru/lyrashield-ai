@@ -40,6 +40,16 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }))
 
+vi.mock("../../../lib/rate-limit", () => ({
+  checkScanCreateRateLimit: vi
+    .fn()
+    .mockResolvedValue({ limited: false, remaining: 5, retryAfter: 0 }),
+  checkFreeUrlScanRateLimit: vi
+    .fn()
+    .mockResolvedValue({ limited: false, remaining: 3, retryAfter: 0 }),
+  clientIpFromRequest: vi.fn().mockReturnValue("203.0.113.9"),
+}))
+
 vi.mock("../../../lib/queue", () => ({
   enqueueScanJob: vi.fn().mockResolvedValue("job-1"),
   assertScanWorkerAvailable: vi.fn().mockResolvedValue(undefined),
@@ -54,6 +64,7 @@ import {
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
+import { checkFreeUrlScanRateLimit } from "../../../lib/rate-limit"
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost:3000/api/scans", {
@@ -666,5 +677,78 @@ describe("GET /api/scans", () => {
 
     const res = await GET(makeGetRequest({ workspaceId: "ws-1" }))
     expect(res.status).toBe(403)
+  })
+})
+
+describe("FREE-plan URL scan per-IP limit", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    defaultAuthMock()
+    vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
+    vi.mocked(enqueueScanJob).mockResolvedValue("job-1")
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({ id: "default-policy" } as never)
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "FREE" } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(checkFreeUrlScanRateLimit).mockResolvedValue({
+      limited: false,
+      remaining: 3,
+      retryAfter: 0,
+    } as never)
+  })
+
+  const freeScanBody = {
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    goal: "TEST_APP",
+    mode: "SAFE",
+  }
+
+  it("429s and never creates the scan when the free URL limit is exhausted", async () => {
+    vi.mocked(checkFreeUrlScanRateLimit).mockResolvedValue({
+      limited: true,
+      remaining: 0,
+      retryAfter: 1800,
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://example.com",
+      apiSpecUrl: null,
+    } as never)
+
+    const response = await POST(makeRequest(freeScanBody))
+    const body = (await response.json()) as { error?: { code?: string } }
+
+    expect(response.status).toBe(429)
+    expect(body.error?.code).toBe("FREE_URL_SCAN_RATE_LIMITED")
+    expect(response.headers.get("Retry-After")).toBe("1800")
+    expect(createScan).not.toHaveBeenCalled()
+  })
+
+  it("checks the limit by client IP for FREE-plan URL targets", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://example.com",
+      apiSpecUrl: null,
+    } as never)
+
+    await POST(makeRequest(freeScanBody))
+
+    expect(checkFreeUrlScanRateLimit).toHaveBeenCalledWith("203.0.113.9")
+  })
+
+  it("does not apply the free limit to paid plans (domain verification governs instead)", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://example.com",
+      apiSpecUrl: null,
+    } as never)
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
+
+    await POST(makeRequest(freeScanBody))
+
+    expect(checkFreeUrlScanRateLimit).not.toHaveBeenCalled()
   })
 })

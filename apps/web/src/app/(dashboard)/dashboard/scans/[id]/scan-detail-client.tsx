@@ -410,6 +410,8 @@ export function ScanDetailClient({
 
   useEffect(() => {
     if (!isActive) return
+    // SSR safety: the polling loop touches `document`; never assume a DOM.
+    if (typeof document === "undefined") return
     const controller = new AbortController()
     let timeoutId: number | undefined
     let isAborted = false
@@ -420,11 +422,12 @@ export function ScanDetailClient({
       return 60_000
     }
 
+    // Battery/network: while the tab is hidden the poll loop suspends entirely
+    // — no timer spin and no fetches. `onVisibility` below resumes it with one
+    // immediate refetch when the tab becomes visible, so state catches up right
+    // away instead of waiting out the (up to 60s) backoff interval.
     const poll = async () => {
-      if (document.hidden) {
-        timeoutId = window.setTimeout(poll, 1000)
-        return
-      }
+      if (document.hidden) return
       await refresh(controller.signal)
       if (isAborted) return
       const startedAtMs = scan.startedAt ? new Date(scan.startedAt).getTime() : Date.now()
