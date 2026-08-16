@@ -241,7 +241,11 @@ export async function getScanWithEvents(
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 200,
         },
-        resultManifest: { select: { checksum: true, manifest: true } },
+        // Checksum only, matching the documented ScanWithEvents contract: the
+        // manifest blob can reach tens of KB and this shape is returned on
+        // every scan-detail poll. One-time consumers that need manifest fields
+        // use getScanResultManifestDetail instead.
+        resultManifest: { select: { checksum: true } },
         coverageReceipts: {
           orderBy: { controlId: "asc" },
         },
@@ -259,6 +263,32 @@ export async function getScanWithEvents(
       resultManifest: scan.resultManifest,
       coverageReceipts: scan.coverageReceipts,
       target: scan.target,
+    }
+  })
+}
+
+/**
+ * One-time manifest detail for the server-rendered scan page: checksum plus the
+ * urlExecution slice extracted from the manifest JSON. Kept separate from
+ * getScanWithEvents so the polling path never fetches the tens-of-KB blob.
+ */
+export async function getScanResultManifestDetail(
+  scanId: string,
+  workspaceId: string
+): Promise<{ checksum: string; urlExecution: Record<string, unknown> | null } | null> {
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const manifest = await tx.scanResultManifest.findUnique({
+      where: { scanId },
+      select: { checksum: true, manifest: true },
+    })
+    if (!manifest) return null
+    const urlExecution = (manifest.manifest as { urlExecution?: unknown } | null)?.urlExecution
+    return {
+      checksum: manifest.checksum,
+      urlExecution:
+        urlExecution && typeof urlExecution === "object" && !Array.isArray(urlExecution)
+          ? (urlExecution as Record<string, unknown>)
+          : null,
     }
   })
 }
