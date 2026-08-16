@@ -236,4 +236,29 @@ describe("processDueSchedules", () => {
     )
     expect(enqueueScan).toHaveBeenCalledTimes(1)
   })
+
+  it("enqueues when the workspace is below the cap", async () => {
+    mockPrisma.scan.count.mockImplementation(
+      async (args: { where?: { targetId?: string; workspaceId?: string } }) =>
+        args?.where?.workspaceId ? 2 : 0
+    )
+
+    const enqueued = await processDueSchedules(new Date("2026-01-01T12:00:00Z"))
+
+    expect(enqueued).toBe(1)
+    expect(createScan).toHaveBeenCalledTimes(1)
+  })
+
+  it("skips a scheduled scan when the workspace is at MAX_CONCURRENT_WORKSPACE_SCANS", async () => {
+    mockPrisma.scan.count.mockImplementation(
+      async (args: { where?: { targetId?: string; workspaceId?: string } }) =>
+        args?.where?.workspaceId ? 3 : 0
+    )
+
+    const enqueued = await processDueSchedules(new Date("2026-01-01T12:00:00Z"))
+
+    expect(enqueued).toBe(0)
+    expect(createScan).not.toHaveBeenCalled()
+    expect(enqueueScan).not.toHaveBeenCalled()
+  })
 })

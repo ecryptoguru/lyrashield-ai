@@ -767,6 +767,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         )
         billablePhaseStarted = true
 
+        // The policy's maxDurationMinutes is a paid-plan cost control and must
+        // bound the most expensive scan class too: pass the REMAINING wall-clock
+        // budget to the engine runner so a REPO scan cannot outlive it even when
+        // its self-reported spend and liveness keep advancing.
+        const engineTimeoutMs = Math.max(0, scanRuntimeBudgetMs - (Date.now() - scanStartedAtMs))
+
         engineResult = await runEngine(
           {
             scanId,
@@ -784,7 +790,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             maxBudgetUsd,
           },
           scanId,
-          null,
+          engineTimeoutMs,
           isScanCancelled
         )
       } else if (target.type === "WEB_APP" || target.type === "API") {
@@ -933,9 +939,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       if (engineResult.timedOut) {
         const inactive = engineResult.timeoutReason === "INACTIVITY"
+        const llmStalled = engineResult.timeoutReason === "LLM_STALL"
         const timeoutMessage = inactive
           ? "Scan engine stopped after no durable progress was observed"
-          : "Scan engine timed out before completing"
+          : llmStalled
+            ? "Scan engine stalled: no model activity was observed while the run stayed active"
+            : "Scan engine timed out before completing"
         await persistResultManifest({
           scanId,
           target: {
@@ -957,7 +966,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           },
         })
         await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: inactive ? "ENGINE_INACTIVE" : "TIMEOUT",
+          errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
           errorMessage: timeoutMessage,
         })
         try {
@@ -973,7 +982,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
         return {
           status: "failed",
-          errorCategory: inactive ? "ENGINE_INACTIVE" : "TIMEOUT",
+          errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
           errorMessage: timeoutMessage,
         }
       }

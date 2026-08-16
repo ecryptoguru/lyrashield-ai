@@ -365,9 +365,9 @@ export function ScanDetailClient({
           integrity: {
             ...scan.integrity,
             manifestChecksum: updated.resultManifest?.checksum ?? null,
-            urlExecution:
-              ((updated.resultManifest as Record<string, unknown> | undefined)?.urlExecution as
-                Record<string, unknown> | undefined | null) ?? scan.integrity.urlExecution,
+            // urlExecution comes from the server-rendered manifest detail;
+            // the polling payload carries the checksum only.
+            urlExecution: scan.integrity.urlExecution,
             coverage: (updated.coverageReceipts ?? []).map((receipt) => ({
               scanner: receipt.scanner,
               controlId: receipt.controlId,
