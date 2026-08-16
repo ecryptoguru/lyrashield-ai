@@ -232,6 +232,24 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
+  .refine(
+    // The worker authenticates to the egress proxy with a static Bearer secret,
+    // so an http:// proxy URL would send that credential in cleartext. Require
+    // TLS in production; local development may still point at a plaintext proxy.
+    (val) => {
+      if (val.NODE_ENV !== "production" || !val.LYRASHIELD_EGRESS_PROXY_URL) return true
+      try {
+        return new URL(val.LYRASHIELD_EGRESS_PROXY_URL).protocol === "https:"
+      } catch {
+        return false
+      }
+    },
+    {
+      path: ["LYRASHIELD_EGRESS_PROXY_URL"],
+      message:
+        "LYRASHIELD_EGRESS_PROXY_URL must use https: in production — the worker sends LYRASHIELD_EGRESS_PROXY_SECRET as a Bearer token to this proxy, and http:// would expose it in cleartext",
+    }
+  )
   // Claiming to verify email addresses without a way to send the mail is worse than not
   // claiming it: sign-up would either break or silently fall through unverified.
   //
