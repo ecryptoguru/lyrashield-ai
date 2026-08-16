@@ -2,6 +2,12 @@ import { z } from "zod"
 
 export * from "./ai-safety-tests"
 
+/**
+ * Maximum simultaneously-active scans per workspace. Enforced by the scan-create
+ * API route AND the scheduled-scan runner so schedules cannot bypass the cap.
+ */
+export const MAX_CONCURRENT_WORKSPACE_SCANS = 3
+
 export const WorkspaceModeSchema = z.enum(["VIBE", "TEAM", "ENTERPRISE"])
 export const WorkspacePlanSchema = z.enum([
   "FREE",

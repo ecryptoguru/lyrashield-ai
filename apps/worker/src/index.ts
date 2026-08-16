@@ -26,6 +26,30 @@ let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
 const RECONCILIATION_INTERVAL_MS = 60_000
+
+// Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
+// so the dependency is only loaded when configured.
+//
+// FOLLOW-UP (observability): route queue-reconciliation drift and cleanup_failed
+// events to Sentry (e.g. captureMessage with a fingerprint) so silent divergence
+// between the BullMQ queue and the database is alerted on, not just logged.
+async function initSentry(): Promise<void> {
+  if (!env.SENTRY_DSN) return
+  try {
+    const Sentry = await import("@sentry/node")
+    Sentry.init({
+      dsn: env.SENTRY_DSN,
+      environment: env.NODE_ENV,
+      tracesSampleRate: 0.1,
+    })
+    logger.info("Sentry initialised for worker")
+  } catch (error) {
+    logger.warn("Failed to initialise Sentry; continuing without it", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
 export async function refreshWorkerReadiness(): Promise<void> {
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
 }
@@ -107,6 +131,7 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"))
 process.on("SIGINT", () => void shutdown("SIGINT"))
 
 async function main(): Promise<void> {
+  await initSentry()
   logger.info("LyraShield worker starting", { redisConfigured: Boolean(env.REDIS_URL) })
   assertEvidenceStorageConfigured()
   assertRepositoryScanRuntimeConfigured()

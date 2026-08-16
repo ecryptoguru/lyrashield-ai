@@ -379,7 +379,7 @@ describe("processScanJob", () => {
         instruction: expect.stringContaining("vibe-security-50/1.1.0"),
       }),
       "scan-1",
-      null,
+      expect.any(Number),
       expect.any(Function)
     )
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -418,12 +418,12 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 1.2 }),
       "scan-1",
-      null,
+      expect.any(Number),
       expect.any(Function)
     )
   })
 
-  it("does not apply a profile-duration cutoff to a progressing Deep engine", async () => {
+  it("applies the profile wall-clock budget as the engine timeout for a progressing Deep engine", async () => {
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 3.2 },
       maxDurationMinutes: 75,
@@ -447,12 +447,18 @@ describe("processScanJob", () => {
       where: { id: "policy-deep", workspaceId: "ws-1", deletedAt: null },
       select: { maxBudgetUsd: true, maxDurationMinutes: true },
     })
+    // DEEP caps at 45 min; the policy asked for 75, so the engine timeout is the
+    // REMAINING wall-clock budget — a number bounded by (never exceeding) 45 min.
+    const deepTimeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 3.2 }),
       "scan-1",
-      null,
+      expect.any(Number),
       expect.any(Function)
     )
+    expect(typeof deepTimeoutMs).toBe("number")
+    expect(deepTimeoutMs).toBeGreaterThan(0)
+    expect(deepTimeoutMs).toBeLessThanOrEqual(45 * 60 * 1000)
     expect(runScannerOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({ scannerPhaseTimeoutMs: 10 * 60 * 1000 })
     )
@@ -1548,5 +1554,36 @@ describe("processScanJob", () => {
     expect(result.status).toBe("failed")
     expect(result.errorCategory).toBe("INVALID_JOB")
     expect(runEngine).not.toHaveBeenCalled()
+  })
+})
+
+describe("REPO scan wall-clock budget enforcement", () => {
+  it("passes the remaining runtime budget as the engine timeout for REPO scans", async () => {
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({
+      maxBudgetUsd: { toNumber: () => 3.2 },
+      maxDurationMinutes: 20,
+    } as never)
+    const policyJob = {
+      id: "job-duration-policy-1",
+      discard: vi.fn(),
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+        policyId: "policy-duration-1",
+      },
+    } as never
+
+    await processScanJob(policyJob)
+
+    const timeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
+    // SAFE profile caps at 15 minutes; the timeout must be the REMAINING budget
+    // after preflight, bounded by (never exceeding) the full budget.
+    expect(typeof timeoutMs).toBe("number")
+    expect(timeoutMs).toBeGreaterThan(0)
+    expect(timeoutMs).toBeLessThanOrEqual(15 * 60 * 1000)
+    expect(timeoutMs).toBeGreaterThanOrEqual(15 * 60 * 1000 - 60_000)
   })
 })

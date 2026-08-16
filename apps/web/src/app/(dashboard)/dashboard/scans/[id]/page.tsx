@@ -1,4 +1,4 @@
-import { getScanWithEvents, prisma } from "@lyrashield/db"
+import { getScanWithEvents, getScanResultManifestDetail, prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
@@ -57,6 +57,11 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     orderBy: { severity: "desc" },
   })
 
+  // One-time server fetch of the manifest detail (urlExecution lives inside the
+  // tens-of-KB manifest JSON, which getScanWithEvents deliberately excludes so
+  // the polling API does not ship it on every request).
+  const manifestDetail = await getScanResultManifestDetail(id, workspaceId)
+
   const target = scan.target
 
   const scanData = {
@@ -93,12 +98,8 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
       createdAt: e.createdAt.toISOString(),
     })),
     integrity: {
-      manifestChecksum:
-        (scan.resultManifest as { checksum?: string | null } | undefined | null)?.checksum ?? null,
-      urlExecution: (
-        (scan.resultManifest as { manifest?: unknown } | undefined | null)?.manifest as
-          { urlExecution?: unknown } | undefined | null
-      )?.urlExecution as Record<string, unknown> | undefined,
+      manifestChecksum: manifestDetail?.checksum ?? scan.resultManifest?.checksum ?? null,
+      urlExecution: manifestDetail?.urlExecution ?? null,
       coverage: scan.coverageReceipts.map((receipt) => ({
         scanner: receipt.scanner,
         controlId: receipt.controlId,

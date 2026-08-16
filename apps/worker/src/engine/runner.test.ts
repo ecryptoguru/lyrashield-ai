@@ -40,6 +40,7 @@ import {
   resolveEngineSourceRevision,
   resolveEngineProfile,
   resolveEngineSandboxNetwork,
+  parseEngineProgressFingerprint,
   readEngineProgressFingerprint,
   readEngineSpendUsd,
   OVERSHOOT_GRACE,
@@ -712,4 +713,27 @@ it("clears stale receipts before a new engine attempt", async () => {
   await expect(realpath(staleReceipt)).rejects.toThrow()
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await expect(realpath(workspace)).resolves.toBe(workspace)
+})
+
+describe("parseEngineProgressFingerprint", () => {
+  it("round-trips the liveness fields readEngineProgressFingerprint emits", () => {
+    expect(parseEngineProgressFingerprint("12:34:running")).toEqual({
+      seq: 12,
+      turnCount: 34,
+      phase: "running",
+    })
+    expect(parseEngineProgressFingerprint("0:0:setup")).toEqual({
+      seq: 0,
+      turnCount: 0,
+      phase: "setup",
+    })
+  })
+
+  it("rejects malformed fingerprints instead of guessing", () => {
+    expect(parseEngineProgressFingerprint("12:34")).toBeNull()
+    expect(parseEngineProgressFingerprint("12:34:running:extra")).toBeNull()
+    expect(parseEngineProgressFingerprint("a:34:running")).toBeNull()
+    expect(parseEngineProgressFingerprint("12:-1:running")).toBeNull()
+    expect(parseEngineProgressFingerprint("12:34:unknown-phase")).toBeNull()
+  })
 })

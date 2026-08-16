@@ -160,3 +160,106 @@ describe("evidence-storage", () => {
     )
   })
 })
+
+describe("s3 envelope encryption", () => {
+  const sentCommands: { command: { input: Record<string, unknown> } }[] = []
+  let storedBody: Buffer | null = null
+
+  beforeAll(async () => {
+    process.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = "0"
+    process.env.S3_ENDPOINT = "https://s3.example.test"
+    process.env.S3_BUCKET = "evidence-bucket"
+    process.env.S3_ACCESS_KEY = "test-access"
+    process.env.S3_SECRET_KEY = "test-secret"
+    process.env.LYRASHIELD_EVIDENCE_KEK = Buffer.from(new Array(32).fill(3)).toString("base64")
+    vi.resetModules()
+    const s3ClientProto = (await import("@aws-sdk/client-s3")).S3Client.prototype as unknown as {
+      send: (command: { input: Record<string, unknown> }) => Promise<unknown>
+    }
+    sentCommands.length = 0
+    s3ClientProto.send = async (command: { input: Record<string, unknown> }) => {
+      sentCommands.push({ command })
+      // PutObject carries a Body; GetObject does not — distinguish by shape.
+      if (command.input["Body"] !== undefined) {
+        storedBody = command.input["Body"] as Buffer
+        return {}
+      }
+      return { Body: { transformToByteArray: async () => storedBody ?? Buffer.alloc(0) } }
+    }
+  })
+
+  afterAll(() => {
+    delete process.env.S3_ENDPOINT
+    delete process.env.S3_BUCKET
+    delete process.env.S3_ACCESS_KEY
+    delete process.env.S3_SECRET_KEY
+    delete process.env.LYRASHIELD_EVIDENCE_KEK
+  })
+
+  it("uploads only envelope ciphertext and records the envelope key ref", async () => {
+    vi.resetModules()
+    const mod = await import("./index")
+    const plaintext = Buffer.from("captured request with live session token")
+    const result = await mod.uploadEncryptedArtifact({
+      workspaceId: "ws-1",
+      ownerId: "owner-1",
+      type: "proof",
+      content: plaintext,
+    })
+
+    expect(result.storageUri).toContain("s3://evidence-bucket/evidence/ws-1/")
+    expect(result.encryptionKeyRef).toBe("envkeystore/lyrashield-evidence-kek/v1")
+    expect(result.checkdown).toBeUndefined()
+    const put = sentCommands.find((c) => c.command.input["Body"] !== undefined)?.command.input
+    expect(put).toBeDefined()
+    const body = put!["Body"] as Buffer
+    expect(body.subarray(0, 5).toString("latin1")).toBe("LSEV1")
+    expect(body.indexOf(plaintext)).toBe(-1)
+  })
+
+  it("reads an envelope object back to the exact plaintext", async () => {
+    vi.resetModules()
+    const mod = await import("./index")
+    const plaintext = Buffer.from("decrypt me back exactly")
+    await mod.uploadEncryptedArtifact({
+      workspaceId: "ws-1",
+      ownerId: "owner-1",
+      type: "proof",
+      content: plaintext,
+    })
+    const putBody = storedBody!
+
+    const read = await mod.readEncryptedArtifact(
+      "s3://evidence-bucket/evidence/ws-1/owner-1/proof/x"
+    )
+    expect(read.legacy).toBe(false)
+    expect(read.content.equals(plaintext)).toBe(true)
+    expect(read.checksum).toBe(createHash("sha256").update(plaintext).digest("hex"))
+    expect(putBody.indexOf(plaintext)).toBe(-1)
+  })
+
+  it("returns legacy SSE-only objects flagged, without decryption", async () => {
+    vi.resetModules()
+    const mod = await import("./index")
+    storedBody = Buffer.from("legacy provider-SSE plaintext")
+    const read = await mod.readEncryptedArtifact("s3://evidence-bucket/evidence/ws-1/legacy")
+    expect(read.legacy).toBe(true)
+    expect(read.content.toString("utf8")).toBe("legacy provider-SSE plaintext")
+  })
+
+  it("fails closed when the KEK is not configured", async () => {
+    process.env.LYRASHIELD_EVIDENCE_KEK = ""
+    vi.resetModules()
+    const mod = await import("./index")
+    expect(() => mod.assertEvidenceStorageConfigured()).toThrow()
+    await expect(
+      mod.uploadEncryptedArtifact({
+        workspaceId: "ws-1",
+        ownerId: "owner-1",
+        type: "proof",
+        content: Buffer.from("a"),
+      })
+    ).rejects.toThrow()
+    process.env.LYRASHIELD_EVIDENCE_KEK = Buffer.from(new Array(32).fill(3)).toString("base64")
+  })
+})
