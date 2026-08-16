@@ -423,7 +423,7 @@ describe("processScanJob", () => {
     )
   })
 
-  it("does not apply a profile-duration cutoff to a progressing Deep engine", async () => {
+  it("applies the profile wall-clock budget as the engine timeout for a progressing Deep engine", async () => {
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 3.2 },
       maxDurationMinutes: 75,
@@ -447,12 +447,18 @@ describe("processScanJob", () => {
       where: { id: "policy-deep", workspaceId: "ws-1", deletedAt: null },
       select: { maxBudgetUsd: true, maxDurationMinutes: true },
     })
+    // DEEP caps at 45 min; the policy asked for 75, so the engine timeout is the
+    // REMAINING wall-clock budget — a number bounded by (never exceeding) 45 min.
+    const deepTimeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 3.2 }),
       "scan-1",
-      null,
+      expect.any(Number),
       expect.any(Function)
     )
+    expect(typeof deepTimeoutMs).toBe("number")
+    expect(deepTimeoutMs).toBeGreaterThan(0)
+    expect(deepTimeoutMs).toBeLessThanOrEqual(45 * 60 * 1000)
     expect(runScannerOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({ scannerPhaseTimeoutMs: 10 * 60 * 1000 })
     )
