@@ -30,6 +30,7 @@ const envSchema = z
     LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
+    LYRASHIELD_EGRESS_PROXY_URL: z.string().url().optional().or(z.literal("")),
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
     // Web Search (Parallel Search)
     LYRASHIELD_WEB_SEARCH_ENABLED: z.enum(["0", "1"]).optional().default("0"),
@@ -63,6 +64,18 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
+  .refine(
+    (val) =>
+      val.NODE_ENV !== "production" ||
+      !val.LYRASHIELD_EGRESS_PROXY_URL ||
+      val.LYRASHIELD_EGRESS_PROXY_URL.startsWith("https:"),
+    {
+      path: ["LYRASHIELD_EGRESS_PROXY_URL"],
+      message:
+        "LYRASHIELD_EGRESS_PROXY_URL must use https:// in production — the proxy is authenticated " +
+        "with the LYRASHIELD_EGRESS_PROXY_SECRET bearer token, which an http:// URL would send in cleartext",
+    }
+  )
   .refine(
     (val) =>
       val.LYRASHIELD_WEB_SEARCH_ENABLED !== "1" || Boolean(val.LYRASHIELD_WEB_SEARCH_API_KEY),
@@ -118,6 +131,44 @@ describe("Env Validation Schema", () => {
     it("rejects production without a trusted proxy header but permits development", () => {
       expect(envSchema.safeParse({ ...validEnv, NODE_ENV: "production" }).success).toBe(false)
       expect(envSchema.safeParse({ ...validEnv, NODE_ENV: "development" }).success).toBe(true)
+    })
+
+    it("rejects an http egress proxy URL in production (bearer-token transport)", () => {
+      const result = envSchema.safeParse({
+        ...validEnv,
+        NODE_ENV: "production",
+        TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
+        LYRASHIELD_EGRESS_PROXY_URL: "http://proxy.internal:8080",
+      })
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        const issue = result.error.issues.find((i) =>
+          i.path.includes("LYRASHIELD_EGRESS_PROXY_URL")
+        )
+        expect(issue?.message).toContain("https://")
+        expect(issue?.message).toContain("cleartext")
+      }
+    })
+
+    it("accepts an https egress proxy URL in production", () => {
+      const result = envSchema.safeParse({
+        ...validEnv,
+        NODE_ENV: "production",
+        TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
+        LYRASHIELD_EGRESS_PROXY_URL: "https://proxy.internal:8443",
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it("accepts an http egress proxy URL outside production (local proxies in dev/test)", () => {
+      for (const nodeEnv of ["development", "test"] as const) {
+        const result = envSchema.safeParse({
+          ...validEnv,
+          NODE_ENV: nodeEnv,
+          LYRASHIELD_EGRESS_PROXY_URL: "http://localhost:8080",
+        })
+        expect(result.success).toBe(true)
+      }
     })
 
     it("should accept NODE_ENV as test", () => {
