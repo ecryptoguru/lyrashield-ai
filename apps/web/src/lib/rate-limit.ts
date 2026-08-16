@@ -192,6 +192,33 @@ export async function checkLiteScanRateLimit(ipHash: string) {
   return checkInMemory(`lite-scan:${ipHash}`, LITE_SCAN_MAX, WINDOW_MS)
 }
 
+/**
+ * FREE-plan remote URL scans per client IP per hour. Free tier skips domain
+ * verification, so without this a free account can drive server-side reviews
+ * of arbitrary third-party sites. Paid plans verify domain control instead.
+ * Turnstile on free scan creation is the stronger follow-up; this limit is
+ * the bound that ships today.
+ */
+const FREE_URL_SCAN_MAX = 3
+const FREE_URL_SCAN_WINDOW_MS = 60 * 60 * 1000
+
+/** Extract the client IP the same way the edge proxy does (trusted header only). */
+export function clientIpFromRequest(request: Request): string {
+  const trustedHeader = process.env.TRUSTED_PROXY_IP_HEADER?.toLowerCase()
+  if (!trustedHeader) return "unknown"
+  const value = request.headers.get(trustedHeader)
+  if (!value) return "unknown"
+  const parts = value.split(",")
+  return parts[parts.length - 1]!.trim() || "unknown"
+}
+
+/** Bounds FREE-plan remote URL reviews per client IP. See FREE_URL_SCAN_MAX. */
+export async function checkFreeUrlScanRateLimit(ip: string) {
+  const upstash = await checkUpstash(FREE_URL_SCAN_MAX, "1 h", `free-url-scan:${ip}`)
+  if (upstash) return upstash
+  return checkInMemory(`free-url-scan:${ip}`, FREE_URL_SCAN_MAX, FREE_URL_SCAN_WINDOW_MS)
+}
+
 /** Bounds committed model spend per workspace. See SCAN_CREATE_MAX. */
 export async function checkScanCreateRateLimit(workspaceId: string) {
   const upstash = await checkUpstash(SCAN_CREATE_MAX, "60 s", `scan-create:${workspaceId}`)

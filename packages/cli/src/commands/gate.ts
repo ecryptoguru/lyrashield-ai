@@ -2,15 +2,17 @@ import minimist from "minimist"
 import { writeFile } from "node:fs/promises"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
+import { loadDefaultProject } from "../projects.js"
 import { resolveDiffRange, runRiskyPatternChecks, buildSarif, rankSeverity } from "../diff-core.js"
 import type { Output } from "../output.js"
 import { listAll, FindingSchema } from "@lyrashield/sdk"
 
 export async function handleGate(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["fail-on", "sarif", "base", "head"],
+    string: ["fail-on", "sarif", "base", "head", "target"],
     boolean: ["staged"],
     default: { "fail-on": "HIGH" },
+    alias: { t: "target" },
   })
 
   const threshold = ((parsed["fail-on"] as string) ?? "HIGH").toUpperCase()
@@ -47,14 +49,36 @@ export async function handleGate(args: string[], output: Output): Promise<number
     const creds = await getEffectiveCredentials()
     if (creds.apiKey) {
       const workspaceId = requireWorkspace(creds)
-      const client = await createClient()
-      const items = await listAll(
-        client,
-        "GET",
-        `/findings?workspaceId=${encodeURIComponent(workspaceId)}&status=OPEN`,
-        FindingSchema
-      )
-      apiFindings = items.map((f) => ({ severity: f.severity, message: f.title }))
+
+      // The gate must scope API findings to ONE target: fetching the whole
+      // workspace merges every project's open findings into this PR's decision,
+      // so an unrelated HIGH finding fails every gate. Resolution matches
+      // `scan`: explicit --target wins, else the saved default project when it
+      // belongs to this workspace. Without a target, only the local diff
+      // checks gate this PR.
+      const explicitTarget = parsed.target as string | undefined
+      let targetId = explicitTarget
+      if (!targetId) {
+        const defaultProject = await loadDefaultProject()
+        if (defaultProject?.targetId && defaultProject.workspaceId === workspaceId) {
+          targetId = defaultProject.targetId
+        }
+      }
+
+      if (targetId) {
+        const client = await createClient()
+        const items = await listAll(
+          client,
+          "GET",
+          `/findings?workspaceId=${encodeURIComponent(workspaceId)}&targetId=${encodeURIComponent(targetId)}&status=OPEN`,
+          FindingSchema
+        )
+        apiFindings = items.map((f) => ({ severity: f.severity, message: f.title }))
+      } else if (explicitTarget === undefined) {
+        output.notice(
+          "No --target and no saved default project: evaluating local diff checks only."
+        )
+      }
     }
   } catch (err) {
     hadError = true
