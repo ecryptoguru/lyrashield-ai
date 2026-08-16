@@ -16,6 +16,8 @@ interface Props {
 }
 
 const appOrigin = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
+// Fallback must stay in sync with DEFAULT_API_URL in packages/credentials/src/index.ts
+// (marketing deliberately has no dependency edge on that package).
 const API_URL = appOrigin || "https://app.lyrashieldai.com"
 const MCP_REMOTE_URL = `${API_URL}/api/mcp`
 const SERVER_NAME = "lyrashield"
