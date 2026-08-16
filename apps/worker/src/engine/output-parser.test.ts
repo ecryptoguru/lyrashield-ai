@@ -734,7 +734,6 @@ describe("output-parser", () => {
 })
 
 describe("checkRunRecordSchemaVersion", () => {
-
   it("warns when schema_version is absent (pre-versioning run.json)", () => {
     const check = checkRunRecordSchemaVersion(undefined)
     expect(check?.level).toBe("warn")
