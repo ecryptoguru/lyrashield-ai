@@ -72,7 +72,7 @@ Commands:
   fix-plan <findingId> Generate a fix plan
   verify <findingId>   Queue a retest
   check-diff           Local advisory diff check
-  gate                 CI gate (local + findings)
+  gate [--target <id>] CI gate (local + findings; defaults to the saved project)
   report               Create or list reports
   readiness            Launch readiness
   targets              List or create targets

@@ -3,14 +3,16 @@ import { writeFile } from "node:fs/promises"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import { resolveDiffRange, runRiskyPatternChecks, buildSarif, rankSeverity } from "../diff-core.js"
+import { loadDefaultProject } from "../projects.js"
 import type { Output } from "../output.js"
 import { listAll, FindingSchema } from "@lyrashield/sdk"
 
 export async function handleGate(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["fail-on", "sarif", "base", "head"],
+    string: ["fail-on", "sarif", "base", "head", "target"],
     boolean: ["staged"],
     default: { "fail-on": "HIGH" },
+    alias: { t: "target" },
   })
 
   const threshold = ((parsed["fail-on"] as string) ?? "HIGH").toUpperCase()
@@ -47,13 +49,21 @@ export async function handleGate(args: string[], output: Output): Promise<number
     const creds = await getEffectiveCredentials()
     if (creds.apiKey) {
       const workspaceId = requireWorkspace(creds)
+      // Scope the gate to one target: --target wins, then the saved default
+      // project (only when it belongs to this workspace, same as scan.ts).
+      // Without a targetId filter every open finding in ANY target would fail
+      // every PR gate.
+      let targetId = parsed.target as string | undefined
+      if (!targetId) {
+        const defaultProject = await loadDefaultProject()
+        if (defaultProject?.targetId && defaultProject.workspaceId === workspaceId) {
+          targetId = defaultProject.targetId
+        }
+      }
+      const params = new URLSearchParams({ workspaceId, status: "OPEN" })
+      if (targetId) params.set("targetId", targetId)
       const client = await createClient()
-      const items = await listAll(
-        client,
-        "GET",
-        `/findings?workspaceId=${encodeURIComponent(workspaceId)}&status=OPEN`,
-        FindingSchema
-      )
+      const items = await listAll(client, "GET", `/findings?${params.toString()}`, FindingSchema)
       apiFindings = items.map((f) => ({ severity: f.severity, message: f.title }))
     }
   } catch (err) {

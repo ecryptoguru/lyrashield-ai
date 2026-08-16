@@ -86,7 +86,7 @@ Deeper modes consume more compute and take longer. Choose the least intensive mo
 ### Local checks and CI
 
 - `check-diff [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — fast advisory diff check for obvious risky patterns; not a substitute for a full recorded scan
-- `gate [--fail-on HIGH|MEDIUM|LOW] [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — combine local diff patterns with open findings and fail at the chosen severity threshold
+- `gate [--fail-on HIGH|MEDIUM|LOW] [--target <targetId>] [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — combine local diff patterns with open findings and fail at the chosen severity threshold. The findings check is scoped to `--target`, falling back to the saved default project (`lyrashield project use`); without either it covers the whole workspace.
 
 ### Reports and approvals
 
