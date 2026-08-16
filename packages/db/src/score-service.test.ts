@@ -4,6 +4,7 @@ vi.mock("./client", () => ({
   prisma: {
     $transaction: vi.fn(),
     $executeRaw: vi.fn(),
+    $queryRaw: vi.fn(),
     scan: { findUnique: vi.fn(), update: vi.fn() },
     scoreSnapshot: {
       findUnique: vi.fn(),
@@ -37,11 +38,14 @@ vi.mock("./system-client", async () => {
 })
 
 import { prisma } from "./client"
+import { Prisma } from "./generated/prisma"
 import {
   buildScorecardPayload,
   normalizeScorecardPayload,
   attributeReferral,
+  getOrCreateReferralCode,
   getPublicScorecard,
+  qualifyReferralForWorkspace,
   revokeScorecardShare,
   completeScanWithScore,
   recordScorecardEvent,
@@ -345,6 +349,214 @@ describe("score-service", () => {
         where: { id: "share-1" },
         data: { viewCount: { increment: 1 } },
       })
+    })
+
+    it("increments viewCount in the SAME transaction as the insert (atomic — no drift window)", async () => {
+      mockPrisma.scorecardShare.findFirst.mockResolvedValue({
+        id: "share-1",
+        snapshot: { workspaceId: "workspace-1" },
+      })
+      mockPrisma.scorecardEvent.createMany.mockResolvedValue({ count: 1 })
+      mockPrisma.scorecardShare.update.mockResolvedValue({})
+      mockPrisma.$transaction.mockClear()
+      mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+
+      await recordScorecardEvent("slug", { eventType: "VIEW", visitorId: "visitor-1" })
+
+      // One transaction carries both the insert and the conditional increment;
+      // a second transaction (or a post-transaction statement) would reintroduce
+      // the crash-between-statements count drift.
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1)
+      expect(mockPrisma.scorecardEvent.createMany.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPrisma.scorecardShare.update.mock.invocationCallOrder[0]
+      )
+    })
+
+    it("does NOT increment viewCount when the insert was a duplicate (count 0)", async () => {
+      mockPrisma.scorecardShare.findFirst.mockResolvedValue({
+        id: "share-1",
+        snapshot: { workspaceId: "workspace-1" },
+      })
+      mockPrisma.scorecardEvent.createMany.mockResolvedValue({ count: 0 })
+
+      const result = await recordScorecardEvent("slug", {
+        eventType: "VIEW",
+        visitorId: "visitor-1",
+      })
+
+      expect(result).toEqual({ recorded: false })
+      expect(mockPrisma.scorecardShare.update).not.toHaveBeenCalled()
+    })
+
+    it("never increments viewCount for SHARE events, even when a row was created", async () => {
+      mockPrisma.scorecardShare.findFirst.mockResolvedValue({
+        id: "share-1",
+        snapshot: { workspaceId: "workspace-1" },
+      })
+      mockPrisma.scorecardEvent.createMany.mockResolvedValue({ count: 1 })
+
+      const result = await recordScorecardEvent("slug", {
+        eventType: "SHARE",
+        channel: "linkedin",
+        visitorId: "visitor-1",
+      })
+
+      expect(result).toEqual({ recorded: true })
+      expect(mockPrisma.scorecardShare.update).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("getOrCreateReferralCode (P2002 collision handling)", () => {
+    /** A real Prisma known-request error carrying the unique-constraint code. */
+    function p2002Error(): Prisma.PrismaClientKnownRequestError {
+      return new Prisma.PrismaClientKnownRequestError(
+        "Unique constraint failed on the fields: (`code`)",
+        { code: "P2002", clientVersion: "test", meta: { target: ["code"] } }
+      )
+    }
+
+    it("returns the existing code without allocating", async () => {
+      mockPrisma.referralCode.findUnique.mockResolvedValue({ id: "ref-1", code: "CODEAAAA" })
+
+      const result = await getOrCreateReferralCode("user-1")
+
+      expect(result).toEqual({ id: "ref-1", code: "CODEAAAA" })
+      expect(mockPrisma.referralCode.create).not.toHaveBeenCalled()
+    })
+
+    it("retries allocation on a P2002 unique-constraint error", async () => {
+      mockPrisma.referralCode.findUnique.mockResolvedValue(null)
+      mockPrisma.referralCode.create
+        .mockRejectedValueOnce(p2002Error())
+        .mockResolvedValueOnce({ id: "ref-2", code: "CODEBBBB" })
+
+      const result = await getOrCreateReferralCode("user-1")
+
+      expect(result).toEqual({ id: "ref-2", code: "CODEBBBB" })
+      expect(mockPrisma.referralCode.create).toHaveBeenCalledTimes(2)
+    })
+
+    it("gives up after five consecutive P2002 collisions", async () => {
+      mockPrisma.referralCode.findUnique.mockResolvedValue(null)
+      mockPrisma.referralCode.create.mockRejectedValue(p2002Error())
+
+      await expect(getOrCreateReferralCode("user-1")).rejects.toThrow(
+        "Unable to allocate referral code"
+      )
+      expect(mockPrisma.referralCode.create).toHaveBeenCalledTimes(5)
+    })
+
+    it("rethrows a message-only unique-constraint error — only the P2002 code is contractual", async () => {
+      mockPrisma.referralCode.findUnique.mockResolvedValue(null)
+      // Same message text as the real error, but NOT a PrismaClientKnownRequestError
+      // and carrying no code. Matching on message text (the old behaviour) made
+      // this indistinguishable from a genuine collision.
+      mockPrisma.referralCode.create.mockRejectedValue(
+        new Error("Unique constraint failed on the fields: (`code`)")
+      )
+
+      await expect(getOrCreateReferralCode("user-1")).rejects.toThrow(
+        "Unique constraint failed on the fields: (`code`)"
+      )
+      expect(mockPrisma.referralCode.create).toHaveBeenCalledTimes(1)
+    })
+
+    it("rethrows unrelated Prisma known-request errors with a different code", async () => {
+      mockPrisma.referralCode.findUnique.mockResolvedValue(null)
+      mockPrisma.referralCode.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError("Some other constraint", {
+          code: "P2003",
+          clientVersion: "test",
+        })
+      )
+
+      await expect(getOrCreateReferralCode("user-1")).rejects.toThrow("Some other constraint")
+      expect(mockPrisma.referralCode.create).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe("qualifyReferralForWorkspace (deterministic credit)", () => {
+    function seedHappyPath() {
+      mockPrisma.workspaceMember.findFirst
+        // Referred workspace's owner.
+        .mockResolvedValueOnce({ userId: "owner-1", workspaceId: "ws-referred" })
+        // Referrer's OWNER memberships — the oldest one must win deterministically.
+        .mockResolvedValueOnce({ workspaceId: "ws-referrer-oldest" })
+      mockPrisma.referralAttribution.findFirst.mockResolvedValue({
+        id: "attr-1",
+        referredUserId: "owner-1",
+        status: "PENDING",
+        code: { id: "code-1", userId: "referrer-1" },
+      })
+      mockPrisma.referralAttribution.findUnique.mockResolvedValue({
+        id: "attr-1",
+        status: "PENDING",
+      })
+      mockPrisma.usageRecord.upsert.mockResolvedValue({ id: "reward-1" })
+      mockPrisma.referralAttribution.update.mockResolvedValue({})
+      mockPrisma.auditLog.create.mockResolvedValue({})
+    }
+
+    it("credits the referrer's OLDEST active OWNER membership (createdAt asc)", async () => {
+      seedHappyPath()
+
+      const recipient = await qualifyReferralForWorkspace("ws-referred")
+
+      // The referrer lookup must pin an ordering — without it, findFirst picks an
+      // arbitrary workspace when the referrer owns several, so the same signup
+      // could credit different workspaces across runs.
+      expect(mockPrisma.workspaceMember.findFirst).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: { userId: "referrer-1", role: "OWNER", status: "active" },
+          orderBy: { createdAt: "asc" },
+        })
+      )
+      // Referred-side reward.
+      expect(mockPrisma.usageRecord.upsert).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          create: expect.objectContaining({ workspaceId: "ws-referred", kind: "referral_bonus" }),
+        })
+      )
+      // Referrer-side reward goes to the deterministically selected workspace.
+      expect(mockPrisma.usageRecord.upsert).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          create: expect.objectContaining({
+            workspaceId: "ws-referrer-oldest",
+            idempotencyKey: "attr-1:referrer",
+          }),
+        })
+      )
+      expect(recipient).toEqual({ id: "reward-1" })
+    })
+
+    it("awards nothing when the attribution is no longer PENDING inside the transaction", async () => {
+      seedHappyPath()
+      mockPrisma.referralAttribution.findUnique.mockResolvedValue({
+        id: "attr-1",
+        status: "REWARDED",
+      })
+
+      const recipient = await qualifyReferralForWorkspace("ws-referred")
+
+      expect(recipient).toBeNull()
+      expect(mockPrisma.usageRecord.upsert).not.toHaveBeenCalled()
+      expect(mockPrisma.auditLog.create).not.toHaveBeenCalled()
+    })
+
+    it("awards nothing when the referrer has no active OWNER membership", async () => {
+      seedHappyPath()
+      mockPrisma.workspaceMember.findFirst
+        .mockReset()
+        .mockResolvedValueOnce({ userId: "owner-1", workspaceId: "ws-referred" })
+        .mockResolvedValueOnce(null)
+
+      const recipient = await qualifyReferralForWorkspace("ws-referred")
+
+      expect(recipient).toBeNull()
+      expect(mockPrisma.usageRecord.upsert).not.toHaveBeenCalled()
     })
   })
 

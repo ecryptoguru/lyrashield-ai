@@ -4,6 +4,7 @@ import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
   CreateScanSchema,
+  MAX_CONCURRENT_WORKSPACE_SCANS,
   ScanStatusSchema,
   resolveScanProfile,
   resolveTargetScanMode,
@@ -24,11 +25,11 @@ import { checkScanCreateRateLimit } from "../../../lib/rate-limit"
 const ACTIVE_SCAN_STATUSES = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] as const
 
 /**
- * Concurrent in-flight reviews per workspace. Each running scan holds a worker slot and
- * commits model spend, so this bounds both blast radius and cost while leaving normal
- * multi-product use unaffected.
+ * Concurrent in-flight reviews per workspace (shared with the scheduled-scan
+ * runner via @lyrashield/types). Each running scan holds a worker slot and
+ * commits model spend, so this bounds both blast radius and cost while leaving
+ * normal multi-product use unaffected.
  */
-const MAX_CONCURRENT_WORKSPACE_SCANS = 3
 
 /**
  * Serialize a scan list row for the client. Dates become ISO strings so the

@@ -60,10 +60,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     switch (action) {
       case "share": {
-        const { token, tokenHash, expiresAt } = await generateShareToken(id, workspaceId)
+        const { token, expiresAt } = await generateShareToken(id, workspaceId)
+        // tokenHash stays server-side: the client has no legitimate use for the
+        // hash of the bearer token it already holds, and echoing it widens the
+        // disclosure surface for no feature.
         return apiSuccess({
           token,
-          tokenHash,
           expiresAt: expiresAt.toISOString(),
           shareUrl: `/reports/shared/${id}?token=${token}`,
         })

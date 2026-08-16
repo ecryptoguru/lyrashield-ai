@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 const error = vi.fn()
-vi.mock("@lyrashield/logger", () => ({ logger: { error } }))
+vi.mock("@lyrashield/logger", () => ({ logger: { error, warn: vi.fn() } }))
 
 describe("request instrumentation", () => {
   it("records unhandled request errors", async () => {

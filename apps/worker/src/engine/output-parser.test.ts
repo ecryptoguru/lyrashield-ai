@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest"
+import { checkRunRecordSchemaVersion } from "./engine-output-schema"
 import {
   parseVulnerabilitiesJson,
   parseRunJson,
@@ -729,5 +730,30 @@ describe("output-parser", () => {
       })
       expect(summary.length).toBeLessThan(longDesc.length + 100)
     })
+  })
+})
+
+describe("checkRunRecordSchemaVersion", () => {
+  it("warns when schema_version is absent (pre-versioning run.json)", () => {
+    const check = checkRunRecordSchemaVersion(undefined)
+    expect(check?.level).toBe("warn")
+    expect(check?.message).toContain("predates schema versioning")
+  })
+
+  it("errors on a MAJOR mismatch (engine 2.x vs worker 1.x)", () => {
+    const check = checkRunRecordSchemaVersion("2.0")
+    expect(check?.level).toBe("error")
+    expect(check?.message).toContain("major version moved")
+  })
+
+  it("stays silent on matching major and additive minor bumps", () => {
+    expect(checkRunRecordSchemaVersion("1.0")).toBeNull()
+    expect(checkRunRecordSchemaVersion("1.7")).toBeNull()
+  })
+
+  it("warns on an unparsable version value", () => {
+    const check = checkRunRecordSchemaVersion("one-oh")
+    expect(check?.level).toBe("warn")
+    expect(check?.message).toContain("not a parsable")
   })
 })

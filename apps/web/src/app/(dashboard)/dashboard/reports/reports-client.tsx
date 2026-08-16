@@ -39,7 +39,6 @@ interface ReportItem {
   type: string
   status: string
   format: string
-  shareTokenHash: string | null
   shareExpiresAt: string | null
   revokedAt: string | null
   createdAt: string
@@ -53,7 +52,6 @@ const reportItemSchema = z
     type: z.string(),
     status: z.string(),
     format: z.string(),
-    shareTokenHash: z.string().nullable(),
     shareExpiresAt: z.string().datetime().or(z.string()).nullable(),
     revokedAt: z.string().datetime().or(z.string()).nullable(),
     createdAt: z.string().datetime().or(z.string()),
@@ -80,7 +78,6 @@ const reportScansPaginatedSchema = paginatedResponseSchema(reportScanSchema)
 const reportShareSchema = z
   .object({
     token: z.string(),
-    tokenHash: z.string(),
     expiresAt: z.string().datetime().or(z.string()),
     shareUrl: z.string(),
   })
@@ -247,7 +244,9 @@ export function ReportsClient({
           r.id === reportId
             ? {
                 ...r,
-                shareTokenHash: res.tokenHash,
+                // shareExpiresAt (not the server-held shareTokenHash) marks the
+                // report as actively shared — the share response no longer
+                // echoes the hash back to the client.
                 shareExpiresAt: res.expiresAt,
               }
             : r
@@ -519,14 +518,14 @@ export function ReportsClient({
                       size="sm"
                       variant="ghost"
                       aria-label={
-                        report.shareTokenHash ? "Regenerate share link" : "Create share link"
+                        report.shareExpiresAt ? "Regenerate share link" : "Create share link"
                       }
                       onClick={() => void handleShare(report.id)}
                     >
                       <Share2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   )}
-                  {!report.revokedAt && report.shareTokenHash && (
+                  {!report.revokedAt && report.shareExpiresAt && (
                     <InlineConfirm
                       triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
                       aria-label="Revoke share link"

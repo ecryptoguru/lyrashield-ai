@@ -174,6 +174,10 @@ const envSchema = z
     S3_SECRET_KEY: z.string().optional().or(z.literal("")),
     S3_BUCKET: z.string().optional().or(z.literal("")),
     S3_REGION: z.string().optional().or(z.literal("")),
+    // Base64-encoded 32-byte key-encryption key for evidence envelope encryption.
+    // Required (fail-closed) when S3 evidence storage is configured: each artifact
+    // is sealed with a per-object data key that is itself encrypted under this KEK.
+    LYRASHIELD_EVIDENCE_KEK: z.string().optional().or(z.literal("")),
     // Local Compose-only encrypted evidence store. Production must use S3-compatible storage.
     LYRASHIELD_LOCAL_EVIDENCE_STORAGE: z.enum(["0", "1"]).optional().default("0"),
     LYRASHIELD_LOCAL_EVIDENCE_DIR: z.string().optional().or(z.literal("")),
