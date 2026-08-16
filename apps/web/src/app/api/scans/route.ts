@@ -108,9 +108,7 @@ export async function POST(request: Request) {
         // Free tier skips domain verification, so a free account could
         // otherwise drive server-side reviews of arbitrary third-party
         // sites. Bound it per client IP; Turnstile is the follow-up.
-        const freeUrlLimit = await checkFreeUrlScanRateLimit(
-          clientIpFromRequest(request)
-        )
+        const freeUrlLimit = await checkFreeUrlScanRateLimit(clientIpFromRequest(request))
         if (freeUrlLimit.limited) {
           return apiError(
             "FREE_URL_SCAN_RATE_LIMITED",

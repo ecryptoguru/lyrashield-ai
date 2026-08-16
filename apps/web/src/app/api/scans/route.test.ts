@@ -41,8 +41,12 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("../../../lib/rate-limit", () => ({
-  checkScanCreateRateLimit: vi.fn().mockResolvedValue({ limited: false, remaining: 5, retryAfter: 0 }),
-  checkFreeUrlScanRateLimit: vi.fn().mockResolvedValue({ limited: false, remaining: 3, retryAfter: 0 }),
+  checkScanCreateRateLimit: vi
+    .fn()
+    .mockResolvedValue({ limited: false, remaining: 5, retryAfter: 0 }),
+  checkFreeUrlScanRateLimit: vi
+    .fn()
+    .mockResolvedValue({ limited: false, remaining: 3, retryAfter: 0 }),
   clientIpFromRequest: vi.fn().mockReturnValue("203.0.113.9"),
 }))
 
