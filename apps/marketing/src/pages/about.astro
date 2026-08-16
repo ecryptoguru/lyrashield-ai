@@ -4,6 +4,8 @@
 // through /security-reporting rather than a raw mailto so the disclosure
 // policy and the monitored address stay in one place.
 const abuseEmail = (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || "abuse@lyrashieldai.com"
+// Fallback must stay in sync with DEFAULT_API_URL in packages/credentials/src/index.ts
+// (marketing deliberately has no dependency edge on that package).
 const appUrl =
   (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
   "https://app.lyrashieldai.com"

@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline"
 import { Writable } from "node:stream"
 import minimist from "minimist"
-import { saveCredentials, loadCredentials, getEnvApiUrl } from "../credentials.js"
+import { saveCredentials, loadCredentials, getEnvApiUrl, DEFAULT_API_URL } from "../credentials.js"
 import { redactKey } from "../output.js"
 import type { Output } from "../output.js"
 import process from "node:process"
@@ -124,7 +124,7 @@ export async function handleLogin(args: string[], output: Output): Promise<numbe
     string: ["key", "url", "workspace"],
     boolean: ["oauth"],
     alias: { k: "key" },
-    default: { url: getEnvApiUrl() ?? "https://app.lyrashieldai.com" },
+    default: { url: getEnvApiUrl() ?? DEFAULT_API_URL },
   })
 
   if (parsed.oauth) return loginWithDevice(parsed.url, output)

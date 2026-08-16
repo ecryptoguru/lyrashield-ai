@@ -1,5 +1,5 @@
 import minimist from "minimist"
-import { getEffectiveCredentials, requireApiKey } from "../credentials.js"
+import { getEffectiveCredentials, requireApiKey, DEFAULT_API_URL } from "../credentials.js"
 import type { Output } from "../output.js"
 
 const MCP_ENDPOINT = "/api/mcp"
@@ -35,7 +35,7 @@ export async function handleMcp(args: string[], output: Output): Promise<number>
 
   const creds = await getEffectiveCredentials()
   const apiKey = requireApiKey(creds)
-  const baseUrl = (creds.apiUrl ?? "https://app.lyrashieldai.com").replace(/\/+$/, "")
+  const baseUrl = (creds.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, "")
 
   const initReq = {
     jsonrpc: "2.0",

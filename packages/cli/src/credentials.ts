@@ -12,6 +12,7 @@ import { unlink, access } from "node:fs/promises"
 import {
   CREDENTIALS_DIR,
   CREDENTIALS_FILE,
+  DEFAULT_API_URL,
   getEnvApiKey,
   getEnvApiUrl,
   getEnvOAuthAccessToken,
@@ -23,7 +24,14 @@ import {
   type StoredCredentials,
 } from "@lyrashield/credentials"
 
-export { CREDENTIALS_DIR, CREDENTIALS_FILE, getEnvApiKey, getEnvApiUrl, getEnvOAuthAccessToken }
+export {
+  CREDENTIALS_DIR,
+  CREDENTIALS_FILE,
+  DEFAULT_API_URL,
+  getEnvApiKey,
+  getEnvApiUrl,
+  getEnvOAuthAccessToken,
+}
 
 export type Credentials = StoredCredentials
 export type EffectiveCredentials = ResolvedCredentials

@@ -1,4 +1,6 @@
 ---
+// Fallback must stay in sync with DEFAULT_API_URL in packages/credentials/src/index.ts
+// (marketing deliberately has no dependency edge on that package).
 const appUrl =
   (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
   "https://app.lyrashieldai.com"

@@ -3,6 +3,9 @@ import { LyraShieldError, NotModified } from "./errors"
 
 export const VERSION = "0.1.0"
 
+// Source of truth: DEFAULT_API_URL in packages/credentials/src/index.ts.
+// This published package cannot depend on the private credentials package,
+// so the literal is duplicated here — keep the two in sync.
 const DEFAULT_API_URL = "https://app.lyrashieldai.com"
 const REQUEST_TIMEOUT_MS = 30000
 const MAX_RETRIES = 3
