@@ -92,8 +92,13 @@ write_secret S3_SECRET_KEY worker-r2-secret-key
 # durably (loss makes envelope-encrypted evidence unreadable) — see
 # packages/evidence-storage/scripts/generate-kek.mjs and PRODUCTION_DEPLOYMENT.
 write_secret LYRASHIELD_EVIDENCE_KEK worker-evidence-kek
-write_secret LYRASHIELD_EGRESS_PROXY_URL worker-egress-proxy-url
-write_secret LYRASHIELD_EGRESS_PROXY_SECRET worker-egress-proxy-secret
+# Optional. The egress proxy is separately deployed infrastructure; when these
+# are absent the worker starts without it (engine egress is additionally bounded
+# by the deny-by-default firewall policy). Making them required wedged the
+# worker's ExecStartPre in environments where the proxy is not deployed
+# (observed 2026-08-16: worker could not restart until this was optional).
+write_secret_optional LYRASHIELD_EGRESS_PROXY_URL worker-egress-proxy-url
+write_secret_optional LYRASHIELD_EGRESS_PROXY_SECRET worker-egress-proxy-secret
 # Optional. When present and LYRASHIELD_WEB_SEARCH_ENABLED=1, enables Parallel Search.
 write_secret_optional LYRASHIELD_WEB_SEARCH_API_KEY worker-web-search-api-key
 # Optional paid-scan overlay. The worker defaults to disabled when these are
