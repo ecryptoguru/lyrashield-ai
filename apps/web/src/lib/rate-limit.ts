@@ -23,6 +23,18 @@ const APPROVAL_CREATE_MAX = 10
  * is keyed on the workspace rather than the IP so rotating addresses does not lift it.
  */
 const SCAN_CREATE_MAX = 5
+/**
+ * Free-tier WEB_APP scan starts per client IP per hour.
+ *
+ * Free-tier web-app scans skip the paid domain-verification proof, so the workspace-keyed
+ * limit above is all that stops someone from spinning up fresh free workspaces to scan
+ * third-party sites. Keying on the IP keeps that abuse bounded even across fresh
+ * workspaces; paid plans are unaffected (their domain proof is the stronger gate).
+ * Follow-up: require Turnstile on free-tier WEB_APP scans for a bot check that survives
+ * IP rotation.
+ */
+const FREE_TIER_WEB_APP_SCAN_MAX = 3
+const FREE_TIER_WEB_APP_SCAN_WINDOW_MS = 3_600_000
 
 // Bound the in-memory store so a long-running instance (dev / self-hosted
 // without Upstash) can't grow unboundedly with one entry per distinct IP.
@@ -191,6 +203,17 @@ export async function checkScanCreateRateLimit(workspaceId: string) {
   const upstash = await checkUpstash(SCAN_CREATE_MAX, "60 s", `scan-create:${workspaceId}`)
   if (upstash) return upstash
   return checkInMemory(`scan-create:${workspaceId}`, SCAN_CREATE_MAX, WINDOW_MS)
+}
+
+/** Bounds free-tier WEB_APP scan starts per client IP. See FREE_TIER_WEB_APP_SCAN_MAX. */
+export async function checkFreeTierWebAppScanRateLimit(ip: string) {
+  const upstash = await checkUpstash(
+    FREE_TIER_WEB_APP_SCAN_MAX,
+    "1 h",
+    `free-webapp-scan:${ip}`
+  )
+  if (upstash) return upstash
+  return checkInMemory(`free-webapp-scan:${ip}`, FREE_TIER_WEB_APP_SCAN_MAX, FREE_TIER_WEB_APP_SCAN_WINDOW_MS)
 }
 
 /** Bounds remote MCP approval creation per workspace. */

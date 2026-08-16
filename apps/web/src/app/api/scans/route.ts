@@ -19,7 +19,10 @@ import {
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
-import { checkScanCreateRateLimit } from "../../../lib/rate-limit"
+import {
+  checkScanCreateRateLimit,
+  checkFreeTierWebAppScanRateLimit,
+} from "../../../lib/rate-limit"
 
 const ACTIVE_SCAN_STATUSES = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] as const
 
@@ -114,6 +117,25 @@ export async function POST(request: Request) {
             "DOMAIN_VERIFICATION_REQUIRED",
             "Verify control of this domain once before starting a paid remote review.",
             403
+          )
+        }
+      } else if (workspace && target.type === "WEB_APP") {
+        // Free-tier WEB_APP scans skip the paid domain-verification proof, so
+        // bound them per client IP: without this, fresh free workspaces would
+        // each get a fresh SCAN_CREATE_MAX budget for scanning third-party
+        // sites. Follow-up: require Turnstile here so the check survives IP
+        // rotation.
+        const ip =
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+          request.headers.get("x-real-ip") ??
+          "unknown"
+        const freeTierRate = await checkFreeTierWebAppScanRateLimit(ip)
+        if (freeTierRate.limited) {
+          return apiError(
+            "SCAN_RATE_LIMITED",
+            "Free-tier web app reviews are limited per hour. Please wait and try again.",
+            429,
+            { "Retry-After": String(Math.max(freeTierRate.retryAfter, 1)) }
           )
         }
       }
