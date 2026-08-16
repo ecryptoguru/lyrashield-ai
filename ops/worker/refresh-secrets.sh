@@ -87,6 +87,11 @@ write_secret S3_ENDPOINT worker-r2-endpoint
 write_secret S3_BUCKET worker-r2-bucket
 write_secret S3_ACCESS_KEY worker-r2-access-key
 write_secret S3_SECRET_KEY worker-r2-secret-key
+# Evidence envelope encryption key (base64, 32 bytes). Required together with
+# the S3 block: evidence uploads fail closed without it. Generate once, store
+# durably (loss makes envelope-encrypted evidence unreadable) — see
+# packages/evidence-storage/scripts/generate-kek.mjs and PRODUCTION_DEPLOYMENT.
+write_secret LYRASHIELD_EVIDENCE_KEK worker-evidence-kek
 write_secret LYRASHIELD_EGRESS_PROXY_URL worker-egress-proxy-url
 write_secret LYRASHIELD_EGRESS_PROXY_SECRET worker-egress-proxy-secret
 # Optional. When present and LYRASHIELD_WEB_SEARCH_ENABLED=1, enables Parallel Search.

@@ -283,3 +283,17 @@ docker compose down
 - If a database applied the first local draft of `20260713170000_scorecard_events`, its unique index may end in `dayBucket_`; current schema truth ends in `dayBuc_key`. Fresh databases are correct. For an old disposable local database, reset/redeploy migrations or rename only that index after confirming the exact drift—never edit an already-deployed production migration ad hoc.
 - If the worker cannot find `lyrashield`, confirm the sibling repository path or `LYRASHIELD_ENGINE_SOURCE` before rebuilding.
 - If the homepage waitlist endpoint returns 500 locally, set a non-placeholder `WAITLIST_IP_SALT` in `apps/marketing/.dev.vars`.
+
+## Evidence envelope key (S3 evidence mode)
+
+Local Compose uses the encrypted local evidence store
+(`LYRASHIELD_LOCAL_EVIDENCE_STORAGE=1`, HKDF from `BETTER_AUTH_SECRET`) and
+needs no extra key. If you point a local environment at S3-compatible evidence
+storage instead, generate the required envelope key once:
+
+```bash
+node packages/evidence-storage/scripts/generate-kek.mjs
+# → set as LYRASHIELD_EVIDENCE_KEK in .env (base64, exactly 32 bytes)
+```
+
+Uploads fail closed without it — that is the intended behavior, not a bug.

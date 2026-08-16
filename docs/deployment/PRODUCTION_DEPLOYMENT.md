@@ -225,6 +225,26 @@ rule.
 10. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
 11. `.github/workflows/deploy-azure.yml` pins the exact reviewed engine commit. PR CI proves that the pin is merged into engine `main`, its named engine checks passed, and the worker contract is compatible. The main deployment repeats provenance and contract checks, builds and pushes the SHA-only worker candidate, pulls its exact digest, and verifies the app and engine OCI labels. Promote that verified digest by updating the worker VM runtime configuration, retaining the prior digest for rollback, restarting the systemd worker service, and reconciling the configured/running digest, OCI labels, Docker health, and `/api/ready/scans`. This prevents silent updates without preventing future releases. Advance the engine pin only after the engine change is merged and green; never point it at a branch or mutable tag.
 
+### Evidence envelope key provisioning (LYRASHIELD_EVIDENCE_KEK)
+
+Every evidence artifact is client-side envelope-encrypted (per-object AES-256-GCM
+data key, wrapped under this KEK) before it reaches the bucket. The key is a
+one-time secret:
+
+1. **Generate once**: `node packages/evidence-storage/scripts/generate-kek.mjs`
+2. **Store durably first** (password manager / KMS / sealed offline copy): loss
+   of the KEK makes every artifact written under it permanently unreadable —
+   there is no recovery path. Rotating to a new KEK only affects NEW artifacts;
+   existing envelopes record the key ref they were sealed under.
+3. **Provision**:
+   - GitHub secret `LYRASHIELD_EVIDENCE_KEK` — the deploy workflow validates it
+     (present + base64-decodes to exactly 32 bytes), syncs it to the app
+     Container App as `lyrashield-evidence-kek`, and wires the env secretref.
+   - Key Vault secret `worker-evidence-kek` — the worker VM picks it up via
+     `ops/worker/refresh-secrets.sh` (required entry, not optional).
+4. **Never** commit the value, paste it into tickets/chats/logs, or reuse
+   another secret for it.
+
 ## Full-scan resource checklist
 
 The live Lite Scanner is a separate passive API and cannot be promoted into the full worker by configuration alone. A controlled repository scan requires all of the following:
@@ -352,6 +372,14 @@ S3_BUCKET="lyrashield-evidence"
 S3_ACCESS_KEY="..."
 S3_SECRET_KEY="..."
 S3_REGION="auto"
+# Evidence envelope key (REQUIRED with the S3 block — uploads fail closed without it).
+# Base64 of exactly 32 bytes. Generate ONCE and store durably before provisioning:
+#   node packages/evidence-storage/scripts/generate-kek.mjs
+# Losing it makes every envelope-encrypted evidence artifact unreadable.
+# Provision as: GitHub secret LYRASHIELD_EVIDENCE_KEK (the deploy workflow syncs the
+# app Container App secret and refuses to deploy without it) and Key Vault secret
+# worker-evidence-kek (worker VM, ops/worker/refresh-secrets.sh).
+LYRASHIELD_EVIDENCE_KEK="<base64 32-byte key>"
 ```
 
 ### Model routing, reasoning, and spend limits
