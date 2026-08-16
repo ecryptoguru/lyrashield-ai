@@ -5,6 +5,7 @@ import { OnboardingWizard } from "./onboarding-wizard"
 import { ReferralClaim } from "./referral-claim"
 import { SignOutButton } from "./sign-out-button"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { InvitationAcceptBridge } from "@/components/invitation-accept-bridge"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
 import { withWorkspaceRLS } from "@lyrashield/db"
 
@@ -59,6 +60,7 @@ export default async function OnboardingPage() {
       </div>
 
       <OnboardingWizard initialState={initialState} />
+      <InvitationAcceptBridge />
     </div>
   )
 }
