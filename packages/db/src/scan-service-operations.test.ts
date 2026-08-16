@@ -26,6 +26,7 @@ import { prisma } from "./client"
 import {
   addScanEvent,
   createScan,
+  getScanResultManifestDetail,
   getScanWithEvents,
   listScans,
   removeScan,
@@ -268,48 +269,53 @@ describe("getScanWithEvents", () => {
     expect(scan?.events.map((event) => event.id)).toEqual(["old", "new"])
   })
 
-  it("projects the manifest checksum and the bounded urlExecution blob", async () => {
+  it("projects only the manifest checksum on the polling path", async () => {
     mockPrisma.scan.findFirst.mockResolvedValue({
       id: "scan-1",
       events: [],
-      resultManifest: {
-        checksum: "abc123",
-        manifest: {
-          urlExecution: {
-            contractVersion: "url-scan/2.0.0",
-            profile: "WEB_APP_STANDARD",
-            methods: ["GET"],
-            subjectCount: 17,
-            documentCount: 10,
-            assetCount: 7,
-            operationCount: 0,
-            methodProbeCount: 0,
-            originProbeCount: 0,
-            totalBytes: 2048,
-            truncated: true,
-            issueCodes: ["LIMIT_REACHED"],
-          },
-        },
-      },
+      resultManifest: { checksum: "abc123" },
       coverageReceipts: [],
       target: null,
     })
 
     const scan = await getScanWithEvents("scan-1", "ws-1")
 
-    // The scan detail page and report generator need the bounded urlExecution
-    // metadata, but not the full manifest coverage blob.
+    // The hot polling path must project the checksum only — the full manifest
+    // blob (tens of KB) is fetched once by getScanResultManifestDetail instead.
     expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         include: expect.objectContaining({
-          resultManifest: { select: { checksum: true, manifest: true } },
+          resultManifest: { select: { checksum: true } },
         }),
       })
     )
     expect(scan?.resultManifest?.checksum).toBe("abc123")
-    expect(
-      (scan?.resultManifest?.manifest as { urlExecution?: unknown } | undefined)?.urlExecution
-    ).toBeTruthy()
+  })
+
+  it("reads the bounded urlExecution blob via getScanResultManifestDetail", async () => {
+    mockPrisma.scanResultManifest.findUnique.mockResolvedValue({
+      checksum: "abc123",
+      manifest: {
+        urlExecution: {
+          contractVersion: "url-scan/2.0.0",
+          profile: "WEB_APP_STANDARD",
+          methods: ["GET"],
+          subjectCount: 17,
+          truncated: true,
+          issueCodes: ["LIMIT_REACHED"],
+        },
+      },
+    })
+
+    const detail = await getScanResultManifestDetail("scan-1", "ws-1")
+
+    expect(mockPrisma.scanResultManifest.findUnique).toHaveBeenCalledWith({
+      where: { scanId: "scan-1" },
+      select: { checksum: true, manifest: true },
+    })
+    expect(detail?.checksum).toBe("abc123")
+    expect(detail?.urlExecution).toBeTruthy()
+    expect(detail?.urlExecution?.profile).toBe("WEB_APP_STANDARD")
   })
 
   it("does not query child records when the scoped scan is absent", async () => {
