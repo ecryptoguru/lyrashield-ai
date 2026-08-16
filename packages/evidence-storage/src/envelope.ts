@@ -80,7 +80,11 @@ export function resolveEnvelopeKek(baseKeySecret: string | undefined): Buffer {
   return Buffer.from(hkdfSync("sha256", raw, "", ENVELOPE_KEY_INFO, ENVELOPE_KEK_BYTES))
 }
 
-function aesGcmSeal(key: Buffer, nonce: Buffer, plaintext: Buffer): { ciphertext: Buffer; tag: Buffer } {
+function aesGcmSeal(
+  key: Buffer,
+  nonce: Buffer,
+  plaintext: Buffer
+): { ciphertext: Buffer; tag: Buffer } {
   const cipher = createCipheriv("aes-256-gcm", key, nonce)
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()])
   return { ciphertext, tag: cipher.getAuthTag() }
@@ -199,9 +203,12 @@ export function openEnvelope(buffer: Buffer, kek: Buffer): { plaintext: Buffer; 
     )
     plaintext = aesGcmOpen(dataKey, bodyNonce, ciphertext, bodyTag)
   } catch (err) {
-    throw new EvidenceEnvelopeError("Evidence envelope failed authentication (tampered or wrong key)", {
-      cause: err,
-    })
+    throw new EvidenceEnvelopeError(
+      "Evidence envelope failed authentication (tampered or wrong key)",
+      {
+        cause: err,
+      }
+    )
   }
   return { plaintext, keyRef: header.keyRef }
 }

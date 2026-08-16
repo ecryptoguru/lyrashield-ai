@@ -173,9 +173,7 @@ describe("s3 envelope encryption", () => {
     process.env.S3_SECRET_KEY = "test-secret"
     process.env.LYRASHIELD_EVIDENCE_KEK = Buffer.from(new Array(32).fill(3)).toString("base64")
     vi.resetModules()
-    const s3ClientProto = (
-      await import("@aws-sdk/client-s3")
-    ).S3Client.prototype as unknown as {
+    const s3ClientProto = (await import("@aws-sdk/client-s3")).S3Client.prototype as unknown as {
       send: (command: { input: Record<string, unknown> }) => Promise<unknown>
     }
     sentCommands.length = 0
@@ -212,9 +210,7 @@ describe("s3 envelope encryption", () => {
     expect(result.storageUri).toContain("s3://evidence-bucket/evidence/ws-1/")
     expect(result.encryptionKeyRef).toBe("envkeystore/lyrashield-evidence-kek/v1")
     expect(result.checkdown).toBeUndefined()
-    const put = sentCommands.find(
-      (c) => c.command.input["Body"] !== undefined
-    )?.command.input
+    const put = sentCommands.find((c) => c.command.input["Body"] !== undefined)?.command.input
     expect(put).toBeDefined()
     const body = put!["Body"] as Buffer
     expect(body.subarray(0, 5).toString("latin1")).toBe("LSEV1")
@@ -233,7 +229,9 @@ describe("s3 envelope encryption", () => {
     })
     const putBody = storedBody!
 
-    const read = await mod.readEncryptedArtifact("s3://evidence-bucket/evidence/ws-1/owner-1/proof/x")
+    const read = await mod.readEncryptedArtifact(
+      "s3://evidence-bucket/evidence/ws-1/owner-1/proof/x"
+    )
     expect(read.legacy).toBe(false)
     expect(read.content.equals(plaintext)).toBe(true)
     expect(read.checksum).toBe(createHash("sha256").update(plaintext).digest("hex"))

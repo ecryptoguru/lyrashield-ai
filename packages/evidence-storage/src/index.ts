@@ -175,7 +175,9 @@ export async function uploadEncryptedArtifact(
   // readable by the storage operator.
   const envelope = sealEnvelope(payload, kek, encryptionKeyRef)
   if (!verifyEnvelopeShape(envelope)) {
-    throw new EvidenceEnvelopeError("Refusing to store evidence: envelope failed shape verification")
+    throw new EvidenceEnvelopeError(
+      "Refusing to store evidence: envelope failed shape verification"
+    )
   }
 
   try {
@@ -195,9 +197,10 @@ export async function uploadEncryptedArtifact(
         // Object integrity covers the bytes actually uploaded (the envelope);
         // the plaintext checksum below is the content digest recorded in the
         // evidence manifest.
-        ChecksumSHA256: Buffer.from(createHash("sha256").update(envelope).digest("hex"), "hex").toString(
-          "base64"
-        ),
+        ChecksumSHA256: Buffer.from(
+          createHash("sha256").update(envelope).digest("hex"),
+          "hex"
+        ).toString("base64"),
       })
     )
 
@@ -259,7 +262,9 @@ export async function readEncryptedArtifact(
   }
   if (!isS3Configured()) throw new EvidenceStorageConfigurationError()
 
-  const response = await getS3Client().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }))
+  const response = await getS3Client().send(
+    new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key })
+  )
   const body = Buffer.from(await response.Body!.transformToByteArray())
 
   if (!isEnvelope(body)) {
