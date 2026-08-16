@@ -10,7 +10,11 @@ export interface DiffFinding {
   line?: number
 }
 
-const RISKY_PATTERNS: {
+// Source of truth for the risky-pattern detector rules. The root `action.yml`
+// embeds bash (grep -E) equivalents for CI runners without a Node runtime —
+// `packages/cli/src/__tests__/action-patterns.drift.test.ts` fails when the
+// two copies diverge, so change both together (that test first).
+export const RISKY_PATTERNS: {
   ruleId: string
   severity: DiffFinding["severity"]
   regex: RegExp
