@@ -81,15 +81,12 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
           },
         })
         if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
-          logger.info(
-            "Skipping scheduled scan because workspace is at its concurrent scan cap",
-            {
-              scheduleId: schedule.id,
-              workspaceId: schedule.workspaceId,
-              activeWorkspaceScans,
-              cap: MAX_CONCURRENT_WORKSPACE_SCANS,
-            }
-          )
+          logger.info("Skipping scheduled scan because workspace is at its concurrent scan cap", {
+            scheduleId: schedule.id,
+            workspaceId: schedule.workspaceId,
+            activeWorkspaceScans,
+            cap: MAX_CONCURRENT_WORKSPACE_SCANS,
+          })
           return
         }
 
