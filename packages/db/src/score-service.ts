@@ -4,6 +4,7 @@ import { prisma } from "./client"
 import { logger } from "@lyrashield/logger"
 import { getSystemPrisma } from "./system-client"
 import { withWorkspaceRLS } from "./rls"
+import { Prisma } from "./generated/prisma"
 
 const SCORE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const SHARE_SCOPE = "agentic pentest + SCA + secrets"
@@ -293,6 +294,15 @@ export async function completeScanWithScore(
   return outcome
 }
 
+/**
+ * Unique-constraint collision on the generated referral code. Matched on the
+ * Prisma error code P2002 rather than the error message: message text is
+ * driver/driver-version dependent (and localised), the code is contractual.
+ */
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
+
 export async function getOrCreateReferralCode(userId: string) {
   const existing = await prisma.referralCode.findUnique({ where: { userId } })
   if (existing) return existing
@@ -300,7 +310,7 @@ export async function getOrCreateReferralCode(userId: string) {
     try {
       return await prisma.referralCode.create({ data: { userId, code: randomBase32(8) } })
     } catch (error) {
-      if (!(error instanceof Error) || !error.message.includes("Unique constraint")) throw error
+      if (!isUniqueConstraintError(error)) throw error
     }
   }
   throw new Error("Unable to allocate referral code")
@@ -524,6 +534,8 @@ export async function attributeReferral(
 export async function qualifyReferralForWorkspace(workspaceId: string) {
   const owner = await prisma.workspaceMember.findFirst({
     where: { workspaceId, role: "OWNER", status: "active" },
+    // Deterministic actor pick when a workspace ever has multiple owners.
+    orderBy: { createdAt: "asc" },
   })
   if (!owner) return null
   const attribution = await prisma.referralAttribution.findFirst({
@@ -531,8 +543,13 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
     include: { code: true },
   })
   if (!attribution || attribution.code.userId === owner.userId) return null
+  // The referrer's oldest active OWNER membership deterministically receives the
+  // credit — without the ordering, findFirst picks an arbitrary workspace when
+  // the referrer owns several, so the same signup could credit different
+  // workspaces across runs.
   const referrerWorkspace = await prisma.workspaceMember.findFirst({
     where: { userId: attribution.code.userId, role: "OWNER", status: "active" },
+    orderBy: { createdAt: "asc" },
     select: { workspaceId: true },
   })
   if (!referrerWorkspace) return null
