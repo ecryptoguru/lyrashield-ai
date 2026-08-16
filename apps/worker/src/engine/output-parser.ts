@@ -1,7 +1,11 @@
 import { createHash } from "crypto"
 import { logger } from "@lyrashield/logger"
 import { checkOutputSafety } from "@lyrashield/security"
-import { engineRunRecordSchema, engineVulnerabilitySchema } from "./engine-output-schema"
+import {
+  checkRunRecordSchemaVersion,
+  engineRunRecordSchema,
+  engineVulnerabilitySchema,
+} from "./engine-output-schema"
 
 export interface EngineVulnerability {
   id: string
@@ -801,6 +805,16 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
         errors: parsed.error.issues.map((issue) => issue.message),
       })
       return null
+    }
+
+    // Tripwire, not a gate: surface cross-repo contract drift that the
+    // .strip()ed schema would otherwise swallow.
+    const versionCheck = checkRunRecordSchemaVersion(parsed.data.schema_version)
+    if (versionCheck) {
+      logger[versionCheck.level === "error" ? "error" : "warn"](
+        "Engine output: run.json schema version check",
+        { runId, schemaVersion: parsed.data.schema_version ?? null, ...versionCheck }
+      )
     }
 
     return runRecord

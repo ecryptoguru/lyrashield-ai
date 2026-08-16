@@ -157,3 +157,58 @@ export const engineRunRecordSchema = z
 
 export type EngineVulnerabilitySchema = z.infer<typeof engineVulnerabilitySchema>
 export type EngineRunRecordSchema = z.infer<typeof engineRunRecordSchema>
+
+/**
+ * The run.json major version this worker's schema is written against. The
+ * engine emits RUN_RECORD_SCHEMA_VERSION (currently "1.0"); MAJOR bumps mean
+ * the cross-repo contract moved (field removed/renamed/re-meaned), MINOR bumps
+ * are additive.
+ */
+export const EXPECTED_RUN_RECORD_SCHEMA_MAJOR = 1
+
+export interface RunRecordSchemaVersionCheck {
+  level: "warn" | "error"
+  message: string
+}
+
+/**
+ * Tripwire for cross-repo run.json contract drift — never a gate. Because the
+ * worker schema is `.strip()`ed, an unknown or removed field does not error on
+ * its own; this check makes a MAJOR version move observable instead of
+ * silently misread. MINOR (additive) bumps stay silent per the bump policy.
+ */
+export function checkRunRecordSchemaVersion(
+  schemaVersion: string | undefined
+): RunRecordSchemaVersionCheck | null {
+  if (schemaVersion === undefined || schemaVersion.trim() === "") {
+    return {
+      level: "warn",
+      message: "run.json predates schema versioning; engine contract version unknown",
+    }
+  }
+  const parts = schemaVersion.trim().split(".")
+  const major = Number(parts[0])
+  const minorRaw = parts[1]
+  const parsable =
+    parts.length <= 2 &&
+    parts[0] !== "" &&
+    Number.isInteger(major) &&
+    major >= 0 &&
+    (minorRaw === undefined || (minorRaw !== "" && Number.isInteger(Number(minorRaw))))
+  if (!parsable) {
+    return {
+      level: "warn",
+      message: `run.json schema_version is not a parsable major[.minor] value: ${schemaVersion}`,
+    }
+  }
+  if (major !== EXPECTED_RUN_RECORD_SCHEMA_MAJOR) {
+    return {
+      level: "error",
+      message:
+        `run.json schema major version moved: engine sent ${major}.x, worker understands ` +
+        `${EXPECTED_RUN_RECORD_SCHEMA_MAJOR}.x — the run-record contract changed and the ` +
+        `worker schema must be updated deliberately`,
+    }
+  }
+  return null
+}
