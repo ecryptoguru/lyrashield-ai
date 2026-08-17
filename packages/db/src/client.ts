@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto"
 import { PrismaClient, Prisma } from "./generated/prisma"
-import { PrismaPg } from "@prisma/adapter-pg"
 import { env, isDev } from "@lyrashield/config"
 import { workspaceExtension } from "./extension"
 import { computeAuditHash } from "./audit-hash"
+import { createBoundedPgAdapter } from "./pool"
 
 const globalForPrisma = globalThis as unknown as {
   prisma: ReturnType<typeof createPrismaClient> | undefined
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL })
+  const adapter = createBoundedPgAdapter(env.DATABASE_URL)
   const baseClient = new PrismaClient({
     adapter,
     log: isDev ? ["error", "warn"] : ["error"],

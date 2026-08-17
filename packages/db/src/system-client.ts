@@ -1,7 +1,7 @@
 import { PrismaClient } from "./generated/prisma"
-import { PrismaPg } from "@prisma/adapter-pg"
 import { env, isProd } from "@lyrashield/config"
 import { prisma } from "./client"
+import { createBoundedPgAdapter } from "./pool"
 
 const globalForSystemPrisma = globalThis as unknown as {
   systemPrisma: ReturnType<typeof createSystemPrismaClient> | undefined
@@ -12,7 +12,7 @@ function createSystemPrismaClient() {
     throw new Error("DATABASE_SYSTEM_URL is required for privileged system database operations")
   }
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: env.DATABASE_SYSTEM_URL }),
+    adapter: createBoundedPgAdapter(env.DATABASE_SYSTEM_URL),
     log: ["error"],
   })
 }
