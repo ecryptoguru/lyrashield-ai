@@ -52,6 +52,8 @@ interface ScanData {
   errorCategory: string | null
   errorMessage: string | null
   createdAt: string
+  /** The scan's place in the run queue while QUEUED (1-based + total waiting). */
+  queuePosition?: { position: number; waiting: number } | null
   target: {
     id: string
     name: string
