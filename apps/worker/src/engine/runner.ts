@@ -291,7 +291,20 @@ export function assertRepositoryScanRuntimeConfigured(
       )
     }
     const dockerHost = runtimeEnv.DOCKER_HOST?.trim() ?? ""
-    if (!/^ssh:\/\//.test(dockerHost) && !/^tcp:\/\//.test(dockerHost)) {
+    // A remote, isolated sandbox host (ssh:// or tls tcp://) is the strongest
+    // posture and stays the default. A single-VM deployment — the worker runs
+    // the engine against the VM's LOCAL Docker daemon and isolates scans with a
+    // dedicated egress-restricted network plus a deny-by-default firewall (see
+    // ops/worker/README.md) — is supported as an explicit, name-clear opt-in via
+    // LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST=1. That opt-in is honored ONLY when a
+    // routable egress-restricted sandbox network is also configured (the
+    // resolveEngineSandboxNetwork check above), so a bare local Docker socket
+    // with no network isolation still fails.
+    const allowLocalSandboxHost =
+      (runtimeEnv.LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST ?? "").trim().toLowerCase() === "1" ||
+      (runtimeEnv.LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST ?? "").trim().toLowerCase() === "true"
+    const isRemoteDockerHost = /^ssh:\/\//.test(dockerHost) || /^tcp:\/\//.test(dockerHost)
+    if (!isRemoteDockerHost && !allowLocalSandboxHost) {
       throw new Error(
         "DOCKER_HOST must be an ssh:// or tcp:// endpoint for an isolated sandbox worker in production"
       )
