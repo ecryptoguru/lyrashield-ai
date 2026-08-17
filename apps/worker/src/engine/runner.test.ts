@@ -275,7 +275,7 @@ describe("repository scan runtime configuration", () => {
     }
   )
 
-  it("requires an isolated remote Docker endpoint in production", () => {
+  it("requires an isolated remote Docker endpoint in production by default", () => {
     const productionEnv = {
       ...runtimeEnv,
       NODE_ENV: "production",
@@ -301,6 +301,43 @@ describe("repository scan runtime configuration", () => {
         DOCKER_HOST: "ssh://scanner@isolated-worker",
       })
     ).not.toThrow()
+  })
+
+  it("accepts a local Docker daemon only with the explicit single-VM opt-in", () => {
+    const productionEnv = {
+      ...runtimeEnv,
+      NODE_ENV: "production",
+      LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
+      LYRASHIELD_ENGINE_SANDBOX_NETWORK: "lyrashield-sandbox",
+    }
+
+    // Without the opt-in, a local socket still fails (strict default preserved).
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...productionEnv,
+        DOCKER_HOST: "unix:///var/run/docker.sock",
+      })
+    ).toThrow("DOCKER_HOST")
+
+    // With the explicit opt-in AND a named egress-restricted network, local
+    // Docker is accepted (the single-VM + firewall topology).
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...productionEnv,
+        DOCKER_HOST: "unix:///var/run/docker.sock",
+        LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST: "1",
+      })
+    ).not.toThrow()
+
+    // The opt-in never rescues a missing egress-restricted network.
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...productionEnv,
+        DOCKER_HOST: "unix:///var/run/docker.sock",
+        LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST: "1",
+        LYRASHIELD_ENGINE_SANDBOX_NETWORK: "",
+      })
+    ).toThrow("LYRASHIELD_ENGINE_SANDBOX_NETWORK")
   })
 
   it.each([
