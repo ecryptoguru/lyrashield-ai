@@ -460,6 +460,11 @@ async function runEngineProcess(
     let stdoutBytes = 0
     let stderrBytes = 0
     let stderrTail = Buffer.alloc(0)
+    // Keep a bounded tail of STDOUT too: the engine writes some startup/clone
+    // errors to stdout (not stderr), and a non-zero exit with only a byte count
+    // left the cause invisible (the production "engine exited code 1, no detail"
+    // case). Capturing a tail lets a failed run surface the real reason.
+    let stdoutTail = Buffer.alloc(0)
     let failureMarkerWindow = ""
     let failureType: string | null = null
     let timedOut = false
@@ -583,6 +588,7 @@ async function runEngineProcess(
 
     child.stdout?.on("data", (chunk: Buffer) => {
       stdoutBytes += chunk.byteLength
+      stdoutTail = Buffer.concat([stdoutTail, chunk]).subarray(-MAX_ENGINE_ERROR_TAIL_BYTES)
     })
 
     child.stderr?.on("data", (chunk: Buffer) => {
@@ -603,6 +609,19 @@ async function runEngineProcess(
       stopTracking()
       const exitCode = code ?? (timedOut || cancelled || budgetKilled ? -1 : 1)
       logger.info("Engine streams consumed", { scanId, stdoutBytes, stderrBytes })
+      // On a non-clean exit, surface the captured stdout+stderr tails so the
+      // engine's real error (which it may write to stdout) is in the worker log
+      // instead of being discarded. Bounded to the last 4KB of each stream.
+      if (exitCode !== 0) {
+        const stdoutText = stdoutTail.toString("utf8").trim()
+        const stderrText = stderrTail.toString("utf8").trim()
+        logger.warn("Engine exited with an error", {
+          scanId,
+          exitCode,
+          ...(stdoutText ? { stdoutTail: stdoutText } : {}),
+          ...(stderrText ? { stderrTail: stderrText } : {}),
+        })
+      }
       resolvePromise({
         exitCode,
         timedOut,
