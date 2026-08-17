@@ -201,6 +201,12 @@ const scanPollDataSchema = z
       .nullable()
       .optional(),
     coverageReceipts: z.array(scanPollCoverageReceiptSchema).optional(),
+    // The scan's place in the run queue while QUEUED (1-based position + total
+    // waiting), so the UI can tell the user how far from the front they are.
+    queuePosition: z
+      .object({ position: z.number().int(), waiting: z.number().int() })
+      .nullable()
+      .optional(),
   })
   .passthrough()
 
@@ -576,6 +582,7 @@ export function ScanDetailClient({
             elapsedTime={elapsedTime}
             events={displayEvents}
             findingsCount={currentFindings.length}
+            queuePosition={scan.queuePosition ?? null}
             onRefresh={() => void handleManualRefresh()}
             refreshing={refreshing}
           />
