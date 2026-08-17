@@ -96,3 +96,33 @@ export async function enqueueScan(data: ScanJobData): Promise<string> {
   const job = await queue.add("scan", data, { jobId: data.scanId })
   return job.id!
 }
+
+/**
+ * A scan's 1-based position in the run queue (and the total number waiting), so
+ * the dashboard can tell the user how far from the front their scan is.
+ *
+ * Returns null when the scan is not currently waiting (already running, done,
+ * or never enqueued) — the caller should only show a position for a QUEUED
+ * scan. BullMQ returns waiting jobs oldest-first, so the index of this scan's
+ * job in that list is its position. Read-only; never throws on a missing job.
+ */
+export interface ScanQueuePosition {
+  /** 1-based place in line; 1 means it runs next. */
+  position: number
+  /** Total jobs currently waiting (including this one). */
+  waiting: number
+}
+
+export async function getScanQueuePosition(scanId: string): Promise<ScanQueuePosition | null> {
+  const redis = getRedis()
+  if (!redis) return null
+  try {
+    const queue = getScanQueue()
+    const waiting = await queue.getJobs(["wait", "delayed", "prioritized", "paused"])
+    const index = waiting.findIndex((job) => job.id === scanId)
+    if (index === -1) return null
+    return { position: index + 1, waiting: waiting.length }
+  } catch {
+    return null
+  }
+}
