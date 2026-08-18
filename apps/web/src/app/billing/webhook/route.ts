@@ -9,6 +9,9 @@ import {
   isHandledPolarEvent,
   isHandledRazorpayEvent,
 } from "@lyrashield/billing"
+import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
+import { LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
+import { issueLicenseForPolarOrder } from "@/lib/licenses/license-service"
 
 /**
  * Billing webhook handler — accepts both Polar and Razorpay webhooks.
@@ -20,9 +23,13 @@ import {
  * 1. Validate signature
  * 2. Insert WebhookEvent (idempotent on @@unique([provider, externalId]))
  * 3. Respond 200 fast
- * 4. Process the event asynchronously
+ * 4. Process the event asynchronously:
+ *    a. Track A: syncSubscription / creditTopUp (billing entitlements)
+ *    b. Track B: issue license for Local SKU Polar one-time orders
+ *    c. Track C: affiliate commission/clawback via webhook-dispatch
  *
- * TODO: dispatch to packages/affiliate webhook-dispatch when Track C lands
+ * Single webhook ingress — Track C never registers a second webhook route.
+ * Both tracks consume the same idempotent WebhookEvent rows.
  */
 export async function POST(request: Request) {
   const body = await request.text()
@@ -46,6 +53,7 @@ export async function POST(request: Request) {
   let externalId: string
   let eventType: string
   let payload: unknown
+  let payloadRecord: Record<string, unknown>
 
   try {
     if (hasPolarHeaders) {
@@ -54,18 +62,36 @@ export async function POST(request: Request) {
       externalId = (event.data.id as string) ?? crypto.randomUUID()
       eventType = event.type
       payload = event
+      payloadRecord = event.data as Record<string, unknown>
 
       // Insert webhook event (idempotent)
       await insertWebhookEvent(provider, externalId, eventType, payload)
 
       // Respond 200 fast, process async
       processAsync(async () => {
+        // Track A: billing entitlements
         if (isHandledPolarEvent(event.type)) {
           await processPolarEvent(event)
         }
-      })
 
-      // TODO: dispatch to packages/affiliate webhook-dispatch when Track C lands
+        // Track B: license issuance for Local SKU one-time orders
+        if (event.type === "order.paid") {
+          await maybeIssueLicense(provider, externalId, payloadRecord)
+        }
+
+        // Track C: affiliate commission/clawback dispatch
+        await dispatchAffiliate({
+          provider,
+          event: eventType,
+          payload: payloadRecord,
+        }).catch((err) => {
+          logger.error("Affiliate dispatch failed (non-blocking)", {
+            provider,
+            event: eventType,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
+      })
     } else {
       provider = "razorpay"
       const signature = (headers["x-razorpay-signature"] as string) ?? ""
@@ -76,18 +102,33 @@ export async function POST(request: Request) {
         crypto.randomUUID()
       eventType = event.event
       payload = event
+      payloadRecord = (event.payload.payment?.entity ??
+        event.payload.subscription?.entity ??
+        {}) as Record<string, unknown>
 
       // Insert webhook event (idempotent)
       await insertWebhookEvent(provider, externalId, eventType, payload)
 
       // Respond 200 fast, process async
       processAsync(async () => {
+        // Track A: billing entitlements
         if (isHandledRazorpayEvent(event.event)) {
           await processRazorpayEvent(event)
         }
-      })
 
-      // TODO: dispatch to packages/affiliate webhook-dispatch when Track C lands
+        // Track C: affiliate commission/clawback dispatch
+        await dispatchAffiliate({
+          provider,
+          event: eventType,
+          payload: payloadRecord,
+        }).catch((err) => {
+          logger.error("Affiliate dispatch failed (non-blocking)", {
+            provider,
+            event: eventType,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
+      })
     }
   } catch (error) {
     logger.error("Webhook validation/processing failed", {
@@ -101,6 +142,58 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ success: true }, { status: 200 })
+}
+
+/**
+ * Check if a Polar order is for a Local SKU product and issue a license if so.
+ * Called on `order.paid` events. Idempotent — the license issue endpoint
+ * checks for existing licenses by orderId.
+ */
+async function maybeIssueLicense(
+  provider: string,
+  externalId: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  try {
+    const productId = (payload.productId ?? payload.skuId) as string | undefined
+    if (!productId) return
+
+    // Check if this product ID maps to a Local SKU
+    const isLocalSku = Object.values(LOCAL_SKU_MAP).some((sku) => sku.id === productId)
+    if (!isLocalSku) return
+
+    const buyerEmail = (payload.customerEmail ?? payload.email) as string | undefined
+    if (!buyerEmail) {
+      logger.warn("Local SKU order missing buyer email — cannot issue license", { externalId, productId })
+      return
+    }
+
+    const seatCount = (payload.seatCount as number) ?? 1
+    const sku = Object.values(LOCAL_SKU_MAP).find((s) => s.id === productId) as
+      | { id: LocalSkuId }
+      | undefined
+    if (!sku) return
+
+    logger.info("Issuing license for Local SKU order", {
+      externalId,
+      productId,
+      sku: sku.id,
+      buyerEmail,
+    })
+
+    await issueLicenseForPolarOrder({
+      productId,
+      buyerEmail,
+      seatCount,
+      orderId: externalId,
+    })
+  } catch (error) {
+    // Non-blocking — license issuance failure should not block the webhook
+    logger.error("License issuance failed (non-blocking)", {
+      externalId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 /**

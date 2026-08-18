@@ -139,3 +139,88 @@ export function parseLocalProductIds(): Record<string, string> {
     return {}
   }
 }
+
+/**
+ * Issue a license for a Polar one-time order of a Local SKU product.
+ *
+ * Called by the billing webhook handler when a `order.paid` event arrives
+ * for a product ID that maps to a Local SKU. Creates a `License` +
+ * `LicenseKey` and issues a signed license file. Idempotent on orderId —
+ * if a license was already issued for this order, returns the existing one.
+ *
+ * This is the Track B integration point called from Track A's webhook route.
+ */
+export async function issueLicenseForPolarOrder(params: {
+  productId: string
+  buyerEmail: string
+  seatCount: number
+  orderId: string
+  workspaceId?: string
+  currentBuild?: string
+}): Promise<{ licenseId: string; alreadyIssued: boolean }> {
+  const { productId, buyerEmail, seatCount, orderId, workspaceId, currentBuild } = params
+
+  // Resolve the SKU from the product ID map.
+  const productMap = parseLocalProductIds()
+  const skuEntry = Object.entries(productMap).find(([, pid]) => pid === productId)
+  if (!skuEntry) {
+    throw new Error(`Product ID ${productId} is not a recognized Local SKU product`)
+  }
+  const sku = skuEntry[0] as LocalSkuId
+
+  // Idempotency: check if a license was already issued for this order.
+  const existingKey = await prisma.licenseKey.findFirst({
+    where: { issuedByProvider: `polar:${orderId}` },
+  })
+  if (existingKey) {
+    logger.info("License already issued for order — returning existing", { orderId })
+    return { licenseId: existingKey.licenseId, alreadyIssued: true }
+  }
+
+  const updateEligibleUntil = computeUpdateEligibleUntil(sku)
+  const rawKey = generateLicenseKey()
+  const keyHash = hashLicenseKey(rawKey)
+
+  // Create the License and LicenseKey in a transaction.
+  const license = await prisma.$transaction(async (tx) => {
+    const created = await tx.license.create({
+      data: {
+        workspaceId: workspaceId || null,
+        ownerEmail: buyerEmail,
+        sku,
+        seatCount,
+        machineIds: [],
+        updateEligibleUntil,
+        perpetualFallbackBuild: currentBuild ?? null,
+        signingKeyId: "pending",
+        signature: "pending",
+        issuedAt: new Date(),
+      },
+    })
+
+    await tx.licenseKey.create({
+      data: {
+        licenseId: created.id,
+        workspaceId: workspaceId || null,
+        keyHash,
+        issuedByProvider: `polar:${orderId}`,
+        providerProductId: productId,
+      },
+    })
+
+    return created
+  })
+
+  // Issue the signed license file (updates signature on the License row).
+  await issueSignedLicense(license.id, currentBuild ?? null)
+
+  // TODO(email): Send the license key + license file to buyerEmail via Brevo.
+  logger.info("License issued for Polar order", {
+    licenseId: license.id,
+    buyerEmail,
+    sku,
+    orderId,
+  })
+
+  return { licenseId: license.id, alreadyIssued: false }
+}

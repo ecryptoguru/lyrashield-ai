@@ -11,6 +11,7 @@ import {
   type CloudPlanId,
   type BillingRegion,
 } from "@lyrashield/billing"
+import { resolveAttribution } from "@lyrashield/affiliate"
 import { apiSuccess, apiError } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 
@@ -63,10 +64,32 @@ export async function POST(request: Request) {
     const override = parsed.data.region as BillingRegion | undefined
     const { region, provider } = resolveProvider(request, override)
 
-    // TODO: When Track C (affiliate package) lands, resolve promoCode here
-    // to apply affiliate discounts. For now, promoCode is accepted but not processed.
+    // Track C integration: resolve affiliate promo code → attach affiliate metadata.
+    // No commission created at checkout — only on the paid webhook (per affiliate brief).
+    let affiliateMetadata: Record<string, string> = {}
     if (promoCode) {
-      logger.info("Promo code provided but not yet processed", { promoCode, workspaceId })
+      try {
+        const attribution = await resolveAttribution({ promoCode })
+        if (attribution && attribution.affiliateId) {
+          affiliateMetadata = {
+            affiliate_id: attribution.affiliateId,
+            ...(attribution.clickId ? { click_id: attribution.clickId } : {}),
+            promo_code: promoCode,
+          }
+          logger.info("Affiliate promo code resolved at checkout", {
+            promoCode,
+            affiliateId: attribution.affiliateId,
+          })
+        } else {
+          logger.info("Promo code not recognized as affiliate code", { promoCode })
+        }
+      } catch (err) {
+        // Non-blocking — affiliate resolution failure should not block checkout
+        logger.error("Affiliate promo code resolution failed (non-blocking)", {
+          promoCode,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
@@ -76,6 +99,7 @@ export async function POST(request: Request) {
       plan,
       interval,
       ...(promoCode ? { promoCode } : {}),
+      ...affiliateMetadata,
     }
 
     if (provider === "polar") {
