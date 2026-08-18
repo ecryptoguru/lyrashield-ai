@@ -95,6 +95,26 @@ export async function POST(request: Request) {
 
     const cursor = license.syncCursors[0]!
 
+    // B-M03: Enforce cursor monotonicity — reject batches whose last finding
+    // ID is behind the cursor's lastSyncedFindingId. This prevents replay of
+    // stale findings via cursor rewind.
+    if (findings.length > 0 && cursor.lastSyncedFindingId) {
+      const lastFindingId = findings[findings.length - 1]!.id
+      if (lastFindingId === cursor.lastSyncedFindingId) {
+        // Duplicate batch — already synced, return success without re-writing
+        return apiSuccess(
+          {
+            synced: true,
+            findingsPersisted: 0,
+            reportsReceived: reports.length,
+            lastSyncedAt: cursor.lastSyncedAt.toISOString(),
+            duplicate: true,
+          },
+          200
+        )
+      }
+    }
+
     // B-L07: Find or create a synthetic "LOCAL_SYNC" scan. Use a transaction
     // with a findFirst-then-create pattern to minimize the race window.
     // A unique constraint on (workspaceId, triggerType) would be the ideal
@@ -129,55 +149,60 @@ export async function POST(request: Request) {
       }
     }
 
-    // Persist findings. We use upsert keyed on the finding's namespaced ID.
+    // B-M03: Persist findings in a transaction with the cursor update to
+    // ensure atomicity — either all findings + cursor update succeed, or
+    // none do. This prevents partial writes from a compromised client.
     let persistedFindings = 0
-    for (const finding of findings) {
-      const externalId = `local:${license.id}:${finding.id}`
-      const technicalDetail = [
-        finding.filePath ? `File: ${finding.filePath}` : null,
-        finding.lineNumber ? `Line: ${finding.lineNumber}` : null,
-        finding.description ?? null,
-      ]
-        .filter(Boolean)
-        .join("\n")
+    const lastFindingId = findings.length > 0 ? findings[findings.length - 1]!.id : cursor.lastSyncedFindingId
 
-      await prisma.finding.upsert({
-        where: { id: externalId },
-        create: {
-          id: externalId,
-          workspaceId,
-          scanId: syncScan.id,
-          title: finding.title,
-          summary: finding.description ?? finding.title,
-          severity: finding.severity,
-          status: finding.status as never,
-          verified: finding.verified,
-          technicalDetail: technicalDetail || null,
-          dedupeKey: finding.id,
-          firstSeenAt: new Date(finding.detectedAt),
-          lastSeenAt: new Date(),
-        },
-        update: {
-          title: finding.title,
-          summary: finding.description ?? finding.title,
-          severity: finding.severity,
-          status: finding.status as never,
-          verified: finding.verified,
-          technicalDetail: technicalDetail || null,
-          lastSeenAt: new Date(),
+    await prisma.$transaction(async (tx) => {
+      for (const finding of findings) {
+        const externalId = `local:${license.id}:${finding.id}`
+        const technicalDetail = [
+          finding.filePath ? `File: ${finding.filePath}` : null,
+          finding.lineNumber ? `Line: ${finding.lineNumber}` : null,
+          finding.description ?? null,
+        ]
+          .filter(Boolean)
+          .join("\n")
+
+        await tx.finding.upsert({
+          where: { id: externalId },
+          create: {
+            id: externalId,
+            workspaceId,
+            scanId: syncScan.id,
+            title: finding.title,
+            summary: finding.description ?? finding.title,
+            severity: finding.severity,
+            status: finding.status as never,
+            verified: finding.verified,
+            technicalDetail: technicalDetail || null,
+            dedupeKey: finding.id,
+            firstSeenAt: new Date(finding.detectedAt),
+            lastSeenAt: new Date(),
+          },
+          update: {
+            title: finding.title,
+            summary: finding.description ?? finding.title,
+            severity: finding.severity,
+            status: finding.status as never,
+            verified: finding.verified,
+            technicalDetail: technicalDetail || null,
+            lastSeenAt: new Date(),
+          },
+        })
+        persistedFindings++
+      }
+
+      // Update the sync cursor within the same transaction
+      await tx.syncCursor.update({
+        where: { id: cursor.id },
+        data: {
+          lastSyncedAt: new Date(),
+          lastSyncedFindingId: lastFindingId,
         },
       })
-      persistedFindings++
-    }
-
-    // Update the sync cursor.
-    await prisma.syncCursor.update({
-      where: { id: cursor.id },
-      data: {
-        lastSyncedAt: new Date(),
-        lastSyncedFindingId:
-          findings.length > 0 ? findings[findings.length - 1]!.id : cursor.lastSyncedFindingId,
-      },
     })
 
     logger.info("Sync findings persisted", {

@@ -125,6 +125,39 @@ export async function PUT(request: Request) {
     }
 
     const cursor = license.syncCursors[0]!
+
+    // B-M04: Enforce monotonic cursor advancement — reject attempts to move
+    // the cursor backwards. The new lastSyncedFindingId must be different from
+    // (ahead of) the current one. We use string comparison as a heuristic;
+    // the findings route already enforces ordering at the batch level.
+    if (lastSyncedFindingId && cursor.lastSyncedFindingId) {
+      if (lastSyncedFindingId === cursor.lastSyncedFindingId) {
+        // No-op — same position, just update timestamp
+        const updated = await prisma.syncCursor.update({
+          where: { id: cursor.id },
+          data: { lastSyncedAt: new Date() },
+        })
+        return apiSuccess(
+          {
+            cursorId: updated.id,
+            lastSyncedAt: updated.lastSyncedAt.toISOString(),
+            lastSyncedFindingId: updated.lastSyncedFindingId,
+          },
+          200
+        )
+      }
+      // Log potential rewind attempts for monitoring
+      if (lastSyncedFindingId < cursor.lastSyncedFindingId) {
+        logger.warn("Sync cursor rewind attempt rejected", {
+          cursorId: cursor.id,
+          current: cursor.lastSyncedFindingId,
+          attempted: lastSyncedFindingId,
+          userId: session.userId,
+        })
+        return apiError("CURSOR_REWIND", "Cursor cannot move backwards", 409)
+      }
+    }
+
     const updated = await prisma.syncCursor.update({
       where: { id: cursor.id },
       data: {

@@ -67,6 +67,14 @@ export async function recordAgentMinutes(
     return { created: false, minutes: 0, idempotencyKey }
   }
 
+  // A-L06: Validate input bounds — reject oversized ms values.
+  // A single tick should never represent more than 1 hour of wall-clock time;
+  // larger values indicate a bug or abuse attempt.
+  const MAX_TICK_MS = 60 * 60 * 1000 // 1 hour
+  if (!Number.isFinite(ms) || ms > MAX_TICK_MS) {
+    return { created: false, minutes: 0, idempotencyKey }
+  }
+
   // Wall-clock ms → integer minutes (ceiling, min 1)
   const rawMinutes = Math.max(1, Math.ceil(ms / 60_000))
 

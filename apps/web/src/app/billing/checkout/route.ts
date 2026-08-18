@@ -8,7 +8,6 @@ import {
   createRazorpaySubscription,
   CLOUD_PLAN_MAP,
   type CloudPlanId,
-  type BillingRegion,
 } from "@lyrashield/billing"
 import { resolveAttribution } from "@lyrashield/affiliate"
 import { apiSuccess, apiError } from "@/lib/api-response"
@@ -57,9 +56,9 @@ export async function POST(request: Request) {
       return apiError("INVALID_PLAN", "This plan does not support self-serve checkout", 400)
     }
 
-    // Resolve provider (geo-routed or manual override)
-    const override = parsed.data.region as BillingRegion | undefined
-    const { region, provider } = resolveProvider(request, override)
+    // A-L04: Resolve provider — client-side region override removed to
+    // prevent currency arbitrage. Region is determined server-side only.
+    const { region, provider } = resolveProvider(request)
 
     // Track C integration: resolve affiliate promo code → attach affiliate metadata.
     // No commission created at checkout — only on the paid webhook (per affiliate brief).

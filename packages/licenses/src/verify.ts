@@ -27,6 +27,22 @@ export function verifyLicense(
     return { valid: false, updateEligible: false, license: null, reason: "missing_license_file" }
   }
 
+  // B-L04: Validate payload field semantics before signature verification.
+  // This prevents malformed payloads from reaching the crypto layer and
+  // ensures the signed content is well-formed.
+  if (typeof licenseFile.sku !== "string" || licenseFile.sku.length === 0) {
+    return { valid: false, updateEligible: false, license: null, reason: "invalid_sku" }
+  }
+  if (typeof licenseFile.seatCount !== "number" || !Number.isFinite(licenseFile.seatCount) || licenseFile.seatCount <= 0 || licenseFile.seatCount > 10000) {
+    return { valid: false, updateEligible: false, license: null, reason: "invalid_seat_count" }
+  }
+  if (!Array.isArray(licenseFile.machineIds) || !licenseFile.machineIds.every((id) => typeof id === "string")) {
+    return { valid: false, updateEligible: false, license: null, reason: "invalid_machine_ids" }
+  }
+  if (typeof licenseFile.updateEligibleUntil !== "string" || Number.isNaN(Date.parse(licenseFile.updateEligibleUntil))) {
+    return { valid: false, updateEligible: false, license: null, reason: "invalid_update_eligible_until" }
+  }
+
   const { signature, signingKeyId, issuedAt, ...payloadFields } = licenseFile
 
   if (!signature || !signingKeyId || !issuedAt) {
@@ -128,14 +144,36 @@ export function isBuildInstallable(
   return compareVersions(buildVersion, licenseFile.perpetualFallbackBuild) <= 0
 }
 
-/** Simple semver comparison: returns -1, 0, or 1. Non-semver strings compare lexicographically. */
+/**
+ * Simple semver comparison: returns -1, 0, or 1.
+ *
+ * B-L03: Rejects non-numeric version segments instead of silently treating
+ * them as NaN (which would make comparisons always false). Pre-release tags
+ * like "1.2.0-beta" are stripped before numeric comparison.
+ */
 function compareVersions(a: string, b: string): number {
-  const pa = a.split(".").map((n) => parseInt(n, 10))
-  const pb = b.split(".").map((n) => parseInt(n, 10))
+  // Strip pre-release suffixes (e.g. "1.2.0-beta" → "1.2.0")
+  const cleanA = a.split("-")[0]!
+  const cleanB = b.split("-")[0]!
+
+  const pa = cleanA.split(".")
+  const pb = cleanB.split(".")
   const len = Math.max(pa.length, pb.length)
+
   for (let i = 0; i < len; i++) {
-    const va = pa[i] ?? 0
-    const vb = pb[i] ?? 0
+    const na = pa[i] ?? "0"
+    const nb = pb[i] ?? "0"
+    const va = parseInt(na, 10)
+    const vb = parseInt(nb, 10)
+
+    // B-L03: Reject non-numeric segments — fall back to lexicographic
+    // comparison for the remaining segment rather than producing NaN
+    if (Number.isNaN(va) || Number.isNaN(vb)) {
+      if (na < nb) return -1
+      if (na > nb) return 1
+      continue
+    }
+
     if (va < vb) return -1
     if (va > vb) return 1
   }

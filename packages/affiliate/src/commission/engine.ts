@@ -65,6 +65,12 @@ export interface OrderPaidPayload {
   subid?: string | null
   /** Whether this is a first payment (vs renewal). */
   isFirstPayment?: boolean
+  /** C-M09: IP hash for fraud signal detection. */
+  ipHash?: string
+  /** C-M09: Device fingerprint for fraud signal detection. */
+  deviceFingerprint?: string
+  /** C-M09: User agent hash for fraud signal detection. */
+  userAgentHash?: string
 }
 
 export interface OrderPaidResult {
@@ -206,8 +212,13 @@ export async function onOrderPaid(
   }
 
   // S9: Fraud signal detection — block commission if high-severity signals found
+  // C-M09: Pass IP hash, device fingerprint, and user agent hash to detectFraudSignals
+  // for comprehensive fraud evaluation (not just email).
   const fraudResult = detectFraudSignals({
     email: customerEmail,
+    ipHash: payload.ipHash,
+    deviceFingerprint: payload.deviceFingerprint,
+    userAgent: payload.userAgentHash,
   })
   if (fraudResult.block) {
     logger.warn("Commission blocked by fraud signals", {

@@ -135,11 +135,22 @@ export async function POST(request: NextRequest) {
 
   const existingCookie = parseAffiliateCookie(request.headers.get("cookie"))
 
+  // C-M02: Read the actual consent state from the __ls_consent cookie
+  // instead of hardcoding consentGiven: true. This respects the GDPR
+  // consent gate that proxy.ts already enforces.
+  const consentCookie = request.headers.get("cookie")
+  const consentGiven = consentCookie?.includes("__ls_consent=1") ?? false
+
   // S3: Hash the IP before passing to attribution
   const ipHash = clientIp ? hashIp(clientIp) : undefined
   // S4: Hash the user-agent before storing
+  // C-L01: Use the same salted hashing as proxy.ts for consistency.
+  // proxy.ts uses hashWithSalt (salted SHA-256 via Web Crypto), so we
+  // replicate that here with the same salt to produce matching hashes.
   const userAgentHash = rawUserAgent
-    ? createHash("sha256").update(rawUserAgent).digest("hex")
+    ? createHash("sha256")
+        .update(rawUserAgent + (process.env.IP_HASH_SALT ?? "lyrashield-ip-salt-v1"))
+        .digest("hex")
     : undefined
 
   const result = await detectAttribution({
@@ -150,7 +161,7 @@ export async function POST(request: NextRequest) {
     ipHash,
     userAgent: userAgentHash,
     cookieToken: existingCookie,
-    consentGiven: true,
+    consentGiven,
   })
 
   const response = NextResponse.json({

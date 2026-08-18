@@ -28,8 +28,28 @@ const DEFAULT_GEO_IP_HEADER = "cf-connecting-ip"
  *
  * India (IN) → Razorpay (INR)
  * Everywhere else → Polar (USD)
+ *
+ * A-L08: Only trust geo headers from a verified proxy chain. If
+ * TRUSTED_PROXY_IP_HEADER is not configured, fall back to USD to prevent
+ * header spoofing from untrusted sources.
  */
 export function resolveRegion(request: Request): BillingRegion {
+  // A-L08: Only trust the cf-ipcountry header if a trusted proxy is configured.
+  // Without a trusted proxy, any client can set this header and spoof their
+  // country to get INR pricing (which may be cheaper).
+  const trustedProxyHeader = env.TRUSTED_PROXY_IP_HEADER
+  if (!trustedProxyHeader) {
+    // No trusted proxy configured — fall back to USD to prevent spoofing
+    return "usd"
+  }
+
+  // Verify the request came through the trusted proxy
+  const proxyIp = request.headers.get(trustedProxyHeader.toLowerCase())
+  if (!proxyIp) {
+    // Request didn't come through the trusted proxy — fall back to USD
+    return "usd"
+  }
+
   // Check for country header (Cloudflare sets cf-ipcountry)
   const countryCode = request.headers.get("cf-ipcountry")
   if (countryCode && countryCode.toUpperCase() === "IN") {
@@ -55,16 +75,18 @@ export function regionToProvider(region: BillingRegion): BillingProvider {
 }
 
 /**
- * Resolve the provider and region from a request, with optional manual override.
+ * Resolve the provider and region from a request.
+ *
+ * A-L04: The client-supplied region override has been removed to prevent
+ * currency arbitrage. The region is determined solely by the server-side
+ * geo routing, which uses trusted proxy headers only.
  *
  * @param request - The incoming HTTP request
- * @param override - Optional manual region override from the client
  */
 export function resolveProvider(
-  request: Request,
-  override?: BillingRegion
+  request: Request
 ): { region: BillingRegion; provider: BillingProvider } {
-  const region = override ?? resolveRegion(request)
+  const region = resolveRegion(request)
   return { region, provider: regionToProvider(region) }
 }
 

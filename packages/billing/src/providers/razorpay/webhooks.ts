@@ -82,15 +82,17 @@ export function validateRazorpayWebhook(
 
   const parsed = JSON.parse(body) as RazorpayWebhookEvent
 
-  // Timestamp tolerance: reject events older than 5 minutes to prevent replay.
-  // Razorpay includes a top-level `created_at` field (Unix seconds) in the
-  // webhook payload.
-  if (parsed.created_at !== undefined) {
-    const eventTimestampMs = parsed.created_at * 1000
-    const ageMs = Date.now() - eventTimestampMs
-    if (ageMs > DEFAULT_TOLERANCE_MS) {
-      throw new Error(`Razorpay webhook timestamp outside tolerance (${ageMs}ms > ${DEFAULT_TOLERANCE_MS}ms)`)
-    }
+  // A-L01: Timestamp tolerance: reject events older than 5 minutes to prevent
+  // replay. Razorpay includes a top-level `created_at` field (Unix seconds).
+  // The check is now MANDATORY — previously, if created_at was absent the
+  // replay check was silently skipped, allowing old payloads to be replayed.
+  if (parsed.created_at === undefined || parsed.created_at === null) {
+    throw new Error("Razorpay webhook missing created_at — cannot verify timestamp")
+  }
+  const eventTimestampMs = parsed.created_at * 1000
+  const ageMs = Date.now() - eventTimestampMs
+  if (ageMs > DEFAULT_TOLERANCE_MS) {
+    throw new Error(`Razorpay webhook timestamp outside tolerance (${ageMs}ms > ${DEFAULT_TOLERANCE_MS}ms)`)
   }
 
   return parsed

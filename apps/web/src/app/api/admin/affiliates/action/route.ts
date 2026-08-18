@@ -111,19 +111,57 @@ export async function POST(request: Request) {
       })
     }
 
-    logger.info("Affiliate approved", { affiliateId: data.affiliateId })
+    // C-M06: Write persistent audit log with admin userId
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: workspaceId,
+        action: "affiliate.approved",
+        resourceType: "affiliate",
+        resourceId: data.affiliateId,
+        actorUserId: session.userId,
+        metadata: { affiliateId: data.affiliateId },
+      },
+    })
+
+    logger.info("Affiliate approved", { affiliateId: data.affiliateId, adminUserId: session.userId })
   } else if (data.action === "reject") {
     await prisma.affiliate.update({
       where: { id: data.affiliateId },
       data: { status: "REJECTED" },
     })
-    logger.info("Affiliate rejected", { affiliateId: data.affiliateId })
+
+    // C-M06: Audit log
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: workspaceId,
+        action: "affiliate.rejected",
+        resourceType: "affiliate",
+        resourceId: data.affiliateId,
+        actorUserId: session.userId,
+        metadata: { affiliateId: data.affiliateId },
+      },
+    })
+
+    logger.info("Affiliate rejected", { affiliateId: data.affiliateId, adminUserId: session.userId })
   } else if (data.action === "suspend") {
     await prisma.affiliate.update({
       where: { id: data.affiliateId },
       data: { status: "SUSPENDED" },
     })
-    logger.info("Affiliate suspended", { affiliateId: data.affiliateId })
+
+    // C-M06: Audit log
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: workspaceId,
+        action: "affiliate.suspended",
+        resourceType: "affiliate",
+        resourceId: data.affiliateId,
+        actorUserId: session.userId,
+        metadata: { affiliateId: data.affiliateId },
+      },
+    })
+
+    logger.info("Affiliate suspended", { affiliateId: data.affiliateId, adminUserId: session.userId })
   } else if (data.action === "approvePayout") {
     // C-M05: Guard — only approve PENDING/PROCESSING payouts with RESERVED commissions.
     // Prevents double-pay by approving a FAILED payout whose commissions were re-withdrawn.
@@ -186,6 +224,18 @@ export async function POST(request: Request) {
       data: { status: "PAID" },
     })
 
+    // C-M06: Audit log
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: workspaceId,
+        action: "affiliate.payout_approved",
+        resourceType: "payout",
+        resourceId: data.payoutId,
+        actorUserId: session.userId,
+        metadata: { payoutId: data.payoutId, commissionCount: items.length },
+      },
+    })
+
     logger.info("Payout approved", { payoutId: data.payoutId, adminUserId: session.userId })
   } else if (data.action === "tierOverride") {
     await prisma.affiliate.update({
@@ -195,10 +245,28 @@ export async function POST(request: Request) {
         ...(data.tierRateBps !== undefined && { tierRateBps: data.tierRateBps }),
       },
     })
+
+    // C-M06: Audit log
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: workspaceId,
+        action: "affiliate.tier_override",
+        resourceType: "affiliate",
+        resourceId: data.affiliateId,
+        actorUserId: session.userId,
+        metadata: {
+          affiliateId: data.affiliateId,
+          baseRateBps: data.baseRateBps,
+          tierRateBps: data.tierRateBps,
+        },
+      },
+    })
+
     logger.info("Affiliate tier overridden", {
       affiliateId: data.affiliateId,
       baseRateBps: data.baseRateBps,
       tierRateBps: data.tierRateBps,
+      adminUserId: session.userId,
     })
   }
 

@@ -21,6 +21,8 @@ export interface SignupAttributionInput {
   cookieToken?: string | null
   /** A promo code entered at signup (if any). */
   promoCode?: string | null
+  /** C-L06: The new user's email for email-based self-referral check. */
+  userEmail?: string | null
 }
 
 export interface SignupAttributionResult {
@@ -42,18 +44,18 @@ function hashToken(token: string): string {
 export async function attributeSignup(
   input: SignupAttributionInput
 ): Promise<SignupAttributionResult> {
-  const { userId, cookieToken, promoCode } = input
+  const { userId, cookieToken, promoCode, userEmail } = input
 
   // 1. Try promo code first
   if (promoCode) {
     const affiliate = await prisma.affiliate.findUnique({
       where: { promoCode },
-      select: { id: true, userId: true, status: true },
+      select: { id: true, userId: true, status: true, user: { select: { email: true } } },
     })
 
     if (affiliate && affiliate.status === "APPROVED") {
-      // Reject self-referral
-      if (isSelfReferral(affiliate.userId, userId)) {
+      // Reject self-referral (C-L06: includes email-based check)
+      if (isSelfReferral(affiliate.userId, userId, affiliate.user?.email, userEmail ?? undefined)) {
         logger.warn("Signup attribution: self-referral rejected (promo code)", {
           affiliateId: affiliate.id,
           userId,
@@ -83,7 +85,7 @@ export async function attributeSignup(
     const token = await prisma.attributionToken.findUnique({
       where: { tokenHash },
       include: {
-        affiliate: { select: { id: true, userId: true, status: true } },
+        affiliate: { select: { id: true, userId: true, status: true, user: { select: { email: true } } } },
       },
     })
 
@@ -93,8 +95,8 @@ export async function attributeSignup(
       token.expiresAt > new Date() &&
       token.affiliate.status === "APPROVED"
     ) {
-      // Reject self-referral
-      if (isSelfReferral(token.affiliate.userId, userId)) {
+      // Reject self-referral (C-L06: includes email-based check)
+      if (isSelfReferral(token.affiliate.userId, userId, token.affiliate.user?.email, userEmail ?? undefined)) {
         logger.warn("Signup attribution: self-referral rejected (cookie)", {
           affiliateId: token.affiliateId,
           userId,

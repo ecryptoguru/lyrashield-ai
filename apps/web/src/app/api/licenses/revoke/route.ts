@@ -49,10 +49,21 @@ export async function POST(request: Request) {
       return apiError("ALREADY_REVOKED", "This license is already revoked", 409)
     }
 
+    // B-M06: Full revocation — nullify signature, deactivate activations,
+    // and delete sync cursors so the revoked license cannot be used offline
+    // or for further sync. The offline client verifies the signature locally
+    // (grace), so nullifying the signature forces re-verification which will
+    // fail. Sync cursors are deleted so no further findings can be synced.
     await prisma.$transaction(async (tx) => {
       await tx.license.update({
         where: { id: licenseId },
-        data: { revoked: true, revokedAt: new Date() },
+        data: {
+          revoked: true,
+          revokedAt: new Date(),
+          // Nullify the signature so offline verification fails
+          signature: "REVOKED",
+          signingKeyId: "REVOKED",
+        },
       })
       await tx.licenseRevocation.create({
         data: {
@@ -61,6 +72,15 @@ export async function POST(request: Request) {
           reason,
           revokedByKeyId: session.userId,
         },
+      })
+      // Deactivate all active machine activations
+      await tx.licenseActivation.updateMany({
+        where: { licenseId, deactivatedAt: null },
+        data: { deactivatedAt: new Date() },
+      })
+      // Delete sync cursors so no further sync is possible
+      await tx.syncCursor.deleteMany({
+        where: { licenseId },
       })
     })
 

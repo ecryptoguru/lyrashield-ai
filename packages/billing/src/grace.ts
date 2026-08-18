@@ -81,6 +81,16 @@ export async function enterGrace(
   workspaceId: string,
   deltaMs: number
 ): Promise<{ shouldContinue: boolean; remainingMs: number }> {
+  // A-L06: Validate input bounds — reject negative or oversized deltaMs.
+  // deltaMs represents milliseconds of grace consumed in one tick; negative
+  // values would credit grace, and oversized values (> 15 min) are nonsensical
+  // for a single tick and likely indicate a bug or attack.
+  if (!Number.isFinite(deltaMs) || deltaMs <= 0) {
+    return { shouldContinue: false, remainingMs: 0 }
+  }
+  // Cap single-tick delta at the grace cap itself (15 minutes)
+  const cappedDelta = Math.min(deltaMs, GRACE_CAP_MS)
+
   // A-M09: Use a conditional updateMany that checks the cap atomically.
   // This prevents concurrent ticks from each incrementing past the cap.
   // The WHERE clause ensures the increment only happens if graceUsedMs
@@ -91,7 +101,7 @@ export async function enterGrace(
       graceUsedMs: { lt: GRACE_CAP_MS },
     },
     data: {
-      graceUsedMs: { increment: deltaMs },
+      graceUsedMs: { increment: cappedDelta },
     },
   }).catch(() => ({ count: 0 }))
 

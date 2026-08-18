@@ -7,7 +7,6 @@ import {
   createRazorpayPaymentLink,
   MINUTE_PACK_MAP,
   type PackId,
-  type BillingRegion,
 } from "@lyrashield/billing"
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
@@ -60,8 +59,8 @@ export async function POST(request: Request) {
       return apiError("INVALID_PACK", "Unknown minute pack", 400)
     }
 
-    const override = parsed.data.region as BillingRegion | undefined
-    const { provider } = resolveProvider(request, override)
+    // A-L04: Client-side region override removed — server-side geo routing only
+    const { provider } = resolveProvider(request)
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const successUrl = `${appUrl}/dashboard/billing?topup=success`
