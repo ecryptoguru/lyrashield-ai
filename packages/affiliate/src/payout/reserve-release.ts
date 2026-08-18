@@ -142,22 +142,46 @@ export async function releaseReserveForAffiliate(
       })
     }
 
-    await tx.auditLog
-      .create({
-        data: {
-          workspaceId: affiliateId,
-          action: "affiliate.reserve_released",
-          resourceType: "payout",
-          resourceId: payout.id,
-          metadata: {
-            affiliateId,
-            commissionsReleased: releaseItems.length,
-            totalAmount: totalAmount.toString(),
-            currency: finalCurrency,
+    // AuditLog.workspaceId is a hard FK to Workspace. An affiliate has no
+    // natural workspace, so resolve the owning workspace via the affiliate's
+    // user → workspace membership. If the affiliate has no workspace (e.g. an
+    // individual account not yet in a workspace), skip the audit write rather
+    // than violating the FK (previously this wrote affiliateId into the
+    // Workspace FK column and was silently swallowed by the catch).
+    const affiliateRow = await tx.affiliate.findUnique({
+      where: { id: affiliateId },
+      select: { userId: true },
+    })
+    const membership = affiliateRow
+      ? await tx.workspaceMember.findFirst({
+          where: { userId: affiliateRow.userId },
+          select: { workspaceId: true },
+        })
+      : null
+
+    if (membership) {
+      await tx.auditLog
+        .create({
+          data: {
+            workspaceId: membership.workspaceId,
+            action: "affiliate.reserve_released",
+            resourceType: "payout",
+            resourceId: payout.id,
+            metadata: {
+              affiliateId,
+              commissionsReleased: releaseItems.length,
+              totalAmount: totalAmount.toString(),
+              currency: finalCurrency,
+            },
           },
-        },
+        })
+        .catch(() => {})
+    } else {
+      logger.warn("Reserve released but no owning workspace found — audit log skipped", {
+        affiliateId,
+        payoutId: payout.id,
       })
-      .catch(() => {})
+    }
   })
 
   logger.info("Reserve released for affiliate", {
