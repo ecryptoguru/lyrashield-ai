@@ -38,7 +38,9 @@ const { FakeDecimal, models, runTransaction } = vi.hoisted(() => {
   const models = {
     affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
     commission: { findMany: vi.fn(), update: vi.fn() },
-    payout: { create: vi.fn() },
+    // payout.create must resolve to an object with an `id` (the code reads
+    // payout.id for the payoutItem and auditLog references).
+    payout: { create: vi.fn().mockResolvedValue({ id: "payout-test-id" }) },
     payoutItem: { create: vi.fn() },
     auditLog: { create: vi.fn().mockResolvedValue(undefined) },
   }
@@ -90,10 +92,12 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(prisma.$transaction).mockImplementation(runTransaction)
-    // clearAllMocks strips the factory's resolved value — re-set auditLog.create
-    // to return a resolved promise so the .catch(() => {}) chain works.
+    // clearAllMocks strips the factory's resolved values — re-set them so the
+    // transaction writes resolve correctly.
+    vi.mocked(models.payout.create).mockResolvedValue({ id: "payout-test-id" })
+    vi.mocked(models.payoutItem.create).mockResolvedValue({} as never)
+    vi.mocked(models.commission.update).mockResolvedValue({} as never)
     vi.mocked(models.auditLog.create).mockResolvedValue(undefined)
-    vi.mocked(prisma.auditLog.create).mockResolvedValue(undefined)
   })
 
   it("releases nothing when the reserve is still active (reserveUntil in the future)", async () => {
