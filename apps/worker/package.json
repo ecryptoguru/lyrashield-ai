@@ -11,6 +11,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1096.0",
     "@lyrashield/billing": "workspace:*",
+    "@lyrashield/affiliate": "workspace:*",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
     "@lyrashield/evidence-storage": "workspace:*",

@@ -16,6 +16,9 @@ export {
   IntegrationType,
   ScoreGrade,
   ReferralStatus,
+  AffiliateStatus,
+  CommissionStatus,
+  PayoutStatus,
 } from "./generated/prisma"
 
 export type {
@@ -58,6 +61,16 @@ export type {
   LicenseKey,
   SyncCursor,
   LicenseRevocation,
+  Affiliate,
+  AffiliateProgram,
+  AffiliateLink,
+  Click,
+  AttributionToken,
+  AffiliateSubscription,
+  Conversion,
+  Commission,
+  Payout,
+  PayoutItem,
 } from "./generated/prisma"
 
 export { ApprovalStatus } from "./generated/prisma"

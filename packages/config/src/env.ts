@@ -234,6 +234,18 @@ const envSchema = z
     // Maximum findings accepted per sync batch from a Local client.
     LYRASHIELD_SYNC_MAX_FINDINGS_PER_BATCH: z.coerce.number().int().min(1).max(5000).default(500),
 
+    // Affiliate / Partner Program (Track C)
+    RAZORPAYX_API_KEY: z.string().optional().or(z.literal("")),
+    RAZORPAYX_API_SECRET: z.string().optional().or(z.literal("")),
+    RAZORPAYX_ACCOUNT_NUMBER: z.string().optional().or(z.literal("")),
+    PAYONEER_API_KEY: z.string().optional().or(z.literal("")),
+    PAYONEER_API_SECRET: z.string().optional().or(z.literal("")),
+    PAYONEER_PARTNER_ID: z.string().optional().or(z.literal("")),
+    AFFILIATE_DEFAULT_PROGRAM_SLUG: z.string().optional().or(z.literal("")).default("default"),
+    AFFILIATE_COOKIE_DOMAIN: z.string().optional().or(z.literal("")).default(".lyrashieldai.com"),
+    AFFILIATE_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().positive().max(365).default(60),
+    AFFILIATE_PAYOUT_MIN_CENTS: z.coerce.number().int().positive().default(10000),
+
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),

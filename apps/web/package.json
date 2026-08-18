@@ -12,6 +12,7 @@
   "dependencies": {
     "@better-auth/oauth-provider": "1.7.0-beta.10",
     "@lyrashield/agent-registry": "workspace:*",
+    "@lyrashield/affiliate": "workspace:*",
     "@lyrashield/auth": "workspace:*",
     "@lyrashield/billing": "workspace:*",
     "@lyrashield/config": "workspace:*",
