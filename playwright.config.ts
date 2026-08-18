@@ -36,11 +36,14 @@ export default defineConfig({
       // small set of simulated client IPs in rapid succession. Raise the
       // in-memory auth rate limit so the suite doesn't trip the 5/min default
       // and produce flaky cross-test interference. Production leaves this unset.
-      "RATE_LIMIT_AUTH_MAX=1000 " +
+      "RATE_LIMIT_AUTH_MAX=1000; " +
       // Dev/test-only ed25519 signing key for the e2e license-activation flow.
       // Never used in production (production resolves from Azure Key Vault).
-      // Newlines are embedded via ANSI-C $'...' quoting so the PEM is intact.
-      "LICENSE_SIGNING_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\\nMC4CAQAwBQYDK2VwBCIEIM3vjBHfDGv/9UqGuK8KQihi9mQBKjD+Y0HHbxLinhoP\\n-----END PRIVATE KEY-----\\n' " +
+      // Write the PEM to a temp file then read it into the env var — embedding a
+      // multi-line PEM directly in the command string is too fragile across the
+      // TS-string -> shell quoting layers and produced a malformed key.
+      "printf '%s\\n' '-----BEGIN PRIVATE KEY-----' 'MC4CAQAwBQYDK2VwBCIEIM3vjBHfDGv/9UqGuK8KQihi9mQBKjD+Y0HHbxLinhoP' '-----END PRIVATE KEY-----' > /tmp/lyrashield-e2e-lic.pem && " +
+      'export LICENSE_SIGNING_PRIVATE_KEY="$(cat /tmp/lyrashield-e2e-lic.pem)" ' +
       // The e2e app runs NODE_ENV=production, so resolveSigningKeyId requires
       // LICENSE_SIGNING_KEY_ID (a test-only key id; production uses a real one).
       "LICENSE_SIGNING_KEY_ID=e2e-license-key-v1; " +
