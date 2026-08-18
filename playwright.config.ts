@@ -40,7 +40,10 @@ export default defineConfig({
       // Dev/test-only ed25519 signing key for the e2e license-activation flow.
       // Never used in production (production resolves from Azure Key Vault).
       // Newlines are embedded via ANSI-C $'...' quoting so the PEM is intact.
-      "LICENSE_SIGNING_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\\nMC4CAQAwBQYDK2VwBCIEIM3vjBHfDGv/9UqGuK8KQihi9mQBKjD+Y0HHbxLinhoP\\n-----END PRIVATE KEY-----\\n'; " +
+      "LICENSE_SIGNING_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\\nMC4CAQAwBQYDK2VwBCIEIM3vjBHfDGv/9UqGuK8KQihi9mQBKjD+Y0HHbxLinhoP\\n-----END PRIVATE KEY-----\\n' " +
+      // The e2e app runs NODE_ENV=production, so resolveSigningKeyId requires
+      // LICENSE_SIGNING_KEY_ID (a test-only key id; production uses a real one).
+      "LICENSE_SIGNING_KEY_ID=e2e-license-key-v1; " +
       (process.env.CI ? "" : "pnpm --filter @lyrashield/web build && ") +
       "rm -rf apps/web/.next/standalone/apps/web/.next/static apps/web/.next/standalone/apps/web/public && " +
       "cp -R apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static && " +

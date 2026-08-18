@@ -188,9 +188,10 @@ test.describe("Affiliate lifecycle", () => {
     expect(result.duplicate).toBe(false)
     expect(result.status).toBe("PENDING")
 
-    // Verify Conversion + Commission were created
+    // Verify Conversion + Commission were created.
+    // The conversion's idempotencyKey is provider-scoped (polar:<externalId>).
     const conversion = await prisma.conversion.findFirst({
-      where: { idempotencyKey: externalId },
+      where: { idempotencyKey: `polar:${externalId}` },
       include: { commissions: true },
     })
     expect(conversion).not.toBeNull()
