@@ -45,9 +45,7 @@ function toTerms(row: AffiliateProgram): AffiliateProgramTerms {
  * Returns the first active program if slug is not found.
  * Throws if no active program exists.
  */
-export async function loadActiveProgram(
-  slug = "default"
-): Promise<AffiliateProgramTerms> {
+export async function loadActiveProgram(slug = "default"): Promise<AffiliateProgramTerms> {
   const row = await prisma.affiliateProgram.findFirst({
     where: { slug, active: true },
   })

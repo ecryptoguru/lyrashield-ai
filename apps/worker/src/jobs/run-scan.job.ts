@@ -2,12 +2,7 @@ import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
-import {
-  recordAgentMinutes,
-  getUsageBalance,
-  enterGrace,
-  debitOverage,
-} from "@lyrashield/billing"
+import { recordAgentMinutes, getUsageBalance, enterGrace, debitOverage } from "@lyrashield/billing"
 import {
   buildVibeSecurityInstruction,
   summarizeVibeSecurityCoverage,
@@ -869,8 +864,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             where: { workspaceId },
             select: { currentPlan: true, spendLimitCents: true },
           })
-          const overageAvailable =
-            acct?.currentPlan === "TEAM" && (acct.spendLimitCents ?? 0) > 0
+          const overageAvailable = acct?.currentPlan === "TEAM" && (acct.spendLimitCents ?? 0) > 0
 
           if (overageAvailable) {
             // Debit overage for the remaining engine time

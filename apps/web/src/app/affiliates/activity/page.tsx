@@ -191,9 +191,7 @@ export default async function AffiliateActivityPage({
                       <td className="py-2 pr-4">
                         {new Date(row.createdAt as string).toLocaleDateString()}
                       </td>
-                      <td className="py-2 pr-4 font-mono">
-                        {row.id as string}
-                      </td>
+                      <td className="py-2 pr-4 font-mono">{row.id as string}</td>
                     </>
                   )}
                   {tab === "conversions" && (

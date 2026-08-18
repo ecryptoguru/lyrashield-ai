@@ -90,17 +90,19 @@ export async function createPolarOneTimeCheckout(params: {
 /**
  * Get the Polar customer portal URL for subscription management.
  */
-export async function getPolarPortalUrl(params: {
-  customerId: string
-}): Promise<string | null> {
+export async function getPolarPortalUrl(params: { customerId: string }): Promise<string | null> {
   const client = getPolarClient()
   if (!client) return null
 
   try {
     // Polar customer portal API
-    const portal = await (client as unknown as {
-      customerPortal: { sessions: { create: (params: { customerId: string }) => Promise<{ url: string }> } }
-    }).customerPortal.sessions.create({
+    const portal = await (
+      client as unknown as {
+        customerPortal: {
+          sessions: { create: (params: { customerId: string }) => Promise<{ url: string }> }
+        }
+      }
+    ).customerPortal.sessions.create({
       customerId: params.customerId,
     })
 

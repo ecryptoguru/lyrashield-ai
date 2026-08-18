@@ -122,9 +122,7 @@ export function LicensesClient({
                     </td>
                     <td className="px-4 py-3">{license.ownerEmail}</td>
                     <td className="px-4 py-3">
-                      <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
-                        {license.sku}
-                      </code>
+                      <code className="bg-muted rounded px-1.5 py-0.5 text-xs">{license.sku}</code>
                     </td>
                     <td className="px-4 py-3">{license.seatCount}</td>
                     <td className="px-4 py-3">
@@ -170,7 +168,8 @@ export function LicensesClient({
 
       {initialData.length > 0 && (
         <p className="text-muted-foreground text-xs">
-          Showing {initialData.length} license{initialData.length !== 1 ? "s" : ""}. Max 100 results.
+          Showing {initialData.length} license{initialData.length !== 1 ? "s" : ""}. Max 100
+          results.
         </p>
       )}
     </div>

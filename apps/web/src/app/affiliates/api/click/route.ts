@@ -78,7 +78,9 @@ function isBotUserAgent(ua: string | null): boolean {
 
 function hashIp(ip: string): string {
   const salt = process.env.IP_HASH_SALT ?? "lyrashield-ip-salt-v1"
-  return createHash("sha256").update(ip + salt).digest("hex")
+  return createHash("sha256")
+    .update(ip + salt)
+    .digest("hex")
 }
 
 function getClientIp(request: NextRequest): string | undefined {
@@ -104,10 +106,7 @@ export async function POST(request: NextRequest) {
   // S6: Bot detection — reject requests with no user-agent or known bot UAs
   const rawUserAgent = request.headers.get("user-agent")
   if (isBotUserAgent(rawUserAgent)) {
-    return NextResponse.json(
-      { success: false, error: "Rejected" },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: "Rejected" }, { status: 403 })
   }
 
   // S6: Rate limiting
@@ -123,10 +122,7 @@ export async function POST(request: NextRequest) {
 
   const parsed = ClickSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: "Invalid click data" },
-      { status: 400 }
-    )
+    return NextResponse.json({ success: false, error: "Invalid click data" }, { status: 400 })
   }
 
   const searchParams = new URLSearchParams()

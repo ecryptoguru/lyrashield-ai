@@ -21,9 +21,7 @@ export interface PayoutEligibility {
 /**
  * Check if an affiliate is eligible to request a payout.
  */
-export async function checkPayoutEligibility(
-  affiliateId: string
-): Promise<PayoutEligibility> {
+export async function checkPayoutEligibility(affiliateId: string): Promise<PayoutEligibility> {
   const reasons: string[] = []
 
   const affiliate = await prisma.affiliate.findUnique({
@@ -54,7 +52,7 @@ export async function checkPayoutEligibility(
     _sum: { amount: true },
   })
 
-  const available = (result._sum.amount ?? new Prisma.Decimal(0))
+  const available = result._sum.amount ?? new Prisma.Decimal(0)
   const minPayout = new Prisma.Decimal(env.AFFILIATE_PAYOUT_MIN_CENTS / 100)
 
   // Check minimum
@@ -65,9 +63,11 @@ export async function checkPayoutEligibility(
   }
 
   // Check payout method
-  const payoutMethod = affiliate.payoutMethod as
-    | { type?: string; valid?: boolean; taxFormComplete?: boolean }
-    | null
+  const payoutMethod = affiliate.payoutMethod as {
+    type?: string
+    valid?: boolean
+    taxFormComplete?: boolean
+  } | null
 
   if (!payoutMethod || !payoutMethod.type) {
     reasons.push("No payout method configured")

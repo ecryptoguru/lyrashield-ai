@@ -88,26 +88,24 @@ export default async function AffiliateAssetsPage() {
           <div className="rounded-lg border p-6 text-sm text-muted-foreground">
             <ul className="space-y-2">
               <li>
-                <strong>Brand name:</strong> Always use &quot;LyraShield AI&quot; (with
-                space). Never &quot;LyraShieldAI&quot; or &quot;Lyra Shield&quot;.
+                <strong>Brand name:</strong> Always use &quot;LyraShield AI&quot; (with space).
+                Never &quot;LyraShieldAI&quot; or &quot;Lyra Shield&quot;.
               </li>
               <li>
-                <strong>Logo usage:</strong> Maintain clear space around the logo
-                equal to the height of the shield mark. Never stretch, recolor, or
-                add effects.
+                <strong>Logo usage:</strong> Maintain clear space around the logo equal to the
+                height of the shield mark. Never stretch, recolor, or add effects.
               </li>
               <li>
-                <strong>Colors:</strong> Primary #0066FF, Dark #0A0A0A, Light
-                #FAFAFA. Do not use unauthorized color variations.
+                <strong>Colors:</strong> Primary #0066FF, Dark #0A0A0A, Light #FAFAFA. Do not use
+                unauthorized color variations.
               </li>
               <li>
-                <strong>Tone:</strong> Evidence-backed, technical, honest. Avoid
-                hyperbolic claims, security guarantees, or benchmark comparisons.
+                <strong>Tone:</strong> Evidence-backed, technical, honest. Avoid hyperbolic claims,
+                security guarantees, or benchmark comparisons.
               </li>
               <li>
-                <strong>Prohibited:</strong> Do not bid on the brand name
-                &quot;LyraShield&quot; in search ads. Do not use misleading
-                coupons or discounts not provided by LyraShield.
+                <strong>Prohibited:</strong> Do not bid on the brand name &quot;LyraShield&quot; in
+                search ads. Do not use misleading coupons or discounts not provided by LyraShield.
               </li>
             </ul>
           </div>

@@ -34,18 +34,12 @@ const ActionSchema = z.discriminatedUnion("action", [
 export async function POST(request: Request) {
   const session = await getCachedSession()
   if (!session) {
-    return NextResponse.json(
-      { success: false, error: "Authentication required" },
-      { status: 401 }
-    )
+    return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
   }
 
   const workspaceId = await getCachedWorkspaceId(session.userId)
   if (!workspaceId) {
-    return NextResponse.json(
-      { success: false, error: "No workspace" },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: "No workspace" }, { status: 403 })
   }
 
   // Check admin permissions
@@ -55,18 +49,12 @@ export async function POST(request: Request) {
   })
 
   if (!membership || !hasPermission(membership.role, PERMISSIONS.affiliate.admin)) {
-    return NextResponse.json(
-      { success: false, error: "Insufficient permissions" },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 })
   }
 
   const parsed = ActionSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: "Invalid request" },
-      { status: 400 }
-    )
+    return NextResponse.json({ success: false, error: "Invalid request" }, { status: 400 })
   }
 
   const data = parsed.data
@@ -123,7 +111,10 @@ export async function POST(request: Request) {
       },
     })
 
-    logger.info("Affiliate approved", { affiliateId: data.affiliateId, adminUserId: session.userId })
+    logger.info("Affiliate approved", {
+      affiliateId: data.affiliateId,
+      adminUserId: session.userId,
+    })
   } else if (data.action === "reject") {
     await prisma.affiliate.update({
       where: { id: data.affiliateId },
@@ -142,7 +133,10 @@ export async function POST(request: Request) {
       },
     })
 
-    logger.info("Affiliate rejected", { affiliateId: data.affiliateId, adminUserId: session.userId })
+    logger.info("Affiliate rejected", {
+      affiliateId: data.affiliateId,
+      adminUserId: session.userId,
+    })
   } else if (data.action === "suspend") {
     await prisma.affiliate.update({
       where: { id: data.affiliateId },
@@ -161,7 +155,10 @@ export async function POST(request: Request) {
       },
     })
 
-    logger.info("Affiliate suspended", { affiliateId: data.affiliateId, adminUserId: session.userId })
+    logger.info("Affiliate suspended", {
+      affiliateId: data.affiliateId,
+      adminUserId: session.userId,
+    })
   } else if (data.action === "approvePayout") {
     // C-M05: Guard — only approve PENDING/PROCESSING payouts with RESERVED commissions.
     // Prevents double-pay by approving a FAILED payout whose commissions were re-withdrawn.
@@ -171,10 +168,7 @@ export async function POST(request: Request) {
     })
 
     if (!payout) {
-      return NextResponse.json(
-        { success: false, error: "Payout not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ success: false, error: "Payout not found" }, { status: 404 })
     }
 
     if (payout.status !== "PENDING" && payout.status !== "PROCESSING") {
@@ -191,10 +185,7 @@ export async function POST(request: Request) {
     })
 
     if (items.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "Payout has no items" },
-        { status: 409 }
-      )
+      return NextResponse.json({ success: false, error: "Payout has no items" }, { status: 409 })
     }
 
     const commissions = await prisma.commission.findMany({

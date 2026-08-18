@@ -38,11 +38,7 @@ export function canonicalJSON(value: unknown): string {
     .filter((k) => obj[k] !== undefined)
     .sort()
 
-  return (
-    "{" +
-    keys.map((k) => JSON.stringify(k) + ":" + canonicalJSON(obj[k])).join(",") +
-    "}"
-  )
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalJSON(obj[k])).join(",") + "}"
 }
 
 /** The exact bytes that the ed25519 signature covers. */

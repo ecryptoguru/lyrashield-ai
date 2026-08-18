@@ -85,7 +85,9 @@ export async function attributeSignup(
     const token = await prisma.attributionToken.findUnique({
       where: { tokenHash },
       include: {
-        affiliate: { select: { id: true, userId: true, status: true, user: { select: { email: true } } } },
+        affiliate: {
+          select: { id: true, userId: true, status: true, user: { select: { email: true } } },
+        },
       },
     })
 
@@ -96,7 +98,14 @@ export async function attributeSignup(
       token.affiliate.status === "APPROVED"
     ) {
       // Reject self-referral (C-L06: includes email-based check)
-      if (isSelfReferral(token.affiliate.userId, userId, token.affiliate.user?.email, userEmail ?? undefined)) {
+      if (
+        isSelfReferral(
+          token.affiliate.userId,
+          userId,
+          token.affiliate.user?.email,
+          userEmail ?? undefined
+        )
+      ) {
         logger.warn("Signup attribution: self-referral rejected (cookie)", {
           affiliateId: token.affiliateId,
           userId,

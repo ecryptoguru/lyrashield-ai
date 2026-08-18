@@ -36,7 +36,12 @@ export async function requestPayout(params: {
   /** Provider name override (auto-detected from payout method if not given). */
   provider?: string
   /** Optional provider send function. If not provided, payout stays PENDING. */
-  sendFn?: (payoutId: string, amount: string, currency: string, payoutMethod: unknown) => Promise<{ success: boolean; providerPayoutId?: string; error?: string }>
+  sendFn?: (
+    payoutId: string,
+    amount: string,
+    currency: string,
+    payoutMethod: unknown
+  ) => Promise<{ success: boolean; providerPayoutId?: string; error?: string }>
 }): Promise<PayoutRequestResult> {
   const { affiliateId, provider, sendFn } = params
 
@@ -52,91 +57,91 @@ export async function requestPayout(params: {
   let payout: { id: string; amount: Prisma.Decimal; currency: string; itemCount: number }
   try {
     payout = await prisma.$transaction(async (tx) => {
-    // Re-check eligibility inside the transaction to avoid TOCTOU.
-    const eligibility = await checkPayoutEligibility(affiliateId)
-    if (!eligibility.eligible) {
-      throw new Error(eligibility.reasons.join("; "))
-    }
-
-    // Atomically reserve ALL available commissions (AVAILABLE → RESERVED).
-    // This is the concurrency guard: only one transaction can succeed in
-    // flipping the rows because updateMany is atomic.
-    const reserveResult = await tx.commission.updateMany({
-      where: {
-        affiliateId,
-        status: "AVAILABLE",
-      },
-      data: { status: "RESERVED" },
-    })
-
-    if (reserveResult.count === 0) {
-      throw new Error("No available commissions to pay out")
-    }
-
-    // Read the now-reserved commissions.
-    const commissions = await tx.commission.findMany({
-      where: {
-        affiliateId,
-        status: "RESERVED",
-      },
-      select: { id: true, amount: true, currency: true },
-    })
-
-    if (commissions.length === 0) {
-      throw new Error("No available commissions to pay out")
-    }
-
-    // Apply reserve hold if active
-    const reserveActive = isReserveActive(affiliate.reserveUntil)
-    const reservePct = affiliate.reservePct
-
-    let totalAmount = new Prisma.Decimal(0)
-    const items: { commissionId: string; amount: Prisma.Decimal }[] = []
-    const currency = commissions[0]!.currency
-
-    for (const c of commissions) {
-      let itemAmount = c.amount
-
-      if (reserveActive) {
-        // Hold reservePct — only pay out (100 - reservePct)%
-        const releasePct = new Prisma.Decimal(100 - reservePct)
-        itemAmount = c.amount.mul(releasePct).div(100)
+      // Re-check eligibility inside the transaction to avoid TOCTOU.
+      const eligibility = await checkPayoutEligibility(affiliateId)
+      if (!eligibility.eligible) {
+        throw new Error(eligibility.reasons.join("; "))
       }
 
-      totalAmount = totalAmount.add(itemAmount)
-      items.push({ commissionId: c.id, amount: itemAmount })
-    }
+      // Atomically reserve ALL available commissions (AVAILABLE → RESERVED).
+      // This is the concurrency guard: only one transaction can succeed in
+      // flipping the rows because updateMany is atomic.
+      const reserveResult = await tx.commission.updateMany({
+        where: {
+          affiliateId,
+          status: "AVAILABLE",
+        },
+        data: { status: "RESERVED" },
+      })
 
-    // Create Payout
-    // C-M07: Pre-generate a UUID for the idempotencyKey instead of using
-    // empty string. The empty string caused concurrent payout creations to
-    // collide on the unique constraint.
-    const payoutId = crypto.randomUUID()
-    const newPayout = await tx.payout.create({
-      data: {
-        id: payoutId,
-        affiliateId,
-        amount: totalAmount,
-        currency,
-        status: "PROCESSING",
-        provider: provider ?? "manual",
-        idempotencyKey: payoutId,
-      },
-    })
+      if (reserveResult.count === 0) {
+        throw new Error("No available commissions to pay out")
+      }
 
-    // Create PayoutItems (commissions are already RESERVED from updateMany)
-    // C-M04: For reserved commissions, track the held amount separately.
-    // The commission stays RESERVED (not PAID) for the reserve portion,
-    // and the PayoutItem records the actual paid amount.
-    for (const item of items) {
-      await tx.payoutItem.create({
+      // Read the now-reserved commissions.
+      const commissions = await tx.commission.findMany({
+        where: {
+          affiliateId,
+          status: "RESERVED",
+        },
+        select: { id: true, amount: true, currency: true },
+      })
+
+      if (commissions.length === 0) {
+        throw new Error("No available commissions to pay out")
+      }
+
+      // Apply reserve hold if active
+      const reserveActive = isReserveActive(affiliate.reserveUntil)
+      const reservePct = affiliate.reservePct
+
+      let totalAmount = new Prisma.Decimal(0)
+      const items: { commissionId: string; amount: Prisma.Decimal }[] = []
+      const currency = commissions[0]!.currency
+
+      for (const c of commissions) {
+        let itemAmount = c.amount
+
+        if (reserveActive) {
+          // Hold reservePct — only pay out (100 - reservePct)%
+          const releasePct = new Prisma.Decimal(100 - reservePct)
+          itemAmount = c.amount.mul(releasePct).div(100)
+        }
+
+        totalAmount = totalAmount.add(itemAmount)
+        items.push({ commissionId: c.id, amount: itemAmount })
+      }
+
+      // Create Payout
+      // C-M07: Pre-generate a UUID for the idempotencyKey instead of using
+      // empty string. The empty string caused concurrent payout creations to
+      // collide on the unique constraint.
+      const payoutId = crypto.randomUUID()
+      const newPayout = await tx.payout.create({
         data: {
-          payoutId: newPayout.id,
-          commissionId: item.commissionId,
-          amount: item.amount,
+          id: payoutId,
+          affiliateId,
+          amount: totalAmount,
+          currency,
+          status: "PROCESSING",
+          provider: provider ?? "manual",
+          idempotencyKey: payoutId,
         },
       })
-    }
+
+      // Create PayoutItems (commissions are already RESERVED from updateMany)
+      // C-M04: For reserved commissions, track the held amount separately.
+      // The commission stays RESERVED (not PAID) for the reserve portion,
+      // and the PayoutItem records the actual paid amount.
+      for (const item of items) {
+        await tx.payoutItem.create({
+          data: {
+            payoutId: newPayout.id,
+            commissionId: item.commissionId,
+            amount: item.amount,
+          },
+        })
+      }
 
       return { id: newPayout.id, amount: totalAmount, currency, itemCount: items.length }
     })

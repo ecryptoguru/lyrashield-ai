@@ -41,7 +41,11 @@ export async function POST(request: Request) {
     const clientIp = clientIpFromRequest(request)
     const rateLimit = await checkLicenseApiRateLimit(clientIp)
     if (rateLimit.limited) {
-      return apiError("RATE_LIMITED", "Too many verification requests. Please try again later.", 429)
+      return apiError(
+        "RATE_LIMITED",
+        "Too many verification requests. Please try again later.",
+        429
+      )
     }
 
     const body: unknown = await request.json().catch(() => null)

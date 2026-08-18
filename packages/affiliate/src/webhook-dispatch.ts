@@ -28,9 +28,7 @@ export interface WebhookDispatchResult {
 /**
  * Dispatch a billing webhook event to the appropriate affiliate handler.
  */
-export async function dispatch(
-  input: WebhookDispatchInput
-): Promise<WebhookDispatchResult> {
+export async function dispatch(input: WebhookDispatchInput): Promise<WebhookDispatchResult> {
   const { provider, event, payload } = input
 
   logger.info("Affiliate webhook dispatch", { provider, event })
@@ -112,9 +110,9 @@ function getMetadata(payload: Record<string, unknown>): Record<string, unknown> 
  */
 function isLocalSkuOrder(payload: Record<string, unknown>): boolean {
   const meta = getMetadata(payload)
-  const skuId = (getProp(payload, "skuId") ?? getProp(payload, "productId") ?? (meta ? getProp(meta, "productId") : undefined)) as
-    | string
-    | undefined
+  const skuId = (getProp(payload, "skuId") ??
+    getProp(payload, "productId") ??
+    (meta ? getProp(meta, "productId") : undefined)) as string | undefined
   if (!skuId) return false
   return skuId in LOCAL_SKU_MAP || LOCAL_SKUS.some((s) => s.id === skuId)
 }
@@ -133,9 +131,9 @@ function isMinutePackOrder(payload: Record<string, unknown>): boolean {
   const packId = (meta ? getProp(meta, "packId") : undefined) as string | undefined
   if (packId && packId in MINUTE_PACK_MAP) return true
 
-  const productId = (getProp(payload, "productId") ?? getProp(payload, "skuId") ?? (meta ? getProp(meta, "productId") : undefined)) as
-    | string
-    | undefined
+  const productId = (getProp(payload, "productId") ??
+    getProp(payload, "skuId") ??
+    (meta ? getProp(meta, "productId") : undefined)) as string | undefined
   if (productId) {
     const tail = productId.split(/[_-]/).pop() ?? ""
     if (tail in MINUTE_PACK_MAP) return true
@@ -153,7 +151,9 @@ function mapOrderPaidPayload(
   provider: string,
   payload: Record<string, unknown>
 ): OrderPaidPayload | null {
-  const externalId = (getProp(payload, "id") ?? getProp(payload, "orderId") ?? getProp(payload, "chargeId")) as string | undefined
+  const externalId = (getProp(payload, "id") ??
+    getProp(payload, "orderId") ??
+    getProp(payload, "chargeId")) as string | undefined
   if (!externalId) return null
 
   const meta = getMetadata(payload)
@@ -161,26 +161,39 @@ function mapOrderPaidPayload(
   return {
     provider,
     externalId,
-    providerSubscriptionId: (getProp(payload, "subscriptionId") ?? (meta ? getProp(meta, "subscriptionId") : undefined)) as
-      | string
-      | null
-      | undefined,
+    providerSubscriptionId: (getProp(payload, "subscriptionId") ??
+      (meta ? getProp(meta, "subscriptionId") : undefined)) as string | null | undefined,
     customerId: (getProp(payload, "customerId") ?? getProp(payload, "customer") ?? "") as string,
-    customerEmail: (getProp(payload, "customerEmail") ?? getProp(payload, "email") ?? (meta ? getProp(meta, "customerEmail") : undefined)) as string | undefined,
+    customerEmail: (getProp(payload, "customerEmail") ??
+      getProp(payload, "email") ??
+      (meta ? getProp(meta, "customerEmail") : undefined)) as string | undefined,
     grossAmount: String(getProp(payload, "amount") ?? getProp(payload, "grossAmount") ?? "0"),
-    discountAmount: String(getProp(payload, "discountAmount") ?? getProp(payload, "discount") ?? "0"),
+    discountAmount: String(
+      getProp(payload, "discountAmount") ?? getProp(payload, "discount") ?? "0"
+    ),
     taxAmount: String(getProp(payload, "taxAmount") ?? getProp(payload, "tax") ?? "0"),
     currency: (getProp(payload, "currency") ?? "USD") as string,
-    isAnnual: Boolean(getProp(payload, "isAnnual") ?? (meta ? getProp(meta, "isAnnual") : undefined)),
-    planId: (getProp(payload, "planId") ?? (meta ? getProp(meta, "planId") : undefined)) as string | undefined,
-    promoCode: (getProp(payload, "promoCode") ?? (meta ? getProp(meta, "promoCode") : undefined)) as string | null | undefined,
+    isAnnual: Boolean(
+      getProp(payload, "isAnnual") ?? (meta ? getProp(meta, "isAnnual") : undefined)
+    ),
+    planId: (getProp(payload, "planId") ?? (meta ? getProp(meta, "planId") : undefined)) as
+      string | undefined,
+    promoCode: (getProp(payload, "promoCode") ??
+      (meta ? getProp(meta, "promoCode") : undefined)) as string | null | undefined,
     // C1: Look for cookieToken, then fall back to affiliate_id/click_id from
     // checkout metadata (the checkout route sets these directly in metadata).
-    cookieToken: (getProp(payload, "cookieToken") ?? (meta ? getProp(meta, "affToken") : undefined)) as string | null | undefined,
-    affiliateId: (meta ? (getProp(meta, "affiliate_id") ?? getProp(meta, "affiliateId")) : undefined) as string | null | undefined,
-    clickId: (meta ? (getProp(meta, "click_id") ?? getProp(meta, "clickId")) : undefined) as string | null | undefined,
-    subid: (getProp(payload, "subid") ?? (meta ? getProp(meta, "subid") : undefined)) as string | null | undefined,
-    isFirstPayment: Boolean(getProp(payload, "isFirstPayment") ?? (meta ? getProp(meta, "isFirstPayment") : undefined)),
+    cookieToken: (getProp(payload, "cookieToken") ??
+      (meta ? getProp(meta, "affToken") : undefined)) as string | null | undefined,
+    affiliateId: (meta
+      ? (getProp(meta, "affiliate_id") ?? getProp(meta, "affiliateId"))
+      : undefined) as string | null | undefined,
+    clickId: (meta ? (getProp(meta, "click_id") ?? getProp(meta, "clickId")) : undefined) as
+      string | null | undefined,
+    subid: (getProp(payload, "subid") ?? (meta ? getProp(meta, "subid") : undefined)) as
+      string | null | undefined,
+    isFirstPayment: Boolean(
+      getProp(payload, "isFirstPayment") ?? (meta ? getProp(meta, "isFirstPayment") : undefined)
+    ),
   }
 }
 
@@ -191,26 +204,37 @@ function mapLocalOrderPayload(
   provider: string,
   payload: Record<string, unknown>
 ): LocalOrderPaidPayload | null {
-  const externalId = (getProp(payload, "id") ?? getProp(payload, "orderId") ?? getProp(payload, "chargeId")) as string | undefined
+  const externalId = (getProp(payload, "id") ??
+    getProp(payload, "orderId") ??
+    getProp(payload, "chargeId")) as string | undefined
   if (!externalId) return null
 
   const meta = getMetadata(payload)
-  const skuId = (getProp(payload, "skuId") ?? getProp(payload, "productId") ?? (meta ? getProp(meta, "productId") : undefined)) as string
+  const skuId = (getProp(payload, "skuId") ??
+    getProp(payload, "productId") ??
+    (meta ? getProp(meta, "productId") : undefined)) as string
   if (!skuId) return null
 
   return {
     provider,
     externalId,
     customerId: (getProp(payload, "customerId") ?? getProp(payload, "customer") ?? "") as string,
-    customerEmail: (getProp(payload, "customerEmail") ?? getProp(payload, "email") ?? (meta ? getProp(meta, "customerEmail") : undefined)) as string | undefined,
+    customerEmail: (getProp(payload, "customerEmail") ??
+      getProp(payload, "email") ??
+      (meta ? getProp(meta, "customerEmail") : undefined)) as string | undefined,
     grossAmount: String(getProp(payload, "amount") ?? getProp(payload, "grossAmount") ?? "0"),
-    discountAmount: String(getProp(payload, "discountAmount") ?? getProp(payload, "discount") ?? "0"),
+    discountAmount: String(
+      getProp(payload, "discountAmount") ?? getProp(payload, "discount") ?? "0"
+    ),
     taxAmount: String(getProp(payload, "taxAmount") ?? getProp(payload, "tax") ?? "0"),
     currency: (getProp(payload, "currency") ?? "USD") as string,
     skuId,
-    promoCode: (getProp(payload, "promoCode") ?? (meta ? getProp(meta, "promoCode") : undefined)) as string | null | undefined,
-    cookieToken: (getProp(payload, "cookieToken") ?? (meta ? getProp(meta, "affToken") : undefined)) as string | null | undefined,
-    subid: (getProp(payload, "subid") ?? (meta ? getProp(meta, "subid") : undefined)) as string | null | undefined,
+    promoCode: (getProp(payload, "promoCode") ??
+      (meta ? getProp(meta, "promoCode") : undefined)) as string | null | undefined,
+    cookieToken: (getProp(payload, "cookieToken") ??
+      (meta ? getProp(meta, "affToken") : undefined)) as string | null | undefined,
+    subid: (getProp(payload, "subid") ?? (meta ? getProp(meta, "subid") : undefined)) as
+      string | null | undefined,
   }
 }
 
@@ -222,9 +246,10 @@ function mapRefundPayload(
   payload: Record<string, unknown>,
   reason: ClawbackReason
 ): RefundPayload | null {
-  const externalId = (getProp(payload, "id") ?? getProp(payload, "orderId") ?? getProp(payload, "chargeId") ?? getProp(payload, "originalId")) as
-    | string
-    | undefined
+  const externalId = (getProp(payload, "id") ??
+    getProp(payload, "orderId") ??
+    getProp(payload, "chargeId") ??
+    getProp(payload, "originalId")) as string | undefined
   if (!externalId) return null
 
   return {

@@ -8,17 +8,10 @@ interface PayoutMethodFormProps {
   currentMethod: Record<string, unknown> | null
 }
 
-export function PayoutMethodForm({
-  affiliateId,
-  currentMethod,
-}: PayoutMethodFormProps) {
+export function PayoutMethodForm({ affiliateId, currentMethod }: PayoutMethodFormProps) {
   const router = useRouter()
-  const [type, setType] = useState(
-    (currentMethod?.type as string) ?? ""
-  )
-  const [taxFormType, setTaxFormType] = useState(
-    (currentMethod?.taxFormType as string) ?? ""
-  )
+  const [type, setType] = useState((currentMethod?.type as string) ?? "")
+  const [taxFormType, setTaxFormType] = useState((currentMethod?.taxFormType as string) ?? "")
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -131,8 +124,7 @@ export function PayoutMethodForm({
               type="text"
               value={upiId}
               onChange={(e) => setUpiId(e.target.value)}
-              maxLength={100
-              }
+              maxLength={100}
               className="mt-1 block w-full rounded-md border px-3 py-2"
             />
           </div>
@@ -241,9 +233,7 @@ export function PayoutMethodForm({
         {loading ? "Saving..." : "Save Payout Method"}
       </button>
 
-      {saved && (
-        <span className="ml-3 text-sm text-green-600">Saved!</span>
-      )}
+      {saved && <span className="ml-3 text-sm text-green-600">Saved!</span>}
     </form>
   )
 }

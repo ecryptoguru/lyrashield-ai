@@ -153,7 +153,8 @@ export async function POST(request: Request) {
     // ensure atomicity — either all findings + cursor update succeed, or
     // none do. This prevents partial writes from a compromised client.
     let persistedFindings = 0
-    const lastFindingId = findings.length > 0 ? findings[findings.length - 1]!.id : cursor.lastSyncedFindingId
+    const lastFindingId =
+      findings.length > 0 ? findings[findings.length - 1]!.id : cursor.lastSyncedFindingId
 
     await prisma.$transaction(async (tx) => {
       for (const finding of findings) {

@@ -19,10 +19,7 @@ export default async function BillingPage() {
   if (!workspaceId) {
     return (
       <div>
-        <PageHeader
-          title="Billing"
-          description="Manage your plan, usage, and minute packs."
-        />
+        <PageHeader title="Billing" description="Manage your plan, usage, and minute packs." />
         <NoWorkspaceState
           icon={CreditCard}
           description="Create a workspace during onboarding to manage billing."
@@ -37,8 +34,7 @@ export default async function BillingPage() {
     select: { role: true },
   })
 
-  const canManageBilling =
-    membership && hasPermission(membership.role, PERMISSIONS.billing.manage)
+  const canManageBilling = membership && hasPermission(membership.role, PERMISSIONS.billing.manage)
 
   const [billingAccount, balance, trialState, graceState] = await Promise.all([
     prisma.billingAccount.findUnique({
@@ -79,9 +75,7 @@ export default async function BillingPage() {
             <CardTitle className="flex items-center justify-between">
               <span>Current Plan</span>
               {isTrial && <Badge variant="muted">Trial</Badge>}
-              {billingAccount?.status === "canceled" && (
-                <Badge variant="danger">Canceled</Badge>
-              )}
+              {billingAccount?.status === "canceled" && <Badge variant="danger">Canceled</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -94,7 +88,9 @@ export default async function BillingPage() {
                   </p>
                 )}
               </div>
-              {canManageBilling && <BillingActions plan={plan} isTeam={isTeam} workspaceId={workspaceId} />}
+              {canManageBilling && (
+                <BillingActions plan={plan} isTeam={isTeam} workspaceId={workspaceId} />
+              )}
             </div>
 
             {billingAccount?.currentPeriodEnd && (
@@ -139,9 +135,7 @@ export default async function BillingPage() {
                   <span>Your trial has expired. Upgrade to continue scanning.</span>
                 </div>
               )}
-              {!trialState.isExpired && (
-                <UpgradeNowButton workspaceId={workspaceId} />
-              )}
+              {!trialState.isExpired && <UpgradeNowButton workspaceId={workspaceId} />}
             </CardContent>
           </Card>
         )}
@@ -196,7 +190,8 @@ export default async function BillingPage() {
               <div className="flex items-center gap-2 rounded-md bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
                 <AlertCircle className="h-4 w-4" />
                 <span>
-                  Grace period active: {Math.ceil(graceState.remainingMs / 60_000)} minutes remaining.
+                  Grace period active: {Math.ceil(graceState.remainingMs / 60_000)} minutes
+                  remaining.
                 </span>
               </div>
             )}
@@ -231,9 +226,7 @@ export default async function BillingPage() {
                 ))}
               </div>
             )}
-            {canManageBilling && (
-              <BuyPackButton workspaceId={workspaceId} />
-            )}
+            {canManageBilling && <BuyPackButton workspaceId={workspaceId} />}
           </CardContent>
         </Card>
 
@@ -245,12 +238,15 @@ export default async function BillingPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Set a monthly spend limit for overage minutes (beyond your included pool).
-                Overage is billed at $0.15/min.
+                Set a monthly spend limit for overage minutes (beyond your included pool). Overage
+                is billed at $0.15/min.
               </p>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">
-                  Current limit: {billingAccount?.spendLimitCents ? `$${(billingAccount.spendLimitCents / 100).toFixed(2)}` : "Not set"}
+                  Current limit:{" "}
+                  {billingAccount?.spendLimitCents
+                    ? `$${(billingAccount.spendLimitCents / 100).toFixed(2)}`
+                    : "Not set"}
                 </span>
               </div>
             </CardContent>

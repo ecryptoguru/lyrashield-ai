@@ -65,7 +65,9 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
 
       {props.showReactivate && (
         <button
-          onClick={() => action("reactivate", { action: "approve", affiliateId: props.affiliateId })}
+          onClick={() =>
+            action("reactivate", { action: "approve", affiliateId: props.affiliateId })
+          }
           disabled={loading === "reactivate"}
           className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
         >
@@ -75,7 +77,9 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
 
       {props.showPayoutApprove && (
         <button
-          onClick={() => action("approvePayout", { action: "approvePayout", payoutId: props.payoutId })}
+          onClick={() =>
+            action("approvePayout", { action: "approvePayout", payoutId: props.payoutId })
+          }
           disabled={loading === "approvePayout"}
           className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
         >

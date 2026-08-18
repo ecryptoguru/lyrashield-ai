@@ -34,10 +34,7 @@ export interface AffiliateCookieOptions {
  * Build the Set-Cookie string for the attribution token.
  * The token value is a random opaque id — the server does a DB lookup.
  */
-export function buildAffiliateCookie(
-  token: string,
-  options: AffiliateCookieOptions = {}
-): string {
+export function buildAffiliateCookie(token: string, options: AffiliateCookieOptions = {}): string {
   const domain = options.domain ?? env.AFFILIATE_COOKIE_DOMAIN ?? ".lyrashieldai.com"
   const maxAge = options.maxAge ?? AFFILIATE_COOKIE_MAX_AGE
   const secure = options.secure ?? env.NODE_ENV === "production"

@@ -83,9 +83,7 @@ export async function reconciliationJob(params?: {
 
   // If provider data is provided, compare
   if (params?.polarConversions) {
-    const externalMap = new Map(
-      params.polarConversions.map((c) => [c.externalId, c])
-    )
+    const externalMap = new Map(params.polarConversions.map((c) => [c.externalId, c]))
 
     for (const conv of conversions) {
       const external = externalMap.get(conv.externalId)

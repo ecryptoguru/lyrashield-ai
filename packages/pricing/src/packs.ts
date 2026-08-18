@@ -6,21 +6,21 @@
  * 3× the standard rate.
  */
 
-export type PackId = "pack_100" | "pack_250" | "pack_500";
+export type PackId = "pack_100" | "pack_250" | "pack_500"
 
 export interface MinutePack {
-  id: PackId;
-  name: string;
+  id: PackId
+  name: string
   /** Number of agent-minutes included. */
-  minutes: number;
+  minutes: number
   /** Price in USD (major units). */
-  priceUsd: number;
+  priceUsd: number
   /** Validity period in days from purchase. */
-  validityDays: number;
+  validityDays: number
   /** Overage rate per minute in USD (major units). */
-  overagePerMinuteUsd: number;
+  overagePerMinuteUsd: number
   /** Multiplier applied to minutes consumed by Deep/Custom scans. */
-  deepMultiplier: number;
+  deepMultiplier: number
 }
 
 export const MINUTE_PACKS: readonly MinutePack[] = [
@@ -51,19 +51,18 @@ export const MINUTE_PACKS: readonly MinutePack[] = [
     overagePerMinuteUsd: 0.15,
     deepMultiplier: 3,
   },
-] as const;
+] as const
 
 /** Map of pack id → MinutePack for O(1) lookup. */
-export const MINUTE_PACK_MAP: Readonly<Record<PackId, MinutePack>> =
-  Object.fromEntries(MINUTE_PACKS.map((p) => [p.id, p])) as Readonly<
-    Record<PackId, MinutePack>
-  >;
+export const MINUTE_PACK_MAP: Readonly<Record<PackId, MinutePack>> = Object.fromEntries(
+  MINUTE_PACKS.map((p) => [p.id, p])
+) as Readonly<Record<PackId, MinutePack>>
 
 /** Standard overage rate when all packs are exhausted. */
-export const STANDARD_OVERAGE_PER_MINUTE_USD = 0.15;
+export const STANDARD_OVERAGE_PER_MINUTE_USD = 0.15
 
 /** Deep/Custom scan minute multiplier. */
-export const DEEP_SCAN_MULTIPLIER = 3;
+export const DEEP_SCAN_MULTIPLIER = 3
 
 /** Pack validity in days (all packs share the same validity). */
-export const PACK_VALIDITY_DAYS = 180;
+export const PACK_VALIDITY_DAYS = 180

@@ -11,12 +11,7 @@ export {
   type RegionalPrice,
 } from "@lyrashield/pricing"
 
-export {
-  LOCAL_SKUS,
-  LOCAL_SKU_MAP,
-  type LocalSku,
-  type LocalSkuId,
-} from "@lyrashield/pricing"
+export { LOCAL_SKUS, LOCAL_SKU_MAP, type LocalSku, type LocalSkuId } from "@lyrashield/pricing"
 
 export {
   MINUTE_PACKS,

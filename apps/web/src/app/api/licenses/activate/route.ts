@@ -140,15 +140,17 @@ export async function POST(request: Request) {
     })
 
     // B-L01: Audit log the activation
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: license.workspaceId ?? license.id,
-        action: "license.activated",
-        resourceType: "license",
-        resourceId: license.id,
-        metadata: { machineId, machineCount: result.machineIds.length, sku },
-      },
-    }).catch(() => {})
+    await prisma.auditLog
+      .create({
+        data: {
+          workspaceId: license.workspaceId ?? license.id,
+          action: "license.activated",
+          resourceType: "license",
+          resourceId: license.id,
+          metadata: { machineId, machineCount: result.machineIds.length, sku },
+        },
+      })
+      .catch(() => {})
 
     return apiSuccess({ license: licenseFile }, 200)
   } catch (error) {

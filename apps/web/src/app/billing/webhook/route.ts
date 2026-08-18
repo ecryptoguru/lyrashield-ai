@@ -48,7 +48,10 @@ export async function POST(request: Request) {
 
   if (!hasPolarHeaders && !hasRazorpayHeaders) {
     return NextResponse.json(
-      { success: false, error: { code: "UNKNOWN_PROVIDER", message: "Unrecognized webhook provider" } },
+      {
+        success: false,
+        error: { code: "UNKNOWN_PROVIDER", message: "Unrecognized webhook provider" },
+      },
       { status: 400 }
     )
   }
@@ -169,7 +172,10 @@ export async function POST(request: Request) {
     // A-M04: Return 500 (not 400) on processing errors so the provider retries.
     // Returning 400 causes the provider to stop retrying, permanently stranding events.
     return NextResponse.json(
-      { success: false, error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" } },
+      {
+        success: false,
+        error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+      },
       { status: 500 }
     )
   }
@@ -197,14 +203,16 @@ async function maybeIssueLicense(
 
     const buyerEmail = (payload.customerEmail ?? payload.email) as string | undefined
     if (!buyerEmail) {
-      logger.warn("Local SKU order missing buyer email — cannot issue license", { externalId, productId })
+      logger.warn("Local SKU order missing buyer email — cannot issue license", {
+        externalId,
+        productId,
+      })
       return
     }
 
     const seatCount = (payload.seatCount as number) ?? 1
     const sku = Object.values(LOCAL_SKU_MAP).find((s) => s.id === productId) as
-      | { id: LocalSkuId }
-      | undefined
+      { id: LocalSkuId } | undefined
     if (!sku) return
 
     logger.info("Issuing license for Local SKU order", {

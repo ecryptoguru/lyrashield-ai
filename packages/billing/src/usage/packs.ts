@@ -74,7 +74,11 @@ export async function creditTopUp(
         expiresAt: expiry,
       },
     })
-    logger.info("Restored soft-deleted minute pack", { workspaceId, externalId, packId: existing.id })
+    logger.info("Restored soft-deleted minute pack", {
+      workspaceId,
+      externalId,
+      packId: existing.id,
+    })
     return { created: true, minutes, packId: existing.id, expiresAt: expiry }
   }
 

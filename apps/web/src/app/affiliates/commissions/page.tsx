@@ -73,13 +73,9 @@ export default async function AffiliateCommissionsPage() {
             ) : (
               commissions.map((c) => (
                 <tr key={c.id} className="border-b">
+                  <td className="py-2 pr-4">{new Date(c.earnedAt).toLocaleDateString()}</td>
                   <td className="py-2 pr-4">
-                    {new Date(c.earnedAt).toLocaleDateString()}
-                  </td>
-                  <td className="py-2 pr-4">
-                    {c.availableAt
-                      ? new Date(c.availableAt).toLocaleDateString()
-                      : "—"}
+                    {c.availableAt ? new Date(c.availableAt).toLocaleDateString() : "—"}
                   </td>
                   <td className="py-2 pr-4">{c.rateBps / 100}%</td>
                   <td className="py-2 pr-4">

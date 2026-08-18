@@ -25,9 +25,9 @@ test.describe("Affiliate lifecycle", () => {
     await page.getByLabel("Email").fill(affiliateEmail)
     await page.locator("#password").fill(password)
     await page.getByRole("button", { name: "Create account" }).click()
-    await expect.poll(() =>
-      prisma.user.findUnique({ where: { email: affiliateEmail } })
-    ).not.toBeNull()
+    await expect
+      .poll(() => prisma.user.findUnique({ where: { email: affiliateEmail } }))
+      .not.toBeNull()
     await prisma.user.update({
       where: { email: affiliateEmail },
       data: { emailVerified: true },
@@ -39,15 +39,23 @@ test.describe("Affiliate lifecycle", () => {
     await page.getByLabel("Website / Channel URL").fill("https://example.com/blog")
     await page.getByLabel("Audience Size").selectOption("1k-10k")
     await page.getByLabel("Audience Type").selectOption("developers")
-    await page.getByLabel("Promotion Methods").fill("Blog posts and newsletter about AI security tools")
+    await page
+      .getByLabel("Promotion Methods")
+      .fill("Blog posts and newsletter about AI security tools")
     await page.getByLabel("Preferred Payout Method").selectOption("payoneer")
     await page.getByLabel("Tax Form Status").selectOption("will_complete")
     await page.getByRole("button", { name: "Submit Application" }).click()
 
     // Verify application was created
-    const affiliate = await expect.poll(() =>
-      prisma.affiliate.findUnique({ where: { userId: (await prisma.user.findUnique({ where: { email: affiliateEmail } }))!.id } })
-    ).not.toBeNull()
+    const affiliate = await expect
+      .poll(() =>
+        prisma.affiliate.findUnique({
+          where: {
+            userId: (await prisma.user.findUnique({ where: { email: affiliateEmail } }))!.id,
+          },
+        })
+      )
+      .not.toBeNull()
 
     expect(affiliate.status).toBe("PENDING")
 
@@ -78,12 +86,14 @@ test.describe("Affiliate lifecycle", () => {
     expect(clickResponse.status()).toBe(200)
 
     // Verify click was recorded
-    await expect.poll(async () => {
-      const clicks = await prisma.click.count({
-        where: { affiliateId: affiliate.id },
+    await expect
+      .poll(async () => {
+        const clicks = await prisma.click.count({
+          where: { affiliateId: affiliate.id },
+        })
+        return clicks
       })
-      return clicks
-    }).toBeGreaterThanOrEqual(1)
+      .toBeGreaterThanOrEqual(1)
 
     // 5. Sign up as the referred user (with cookie from the click)
     // First sign out
@@ -97,9 +107,9 @@ test.describe("Affiliate lifecycle", () => {
     await page.getByLabel("Email").fill(referredEmail)
     await page.locator("#password").fill(password)
     await page.getByRole("button", { name: "Create account" }).click()
-    await expect.poll(() =>
-      prisma.user.findUnique({ where: { email: referredEmail } })
-    ).not.toBeNull()
+    await expect
+      .poll(() => prisma.user.findUnique({ where: { email: referredEmail } }))
+      .not.toBeNull()
 
     const referredUser = await prisma.user.findUnique({
       where: { email: referredEmail },

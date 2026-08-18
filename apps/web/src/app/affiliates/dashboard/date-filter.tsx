@@ -14,9 +14,7 @@ export function DateFilter({ current }: { current: string }) {
           key={r.value}
           href={`/affiliates/dashboard?range=${r.value}`}
           className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-            current === r.value
-              ? "bg-primary text-primary-foreground"
-              : "border hover:bg-muted"
+            current === r.value ? "bg-primary text-primary-foreground" : "border hover:bg-muted"
           }`}
         >
           {r.label}

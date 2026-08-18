@@ -140,11 +140,21 @@ async function decrementPackMinutes(workspaceId: string, _minutesConsumed: numbe
 
   const [grantRecords, consumeRecords] = await Promise.all([
     prisma.usageRecord.findMany({
-      where: { workspaceId, kind: { in: ["pool_grant", "trial_grant"] }, deletedAt: null, cycleStart: { gte: cycleStart } },
+      where: {
+        workspaceId,
+        kind: { in: ["pool_grant", "trial_grant"] },
+        deletedAt: null,
+        cycleStart: { gte: cycleStart },
+      },
       select: { quantity: true },
     }),
     prisma.usageRecord.findMany({
-      where: { workspaceId, kind: "agent_minutes", deletedAt: null, cycleStart: { gte: cycleStart } },
+      where: {
+        workspaceId,
+        kind: "agent_minutes",
+        deletedAt: null,
+        cycleStart: { gte: cycleStart },
+      },
       select: { quantity: true },
     }),
   ])

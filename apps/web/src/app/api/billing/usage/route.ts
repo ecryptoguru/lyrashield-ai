@@ -42,42 +42,45 @@ export async function GET(request: Request) {
       }),
     ])
 
-    return apiSuccess({
-      plan: billingAccount?.currentPlan ?? "FREE",
-      status: billingAccount?.status ?? "free",
-      interval: billingAccount?.interval ?? null,
-      currentPeriodStart: billingAccount?.currentPeriodStart?.toISOString() ?? null,
-      currentPeriodEnd: billingAccount?.currentPeriodEnd?.toISOString() ?? null,
-      usage: {
-        poolMinutes: balance.poolMinutes,
-        poolConsumed: balance.poolConsumed,
-        poolRemaining: balance.poolRemaining,
-        packRemaining: balance.packRemaining,
-        totalRemaining: balance.totalRemaining,
-        packs: balance.packs.map((p) => ({
-          id: p.id,
-          remainingMinutes: p.remainingMinutes,
-          expiresAt: p.expiresAt?.toISOString() ?? null,
-          purchasedAt: p.purchasedAt.toISOString(),
-        })),
+    return apiSuccess(
+      {
+        plan: billingAccount?.currentPlan ?? "FREE",
+        status: billingAccount?.status ?? "free",
+        interval: billingAccount?.interval ?? null,
+        currentPeriodStart: billingAccount?.currentPeriodStart?.toISOString() ?? null,
+        currentPeriodEnd: billingAccount?.currentPeriodEnd?.toISOString() ?? null,
+        usage: {
+          poolMinutes: balance.poolMinutes,
+          poolConsumed: balance.poolConsumed,
+          poolRemaining: balance.poolRemaining,
+          packRemaining: balance.packRemaining,
+          totalRemaining: balance.totalRemaining,
+          packs: balance.packs.map((p) => ({
+            id: p.id,
+            remainingMinutes: p.remainingMinutes,
+            expiresAt: p.expiresAt?.toISOString() ?? null,
+            purchasedAt: p.purchasedAt.toISOString(),
+          })),
+        },
+        trial: {
+          isActive: trialState.isActive,
+          isExpired: trialState.isExpired,
+          startedAt: trialState.startedAt?.toISOString() ?? null,
+          endsAt: trialState.endsAt?.toISOString() ?? null,
+          daysLeft: trialState.daysLeft,
+          minutesLeft: trialState.minutesLeft,
+          targetsUsed: trialState.targetsUsed,
+          targetCap: trialState.targetCap,
+        },
+        grace: {
+          inGrace: graceState.inGrace,
+          usedMs: graceState.usedMs,
+          remainingMs: graceState.remainingMs,
+          exceeded: graceState.exceeded,
+        },
       },
-      trial: {
-        isActive: trialState.isActive,
-        isExpired: trialState.isExpired,
-        startedAt: trialState.startedAt?.toISOString() ?? null,
-        endsAt: trialState.endsAt?.toISOString() ?? null,
-        daysLeft: trialState.daysLeft,
-        minutesLeft: trialState.minutesLeft,
-        targetsUsed: trialState.targetsUsed,
-        targetCap: trialState.targetCap,
-      },
-      grace: {
-        inGrace: graceState.inGrace,
-        usedMs: graceState.usedMs,
-        remainingMs: graceState.remainingMs,
-        exceeded: graceState.exceeded,
-      },
-    }, 200)
+      200
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

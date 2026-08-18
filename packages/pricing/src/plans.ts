@@ -9,40 +9,35 @@
  * without floating-point arithmetic.
  */
 
-export type CloudPlanId =
-  | "TRIAL"
-  | "STARTER"
-  | "PRO"
-  | "TEAM"
-  | "AGENCY";
+export type CloudPlanId = "TRIAL" | "STARTER" | "PRO" | "TEAM" | "AGENCY"
 
 export interface PlanPrice {
   /** Monthly price in major currency units (e.g. 29 = $29). */
-  monthly: number;
+  monthly: number
   /** Annual price in major currency units (e.g. 295 = $295/yr). */
-  annual: number;
+  annual: number
 }
 
 export interface RegionalPrice {
-  usd: PlanPrice;
-  inr: PlanPrice;
+  usd: PlanPrice
+  inr: PlanPrice
 }
 
 export interface CloudPlan {
-  id: CloudPlanId;
-  name: string;
+  id: CloudPlanId
+  name: string
   /** Included agent-minutes per month. */
-  agentMinutes: number;
+  agentMinutes: number
   /** Target scan cap per month (advisory, not hard-enforced). */
-  targetCaps: number;
+  targetCaps: number
   /** Whether Deep/Custom scans are allowed on this plan. */
-  deepAllowed: boolean;
+  deepAllowed: boolean
   /** Whether this plan has a self-serve checkout flow. */
-  selfServe: boolean;
+  selfServe: boolean
   /** Price by region. */
-  price: RegionalPrice;
+  price: RegionalPrice
   /** Human-readable feature list for marketing/checkout. */
-  features: string[];
+  features: string[]
 }
 
 export const CLOUD_PLANS: readonly CloudPlan[] = [
@@ -145,10 +140,9 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       "Custom integrations",
     ],
   },
-] as const;
+] as const
 
 /** Map of plan id → CloudPlan for O(1) lookup. */
-export const CLOUD_PLAN_MAP: Readonly<Record<CloudPlanId, CloudPlan>> =
-  Object.fromEntries(CLOUD_PLANS.map((p) => [p.id, p])) as Readonly<
-    Record<CloudPlanId, CloudPlan>
-  >;
+export const CLOUD_PLAN_MAP: Readonly<Record<CloudPlanId, CloudPlan>> = Object.fromEntries(
+  CLOUD_PLANS.map((p) => [p.id, p])
+) as Readonly<Record<CloudPlanId, CloudPlan>>

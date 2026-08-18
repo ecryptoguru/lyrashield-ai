@@ -45,7 +45,9 @@ export interface TrialState {
  * Sets trialStartedAt on the Workspace and grants 100 one-time agent-minutes.
  * Idempotent: if a trial has already started, this is a no-op.
  */
-export async function startTrial(workspaceId: string): Promise<{ started: boolean; trialEndsAt: Date }> {
+export async function startTrial(
+  workspaceId: string
+): Promise<{ started: boolean; trialEndsAt: Date }> {
   const now = new Date()
   const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
 
@@ -127,7 +129,10 @@ export async function getTrialState(workspaceId: string): Promise<TrialState> {
     workspace.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
   )
   const isExpired = now > endsAt
-  const daysLeft = Math.max(0, Math.ceil((endsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+  const daysLeft = Math.max(
+    0,
+    Math.ceil((endsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+  )
 
   // Get remaining minutes
   const trialPlan = CLOUD_PLAN_MAP.TRIAL
@@ -196,15 +201,17 @@ export async function blockOnExpiry(workspaceId: string): Promise<{ blocked: boo
   })
 
   // A-L03: Audit log trial expiry block
-  await prisma.auditLog.create({
-    data: {
-      workspaceId,
-      action: "billing.trial_expired",
-      resourceType: "workspace",
-      resourceId: workspaceId,
-      metadata: { trialStartedAt: trialState.startedAt },
-    },
-  }).catch(() => {})
+  await prisma.auditLog
+    .create({
+      data: {
+        workspaceId,
+        action: "billing.trial_expired",
+        resourceType: "workspace",
+        resourceId: workspaceId,
+        metadata: { trialStartedAt: trialState.startedAt },
+      },
+    })
+    .catch(() => {})
 
   logger.info("Trial expired — workspace locked", { workspaceId })
 

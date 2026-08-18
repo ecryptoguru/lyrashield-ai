@@ -19,10 +19,7 @@ const ApplySchema = z.object({
 export async function POST(request: Request) {
   const session = await getCachedSession()
   if (!session) {
-    return NextResponse.json(
-      { success: false, error: "Authentication required" },
-      { status: 401 }
-    )
+    return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
   }
 
   // C-L09: CSRF protection — verify Origin/Referer header matches the app URL
@@ -48,10 +45,7 @@ export async function POST(request: Request) {
 
   const formData = await request.formData().catch(() => null)
   if (!formData) {
-    return NextResponse.json(
-      { success: false, error: "Invalid form data" },
-      { status: 400 }
-    )
+    return NextResponse.json({ success: false, error: "Invalid form data" }, { status: 400 })
   }
 
   const data = Object.fromEntries(formData.entries())
@@ -74,10 +68,7 @@ export async function POST(request: Request) {
   })
 
   if (existing) {
-    return NextResponse.json(
-      { success: false, error: "You have already applied" },
-      { status: 409 }
-    )
+    return NextResponse.json({ success: false, error: "You have already applied" }, { status: 409 })
   }
 
   // S9: Fraud signal detection — reject applications with high-severity signals
@@ -132,8 +123,5 @@ export async function POST(request: Request) {
     userId: session.userId,
   })
 
-  return NextResponse.json(
-    { success: true, affiliateId: affiliate.id },
-    { status: 201 }
-  )
+  return NextResponse.json({ success: true, affiliateId: affiliate.id }, { status: 201 })
 }

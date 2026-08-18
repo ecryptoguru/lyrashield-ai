@@ -77,22 +77,15 @@ export default async function AffiliateAdminPage() {
       />
 
       <section className="mt-6">
-        <h2 className="mb-4 text-lg font-semibold">
-          Approval Queue ({pending.length})
-        </h2>
+        <h2 className="mb-4 text-lg font-semibold">Approval Queue ({pending.length})</h2>
         <div className="space-y-3">
           {pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">No pending applications.</p>
           ) : (
             pending.map((aff) => (
-              <div
-                key={aff.id}
-                className="flex items-center justify-between rounded-lg border p-4"
-              >
+              <div key={aff.id} className="flex items-center justify-between rounded-lg border p-4">
                 <div>
-                  <div className="font-medium">
-                    {aff.user.name ?? aff.user.email}
-                  </div>
+                  <div className="font-medium">{aff.user.name ?? aff.user.email}</div>
                   <div className="text-sm text-muted-foreground">
                     Applied {new Date(aff.createdAt).toLocaleDateString()}
                   </div>
@@ -105,9 +98,7 @@ export default async function AffiliateAdminPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">
-          Approved Affiliates ({approved.length})
-        </h2>
+        <h2 className="mb-4 text-lg font-semibold">Approved Affiliates ({approved.length})</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -123,9 +114,7 @@ export default async function AffiliateAdminPage() {
             <tbody>
               {approved.map((aff) => (
                 <tr key={aff.id} className="border-b">
-                  <td className="py-2 pr-4">
-                    {aff.user.name ?? aff.user.email}
-                  </td>
+                  <td className="py-2 pr-4">{aff.user.name ?? aff.user.email}</td>
                   <td className="py-2 pr-4">{aff.activeReferrals}</td>
                   <td className="py-2 pr-4">{aff._count.commissions}</td>
                   <td className="py-2 pr-4">{aff._count.clicks}</td>
@@ -147,18 +136,13 @@ export default async function AffiliateAdminPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">
-          Pending Payouts ({payouts.length})
-        </h2>
+        <h2 className="mb-4 text-lg font-semibold">Pending Payouts ({payouts.length})</h2>
         <div className="space-y-3">
           {payouts.length === 0 ? (
             <p className="text-sm text-muted-foreground">No pending payouts.</p>
           ) : (
             payouts.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between rounded-lg border p-4"
-              >
+              <div key={p.id} className="flex items-center justify-between rounded-lg border p-4">
                 <div>
                   <div className="font-medium">
                     {p.affiliate.user.name ?? p.affiliate.user.email}
@@ -177,19 +161,12 @@ export default async function AffiliateAdminPage() {
 
       {suspended.length > 0 && (
         <section className="mt-8">
-          <h2 className="mb-4 text-lg font-semibold">
-            Suspended Affiliates ({suspended.length})
-          </h2>
+          <h2 className="mb-4 text-lg font-semibold">Suspended Affiliates ({suspended.length})</h2>
           <div className="space-y-3">
             {suspended.map((aff) => (
-              <div
-                key={aff.id}
-                className="flex items-center justify-between rounded-lg border p-4"
-              >
+              <div key={aff.id} className="flex items-center justify-between rounded-lg border p-4">
                 <div>
-                  <div className="font-medium">
-                    {aff.user.name ?? aff.user.email}
-                  </div>
+                  <div className="font-medium">{aff.user.name ?? aff.user.email}</div>
                 </div>
                 <AffiliateAdminActions affiliateId={aff.id} showReactivate />
               </div>

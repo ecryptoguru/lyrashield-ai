@@ -28,13 +28,10 @@ export default async function AffiliateApplyPage() {
         <h1 className="text-2xl font-bold">Application Submitted</h1>
         <p className="mt-4 text-muted-foreground">
           Your affiliate application is currently{" "}
-          <span className="font-semibold">{existing.status}</span>. Our team will
-          review it and notify you of the decision.
+          <span className="font-semibold">{existing.status}</span>. Our team will review it and
+          notify you of the decision.
         </p>
-        <Link
-          href="/"
-          className="mt-6 inline-block text-primary hover:underline"
-        >
+        <Link href="/" className="mt-6 inline-block text-primary hover:underline">
           Back to home
         </Link>
       </div>

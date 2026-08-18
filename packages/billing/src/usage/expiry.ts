@@ -51,17 +51,19 @@ export async function expirePacks(): Promise<ExpirePacksResult> {
 
   // A-L03: Create audit log entries for each expired pack
   for (const pack of packsToExpire) {
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: pack.workspaceId,
-        action: "billing.pack_expired",
-        resourceType: "minute_pack",
-        resourceId: pack.id,
-        metadata: { remainingMinutes: pack.remainingMinutes },
-      },
-    }).catch(() => {
-      // Non-blocking — audit failure shouldn't break the expiry job
-    })
+    await prisma.auditLog
+      .create({
+        data: {
+          workspaceId: pack.workspaceId,
+          action: "billing.pack_expired",
+          resourceType: "minute_pack",
+          resourceId: pack.id,
+          metadata: { remainingMinutes: pack.remainingMinutes },
+        },
+      })
+      .catch(() => {
+        // Non-blocking — audit failure shouldn't break the expiry job
+      })
   }
 
   if (result.count > 0) {

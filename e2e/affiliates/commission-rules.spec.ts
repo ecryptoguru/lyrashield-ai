@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test"
 import { prisma } from "@lyrashield/db"
-import { onOrderPaid, onRefund, checkPayoutEligibility, computeReserve } from "@lyrashield/affiliate"
+import {
+  onOrderPaid,
+  onRefund,
+  checkPayoutEligibility,
+  computeReserve,
+} from "@lyrashield/affiliate"
 
 /**
  * E2E: Commission rules.
@@ -26,7 +31,7 @@ test.describe("Commission rules", () => {
       },
     })
 
-    affiliate = await prisma.affiliate.create({
+    affiliate = (await prisma.affiliate.create({
       data: {
         userId: user.id,
         status: "APPROVED",
@@ -36,7 +41,7 @@ test.describe("Commission rules", () => {
         reservePct: 25,
         reserveUntil: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       },
-    }) as { id: string; userId: string }
+    })) as { id: string; userId: string }
   })
 
   test("tier escalation: 10 active referred subs → 30%", async () => {

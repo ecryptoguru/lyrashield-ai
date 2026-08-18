@@ -20,12 +20,7 @@ function makeSignedLicense(overrides: Partial<LicenseFile> = {}): LicenseFile {
   const perpetualFallbackBuild = overrides.perpetualFallbackBuild ?? null
   // signLicense takes (payload, privateKeyPem, signingKeyId, perpetualFallbackBuild)
   // and returns a complete LicenseFile
-  const license = signLicense(
-    payload,
-    privateKeyPem,
-    TEST_SIGNING_KEY_ID,
-    perpetualFallbackBuild
-  )
+  const license = signLicense(payload, privateKeyPem, TEST_SIGNING_KEY_ID, perpetualFallbackBuild)
   return { ...license, ...overrides }
 }
 

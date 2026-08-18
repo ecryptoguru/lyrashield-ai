@@ -77,10 +77,7 @@ export default async function LicensesPage({
         icon={KeyRound}
       />
       {initialData.length === 0 && !query ? (
-        <NoWorkspaceState
-          icon={KeyRound}
-          description="No licenses have been issued yet."
-        />
+        <NoWorkspaceState icon={KeyRound} description="No licenses have been issued yet." />
       ) : (
         <LicensesClient initialData={initialData} query={query} statusFilter={statusFilter} />
       )}

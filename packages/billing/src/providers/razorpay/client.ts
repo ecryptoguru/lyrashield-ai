@@ -77,18 +77,20 @@ export async function createRazorpayPaymentLink(params: {
   if (!client) return null
 
   try {
-    const paymentLink = await (client as unknown as {
-      paymentLink: {
-        create: (params: {
-          amount: number
-          currency: string
-          description: string
-          notes?: Record<string, string>
-          callback_url: string
-          callback_method: string
-        }) => Promise<{ id: string; short_url: string }>
+    const paymentLink = await (
+      client as unknown as {
+        paymentLink: {
+          create: (params: {
+            amount: number
+            currency: string
+            description: string
+            notes?: Record<string, string>
+            callback_url: string
+            callback_method: string
+          }) => Promise<{ id: string; short_url: string }>
+        }
       }
-    }).paymentLink.create({
+    ).paymentLink.create({
       amount: params.amount,
       currency: "INR",
       description: params.description,
@@ -109,9 +111,7 @@ export async function createRazorpayPaymentLink(params: {
 /**
  * Cancel a Razorpay subscription.
  */
-export async function cancelRazorpaySubscription(
-  subscriptionId: string
-): Promise<boolean> {
+export async function cancelRazorpaySubscription(subscriptionId: string): Promise<boolean> {
   const client = getRazorpayClient()
   if (!client) return false
 

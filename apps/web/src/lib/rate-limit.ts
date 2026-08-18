@@ -245,7 +245,11 @@ export async function checkInvitationCreateRateLimit(workspaceId: string) {
 /** A-M08: Bounds billing checkout/topup creation per workspace per minute. */
 const BILLING_CHECKOUT_MAX = 10
 export async function checkBillingCheckoutRateLimit(workspaceId: string) {
-  const upstash = await checkUpstash(BILLING_CHECKOUT_MAX, "60 s", `billing-checkout:${workspaceId}`)
+  const upstash = await checkUpstash(
+    BILLING_CHECKOUT_MAX,
+    "60 s",
+    `billing-checkout:${workspaceId}`
+  )
   if (upstash) return upstash
   return checkInMemory(`billing-checkout:${workspaceId}`, BILLING_CHECKOUT_MAX, WINDOW_MS)
 }
@@ -264,5 +268,9 @@ const AFFILIATE_LINK_WINDOW_MS = 60 * 60 * 1000
 export async function checkAffiliateLinkRateLimit(affiliateId: string) {
   const upstash = await checkUpstash(AFFILIATE_LINK_MAX, "1 h", `affiliate-link:${affiliateId}`)
   if (upstash) return upstash
-  return checkInMemory(`affiliate-link:${affiliateId}`, AFFILIATE_LINK_MAX, AFFILIATE_LINK_WINDOW_MS)
+  return checkInMemory(
+    `affiliate-link:${affiliateId}`,
+    AFFILIATE_LINK_MAX,
+    AFFILIATE_LINK_WINDOW_MS
+  )
 }

@@ -7,7 +7,13 @@
  * (production — TODO: wire Key Vault client).
  */
 
-import { createHash, createPrivateKey, createPublicKey, randomUUID, timingSafeEqual } from "node:crypto"
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto"
 import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { getLocalSku, type LocalSkuId } from "@lyrashield/pricing"

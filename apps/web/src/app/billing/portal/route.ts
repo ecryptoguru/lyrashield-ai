@@ -40,20 +40,20 @@ export async function GET(_request: Request) {
     if (billingAccount.provider === "polar") {
       const url = await getPolarPortalUrl({ customerId: billingAccount.externalId })
       if (!url) {
-        return apiError(
-          "PROVIDER_NOT_CONFIGURED",
-          "Polar portal is not configured.",
-          503
-        )
+        return apiError("PROVIDER_NOT_CONFIGURED", "Polar portal is not configured.", 503)
       }
       return apiSuccess({ url }, 200)
     }
 
     // Razorpay doesn't have a self-serve portal — redirect to support
-    return apiSuccess({
-      url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
-      message: "Razorpay customers: manage your subscription from the dashboard or contact support.",
-    }, 200)
+    return apiSuccess(
+      {
+        url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
+        message:
+          "Razorpay customers: manage your subscription from the dashboard or contact support.",
+      },
+      200
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

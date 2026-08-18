@@ -60,10 +60,7 @@ const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000
  * @param signature - Value of X-Razorpay-Signature header
  * @returns The parsed event, or throws if validation fails.
  */
-export function validateRazorpayWebhook(
-  body: string,
-  signature: string
-): RazorpayWebhookEvent {
+export function validateRazorpayWebhook(body: string, signature: string): RazorpayWebhookEvent {
   const secret = env.RAZORPAY_WEBHOOK_SECRET
   if (!secret) {
     throw new Error("RAZORPAY_WEBHOOK_SECRET is not configured")
@@ -92,7 +89,9 @@ export function validateRazorpayWebhook(
   const eventTimestampMs = parsed.created_at * 1000
   const ageMs = Date.now() - eventTimestampMs
   if (ageMs > DEFAULT_TOLERANCE_MS) {
-    throw new Error(`Razorpay webhook timestamp outside tolerance (${ageMs}ms > ${DEFAULT_TOLERANCE_MS}ms)`)
+    throw new Error(
+      `Razorpay webhook timestamp outside tolerance (${ageMs}ms > ${DEFAULT_TOLERANCE_MS}ms)`
+    )
   }
 
   return parsed

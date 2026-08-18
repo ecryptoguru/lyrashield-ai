@@ -101,17 +101,19 @@ export async function reverseRefund(
   })
 
   // A-L03: Audit log the refund reversal
-  await prisma.auditLog.create({
-    data: {
-      workspaceId,
-      action: "billing.refund_reversed",
-      resourceType: "refund",
-      resourceId: refundExternalId,
-      metadata: { reversed, minutesReversed },
-    },
-  }).catch(() => {
-    // Non-blocking — audit failure shouldn't break the reversal
-  })
+  await prisma.auditLog
+    .create({
+      data: {
+        workspaceId,
+        action: "billing.refund_reversed",
+        resourceType: "refund",
+        resourceId: refundExternalId,
+        metadata: { reversed, minutesReversed },
+      },
+    })
+    .catch(() => {
+      // Non-blocking — audit failure shouldn't break the reversal
+    })
 
   return { created: true, reversed, minutesReversed }
 }

@@ -33,14 +33,30 @@ export function verifyLicense(
   if (typeof licenseFile.sku !== "string" || licenseFile.sku.length === 0) {
     return { valid: false, updateEligible: false, license: null, reason: "invalid_sku" }
   }
-  if (typeof licenseFile.seatCount !== "number" || !Number.isFinite(licenseFile.seatCount) || licenseFile.seatCount <= 0 || licenseFile.seatCount > 10000) {
+  if (
+    typeof licenseFile.seatCount !== "number" ||
+    !Number.isFinite(licenseFile.seatCount) ||
+    licenseFile.seatCount <= 0 ||
+    licenseFile.seatCount > 10000
+  ) {
     return { valid: false, updateEligible: false, license: null, reason: "invalid_seat_count" }
   }
-  if (!Array.isArray(licenseFile.machineIds) || !licenseFile.machineIds.every((id) => typeof id === "string")) {
+  if (
+    !Array.isArray(licenseFile.machineIds) ||
+    !licenseFile.machineIds.every((id) => typeof id === "string")
+  ) {
     return { valid: false, updateEligible: false, license: null, reason: "invalid_machine_ids" }
   }
-  if (typeof licenseFile.updateEligibleUntil !== "string" || Number.isNaN(Date.parse(licenseFile.updateEligibleUntil))) {
-    return { valid: false, updateEligible: false, license: null, reason: "invalid_update_eligible_until" }
+  if (
+    typeof licenseFile.updateEligibleUntil !== "string" ||
+    Number.isNaN(Date.parse(licenseFile.updateEligibleUntil))
+  ) {
+    return {
+      valid: false,
+      updateEligible: false,
+      license: null,
+      reason: "invalid_update_eligible_until",
+    }
   }
 
   const { signature, signingKeyId, issuedAt, ...payloadFields } = licenseFile
@@ -107,8 +123,7 @@ export function verifyLicense(
 
   const now = Date.now()
   const eligibleUntil = Date.parse(licenseFile.updateEligibleUntil)
-  const updateEligible =
-    !Number.isNaN(eligibleUntil) && eligibleUntil > now
+  const updateEligible = !Number.isNaN(eligibleUntil) && eligibleUntil > now
 
   return {
     valid: true,
@@ -129,10 +144,7 @@ export function verifyLicense(
  * semver-style strings (e.g. "1.2.0"). Returns `false` if the fallback build
  * is null and eligibility has expired.
  */
-export function isBuildInstallable(
-  licenseFile: LicenseFile,
-  buildVersion: string
-): boolean {
+export function isBuildInstallable(licenseFile: LicenseFile, buildVersion: string): boolean {
   const now = Date.now()
   const eligibleUntil = Date.parse(licenseFile.updateEligibleUntil)
   const stillEligible = !Number.isNaN(eligibleUntil) && eligibleUntil > now

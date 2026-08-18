@@ -1,11 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { generateKeyPairSync } from "node:crypto"
-import {
-  signLicense,
-  verifyLicense,
-  canonicalJSON,
-  type LicenseFile,
-} from "@lyrashield/licenses"
+import { signLicense, verifyLicense, canonicalJSON, type LicenseFile } from "@lyrashield/licenses"
 
 /**
  * License signature verification tests (pure crypto, no server needed).
@@ -96,8 +91,20 @@ test.describe("License signing and verification", () => {
   })
 
   test("canonical JSON is deterministic regardless of key insertion order", () => {
-    const a = { sku: "individual_launch", seatCount: 1, machineIds: ["a", "b"], updateEligibleUntil: "2026-01-01", perpetualFallbackBuild: null }
-    const b = { machineIds: ["a", "b"], perpetualFallbackBuild: null, sku: "individual_launch", updateEligibleUntil: "2026-01-01", seatCount: 1 }
+    const a = {
+      sku: "individual_launch",
+      seatCount: 1,
+      machineIds: ["a", "b"],
+      updateEligibleUntil: "2026-01-01",
+      perpetualFallbackBuild: null,
+    }
+    const b = {
+      machineIds: ["a", "b"],
+      perpetualFallbackBuild: null,
+      sku: "individual_launch",
+      updateEligibleUntil: "2026-01-01",
+      seatCount: 1,
+    }
 
     expect(canonicalJSON(a)).toBe(canonicalJSON(b))
   })

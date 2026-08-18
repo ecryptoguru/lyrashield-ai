@@ -11,18 +11,12 @@ const RequestSchema = z.object({
 export async function POST(request: Request) {
   const session = await getCachedSession()
   if (!session) {
-    return NextResponse.json(
-      { success: false, error: "Authentication required" },
-      { status: 401 }
-    )
+    return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
   }
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: "Invalid request" },
-      { status: 400 }
-    )
+    return NextResponse.json({ success: false, error: "Invalid request" }, { status: 400 })
   }
 
   // Verify ownership
@@ -32,17 +26,11 @@ export async function POST(request: Request) {
   })
 
   if (!affiliate || affiliate.userId !== session.userId) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized" },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 })
   }
 
   if (affiliate.status !== "APPROVED") {
-    return NextResponse.json(
-      { success: false, error: "Affiliate not approved" },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: "Affiliate not approved" }, { status: 403 })
   }
 
   // Determine provider from payout method
@@ -55,10 +43,7 @@ export async function POST(request: Request) {
   })
 
   if (!result.success) {
-    return NextResponse.json(
-      { success: false, error: result.error },
-      { status: 400 }
-    )
+    return NextResponse.json({ success: false, error: result.error }, { status: 400 })
   }
 
   return NextResponse.json({

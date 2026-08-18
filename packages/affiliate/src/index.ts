@@ -63,10 +63,7 @@ export const CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD = 200
 
 export { loadActiveProgram, type AffiliateProgramTerms } from "./program"
 
-export {
-  detectAttribution,
-  type AttributionDetectionResult,
-} from "./attribution/middleware"
+export { detectAttribution, type AttributionDetectionResult } from "./attribution/middleware"
 
 export {
   buildAffiliateCookie,
@@ -85,17 +82,9 @@ export { attributeSignup, type SignupAttributionInput } from "./attribution/sign
 
 export { persistCrossDeviceAttribution } from "./attribution/cross-device"
 
-export {
-  onOrderPaid,
-  type OrderPaidPayload,
-  type OrderPaidResult,
-} from "./commission/engine"
+export { onOrderPaid, type OrderPaidPayload, type OrderPaidResult } from "./commission/engine"
 
-export {
-  onRefund,
-  type RefundPayload,
-  type ClawbackReason,
-} from "./commission/clawback"
+export { onRefund, type RefundPayload, type ClawbackReason } from "./commission/clawback"
 
 export { releaseCommissions, type ReleaseResult } from "./commission/release"
 
@@ -103,22 +92,11 @@ export { onLocalOrderPaid, type LocalOrderPaidPayload } from "./commission/local
 
 export { expireAttributionTokens, type ExpireResult } from "./commission/expire"
 
-export {
-  checkPayoutEligibility,
-  type PayoutEligibility,
-} from "./payout/eligibility"
+export { checkPayoutEligibility, type PayoutEligibility } from "./payout/eligibility"
 
-export {
-  computeReserve,
-  isReserveActive,
-  setupReserve,
-  type ReserveInfo,
-} from "./payout/reserve"
+export { computeReserve, isReserveActive, setupReserve, type ReserveInfo } from "./payout/reserve"
 
-export {
-  requestPayout,
-  type PayoutRequestResult,
-} from "./payout/request"
+export { requestPayout, type PayoutRequestResult } from "./payout/request"
 
 export { payoutScheduler, type PayoutBatch } from "./payout/scheduler"
 
@@ -129,11 +107,7 @@ export { createPayoneerProvider } from "./payout/providers/payoneer"
 export { createBriskpeProvider } from "./payout/providers/briskpe"
 export { createTrolleyProvider } from "./payout/providers/trolley"
 
-export {
-  detectFraudSignals,
-  type FraudSignal,
-  type FraudResult,
-} from "./fraud/signals"
+export { detectFraudSignals, type FraudSignal, type FraudResult } from "./fraud/signals"
 
 export { isSelfReferral } from "./fraud/selfreferral"
 

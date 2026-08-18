@@ -12,14 +12,9 @@ export {
   type CloudPlanId,
   type PlanPrice,
   type RegionalPrice,
-} from "./plans";
+} from "./plans"
 
-export {
-  LOCAL_SKUS,
-  LOCAL_SKU_MAP,
-  type LocalSku,
-  type LocalSkuId,
-} from "./local";
+export { LOCAL_SKUS, LOCAL_SKU_MAP, type LocalSku, type LocalSkuId } from "./local"
 
 export {
   MINUTE_PACKS,
@@ -29,27 +24,27 @@ export {
   PACK_VALIDITY_DAYS,
   type MinutePack as MinutePackSku,
   type PackId,
-} from "./packs";
+} from "./packs"
 
-import { CLOUD_PLAN_MAP, type CloudPlanId } from "./plans";
-import { LOCAL_SKU_MAP, type LocalSkuId } from "./local";
-import { MINUTE_PACK_MAP, type PackId } from "./packs";
+import { CLOUD_PLAN_MAP, type CloudPlanId } from "./plans"
+import { LOCAL_SKU_MAP, type LocalSkuId } from "./local"
+import { MINUTE_PACK_MAP, type PackId } from "./packs"
 
 // ─── Lookup helpers ──────────────────────────────────────────────────────────
 
 /** Get a cloud plan by id. Returns `undefined` if the id is not recognised. */
 export function getPlan(id: CloudPlanId) {
-  return CLOUD_PLAN_MAP[id];
+  return CLOUD_PLAN_MAP[id]
 }
 
 /** Get a local SKU by id. Returns `undefined` if the id is not recognised. */
 export function getLocalSku(id: LocalSkuId) {
-  return LOCAL_SKU_MAP[id];
+  return LOCAL_SKU_MAP[id]
 }
 
 /** Get a minute pack by id. Returns `undefined` if the id is not recognised. */
 export function getPack(id: PackId) {
-  return MINUTE_PACK_MAP[id];
+  return MINUTE_PACK_MAP[id]
 }
 
 // ─── Formatting helpers ──────────────────────────────────────────────────────
@@ -61,7 +56,7 @@ export function formatUSD(amount: number): string {
     currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(amount)
 }
 
 /** Format a number as INR currency, e.g. `formatINR(2900)` → `"₹2,900.00"`. */
@@ -71,5 +66,5 @@ export function formatINR(amount: number): string {
     currency: "INR",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(amount)
 }

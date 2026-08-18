@@ -40,7 +40,9 @@ test.describe.skipIf(!RAZORPAY_TEST_MODE)("Razorpay UPI AutoPay cap fallback", (
     // show UPI AutoPay as an option.
   })
 
-  test("Team annual (₹2,69,000) routes to card/netbanking, not UPI AutoPay", async ({ request }) => {
+  test("Team annual (₹2,69,000) routes to card/netbanking, not UPI AutoPay", async ({
+    request,
+  }) => {
     const response = await request.post("/billing/checkout", {
       data: {
         plan: "TEAM",

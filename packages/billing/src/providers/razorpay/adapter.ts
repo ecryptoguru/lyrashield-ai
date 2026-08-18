@@ -143,10 +143,7 @@ export async function processRazorpayEvent(
   }
 }
 
-function mapRazorpaySubscriptionStatus(
-  eventType: string,
-  rawStatus: string
-): SubscriptionStatus {
+function mapRazorpaySubscriptionStatus(eventType: string, rawStatus: string): SubscriptionStatus {
   switch (eventType) {
     case "subscription.activated":
     case "subscription.charged":

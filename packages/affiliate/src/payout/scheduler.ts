@@ -57,9 +57,14 @@ export async function payoutScheduler(): Promise<PayoutBatch[]> {
     // Determine provider from payout method
     const payoutMethod = affiliate.payoutMethod as { type?: string; country?: string } | null
     const providerType = payoutMethod?.type ?? "manual"
-    const provider = providerType === "razorpayx" ? "razorpayx" :
-      providerType === "payoneer" ? "payoneer" :
-      providerType === "briskpe" ? "briskpe" : "manual"
+    const provider =
+      providerType === "razorpayx"
+        ? "razorpayx"
+        : providerType === "payoneer"
+          ? "payoneer"
+          : providerType === "briskpe"
+            ? "briskpe"
+            : "manual"
 
     const result = await requestPayout({
       affiliateId: affiliate.id,

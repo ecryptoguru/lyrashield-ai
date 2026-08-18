@@ -14,7 +14,8 @@ import { grantMonthlyPool } from "./usage/grants"
 import { resetGrace } from "./grace"
 
 export type SubscriptionProvider = "polar" | "razorpay"
-export type SubscriptionStatus = "active" | "canceled" | "past_due" | "trialing" | "paused" | "incomplete"
+export type SubscriptionStatus =
+  "active" | "canceled" | "past_due" | "trialing" | "paused" | "incomplete"
 export type BillingInterval = "monthly" | "annual"
 
 export interface SyncSubscriptionParams {

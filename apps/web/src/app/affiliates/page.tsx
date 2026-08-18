@@ -51,12 +51,10 @@ export default async function AffiliateLandingPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-16">
       <header className="mb-12 text-center">
-        <h1 className="text-4xl font-bold tracking-tight">
-          LyraShield AI Affiliate Program
-        </h1>
+        <h1 className="text-4xl font-bold tracking-tight">LyraShield AI Affiliate Program</h1>
         <p className="mt-4 text-lg text-muted-foreground">
-          Earn recurring commissions by referring customers to the evidence-backed
-          release assurance platform for AI-built software.
+          Earn recurring commissions by referring customers to the evidence-backed release assurance
+          platform for AI-built software.
         </p>
       </header>
 
@@ -66,15 +64,14 @@ export default async function AffiliateLandingPage() {
           <div className="rounded-lg border p-6">
             <div className="text-3xl font-bold">{basePct}%</div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Recurring commission on Cloud subscriptions for {terms.capMonths} months
-              from the customer&apos;s first payment.
+              Recurring commission on Cloud subscriptions for {terms.capMonths} months from the
+              customer&apos;s first payment.
             </p>
           </div>
           <div className="rounded-lg border p-6">
             <div className="text-3xl font-bold">{tierPct}%</div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Elevated rate once you reach {terms.tierThreshold}+ active referred
-              subscriptions.
+              Elevated rate once you reach {terms.tierThreshold}+ active referred subscriptions.
             </p>
           </div>
           <div className="rounded-lg border p-6">
@@ -96,8 +93,7 @@ export default async function AffiliateLandingPage() {
             <div>
               <h3 className="font-semibold">Apply</h3>
               <p className="text-sm text-muted-foreground">
-                Submit your application with details about your audience and
-                promotion methods.
+                Submit your application with details about your audience and promotion methods.
               </p>
             </div>
           </li>
@@ -108,8 +104,8 @@ export default async function AffiliateLandingPage() {
             <div>
               <h3 className="font-semibold">Get Approved</h3>
               <p className="text-sm text-muted-foreground">
-                Our team reviews your application. Once approved, you get access to
-                your affiliate dashboard, referral links, and promo codes.
+                Our team reviews your application. Once approved, you get access to your affiliate
+                dashboard, referral links, and promo codes.
               </p>
             </div>
           </li>
@@ -120,8 +116,8 @@ export default async function AffiliateLandingPage() {
             <div>
               <h3 className="font-semibold">Promote</h3>
               <p className="text-sm text-muted-foreground">
-                Share your referral link or promo code with your audience. Track
-                clicks, signups, and conversions in real time.
+                Share your referral link or promo code with your audience. Track clicks, signups,
+                and conversions in real time.
               </p>
             </div>
           </li>
@@ -132,8 +128,8 @@ export default async function AffiliateLandingPage() {
             <div>
               <h3 className="font-semibold">Earn</h3>
               <p className="text-sm text-muted-foreground">
-                Earn recurring commissions on every paid subscription. Payouts are
-                processed monthly on the 15th (net-30) with a ${terms.minPayout}
+                Earn recurring commissions on every paid subscription. Payouts are processed monthly
+                on the 15th (net-30) with a ${terms.minPayout}
                 minimum.
               </p>
             </div>
@@ -145,16 +141,16 @@ export default async function AffiliateLandingPage() {
         <h2 className="mb-6 text-2xl font-semibold">Program Terms</h2>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li>
-            <strong>Attribution window:</strong> 60 days (last-click wins, promo
-            code overrides cookie)
+            <strong>Attribution window:</strong> 60 days (last-click wins, promo code overrides
+            cookie)
           </li>
           <li>
-            <strong>Commission cap:</strong> {terms.capMonths} months from the
-            customer&apos;s first payment
+            <strong>Commission cap:</strong> {terms.capMonths} months from the customer&apos;s first
+            payment
           </li>
           <li>
-            <strong>Hold period:</strong> {terms.holdDays} days before commissions
-            become available for payout
+            <strong>Hold period:</strong> {terms.holdDays} days before commissions become available
+            for payout
           </li>
           <li>
             <strong>Minimum payout:</strong> ${terms.minPayout}
@@ -163,16 +159,15 @@ export default async function AffiliateLandingPage() {
             <strong>Payout schedule:</strong> Monthly net-30 on the 15th
           </li>
           <li>
-            <strong>New-affiliate reserve:</strong> {terms.reservePct}% held for
-            first {terms.reserveDays} days
+            <strong>New-affiliate reserve:</strong> {terms.reservePct}% held for first{" "}
+            {terms.reserveDays} days
           </li>
           <li>
-            <strong>Payout methods:</strong> RazorpayX (India), Payoneer (global),
-            BriskPe (RBI-native fallback)
+            <strong>Payout methods:</strong> RazorpayX (India), Payoneer (global), BriskPe
+            (RBI-native fallback)
           </li>
           <li>
-            <strong>No commission on:</strong> Minute packs, trial signups, or
-            self-referrals
+            <strong>No commission on:</strong> Minute packs, trial signups, or self-referrals
           </li>
         </ul>
       </section>

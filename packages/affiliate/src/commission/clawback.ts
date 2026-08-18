@@ -74,9 +74,7 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
 
   const commission = conversion.commissions[0]!
   const originalAmount = commission.amount
-  const manualReview = originalAmount.gt(
-    new Prisma.Decimal(CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD)
-  )
+  const manualReview = originalAmount.gt(new Prisma.Decimal(CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD))
 
   // S5: Update the EXISTING commission in place — avoids the unique constraint
   // violation that would occur if we tried to create a new Commission row with

@@ -139,7 +139,10 @@ export async function onLocalOrderPaid(
   // 20% one-time commission
   // C-L07: Round to Decimal(19,4) before storage to prevent reconciliation drift
   const rateBps = LOCAL_RATE_BPS
-  const commissionAmount = commissionableBase.mul(rateBps).div(10000).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP)
+  const commissionAmount = commissionableBase
+    .mul(rateBps)
+    .div(10000)
+    .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP)
 
   // Create Conversion + Commission
   const now = new Date()

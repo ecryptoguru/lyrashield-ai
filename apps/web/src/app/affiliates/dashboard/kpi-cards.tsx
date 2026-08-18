@@ -23,9 +23,7 @@ export function AffiliateKpiCards(props: AffiliateKpiCardsProps) {
       <div className="rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">Clicks</div>
         <div className="mt-1 text-2xl font-bold">{props.clicks}</div>
-        <div className="text-xs text-muted-foreground">
-          {props.uniqueClicks} unique
-        </div>
+        <div className="text-xs text-muted-foreground">{props.uniqueClicks} unique</div>
       </div>
 
       <div className="rounded-lg border p-4">
@@ -36,9 +34,7 @@ export function AffiliateKpiCards(props: AffiliateKpiCardsProps) {
       <div className="rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">Paid Conversions</div>
         <div className="mt-1 text-2xl font-bold">{props.conversions}</div>
-        <div className="text-xs text-muted-foreground">
-          {props.conversionRate}% conversion rate
-        </div>
+        <div className="text-xs text-muted-foreground">{props.conversionRate}% conversion rate</div>
       </div>
 
       <div className="rounded-lg border p-4">

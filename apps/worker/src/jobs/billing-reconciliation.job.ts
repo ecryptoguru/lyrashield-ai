@@ -74,10 +74,7 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
 /**
  * Reconcile Polar orders and subscriptions against WebhookEvent rows.
  */
-async function reconcilePolar(
-  since: Date,
-  result: ReconciliationResult
-): Promise<void> {
+async function reconcilePolar(since: Date, result: ReconciliationResult): Promise<void> {
   const client = getPolarClient()
   if (!client) {
     logger.debug("Polar client not configured — skipping Polar reconciliation")
@@ -90,21 +87,40 @@ async function reconcilePolar(
     const pageSize = 50
     let hasMore = true
     while (hasMore) {
-      const ordersResponse = await (client as unknown as {
-        orders: {
-          list: (params: { limit: number; page?: number }) => Promise<{ result: { id: string }[] } | { items: { id: string }[] } | { data: { id: string }[] } | { pagination: { hasMore: boolean } }>
+      const ordersResponse = await (
+        client as unknown as {
+          orders: {
+            list: (params: {
+              limit: number
+              page?: number
+            }) => Promise<
+              | { result: { id: string }[] }
+              | { items: { id: string }[] }
+              | { data: { id: string }[] }
+              | { pagination: { hasMore: boolean } }
+            >
+          }
         }
-      }).orders.list({ limit: pageSize, page }).catch(() => null)
+      ).orders
+        .list({ limit: pageSize, page })
+        .catch(() => null)
 
       if (!ordersResponse) {
         logger.debug("Polar orders API not available — skipping")
         return
       }
 
-      const orders = (ordersResponse as { result?: { id: string }[]; items?: { id: string }[]; data?: { id: string }[] }).result
-        ?? (ordersResponse as { items?: { id: string }[] }).items
-        ?? (ordersResponse as { data?: { id: string }[] }).data
-        ?? []
+      const orders =
+        (
+          ordersResponse as {
+            result?: { id: string }[]
+            items?: { id: string }[]
+            data?: { id: string }[]
+          }
+        ).result ??
+        (ordersResponse as { items?: { id: string }[] }).items ??
+        (ordersResponse as { data?: { id: string }[] }).data ??
+        []
 
       if (orders.length === 0) {
         hasMore = false
@@ -163,7 +179,7 @@ async function reconcilePolar(
 
       // Check if there are more pages
       const pagination = (ordersResponse as { pagination?: { hasMore: boolean } }).pagination
-      hasMore = pagination?.hasMore ?? (orders.length === pageSize)
+      hasMore = pagination?.hasMore ?? orders.length === pageSize
       page++
     }
   } catch (error) {
@@ -176,10 +192,7 @@ async function reconcilePolar(
 /**
  * Reconcile Razorpay payments against WebhookEvent rows.
  */
-async function reconcileRazorpay(
-  _since: Date,
-  result: ReconciliationResult
-): Promise<void> {
+async function reconcileRazorpay(_since: Date, result: ReconciliationResult): Promise<void> {
   const client = getRazorpayClient()
   if (!client) {
     logger.debug("Razorpay client not configured — skipping Razorpay reconciliation")
@@ -192,11 +205,18 @@ async function reconcileRazorpay(
     const razorpayPageSize = 50
     let razorpayHasMore = true
     while (razorpayHasMore) {
-      const payments = await (client as unknown as {
-        payments: {
-          all: (params: { count: number; skip?: number }) => Promise<{ items: { id: string; status: string }[] }>
+      const payments = await (
+        client as unknown as {
+          payments: {
+            all: (params: {
+              count: number
+              skip?: number
+            }) => Promise<{ items: { id: string; status: string }[] }>
+          }
         }
-      }).payments.all({ count: razorpayPageSize, skip: (razorpayPage - 1) * razorpayPageSize }).catch(() => null)
+      ).payments
+        .all({ count: razorpayPageSize, skip: (razorpayPage - 1) * razorpayPageSize })
+        .catch(() => null)
 
       if (!payments) {
         logger.debug("Razorpay payments API not available — skipping")
@@ -227,7 +247,8 @@ async function reconcileRazorpay(
             provider: "razorpay",
             externalId: payment.id,
             type: "payment.captured",
-            message: "Razorpay payment not found in WebhookEvent table — webhook may have been missed",
+            message:
+              "Razorpay payment not found in WebhookEvent table — webhook may have been missed",
           })
         } else if (!existing.processed) {
           result.driftAlerts++

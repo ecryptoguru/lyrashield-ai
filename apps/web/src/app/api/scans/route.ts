@@ -173,11 +173,17 @@ export async function POST(request: Request) {
     // enforce trial scan-frequency throttle.
     const entitlement = await assertScanAllowed(workspaceId, canonicalMode)
     if (!entitlement.allowed) {
-      return apiError(entitlement.code ?? "SCAN_NOT_ALLOWED", entitlement.message ?? "Scan not allowed", 403, undefined, {
-        plan: entitlement.plan,
-        isTrial: entitlement.isTrial,
-        remainingMinutes: entitlement.remainingMinutes,
-      })
+      return apiError(
+        entitlement.code ?? "SCAN_NOT_ALLOWED",
+        entitlement.message ?? "Scan not allowed",
+        403,
+        undefined,
+        {
+          plan: entitlement.plan,
+          isTrial: entitlement.isTrial,
+          remainingMinutes: entitlement.remainingMinutes,
+        }
+      )
     }
 
     const policy = await prisma.policy.findFirst({

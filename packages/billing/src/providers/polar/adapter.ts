@@ -12,7 +12,12 @@
 
 import { logger } from "@lyrashield/logger"
 import type { PolarWebhookEvent } from "./webhooks"
-import { syncSubscription, downgradeToFree, type SubscriptionStatus, type BillingInterval } from "../../sync"
+import {
+  syncSubscription,
+  downgradeToFree,
+  type SubscriptionStatus,
+  type BillingInterval,
+} from "../../sync"
 import { creditTopUp } from "../../usage/packs"
 import { reverseRefund } from "../../usage/refund"
 import { MINUTE_PACK_MAP, type CloudPlanId, type PackId } from "@lyrashield/pricing"
@@ -83,9 +88,7 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         const periodEnd = data.currentPeriodEnd
           ? new Date(data.currentPeriodEnd as string)
           : undefined
-        const canceledAt = data.canceledAt
-          ? new Date(data.canceledAt as string)
-          : undefined
+        const canceledAt = data.canceledAt ? new Date(data.canceledAt as string) : undefined
 
         await syncSubscription({
           workspaceId,
@@ -105,7 +108,11 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
       case "customer.state_changed": {
         // Customer state changes (e.g. blocked) — sync subscription state
         if (!workspaceId) {
-          return { handled: false, action: "customer.state_changed.no_workspace", workspaceId: null }
+          return {
+            handled: false,
+            action: "customer.state_changed.no_workspace",
+            workspaceId: null,
+          }
         }
 
         const state = (data.state ?? "active") as string

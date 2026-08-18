@@ -89,25 +89,25 @@ export default async function AffiliatePayoutsPage() {
         <div className="rounded-lg border p-4">
           <div className="text-sm text-muted-foreground">Pending</div>
           <div className="mt-1 text-2xl font-bold">
-            ${(Number((pending._sum.amount ?? new Prisma.Decimal(0)).toString())).toFixed(2)}
+            ${Number((pending._sum.amount ?? new Prisma.Decimal(0)).toString()).toFixed(2)}
           </div>
         </div>
         <div className="rounded-lg border p-4">
           <div className="text-sm text-muted-foreground">Available</div>
           <div className="mt-1 text-2xl font-bold">
-            ${(Number((available._sum.amount ?? new Prisma.Decimal(0)).toString())).toFixed(2)}
+            ${Number((available._sum.amount ?? new Prisma.Decimal(0)).toString()).toFixed(2)}
           </div>
         </div>
         <div className="rounded-lg border p-4">
           <div className="text-sm text-muted-foreground">Paid (lifetime)</div>
           <div className="mt-1 text-2xl font-bold">
-            ${(Number((paid._sum.amount ?? new Prisma.Decimal(0)).toString())).toFixed(2)}
+            ${Number((paid._sum.amount ?? new Prisma.Decimal(0)).toString()).toFixed(2)}
           </div>
         </div>
         <div className="rounded-lg border p-4">
           <div className="text-sm text-muted-foreground">Lifetime Earnings</div>
           <div className="mt-1 text-2xl font-bold">
-            ${(Number((lifetime._sum.amount ?? new Prisma.Decimal(0)).toString())).toFixed(2)}
+            ${Number((lifetime._sum.amount ?? new Prisma.Decimal(0)).toString()).toFixed(2)}
           </div>
         </div>
       </div>
@@ -119,8 +119,8 @@ export default async function AffiliatePayoutsPage() {
           </h3>
           <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
             {reserve.pct}% of your earnings are held in reserve for the first{" "}
-            {reserve.daysRemaining} days. This reserve is released as your account
-            establishes a track record.
+            {reserve.daysRemaining} days. This reserve is released as your account establishes a
+            track record.
           </p>
         </div>
       )}
@@ -170,9 +170,7 @@ export default async function AffiliatePayoutsPage() {
               ) : (
                 affiliate.payouts.map((p) => (
                   <tr key={p.id} className="border-b">
-                    <td className="py-2 pr-4">
-                      {new Date(p.requestedAt).toLocaleDateString()}
-                    </td>
+                    <td className="py-2 pr-4">{new Date(p.requestedAt).toLocaleDateString()}</td>
                     <td className="py-2 pr-4">
                       {p.amount.toString()} {p.currency}
                     </td>

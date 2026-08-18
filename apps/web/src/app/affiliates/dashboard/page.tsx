@@ -43,13 +43,7 @@ export default async function AffiliateDashboardPage({
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 
   // Fetch aggregates
-  const [
-    clicksAgg,
-    uniqueClicksAgg,
-    signups,
-    conversions,
-    activeSubs,
-  ] = await Promise.all([
+  const [clicksAgg, uniqueClicksAgg, signups, conversions, activeSubs] = await Promise.all([
     prisma.click.count({
       where: { affiliateId: affiliate.id, clickedAt: { gte: since } },
     }),
@@ -98,9 +92,10 @@ export default async function AffiliateDashboardPage({
 
   const uniqueClicks = uniqueClicksAgg.filter((c) => c.visitorId !== null).length
   const conversionRate = clicksAgg > 0 ? ((conversions / clicksAgg) * 100).toFixed(2) : "0"
-  const epc = clicksAgg > 0
-    ? (Number((lifetime._sum.amount ?? new Prisma.Decimal(0)).toString()) / clicksAgg).toFixed(2)
-    : "0"
+  const epc =
+    clicksAgg > 0
+      ? (Number((lifetime._sum.amount ?? new Prisma.Decimal(0)).toString()) / clicksAgg).toFixed(2)
+      : "0"
 
   const tierProgress = Math.min(affiliate.activeReferrals, affiliate.tierThreshold)
   const atTier = affiliate.activeReferrals >= affiliate.tierThreshold

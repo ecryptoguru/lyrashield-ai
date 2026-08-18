@@ -1,9 +1,4 @@
-export {
-  signLicense,
-  canonicalJSON,
-  signingBytes,
-  loadPublicKey,
-} from "./sign"
+export { signLicense, canonicalJSON, signingBytes, loadPublicKey } from "./sign"
 
 export { verifyLicense, isBuildInstallable } from "./verify"
 

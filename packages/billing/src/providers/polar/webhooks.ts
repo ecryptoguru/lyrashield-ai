@@ -83,10 +83,7 @@ export function validatePolarWebhook(
   return parsed
 }
 
-function getHeader(
-  headers: Record<string, string | string[] | undefined>,
-  name: string
-): string {
+function getHeader(headers: Record<string, string | string[] | undefined>, name: string): string {
   const value = headers[name] ?? headers[name.toLowerCase()]
   if (Array.isArray(value)) return value[0] ?? ""
   return value ?? ""

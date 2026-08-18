@@ -52,11 +52,7 @@ export async function POST(request: Request) {
     })
 
     if (!billingAccount || billingAccount.currentPlan !== "TEAM") {
-      return apiError(
-        "PLAN_NOT_ELIGIBLE",
-        "Spend limits are only available on the Team plan.",
-        403
-      )
+      return apiError("PLAN_NOT_ELIGIBLE", "Spend limits are only available on the Team plan.", 403)
     }
 
     await prisma.billingAccount.update({

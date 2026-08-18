@@ -122,8 +122,7 @@ export async function assertScanAllowed(
       },
     })
     const overagePlanEligible =
-      billingAccount?.currentPlan === "TEAM" &&
-      (billingAccount.spendLimitCents ?? 0) > 0
+      billingAccount?.currentPlan === "TEAM" && (billingAccount.spendLimitCents ?? 0) > 0
 
     if (overagePlanEligible) {
       // S14: Also verify remaining overage spend budget > 0.
@@ -141,8 +140,7 @@ export async function assertScanAllowed(
       const currentOverageMinutes = overageRecords.reduce((sum, r) => sum + r.quantity, 0)
       const overagePerMinuteCents = Math.round(STANDARD_OVERAGE_PER_MINUTE_USD * 100)
       const currentOverageCostCents = currentOverageMinutes * overagePerMinuteCents
-      const remainingBudgetCents =
-        (billingAccount?.spendLimitCents ?? 0) - currentOverageCostCents
+      const remainingBudgetCents = (billingAccount?.spendLimitCents ?? 0) - currentOverageCostCents
 
       if (remainingBudgetCents <= 0) {
         return {
@@ -204,16 +202,20 @@ export interface TargetAllowedResult {
  * Assert that the workspace can add another target.
  * Each plan has a targetCaps limit (advisory, enforced for trial).
  */
-export async function assertTargetAllowed(
-  workspaceId: string
-): Promise<TargetAllowedResult> {
+export async function assertTargetAllowed(workspaceId: string): Promise<TargetAllowedResult> {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: { plan: true, trialStartedAt: true },
   })
 
   if (!workspace) {
-    return { allowed: false, code: "WORKSPACE_NOT_FOUND", message: "Workspace not found", targetsUsed: 0, targetCap: 0 }
+    return {
+      allowed: false,
+      code: "WORKSPACE_NOT_FOUND",
+      message: "Workspace not found",
+      targetsUsed: 0,
+      targetCap: 0,
+    }
   }
 
   const isTrial = workspace.plan === "FREE" && workspace.trialStartedAt !== null

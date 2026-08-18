@@ -81,10 +81,7 @@ export async function POST(request: Request) {
       )
     }
 
-    return apiSuccess(
-      { started: true, trialEndsAt: result.trialEndsAt.toISOString() },
-      200
-    )
+    return apiSuccess({ started: true, trialEndsAt: result.trialEndsAt.toISOString() }, 200)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

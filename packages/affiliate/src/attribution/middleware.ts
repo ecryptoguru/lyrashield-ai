@@ -39,10 +39,7 @@ function hashToken(token: string): string {
 /**
  * Extract the referral code from either `?ref=CODE` or a `/r/:code` path.
  */
-export function extractRefCode(
-  pathname: string,
-  searchParams: URLSearchParams
-): string | null {
+export function extractRefCode(pathname: string, searchParams: URLSearchParams): string | null {
   // ?ref=CODE takes precedence
   const refParam = searchParams.get("ref")
   if (refParam) return refParam.trim()
@@ -122,9 +119,7 @@ export async function detectAttribution(params: {
   let clickId: string | undefined
   try {
     // S4: Hash the user-agent before storing — never store plaintext UA
-    const hashedUserAgent = userAgent
-      ? createHash("sha256").update(userAgent).digest("hex")
-      : null
+    const hashedUserAgent = userAgent ? createHash("sha256").update(userAgent).digest("hex") : null
 
     const click = await prisma.click.create({
       data: {

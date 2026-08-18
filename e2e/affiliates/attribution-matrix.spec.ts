@@ -51,29 +51,37 @@ test.describe("Attribution matrix", () => {
       },
     })
 
-    affiliateA = await prisma.affiliate.create({
+    affiliateA = (await prisma.affiliate.create({
       data: {
         userId: userA.id,
         status: "APPROVED",
         approvedAt: new Date(),
         promoCode: `CODEA${suffix.slice(-4).toUpperCase()}`,
       },
-    }) as { id: string; userId: string }
+    })) as { id: string; userId: string }
 
-    affiliateB = await prisma.affiliate.create({
+    affiliateB = (await prisma.affiliate.create({
       data: {
         userId: userB.id,
         status: "APPROVED",
         approvedAt: new Date(),
         promoCode: `CODEB${suffix.slice(-4).toUpperCase()}`,
       },
-    }) as { id: string; userId: string }
+    })) as { id: string; userId: string }
 
     linkA = await prisma.affiliateLink.create({
-      data: { affiliateId: affiliateA.id, code: `LINKA${suffix.slice(-4).toUpperCase()}`, campaign: "test" },
+      data: {
+        affiliateId: affiliateA.id,
+        code: `LINKA${suffix.slice(-4).toUpperCase()}`,
+        campaign: "test",
+      },
     })
     linkB = await prisma.affiliateLink.create({
-      data: { affiliateId: affiliateB.id, code: `LINKB${suffix.slice(-4).toUpperCase()}`, campaign: "test" },
+      data: {
+        affiliateId: affiliateB.id,
+        code: `LINKB${suffix.slice(-4).toUpperCase()}`,
+        campaign: "test",
+      },
     })
   })
 
@@ -130,7 +138,11 @@ test.describe("Attribution matrix", () => {
     // Create token for A (older)
     const tokenA = `token-a-then-b-a-${suffix}`
     const clickA = await prisma.click.create({
-      data: { linkId: linkA.id, affiliateId: affiliateA.id, clickedAt: new Date(Date.now() - 5000) },
+      data: {
+        linkId: linkA.id,
+        affiliateId: affiliateA.id,
+        clickedAt: new Date(Date.now() - 5000),
+      },
     })
     await prisma.attributionToken.create({
       data: {

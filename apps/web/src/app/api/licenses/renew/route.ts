@@ -76,7 +76,10 @@ export async function POST(request: Request) {
       select: { processed: true },
     })
     if (existingRenewal?.processed) {
-      logger.info("Renewal webhook already processed — returning existing", { licenseId: license.id, orderId })
+      logger.info("Renewal webhook already processed — returning existing", {
+        licenseId: license.id,
+        orderId,
+      })
       return apiSuccess(
         {
           license: await issueSignedLicense(license.id, license.perpetualFallbackBuild),
@@ -106,15 +109,17 @@ export async function POST(request: Request) {
     })
 
     // B-L01: Audit log the renewal
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: license.workspaceId ?? license.id,
-        action: "license.renewed",
-        resourceType: "license",
-        resourceId: license.id,
-        metadata: { orderId, renewalSku, newExpiry: newExpiry.toISOString() },
-      },
-    }).catch(() => {})
+    await prisma.auditLog
+      .create({
+        data: {
+          workspaceId: license.workspaceId ?? license.id,
+          action: "license.renewed",
+          resourceType: "license",
+          resourceId: license.id,
+          metadata: { orderId, renewalSku, newExpiry: newExpiry.toISOString() },
+        },
+      })
+      .catch(() => {})
 
     const licenseFile = await issueSignedLicense(license.id, license.perpetualFallbackBuild)
 

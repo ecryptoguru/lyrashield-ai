@@ -83,9 +83,10 @@ export function regionToProvider(region: BillingRegion): BillingProvider {
  *
  * @param request - The incoming HTTP request
  */
-export function resolveProvider(
-  request: Request
-): { region: BillingRegion; provider: BillingProvider } {
+export function resolveProvider(request: Request): {
+  region: BillingRegion
+  provider: BillingProvider
+} {
   const region = resolveRegion(request)
   return { region, provider: regionToProvider(region) }
 }

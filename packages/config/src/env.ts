@@ -211,7 +211,10 @@ const envSchema = z
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
-    BILLING_GEO_IP_HEADER: z.string().optional().or(z.literal("").or(z.literal("cf-connecting-ip"))),
+    BILLING_GEO_IP_HEADER: z
+      .string()
+      .optional()
+      .or(z.literal("").or(z.literal("cf-connecting-ip"))),
     // A-L02: Configurable USD→INR conversion rate for Razorpay pricing.
     // Defaults to 100 per the founder-confirmed spec ("INR = USD x 100"), which
     // is the same multiplier the pricing catalog and marketing page use for

@@ -67,8 +67,8 @@ export default async function AffiliateLinksPage() {
               <CopyButton text={affiliate.promoCode} />
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Customers enter this code at checkout. Promo code attribution
-              overrides cookie attribution.
+              Customers enter this code at checkout. Promo code attribution overrides cookie
+              attribution.
             </p>
           </div>
         )}
@@ -82,9 +82,7 @@ export default async function AffiliateLinksPage() {
                 className="flex items-center justify-between rounded-md border p-3"
               >
                 <div>
-                  <div className="font-medium">
-                    {link.campaign ?? "Untitled campaign"}
-                  </div>
+                  <div className="font-medium">{link.campaign ?? "Untitled campaign"}</div>
                   <code className="text-xs text-muted-foreground">
                     {baseUrl}/?ref={link.code}
                     {link.subid ? `&subid=${link.subid}` : ""}
@@ -110,8 +108,8 @@ export default async function AffiliateLinksPage() {
         <div className="rounded-lg border p-6">
           <h2 className="mb-2 text-lg font-semibold">Click Test Tool</h2>
           <p className="text-sm text-muted-foreground">
-            Test your referral link by visiting it in a new incognito window.
-            The click will appear in your Activity tab within a few minutes.
+            Test your referral link by visiting it in a new incognito window. The click will appear
+            in your Activity tab within a few minutes.
           </p>
         </div>
       </section>

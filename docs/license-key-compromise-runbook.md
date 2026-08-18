@@ -53,6 +53,7 @@ Trigger this runbook when **any** of the following occur:
 
 2. **Generate a revocation list** of all licenses signed by the compromised key.
    Query the database:
+
    ```sql
    SELECT id, owner_email, sku, signing_key_id
    FROM "License"
@@ -136,10 +137,10 @@ Trigger this runbook when **any** of the following occur:
 
 ## Quick reference
 
-| Step | Action | Owner | Target time |
-|------|--------|-------|-------------|
-| 1 | Generate new keypair in Key Vault | Founder / Azure admin | < 1 hour |
-| 2 | Ship update with new key + revocation list | Engineering | < 24 hours |
-| 3 | Dual-sign during overlap window | Engineering | 30 days |
-| 4 | Notify affected customers | Founder / Support | < 48 hours |
-| 5 | Post-incident review | Founder | < 7 days |
+| Step | Action                                     | Owner                 | Target time |
+| ---- | ------------------------------------------ | --------------------- | ----------- |
+| 1    | Generate new keypair in Key Vault          | Founder / Azure admin | < 1 hour    |
+| 2    | Ship update with new key + revocation list | Engineering           | < 24 hours  |
+| 3    | Dual-sign during overlap window            | Engineering           | 30 days     |
+| 4    | Notify affected customers                  | Founder / Support     | < 48 hours  |
+| 5    | Post-incident review                       | Founder               | < 7 days    |

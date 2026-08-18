@@ -18,18 +18,12 @@ function generateCode(): string {
 export async function POST(request: Request) {
   const session = await getCachedSession()
   if (!session) {
-    return NextResponse.json(
-      { success: false, error: "Authentication required" },
-      { status: 401 }
-    )
+    return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
   }
 
   const parsed = CreateLinkSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: "Invalid request" },
-      { status: 400 }
-    )
+    return NextResponse.json({ success: false, error: "Invalid request" }, { status: 400 })
   }
 
   // Verify the affiliate belongs to the session user
@@ -39,17 +33,11 @@ export async function POST(request: Request) {
   })
 
   if (!affiliate || affiliate.userId !== session.userId) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized" },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 })
   }
 
   if (affiliate.status !== "APPROVED") {
-    return NextResponse.json(
-      { success: false, error: "Affiliate not approved" },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: "Affiliate not approved" }, { status: 403 })
   }
 
   // C-L02: Rate limit affiliate link creation per affiliate

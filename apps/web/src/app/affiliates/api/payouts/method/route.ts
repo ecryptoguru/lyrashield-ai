@@ -41,10 +41,7 @@ const MethodSchema = z.object({
 export async function POST(request: Request) {
   const session = await getCachedSession()
   if (!session) {
-    return NextResponse.json(
-      { success: false, error: "Authentication required" },
-      { status: 401 }
-    )
+    return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
   }
 
   const parsed = MethodSchema.safeParse(await request.json().catch(() => null))
@@ -62,10 +59,7 @@ export async function POST(request: Request) {
   })
 
   if (!affiliate || affiliate.userId !== session.userId) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized" },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 })
   }
 
   // S10: Server-side sets valid: false — never trust client self-attestation.

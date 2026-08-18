@@ -90,9 +90,7 @@ export interface OrderPaidResult {
  * Idempotent: if a Conversion with this externalId already exists, returns
  * the existing result without creating new records.
  */
-export async function onOrderPaid(
-  payload: OrderPaidPayload
-): Promise<OrderPaidResult> {
+export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidResult> {
   const {
     provider,
     externalId,
@@ -146,7 +144,10 @@ export async function onOrderPaid(
       select: { id: true, status: true },
     })
     if (!directAffiliate || directAffiliate.status !== "APPROVED") {
-      logger.info("Commission engine: direct affiliateId not approved", { externalId, directAffiliateId })
+      logger.info("Commission engine: direct affiliateId not approved", {
+        externalId,
+        directAffiliateId,
+      })
       return {
         conversionId: "",
         commissionId: "",
@@ -370,7 +371,10 @@ export async function onOrderPaid(
   if (isAnnual) {
     // Annual Cloud plans: 25% of annual amount as paid
     rateBps = ANNUAL_RATE_BPS
-  } else if (affiliate && affiliate.activeReferrals >= (affiliate.tierThreshold || TIER_THRESHOLD)) {
+  } else if (
+    affiliate &&
+    affiliate.activeReferrals >= (affiliate.tierThreshold || TIER_THRESHOLD)
+  ) {
     rateBps = affiliate.tierRateBps || TIER_RATE_BPS
   } else {
     rateBps = affiliate?.baseRateBps || BASE_RATE_BPS
@@ -379,7 +383,10 @@ export async function onOrderPaid(
   // Compute commission amount
   // C-L07: Round to Decimal(19,4) before storage to prevent reconciliation drift
   // between stored values and in-memory/logged return values.
-  const commissionAmount = commissionableBase.mul(rateBps).div(10000).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP)
+  const commissionAmount = commissionableBase
+    .mul(rateBps)
+    .div(10000)
+    .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP)
 
   // Create Conversion + Commission
   const now = new Date()

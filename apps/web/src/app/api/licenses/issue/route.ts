@@ -143,15 +143,17 @@ export async function POST(request: Request) {
     })
 
     // B-L01: Audit log the issuance
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId ?? license.id,
-        action: "license.issued",
-        resourceType: "license",
-        resourceId: license.id,
-        metadata: { buyerEmail, sku, orderId, seatCount },
-      },
-    }).catch(() => {})
+    await prisma.auditLog
+      .create({
+        data: {
+          workspaceId: workspaceId ?? license.id,
+          action: "license.issued",
+          resourceType: "license",
+          resourceId: license.id,
+          metadata: { buyerEmail, sku, orderId, seatCount },
+        },
+      })
+      .catch(() => {})
 
     // B-M05: Don't return the raw license key in the API response.
     // The key is delivered via email only (Brevo). Returning it in the

@@ -11,20 +11,20 @@ export type LocalSkuId =
   | "team_perpetual"
   | "team_subscription"
   | "renewal"
-  | "sync_addon";
+  | "sync_addon"
 
 export interface LocalSku {
-  id: LocalSkuId;
-  name: string;
-  description: string;
+  id: LocalSkuId
+  name: string
+  description: string
   /** Price in USD (major units). */
-  priceUsd: number;
+  priceUsd: number
   /** Billing period: "one_time", "per_seat", "per_seat_year". */
-  billing: "one_time" | "per_seat" | "per_seat_year";
+  billing: "one_time" | "per_seat" | "per_seat_year"
   /** Whether this SKU includes update eligibility. */
-  includesUpdates: boolean;
+  includesUpdates: boolean
   /** Update eligibility duration in days (null = perpetual). */
-  updateDays: number | null;
+  updateDays: number | null
 }
 
 export const LOCAL_SKUS: readonly LocalSku[] = [
@@ -82,10 +82,9 @@ export const LOCAL_SKUS: readonly LocalSku[] = [
     includesUpdates: true,
     updateDays: 365,
   },
-] as const;
+] as const
 
 /** Map of SKU id → LocalSku for O(1) lookup. */
-export const LOCAL_SKU_MAP: Readonly<Record<LocalSkuId, LocalSku>> =
-  Object.fromEntries(LOCAL_SKUS.map((s) => [s.id, s])) as Readonly<
-    Record<LocalSkuId, LocalSku>
-  >;
+export const LOCAL_SKU_MAP: Readonly<Record<LocalSkuId, LocalSku>> = Object.fromEntries(
+  LOCAL_SKUS.map((s) => [s.id, s])
+) as Readonly<Record<LocalSkuId, LocalSku>>

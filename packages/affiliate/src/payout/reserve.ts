@@ -30,9 +30,8 @@ export function computeReserve(params: {
   const now = params.now ?? new Date()
   const until = params.reserveUntil
   const active = until ? until > now : false
-  const daysRemaining = active && until
-    ? Math.ceil((until.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
-    : 0
+  const daysRemaining =
+    active && until ? Math.ceil((until.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) : 0
 
   return {
     active,
