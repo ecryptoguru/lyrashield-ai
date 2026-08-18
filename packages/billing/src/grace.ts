@@ -69,6 +69,10 @@ export async function getGraceState(workspaceId: string): Promise<GraceState> {
  * Called by the worker when balance <= 0 mid-scan. Returns whether
  * the scan should continue (grace available) or stop (grace exceeded).
  *
+ * Uses an atomic increment to avoid the read-then-write race condition
+ * where concurrent ticks could both read the same graceUsedMs and overwrite
+ * each other's increment.
+ *
  * @param workspaceId - The workspace ID
  * @param deltaMs     - Grace milliseconds consumed in this tick
  * @returns Whether the scan should continue
@@ -77,26 +81,40 @@ export async function enterGrace(
   workspaceId: string,
   deltaMs: number
 ): Promise<{ shouldContinue: boolean; remainingMs: number }> {
-  const workspace = await prisma.workspace.findUnique({
+  // Atomic increment: avoids the read-then-write race condition.
+  // Prisma's { increment: deltaMs } translates to an atomic SQL UPDATE
+  // that cannot be interleaved by concurrent ticks.
+  const updated = await prisma.workspace.update({
     where: { id: workspaceId },
+    data: {
+      graceUsedMs: { increment: deltaMs },
+      graceCycleStart: undefined,
+    },
     select: { graceUsedMs: true, graceCycleStart: true },
-  })
+  }).catch(() => null)
 
-  if (!workspace) {
+  if (!updated) {
     return { shouldContinue: false, remainingMs: 0 }
   }
 
-  const newUsedMs = workspace.graceUsedMs + deltaMs
+  // Ensure graceCycleStart is set if it was null (first grace entry).
+  // We only set it if it's currently null — using a conditional update
+  // to avoid overwriting an existing cycle start.
+  if (!updated.graceCycleStart) {
+    await prisma.workspace.updateMany({
+      where: { id: workspaceId, graceCycleStart: null },
+      data: { graceCycleStart: new Date() },
+    })
+  }
+
+  const newUsedMs = updated.graceUsedMs
 
   if (newUsedMs >= GRACE_CAP_MS) {
-    // Grace exceeded — update and signal stop
+    // Grace exceeded — clamp to cap and signal stop
     await prisma.workspace.update({
       where: { id: workspaceId },
-      data: {
-        graceUsedMs: GRACE_CAP_MS,
-        graceCycleStart: workspace.graceCycleStart ?? new Date(),
-      },
-    })
+      data: { graceUsedMs: GRACE_CAP_MS },
+    }).catch(() => {})
 
     logger.warn("Grace period exceeded — scan should stop", {
       workspaceId,
@@ -105,14 +123,6 @@ export async function enterGrace(
 
     return { shouldContinue: false, remainingMs: 0 }
   }
-
-  await prisma.workspace.update({
-    where: { id: workspaceId },
-    data: {
-      graceUsedMs: newUsedMs,
-      graceCycleStart: workspace.graceCycleStart ?? new Date(),
-    },
-  })
 
   return {
     shouldContinue: true,

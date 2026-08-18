@@ -23,6 +23,13 @@ const ConnectSchema = z.object({
  * enforces sync entitlement server-side: the license must either be a Cloud
  * subscription OR have the $49/yr `sync_addon` SKU.
  *
+ * H-01: The caller must provide the raw license KEY (not just the ID) as
+ * proof of ownership. The key is hashed and verified against the LicenseKey
+ * record. Additionally, if the license is already linked to a different
+ * workspace, the caller must also be a member of that workspace — this
+ * prevents an attacker with a stolen key from hijacking the license to
+ * their own workspace.
+ *
  * The desktop client calls this once during setup; subsequent sync batches
  * use the established SyncCursor.
  */
@@ -44,7 +51,8 @@ export async function POST(request: Request) {
       return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
     }
 
-    // Look up the license by key hash.
+    // H-01: Look up the license by key hash — this proves the caller possesses
+    // the actual license key, not just the ID.
     const keyHash = hashLicenseKey(licenseKey)
     const licenseKeyRow = await prisma.licenseKey.findUnique({
       where: { keyHash },
@@ -57,6 +65,26 @@ export async function POST(request: Request) {
     const license = licenseKeyRow.license
     if (license.revoked) {
       return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
+    }
+
+    // H-01: Prevent license hijacking. If the license is already linked to a
+    // different workspace, the caller must also be a member of that workspace
+    // to re-link it. This prevents a user with a stolen key from hijacking
+    // someone else's license into their own workspace.
+    if (license.workspaceId && license.workspaceId !== workspaceId) {
+      const owningMembership = await prisma.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: { workspaceId: license.workspaceId, userId: session.userId },
+        },
+      })
+      if (!owningMembership || owningMembership.status !== "active") {
+        return apiError(
+          "LICENSE_ALREADY_LINKED",
+          "This license is already linked to another workspace. " +
+            "Contact the workspace owner to transfer it.",
+          403
+        )
+      }
     }
 
     // Server-side entitlement check: Cloud subscription OR sync_addon.

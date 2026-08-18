@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { getCachedSession } from "@/lib/cache"
+import { detectFraudSignals } from "@lyrashield/affiliate"
 
 const ApplySchema = z.object({
   userId: z.string().min(1),
@@ -56,6 +57,30 @@ export async function POST(request: Request) {
       { success: false, error: "You have already applied" },
       { status: 409 }
     )
+  }
+
+  // S9: Fraud signal detection — reject applications with high-severity signals
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { email: true },
+  })
+
+  if (user) {
+    // Count existing signups/applications from the same user email domain
+    const fraudResult = detectFraudSignals({
+      email: user.email,
+    })
+
+    if (fraudResult.block) {
+      logger.warn("Affiliate application blocked by fraud signals", {
+        userId: session.userId,
+        signals: fraudResult.signals.map((s) => s.type),
+      })
+      return NextResponse.json(
+        { success: false, error: "Application rejected due to risk signals" },
+        { status: 403 }
+      )
+    }
   }
 
   // Create the affiliate application

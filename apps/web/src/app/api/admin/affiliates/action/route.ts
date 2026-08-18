@@ -3,7 +3,7 @@ import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { hasPermission } from "@lyrashield/auth"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { setupReserve } from "@lyrashield/affiliate"
 
 const ActionSchema = z.discriminatedUnion("action", [
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     select: { role: true },
   })
 
-  if (!membership || !hasPermission(membership.role, "affiliate:admin" as never)) {
+  if (!membership || !hasPermission(membership.role, PERMISSIONS.affiliate.admin)) {
     return NextResponse.json(
       { success: false, error: "Insufficient permissions" },
       { status: 403 }

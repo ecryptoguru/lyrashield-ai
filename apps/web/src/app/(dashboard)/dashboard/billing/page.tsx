@@ -1,4 +1,4 @@
-import { CreditCard, Clock, Zap, TrendingUp, AlertCircle } from "lucide-react"
+import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import { getUsageBalance, getTrialState, getGraceState, CLOUD_PLAN_MAP } from "@lyrashield/billing"
@@ -6,6 +6,8 @@ import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { BillingActions } from "./billing-actions"
+import { BuyPackButton } from "./buy-pack-button"
+import { UpgradeNowButton } from "./upgrade-now-button"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 
@@ -92,7 +94,7 @@ export default async function BillingPage() {
                   </p>
                 )}
               </div>
-              {canManageBilling && <BillingActions plan={plan} isTeam={isTeam} />}
+              {canManageBilling && <BillingActions plan={plan} isTeam={isTeam} workspaceId={workspaceId} />}
             </div>
 
             {billingAccount?.currentPeriodEnd && (
@@ -138,13 +140,7 @@ export default async function BillingPage() {
                 </div>
               )}
               {!trialState.isExpired && (
-                <Link
-                  href="/billing/checkout"
-                  className={`${buttonVariants({ variant: "default" })} w-full`}
-                >
-                  <TrendingUp className="mr-2 h-4 w-4" />
-                  Upgrade Now
-                </Link>
+                <UpgradeNowButton workspaceId={workspaceId} />
               )}
             </CardContent>
           </Card>
@@ -236,12 +232,7 @@ export default async function BillingPage() {
               </div>
             )}
             {canManageBilling && (
-              <Link
-                href="/api/billing/topup"
-                className={`${buttonVariants({ variant: "outline" })} w-full`}
-              >
-                Buy Minute Pack
-              </Link>
+              <BuyPackButton workspaceId={workspaceId} />
             )}
           </CardContent>
         </Card>

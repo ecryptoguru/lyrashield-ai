@@ -20,6 +20,8 @@ import { env } from "@lyrashield/config"
 
 export interface RazorpayWebhookEvent {
   event: string
+  /** Razorpay includes a top-level timestamp (Unix seconds) for replay protection. */
+  created_at?: number
   payload: {
     payment?: {
       entity: {
@@ -43,8 +45,16 @@ export interface RazorpayWebhookEvent {
   }
 }
 
+/** Default webhook tolerance in milliseconds (5 minutes). */
+const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000
+
 /**
  * Validate a Razorpay webhook signature.
+ *
+ * Security:
+ * - Uses RAZORPAY_WEBHOOK_SECRET exclusively (never falls back to the API key
+ *   secret, which has a different purpose and would weaken webhook validation).
+ * - Rejects events older than 5 minutes to prevent replay attacks.
  *
  * @param body - Raw request body string
  * @param signature - Value of X-Razorpay-Signature header
@@ -54,9 +64,9 @@ export function validateRazorpayWebhook(
   body: string,
   signature: string
 ): RazorpayWebhookEvent {
-  const secret = env.RAZORPAY_WEBHOOK_SECRET ?? env.RAZORPAY_KEY_SECRET
+  const secret = env.RAZORPAY_WEBHOOK_SECRET
   if (!secret) {
-    throw new Error("RAZORPAY_WEBHOOK_SECRET (or RAZORPAY_KEY_SECRET) is not configured")
+    throw new Error("RAZORPAY_WEBHOOK_SECRET is not configured")
   }
 
   if (!signature) {
@@ -71,6 +81,18 @@ export function validateRazorpayWebhook(
   }
 
   const parsed = JSON.parse(body) as RazorpayWebhookEvent
+
+  // Timestamp tolerance: reject events older than 5 minutes to prevent replay.
+  // Razorpay includes a top-level `created_at` field (Unix seconds) in the
+  // webhook payload.
+  if (parsed.created_at !== undefined) {
+    const eventTimestampMs = parsed.created_at * 1000
+    const ageMs = Date.now() - eventTimestampMs
+    if (ageMs > DEFAULT_TOLERANCE_MS) {
+      throw new Error(`Razorpay webhook timestamp outside tolerance (${ageMs}ms > ${DEFAULT_TOLERANCE_MS}ms)`)
+    }
+  }
+
   return parsed
 }
 

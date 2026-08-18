@@ -228,11 +228,18 @@ const envSchema = z
       ),
     // Identifier of the current signing key (for rotation / revocation lists).
     LICENSE_SIGNING_KEY_ID: z.string().optional().or(z.literal("")),
+    // Optional SPKI PEM public key for license verification. If unset, the
+    // public key is derived at runtime from LICENSE_SIGNING_PRIVATE_KEY.
+    LICENSE_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
     // JSON map of Local SKU → Polar product ID, e.g.
     // {"individual_launch":"prod_abc","individual_regular":"prod_def",...}
     POLAR_LOCAL_PRODUCT_IDS: z.string().optional().or(z.literal("")),
     // Maximum findings accepted per sync batch from a Local client.
     LYRASHIELD_SYNC_MAX_FINDINGS_PER_BATCH: z.coerce.number().int().min(1).max(5000).default(500),
+    // Internal API key for server-to-server routes (license issue/renew).
+    // When set, callers must send `X-LyraShield-Internal-Key` matching this
+    // value. Leave unset in dev/test to allow unauthenticated internal calls.
+    LYRASHIELD_INTERNAL_API_KEY: z.string().optional().or(z.literal("")),
 
     // Affiliate / Partner Program (Track C)
     RAZORPAYX_API_KEY: z.string().optional().or(z.literal("")),

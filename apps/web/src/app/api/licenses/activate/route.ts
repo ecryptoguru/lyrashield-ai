@@ -26,6 +26,10 @@ const ActivateSchema = z.object({
  *
  * Idempotent on (licenseId, machineId): re-activating the same machine just
  * refreshes `lastSeenAt` and re-issues the license file.
+ *
+ * C-03: The cap check + activation create are wrapped in a transaction with a
+ * `SELECT FOR UPDATE` lock on the License row to prevent a race condition
+ * where two concurrent requests both pass the cap check and exceed the limit.
  */
 export async function POST(request: Request) {
   try {
@@ -54,62 +58,78 @@ export async function POST(request: Request) {
     const sku = license.sku as LocalSkuId
     const cap = machineCapForSku(sku, license.seatCount)
 
-    // Check if this machine is already activated (idempotent path).
-    const existing = await prisma.licenseActivation.findUnique({
-      where: { licenseId_machineId: { licenseId: license.id, machineId } },
-    })
+    // C-03: Wrap the cap check + activation in a transaction with a row lock
+    // to prevent concurrent requests from both passing the cap check.
+    const result = await prisma.$transaction(async (tx) => {
+      // Lock the License row so concurrent activations for the same license
+      // are serialized. This prevents the TOCTOU race between counting active
+      // activations and creating a new one.
+      await tx.$queryRaw`SELECT * FROM "License" WHERE id = ${license.id} FOR UPDATE`
 
-    if (!existing) {
-      // New activation — enforce machine cap.
-      // Count active (non-deactivated) activations.
-      const activeCount = await prisma.licenseActivation.count({
-        where: { licenseId: license.id, deactivatedAt: null },
+      // Check if this machine is already activated (idempotent path).
+      const existing = await tx.licenseActivation.findUnique({
+        where: { licenseId_machineId: { licenseId: license.id, machineId } },
       })
 
-      if (activeCount >= cap) {
-        return apiError(
-          "MACHINE_CAP_REACHED",
-          isIndividualSku(sku)
-            ? `Individual licenses allow up to ${cap} machines. Deactivate a machine or upgrade to a team license.`
-            : `This team license has ${license.seatCount} seat(s) and all are in use.`,
-          409
-        )
+      if (!existing) {
+        // New activation — enforce machine cap.
+        const activeCount = await tx.licenseActivation.count({
+          where: { licenseId: license.id, deactivatedAt: null },
+        })
+
+        if (activeCount >= cap) {
+          return { capped: true as const, machineIds: [] as string[] }
+        }
+
+        await tx.licenseActivation.create({
+          data: {
+            licenseId: license.id,
+            workspaceId: license.workspaceId,
+            machineId,
+            lastSeenAt: new Date(),
+          },
+        })
+      } else {
+        // Refresh lastSeenAt for the existing activation.
+        await tx.licenseActivation.update({
+          where: { id: existing.id },
+          data: { lastSeenAt: new Date(), deactivatedAt: null },
+        })
       }
 
-      await prisma.licenseActivation.create({
-        data: {
-          licenseId: license.id,
-          workspaceId: license.workspaceId,
-          machineId,
-          lastSeenAt: new Date(),
-        },
+      // Update machineIds on the License row within the same transaction.
+      const allActivations = await tx.licenseActivation.findMany({
+        where: { licenseId: license.id, deactivatedAt: null },
+        select: { machineId: true },
       })
-    } else {
-      // Refresh lastSeenAt for the existing activation.
-      await prisma.licenseActivation.update({
-        where: { id: existing.id },
-        data: { lastSeenAt: new Date(), deactivatedAt: null },
+      const machineIds = allActivations.map((a) => a.machineId)
+
+      await tx.license.update({
+        where: { id: license.id },
+        data: { machineIds },
       })
+
+      return { capped: false as const, machineIds }
+    })
+
+    if (result.capped) {
+      return apiError(
+        "MACHINE_CAP_REACHED",
+        isIndividualSku(sku)
+          ? `Individual licenses allow up to ${cap} machines. Deactivate a machine or upgrade to a team license.`
+          : `This team license has ${license.seatCount} seat(s) and all are in use.`,
+        409
+      )
     }
 
-    // Update machineIds on the License row and issue the signed license file.
-    const allActivations = await prisma.licenseActivation.findMany({
-      where: { licenseId: license.id, deactivatedAt: null },
-      select: { machineId: true },
-    })
-    const machineIds = allActivations.map((a) => a.machineId)
-
-    await prisma.license.update({
-      where: { id: license.id },
-      data: { machineIds },
-    })
-
+    // Issue the signed license file outside the transaction — it does its own
+    // DB reads/writes and the machineIds are already committed.
     const licenseFile = await issueSignedLicense(license.id, license.perpetualFallbackBuild)
 
     logger.info("License activated", {
       licenseId: license.id,
       machineId,
-      machineCount: machineIds.length,
+      machineCount: result.machineIds.length,
       sku,
     })
 

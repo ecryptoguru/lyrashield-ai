@@ -13,20 +13,24 @@ import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
 import { LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
 import { issueLicenseForPolarOrder } from "@/lib/licenses/license-service"
 
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
 /**
  * Billing webhook handler — accepts both Polar and Razorpay webhooks.
  *
  * The provider is determined by the presence of Polar-specific headers
  * (webhooks-id) vs Razorpay-specific headers (X-Razorpay-Signature).
  *
- * Flow:
+ * Flow (synchronous, like the GitHub webhook):
  * 1. Validate signature
  * 2. Insert WebhookEvent (idempotent on @@unique([provider, externalId]))
- * 3. Respond 200 fast
- * 4. Process the event asynchronously:
+ * 3. Process the event synchronously BEFORE responding:
  *    a. Track A: syncSubscription / creditTopUp (billing entitlements)
  *    b. Track B: issue license for Local SKU Polar one-time orders
  *    c. Track C: affiliate commission/clawback via webhook-dispatch
+ * 4. Update WebhookEvent: processed=true, processedAt=now()
+ * 5. Respond 200
  *
  * Single webhook ingress — Track C never registers a second webhook route.
  * Both tracks consume the same idempotent WebhookEvent rows.
@@ -65,33 +69,38 @@ export async function POST(request: Request) {
       payloadRecord = event.data as Record<string, unknown>
 
       // Insert webhook event (idempotent)
-      await insertWebhookEvent(provider, externalId, eventType, payload)
+      const inserted = await insertWebhookEvent(provider, externalId, eventType, payload)
+      if (!inserted) {
+        // Replay — already processed
+        return NextResponse.json({ success: true }, { status: 200 })
+      }
 
-      // Respond 200 fast, process async
-      processAsync(async () => {
-        // Track A: billing entitlements
-        if (isHandledPolarEvent(event.type)) {
-          await processPolarEvent(event)
-        }
+      // Process synchronously before responding
+      // Track A: billing entitlements
+      if (isHandledPolarEvent(event.type)) {
+        await processPolarEvent(event)
+      }
 
-        // Track B: license issuance for Local SKU one-time orders
-        if (event.type === "order.paid") {
-          await maybeIssueLicense(provider, externalId, payloadRecord)
-        }
+      // Track B: license issuance for Local SKU one-time orders
+      if (event.type === "order.paid") {
+        await maybeIssueLicense(provider, externalId, payloadRecord)
+      }
 
-        // Track C: affiliate commission/clawback dispatch
-        await dispatchAffiliate({
+      // Track C: affiliate commission/clawback dispatch (non-blocking on failure)
+      await dispatchAffiliate({
+        provider,
+        event: eventType,
+        payload: payloadRecord,
+      }).catch((err) => {
+        logger.error("Affiliate dispatch failed (non-blocking)", {
           provider,
           event: eventType,
-          payload: payloadRecord,
-        }).catch((err) => {
-          logger.error("Affiliate dispatch failed (non-blocking)", {
-            provider,
-            event: eventType,
-            error: err instanceof Error ? err.message : String(err),
-          })
+          error: err instanceof Error ? err.message : String(err),
         })
       })
+
+      // Mark as processed
+      await markProcessed(provider, externalId)
     } else {
       provider = "razorpay"
       const signature = (headers["x-razorpay-signature"] as string) ?? ""
@@ -107,28 +116,33 @@ export async function POST(request: Request) {
         {}) as Record<string, unknown>
 
       // Insert webhook event (idempotent)
-      await insertWebhookEvent(provider, externalId, eventType, payload)
+      const inserted = await insertWebhookEvent(provider, externalId, eventType, payload)
+      if (!inserted) {
+        // Replay — already processed
+        return NextResponse.json({ success: true }, { status: 200 })
+      }
 
-      // Respond 200 fast, process async
-      processAsync(async () => {
-        // Track A: billing entitlements
-        if (isHandledRazorpayEvent(event.event)) {
-          await processRazorpayEvent(event)
-        }
+      // Process synchronously before responding
+      // Track A: billing entitlements
+      if (isHandledRazorpayEvent(event.event)) {
+        await processRazorpayEvent(event)
+      }
 
-        // Track C: affiliate commission/clawback dispatch
-        await dispatchAffiliate({
+      // Track C: affiliate commission/clawback dispatch (non-blocking on failure)
+      await dispatchAffiliate({
+        provider,
+        event: eventType,
+        payload: payloadRecord,
+      }).catch((err) => {
+        logger.error("Affiliate dispatch failed (non-blocking)", {
           provider,
           event: eventType,
-          payload: payloadRecord,
-        }).catch((err) => {
-          logger.error("Affiliate dispatch failed (non-blocking)", {
-            provider,
-            event: eventType,
-            error: err instanceof Error ? err.message : String(err),
-          })
+          error: err instanceof Error ? err.message : String(err),
         })
       })
+
+      // Mark as processed
+      await markProcessed(provider, externalId)
     }
   } catch (error) {
     logger.error("Webhook validation/processing failed", {
@@ -198,14 +212,15 @@ async function maybeIssueLicense(
 
 /**
  * Insert a WebhookEvent row, idempotent on (provider, externalId).
- * If the event already exists, it's a replay — return without error.
+ * If the event already exists, it's a replay — return false to signal skip.
+ * Returns true if the row was newly inserted.
  */
 async function insertWebhookEvent(
   provider: string,
   externalId: string,
   eventType: string,
   payload: unknown
-): Promise<void> {
+): Promise<boolean> {
   try {
     await prisma.webhookEvent.create({
       data: {
@@ -216,6 +231,7 @@ async function insertWebhookEvent(
         processed: false,
       },
     })
+    return true
   } catch (error) {
     // P2002 = unique constraint — replay, ignore
     if (
@@ -225,21 +241,18 @@ async function insertWebhookEvent(
       (error as { code: string }).code === "P2002"
     ) {
       logger.debug("Webhook event replay (already processed)", { provider, externalId })
-      return
+      return false
     }
     throw error
   }
 }
 
 /**
- * Process an async task without blocking the webhook response.
- * In production, this should be a BullMQ job; for now, we use a fire-and-forget
- * promise with error logging.
+ * Mark a WebhookEvent as processed after all synchronous side effects succeed.
  */
-function processAsync(fn: () => Promise<void>): void {
-  fn().catch((error) => {
-    logger.error("Async webhook processing failed", {
-      error: error instanceof Error ? error.message : String(error),
-    })
+async function markProcessed(provider: string, externalId: string): Promise<void> {
+  await prisma.webhookEvent.updateMany({
+    where: { provider, externalId, processed: false },
+    data: { processed: true, processedAt: new Date() },
   })
 }

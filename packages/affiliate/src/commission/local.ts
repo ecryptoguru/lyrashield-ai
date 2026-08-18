@@ -20,6 +20,8 @@ export interface LocalOrderPaidPayload {
   externalId: string
   /** Provider customer id. */
   customerId: string
+  /** Customer email — used for self-referral detection. */
+  customerEmail?: string
   /** Gross amount in major currency units. */
   grossAmount: string
   /** Discount amount in major currency units. */
@@ -55,6 +57,7 @@ export async function onLocalOrderPaid(
   payload: LocalOrderPaidPayload
 ): Promise<LocalOrderPaidResult> {
   const {
+    provider,
     externalId,
     grossAmount,
     discountAmount = "0",
@@ -66,9 +69,12 @@ export async function onLocalOrderPaid(
     subid,
   } = payload
 
+  // C2: Provider-scoped idempotency key prevents cross-provider collisions
+  const idempotencyKey = `${provider}:${externalId}`
+
   // Idempotency check
   const existing = await prisma.conversion.findFirst({
-    where: { idempotencyKey: externalId },
+    where: { idempotencyKey },
     include: { commissions: true },
   })
 
@@ -141,7 +147,7 @@ export async function onLocalOrderPaid(
   const conversion = await prisma.conversion.create({
     data: {
       externalId,
-      idempotencyKey: externalId,
+      idempotencyKey,
       affiliateId,
       grossAmount: gross,
       commissionableAmount: commissionableBase,

@@ -38,7 +38,9 @@ export interface SyncSubscriptionParams {
  * - past_due: keep plan until period end, then downgrade to FREE
  * - trialing: set trial state
  *
- * All changes are audit-logged.
+ * All changes are audit-logged and wrapped in a single transaction so
+ * the billing account, workspace plan, and audit log are committed
+ * atomically.
  */
 export async function syncSubscription(params: SyncSubscriptionParams): Promise<void> {
   const {
@@ -91,64 +93,70 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
       billingStatus = status
   }
 
-  // Update billing account
-  await prisma.billingAccount.upsert({
-    where: { workspaceId },
-    create: {
-      workspaceId,
-      provider,
-      externalId,
-      status: billingStatus,
-      currentPlan: effectivePlan,
-      interval,
-      currentPeriodStart: currentPeriodStart ?? null,
-      currentPeriodEnd: currentPeriodEnd ?? null,
-      canceledAt: canceledAt ?? null,
-    },
-    update: {
-      provider,
-      externalId,
-      status: billingStatus,
-      currentPlan: effectivePlan,
-      interval,
-      currentPeriodStart: currentPeriodStart ?? undefined,
-      currentPeriodEnd: currentPeriodEnd ?? undefined,
-      canceledAt: canceledAt ?? undefined,
-    },
+  // Wrap all writes in a single transaction for atomicity.
+  // The monthly pool grant and grace reset are called outside the transaction
+  // because they perform their own independent writes with idempotency keys.
+  await prisma.$transaction(async (tx) => {
+    // Update billing account
+    await tx.billingAccount.upsert({
+      where: { workspaceId },
+      create: {
+        workspaceId,
+        provider,
+        externalId,
+        status: billingStatus,
+        currentPlan: effectivePlan,
+        interval,
+        currentPeriodStart: currentPeriodStart ?? null,
+        currentPeriodEnd: currentPeriodEnd ?? null,
+        canceledAt: canceledAt ?? null,
+      },
+      update: {
+        provider,
+        externalId,
+        status: billingStatus,
+        currentPlan: effectivePlan,
+        interval,
+        currentPeriodStart: currentPeriodStart ?? undefined,
+        currentPeriodEnd: currentPeriodEnd ?? undefined,
+        canceledAt: canceledAt ?? undefined,
+      },
+    })
+
+    // Update workspace plan + deepAllowed
+    await tx.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        plan: effectivePlan,
+        deepAllowed,
+      },
+    })
+
+    // Audit log
+    await tx.auditLog.create({
+      data: {
+        workspaceId,
+        action: "billing.subscription_synced",
+        resourceType: "billing_account",
+        resourceId: externalId,
+        metadata: {
+          provider,
+          plan,
+          status,
+          interval,
+          deepAllowed,
+        },
+      },
+    })
   })
 
-  // Update workspace plan + deepAllowed
-  await prisma.workspace.update({
-    where: { id: workspaceId },
-    data: {
-      plan: effectivePlan,
-      deepAllowed,
-    },
-  })
-
-  // Grant monthly pool on active subscription
+  // Grant monthly pool on active subscription (outside the transaction —
+  // grantMonthlyPool and resetGrace perform their own idempotent writes).
   if (status === "active" && currentPeriodStart && cloudPlan.agentMinutes > 0) {
     const source = interval === "annual" ? "annual_monthly" : "subscription"
     await grantMonthlyPool(workspaceId, plan, currentPeriodStart, source)
     await resetGrace(workspaceId)
   }
-
-  // Audit log
-  await prisma.auditLog.create({
-    data: {
-      workspaceId,
-      action: "billing.subscription_synced",
-      resourceType: "billing_account",
-      resourceId: externalId,
-      metadata: {
-        provider,
-        plan,
-        status,
-        interval,
-        deepAllowed,
-      },
-    },
-  })
 
   logger.info("Subscription synced", {
     workspaceId,

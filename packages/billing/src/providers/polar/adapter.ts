@@ -12,7 +12,7 @@
 
 import { logger } from "@lyrashield/logger"
 import type { PolarWebhookEvent } from "./webhooks"
-import { syncSubscription, type SubscriptionStatus, type BillingInterval } from "../../sync"
+import { syncSubscription, downgradeToFree, type SubscriptionStatus, type BillingInterval } from "../../sync"
 import { creditTopUp } from "../../usage/packs"
 import { reverseRefund } from "../../usage/refund"
 import { MINUTE_PACK_MAP, type CloudPlanId, type PackId } from "@lyrashield/pricing"
@@ -110,28 +110,25 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
 
         const state = (data.state ?? "active") as string
         if (state === "blocked" || state === "deleted") {
-          await syncSubscription({
-            workspaceId,
-            provider: "polar",
-            externalId: String(data.id ?? ""),
-            plan: "STARTER",
-            status: "canceled",
-            interval: "monthly",
-            canceledAt: new Date(),
-          })
+          // Downgrade to FREE directly — blocked/deleted customers should
+          // not retain any paid plan entitlements.
+          await downgradeToFree(workspaceId, `customer.${state}`)
         }
 
         return { handled: true, action: `customer.state_changed.${state}`, workspaceId }
       }
 
       case "refund.created": {
-        // Refund — reverse the entitlement
+        // Refund — reverse the entitlement.
+        // Polar refund events include data.order_id — use the original order ID
+        // (not the refund ID) so reverseRefund can find the MinutePack by
+        // its externalId (which was set to the order ID at purchase time).
         if (!workspaceId) {
           return { handled: false, action: "refund.no_workspace", workspaceId: null }
         }
 
-        const refundExternalId = String(data.id ?? "")
-        await reverseRefund(workspaceId, refundExternalId)
+        const orderId = String(data.order_id ?? data.id ?? "")
+        await reverseRefund(workspaceId, orderId)
 
         return { handled: true, action: "refund.reversed", workspaceId }
       }
@@ -167,6 +164,9 @@ function mapPolarSubscriptionStatus(
       if (status === "past_due" || status === "incomplete" || status === "trialing") {
         return status as SubscriptionStatus
       }
-      return "active"
+      // Fail-closed: unknown status defaults to past_due, not active.
+      // This prevents a malformed/unexpected event from silently granting
+      // full access when the subscription state is ambiguous.
+      return "past_due"
   }
 }

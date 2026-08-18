@@ -2,7 +2,7 @@ import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { redirect } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
-import { hasPermission } from "@lyrashield/auth"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { AffiliateAdminActions } from "./admin-actions"
 
 export const metadata = {
@@ -24,7 +24,7 @@ export default async function AffiliateAdminPage() {
     select: { role: true },
   })
 
-  if (!membership || !hasPermission(membership.role, "affiliate:admin" as never)) {
+  if (!membership || !hasPermission(membership.role, PERMISSIONS.affiliate.admin)) {
     redirect("/dashboard")
   }
 

@@ -7,12 +7,15 @@
  * (production — TODO: wire Key Vault client).
  */
 
-import { createHash, randomUUID } from "node:crypto"
+import { createHash, createPrivateKey, createPublicKey, randomUUID } from "node:crypto"
 import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { getLocalSku, type LocalSkuId } from "@lyrashield/pricing"
 import { signLicense, type LicenseFile, type LicenseSku } from "@lyrashield/licenses"
 import { logger } from "@lyrashield/logger"
+
+/** HTTP header name for the internal API key used by server-to-server routes. */
+export const INTERNAL_API_KEY_HEADER = "X-LyraShield-Internal-Key"
 
 /** Individual licenses allow up to 3 machines. Team licenses allow 1 machine per seat. */
 export const INDIVIDUAL_MACHINE_CAP = 3
@@ -42,6 +45,64 @@ export function resolveSigningPrivateKey(): string {
 /** Resolve the signing key identifier (for rotation / revocation). */
 export function resolveSigningKeyId(): string {
   return env.LICENSE_SIGNING_KEY_ID || "license-key-v1"
+}
+
+/**
+ * Resolve the ed25519 public key (SPKI PEM) for license verification.
+ *
+ * Resolution order:
+ * 1. `LICENSE_SIGNING_PUBLIC_KEY` env var (explicit, supports key separation).
+ * 2. Derived from `LICENSE_SIGNING_PRIVATE_KEY` at runtime.
+ *
+ * The server must NEVER accept a public key from the client — doing so would
+ * allow an attacker to forge a license and supply their own key for verification.
+ */
+export function resolveSigningPublicKey(): string {
+  if (env.LICENSE_SIGNING_PUBLIC_KEY) {
+    return env.LICENSE_SIGNING_PUBLIC_KEY
+  }
+
+  // Derive the public key from the private key.
+  const privateKeyPem = resolveSigningPrivateKey()
+  const privateKey = createPrivateKey({ key: privateKeyPem, format: "pem" })
+  const derivedPublicKey = createPublicKey(privateKey)
+  return derivedPublicKey.export({ type: "spki", format: "pem" }).toString()
+}
+
+/**
+ * Verify the internal API key on server-to-server routes (license issue/renew).
+ *
+ * When `LYRASHIELD_INTERNAL_API_KEY` is set, the request must include the
+ * `X-LyraShield-Internal-Key` header matching that value. When the env var is
+ * unset (dev/test), the check is skipped with a warning so local development
+ * and e2e tests are not blocked.
+ *
+ * @returns `null` if the check passes, or a `Response` (403) if it fails.
+ */
+export function requireInternalApiKey(request: Request): Response | null {
+  const expectedKey = env.LYRASHIELD_INTERNAL_API_KEY
+
+  // Dev/test convenience: if no internal key is configured, allow the request.
+  if (!expectedKey) {
+    logger.warn(
+      "LYRASHIELD_INTERNAL_API_KEY is not set — internal API routes are unauthenticated. " +
+        "Set this variable in production to protect license issue/renew endpoints."
+    )
+    return null
+  }
+
+  const providedKey = request.headers.get(INTERNAL_API_KEY_HEADER)
+  if (!providedKey || providedKey !== expectedKey) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: { code: "FORBIDDEN", message: "Missing or invalid internal API key" },
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    )
+  }
+
+  return null
 }
 
 /**

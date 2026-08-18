@@ -7,6 +7,7 @@ import {
   hashLicenseKey,
   issueSignedLicense,
   computeUpdateEligibleUntil,
+  requireInternalApiKey,
 } from "../../../../lib/licenses/license-service"
 
 export const dynamic = "force-dynamic"
@@ -29,10 +30,17 @@ const RenewSchema = z.object({
  * license file. The `renewalSku` must be a valid renewal or original SKU.
  *
  * In production this is triggered by a Polar `order.paid` webhook for the
- * renewal SKU; it is also exposed as a direct API for manual renewals.
+ * renewal SKU. This route is protected by an internal API key
+ * (`X-LyraShield-Internal-Key`) so that external users cannot extend
+ * eligibility infinitely.
  */
 export async function POST(request: Request) {
   try {
+    // C-02: Require internal API key — renewal is a paid action triggered by
+    // the Polar webhook. Without this check anyone could extend eligibility.
+    const authResponse = requireInternalApiKey(request)
+    if (authResponse) return authResponse
+
     const body: unknown = await request.json().catch(() => null)
     const parsed = RenewSchema.safeParse(body)
     if (!parsed.success) {

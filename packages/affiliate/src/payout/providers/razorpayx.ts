@@ -6,6 +6,7 @@
  */
 
 import { logger } from "@lyrashield/logger"
+import { Prisma } from "@lyrashield/db"
 
 export interface RazorpayXProvider {
   send(
@@ -46,8 +47,13 @@ export function createRazorpayXProvider(): RazorpayXProvider {
         return { success: false, error: "RazorpayX only supports INR payouts" }
       }
 
+      // Q1: Use Prisma.Decimal for money — never parseFloat for monetary amounts
+      const amountDecimal = new Prisma.Decimal(amount)
+      if (amountDecimal.lte(0)) {
+        return { success: false, error: "Invalid payout amount" }
+      }
       // Convert major units to paise (integer)
-      const amountPaise = Math.round(parseFloat(amount) * 100)
+      const amountPaise = amountDecimal.mul(100).toNumber()
       if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
         return { success: false, error: "Invalid payout amount" }
       }

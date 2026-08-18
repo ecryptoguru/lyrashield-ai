@@ -19,6 +19,7 @@ import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { loadActiveProgram } from "../program"
 import { resolveAttribution } from "../attribution/resolve"
+import { detectFraudSignals } from "../fraud/signals"
 import {
   BASE_RATE_BPS,
   TIER_RATE_BPS,
@@ -38,6 +39,8 @@ export interface OrderPaidPayload {
   providerSubscriptionId?: string | null
   /** Provider customer id. */
   customerId: string
+  /** Customer email — used for self-referral detection. */
+  customerEmail?: string
   /** Gross amount in major currency units (e.g. 29.00). */
   grossAmount: string
   /** Discount amount in major currency units (e.g. 5.00). */
@@ -54,6 +57,10 @@ export interface OrderPaidPayload {
   promoCode?: string | null
   /** Attribution cookie token (if available). */
   cookieToken?: string | null
+  /** Direct affiliate id (from checkout metadata — skips attribution resolution). */
+  affiliateId?: string | null
+  /** Click id (from checkout metadata — paired with affiliateId). */
+  clickId?: string | null
   /** SubID for campaign tracking. */
   subid?: string | null
   /** Whether this is a first payment (vs renewal). */
@@ -85,6 +92,7 @@ export async function onOrderPaid(
     externalId,
     providerSubscriptionId,
     customerId,
+    customerEmail,
     grossAmount,
     discountAmount = "0",
     taxAmount = "0",
@@ -92,13 +100,17 @@ export async function onOrderPaid(
     isAnnual = false,
     promoCode,
     cookieToken,
+    affiliateId: directAffiliateId,
     subid,
     isFirstPayment = false,
   } = payload
 
+  // Provider-scoped idempotency key prevents cross-provider collisions (C2)
+  const idempotencyKey = `${provider}:${externalId}`
+
   // Idempotency check
   const existing = await prisma.conversion.findFirst({
-    where: { idempotencyKey: externalId },
+    where: { idempotencyKey },
     include: { commissions: true },
   })
 
@@ -115,24 +127,104 @@ export async function onOrderPaid(
     }
   }
 
-  // Resolve attribution
-  const attribution = await resolveAttribution({ promoCode, cookieToken })
-  if (!attribution.affiliateId) {
-    logger.info("Commission engine: no attribution for order", { externalId })
-    // No attribution — skip commission creation (no unattributed conversion record
-    // since the schema requires a valid affiliateId foreign key)
+  // Resolve attribution.
+  // C1: If the payload carries a direct affiliateId (from checkout metadata),
+  // skip attribution resolution and use it directly.
+  let affiliateId: string
+  let attributionMethod: string
+
+  if (directAffiliateId) {
+    // Verify the affiliate exists and is approved
+    const directAffiliate = await prisma.affiliate.findUnique({
+      where: { id: directAffiliateId },
+      select: { id: true, status: true },
+    })
+    if (!directAffiliate || directAffiliate.status !== "APPROVED") {
+      logger.info("Commission engine: direct affiliateId not approved", { externalId, directAffiliateId })
+      return {
+        conversionId: "",
+        commissionId: "",
+        amount: "0",
+        rateBps: 0,
+        status: "UNATTRIBUTED",
+        expired: false,
+        duplicate: false,
+      }
+    }
+    affiliateId = directAffiliateId
+    attributionMethod = "direct_metadata"
+  } else {
+    const attribution = await resolveAttribution({ promoCode, cookieToken })
+    if (!attribution.affiliateId) {
+      logger.info("Commission engine: no attribution for order", { externalId })
+      // No attribution — skip commission creation (no unattributed conversion record
+      // since the schema requires a valid affiliateId foreign key)
+      return {
+        conversionId: "",
+        commissionId: "",
+        amount: "0",
+        rateBps: 0,
+        status: "UNATTRIBUTED",
+        expired: false,
+        duplicate: false,
+      }
+    }
+    affiliateId = attribution.affiliateId
+    attributionMethod = attribution.method
+  }
+
+  // S2: Self-referral check — if the paying customer's email matches the
+  // affiliate owner's email, reject the commission.
+  const affiliateOwner = await prisma.affiliate.findUnique({
+    where: { id: affiliateId },
+    select: {
+      userId: true,
+      user: { select: { email: true } },
+    },
+  })
+
+  if (
+    affiliateOwner &&
+    customerEmail &&
+    affiliateOwner.user?.email &&
+    affiliateOwner.user.email.toLowerCase() === customerEmail.toLowerCase()
+  ) {
+    logger.warn("Self-referral rejected", {
+      externalId,
+      affiliateId,
+      customerEmail,
+    })
     return {
       conversionId: "",
       commissionId: "",
       amount: "0",
       rateBps: 0,
-      status: "UNATTRIBUTED",
+      status: "SELF_REFERRAL_REJECTED",
       expired: false,
       duplicate: false,
     }
   }
 
-  const affiliateId = attribution.affiliateId
+  // S9: Fraud signal detection — block commission if high-severity signals found
+  const fraudResult = detectFraudSignals({
+    email: customerEmail,
+  })
+  if (fraudResult.block) {
+    logger.warn("Commission blocked by fraud signals", {
+      externalId,
+      affiliateId,
+      signals: fraudResult.signals.map((s) => s.type),
+    })
+    return {
+      conversionId: "",
+      commissionId: "",
+      amount: "0",
+      rateBps: 0,
+      status: "FRAUD_BLOCKED",
+      expired: false,
+      duplicate: false,
+    }
+  }
 
   // Load program terms
   let holdDays = DEFAULT_HOLD_DAYS
@@ -162,9 +254,8 @@ export async function onOrderPaid(
     } else if (isFirstPayment) {
       // Create new subscription record
       const now = new Date()
-      capEndsAt = new Date(
-        now.getTime() + capMonths * 30 * 24 * 60 * 60 * 1000
-      )
+      // C5: Use calendar month arithmetic instead of 30-day months
+      capEndsAt = new Date(now.getFullYear(), now.getMonth() + capMonths, now.getDate())
       const sub = await prisma.affiliateSubscription.create({
         data: {
           providerSubscriptionId,
@@ -191,13 +282,13 @@ export async function onOrderPaid(
     const conversion = await prisma.conversion.create({
       data: {
         externalId,
-        idempotencyKey: externalId,
+        idempotencyKey,
         subscriptionId,
         affiliateId,
         grossAmount: new Prisma.Decimal(grossAmount),
         commissionableAmount: new Prisma.Decimal(0),
         currency,
-        method: attribution.method,
+        method: attributionMethod,
         promoCode: promoCode ?? null,
         subid: subid ?? null,
         occurredAt: new Date(),
@@ -284,13 +375,13 @@ export async function onOrderPaid(
   const conversion = await prisma.conversion.create({
     data: {
       externalId,
-      idempotencyKey: externalId,
+      idempotencyKey,
       subscriptionId,
       affiliateId,
       grossAmount: gross,
       commissionableAmount: commissionableBase,
       currency,
-      method: attribution.method,
+      method: attributionMethod,
       promoCode: promoCode ?? null,
       subid: subid ?? null,
       occurredAt: now,

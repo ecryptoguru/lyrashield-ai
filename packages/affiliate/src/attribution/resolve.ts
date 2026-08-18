@@ -5,6 +5,15 @@
  *  1. Valid affiliate promo code at checkout → code owner
  *  2. Else valid unexpired last-click cookie → its affiliate
  *  3. Else unattributed
+ *
+ * S7: RATE LIMITING NOTE — promo code resolution is a database lookup that
+ * could be brute-forced if an attacker tries many codes at checkout. Rate
+ * limiting should be enforced at the call site (e.g. the checkout route or
+ * webhook handler) to bound failed attempts per IP. A simple approach:
+ * cache failed attempts per IP; if more than 10 failures in 5 minutes,
+ * reject all resolution attempts for 15 minutes. The checkout/billing
+ * route is the correct place to implement this since it has the request
+ * context (IP, session).
  */
 
 import { createHash } from "node:crypto"

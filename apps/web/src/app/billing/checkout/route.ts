@@ -1,7 +1,6 @@
 import { z } from "zod"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   resolveProvider,
@@ -16,6 +15,7 @@ import { apiSuccess, apiError } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 
 const CheckoutSchema = z.object({
+  workspaceId: z.string().min(1),
   plan: z.enum(["STARTER", "PRO", "TEAM"]),
   interval: z.enum(["monthly", "annual"]),
   region: z.enum(["usd", "inr"]).optional(),
@@ -35,24 +35,12 @@ export async function POST(request: Request) {
     return apiError("VALIDATION_ERROR", parsed.error.message, 400)
   }
 
-  const { plan, interval, promoCode } = parsed.data
+  const { workspaceId, plan, interval, promoCode } = parsed.data
 
   try {
-    // Get workspace from session
-    const { session } = await requirePermission("", PERMISSIONS.billing.manage).catch(() => {
-      throw new Error("UNAUTHORIZED")
-    })
-
-    // Get the user's workspace
-    const membership = await prisma.workspaceMember.findFirst({
-      where: { userId: session.userId },
-      select: { workspaceId: true },
-    })
-    if (!membership) {
-      return apiError("NO_WORKSPACE", "No workspace found for this user", 404)
-    }
-
-    const workspaceId = membership.workspaceId
+    // Validate the caller has billing.manage on the specified workspace.
+    // No findFirst fallback — the workspaceId must be explicitly provided.
+    await requirePermission(workspaceId, PERMISSIONS.billing.manage)
 
     // Verify the plan is self-serve
     const cloudPlan = CLOUD_PLAN_MAP[plan as CloudPlanId]

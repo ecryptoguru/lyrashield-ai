@@ -1,5 +1,4 @@
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
@@ -15,6 +14,7 @@ import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
 
 const TopUpSchema = z.object({
+  workspaceId: z.string().min(1),
   pack: z.enum(["pack_100", "pack_250", "pack_500"]),
   region: z.enum(["usd", "inr"]).optional(),
 })
@@ -38,22 +38,13 @@ export async function POST(request: Request) {
     return apiError("VALIDATION_ERROR", parsed.error.message, 400)
   }
 
-  const { pack: packId } = parsed.data
+  const { workspaceId, pack: packId } = parsed.data
 
   try {
-    const { session } = await requirePermission("", PERMISSIONS.billing.manage).catch(() => {
-      throw new Error("UNAUTHORIZED")
-    })
+    // Validate the caller has billing.manage on the specified workspace.
+    // No findFirst fallback — the workspaceId must be explicitly provided.
+    await requirePermission(workspaceId, PERMISSIONS.billing.manage)
 
-    const membership = await prisma.workspaceMember.findFirst({
-      where: { userId: session.userId },
-      select: { workspaceId: true },
-    })
-    if (!membership) {
-      return apiError("NO_WORKSPACE", "No workspace found for this user", 404)
-    }
-
-    const workspaceId = membership.workspaceId
     const pack = MINUTE_PACK_MAP[packId as PackId]
     if (!pack) {
       return apiError("INVALID_PACK", "Unknown minute pack", 400)

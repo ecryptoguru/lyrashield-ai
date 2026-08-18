@@ -121,6 +121,11 @@ export async function detectAttribution(params: {
   // Create the Click (non-blocking — swallow errors)
   let clickId: string | undefined
   try {
+    // S4: Hash the user-agent before storing — never store plaintext UA
+    const hashedUserAgent = userAgent
+      ? createHash("sha256").update(userAgent).digest("hex")
+      : null
+
     const click = await prisma.click.create({
       data: {
         linkId: link.id,
@@ -129,7 +134,7 @@ export async function detectAttribution(params: {
         landingUrl: landingUrl ?? null,
         referrer: referrer ?? null,
         ipHash: ipHash ?? null,
-        userAgent: userAgent ?? null,
+        userAgent: hashedUserAgent,
         subid: link.subid ?? null,
         utm: {
           source: searchParams.get("utm_source") ?? null,

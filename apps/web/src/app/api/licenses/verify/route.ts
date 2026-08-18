@@ -2,6 +2,7 @@ import { z } from "zod"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { verifyLicense, type LicenseFile } from "@lyrashield/licenses"
+import { resolveSigningPublicKey } from "../../../../lib/licenses/license-service"
 
 export const dynamic = "force-dynamic"
 
@@ -19,9 +20,6 @@ const VerifySchema = z.object({
       typeof (val as LicenseFile).issuedAt === "string",
     "licenseFile must be a valid LicenseFile object"
   ),
-  // The public key PEM is bundled with the desktop app; the server endpoint
-  // accepts it for convenience but the client should verify locally.
-  publicKeyPem: z.string().min(1).optional(),
 })
 
 /**
@@ -30,6 +28,11 @@ const VerifySchema = z.object({
  * Verify a license file's ed25519 signature and return update-eligibility
  * status. The desktop client should verify locally (offline grace); this
  * endpoint is for server-side checks and client convenience.
+ *
+ * C-08: The server uses its OWN configured public key (derived from
+ * LICENSE_SIGNING_PRIVATE_KEY or LICENSE_SIGNING_PUBLIC_KEY) — it NEVER
+ * accepts a public key from the client. Accepting a client-supplied key
+ * would allow an attacker to forge a license and provide their own key.
  */
 export async function POST(request: Request) {
   try {
@@ -38,20 +41,14 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
-    const { licenseFile, publicKeyPem } = parsed.data
+    const { licenseFile } = parsed.data
 
-    // The server uses its own bundled public key if the client doesn't supply one.
-    // For now we require the client to pass it; a future enhancement will bundle
-    // the server's public key as a constant.
-    if (!publicKeyPem) {
-      return apiError(
-        "MISSING_PUBLIC_KEY",
-        "publicKeyPem is required for verification",
-        400
-      )
-    }
+    // C-08: Always use the server's own public key — never trust a key
+    // supplied by the client. An attacker could forge a license and provide
+    // their own public key to make verification pass.
+    const serverPublicKeyPem = resolveSigningPublicKey()
 
-    const result = verifyLicense(licenseFile, publicKeyPem)
+    const result = verifyLicense(licenseFile, serverPublicKeyPem)
 
     if (!result.valid) {
       return apiSuccess(

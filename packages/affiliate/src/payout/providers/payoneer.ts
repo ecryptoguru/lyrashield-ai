@@ -6,6 +6,7 @@
  */
 
 import { logger } from "@lyrashield/logger"
+import { Prisma } from "@lyrashield/db"
 
 export interface PayoneerProvider {
   send(
@@ -41,8 +42,9 @@ export function createPayoneerProvider(): PayoneerProvider {
         return { success: false, error: "Invalid payout method for Payoneer" }
       }
 
-      const amountNum = parseFloat(amount)
-      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      // Q1: Use Prisma.Decimal for money — never parseFloat for monetary amounts
+      const amountDecimal = new Prisma.Decimal(amount)
+      if (amountDecimal.lte(0)) {
         return { success: false, error: "Invalid payout amount" }
       }
 

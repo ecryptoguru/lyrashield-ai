@@ -6,10 +6,10 @@
  */
 
 import { prisma } from "@lyrashield/db"
-import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
+import { CLOUD_PLAN_MAP, STANDARD_OVERAGE_PER_MINUTE_USD } from "@lyrashield/pricing"
 import type { ScanMode } from "@lyrashield/types"
 import { getUsageBalance } from "./usage/balance"
-import { getTrialState } from "./trial"
+import { getTrialState, blockOnExpiry } from "./trial"
 import { getGraceState as getGraceStateFromGrace } from "./grace"
 
 export type ScanModeAllowed = "SAFE" | "QUICK" | "STANDARD" | "DEEP" | "CUSTOM"
@@ -61,6 +61,26 @@ export async function assertScanAllowed(
   const cloudPlan = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = plan === "FREE" && workspace.trialStartedAt !== null
 
+  // Check trial expiry: if the workspace is on trial and the trial has expired,
+  // block the scan and lazily set the billing account status via blockOnExpiry.
+  if (isTrial) {
+    const trialState = await getTrialState(workspaceId)
+    if (trialState.isExpired) {
+      // Lazily set the billing account status to "trial_expired"
+      await blockOnExpiry(workspaceId).catch(() => {
+        // Non-blocking — the scan is already blocked below
+      })
+      return {
+        allowed: false,
+        code: "TRIAL_EXPIRED",
+        message: "Your trial has expired. Upgrade to continue scanning.",
+        isTrial,
+        plan,
+        remainingMinutes: 0,
+      }
+    }
+  }
+
   // Check deep scan permission
   const isDeepMode = mode === "DEEP" || mode === "CUSTOM"
   if (isDeepMode) {
@@ -94,13 +114,47 @@ export async function assertScanAllowed(
     // Check if overage is available (Team plan with spend limit)
     const billingAccount = await prisma.billingAccount.findUnique({
       where: { workspaceId },
-      select: { currentPlan: true, spendLimitCents: true },
+      select: {
+        currentPlan: true,
+        spendLimitCents: true,
+        currentPeriodStart: true,
+      },
     })
-    const overageAvailable =
+    const overagePlanEligible =
       billingAccount?.currentPlan === "TEAM" &&
       (billingAccount.spendLimitCents ?? 0) > 0
 
-    if (!overageAvailable) {
+    if (overagePlanEligible) {
+      // S14: Also verify remaining overage spend budget > 0.
+      // Query current cycle overage minutes and compute the remaining budget.
+      const cycleStart = billingAccount?.currentPeriodStart ?? new Date(0)
+      const overageRecords = await prisma.usageRecord.findMany({
+        where: {
+          workspaceId,
+          kind: "overage_minutes",
+          deletedAt: null,
+          cycleStart: { gte: cycleStart },
+        },
+        select: { quantity: true },
+      })
+      const currentOverageMinutes = overageRecords.reduce((sum, r) => sum + r.quantity, 0)
+      const overagePerMinuteCents = Math.round(STANDARD_OVERAGE_PER_MINUTE_USD * 100)
+      const currentOverageCostCents = currentOverageMinutes * overagePerMinuteCents
+      const remainingBudgetCents =
+        (billingAccount?.spendLimitCents ?? 0) - currentOverageCostCents
+
+      if (remainingBudgetCents <= 0) {
+        return {
+          allowed: false,
+          code: "NO_MINUTES_REMAINING",
+          message:
+            "Your agent-minute balance is exhausted and your overage spend limit has been reached. Buy a minute pack or upgrade your plan.",
+          isTrial,
+          plan,
+          remainingMinutes: 0,
+        }
+      }
+    } else {
       return {
         allowed: false,
         code: "NO_MINUTES_REMAINING",

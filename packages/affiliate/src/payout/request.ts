@@ -40,15 +40,6 @@ export async function requestPayout(params: {
 }): Promise<PayoutRequestResult> {
   const { affiliateId, provider, sendFn } = params
 
-  // Check eligibility
-  const eligibility = await checkPayoutEligibility(affiliateId)
-  if (!eligibility.eligible) {
-    return {
-      success: false,
-      error: eligibility.reasons.join("; "),
-    }
-  }
-
   const affiliate = await prisma.affiliate.findUnique({
     where: { id: affiliateId },
     select: { id: true, payoutMethod: true, reservePct: true, reserveUntil: true },
@@ -58,13 +49,35 @@ export async function requestPayout(params: {
     return { success: false, error: "Affiliate not found" }
   }
 
-  // Transaction: lock + reserve commissions + create payout
-  const payout = await prisma.$transaction(async (tx) => {
-    // Find eligible AVAILABLE commissions (not in reserve)
-    const commissions = await tx.commission.findMany({
+  let payout: { id: string; amount: Prisma.Decimal; currency: string; itemCount: number }
+  try {
+    payout = await prisma.$transaction(async (tx) => {
+    // Re-check eligibility inside the transaction to avoid TOCTOU.
+    const eligibility = await checkPayoutEligibility(affiliateId)
+    if (!eligibility.eligible) {
+      throw new Error(eligibility.reasons.join("; "))
+    }
+
+    // Atomically reserve ALL available commissions (AVAILABLE → RESERVED).
+    // This is the concurrency guard: only one transaction can succeed in
+    // flipping the rows because updateMany is atomic.
+    const reserveResult = await tx.commission.updateMany({
       where: {
         affiliateId,
         status: "AVAILABLE",
+      },
+      data: { status: "RESERVED" },
+    })
+
+    if (reserveResult.count === 0) {
+      throw new Error("No available commissions to pay out")
+    }
+
+    // Read the now-reserved commissions.
+    const commissions = await tx.commission.findMany({
+      where: {
+        affiliateId,
+        status: "RESERVED",
       },
       select: { id: true, amount: true, currency: true },
     })
@@ -112,7 +125,7 @@ export async function requestPayout(params: {
       data: { idempotencyKey: newPayout.id },
     })
 
-    // Create PayoutItems + mark commissions RESERVED
+    // Create PayoutItems (commissions are already RESERVED from updateMany)
     for (const item of items) {
       await tx.payoutItem.create({
         data: {
@@ -121,15 +134,22 @@ export async function requestPayout(params: {
           amount: item.amount,
         },
       })
-
-      await tx.commission.update({
-        where: { id: item.commissionId },
-        data: { status: "RESERVED" },
-      })
     }
 
-    return { id: newPayout.id, amount: totalAmount, currency, itemCount: items.length }
-  })
+      return { id: newPayout.id, amount: totalAmount, currency, itemCount: items.length }
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Payout transaction failed"
+    // Distinguish eligibility/no-commissions errors from unexpected failures
+    if (
+      message.includes("No available commissions") ||
+      message.includes("eligibility") ||
+      message.includes("; ")
+    ) {
+      return { success: false, error: message }
+    }
+    throw error
+  }
 
   // Call provider (outside transaction)
   if (sendFn) {

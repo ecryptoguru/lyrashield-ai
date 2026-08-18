@@ -9,6 +9,7 @@ import {
   computeUpdateEligibleUntil,
   issueSignedLicense,
   parseLocalProductIds,
+  requireInternalApiKey,
 } from "../../../../lib/licenses/license-service"
 
 export const dynamic = "force-dynamic"
@@ -35,15 +36,21 @@ const IssueSchema = z.object({
  * product is purchased. Creates a `License` + `LicenseKey` and emails the
  * license key to the buyer.
  *
- * TODO(webhook-integration): Track A owns the Polar webhook route
- * (`/api/webhooks/polar`). When a `order.paid` event arrives for a product ID
- * in `POLAR_LOCAL_PRODUCT_IDS`, the webhook handler should call this endpoint
- * (or inline the same logic) with the product ID, buyer email, and order ID.
- * Idempotency: the `orderId` should be checked against existing licenses to
- * avoid duplicate issuance on webhook retries.
+ * This route is protected by an internal API key (`X-LyraShield-Internal-Key`)
+ * so that external users cannot generate free licenses. The primary webhook
+ * handler calls `issueLicenseForPolarOrder()` directly; this route is a
+ * fallback/internal API.
+ *
+ * Idempotency: the `orderId` is checked against existing licenses to avoid
+ * duplicate issuance on webhook retries.
  */
 export async function POST(request: Request) {
   try {
+    // C-01: Require internal API key — this endpoint must not be callable by
+    // external users. Without this check anyone could generate free licenses.
+    const authResponse = requireInternalApiKey(request)
+    if (authResponse) return authResponse
+
     const body: unknown = await request.json().catch(() => null)
     const parsed = IssueSchema.safeParse(body)
     if (!parsed.success) {

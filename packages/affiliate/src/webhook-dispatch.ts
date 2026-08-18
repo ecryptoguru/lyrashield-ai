@@ -127,6 +127,7 @@ function mapOrderPaidPayload(
       | null
       | undefined,
     customerId: (getProp(payload, "customerId") ?? getProp(payload, "customer") ?? "") as string,
+    customerEmail: (getProp(payload, "customerEmail") ?? getProp(payload, "email") ?? (meta ? getProp(meta, "customerEmail") : undefined)) as string | undefined,
     grossAmount: String(getProp(payload, "amount") ?? getProp(payload, "grossAmount") ?? "0"),
     discountAmount: String(getProp(payload, "discountAmount") ?? getProp(payload, "discount") ?? "0"),
     taxAmount: String(getProp(payload, "taxAmount") ?? getProp(payload, "tax") ?? "0"),
@@ -134,7 +135,11 @@ function mapOrderPaidPayload(
     isAnnual: Boolean(getProp(payload, "isAnnual") ?? (meta ? getProp(meta, "isAnnual") : undefined)),
     planId: (getProp(payload, "planId") ?? (meta ? getProp(meta, "planId") : undefined)) as string | undefined,
     promoCode: (getProp(payload, "promoCode") ?? (meta ? getProp(meta, "promoCode") : undefined)) as string | null | undefined,
+    // C1: Look for cookieToken, then fall back to affiliate_id/click_id from
+    // checkout metadata (the checkout route sets these directly in metadata).
     cookieToken: (getProp(payload, "cookieToken") ?? (meta ? getProp(meta, "affToken") : undefined)) as string | null | undefined,
+    affiliateId: (meta ? (getProp(meta, "affiliate_id") ?? getProp(meta, "affiliateId")) : undefined) as string | null | undefined,
+    clickId: (meta ? (getProp(meta, "click_id") ?? getProp(meta, "clickId")) : undefined) as string | null | undefined,
     subid: (getProp(payload, "subid") ?? (meta ? getProp(meta, "subid") : undefined)) as string | null | undefined,
     isFirstPayment: Boolean(getProp(payload, "isFirstPayment") ?? (meta ? getProp(meta, "isFirstPayment") : undefined)),
   }
@@ -158,6 +163,7 @@ function mapLocalOrderPayload(
     provider,
     externalId,
     customerId: (getProp(payload, "customerId") ?? getProp(payload, "customer") ?? "") as string,
+    customerEmail: (getProp(payload, "customerEmail") ?? getProp(payload, "email") ?? (meta ? getProp(meta, "customerEmail") : undefined)) as string | undefined,
     grossAmount: String(getProp(payload, "amount") ?? getProp(payload, "grossAmount") ?? "0"),
     discountAmount: String(getProp(payload, "discountAmount") ?? getProp(payload, "discount") ?? "0"),
     taxAmount: String(getProp(payload, "taxAmount") ?? getProp(payload, "tax") ?? "0"),
