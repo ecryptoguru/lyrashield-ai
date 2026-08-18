@@ -209,6 +209,27 @@ const envSchema = z
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
 
+    // Local / Desktop Licensing (Track B)
+    // ed25519 PKCS#8 PEM private key for signing offline license files.
+    // In production this is fetched from Azure Key Vault at runtime; in dev it
+    // is provided directly. Generate with:
+    //   openssl genpkey -algorithm ed25519 -out license_private.pem
+    LICENSE_SIGNING_PRIVATE_KEY: z
+      .string()
+      .optional()
+      .or(z.literal(""))
+      .refine(
+        (val) => !val || val.includes("-----BEGIN"),
+        "LICENSE_SIGNING_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
+      ),
+    // Identifier of the current signing key (for rotation / revocation lists).
+    LICENSE_SIGNING_KEY_ID: z.string().optional().or(z.literal("")),
+    // JSON map of Local SKU → Polar product ID, e.g.
+    // {"individual_launch":"prod_abc","individual_regular":"prod_def",...}
+    POLAR_LOCAL_PRODUCT_IDS: z.string().optional().or(z.literal("")),
+    // Maximum findings accepted per sync batch from a Local client.
+    LYRASHIELD_SYNC_MAX_FINDINGS_PER_BATCH: z.coerce.number().int().min(1).max(5000).default(500),
+
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
