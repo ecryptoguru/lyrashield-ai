@@ -158,7 +158,7 @@ async function main(): Promise<void> {
     // blocking client silently wedging (taskforcesh/bullmq#4479) so jobs sit
     // in `wait` while the worker reports ready.
     drainDelay: 600,
-    stalledInterval: 60_000,
+    stalledInterval: 60_000
   })
 
   await worker.waitUntilReady()

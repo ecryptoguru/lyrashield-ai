@@ -58,7 +58,9 @@ export interface ScanConsumerLiveness {
  * separate, already-logged failure mode; this guard only fires on a confirmed
  * idle-despite-waiting wedge).
  */
-export async function checkScanConsumerLiveness(now = Date.now()): Promise<ScanConsumerLiveness | null> {
+export async function checkScanConsumerLiveness(
+  now = Date.now()
+): Promise<ScanConsumerLiveness | null> {
   const redis = getRedis()
   if (!redis) return null
 
@@ -67,7 +69,7 @@ export async function checkScanConsumerLiveness(now = Date.now()): Promise<ScanC
     waiting = await redis.llen(`bull:${SCAN_QUEUE_NAME}:wait`)
   } catch (error) {
     logger.warn("Scan consumer liveness check failed", {
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : String(error)
     })
     return null
   }

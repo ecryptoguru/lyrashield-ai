@@ -12,7 +12,7 @@ vi.mock("@lyrashield/logger", () => ({
 import {
   checkScanConsumerLiveness,
   markScanJobClaimed,
-  resetScanConsumerLiveness,
+  resetScanConsumerLiveness
 } from "./consumer-liveness"
 
 describe("scan consumer liveness guard", () => {
@@ -20,9 +20,9 @@ describe("scan consumer liveness guard", () => {
     vi.resetAllMocks()
   })
 
-  it("does not trip on an idle queue (nothing waiting), even after a long idle period", async () => {
+  it("does not trip on an idle queue (nothing waiting) after a long idle period", async () => {
     mocks.redis.llen.mockResolvedValue(0)
-    // No claim ever recorded beyond the module init; a far-future "now" must not wedge an empty queue.
+    // A far-future "now" must not wedge an empty queue.
     const farFuture = Date.now() + 60 * 60_000
     const result = await checkScanConsumerLiveness(farFuture)
     expect(result).not.toBeNull()
@@ -30,7 +30,7 @@ describe("scan consumer liveness guard", () => {
     expect(result!.wedged).toBe(false)
   })
 
-  it("does not trip when a job was claimed recently even if the queue still shows waiting work", async () => {
+  it("does not trip when a job was claimed recently even if work is waiting", async () => {
     mocks.redis.llen.mockResolvedValue(1)
     resetScanConsumerLiveness(1_000_000)
     markScanJobClaimed(1_000_000)
@@ -40,7 +40,7 @@ describe("scan consumer liveness guard", () => {
     expect(result!.wedged).toBe(false)
   })
 
-  it("trips when jobs are waiting but the consumer has been idle past the block window + grace", async () => {
+  it("trips when jobs are waiting but the consumer is idle past block window + grace", async () => {
     mocks.redis.llen.mockResolvedValue(2)
     resetScanConsumerLiveness(0)
     // 600s block + 120s grace => wedge beyond 720s idle with waiting work.
