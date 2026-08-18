@@ -33,6 +33,28 @@ test.describe("Affiliate lifecycle", () => {
       data: { emailVerified: true },
     })
 
+    // Establish an authenticated session on the dashboard before navigating to
+    // the (auth-gated) apply page. New signups land on /onboarding; sign out +
+    // sign in + skip onboarding, matching the critical-flow pattern, so the
+    // apply page does not redirect to /sign-in and the form renders.
+    await page.request
+      .post("/api/auth/sign-out", {
+        data: {},
+        headers: { Origin: "http://127.0.0.1:3100" },
+      })
+      .catch(() => {})
+    await page.goto("/sign-in")
+    await page.getByLabel("Email").fill(affiliateEmail)
+    await page.locator("#password").fill(password)
+    await page.getByRole("button", { name: "Sign in" }).click()
+    await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
+    await page.request
+      .patch("/api/onboarding", {
+        data: { skipped: true },
+        headers: { Origin: "http://127.0.0.1:3100" },
+      })
+      .catch(() => {})
+
     // 2. Apply to the affiliate program
     await page.goto("/affiliates/apply")
     await page.getByLabel("Your Name").fill("E2E Affiliate")

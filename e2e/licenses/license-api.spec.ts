@@ -75,6 +75,7 @@ test.beforeAll(async () => {
     tx.licenseKey.create({
       data: {
         licenseId: license.id,
+        workspaceId: workspace.id,
         keyHash,
         issuedByProvider: "e2e-test",
       },
