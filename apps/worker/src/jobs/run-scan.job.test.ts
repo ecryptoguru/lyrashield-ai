@@ -380,6 +380,7 @@ describe("processScanJob", () => {
       }),
       "scan-1",
       expect.any(Number),
+      expect.any(Function),
       expect.any(Function)
     )
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -419,6 +420,7 @@ describe("processScanJob", () => {
       expect.objectContaining({ maxBudgetUsd: 1.2 }),
       "scan-1",
       expect.any(Number),
+      expect.any(Function),
       expect.any(Function)
     )
   })
@@ -454,6 +456,7 @@ describe("processScanJob", () => {
       expect.objectContaining({ maxBudgetUsd: 3.2 }),
       "scan-1",
       expect.any(Number),
+      expect.any(Function),
       expect.any(Function)
     )
     expect(typeof deepTimeoutMs).toBe("number")
