@@ -48,7 +48,7 @@ test.describe("Affiliate lifecycle", () => {
 
     // Verify application was created
     const affiliate = await expect
-      .poll(() =>
+      .poll(async () =>
         prisma.affiliate.findUnique({
           where: {
             userId: (await prisma.user.findUnique({ where: { email: affiliateEmail } }))!.id,
