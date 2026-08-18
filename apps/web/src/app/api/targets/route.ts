@@ -150,7 +150,11 @@ export async function POST(request: Request) {
             repoName: data.repoName,
             repoFullName: `${data.repoOwner}/${data.repoName}`,
             installationId: repoInstallationId ?? null,
-            branch: data.branch ?? "main",
+            // Do not force "main" — a repo whose default branch is master (or
+            // anything else) would fail to clone with "Remote branch main not
+            // found". Leave it null so the engine clones the remote's default
+            // branch; the engine only pins --repository-branch when one is set.
+            branch: data.branch ?? null,
             environment: data.environment,
           }
         : {

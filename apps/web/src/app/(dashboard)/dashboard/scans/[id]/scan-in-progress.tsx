@@ -122,6 +122,11 @@ interface ScanInProgressProps {
   events: ScanEvent[]
   findingsCount: number
   /**
+   * The scan's place in the run queue while QUEUED (1-based position + total
+   * waiting). Null once it is running or if the position is unknown.
+   */
+  queuePosition?: { position: number; waiting: number } | null
+  /**
    * Lets the user pull an update on demand. Polling backs off to 60s and pauses entirely
    * while the tab is hidden, so someone watching a long review can otherwise sit in front
    * of a screen that looks stalled with no way to ask.
@@ -137,6 +142,7 @@ export function ScanInProgress({
   elapsedTime,
   events,
   findingsCount,
+  queuePosition,
   onRefresh,
   refreshing = false,
 }: ScanInProgressProps) {
@@ -202,6 +208,14 @@ export function ScanInProgress({
               </h2>
 
               <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                {status === "QUEUED" && queuePosition && (
+                  <span className="flex items-center gap-1.5 font-medium text-teal-600 dark:text-teal-400">
+                    <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="tabular-nums">
+                      In queue: {queuePosition.position} of {queuePosition.waiting}
+                    </span>
+                  </span>
+                )}
                 {startedAt && (
                   <span className="flex items-center gap-1.5">
                     <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />

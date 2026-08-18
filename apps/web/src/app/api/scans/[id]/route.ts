@@ -1,5 +1,6 @@
 import { createHash } from "crypto"
 import { getScanWithEvents, cancelScan, prisma, removeScan } from "@lyrashield/db"
+import { getScanQueuePosition } from "@lyrashield/integrations"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -49,8 +50,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return new Response(null, { status: 304, headers: { ETag: etag } })
     }
 
+    // Surface the scan's place in the run queue so the dashboard can tell the
+    // user how far from the front they are. Only meaningful while QUEUED; the
+    // helper returns null for a scan that is already running or done.
+    const queuePosition = scan.status === "QUEUED" ? await getScanQueuePosition(id) : null
+
     return NextResponse.json(
-      { success: true, data: scan },
+      { success: true, data: { ...scan, queuePosition } },
       { status: 200, headers: { ETag: etag } }
     )
   } catch (error) {

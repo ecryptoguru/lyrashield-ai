@@ -31,6 +31,7 @@ export { getRedis, closeRedis } from "./redis"
 export {
   getScanQueue,
   enqueueScan,
+  getScanQueuePosition,
   registerScanWorker,
   unregisterScanWorker,
   isScanWorkerAvailable,
@@ -38,4 +39,5 @@ export {
   ScanWorkerUnavailableError,
   SCAN_WORKER_HEARTBEAT_MS,
   SCAN_WORKER_TTL_MS,
+  type ScanQueuePosition,
 } from "./queue"

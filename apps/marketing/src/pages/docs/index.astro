@@ -1,0 +1,28 @@
+---
+// The docs section has no standalone index page; the canonical docs home is the
+// integrations index (every nav/footer "Docs" link points there). The site is
+// built static (output: "static"), so Astro.redirect (SSR-only) does not apply —
+// emit a static page that immediately redirects, and mark the real target as
+// canonical so the bare /docs URL is not indexed as a duplicate.
+const target = "/docs/integrations"
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href={target} />
+    <meta http-equiv="refresh" content={`0;url=${target}`} />
+    <title>Redirecting to LyraShield docs…</title>
+  </head>
+  <body>
+    <p>
+      This page has moved to
+      <a href={target}>the LyraShield documentation</a>.
+    </p>
+    <script is:inline>
+      window.location.replace("/docs/integrations")
+    </script>
+  </body>
+</html>

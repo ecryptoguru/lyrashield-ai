@@ -61,6 +61,7 @@ export { Prisma } from "./generated/prisma"
 
 export { prisma } from "./client"
 export { getSystemPrisma } from "./system-client"
+export { createBoundedPgAdapter, resolveDbPoolMax } from "./pool"
 export { setWorkspaceContext, getWorkspaceContext, runWithWorkspaceContext } from "./extension"
 export { computeAuditHash, verifyAuditChain, type AuditLogChainFields } from "./audit-hash"
 export {

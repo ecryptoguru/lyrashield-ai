@@ -100,6 +100,14 @@ const envSchema = z
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),
     LYRASHIELD_ENGINE_SANDBOX_NETWORK: z.string().optional().or(z.literal("")),
+    // Explicit opt-in to run scan sandboxes on the worker's LOCAL Docker daemon
+    // (single-VM topology with a dedicated egress-restricted network + firewall).
+    // Without it, production requires an isolated ssh:// or tcp:// DOCKER_HOST.
+    // Honored only when LYRASHIELD_ENGINE_SANDBOX_NETWORK is also set.
+    LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST: z
+      .enum(["0", "1", "true", "false"])
+      .optional()
+      .or(z.literal("")),
     // Worker-local directory where the engine writes run artifacts. Defaults to cwd/lyrashield_runs.
     LYRASHIELD_ENGINE_WORK_ROOT: z.string().optional().or(z.literal("")),
     // Conservative crash recovery: only resources older than this threshold
