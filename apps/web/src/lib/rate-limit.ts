@@ -8,11 +8,23 @@ type RateLimitEntry = {
 
 const store = new Map<string, RateLimitEntry>()
 
+// Rate-limit ceilings. The defaults match production. Each can be overridden
+// via env so the e2e suite (which fires many auth/api calls from a small set
+// of simulated client IPs in rapid succession) does not collide on the
+// in-memory per-IP buckets. Production deploys leave these unset, so the
+// production limits are unchanged.
 const WINDOW_MS = 60_000
-const AUTH_MAX = 5
-const API_MAX = 30
-const LITE_SCAN_MAX = 5
-const APPROVAL_CREATE_MAX = 10
+const AUTH_MAX = readIntEnv("RATE_LIMIT_AUTH_MAX", 5)
+const API_MAX = readIntEnv("RATE_LIMIT_API_MAX", 30)
+const LITE_SCAN_MAX = readIntEnv("RATE_LIMIT_LITE_SCAN_MAX", 5)
+const APPROVAL_CREATE_MAX = readIntEnv("RATE_LIMIT_APPROVAL_CREATE_MAX", 10)
+
+function readIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
 /**
  * Team invitations created per workspace per minute. Each invitation mints a
  * 7-day bearer token and (when configured) triggers an outbound email, so an

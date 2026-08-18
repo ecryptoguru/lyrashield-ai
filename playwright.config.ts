@@ -31,7 +31,16 @@ export default defineConfig({
       "export BETTER_AUTH_URL=http://127.0.0.1:3100 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 " +
       "NEXT_PUBLIC_MARKETING_URL=https://lyrashieldai.com " +
       "ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3100 TRUSTED_PROXY_IP_HEADER=x-forwarded-for " +
-      "HOSTNAME=127.0.0.1 PORT=3100 NODE_ENV=production LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0; " +
+      "HOSTNAME=127.0.0.1 PORT=3100 NODE_ENV=production LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 " +
+      // The e2e suite fires many auth calls (sign-up/sign-in/sign-out) from a
+      // small set of simulated client IPs in rapid succession. Raise the
+      // in-memory auth rate limit so the suite doesn't trip the 5/min default
+      // and produce flaky cross-test interference. Production leaves this unset.
+      "RATE_LIMIT_AUTH_MAX=1000 " +
+      // Dev/test-only ed25519 signing key for the e2e license-activation flow.
+      // Never used in production (production resolves from Azure Key Vault).
+      // Newlines are embedded via ANSI-C $'...' quoting so the PEM is intact.
+      "LICENSE_SIGNING_PRIVATE_KEY=$'-----BEGIN PRIVATE KEY-----\\nMC4CAQAwBQYDK2VwBCIEIM3vjBHfDGv/9UqGuK8KQihi9mQBKjD+Y0HHbxLinhoP\\n-----END PRIVATE KEY-----\\n'; " +
       (process.env.CI ? "" : "pnpm --filter @lyrashield/web build && ") +
       "rm -rf apps/web/.next/standalone/apps/web/.next/static apps/web/.next/standalone/apps/web/public && " +
       "cp -R apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static && " +

@@ -99,12 +99,13 @@ test.describe("Affiliate lifecycle", () => {
     expect(affiliate!.status).toBe("PENDING")
 
     // 3. Admin approve (directly in DB for E2E)
+    const affiliatePromoCode = `E2E${suffix.slice(-6).toUpperCase()}`
     await prisma.affiliate.update({
       where: { id: affiliate.id },
       data: {
         status: "APPROVED",
         approvedAt: new Date(),
-        promoCode: `E2E${suffix.slice(-6).toUpperCase()}`,
+        promoCode: affiliatePromoCode,
         reserveUntil: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       },
     })
@@ -160,7 +161,12 @@ test.describe("Affiliate lifecycle", () => {
       data: { affiliate: { connect: { id: affiliate.id } } },
     })
 
-    // 6. Simulate a paid webhook (Polar sandbox order.paid)
+    // 6. Simulate a paid webhook (Polar sandbox order.paid).
+    // Attribution: pass the affiliate's promo code so resolveAttribution
+    // resolves the order to the affiliate (promo code takes precedence over a
+    // cookie). The manual User.affiliate connect above links the user record but
+    // is NOT how the commission engine resolves attribution — it needs the
+    // promo code or cookie token.
     const externalId = `polar_order_${suffix}`
     const result = await onOrderPaid({
       provider: "polar",
@@ -173,7 +179,7 @@ test.describe("Affiliate lifecycle", () => {
       currency: "USD",
       isAnnual: false,
       planId: "STARTER",
-      promoCode: null,
+      promoCode: affiliatePromoCode,
       cookieToken: null,
       subid: null,
       isFirstPayment: true,
