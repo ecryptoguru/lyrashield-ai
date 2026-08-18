@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
+import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import {
@@ -48,7 +48,14 @@ export async function POST(request: Request) {
     const { licenseKey, machineId } = parsed.data
 
     const keyHash = hashLicenseKey(licenseKey)
-    const licenseKeyRow = await prisma.licenseKey.findUnique({
+    // License activation is a workspace-less global operation: the key-hash
+    // lookup must not be scoped to a caller workspace. License keys for direct
+    // purchases are NULL-workspaceId and FORCE-RLS-scoped, so the RLS-scoped
+    // client would not find them under a NOBYPASSRLS role (USING workspaceId =
+    // current_workspace_id() yields no rows when there is no context). Use the
+    // system client (cross-workspace privileged read) for this lookup.
+    const systemPrisma = getSystemPrisma()
+    const licenseKeyRow = await systemPrisma.licenseKey.findUnique({
       where: { keyHash },
       include: { license: true },
     })
@@ -67,7 +74,10 @@ export async function POST(request: Request) {
 
     // C-03: Wrap the cap check + activation in a transaction with a row lock
     // to prevent concurrent requests from both passing the cap check.
-    const result = await prisma.$transaction(async (tx) => {
+    // Use the system client — the activation is workspace-less (no caller
+    // workspace context) and License/LicenseActivation are FORCE-RLS-scoped, so
+    // the RLS-scoped client would not see the rows under a NOBYPASSRLS role.
+    const result = await systemPrisma.$transaction(async (tx) => {
       // Lock the License row so concurrent activations for the same license
       // are serialized. This prevents the TOCTOU race between counting active
       // activations and creating a new one.

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
+import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, type LocalSkuId } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
@@ -52,7 +52,12 @@ export async function POST(request: Request) {
     const { licenseKey, renewalSku, orderId } = parsed.data
 
     const keyHash = hashLicenseKey(licenseKey)
-    const licenseKeyRow = await prisma.licenseKey.findUnique({
+    // License renewal is a workspace-less global lookup by key hash (like
+    // activation). License keys for direct purchases are NULL-workspaceId and
+    // FORCE-RLS-scoped, so the RLS-scoped client would not find them under a
+    // NOBYPASSRLS role. Use the system client (cross-workspace privileged read).
+    const systemPrisma = getSystemPrisma()
+    const licenseKeyRow = await systemPrisma.licenseKey.findUnique({
       where: { keyHash },
       include: { license: true },
     })
@@ -103,23 +108,30 @@ export async function POST(request: Request) {
     const baseDate = currentExpiry > new Date() ? currentExpiry : new Date()
     const newExpiry = computeUpdateEligibleUntil(renewalSku as LocalSkuId, baseDate)
 
-    await prisma.license.update({
+    // The license row is workspace-less in this route's context, so the update
+    // must use the system client (FORCE-RLS-scoped table, NOBYPASSRLS runtime).
+    await systemPrisma.license.update({
       where: { id: license.id },
       data: { updateEligibleUntil: newExpiry },
     })
 
-    // B-L01: Audit log the renewal
-    await prisma.auditLog
-      .create({
-        data: {
-          workspaceId: license.workspaceId ?? license.id,
-          action: "license.renewed",
-          resourceType: "license",
-          resourceId: license.id,
-          metadata: { orderId, renewalSku, newExpiry: newExpiry.toISOString() },
-        },
-      })
-      .catch(() => {})
+    // B-L01: Audit log the renewal. AuditLog.workspaceId is a hard FK to
+    // Workspace — only write when the license is actually linked to a
+    // workspace (a direct Polar purchase may not be). Skip when null rather
+    // than writing license.id into a Workspace FK column.
+    if (license.workspaceId) {
+      await prisma.auditLog
+        .create({
+          data: {
+            workspaceId: license.workspaceId,
+            action: "license.renewed",
+            resourceType: "license",
+            resourceId: license.id,
+            metadata: { orderId, renewalSku, newExpiry: newExpiry.toISOString() },
+          },
+        })
+        .catch(() => {})
+    }
 
     const licenseFile = await issueSignedLicense(license.id, license.perpetualFallbackBuild)
 

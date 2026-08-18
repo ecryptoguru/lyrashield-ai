@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
+import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { requireAuth } from "@lyrashield/auth/server"
 import { type LocalSkuId } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
@@ -53,8 +53,14 @@ export async function POST(request: Request) {
 
     // H-01: Look up the license by key hash — this proves the caller possesses
     // the actual license key, not just the ID.
+    // Sync connect resolves a license by key hash — a workspace-less global
+    // lookup (the license may not be linked to the caller's workspace yet).
+    // Use the system client (cross-workspace privileged read) since the
+    // FORCE-RLS-scoped client would not find NULL-workspaceId keys under a
+    // NOBYPASSRLS role.
+    const systemPrisma = getSystemPrisma()
     const keyHash = hashLicenseKey(licenseKey)
-    const licenseKeyRow = await prisma.licenseKey.findUnique({
+    const licenseKeyRow = await systemPrisma.licenseKey.findUnique({
       where: { keyHash },
       include: { license: true },
     })
