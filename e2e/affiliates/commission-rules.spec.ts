@@ -22,6 +22,10 @@ const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
 test.describe("Commission rules", () => {
   let affiliate: { id: string; userId: string }
+  // The affiliate's promo code — passed to onOrderPaid so resolveAttribution
+  // resolves the order to this affiliate (promo code takes precedence over
+  // cookie). Without it the order is UNATTRIBUTED and no commission is created.
+  let affiliatePromoCode: string
 
   test.beforeAll(async () => {
     // User.id has no @default (Better Auth generates it at signup), so supply
@@ -35,12 +39,13 @@ test.describe("Commission rules", () => {
       },
     })
 
+    affiliatePromoCode = `COMM${suffix.slice(-4).toUpperCase()}`
     affiliate = (await prisma.affiliate.create({
       data: {
         userId: user.id,
         status: "APPROVED",
         approvedAt: new Date(),
-        promoCode: `COMM${suffix.slice(-4).toUpperCase()}`,
+        promoCode: affiliatePromoCode,
         activeReferrals: 0,
         reservePct: 25,
         reserveUntil: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
@@ -64,6 +69,7 @@ test.describe("Commission rules", () => {
       grossAmount: "99.00",
       currency: "USD",
       isFirstPayment: true,
+      promoCode: affiliatePromoCode,
     })
 
     expect(result.duplicate).toBe(false)
@@ -94,6 +100,7 @@ test.describe("Commission rules", () => {
       grossAmount: "99.00",
       currency: "USD",
       isFirstPayment: false,
+      promoCode: affiliatePromoCode,
     })
 
     expect(result.expired).toBe(true)
@@ -113,6 +120,7 @@ test.describe("Commission rules", () => {
       grossAmount: "29.00",
       currency: "USD",
       isFirstPayment: true,
+      promoCode: affiliatePromoCode,
     })
 
     // Then refund
@@ -125,8 +133,10 @@ test.describe("Commission rules", () => {
     expect(clawbackResult.reversed).toBe(true)
 
     // Verify commission is REVERSED
+    // The conversion's idempotencyKey is provider-scoped (polar:externalId),
+    // not the bare externalId.
     const conversion = await prisma.conversion.findFirst({
-      where: { idempotencyKey: externalId },
+      where: { idempotencyKey: `polar:${externalId}` },
       include: { commissions: true },
     })
     expect(conversion!.commissions[0]!.status).toBe("REVERSED")

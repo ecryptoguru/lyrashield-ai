@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
-import { generateKeyPairSync, createHash } from "node:crypto"
-import { prisma, withoutWorkspaceRLS } from "@lyrashield/db"
+import { generateKeyPairSync, createHash, randomUUID } from "node:crypto"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { signLicense, verifyLicense, type LicenseFile } from "@lyrashield/licenses"
 
 /**
@@ -30,17 +30,33 @@ const rawLicenseKey = `LYRA-TEST-${testSuffix}`
 const keyHash = createHash("sha256").update(rawLicenseKey).digest("hex")
 
 let licenseId: string | null = null
+let testWorkspaceId: string | null = null
 
 test.beforeAll(async () => {
   // Create a test license directly in the database.
-  // The License table has FORCE RLS with a strict policy that allows
-  // workspaceId IS NULL. The shared `prisma` client may carry a stale
-  // app.current_workspace_id from a prior operation in the same worker, so
-  // wrap the create in withoutWorkspaceRLS to run it with the workspace
-  // context explicitly null (satisfying the RLS WITH CHECK).
-  const license = await withoutWorkspaceRLS(async (tx) =>
+  //
+  // RLS fix (deep review): the License table has FORCE RLS with a strict policy
+  // `WITH CHECK ("workspaceId" = app.current_workspace_id() OR "workspaceId" IS
+  // NULL)`. In CI the prisma client runs as a NOBYPASSRLS role, so a NULL-
+  // workspaceId insert is blocked once the workspace context is set anywhere
+  // in the pooled connection (and the plain `RESET` in withoutWorkspaceRLS does
+  // not reliably clear the application-level AsyncLocalStorage context). The
+  // robust fix: create a real test workspace and run the license create inside
+  // withWorkspaceRLS(workspace.id) so the strict policy's WITH CHECK passes
+  // (workspaceId = current_workspace_id()).
+  const workspace = await prisma.workspace.create({
+    data: {
+      id: randomUUID(),
+      name: `E2E License ${testSuffix}`,
+      slug: `e2e-license-${testSuffix.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+    },
+  })
+  testWorkspaceId = workspace.id
+
+  const license = await withWorkspaceRLS(workspace.id, async (tx) =>
     tx.license.create({
       data: {
+        workspaceId: workspace.id,
         ownerEmail,
         sku: "individual_launch",
         seatCount: 1,
@@ -55,7 +71,7 @@ test.beforeAll(async () => {
   )
   licenseId = license.id
 
-  await withoutWorkspaceRLS(async (tx) =>
+  await withWorkspaceRLS(workspace.id, async (tx) =>
     tx.licenseKey.create({
       data: {
         licenseId: license.id,
@@ -68,13 +84,16 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   try {
-    if (licenseId) {
-      await withoutWorkspaceRLS(async (tx) => {
+    if (licenseId && testWorkspaceId) {
+      const workspaceId = testWorkspaceId
+      await withWorkspaceRLS(workspaceId, async (tx) => {
         await tx.licenseActivation.deleteMany({ where: { licenseId } })
         await tx.licenseRevocation.deleteMany({ where: { licenseId } })
         await tx.licenseKey.deleteMany({ where: { licenseId } })
         await tx.license.delete({ where: { id: licenseId } })
       })
+      // Clean up the test workspace (License rows already deleted above).
+      await prisma.workspace.delete({ where: { id: workspaceId } })
     }
   } finally {
     await prisma.$disconnect()
@@ -139,10 +158,13 @@ test.describe("License activation API", () => {
 
 test.describe("License renewal API", () => {
   test("renewal extends update eligibility by 1 year", async ({ request }) => {
-    // Get the current expiry before renewal
-    const beforeLicense = await prisma.license.findUniqueOrThrow({
-      where: { id: licenseId! },
-    })
+    // Get the current expiry before renewal (RLS-scoped read needs the
+    // workspace context — the license is linked to the test workspace).
+    const beforeLicense = await withWorkspaceRLS(testWorkspaceId!, async (tx) =>
+      tx.license.findUniqueOrThrow({
+        where: { id: licenseId! },
+      })
+    )
     const beforeExpiry = beforeLicense.updateEligibleUntil
 
     const res = await request.post("/api/licenses/renew", {

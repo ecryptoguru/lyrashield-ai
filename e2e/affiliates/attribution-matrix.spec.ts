@@ -214,7 +214,7 @@ test.describe("Attribution matrix", () => {
   test("duplicate webhook → idempotent", async () => {
     const externalId = `polar_dup_${suffix}`
 
-    // First call
+    // First call — attributed via promo code so a conversion is created.
     const result1 = await onOrderPaid({
       provider: "polar",
       externalId,
@@ -223,10 +223,11 @@ test.describe("Attribution matrix", () => {
       grossAmount: "29.00",
       currency: "USD",
       isFirstPayment: true,
+      promoCode: `CODEA${suffix.slice(-4).toUpperCase()}`,
     })
     expect(result1.duplicate).toBe(false)
 
-    // Second call with same externalId
+    // Second call with same externalId — must be a duplicate (idempotent).
     const result2 = await onOrderPaid({
       provider: "polar",
       externalId,
@@ -235,6 +236,7 @@ test.describe("Attribution matrix", () => {
       grossAmount: "29.00",
       currency: "USD",
       isFirstPayment: true,
+      promoCode: `CODEA${suffix.slice(-4).toUpperCase()}`,
     })
     expect(result2.duplicate).toBe(true)
     expect(result2.conversionId).toBe(result1.conversionId)
