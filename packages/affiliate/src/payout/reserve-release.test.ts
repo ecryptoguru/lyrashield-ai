@@ -1,32 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { Prisma } from "@lyrashield/db"
 
-// Mock @lyrashield/db but keep the real Prisma namespace (for Decimal math) —
-// only the `prisma` client is mocked. This avoids a fragile hand-rolled
-// Decimal stand-in while still isolating the DB.
-vi.mock("@lyrashield/db", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@lyrashield/db")>()
+// Mock @lyrashield/db. reserve-release.ts uses `new Prisma.Decimal(...)` at
+// runtime, so the mock must expose a Decimal constructor. This minimal
+// stand-in supports the methods the release math uses (minus, lte, plus,
+// toString). It also provides the $transaction mock with a tx that has the
+// same model methods so payout/commission/payoutItem/auditLog creates work
+// inside the transaction.
+vi.mock("@lyrashield/db", () => {
+  class FakeDecimal {
+    private n: number
+    constructor(v: string | number | { toString: () => string }) {
+      this.n =
+        typeof v === "string"
+          ? Number.parseFloat(v)
+          : typeof v === "number"
+            ? v
+            : Number.parseFloat(String(v))
+    }
+    toString() {
+      return Number.isInteger(this.n) ? `${this.n}.0000` : `${this.n}`
+    }
+    minus(other: { toString: () => string }) {
+      return new FakeDecimal(this.n - Number.parseFloat(String(other)))
+    }
+    lte(other: { toString: () => string }) {
+      return this.n <= Number.parseFloat(String(other))
+    }
+    gt(other: { toString: () => string }) {
+      return this.n > Number.parseFloat(String(other))
+    }
+    plus(other: { toString: () => string }) {
+      return new FakeDecimal(this.n + Number.parseFloat(String(other)))
+    }
+  }
+  const models = {
+    affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
+    commission: { findMany: vi.fn(), update: vi.fn() },
+    payout: { create: vi.fn() },
+    payoutItem: { create: vi.fn() },
+    auditLog: { create: vi.fn().mockResolvedValue(undefined) },
+  }
   return {
-    ...actual,
+    Prisma: { Decimal: FakeDecimal },
     prisma: {
-      affiliate: {
-        findUnique: vi.fn(),
-        findMany: vi.fn(),
-      },
-      commission: {
-        findMany: vi.fn(),
-        update: vi.fn(),
-      },
-      payout: {
-        create: vi.fn(),
-      },
-      payoutItem: {
-        create: vi.fn(),
-      },
-      auditLog: {
-        create: vi.fn().mockResolvedValue(undefined),
-      },
-      $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb({})),
+      ...models,
+      $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(models)),
     },
   }
 })
@@ -37,9 +55,9 @@ vi.mock("@lyrashield/logger", () => ({
 
 import { releaseReserveForAffiliate } from "./reserve-release"
 import { prisma } from "@lyrashield/db"
+import { Prisma } from "@lyrashield/db"
 
-// Helper: a fake commission with a real Prisma.Decimal amount and a payoutItems
-// array (the relation is now one-to-many).
+// Helper: a fake commission with a FakeDecimal amount and a payoutItems array.
 function fakeCommission(opts: {
   id: string
   amount: string
@@ -136,7 +154,7 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
     const result = await releaseReserveForAffiliate("aff-4")
 
     expect(result.released).toBe(1)
-    expect(result.totalAmount.toString()).toBe("0") // nothing to pay
+    expect(result.totalAmount.toString()).toBe("0.0000") // nothing to pay
     expect(prisma.commission.update).toHaveBeenCalledOnce()
   })
 })

@@ -1,20 +1,52 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// Mock prisma before importing the module under test.
-vi.mock("@lyrashield/db", () => ({
-  prisma: {
-    conversion: {
-      findFirst: vi.fn(),
+// Mock prisma before importing the module under test. clawback.ts uses
+// `new Prisma.Decimal(...)` at runtime, so the mock must expose a Decimal
+// constructor. This minimal stand-in supports the methods clawback uses
+// (gt, minus, lte, toString).
+vi.mock("@lyrashield/db", () => {
+  class FakeDecimal {
+    private n: number
+    constructor(v: string | number | { toString: () => string }) {
+      this.n =
+        typeof v === "string"
+          ? Number.parseFloat(v)
+          : typeof v === "number"
+            ? v
+            : Number.parseFloat(String(v))
+    }
+    toString() {
+      return Number.isInteger(this.n) ? `${this.n}` : `${this.n}`
+    }
+    minus(other: { toString: () => string }) {
+      return new FakeDecimal(this.n - Number.parseFloat(String(other)))
+    }
+    gt(other: { toString: () => string }) {
+      return this.n > Number.parseFloat(String(other))
+    }
+    lte(other: { toString: () => string }) {
+      return this.n <= Number.parseFloat(String(other))
+    }
+    plus(other: { toString: () => string }) {
+      return new FakeDecimal(this.n + Number.parseFloat(String(other)))
+    }
+  }
+  return {
+    Prisma: { Decimal: FakeDecimal },
+    prisma: {
+      conversion: {
+        findFirst: vi.fn(),
+      },
+      commission: {
+        update: vi.fn(),
+      },
+      affiliate: {
+        findUnique: vi.fn(),
+        update: vi.fn(),
+      },
     },
-    commission: {
-      update: vi.fn(),
-    },
-    affiliate: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-  },
-}))
+  }
+})
 
 vi.mock("@lyrashield/logger", () => ({
   logger: {

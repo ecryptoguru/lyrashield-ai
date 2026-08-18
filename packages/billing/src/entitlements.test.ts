@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// Mock dependencies before importing the module under test.
+// Mock dependencies so assertScanAllowed only needs prisma.workspace.findUnique.
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     workspace: {
@@ -8,6 +8,14 @@ vi.mock("@lyrashield/db", () => ({
     },
     billingAccount: {
       update: vi.fn(),
+      // The overage path (no minutes remaining) calls findUnique. Return a
+      // non-TEAM account so overage is not eligible and the gate returns
+      // NO_MINUTES_REMAINING without needing the spend-limit overage branch.
+      findUnique: vi.fn().mockResolvedValue({
+        currentPlan: "PRO",
+        spendLimitCents: null,
+        currentPeriodStart: new Date(),
+      }),
     },
   },
 }))
@@ -22,8 +30,10 @@ vi.mock("@lyrashield/pricing", () => ({
   STANDARD_OVERAGE_PER_MINUTE_USD: 0.15,
 }))
 
+// Mock the usage/trial/grace modules so the Deep-gating logic is exercised
+// in isolation without a full DB balance/trial computation.
 vi.mock("./usage/balance", () => ({
-  getUsageBalance: vi.fn().mockResolvedValue({ totalRemaining: 600 }),
+  getUsageBalance: vi.fn(),
 }))
 
 vi.mock("./trial", () => ({
@@ -42,10 +52,13 @@ vi.mock("@lyrashield/logger", () => ({
 import { assertScanAllowed } from "./entitlements"
 import { prisma } from "@lyrashield/db"
 import { getUsageBalance } from "./usage/balance"
+import { getTrialState } from "./trial"
 
 describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: trial not expired, plenty of minutes, not in grace.
+    vi.mocked(getTrialState).mockResolvedValue({ isExpired: false })
     vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 600 })
   })
 
@@ -69,6 +82,7 @@ describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
       deepAllowed: false,
       trialStartedAt: new Date("2026-08-01"),
     })
+    vi.mocked(getTrialState).mockResolvedValue({ isExpired: false })
 
     const result = await assertScanAllowed("ws-trial", "DEEP")
 
