@@ -3,48 +3,52 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 // Mock @lyrashield/db. reserve-release.ts uses `new Prisma.Decimal(...)` at
 // runtime, so the mock must expose a Decimal constructor. This minimal
 // stand-in supports the methods the release math uses (minus, lte, plus,
-// toString). It also provides the $transaction mock with a tx that has the
-// same model methods so payout/commission/payoutItem/auditLog creates work
-// inside the transaction.
+// toString). The model-method object (`models`) is hoisted to module scope so
+// both the $transaction factory and beforeEach can share it — the $transaction
+// mock passes it as the tx handle so tx.payout.create etc. resolve.
+class FakeDecimal {
+  private n: number
+  constructor(v: string | number | { toString: () => string }) {
+    this.n =
+      typeof v === "string"
+        ? Number.parseFloat(v)
+        : typeof v === "number"
+          ? v
+          : Number.parseFloat(String(v))
+  }
+  toString() {
+    return Number.isInteger(this.n) ? `${this.n}.0000` : `${this.n}`
+  }
+  minus(other: { toString: () => string }) {
+    return new FakeDecimal(this.n - Number.parseFloat(String(other)))
+  }
+  lte(other: { toString: () => string }) {
+    return this.n <= Number.parseFloat(String(other))
+  }
+  gt(other: { toString: () => string }) {
+    return this.n > Number.parseFloat(String(other))
+  }
+  plus(other: { toString: () => string }) {
+    return new FakeDecimal(this.n + Number.parseFloat(String(other)))
+  }
+}
+
+const models = {
+  affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
+  commission: { findMany: vi.fn(), update: vi.fn() },
+  payout: { create: vi.fn() },
+  payoutItem: { create: vi.fn() },
+  auditLog: { create: vi.fn().mockResolvedValue(undefined) },
+}
+
+const runTransaction = (cb: (tx: unknown) => Promise<unknown>) => cb(models)
+
 vi.mock("@lyrashield/db", () => {
-  class FakeDecimal {
-    private n: number
-    constructor(v: string | number | { toString: () => string }) {
-      this.n =
-        typeof v === "string"
-          ? Number.parseFloat(v)
-          : typeof v === "number"
-            ? v
-            : Number.parseFloat(String(v))
-    }
-    toString() {
-      return Number.isInteger(this.n) ? `${this.n}.0000` : `${this.n}`
-    }
-    minus(other: { toString: () => string }) {
-      return new FakeDecimal(this.n - Number.parseFloat(String(other)))
-    }
-    lte(other: { toString: () => string }) {
-      return this.n <= Number.parseFloat(String(other))
-    }
-    gt(other: { toString: () => string }) {
-      return this.n > Number.parseFloat(String(other))
-    }
-    plus(other: { toString: () => string }) {
-      return new FakeDecimal(this.n + Number.parseFloat(String(other)))
-    }
-  }
-  const models = {
-    affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
-    commission: { findMany: vi.fn(), update: vi.fn() },
-    payout: { create: vi.fn() },
-    payoutItem: { create: vi.fn() },
-    auditLog: { create: vi.fn().mockResolvedValue(undefined) },
-  }
   return {
     Prisma: { Decimal: FakeDecimal },
     prisma: {
       ...models,
-      $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(models)),
+      $transaction: vi.fn(runTransaction),
     },
   }
 })
@@ -80,9 +84,11 @@ function fakeCommission(opts: {
 describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(prisma.$transaction).mockImplementation(
-      async (cb: (tx: unknown) => Promise<unknown>) => cb({})
-    )
+    vi.mocked(prisma.$transaction).mockImplementation(runTransaction)
+    // clearAllMocks strips the factory's resolved value — re-set auditLog.create
+    // to return a resolved promise so the .catch(() => {}) chain works.
+    vi.mocked(models.auditLog.create).mockResolvedValue(undefined)
+    vi.mocked(prisma.auditLog.create).mockResolvedValue(undefined)
   })
 
   it("releases nothing when the reserve is still active (reserveUntil in the future)", async () => {
