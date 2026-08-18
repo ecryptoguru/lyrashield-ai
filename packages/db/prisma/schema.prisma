@@ -1925,4 +1925,6 @@ model PayoutItem {
 
   payout    Payout    @relation(fields: [payoutId], references: [id], onDelete: Cascade)
   commission Commission @relation(fields: [commissionId], references: [id], onDelete: Restrict)
+
+  @@index([commissionId])
 }
