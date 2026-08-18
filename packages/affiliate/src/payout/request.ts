@@ -206,32 +206,41 @@ export async function requestPayout(params: {
       } else {
         // Provider failed — release back to AVAILABLE
         await releasePayoutCommissions(payout.id)
+        // C-L04: Map to generic failure code; log full error server-side only
         await prisma.payout.update({
           where: { id: payout.id },
-          data: { status: "FAILED", failureCode: result.error ?? "PROVIDER_ERROR" },
+          data: { status: "FAILED", failureCode: "PROVIDER_ERROR" },
+        })
+
+        logger.error("Payout provider failed", {
+          payoutId: payout.id,
+          providerError: result.error ?? "unknown",
         })
 
         return {
           success: false,
           payoutId: payout.id,
-          error: result.error ?? "Provider payout failed",
+          error: "Provider payout failed",
         }
       }
     } catch (error) {
       // Provider threw — release back
       await releasePayoutCommissions(payout.id)
+      // C-L04: Generic failure code; log full error server-side only
       await prisma.payout.update({
         where: { id: payout.id },
-        data: {
-          status: "FAILED",
-          failureCode: error instanceof Error ? error.message : "EXCEPTION",
-        },
+        data: { status: "FAILED", failureCode: "PROVIDER_EXCEPTION" },
+      })
+
+      logger.error("Payout provider exception", {
+        payoutId: payout.id,
+        error: error instanceof Error ? error.message : String(error),
       })
 
       return {
         success: false,
         payoutId: payout.id,
-        error: error instanceof Error ? error.message : "Provider exception",
+        error: "Provider exception",
       }
     }
   }

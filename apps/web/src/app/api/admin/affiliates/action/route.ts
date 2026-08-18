@@ -84,8 +84,10 @@ export async function POST(request: Request) {
     await setupReserve(affiliate.id)
 
     // Generate promo code if not set
+    // C-L03: Use random bytes instead of affiliate ID suffix for unpredictability
     if (!affiliate.promoCode) {
-      const code = `LYRA${affiliate.id.slice(-6).toUpperCase()}`
+      const { randomBytes } = await import("node:crypto")
+      const code = `LYRA-${randomBytes(4).toString("base64url").slice(0, 6).toUpperCase()}`
       await prisma.affiliate.update({
         where: { id: affiliate.id },
         data: { promoCode: code },

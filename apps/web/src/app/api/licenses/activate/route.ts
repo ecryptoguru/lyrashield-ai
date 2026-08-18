@@ -6,8 +6,8 @@ import {
   hashLicenseKey,
   issueSignedLicense,
   machineCapForSku,
-  isIndividualSku,
 } from "../../../../lib/licenses/license-service"
+import { checkLicenseApiRateLimit, clientIpFromRequest } from "../../../../lib/rate-limit"
 import type { LocalSkuId } from "@lyrashield/pricing"
 
 export const dynamic = "force-dynamic"
@@ -33,6 +33,13 @@ const ActivateSchema = z.object({
  */
 export async function POST(request: Request) {
   try {
+    // B-M02: Rate limit license activation per IP
+    const clientIp = clientIpFromRequest(request)
+    const rateLimit = await checkLicenseApiRateLimit(clientIp)
+    if (rateLimit.limited) {
+      return apiError("RATE_LIMITED", "Too many activation requests. Please try again later.", 429)
+    }
+
     const body: unknown = await request.json().catch(() => null)
     const parsed = ActivateSchema.safeParse(body)
     if (!parsed.success) {
@@ -113,11 +120,10 @@ export async function POST(request: Request) {
     })
 
     if (result.capped) {
+      // B-M07: Generic error message — don't leak seat count
       return apiError(
         "MACHINE_CAP_REACHED",
-        isIndividualSku(sku)
-          ? `Individual licenses allow up to ${cap} machines. Deactivate a machine or upgrade to a team license.`
-          : `This team license has ${license.seatCount} seat(s) and all are in use.`,
+        "Machine cap reached. Deactivate a machine or upgrade your license.",
         409
       )
     }

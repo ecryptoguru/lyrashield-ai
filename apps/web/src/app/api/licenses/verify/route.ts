@@ -3,6 +3,7 @@ import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { verifyLicense, type LicenseFile } from "@lyrashield/licenses"
 import { resolveSigningPublicKey } from "../../../../lib/licenses/license-service"
+import { checkLicenseApiRateLimit, clientIpFromRequest } from "../../../../lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 
@@ -36,6 +37,13 @@ const VerifySchema = z.object({
  */
 export async function POST(request: Request) {
   try {
+    // B-M02: Rate limit license verification per IP
+    const clientIp = clientIpFromRequest(request)
+    const rateLimit = await checkLicenseApiRateLimit(clientIp)
+    if (rateLimit.limited) {
+      return apiError("RATE_LIMITED", "Too many verification requests. Please try again later.", 429)
+    }
+
     const body: unknown = await request.json().catch(() => null)
     const parsed = VerifySchema.safeParse(body)
     if (!parsed.success) {
@@ -61,16 +69,17 @@ export async function POST(request: Request) {
       )
     }
 
+    // B-L06: Don't echo full payload to unauthenticated callers.
+    // Return only the essential fields needed for client decisions.
     return apiSuccess(
       {
         valid: true,
         updateEligible: result.updateEligible,
         reason: result.reason,
+        // Include SKU and expiry for client-side update prompts, but not
+        // the full machineIds list or perpetualFallbackBuild.
         sku: licenseFile.sku,
-        seatCount: licenseFile.seatCount,
-        machineIds: licenseFile.machineIds,
         updateEligibleUntil: licenseFile.updateEligibleUntil,
-        perpetualFallbackBuild: licenseFile.perpetualFallbackBuild,
       },
       200
     )

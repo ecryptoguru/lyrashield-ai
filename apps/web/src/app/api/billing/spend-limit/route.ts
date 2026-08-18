@@ -28,7 +28,9 @@ export async function POST(request: Request) {
 
   const parsed = SpendLimitSchema.safeParse(body)
   if (!parsed.success) {
-    return apiError("VALIDATION_ERROR", parsed.error.message, 400)
+    // A-L09: Don't leak Zod error details to clients
+    logger.warn("Spend limit validation error", { errors: parsed.error.issues })
+    return apiError("VALIDATION_ERROR", "Invalid request body", 400)
   }
 
   const { cents } = parsed.data

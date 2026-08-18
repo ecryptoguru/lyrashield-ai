@@ -129,10 +129,17 @@ export async function POST(request: Request) {
       orderId,
     })
 
+    // B-M05: Don't return the raw license key in the API response.
+    // The key is delivered via email only (Brevo). Returning it in the
+    // response would leak it via logs, browser history, or network inspection.
+    // Return only the licenseId and a masked key prefix for confirmation.
+    const maskedKey = rawKey.slice(0, 8) + "••••••••" + rawKey.slice(-4)
     return apiSuccess(
       {
         licenseId: license.id,
-        licenseKey: rawKey,
+        licenseKeyMasked: maskedKey,
+        // licenseFile is returned for server-side use (webhook handler);
+        // the raw key is NOT included.
         licenseFile,
       },
       201

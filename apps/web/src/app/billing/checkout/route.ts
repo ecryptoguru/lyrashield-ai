@@ -13,6 +13,7 @@ import {
 import { resolveAttribution } from "@lyrashield/affiliate"
 import { apiSuccess, apiError } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
+import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
 
 const CheckoutSchema = z.object({
   workspaceId: z.string().min(1),
@@ -32,7 +33,9 @@ export async function POST(request: Request) {
 
   const parsed = CheckoutSchema.safeParse(body)
   if (!parsed.success) {
-    return apiError("VALIDATION_ERROR", parsed.error.message, 400)
+    // A-L09: Don't leak Zod error details to clients — log server-side only
+    logger.warn("Checkout validation error", { errors: parsed.error.issues })
+    return apiError("VALIDATION_ERROR", "Invalid request body", 400)
   }
 
   const { workspaceId, plan, interval, promoCode } = parsed.data
@@ -41,6 +44,12 @@ export async function POST(request: Request) {
     // Validate the caller has billing.manage on the specified workspace.
     // No findFirst fallback — the workspaceId must be explicitly provided.
     await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+
+    // A-M08: Rate limit checkout creation per workspace
+    const rateLimit = await checkBillingCheckoutRateLimit(workspaceId)
+    if (rateLimit.limited) {
+      return apiError("RATE_LIMITED", "Too many checkout requests. Please try again later.", 429)
+    }
 
     // Verify the plan is self-serve
     const cloudPlan = CLOUD_PLAN_MAP[plan as CloudPlanId]

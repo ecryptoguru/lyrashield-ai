@@ -37,8 +37,8 @@ export function PayoutMethodForm({
 
     const methodData: Record<string, unknown> = {
       type,
-      valid: true,
-      taxFormComplete: Boolean(taxFormType),
+      // C-L10: Don't send valid: true from the client — the server is the
+      // sole setter of the valid flag (always false until admin verifies).
       taxFormType,
     }
 

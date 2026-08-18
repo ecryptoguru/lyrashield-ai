@@ -25,6 +25,27 @@ export async function POST(request: Request) {
     )
   }
 
+  // C-L09: CSRF protection — verify Origin/Referer header matches the app URL
+  // for form POST submissions. This prevents cross-site form submission attacks.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (appUrl) {
+    const origin = request.headers.get("origin")
+    const referer = request.headers.get("referer")
+    const allowedOrigin = new URL(appUrl).origin
+    if (origin && new URL(origin).origin !== allowedOrigin) {
+      return NextResponse.json(
+        { success: false, error: "Cross-origin form submission not allowed" },
+        { status: 403 }
+      )
+    }
+    if (referer && new URL(referer).origin !== allowedOrigin) {
+      return NextResponse.json(
+        { success: false, error: "Cross-origin form submission not allowed" },
+        { status: 403 }
+      )
+    }
+  }
+
   const formData = await request.formData().catch(() => null)
   if (!formData) {
     return NextResponse.json(

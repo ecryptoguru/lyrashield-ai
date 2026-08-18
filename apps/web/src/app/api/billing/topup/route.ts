@@ -13,6 +13,7 @@ import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
+import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
 
 const TopUpSchema = z.object({
   workspaceId: z.string().min(1),
@@ -36,7 +37,9 @@ export async function POST(request: Request) {
 
   const parsed = TopUpSchema.safeParse(body)
   if (!parsed.success) {
-    return apiError("VALIDATION_ERROR", parsed.error.message, 400)
+    // A-L09: Don't leak Zod error details to clients
+    logger.warn("Topup validation error", { errors: parsed.error.issues })
+    return apiError("VALIDATION_ERROR", "Invalid request body", 400)
   }
 
   const { workspaceId, pack: packId } = parsed.data
@@ -45,6 +48,12 @@ export async function POST(request: Request) {
     // Validate the caller has billing.manage on the specified workspace.
     // No findFirst fallback — the workspaceId must be explicitly provided.
     await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+
+    // A-M08: Rate limit topup creation per workspace
+    const rateLimit = await checkBillingCheckoutRateLimit(workspaceId)
+    if (rateLimit.limited) {
+      return apiError("RATE_LIMITED", "Too many top-up requests. Please try again later.", 429)
+    }
 
     const pack = MINUTE_PACK_MAP[packId as PackId]
     if (!pack) {

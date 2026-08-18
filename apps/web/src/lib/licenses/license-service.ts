@@ -7,7 +7,7 @@
  * (production — TODO: wire Key Vault client).
  */
 
-import { createHash, createPrivateKey, createPublicKey, randomUUID } from "node:crypto"
+import { createHash, createPrivateKey, createPublicKey, randomUUID, timingSafeEqual } from "node:crypto"
 import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { getLocalSku, type LocalSkuId } from "@lyrashield/pricing"
@@ -92,7 +92,24 @@ export function requireInternalApiKey(request: Request): Response | null {
   }
 
   const providedKey = request.headers.get(INTERNAL_API_KEY_HEADER)
-  if (!providedKey || providedKey !== expectedKey) {
+  // B-M01: Use constant-time comparison to prevent timing side-channel attacks.
+  // A plain !== comparison leaks byte-by-byte timing information that can
+  // be used to recover the key over many requests.
+  if (!providedKey) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: { code: "FORBIDDEN", message: "Missing or invalid internal API key" },
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    )
+  }
+
+  const provided = Buffer.from(providedKey)
+  const expected = Buffer.from(expectedKey)
+  // Length guard: timingSafeEqual throws on different lengths, which would
+  // leak the key length via timing. Compare lengths first, then content.
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
     return new Response(
       JSON.stringify({
         success: false,

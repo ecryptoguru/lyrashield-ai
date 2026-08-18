@@ -3,6 +3,7 @@ import { z } from "zod"
 import { randomBytes } from "node:crypto"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession } from "@/lib/cache"
+import { checkAffiliateLinkRateLimit } from "@/lib/rate-limit"
 
 const CreateLinkSchema = z.object({
   affiliateId: z.string().min(1),
@@ -48,6 +49,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { success: false, error: "Affiliate not approved" },
       { status: 403 }
+    )
+  }
+
+  // C-L02: Rate limit affiliate link creation per affiliate
+  const rateLimit = await checkAffiliateLinkRateLimit(parsed.data.affiliateId)
+  if (rateLimit.limited) {
+    return NextResponse.json(
+      { success: false, error: "Too many link creation requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": "3600" } }
     )
   }
 
