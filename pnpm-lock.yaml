@@ -175,6 +175,9 @@ importers:
       '@better-auth/oauth-provider':
         specifier: 1.7.0-beta.10
         version: 1.7.0-beta.10(60ed3bd66d8ab0d83cd438bb4744eb29)
+      '@lyrashield/affiliate':
+        specifier: workspace:*
+        version: link:../../packages/affiliate
       '@lyrashield/agent-registry':
         specifier: workspace:*
         version: link:../../packages/agent-registry
@@ -300,6 +303,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1096.0
         version: 3.1096.0
+      '@lyrashield/affiliate':
+        specifier: workspace:*
+        version: link:../../packages/affiliate
       '@lyrashield/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -339,6 +345,28 @@ importers:
       zod:
         specifier: ^4.0.0
         version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+
+  packages/affiliate:
+    dependencies:
+      '@lyrashield/config':
+        specifier: workspace:*
+        version: link:../config
+      '@lyrashield/db':
+        specifier: workspace:*
+        version: link:../db
+      '@lyrashield/logger':
+        specifier: workspace:*
+        version: link:../logger
+      '@lyrashield/pricing':
+        specifier: workspace:*
+        version: link:../pricing
     devDependencies:
       '@types/node':
         specifier: ^24.0.0

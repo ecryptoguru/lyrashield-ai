@@ -94,6 +94,14 @@ export const PERMISSIONS = {
     act: "agent:act",
     approve: "agent:approve",
   },
+  affiliate: {
+    /** Self-manage own affiliate dashboard, links, and payouts (approved partners). */
+    manage: "affiliate:manage",
+    /** Admin: approve/reject/suspend affiliates, override tiers, approve payouts. */
+    admin: "affiliate:admin",
+    /** Admin: review fraud flags and brand-bid monitoring notes. */
+    review: "affiliate:review",
+  },
 } as const
 
 // Derive a type-safe union of every permission string from PERMISSIONS.
@@ -106,6 +114,7 @@ export type Permission = {
 
 const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
   OWNER: Object.values(PERMISSIONS).flatMap((group) => Object.values(group)) as Permission[],
+  // ADMIN gets affiliate admin + review permissions in addition to the list below
   ADMIN: [
     PERMISSIONS.workspace.update,
     PERMISSIONS.member.invite,
@@ -153,6 +162,9 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.aiAssurance.view,
     PERMISSIONS.aiAssurance.manage,
     PERMISSIONS.aiAssurance.review,
+    // Affiliate admin — approve/reject/suspend, tier override, payout approval
+    PERMISSIONS.affiliate.admin,
+    PERMISSIONS.affiliate.review,
   ],
   SECURITY_ADMIN: [
     PERMISSIONS.scan.view,
@@ -216,6 +228,8 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
   ],
   BILLING_ADMIN: [
     PERMISSIONS.billing.manage,
+    PERMISSIONS.affiliate.admin,
+    PERMISSIONS.affiliate.review,
     PERMISSIONS.finding.view,
     PERMISSIONS.report.create,
     PERMISSIONS.report.download,

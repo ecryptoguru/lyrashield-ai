@@ -209,6 +209,18 @@ const envSchema = z
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
 
+    // Affiliate / Partner Program (Track C)
+    RAZORPAYX_API_KEY: z.string().optional().or(z.literal("")),
+    RAZORPAYX_API_SECRET: z.string().optional().or(z.literal("")),
+    RAZORPAYX_ACCOUNT_NUMBER: z.string().optional().or(z.literal("")),
+    PAYONEER_API_KEY: z.string().optional().or(z.literal("")),
+    PAYONEER_API_SECRET: z.string().optional().or(z.literal("")),
+    PAYONEER_PARTNER_ID: z.string().optional().or(z.literal("")),
+    AFFILIATE_DEFAULT_PROGRAM_SLUG: z.string().optional().or(z.literal("")).default("default"),
+    AFFILIATE_COOKIE_DOMAIN: z.string().optional().or(z.literal("")).default(".lyrashieldai.com"),
+    AFFILIATE_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().positive().max(365).default(60),
+    AFFILIATE_PAYOUT_MIN_CENTS: z.coerce.number().int().positive().default(10000),
+
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
