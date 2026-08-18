@@ -234,7 +234,13 @@ test.describe("Affiliate lifecycle", () => {
       .catch(() => {})
 
     await page.goto("/affiliates/dashboard")
-    await expect(page.getByText("Affiliate Dashboard")).toBeVisible()
+    // The dashboard is a server component that requires an APPROVED affiliate
+    // for the signed-in user. Wait for the page to finish loading and for the
+    // dashboard h1 (rendered by PageHeader) to appear.
+    await page.waitForLoadState("networkidle").catch(() => {})
+    await expect(page.getByRole("heading", { name: "Affiliate Dashboard" })).toBeVisible({
+      timeout: 20000,
+    })
 
     // 9. Privacy check: partner dashboard shows masked IDs only
     await page.goto("/affiliates/activity?tab=signups")
