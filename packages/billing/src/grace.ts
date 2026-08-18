@@ -137,6 +137,17 @@ export async function enterGrace(
       data: { graceUsedMs: GRACE_CAP_MS },
     }).catch(() => {})
 
+    // A-L03: Audit log grace exhaustion
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        action: "billing.grace_exceeded",
+        resourceType: "workspace",
+        resourceId: workspaceId,
+        metadata: { graceUsedMs: GRACE_CAP_MS },
+      },
+    }).catch(() => {})
+
     logger.warn("Grace period exceeded — scan should stop", {
       workspaceId,
       graceUsedMs: GRACE_CAP_MS,

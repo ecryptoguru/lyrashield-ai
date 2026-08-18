@@ -61,23 +61,24 @@ export async function assertScanAllowed(
   const cloudPlan = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = plan === "FREE" && workspace.trialStartedAt !== null
 
+  // A-L05: Call getTrialState once and reuse the result for both the
+  // expiry check and the target-cap throttle check below.
+  const trialState = isTrial ? await getTrialState(workspaceId) : null
+
   // Check trial expiry: if the workspace is on trial and the trial has expired,
   // block the scan and lazily set the billing account status via blockOnExpiry.
-  if (isTrial) {
-    const trialState = await getTrialState(workspaceId)
-    if (trialState.isExpired) {
-      // Lazily set the billing account status to "trial_expired"
-      await blockOnExpiry(workspaceId).catch(() => {
-        // Non-blocking — the scan is already blocked below
-      })
-      return {
-        allowed: false,
-        code: "TRIAL_EXPIRED",
-        message: "Your trial has expired. Upgrade to continue scanning.",
-        isTrial,
-        plan,
-        remainingMinutes: 0,
-      }
+  if (isTrial && trialState?.isExpired) {
+    // Lazily set the billing account status to "trial_expired"
+    await blockOnExpiry(workspaceId).catch(() => {
+      // Non-blocking — the scan is already blocked below
+    })
+    return {
+      allowed: false,
+      code: "TRIAL_EXPIRED",
+      message: "Your trial has expired. Upgrade to continue scanning.",
+      isTrial,
+      plan,
+      remainingMinutes: 0,
     }
   }
 
@@ -169,8 +170,8 @@ export async function assertScanAllowed(
   }
 
   // Trial scan-frequency throttle: trial workspaces limited to 3 targets
-  if (isTrial) {
-    const trialState = await getTrialState(workspaceId)
+  // A-L05: Reuse the trialState from above instead of calling getTrialState again
+  if (isTrial && trialState) {
     if (trialState.targetsUsed >= trialState.targetCap) {
       return {
         allowed: false,

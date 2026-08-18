@@ -31,25 +31,55 @@ export interface DriftItem {
  *
  * This is a stub that compares internal records. In production, it would
  * fetch provider exports (Polar/Razorpay) and compare line-by-line.
+ *
+ * C-L08: Uses cursor-based pagination to check all records, not just the
+ * first 1000. The `since` parameter allows incremental reconciliation.
  */
 export async function reconciliationJob(params?: {
   /** Optional provider export data for comparison. */
   polarConversions?: Array<{ externalId: string; amount: string; status: string }>
   polarPayouts?: Array<{ id: string; amount: string; status: string }>
+  /** C-L08: Only check records created after this date (incremental mode). */
+  since?: Date
 }): Promise<ReconciliationResult> {
   const driftItems: DriftItem[] = []
 
-  // Check internal conversions
-  const conversions = await prisma.conversion.findMany({
-    select: {
-      id: true,
-      externalId: true,
-      grossAmount: true,
-      commissionableAmount: true,
-      currency: true,
-    },
-    take: 1000,
-  })
+  // C-L08: Paginate through all conversions using cursor-based pagination
+  const conversions: Array<{
+    id: string
+    externalId: string
+    grossAmount: unknown
+    commissionableAmount: unknown
+    currency: string
+    occurredAt: Date
+  }> = []
+  let cursor: string | undefined = undefined
+  const pageSize = 500
+  do {
+    const batch: Array<{
+      id: string
+      externalId: string
+      grossAmount: unknown
+      commissionableAmount: unknown
+      currency: string
+      occurredAt: Date
+    }> = await prisma.conversion.findMany({
+      select: {
+        id: true,
+        externalId: true,
+        grossAmount: true,
+        commissionableAmount: true,
+        currency: true,
+        occurredAt: true,
+      },
+      where: params?.since ? { occurredAt: { gte: params.since } } : undefined,
+      take: pageSize,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: "asc" },
+    })
+    conversions.push(...batch)
+    cursor = batch.length === pageSize ? batch[batch.length - 1]!.id : undefined
+  } while (cursor)
 
   // If provider data is provided, compare
   if (params?.polarConversions) {
@@ -83,17 +113,41 @@ export async function reconciliationJob(params?: {
     }
   }
 
-  // Check internal payouts
-  const payouts = await prisma.payout.findMany({
-    select: {
-      id: true,
-      amount: true,
-      status: true,
-      providerPayoutId: true,
-      currency: true,
-    },
-    take: 1000,
-  })
+  // C-L08: Paginate through all payouts using cursor-based pagination
+  const payouts: Array<{
+    id: string
+    amount: unknown
+    status: string
+    providerPayoutId: string | null
+    currency: string
+    requestedAt: Date
+  }> = []
+  let payoutCursor: string | undefined = undefined
+  do {
+    const batch: Array<{
+      id: string
+      amount: unknown
+      status: string
+      providerPayoutId: string | null
+      currency: string
+      requestedAt: Date
+    }> = await prisma.payout.findMany({
+      select: {
+        id: true,
+        amount: true,
+        status: true,
+        providerPayoutId: true,
+        currency: true,
+        requestedAt: true,
+      },
+      where: params?.since ? { requestedAt: { gte: params.since } } : undefined,
+      take: pageSize,
+      ...(payoutCursor ? { skip: 1, cursor: { id: payoutCursor } } : {}),
+      orderBy: { id: "asc" },
+    })
+    payouts.push(...batch)
+    payoutCursor = batch.length === pageSize ? batch[batch.length - 1]!.id : undefined
+  } while (payoutCursor)
 
   if (params?.polarPayouts) {
     const externalMap = new Map(params.polarPayouts.map((p) => [p.id, p]))

@@ -195,6 +195,17 @@ export async function blockOnExpiry(workspaceId: string): Promise<{ blocked: boo
     data: { status: "trial_expired" },
   })
 
+  // A-L03: Audit log trial expiry block
+  await prisma.auditLog.create({
+    data: {
+      workspaceId,
+      action: "billing.trial_expired",
+      resourceType: "workspace",
+      resourceId: workspaceId,
+      metadata: { trialStartedAt: trialState.startedAt },
+    },
+  }).catch(() => {})
+
   logger.info("Trial expired — workspace locked", { workspaceId })
 
   return { blocked: true }

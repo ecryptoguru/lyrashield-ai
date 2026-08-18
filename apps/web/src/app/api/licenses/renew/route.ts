@@ -105,6 +105,17 @@ export async function POST(request: Request) {
       data: { updateEligibleUntil: newExpiry },
     })
 
+    // B-L01: Audit log the renewal
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: license.workspaceId ?? license.id,
+        action: "license.renewed",
+        resourceType: "license",
+        resourceId: license.id,
+        metadata: { orderId, renewalSku, newExpiry: newExpiry.toISOString() },
+      },
+    }).catch(() => {})
+
     const licenseFile = await issueSignedLicense(license.id, license.perpetualFallbackBuild)
 
     logger.info("License renewed", {

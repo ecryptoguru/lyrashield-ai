@@ -42,9 +42,17 @@ export function resolveSigningPrivateKey(): string {
   return key
 }
 
-/** Resolve the signing key identifier (for rotation / revocation). */
+/** Resolve the signing key identifier (for rotation / revocation).
+ *
+ * B-L05: In production, LICENSE_SIGNING_KEY_ID must be set explicitly.
+ * The fallback "license-key-v1" is only for development.
+ */
 export function resolveSigningKeyId(): string {
-  return env.LICENSE_SIGNING_KEY_ID || "license-key-v1"
+  const keyId = env.LICENSE_SIGNING_KEY_ID
+  if (!keyId && env.NODE_ENV === "production") {
+    throw new Error("LICENSE_SIGNING_KEY_ID is required in production")
+  }
+  return keyId || "license-key-v1"
 }
 
 /**
