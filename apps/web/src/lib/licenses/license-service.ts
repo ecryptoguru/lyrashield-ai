@@ -15,7 +15,7 @@ import {
   timingSafeEqual,
 } from "node:crypto"
 import { env } from "@lyrashield/config"
-import { prisma } from "@lyrashield/db"
+import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, type LocalSkuId } from "@lyrashield/pricing"
 import { signLicense, type LicenseFile, type LicenseSku } from "@lyrashield/licenses"
 import { logger } from "@lyrashield/logger"
@@ -212,7 +212,11 @@ export async function issueSignedLicense(
   licenseId: string,
   perpetualFallbackBuild: string | null
 ): Promise<LicenseFile> {
-  const license = await prisma.license.findUniqueOrThrow({ where: { id: licenseId } })
+  // License issuance is called from workspace-less routes (activate, renew,
+  // sync connect) — the license is FORCE-RLS-scoped and may be NULL-workspaceId,
+  // so the RLS-scoped client would not see it. Use the system client.
+  const systemPrisma = getSystemPrisma()
+  const license = await systemPrisma.license.findUniqueOrThrow({ where: { id: licenseId } })
 
   if (license.revoked) {
     throw new Error("LICENSE_REVOKED")
@@ -234,7 +238,7 @@ export async function issueSignedLicense(
     perpetualFallbackBuild
   )
 
-  await prisma.license.update({
+  await systemPrisma.license.update({
     where: { id: licenseId },
     data: {
       signature: licenseFile.signature,

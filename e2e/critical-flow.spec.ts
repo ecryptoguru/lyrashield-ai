@@ -23,9 +23,13 @@ async function signUp(
   await page.getByRole("button", { name: "Create account" }).click()
   await expect.poll(() => prisma.user.findUnique({ where: { email } })).not.toBeNull()
   await prisma.user.update({ where: { email }, data: { emailVerified: true } })
+  // Pass the test's simulated client IP so the auth rate limiter buckets this
+  // sign-out under the test's distinct IP, not the shared default — otherwise
+  // the 5/min in-memory auth limit is shared across the whole e2e suite and
+  // sign-out returns RATE_LIMITED (flaky cross-test interference).
   const signOutResponse = await page.request.post("/api/auth/sign-out", {
     data: {},
-    headers: { Origin: "http://127.0.0.1:3100" },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(signOutResponse).toBeOK()
   await page.goto("/sign-in")

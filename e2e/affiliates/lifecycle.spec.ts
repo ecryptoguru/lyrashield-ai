@@ -18,7 +18,14 @@ const affiliateEmail = `e2e-affiliate-${suffix}@example.com`
 const referredEmail = `e2e-referred-${suffix}@example.com`
 
 test.describe("Affiliate lifecycle", () => {
-  test("apply → approve → click → signup → commission → payout", async ({ page }) => {
+  test("apply → approve → click → signup → commission → payout", async ({ page }, testInfo) => {
+    // Isolate the per-IP fraud/rate-limit counters: the apply route's fraud
+    // check counts prior Clicks by the request IP, and many e2e specs share the
+    // default 127.0.0.1. Give this test a distinct simulated client IP so the
+    // RATE_LIMIT_IP signal does not falsely trip on other specs' Clicks.
+    const forwardedFor = `198.51.100.${(testInfo.workerIndex % 200) + 20}`
+    await page.setExtraHTTPHeaders({ "x-forwarded-for": forwardedFor })
+
     // 1. Sign up as the prospective affiliate
     await page.goto("/sign-up")
     await page.getByLabel("Name").fill("E2E Affiliate")
