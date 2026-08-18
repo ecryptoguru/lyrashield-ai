@@ -63,13 +63,20 @@ export async function releaseReserveForAffiliate(
       affiliateId,
       status: "PAID",
       reserveReleasedAt: null,
-      payoutItem: { isNot: null },
+      // The commission must have at least one payout item (the main payout).
+      payoutItems: { some: {} },
     },
     select: {
       id: true,
       amount: true,
       currency: true,
-      payoutItem: { select: { amount: true } },
+      // The first NON-reserve-release payout item is the main payout; its amount
+      // is what was already paid. The reserved delta is Commission.amount - this.
+      payoutItems: {
+        where: { payout: { isReserveRelease: false } },
+        take: 1,
+        select: { amount: true },
+      },
     },
   })
 
@@ -79,7 +86,7 @@ export async function releaseReserveForAffiliate(
   let currency: string | null = null
 
   for (const c of paidCommissions) {
-    const alreadyPaid = c.payoutItem?.amount ?? new Prisma.Decimal(0)
+    const alreadyPaid = c.payoutItems[0]?.amount ?? new Prisma.Decimal(0)
     const reservedDelta = c.amount.minus(alreadyPaid)
     if (reservedDelta.lte(0)) {
       // No reserve was held for this commission (e.g. reserve was not active

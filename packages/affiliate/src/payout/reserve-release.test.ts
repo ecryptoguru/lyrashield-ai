@@ -50,7 +50,7 @@ function fakeCommission(opts: {
     currency: "USD",
     status: opts.status ?? "PAID",
     reserveReleasedAt: opts.reserveReleasedAt ?? null,
-    payoutItem: { amount: paidAmount },
+    payoutItems: [{ amount: paidAmount }],
   }
 }
 

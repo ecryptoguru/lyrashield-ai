@@ -1883,8 +1883,10 @@ model Commission {
 
   conversion Conversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
   affiliate  Affiliate  @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
-  payoutItem PayoutItem?
-
+  // A commission can have up to two payout items: the main payout, and a
+  // later reserve-release payout for the reserved portion held back during
+  // the new-affiliate reserve period.
+  payoutItems PayoutItem[]
   @@unique([conversionId, affiliateId])
   @@index([affiliateId, status, availableAt])
   @@index([status, availableAt])
