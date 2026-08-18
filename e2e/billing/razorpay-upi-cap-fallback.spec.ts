@@ -19,7 +19,9 @@ import { test, expect } from "@playwright/test"
 const RAZORPAY_TEST_MODE = process.env.RAZORPAY_TEST_MODE === "1"
 const UPI_AUTOPAY_CAP_INR = 15_000
 
-test.describe.skipIf(!RAZORPAY_TEST_MODE)("Razorpay UPI AutoPay cap fallback", () => {
+test.describe("Razorpay UPI AutoPay cap fallback", () => {
+  test.skip(!RAZORPAY_TEST_MODE, "Razorpay test mode not enabled")
+
   test("Team monthly (₹29,900) routes to card/netbanking, not UPI AutoPay", async ({ request }) => {
     // Team monthly is ₹29,900 — above the ₹15,000 UPI AutoPay cap
     const response = await request.post("/billing/checkout", {

@@ -13,7 +13,11 @@
     "noEmit": true,
     "typeRoots": ["../node_modules/.pnpm/node_modules/@types"],
     "paths": {
-      "@lyrashield/db": ["../packages/db/src/index.ts"]
+      "@lyrashield/db": ["../packages/db/src/index.ts"],
+      "@lyrashield/affiliate": ["../packages/affiliate/src/index.ts"],
+      "@lyrashield/licenses": ["../packages/licenses/src/index.ts"],
+      "@lyrashield/pricing": ["../packages/pricing/src/index.ts"],
+      "@lyrashield/billing": ["../packages/billing/src/index.ts"]
     }
   },
   "include": ["**/*.ts"],

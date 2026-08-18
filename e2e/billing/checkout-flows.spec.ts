@@ -16,7 +16,9 @@ import { test, expect } from "@playwright/test"
 
 const POLAR_TEST_MODE = process.env.POLAR_TEST_MODE === "1"
 
-test.describe.skipIf(!POLAR_TEST_MODE)("Checkout flows (Polar test mode)", () => {
+test.describe("Checkout flows (Polar test mode)", () => {
+  test.skip(!POLAR_TEST_MODE, "Polar test mode not enabled")
+
   test("monthly checkout → order.paid → entitlement granted", async ({ request }) => {
     // 1. Create a checkout session
     const checkoutResponse = await request.post("/billing/checkout", {
