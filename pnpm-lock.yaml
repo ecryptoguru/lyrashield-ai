@@ -196,12 +196,18 @@ importers:
       '@lyrashield/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
+      '@lyrashield/licenses':
+        specifier: workspace:*
+        version: link:../../packages/licenses
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
       '@lyrashield/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@lyrashield/pricing':
+        specifier: workspace:*
+        version: link:../../packages/pricing
       '@lyrashield/score':
         specifier: workspace:*
         version: link:../../packages/score
@@ -712,6 +718,15 @@ importers:
       ioredis:
         specifier: ^5.11.1
         version: 5.11.1
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+
+  packages/licenses:
     devDependencies:
       '@types/node':
         specifier: ^24.0.0

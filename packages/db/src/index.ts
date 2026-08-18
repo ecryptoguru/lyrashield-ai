@@ -53,6 +53,11 @@ export type {
   Session,
   Account,
   Verification,
+  License,
+  LicenseActivation,
+  LicenseKey,
+  SyncCursor,
+  LicenseRevocation,
 } from "./generated/prisma"
 
 export { ApprovalStatus } from "./generated/prisma"
