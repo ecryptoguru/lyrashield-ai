@@ -1,47 +1,52 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 // Mock @lyrashield/db. reserve-release.ts uses `new Prisma.Decimal(...)` at
-// runtime, so the mock must expose a Decimal constructor. This minimal
-// stand-in supports the methods the release math uses (minus, lte, plus,
-// toString). The model-method object (`models`) is hoisted to module scope so
-// both the $transaction factory and beforeEach can share it — the $transaction
-// mock passes it as the tx handle so tx.payout.create etc. resolve.
-class FakeDecimal {
-  private n: number
-  constructor(v: string | number | { toString: () => string }) {
-    this.n =
-      typeof v === "string"
-        ? Number.parseFloat(v)
-        : typeof v === "number"
-          ? v
-          : Number.parseFloat(String(v))
+// runtime, so the mock must expose a Decimal constructor. vi.mock factories are
+// hoisted above all module-scope declarations, so anything the factory
+// references (FakeDecimal, models, runTransaction) MUST be defined with
+// vi.hoisted() — plain module-scope `class`/`const` are NOT initialized when
+// the hoisted factory runs (that caused "Cannot access 'FakeDecimal' before
+// initialization").
+const { FakeDecimal, models, runTransaction } = vi.hoisted(() => {
+  class FakeDecimal {
+    private n: number
+    constructor(v: string | number | { toString: () => string }) {
+      this.n =
+        typeof v === "string"
+          ? Number.parseFloat(v)
+          : typeof v === "number"
+            ? v
+            : Number.parseFloat(String(v))
+    }
+    toString() {
+      return Number.isInteger(this.n) ? `${this.n}.0000` : `${this.n}`
+    }
+    minus(other: { toString: () => string }) {
+      return new FakeDecimal(this.n - Number.parseFloat(String(other)))
+    }
+    lte(other: { toString: () => string }) {
+      return this.n <= Number.parseFloat(String(other))
+    }
+    gt(other: { toString: () => string }) {
+      return this.n > Number.parseFloat(String(other))
+    }
+    plus(other: { toString: () => string }) {
+      return new FakeDecimal(this.n + Number.parseFloat(String(other)))
+    }
   }
-  toString() {
-    return Number.isInteger(this.n) ? `${this.n}.0000` : `${this.n}`
-  }
-  minus(other: { toString: () => string }) {
-    return new FakeDecimal(this.n - Number.parseFloat(String(other)))
-  }
-  lte(other: { toString: () => string }) {
-    return this.n <= Number.parseFloat(String(other))
-  }
-  gt(other: { toString: () => string }) {
-    return this.n > Number.parseFloat(String(other))
-  }
-  plus(other: { toString: () => string }) {
-    return new FakeDecimal(this.n + Number.parseFloat(String(other)))
-  }
-}
 
-const models = {
-  affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
-  commission: { findMany: vi.fn(), update: vi.fn() },
-  payout: { create: vi.fn() },
-  payoutItem: { create: vi.fn() },
-  auditLog: { create: vi.fn().mockResolvedValue(undefined) },
-}
+  const models = {
+    affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
+    commission: { findMany: vi.fn(), update: vi.fn() },
+    payout: { create: vi.fn() },
+    payoutItem: { create: vi.fn() },
+    auditLog: { create: vi.fn().mockResolvedValue(undefined) },
+  }
 
-const runTransaction = (cb: (tx: unknown) => Promise<unknown>) => cb(models)
+  const runTransaction = (cb: (tx: unknown) => Promise<unknown>) => cb(models)
+
+  return { FakeDecimal, models, runTransaction }
+})
 
 vi.mock("@lyrashield/db", () => {
   return {
