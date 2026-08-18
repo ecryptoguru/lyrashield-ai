@@ -69,7 +69,7 @@ export async function checkScanConsumerLiveness(
     waiting = await redis.llen(`bull:${SCAN_QUEUE_NAME}:wait`)
   } catch (error) {
     logger.warn("Scan consumer liveness check failed", {
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     })
     return null
   }

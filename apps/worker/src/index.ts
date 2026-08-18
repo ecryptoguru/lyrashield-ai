@@ -137,29 +137,33 @@ async function main(): Promise<void> {
   assertEvidenceStorageConfigured()
   assertRepositoryScanRuntimeConfigured()
 
-  worker = new Worker<ScanJobData, ScanJobResult>(SCAN_QUEUE_NAME, async (job) => {
-    // Record the claim at the top of the processor so the liveness guard can
-    // tell "consumer is alive and claiming" apart from "wedged with work waiting".
-    markScanJobClaimed()
-    return processScanJob(job)
-  }, {
-    connection: {
-      url: env.REDIS_URL || "redis://localhost:6379",
-      maxRetriesPerRequest: null,
+  worker = new Worker<ScanJobData, ScanJobResult>(
+    SCAN_QUEUE_NAME,
+    async (job) => {
+      // Record the claim at the top of the processor so the liveness guard can
+      // tell "consumer is alive and claiming" apart from "wedged with work waiting".
+      markScanJobClaimed()
+      return processScanJob(job)
     },
-    concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
-    autorun: false,
-    // BRPOP blocks for up to 10 min per call — but returns instantly when a
-    // job is pushed to the queue. This gives instant scan pickup with only
-    // ~4.3K re-issue commands/month at idle. Stalled checks run every minute
-    // so jobs that are genuinely stuck are retried; reconcileScanQueue() is the
-    // fail-closed backstop that runs both on startup and periodically. The
-    // consumer-liveness guard (below) covers the remaining failure mode: the
-    // blocking client silently wedging (taskforcesh/bullmq#4479) so jobs sit
-    // in `wait` while the worker reports ready.
-    drainDelay: 600,
-    stalledInterval: 60_000
-  })
+    {
+      connection: {
+        url: env.REDIS_URL || "redis://localhost:6379",
+        maxRetriesPerRequest: null,
+      },
+      concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
+      autorun: false,
+      // BRPOP blocks for up to 10 min per call — but returns instantly when a
+      // job is pushed to the queue. This gives instant scan pickup with only
+      // ~4.3K re-issue commands/month at idle. Stalled checks run every minute
+      // so jobs that are genuinely stuck are retried; reconcileScanQueue() is the
+      // fail-closed backstop that runs both on startup and periodically. The
+      // consumer-liveness guard (below) covers the remaining failure mode: the
+      // blocking client silently wedging (taskforcesh/bullmq#4479) so jobs sit
+      // in `wait` while the worker reports ready.
+      drainDelay: 600,
+      stalledInterval: 60_000,
+    }
+  )
 
   await worker.waitUntilReady()
   worker.on("completed", (job, result) => {

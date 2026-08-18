@@ -12,7 +12,7 @@ vi.mock("@lyrashield/logger", () => ({
 import {
   checkScanConsumerLiveness,
   markScanJobClaimed,
-  resetScanConsumerLiveness
+  resetScanConsumerLiveness,
 } from "./consumer-liveness"
 
 describe("scan consumer liveness guard", () => {
