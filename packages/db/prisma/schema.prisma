@@ -1625,7 +1625,7 @@ model License {
   ownerEmail            String
   sku                   String
   seatCount             Int
-  machineIds            String[]
+  machineIds            String[]  @default([])
   updateEligibleUntil   DateTime
   perpetualFallbackBuild String?
   signingKeyId          String
