@@ -46,35 +46,35 @@ export interface TrialState {
  * Idempotent: if a trial has already started, this is a no-op.
  */
 export async function startTrial(workspaceId: string): Promise<{ started: boolean; trialEndsAt: Date }> {
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: workspaceId },
-    select: { plan: true, trialStartedAt: true },
-  })
-
-  if (!workspace) {
-    throw new Error("Workspace not found")
-  }
-
-  // If trial already started, return existing
-  if (workspace.trialStartedAt) {
-    const endsAt = new Date(
-      workspace.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
-    )
-    return { started: false, trialEndsAt: endsAt }
-  }
-
   const now = new Date()
   const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
 
-  // Set trialStartedAt and ensure plan is FREE
-  await prisma.workspace.update({
-    where: { id: workspaceId },
+  // A-M01: Atomic conditional update — only sets trialStartedAt if it's still null.
+  // This prevents the TOCTOU race where two concurrent requests both read null
+  // and both proceed to grant trial minutes.
+  const result = await prisma.workspace.updateMany({
+    where: { id: workspaceId, trialStartedAt: null },
     data: {
       trialStartedAt: now,
       plan: "FREE",
       deepAllowed: false,
     },
   })
+
+  if (result.count === 0) {
+    // Trial was already started (by this call or a concurrent one)
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { trialStartedAt: true },
+    })
+    if (!workspace) {
+      throw new Error("Workspace not found")
+    }
+    const endsAt = workspace.trialStartedAt
+      ? new Date(workspace.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
+      : trialEndsAt
+    return { started: false, trialEndsAt: endsAt }
+  }
 
   // Update billing account
   await prisma.billingAccount.upsert({

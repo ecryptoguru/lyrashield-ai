@@ -85,55 +85,68 @@ async function reconcilePolar(
   }
 
   try {
-    // Fetch recent orders from Polar
-    // Note: The Polar SDK API may vary; this is a best-effort reconciliation.
-    // In production, use the actual Polar API to list orders/subscriptions.
-    const ordersResponse = await (client as unknown as {
-      orders: {
-        list: (params: { limit: number }) => Promise<{ result: { id: string }[] } | { items: { id: string }[] } | { data: { id: string }[] }>
+    // A-L07: Paginate through all orders in the 24h window, not just the first 50.
+    let page = 1
+    const pageSize = 50
+    let hasMore = true
+    while (hasMore) {
+      const ordersResponse = await (client as unknown as {
+        orders: {
+          list: (params: { limit: number; page?: number }) => Promise<{ result: { id: string }[] } | { items: { id: string }[] } | { data: { id: string }[] } | { pagination: { hasMore: boolean } }>
+        }
+      }).orders.list({ limit: pageSize, page }).catch(() => null)
+
+      if (!ordersResponse) {
+        logger.debug("Polar orders API not available — skipping")
+        return
       }
-    }).orders.list({ limit: 50 }).catch(() => null)
 
-    if (!ordersResponse) {
-      logger.debug("Polar orders API not available — skipping")
-      return
-    }
+      const orders = (ordersResponse as { result?: { id: string }[]; items?: { id: string }[]; data?: { id: string }[] }).result
+        ?? (ordersResponse as { items?: { id: string }[] }).items
+        ?? (ordersResponse as { data?: { id: string }[] }).data
+        ?? []
 
-    const orders = (ordersResponse as { result?: { id: string }[]; items?: { id: string }[]; data?: { id: string }[] }).result
-      ?? (ordersResponse as { items?: { id: string }[] }).items
-      ?? (ordersResponse as { data?: { id: string }[] }).data
-      ?? []
-
-    for (const order of orders) {
-      result.polarChecked++
-
-      // Check if we have a WebhookEvent for this order
-      const existing = await prisma.webhookEvent.findUnique({
-        where: {
-          provider_externalId: { provider: "polar", externalId: order.id },
-        },
-        select: { id: true, processed: true },
-      })
-
-      if (!existing) {
-        // Missed event — alert
-        result.driftAlerts++
-        result.alerts.push({
-          provider: "polar",
-          externalId: order.id,
-          type: "order.paid",
-          message: "Polar order not found in WebhookEvent table — webhook may have been missed",
-        })
-      } else if (!existing.processed) {
-        // Unprocessed event — alert
-        result.driftAlerts++
-        result.alerts.push({
-          provider: "polar",
-          externalId: order.id,
-          type: "unprocessed",
-          message: "Polar webhook event exists but was not processed",
-        })
+      if (orders.length === 0) {
+        hasMore = false
+        break
       }
+
+      for (const order of orders) {
+        result.polarChecked++
+
+        // Check if we have a WebhookEvent for this order
+        const existing = await prisma.webhookEvent.findUnique({
+          where: {
+            provider_externalId: { provider: "polar", externalId: order.id },
+          },
+          select: { id: true, processed: true },
+        })
+
+        if (!existing) {
+          // Missed event — alert
+          result.driftAlerts++
+          result.alerts.push({
+            provider: "polar",
+            externalId: order.id,
+            type: "order.paid",
+            message: "Polar order not found in WebhookEvent table — webhook may have been missed",
+          })
+        } else if (!existing.processed) {
+          // Unprocessed event — alert
+          result.driftAlerts++
+          result.alerts.push({
+            provider: "polar",
+            externalId: order.id,
+            type: "unprocessed",
+            message: "Polar webhook event exists but was not processed",
+          })
+        }
+      }
+
+      // Check if there are more pages
+      const pagination = (ordersResponse as { pagination?: { hasMore: boolean } }).pagination
+      hasMore = pagination?.hasMore ?? (orders.length === pageSize)
+      page++
     }
   } catch (error) {
     logger.error("Polar reconciliation failed", {
@@ -156,47 +169,61 @@ async function reconcileRazorpay(
   }
 
   try {
-    // Fetch recent payments from Razorpay
-    const payments = await (client as unknown as {
-      payments: {
-        all: (params: { count: number }) => Promise<{ items: { id: string; status: string }[] }>
+    // A-L07: Paginate through all payments in the 24h window
+    let razorpayPage = 1
+    const razorpayPageSize = 50
+    let razorpayHasMore = true
+    while (razorpayHasMore) {
+      const payments = await (client as unknown as {
+        payments: {
+          all: (params: { count: number; skip?: number }) => Promise<{ items: { id: string; status: string }[] }>
+        }
+      }).payments.all({ count: razorpayPageSize, skip: (razorpayPage - 1) * razorpayPageSize }).catch(() => null)
+
+      if (!payments) {
+        logger.debug("Razorpay payments API not available — skipping")
+        return
       }
-    }).payments.all({ count: 50 }).catch(() => null)
 
-    if (!payments) {
-      logger.debug("Razorpay payments API not available — skipping")
-      return
-    }
-
-    for (const payment of payments.items ?? []) {
-      result.razorpayChecked++
-
-      if (payment.status !== "captured") continue
-
-      const existing = await prisma.webhookEvent.findUnique({
-        where: {
-          provider_externalId: { provider: "razorpay", externalId: payment.id },
-        },
-        select: { id: true, processed: true },
-      })
-
-      if (!existing) {
-        result.driftAlerts++
-        result.alerts.push({
-          provider: "razorpay",
-          externalId: payment.id,
-          type: "payment.captured",
-          message: "Razorpay payment not found in WebhookEvent table — webhook may have been missed",
-        })
-      } else if (!existing.processed) {
-        result.driftAlerts++
-        result.alerts.push({
-          provider: "razorpay",
-          externalId: payment.id,
-          type: "unprocessed",
-          message: "Razorpay webhook event exists but was not processed",
-        })
+      const paymentItems = payments.items ?? []
+      if (paymentItems.length === 0) {
+        razorpayHasMore = false
+        break
       }
+
+      for (const payment of paymentItems) {
+        result.razorpayChecked++
+
+        if (payment.status !== "captured") continue
+
+        const existing = await prisma.webhookEvent.findUnique({
+          where: {
+            provider_externalId: { provider: "razorpay", externalId: payment.id },
+          },
+          select: { id: true, processed: true },
+        })
+
+        if (!existing) {
+          result.driftAlerts++
+          result.alerts.push({
+            provider: "razorpay",
+            externalId: payment.id,
+            type: "payment.captured",
+            message: "Razorpay payment not found in WebhookEvent table — webhook may have been missed",
+          })
+        } else if (!existing.processed) {
+          result.driftAlerts++
+          result.alerts.push({
+            provider: "razorpay",
+            externalId: payment.id,
+            type: "unprocessed",
+            message: "Razorpay webhook event exists but was not processed",
+          })
+        }
+      }
+
+      razorpayHasMore = paymentItems.length === razorpayPageSize
+      razorpayPage++
     }
   } catch (error) {
     logger.error("Razorpay reconciliation failed", {

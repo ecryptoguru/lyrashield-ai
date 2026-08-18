@@ -124,14 +124,16 @@ export async function getUsageBalance(workspaceId: string): Promise<UsageBalance
   const poolRemaining = Math.max(0, poolMinutes - poolConsumed)
 
   // Pack consumption: consumption spills into packs only after the pool is
-  // exhausted. Compute packConsumed from UsageRecords rather than trusting
-  // MinutePack.remainingMinutes directly (which may be stale if the expire
-  // job hasn't run or if packs were credited but consumption wasn't attributed).
+  // exhausted. A-M05: Use the MinutePack.remainingMinutes column directly
+  // (decremented atomically by recordAgentMinutes) rather than computing
+  // from cycle-scoped UsageRecords, which incorrectly "replenished" pack
+  // minutes at cycle rollover. The column is the source of truth.
   const packConsumed = Math.max(0, poolConsumed - poolMinutes)
 
-  // Sum original minutes across all unexpired packs, then subtract pack consumption.
+  // Sum remaining minutes across all unexpired packs (the column is
+  // decremented atomically by recordAgentMinutes when consumption spills).
   const totalPackMinutes = packs.reduce((sum, p) => sum + p.minutes, 0)
-  const packRemaining = Math.max(0, totalPackMinutes - packConsumed)
+  const packRemaining = packs.reduce((sum, p) => sum + Math.max(0, p.remainingMinutes), 0)
 
   return {
     poolMinutes,

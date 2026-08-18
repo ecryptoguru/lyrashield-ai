@@ -53,11 +53,17 @@ export interface ClawbackResult {
  * constraint.
  */
 export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> {
-  const { externalId, reason } = payload
+  const { provider, externalId, reason } = payload
+
+  // C-M01: Use provider-scoped idempotency key to match the key used when
+  // the conversion was stored. The commission engine stores conversions with
+  // idempotencyKey = `${provider}:${externalId}`, but the previous clawback
+  // lookup used only `externalId`, causing every clawback to return notFound.
+  const idempotencyKey = `${provider}:${externalId}`
 
   // Find the original conversion + commission
   const conversion = await prisma.conversion.findFirst({
-    where: { idempotencyKey: externalId },
+    where: { idempotencyKey },
     include: { commissions: true, subscription: true },
   })
 

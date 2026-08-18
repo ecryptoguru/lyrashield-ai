@@ -71,8 +71,18 @@ export async function POST(request: Request) {
       // Insert webhook event (idempotent)
       const inserted = await insertWebhookEvent(provider, externalId, eventType, payload)
       if (!inserted) {
-        // Replay — already processed
-        return NextResponse.json({ success: true }, { status: 200 })
+        // A-M04: Replay — check if the existing event was never processed.
+        // If it's still unprocessed, reattempt processing instead of silently
+        // returning 200 and permanently stranding the event.
+        const existingEvent = await prisma.webhookEvent.findUnique({
+          where: { provider_externalId: { provider, externalId } },
+          select: { processed: true },
+        })
+        if (existingEvent?.processed) {
+          return NextResponse.json({ success: true }, { status: 200 })
+        }
+        // Fall through to reprocess the unprocessed event
+        logger.info("Reprocessing unprocessed webhook event", { provider, externalId })
       }
 
       // Process synchronously before responding
@@ -118,8 +128,15 @@ export async function POST(request: Request) {
       // Insert webhook event (idempotent)
       const inserted = await insertWebhookEvent(provider, externalId, eventType, payload)
       if (!inserted) {
-        // Replay — already processed
-        return NextResponse.json({ success: true }, { status: 200 })
+        // A-M04: Replay — check if the existing event was never processed.
+        const existingEvent = await prisma.webhookEvent.findUnique({
+          where: { provider_externalId: { provider, externalId } },
+          select: { processed: true },
+        })
+        if (existingEvent?.processed) {
+          return NextResponse.json({ success: true }, { status: 200 })
+        }
+        logger.info("Reprocessing unprocessed webhook event", { provider, externalId })
       }
 
       // Process synchronously before responding
@@ -149,9 +166,11 @@ export async function POST(request: Request) {
       provider: hasPolarHeaders ? "polar" : "razorpay",
       error: error instanceof Error ? error.message : String(error),
     })
+    // A-M04: Return 500 (not 400) on processing errors so the provider retries.
+    // Returning 400 causes the provider to stop retrying, permanently stranding events.
     return NextResponse.json(
-      { success: false, error: { code: "WEBHOOK_VALIDATION_FAILED", message: "Invalid webhook" } },
-      { status: 400 }
+      { success: false, error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" } },
+      { status: 500 }
     )
   }
 

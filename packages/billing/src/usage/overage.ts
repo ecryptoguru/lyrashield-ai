@@ -80,39 +80,11 @@ export async function debitOverage(
     }
   }
 
-  // Calculate current cycle overage cost
+  // A-M03: Use a transaction with serializable isolation to prevent the
+  // TOCTOU race where concurrent ticks both pass the spend-limit check.
+  // The $transaction wraps the read + insert so only one tick at a time
+  // can check-and-debit against the spend limit.
   const cycleStart = billingAccount.currentPeriodStart ?? new Date(0)
-  const overageRecords = await prisma.usageRecord.findMany({
-    where: {
-      workspaceId,
-      kind: "overage_minutes",
-      deletedAt: null,
-      cycleStart: { gte: cycleStart },
-    },
-    select: { quantity: true },
-  })
-  const currentOverageMinutes = overageRecords.reduce((sum, r) => sum + r.quantity, 0)
-  const currentOverageCostCents = currentOverageMinutes * OVERAGE_PER_MINUTE_CENTS
-
-  const requestedCostCents = minutes * OVERAGE_PER_MINUTE_CENTS
-  const projectedCostCents = currentOverageCostCents + requestedCostCents
-
-  // Check spend limit
-  if (projectedCostCents > billingAccount.spendLimitCents) {
-    const remainingBudgetCents = billingAccount.spendLimitCents - currentOverageCostCents
-    const allowedMinutes = Math.floor(remainingBudgetCents / OVERAGE_PER_MINUTE_CENTS)
-    if (allowedMinutes <= 0) {
-      return {
-        debited: false,
-        minutes: 0,
-        estimatedCostCents: 0,
-        reason: "spend_limit_reached",
-      }
-    }
-    // Debit only the allowed minutes
-    minutes = allowedMinutes
-  }
-
   const idempotencyKey = `${workspaceId}:${scanId}:${phase}:overage`
 
   const existing = await prisma.usageRecord.findUnique({
@@ -124,22 +96,57 @@ export async function debitOverage(
   }
 
   try {
-    await prisma.usageRecord.create({
-      data: {
-        workspaceId,
-        kind: "overage_minutes",
-        quantity: minutes,
-        idempotencyKey,
-        cycleStart: billingAccount.currentPeriodStart ?? null,
-        metadata: {
-          scanId,
-          phase,
-          costCents: minutes * OVERAGE_PER_MINUTE_CENTS,
-          rateCentsPerMinute: OVERAGE_PER_MINUTE_CENTS,
+    await prisma.$transaction(async (tx) => {
+      // Re-read overage records inside the transaction for consistent reads
+      const overageRecords = await tx.usageRecord.findMany({
+        where: {
+          workspaceId,
+          kind: "overage_minutes",
+          deletedAt: null,
+          cycleStart: { gte: cycleStart },
         },
-      },
+        select: { quantity: true },
+      })
+      const currentOverageMinutes = overageRecords.reduce((sum, r) => sum + r.quantity, 0)
+      const currentOverageCostCents = currentOverageMinutes * OVERAGE_PER_MINUTE_CENTS
+
+      let debitMinutes = minutes
+      const requestedCostCents = debitMinutes * OVERAGE_PER_MINUTE_CENTS
+      const projectedCostCents = currentOverageCostCents + requestedCostCents
+
+      const spendLimit = billingAccount.spendLimitCents!
+      if (projectedCostCents > spendLimit) {
+        const remainingBudgetCents = spendLimit - currentOverageCostCents
+        const allowedMinutes = Math.floor(remainingBudgetCents / OVERAGE_PER_MINUTE_CENTS)
+        if (allowedMinutes <= 0) {
+          throw new Error("spend_limit_reached")
+        }
+        debitMinutes = allowedMinutes
+      }
+
+      await tx.usageRecord.create({
+        data: {
+          workspaceId,
+          kind: "overage_minutes",
+          quantity: debitMinutes,
+          idempotencyKey,
+          cycleStart: billingAccount.currentPeriodStart ?? null,
+          metadata: {
+            scanId,
+            phase,
+            costCents: debitMinutes * OVERAGE_PER_MINUTE_CENTS,
+            rateCentsPerMinute: OVERAGE_PER_MINUTE_CENTS,
+          },
+        },
+      })
+
+      // Update minutes for the return value
+      minutes = debitMinutes
     })
   } catch (error) {
+    if (error instanceof Error && error.message === "spend_limit_reached") {
+      return { debited: false, minutes: 0, estimatedCostCents: 0, reason: "spend_limit_reached" }
+    }
     if (
       error &&
       typeof error === "object" &&

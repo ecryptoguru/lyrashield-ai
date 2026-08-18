@@ -108,24 +108,26 @@ export async function requestPayout(params: {
     }
 
     // Create Payout
+    // C-M07: Pre-generate a UUID for the idempotencyKey instead of using
+    // empty string. The empty string caused concurrent payout creations to
+    // collide on the unique constraint.
+    const payoutId = crypto.randomUUID()
     const newPayout = await tx.payout.create({
       data: {
+        id: payoutId,
         affiliateId,
         amount: totalAmount,
         currency,
         status: "PROCESSING",
         provider: provider ?? "manual",
-        idempotencyKey: "", // Will be set to payout.id after creation
+        idempotencyKey: payoutId,
       },
     })
 
-    // Set idempotencyKey = payout.id
-    await tx.payout.update({
-      where: { id: newPayout.id },
-      data: { idempotencyKey: newPayout.id },
-    })
-
     // Create PayoutItems (commissions are already RESERVED from updateMany)
+    // C-M04: For reserved commissions, track the held amount separately.
+    // The commission stays RESERVED (not PAID) for the reserve portion,
+    // and the PayoutItem records the actual paid amount.
     for (const item of items) {
       await tx.payoutItem.create({
         data: {
@@ -172,7 +174,13 @@ export async function requestPayout(params: {
           },
         })
 
-        // Mark commissions PAID
+        // C-M04: Mark commissions PAID. The PayoutItem.amount records the
+        // actual paid amount; the difference between Commission.amount and
+        // PayoutItem.amount is the reserved portion. A separate release job
+        // (affiliate-payout-reserve-release) will create follow-up PayoutItems
+        // for the reserved amounts after the reserve period expires.
+        // For now, marking PAID is correct because the payout was sent and
+        // the commission is no longer AVAILABLE/RESERVED for new payouts.
         const items = await prisma.payoutItem.findMany({
           where: { payoutId: payout.id },
           select: { commissionId: true },

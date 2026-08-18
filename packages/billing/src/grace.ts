@@ -81,25 +81,36 @@ export async function enterGrace(
   workspaceId: string,
   deltaMs: number
 ): Promise<{ shouldContinue: boolean; remainingMs: number }> {
-  // Atomic increment: avoids the read-then-write race condition.
-  // Prisma's { increment: deltaMs } translates to an atomic SQL UPDATE
-  // that cannot be interleaved by concurrent ticks.
-  const updated = await prisma.workspace.update({
-    where: { id: workspaceId },
+  // A-M09: Use a conditional updateMany that checks the cap atomically.
+  // This prevents concurrent ticks from each incrementing past the cap.
+  // The WHERE clause ensures the increment only happens if graceUsedMs
+  // is still below the cap, making the check-and-increment atomic.
+  const result = await prisma.workspace.updateMany({
+    where: {
+      id: workspaceId,
+      graceUsedMs: { lt: GRACE_CAP_MS },
+    },
     data: {
       graceUsedMs: { increment: deltaMs },
-      graceCycleStart: undefined,
     },
+  }).catch(() => ({ count: 0 }))
+
+  if (result.count === 0) {
+    // Either workspace not found, or grace cap already exceeded
+    return { shouldContinue: false, remainingMs: 0 }
+  }
+
+  // Read the updated value to compute remaining
+  const updated = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
     select: { graceUsedMs: true, graceCycleStart: true },
-  }).catch(() => null)
+  })
 
   if (!updated) {
     return { shouldContinue: false, remainingMs: 0 }
   }
 
   // Ensure graceCycleStart is set if it was null (first grace entry).
-  // We only set it if it's currently null — using a conditional update
-  // to avoid overwriting an existing cycle start.
   if (!updated.graceCycleStart) {
     await prisma.workspace.updateMany({
       where: { id: workspaceId, graceCycleStart: null },

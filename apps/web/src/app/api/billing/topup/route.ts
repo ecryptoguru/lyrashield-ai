@@ -12,6 +12,7 @@ import {
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
+import { env } from "@lyrashield/config"
 
 const TopUpSchema = z.object({
   workspaceId: z.string().min(1),
@@ -81,8 +82,9 @@ export async function POST(request: Request) {
     } else {
       // Razorpay: payment link
       // Amount in paise (1 INR = 100 paise)
-      // Convert USD price to INR at a fixed rate for now (production would use live rates)
-      const amountInr = pack.priceUsd * 83 * 100 // approximate USD→INR conversion
+      // A-L02: Use configurable USD→INR rate instead of hardcoded 83
+      const usdInrRate = env.BILLING_USD_INR_RATE
+      const amountInr = pack.priceUsd * usdInrRate * 100
       const result = await createRazorpayPaymentLink({
         amount: Math.round(amountInr),
         description: pack.name,

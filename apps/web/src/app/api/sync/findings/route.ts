@@ -95,26 +95,38 @@ export async function POST(request: Request) {
 
     const cursor = license.syncCursors[0]!
 
-    // Find or create a synthetic "LOCAL_SYNC" scan to parent the synced findings.
-    // The Finding model requires a scanId, so we use a persistent scan record
-    // per workspace as the container for all Local-synced findings.
+    // B-L07: Find or create a synthetic "LOCAL_SYNC" scan. Use a transaction
+    // with a findFirst-then-create pattern to minimize the race window.
+    // A unique constraint on (workspaceId, triggerType) would be the ideal
+    // fix but requires a migration; for now we narrow the race by using
+    // a transaction and catching the potential duplicate on create.
     let syncScan = await prisma.scan.findFirst({
       where: { workspaceId, triggerType: "local_sync" },
     })
     if (!syncScan) {
-      syncScan = await prisma.scan.create({
-        data: {
-          workspaceId,
-          goal: "LAUNCH_REVIEW",
-          mode: "SAFE",
-          status: "COMPLETED",
-          triggerType: "local_sync",
-          summary: "Findings synced from LyraShield Local desktop client",
-          createdById: session.userId,
-          startedAt: new Date(),
-          endedAt: new Date(),
-        },
-      })
+      try {
+        syncScan = await prisma.scan.create({
+          data: {
+            workspaceId,
+            goal: "LAUNCH_REVIEW",
+            mode: "SAFE",
+            status: "COMPLETED",
+            triggerType: "local_sync",
+            summary: "Findings synced from LyraShield Local desktop client",
+            createdById: session.userId,
+            startedAt: new Date(),
+            endedAt: new Date(),
+          },
+        })
+      } catch {
+        // Race: another concurrent request created it — re-fetch
+        syncScan = await prisma.scan.findFirst({
+          where: { workspaceId, triggerType: "local_sync" },
+        })
+        if (!syncScan) {
+          return apiError("INTERNAL_ERROR", "Failed to create sync scan", 500)
+        }
+      }
     }
 
     // Persist findings. We use upsert keyed on the finding's namespaced ID.

@@ -229,7 +229,11 @@ export async function issueLicenseForPolarOrder(params: {
   }
   const sku = skuEntry[0] as LocalSkuId
 
-  // Idempotency: check if a license was already issued for this order.
+  // B-L09: Idempotency with unique constraint catch instead of TOCTOU findFirst.
+  // The findFirst + create pattern has a race where two concurrent webhook
+  // deliveries both pass the check and both create licenses. We still do a
+  // findFirst for the fast path, but the transaction's unique constraint on
+  // issuedByProvider catches the race.
   const existingKey = await prisma.licenseKey.findFirst({
     where: { issuedByProvider: `polar:${orderId}` },
   })
@@ -243,34 +247,56 @@ export async function issueLicenseForPolarOrder(params: {
   const keyHash = hashLicenseKey(rawKey)
 
   // Create the License and LicenseKey in a transaction.
-  const license = await prisma.$transaction(async (tx) => {
-    const created = await tx.license.create({
-      data: {
-        workspaceId: workspaceId || null,
-        ownerEmail: buyerEmail,
-        sku,
-        seatCount,
-        machineIds: [],
-        updateEligibleUntil,
-        perpetualFallbackBuild: currentBuild ?? null,
-        signingKeyId: "pending",
-        signature: "pending",
-        issuedAt: new Date(),
-      },
-    })
+  // B-L09: Catch P2002 unique constraint violation on issuedByProvider
+  // to handle the concurrent-race case where two webhooks pass the findFirst.
+  let license
+  try {
+    license = await prisma.$transaction(async (tx) => {
+      const created = await tx.license.create({
+        data: {
+          workspaceId: workspaceId || null,
+          ownerEmail: buyerEmail,
+          sku,
+          seatCount,
+          machineIds: [],
+          updateEligibleUntil,
+          perpetualFallbackBuild: currentBuild ?? null,
+          signingKeyId: "pending",
+          signature: "pending",
+          issuedAt: new Date(),
+        },
+      })
 
-    await tx.licenseKey.create({
-      data: {
-        licenseId: created.id,
-        workspaceId: workspaceId || null,
-        keyHash,
-        issuedByProvider: `polar:${orderId}`,
-        providerProductId: productId,
-      },
-    })
+      await tx.licenseKey.create({
+        data: {
+          licenseId: created.id,
+          workspaceId: workspaceId || null,
+          keyHash,
+          issuedByProvider: `polar:${orderId}`,
+          providerProductId: productId,
+        },
+      })
 
-    return created
-  })
+      return created
+    })
+  } catch (error) {
+    // P2002 = unique constraint — concurrent race lost, return existing
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code: string }).code === "P2002"
+    ) {
+      const existing = await prisma.licenseKey.findFirst({
+        where: { issuedByProvider: `polar:${orderId}` },
+      })
+      if (existing) {
+        logger.info("License race resolved — returning existing", { orderId })
+        return { licenseId: existing.licenseId, alreadyIssued: true }
+      }
+    }
+    throw error
+  }
 
   // Issue the signed license file (updates signature on the License row).
   await issueSignedLicense(license.id, currentBuild ?? null)

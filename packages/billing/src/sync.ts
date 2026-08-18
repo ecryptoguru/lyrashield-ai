@@ -152,10 +152,19 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
 
   // Grant monthly pool on active subscription (outside the transaction —
   // grantMonthlyPool and resetGrace perform their own idempotent writes).
+  // A-L10: Log failures at error level so monitoring can alert.
   if (status === "active" && currentPeriodStart && cloudPlan.agentMinutes > 0) {
     const source = interval === "annual" ? "annual_monthly" : "subscription"
-    await grantMonthlyPool(workspaceId, plan, currentPeriodStart, source)
-    await resetGrace(workspaceId)
+    try {
+      await grantMonthlyPool(workspaceId, plan, currentPeriodStart, source)
+      await resetGrace(workspaceId)
+    } catch (grantError) {
+      logger.error("Monthly pool grant or grace reset failed after subscription sync", {
+        workspaceId,
+        plan,
+        error: grantError instanceof Error ? grantError.message : String(grantError),
+      })
+    }
   }
 
   logger.info("Subscription synced", {
@@ -175,30 +184,34 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
  * Data is preserved; scans are blocked by the entitlement gate.
  */
 export async function downgradeToFree(workspaceId: string, reason: string): Promise<void> {
-  await prisma.workspace.update({
-    where: { id: workspaceId },
-    data: {
-      plan: "FREE",
-      deepAllowed: false,
-    },
-  })
+  // A-M02: Wrap all writes in a single transaction for atomicity,
+  // matching the pattern used in syncSubscription.
+  await prisma.$transaction(async (tx) => {
+    await tx.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        plan: "FREE",
+        deepAllowed: false,
+      },
+    })
 
-  await prisma.billingAccount.update({
-    where: { workspaceId },
-    data: {
-      status: "downgraded",
-      currentPlan: "FREE",
-    },
-  })
+    await tx.billingAccount.update({
+      where: { workspaceId },
+      data: {
+        status: "downgraded",
+        currentPlan: "FREE",
+      },
+    })
 
-  await prisma.auditLog.create({
-    data: {
-      workspaceId,
-      action: "billing.downgraded",
-      resourceType: "workspace",
-      resourceId: workspaceId,
-      metadata: { reason },
-    },
+    await tx.auditLog.create({
+      data: {
+        workspaceId,
+        action: "billing.downgraded",
+        resourceType: "workspace",
+        resourceId: workspaceId,
+        metadata: { reason },
+      },
+    })
   })
 
   logger.info("Workspace downgraded to FREE", { workspaceId, reason })

@@ -366,7 +366,9 @@ export async function onOrderPaid(
   }
 
   // Compute commission amount
-  const commissionAmount = commissionableBase.mul(rateBps).div(10000)
+  // C-L07: Round to Decimal(19,4) before storage to prevent reconciliation drift
+  // between stored values and in-memory/logged return values.
+  const commissionAmount = commissionableBase.mul(rateBps).div(10000).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP)
 
   // Create Conversion + Commission
   const now = new Date()

@@ -212,6 +212,10 @@ const envSchema = z
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
     BILLING_GEO_IP_HEADER: z.string().optional().or(z.literal("").or(z.literal("cf-connecting-ip"))),
+    // A-L02: Configurable USD→INR conversion rate for Razorpay pricing.
+    // Defaults to 83 (approximate as of Aug 2026). Must be updated periodically
+    // or replaced with a live rate API in production.
+    BILLING_USD_INR_RATE: z.coerce.number().positive().min(50).max(150).default(83),
 
     // Local / Desktop Licensing (Track B)
     // ed25519 PKCS#8 PEM private key for signing offline license files.

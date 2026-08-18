@@ -21,6 +21,9 @@ const RenewSchema = z.object({
     "team_perpetual",
     "team_subscription",
   ]),
+  // B-L02: orderId for idempotency — prevents duplicate renewals from
+  // retried Polar webhooks extending eligibility multiple times.
+  orderId: z.string().min(1).max(200),
 })
 
 /**
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
-    const { licenseKey, renewalSku } = parsed.data
+    const { licenseKey, renewalSku, orderId } = parsed.data
 
     const keyHash = hashLicenseKey(licenseKey)
     const licenseKeyRow = await prisma.licenseKey.findUnique({
@@ -61,6 +64,27 @@ export async function POST(request: Request) {
     const license = licenseKeyRow.license
     if (license.revoked) {
       return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
+    }
+
+    // B-L02: Idempotency check — if this renewal order was already processed,
+    // return the existing expiry without extending again. We check the
+    // WebhookEvent table since renewals are triggered by Polar webhooks.
+    // The webhook handler inserts a WebhookEvent with (provider, externalId)
+    // uniqueness; if the webhook was already processed, the renewal was too.
+    const existingRenewal = await prisma.webhookEvent.findUnique({
+      where: { provider_externalId: { provider: "polar", externalId: orderId } },
+      select: { processed: true },
+    })
+    if (existingRenewal?.processed) {
+      logger.info("Renewal webhook already processed — returning existing", { licenseId: license.id, orderId })
+      return apiSuccess(
+        {
+          license: await issueSignedLicense(license.id, license.perpetualFallbackBuild),
+          updateEligibleUntil: license.updateEligibleUntil.toISOString(),
+          alreadyRenewed: true,
+        },
+        200
+      )
     }
 
     // Validate the renewal SKU is a legitimate renewal product.

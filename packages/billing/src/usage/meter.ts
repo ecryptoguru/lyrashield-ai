@@ -91,6 +91,11 @@ export async function recordAgentMinutes(
         },
       },
     })
+
+    // A-M05: Decrement MinutePack.remainingMinutes atomically when consumption
+    // spills into packs. The pool is consumed first; only the overflow reduces
+    // pack balances. We decrement oldest-first (FIFO) matching the draw order.
+    await decrementPackMinutes(workspaceId, minutes)
   } catch (error) {
     // P2002 = unique constraint violation — concurrent idempotent insert
     if (
@@ -106,4 +111,66 @@ export async function recordAgentMinutes(
   }
 
   return { created: true, minutes, idempotencyKey }
+}
+
+/**
+ * Decrement pack remaining minutes for a workspace, oldest-first (FIFO).
+ *
+ * A-M05: Called after recording agent_minutes to atomically reduce pack
+ * balances. Only the overflow beyond the monthly pool consumes pack minutes;
+ * the caller passes the total minutes consumed this tick, and this function
+ * checks how many pool minutes remain before decrementing packs.
+ */
+async function decrementPackMinutes(workspaceId: string, _minutesConsumed: number): Promise<void> {
+  // Get the current pool remaining to know how much spills into packs
+  const billingAccount = await prisma.billingAccount.findUnique({
+    where: { workspaceId },
+    select: { currentPeriodStart: true },
+  })
+  const cycleStart = billingAccount?.currentPeriodStart
+  if (!cycleStart) return // No cycle → can't compute pool remaining
+
+  const [grantRecords, consumeRecords] = await Promise.all([
+    prisma.usageRecord.findMany({
+      where: { workspaceId, kind: { in: ["pool_grant", "trial_grant"] }, deletedAt: null, cycleStart: { gte: cycleStart } },
+      select: { quantity: true },
+    }),
+    prisma.usageRecord.findMany({
+      where: { workspaceId, kind: "agent_minutes", deletedAt: null, cycleStart: { gte: cycleStart } },
+      select: { quantity: true },
+    }),
+  ])
+
+  const poolMinutes = grantRecords.reduce((s, r) => s + r.quantity, 0)
+  const poolConsumed = consumeRecords.reduce((s, r) => s + r.quantity, 0)
+
+  // Only the overflow beyond pool remaining consumes pack minutes.
+  // The just-recorded minutes are included in poolConsumed, so poolRemaining
+  // already reflects the post-debit state. If poolConsumed > poolMinutes,
+  // the overflow is the pack consumption.
+  const packSpillover = Math.max(0, poolConsumed - poolMinutes)
+  if (packSpillover <= 0) return
+
+  // Decrement oldest packs first (FIFO draw order)
+  const packs = await prisma.minutePack.findMany({
+    where: {
+      workspaceId,
+      deletedAt: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      remainingMinutes: { gt: 0 },
+    },
+    orderBy: { purchasedAt: "asc" },
+    select: { id: true, remainingMinutes: true },
+  })
+
+  let toDecrement = packSpillover
+  for (const pack of packs) {
+    if (toDecrement <= 0) break
+    const decrementAmount = Math.min(pack.remainingMinutes, toDecrement)
+    await prisma.minutePack.update({
+      where: { id: pack.id },
+      data: { remainingMinutes: { decrement: decrementAmount } },
+    })
+    toDecrement -= decrementAmount
+  }
 }
