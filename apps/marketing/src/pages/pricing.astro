@@ -1,0 +1,387 @@
+---
+import Base from "@layouts/Base.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/pricing", origin).toString()
+const title = "Pricing — Cloud & Local Plans | LyraShield AI"
+const description =
+  "Cloud plans from Starter to Team with monthly/annual billing, prepaid minute packs, and a 14-day money-back guarantee. Local licenses for self-hosted use. Agent-minutes are wall-clock time."
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title,
+    description,
+    url: canonical,
+    isPartOf: { "@id": `${origin}/#website` },
+  },
+]
+
+const cloudPlans = [
+  {
+    id: "STARTER",
+    name: "Starter",
+    monthly: { usd: 29, inr: 2900 },
+    annual: { usd: 295, inr: 29500 },
+    agentMinutes: 300,
+    targetCaps: 5,
+    deepAllowed: false,
+    features: [
+      "300 agent-minutes / month",
+      "Up to 5 targets",
+      "Safe / Quick / Standard scans",
+      "Email support",
+      "Evidence Vault access",
+    ],
+  },
+  {
+    id: "PRO",
+    name: "Pro",
+    monthly: { usd: 99, inr: 9900 },
+    annual: { usd: 950, inr: 95000 },
+    agentMinutes: 1200,
+    targetCaps: 15,
+    deepAllowed: true,
+    features: [
+      "1,200 agent-minutes / month",
+      "Up to 15 targets",
+      "Deep / Custom scans enabled",
+      "Priority email support",
+      "Evidence Vault + Retest",
+      "Scheduled scans",
+    ],
+  },
+  {
+    id: "TEAM",
+    name: "Team",
+    monthly: { usd: 299, inr: 29900 },
+    annual: { usd: 2690, inr: 269000 },
+    agentMinutes: 4000,
+    targetCaps: 50,
+    deepAllowed: true,
+    features: [
+      "4,000 agent-minutes / month",
+      "Up to 50 targets",
+      "Deep / Custom scans enabled",
+      "Role-based access control",
+      "Integrations (GitHub, Slack, Jira)",
+      "Shared reports + scorecards",
+      "Priority support",
+    ],
+  },
+]
+
+const minutePacks = [
+  { id: "pack_100", name: "100-Minute Pack", minutes: 100, priceUsd: 15 },
+  { id: "pack_250", name: "250-Minute Pack", minutes: 250, priceUsd: 30 },
+  { id: "pack_500", name: "500-Minute Pack", minutes: 500, priceUsd: 50 },
+]
+
+const localSkus = [
+  {
+    name: "Individual — Launch",
+    price: "$199",
+    description: "Single-user perpetual license at launch pricing. 1-year updates included.",
+    billing: "one-time",
+  },
+  {
+    name: "Individual — Regular",
+    price: "$299",
+    description: "Single-user perpetual license at standard pricing. 1-year updates included.",
+    billing: "one-time",
+  },
+  {
+    name: "Team — Perpetual",
+    price: "$99/seat",
+    description: "Per-seat perpetual license for teams. 1-year updates included.",
+    billing: "per seat",
+  },
+  {
+    name: "Team — Subscription",
+    price: "$149/seat/yr",
+    description: "Per-seat annual subscription with continuous updates.",
+    billing: "per seat/year",
+  },
+  {
+    name: "Update Renewal",
+    price: "$59/seat/yr",
+    description: "Annual update renewal per seat.",
+    billing: "per seat/year",
+  },
+  {
+    name: "Cloud Sync Add-on",
+    price: "$49/yr",
+    description: "Annual cloud sync add-on for findings and evidence.",
+    billing: "per year",
+  },
+]
+
+const appUrl =
+  (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://app.lyrashieldai.com"
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="text-center">
+      <h1 class="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
+        Pricing
+      </h1>
+      <p class="mt-4 text-lg text-gray-600 dark:text-gray-400">
+        Cloud subscriptions and local licenses. Start with a free trial — no credit card required.
+      </p>
+    </div>
+
+    <!-- Cloud / Local Toggle -->
+    <div class="mt-8 flex justify-center">
+      <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800">
+        <button
+          id="tab-cloud"
+          class="rounded-md px-4 py-2 text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+        >
+          Cloud
+        </button>
+        <button
+          id="tab-local"
+          class="rounded-md px-4 py-2 text-sm font-medium transition-colors text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+        >
+          Local
+        </button>
+      </div>
+    </div>
+
+    <!-- Cloud Pricing -->
+    <div id="cloud-pricing" class="mt-12">
+      <!-- Currency + Billing Toggle -->
+      <div class="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center sm:gap-8">
+        <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800">
+          <button id="cur-usd" class="currency-btn rounded-md px-3 py-1.5 text-sm font-medium bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white">USD</button>
+          <button id="cur-inr" class="currency-btn rounded-md px-3 py-1.5 text-sm font-medium text-gray-500 dark:text-gray-400">INR</button>
+        </div>
+        <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800">
+          <button id="int-monthly" class="interval-btn rounded-md px-3 py-1.5 text-sm font-medium bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white">Monthly</button>
+          <button id="int-annual" class="interval-btn rounded-md px-3 py-1.5 text-sm font-medium text-gray-500 dark:text-gray-400">Annual</button>
+        </div>
+      </div>
+
+      <!-- Plan Cards -->
+      <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+        {cloudPlans.map((plan) => (
+          <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{plan.name}</h3>
+            <div class="mt-4">
+              <span class="price-usd-monthly price text-3xl font-bold text-gray-900 dark:text-white" data-monthly={plan.monthly.usd} data-annual={plan.annual.usd}>${plan.monthly.usd}</span>
+              <span class="price-usd-monthly text-sm text-gray-500 dark:text-gray-400">/mo</span>
+              <span class="price-usd-annual hidden text-3xl font-bold text-gray-900 dark:text-white" data-monthly={plan.monthly.usd} data-annual={plan.annual.usd}>${plan.annual.usd}</span>
+              <span class="price-usd-annual hidden text-sm text-gray-500 dark:text-gray-400">/yr</span>
+              <span class="price-inr-monthly hidden text-3xl font-bold text-gray-900 dark:text-white">₹{plan.monthly.inr.toLocaleString('en-IN')}</span>
+              <span class="price-inr-monthly hidden text-sm text-gray-500 dark:text-gray-400">/mo</span>
+              <span class="price-inr-annual hidden text-3xl font-bold text-gray-900 dark:text-white">₹{plan.annual.inr.toLocaleString('en-IN')}</span>
+              <span class="price-inr-annual hidden text-sm text-gray-500 dark:text-gray-400">/yr</span>
+            </div>
+            <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              {plan.agentMinutes.toLocaleString()} agent-minutes / month
+            </p>
+            {plan.deepAllowed && (
+              <p class="mt-1 text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                Deep / Custom scans enabled
+              </p>
+            )}
+            <ul class="mt-4 space-y-2">
+              {plan.features.map((feature) => (
+                <li class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <svg class="h-4 w-4 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {feature}
+                </li>
+              ))}
+            </ul>
+            <a
+              href={`${appUrl}/sign-up?plan=${plan.id}`}
+              class="mt-6 block w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+            >
+              Start with {plan.name}
+            </a>
+          </div>
+        ))}
+      </div>
+
+      <!-- Minute Packs Section -->
+      <div class="mt-16">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Minute Packs</h2>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          Add prepaid agent-minutes to any plan. Packs are valid for 6 months and are consumed after your monthly pool.
+        </p>
+        <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {minutePacks.map((pack) => (
+            <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+              <h3 class="font-semibold text-gray-900 dark:text-white">{pack.name}</h3>
+              <p class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">${pack.priceUsd}</p>
+              <p class="text-sm text-gray-600 dark:text-gray-400">{pack.minutes} agent-minutes</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-500">Valid for 6 months</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <!-- Agency Contact-Led -->
+      <div class="mt-12 rounded-xl border border-gray-200 bg-gray-50 p-8 dark:border-gray-700 dark:bg-gray-800/50">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Agency</h2>
+        <p class="mt-2 text-gray-600 dark:text-gray-400">
+          Custom agent-minute pools, unlimited targets, SSO/SAML, multi-workspace management, and dedicated support with SLA.
+        </p>
+        <a
+          href="/support"
+          class="mt-4 inline-block rounded-lg border border-indigo-600 px-6 py-2.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+        >
+          Contact Sales
+        </a>
+      </div>
+
+      <!-- Trial CTA -->
+      <div class="mt-12 text-center">
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+          Not sure yet? Start with a free trial.
+        </h2>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          100 agent-minutes, up to 3 targets, 14 days. No credit card required.
+        </p>
+        <a
+          href={`${appUrl}/sign-up`}
+          class="mt-4 inline-block rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+        >
+          Start Free Trial
+        </a>
+      </div>
+
+      <!-- Money-back guarantee -->
+      <div class="mt-12 rounded-lg bg-green-50 p-4 text-center dark:bg-green-900/20">
+        <p class="text-sm text-green-800 dark:text-green-400">
+          14-day money-back guarantee on Cloud plans. Cancel anytime.
+        </p>
+      </div>
+    </div>
+
+    <!-- Local Pricing -->
+    <div id="local-pricing" class="mt-12 hidden">
+      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        {localSkus.map((sku) => (
+          <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{sku.name}</h3>
+            <p class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{sku.price}</p>
+            <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">{sku.description}</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-500">{sku.billing}</p>
+          </div>
+        ))}
+      </div>
+
+      <!-- Local notes -->
+      <div class="mt-8 space-y-3">
+        <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-800/50">
+          <h3 class="font-medium text-gray-900 dark:text-white">Local License Details</h3>
+          <ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
+            <li>• 3-machine activation limit per seat</li>
+            <li>• No lifetime deals (LTD) — all licenses include 1-year updates, renewable</li>
+            <li>• No refunds on local licenses</li>
+            <li>• Cloud Sync Add-on syncs findings and evidence to your cloud workspace</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent-minute definition -->
+    <div class="mt-16 rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <h2 class="text-xl font-bold text-gray-900 dark:text-white">What is an agent-minute?</h2>
+      <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        An agent-minute is a unit of wall-clock time — the real elapsed time from when a scan phase
+        starts to when it ends, measured on the server clock. It is not "active-loop time" or
+        "thinking time"; it includes all processing, network I/O, and model calls within that phase.
+        Deep and Custom scans consume agent-minutes at 3× the standard rate.
+      </p>
+      <p class="mt-3 text-sm text-gray-600 dark:text-gray-400">
+        Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for
+        Team plans with a spend limit configured. Minute packs are valid for 6 months from purchase.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // Cloud / Local toggle
+    const tabCloud = document.getElementById('tab-cloud');
+    const tabLocal = document.getElementById('tab-local');
+    const cloudPricing = document.getElementById('cloud-pricing');
+    const localPricing = document.getElementById('local-pricing');
+
+    function setTab(active: 'cloud' | 'local') {
+      if (active === 'cloud') {
+        tabCloud?.classList.add('bg-white', 'text-gray-900', 'shadow-sm', 'dark:bg-gray-700', 'dark:text-white');
+        tabCloud?.classList.remove('text-gray-500', 'dark:text-gray-400');
+        tabLocal?.classList.remove('bg-white', 'text-gray-900', 'shadow-sm', 'dark:bg-gray-700', 'dark:text-white');
+        tabLocal?.classList.add('text-gray-500', 'dark:text-gray-400');
+        cloudPricing?.classList.remove('hidden');
+        localPricing?.classList.add('hidden');
+      } else {
+        tabLocal?.classList.add('bg-white', 'text-gray-900', 'shadow-sm', 'dark:bg-gray-700', 'dark:text-white');
+        tabLocal?.classList.remove('text-gray-500', 'dark:text-gray-400');
+        tabCloud?.classList.remove('bg-white', 'text-gray-900', 'shadow-sm', 'dark:bg-gray-700', 'dark:text-white');
+        tabCloud?.classList.add('text-gray-500', 'dark:text-gray-400');
+        localPricing?.classList.remove('hidden');
+        cloudPricing?.classList.add('hidden');
+      }
+    }
+
+    tabCloud?.addEventListener('click', () => setTab('cloud'));
+    tabLocal?.addEventListener('click', () => setTab('local'));
+
+    // Currency toggle
+    const curUsd = document.getElementById('cur-usd');
+    const curInr = document.getElementById('cur-inr');
+
+    // Interval toggle
+    const intMonthly = document.getElementById('int-monthly');
+    const intAnnual = document.getElementById('int-annual');
+
+    type Currency = 'usd' | 'inr';
+    type Interval = 'monthly' | 'annual';
+
+    function updatePrices(currency: Currency, interval: Interval) {
+      // Hide all price elements
+      document.querySelectorAll('.price-usd-monthly, .price-usd-annual, .price-inr-monthly, .price-inr-annual').forEach(el => {
+        el.classList.add('hidden');
+      });
+
+      // Show the selected combination
+      document.querySelectorAll(`.price-${currency}-${interval}`).forEach(el => {
+        el.classList.remove('hidden');
+      });
+
+      // Update button styles
+      [curUsd, curInr].forEach(btn => {
+        btn?.classList.remove('bg-white', 'text-gray-900', 'shadow-sm', 'dark:bg-gray-700', 'dark:text-white');
+        btn?.classList.add('text-gray-500', 'dark:text-gray-400');
+      });
+      [intMonthly, intAnnual].forEach(btn => {
+        btn?.classList.remove('bg-white', 'text-gray-900', 'shadow-sm', 'dark:bg-gray-700', 'dark:text-white');
+        btn?.classList.add('text-gray-500', 'dark:text-gray-400');
+      });
+
+      const activeCur = currency === 'usd' ? curUsd : curInr;
+      const activeInt = interval === 'monthly' ? intMonthly : intAnnual;
+      activeCur?.classList.add('bg-white', 'text-gray-900', 'shadow-sm', 'dark:bg-gray-700', 'dark:text-white');
+      activeCur?.classList.remove('text-gray-500', 'dark:text-gray-400');
+      activeInt?.classList.add('bg-white', 'text-gray-900', 'shadow-sm', 'dark:bg-gray-700', 'dark:text-white');
+      activeInt?.classList.remove('text-gray-500', 'dark:text-gray-400');
+    }
+
+    let currentCurrency: Currency = 'usd';
+    let currentInterval: Interval = 'monthly';
+
+    curUsd?.addEventListener('click', () => { currentCurrency = 'usd'; updatePrices(currentCurrency, currentInterval); });
+    curInr?.addEventListener('click', () => { currentCurrency = 'inr'; updatePrices(currentCurrency, currentInterval); });
+    intMonthly?.addEventListener('click', () => { currentInterval = 'monthly'; updatePrices(currentCurrency, currentInterval); });
+    intAnnual?.addEventListener('click', () => { currentInterval = 'annual'; updatePrices(currentCurrency, currentInterval); });
+  </script>
+</Base>

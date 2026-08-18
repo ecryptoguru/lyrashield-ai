@@ -1,0 +1,172 @@
+/**
+ * Polar webhook event adapter.
+ *
+ * Maps Polar webhook events to internal billing actions:
+ * - order.paid → creditTopUp (minute pack purchase)
+ * - subscription.* → syncSubscription
+ * - customer.state_changed → syncSubscription
+ *
+ * The adapter extracts workspaceId from the event metadata (set at checkout time)
+ * and dispatches to the appropriate billing function.
+ */
+
+import { logger } from "@lyrashield/logger"
+import type { PolarWebhookEvent } from "./webhooks"
+import { syncSubscription, type SubscriptionStatus, type BillingInterval } from "../../sync"
+import { creditTopUp } from "../../usage/packs"
+import { reverseRefund } from "../../usage/refund"
+import { MINUTE_PACK_MAP, type CloudPlanId, type PackId } from "@lyrashield/pricing"
+
+export interface PolarAdapterResult {
+  handled: boolean
+  action: string
+  workspaceId: string | null
+}
+
+/**
+ * Process a validated Polar webhook event.
+ */
+export async function processPolarEvent(event: PolarWebhookEvent): Promise<PolarAdapterResult> {
+  const data = event.data
+  const metadata = (data.metadata ?? {}) as Record<string, string>
+  const workspaceId = metadata.workspaceId ?? null
+
+  try {
+    switch (event.type) {
+      case "order.paid": {
+        // One-time purchase (minute pack)
+        if (!workspaceId) {
+          logger.warn("Polar order.paid without workspaceId metadata", { eventId: data.id })
+          return { handled: false, action: "order.paid.no_workspace", workspaceId: null }
+        }
+
+        const packId = metadata.packId as PackId | undefined
+        if (!packId || !MINUTE_PACK_MAP[packId]) {
+          logger.warn("Polar order.paid with unknown packId", { packId })
+          return { handled: false, action: "order.paid.unknown_pack", workspaceId }
+        }
+
+        const pack = MINUTE_PACK_MAP[packId]
+        const externalId = String(data.id ?? "")
+
+        await creditTopUp(
+          workspaceId,
+          "polar",
+          pack.minutes,
+          new Date(Date.now() + pack.validityDays * 24 * 60 * 60 * 1000),
+          externalId
+        )
+
+        return { handled: true, action: "order.paid.credited", workspaceId }
+      }
+
+      case "subscription.created":
+      case "subscription.updated":
+      case "subscription.active":
+      case "subscription.canceled":
+      case "subscription.revoked":
+      case "subscription.uncanceled": {
+        if (!workspaceId) {
+          logger.warn("Polar subscription event without workspaceId metadata", {
+            type: event.type,
+          })
+          return { handled: false, action: "subscription.no_workspace", workspaceId: null }
+        }
+
+        const planId = (metadata.plan ?? "STARTER") as CloudPlanId
+        const status = mapPolarSubscriptionStatus(event.type, data)
+        const interval = (metadata.interval ?? "monthly") as BillingInterval
+
+        const periodStart = data.currentPeriodStart
+          ? new Date(data.currentPeriodStart as string)
+          : undefined
+        const periodEnd = data.currentPeriodEnd
+          ? new Date(data.currentPeriodEnd as string)
+          : undefined
+        const canceledAt = data.canceledAt
+          ? new Date(data.canceledAt as string)
+          : undefined
+
+        await syncSubscription({
+          workspaceId,
+          provider: "polar",
+          externalId: String(data.id ?? ""),
+          plan: planId,
+          status,
+          interval,
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          canceledAt,
+        })
+
+        return { handled: true, action: `subscription.${status}`, workspaceId }
+      }
+
+      case "customer.state_changed": {
+        // Customer state changes (e.g. blocked) — sync subscription state
+        if (!workspaceId) {
+          return { handled: false, action: "customer.state_changed.no_workspace", workspaceId: null }
+        }
+
+        const state = (data.state ?? "active") as string
+        if (state === "blocked" || state === "deleted") {
+          await syncSubscription({
+            workspaceId,
+            provider: "polar",
+            externalId: String(data.id ?? ""),
+            plan: "STARTER",
+            status: "canceled",
+            interval: "monthly",
+            canceledAt: new Date(),
+          })
+        }
+
+        return { handled: true, action: `customer.state_changed.${state}`, workspaceId }
+      }
+
+      case "refund.created": {
+        // Refund — reverse the entitlement
+        if (!workspaceId) {
+          return { handled: false, action: "refund.no_workspace", workspaceId: null }
+        }
+
+        const refundExternalId = String(data.id ?? "")
+        await reverseRefund(workspaceId, refundExternalId)
+
+        return { handled: true, action: "refund.reversed", workspaceId }
+      }
+
+      default:
+        logger.debug("Unhandled Polar event type", { type: event.type })
+        return { handled: false, action: "unhandled", workspaceId }
+    }
+  } catch (error) {
+    logger.error("Failed to process Polar event", {
+      type: event.type,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
+
+function mapPolarSubscriptionStatus(
+  eventType: string,
+  data: Record<string, unknown>
+): SubscriptionStatus {
+  const status = (data.status ?? "active") as string
+
+  switch (eventType) {
+    case "subscription.canceled":
+    case "subscription.revoked":
+      return "canceled"
+    case "subscription.uncanceled":
+      return "active"
+    case "subscription.active":
+      return "active"
+    default:
+      if (status === "past_due" || status === "incomplete" || status === "trialing") {
+        return status as SubscriptionStatus
+      }
+      return "active"
+  }
+}

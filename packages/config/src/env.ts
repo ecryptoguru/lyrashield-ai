@@ -205,9 +205,13 @@ const envSchema = z
 
     // Billing (Sprint 10)
     POLAR_ACCESS_TOKEN: z.string().optional().or(z.literal("")),
+    POLAR_ORG_ID: z.string().optional().or(z.literal("")),
     POLAR_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
+    POLAR_WEBHOOK_TOLERANCE_MS: z.coerce.number().int().positive().max(3_600_000).default(300_000),
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
+    RAZORPAY_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
+    BILLING_GEO_IP_HEADER: z.string().optional().or(z.literal("").or(z.literal("cf-connecting-ip"))),
 
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),

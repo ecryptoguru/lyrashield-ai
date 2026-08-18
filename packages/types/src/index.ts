@@ -11,6 +11,7 @@ export const MAX_CONCURRENT_WORKSPACE_SCANS = 3
 export const WorkspaceModeSchema = z.enum(["VIBE", "TEAM", "ENTERPRISE"])
 export const WorkspacePlanSchema = z.enum([
   "FREE",
+  "STARTER",
   "PRO",
   "TEAM",
   "AGENCY",

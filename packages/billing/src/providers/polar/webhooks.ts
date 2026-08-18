@@ -1,0 +1,115 @@
+/**
+ * Polar webhook validation and event handling.
+ *
+ * Uses Standard Webhooks specification for signature validation.
+ * The webhook secret is read from POLAR_WEBHOOK_SECRET.
+ *
+ * Handled events:
+ * - order.paid → creditTopUp (for one-time pack purchases)
+ * - subscription.created → syncSubscription
+ * - subscription.updated → syncSubscription
+ * - subscription.canceled → syncSubscription (canceled)
+ * - subscription.revoked → syncSubscription (canceled)
+ * - customer.state_changed → syncSubscription
+ */
+
+import { createHmac } from "node:crypto"
+import { env } from "@lyrashield/config"
+
+/** Default webhook tolerance in milliseconds (5 minutes). */
+const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000
+
+export interface PolarWebhookEvent {
+  type: string
+  data: Record<string, unknown>
+}
+
+/**
+ * Validate a Polar webhook signature using Standard Webhooks spec.
+ *
+ * Headers:
+ * - webhooks-id: unique event ID
+ * - webhooks-timestamp: Unix timestamp
+ * - webhooks-signature: base64 HMAC-SHA256 of `{id}.{timestamp}.{body}`
+ *
+ * @returns The parsed event, or throws if validation fails.
+ */
+export function validatePolarWebhook(
+  body: string,
+  headers: Record<string, string | string[] | undefined>
+): PolarWebhookEvent {
+  const secret = env.POLAR_WEBHOOK_SECRET
+  if (!secret) {
+    throw new Error("POLAR_WEBHOOK_SECRET is not configured")
+  }
+
+  const eventId = getHeader(headers, "webhooks-id")
+  const timestamp = getHeader(headers, "webhooks-timestamp")
+  const signature = getHeader(headers, "webhooks-signature")
+
+  if (!eventId || !timestamp || !signature) {
+    throw new Error("Missing required webhook headers")
+  }
+
+  // Check timestamp tolerance
+  const ts = parseInt(timestamp, 10)
+  if (isNaN(ts)) {
+    throw new Error("Invalid webhook timestamp")
+  }
+
+  const tolerance = env.POLAR_WEBHOOK_TOLERANCE_MS ?? DEFAULT_TOLERANCE_MS
+  const ageMs = Date.now() - ts
+  if (ageMs > tolerance) {
+    throw new Error(`Webhook timestamp outside tolerance (${ageMs}ms > ${tolerance}ms)`)
+  }
+
+  // Verify signature: HMAC-SHA256 of `{id}.{timestamp}.{body}`
+  const signedPayload = `${eventId}.${timestamp}.${body}`
+  const expectedSig = createHmac("sha256", secret).update(signedPayload).digest("base64")
+
+  // The signature header may contain multiple signatures (space-separated, prefixed with "v1,")
+  const signatures = signature.split(" ").map((s) => s.replace(/^v1,/, ""))
+  const isValid = signatures.some((sig) => timingSafeEqual(sig, expectedSig))
+
+  if (!isValid) {
+    throw new Error("Invalid webhook signature")
+  }
+
+  const parsed = JSON.parse(body) as PolarWebhookEvent
+  return parsed
+}
+
+function getHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: string
+): string {
+  const value = headers[name] ?? headers[name.toLowerCase()]
+  if (Array.isArray(value)) return value[0] ?? ""
+  return value ?? ""
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let result = 0
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return result === 0
+}
+
+/**
+ * Check if a Polar event type is one we handle.
+ */
+export function isHandledPolarEvent(type: string): boolean {
+  const handled = [
+    "order.paid",
+    "subscription.created",
+    "subscription.updated",
+    "subscription.active",
+    "subscription.canceled",
+    "subscription.revoked",
+    "subscription.uncanceled",
+    "customer.state_changed",
+  ]
+  return handled.includes(type)
+}
