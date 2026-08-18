@@ -11,7 +11,7 @@ import { logger } from "@lyrashield/logger"
 import { onOrderPaid, type OrderPaidPayload } from "./commission/engine"
 import { onRefund, type RefundPayload, type ClawbackReason } from "./commission/clawback"
 import { onLocalOrderPaid, type LocalOrderPaidPayload } from "./commission/local"
-import { LOCAL_SKUS, LOCAL_SKU_MAP } from "@lyrashield/pricing"
+import { LOCAL_SKUS, LOCAL_SKU_MAP, MINUTE_PACK_MAP, type PackId } from "@lyrashield/pricing"
 
 export interface WebhookDispatchInput {
   provider: string
@@ -46,6 +46,18 @@ export async function dispatch(
           const result = await onLocalOrderPaid(localPayload)
           return { handled: true, result }
         }
+      } else if (isMinutePackOrder(payload)) {
+        // C2: Minute packs are one-time prepaid purchases, NOT subscriptions.
+        // The founder-confirmed spec forbids affiliate commission on minute
+        // packs. Without this guard a pack order.paid (productId like
+        // "polar_pack_100") is not a Local SKU, so it would fall through to the
+        // Cloud onOrderPaid handler and erroneously create a 25% recurring
+        // commission on a one-time pack. Skip commission creation entirely.
+        logger.info("Affiliate dispatch: skipping minute-pack order (no commission)", {
+          provider,
+          event,
+        })
+        return { handled: true, result: { skipped: "minute_pack_no_commission" } }
       } else {
         const orderPayload = mapOrderPaidPayload(provider, payload)
         if (orderPayload) {
@@ -105,6 +117,33 @@ function isLocalSkuOrder(payload: Record<string, unknown>): boolean {
     | undefined
   if (!skuId) return false
   return skuId in LOCAL_SKU_MAP || LOCAL_SKUS.some((s) => s.id === skuId)
+}
+
+/**
+ * Check if the order is for a prepaid minute pack (one-time, non-commissionable).
+ *
+ * Minute packs are identified by either:
+ * - a `packId` in the order metadata matching a known MINUTE_PACK_MAP key
+ *   (pack_100 / pack_250 / pack_500), set by the topup route, or
+ * - a `productId`/`skuId` whose trailing segment is a known pack id
+ *   (e.g. "polar_pack_100", "razorpay_pack_250").
+ */
+function isMinutePackOrder(payload: Record<string, unknown>): boolean {
+  const meta = getMetadata(payload)
+  const packId = (meta ? getProp(meta, "packId") : undefined) as string | undefined
+  if (packId && packId in MINUTE_PACK_MAP) return true
+
+  const productId = (getProp(payload, "productId") ?? getProp(payload, "skuId") ?? (meta ? getProp(meta, "productId") : undefined)) as
+    | string
+    | undefined
+  if (productId) {
+    const tail = productId.split(/[_-]/).pop() ?? ""
+    if (tail in MINUTE_PACK_MAP) return true
+    for (const id of Object.keys(MINUTE_PACK_MAP) as PackId[]) {
+      if (productId === `polar_pack_${id}` || productId === `razorpay_pack_${id}`) return true
+    }
+  }
+  return false
 }
 
 /**

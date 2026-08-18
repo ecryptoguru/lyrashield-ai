@@ -213,9 +213,13 @@ const envSchema = z
     RAZORPAY_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
     BILLING_GEO_IP_HEADER: z.string().optional().or(z.literal("").or(z.literal("cf-connecting-ip"))),
     // A-L02: Configurable USD→INR conversion rate for Razorpay pricing.
-    // Defaults to 83 (approximate as of Aug 2026). Must be updated periodically
-    // or replaced with a live rate API in production.
-    BILLING_USD_INR_RATE: z.coerce.number().positive().min(50).max(150).default(83),
+    // Defaults to 100 per the founder-confirmed spec ("INR = USD x 100"), which
+    // is the same multiplier the pricing catalog and marketing page use for
+    // Cloud plan INR prices (e.g. $29 -> ₹2,900). Keeping the minute-pack path
+    // on the same multiplier avoids undercharging India buyers relative to the
+    // advertised plan pricing. Override with a live FX rate only if the founder
+    // explicitly moves away from the flat x100 convention.
+    BILLING_USD_INR_RATE: z.coerce.number().positive().min(50).max(150).default(100),
 
     // Local / Desktop Licensing (Track B)
     // ed25519 PKCS#8 PEM private key for signing offline license files.

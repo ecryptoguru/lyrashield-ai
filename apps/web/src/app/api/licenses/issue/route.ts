@@ -10,6 +10,7 @@ import {
   issueSignedLicense,
   parseLocalProductIds,
   requireInternalApiKey,
+  validateSeatCountForSku,
 } from "../../../../lib/licenses/license-service"
 
 export const dynamic = "force-dynamic"
@@ -69,6 +70,18 @@ export async function POST(request: Request) {
       )
     }
     const sku = skuEntry[0] as LocalSkuId
+
+    // B-L02: Enforce the team-SKU minimum seat count (spec: min 3 seats).
+    // Individual SKUs allow 1 seat; team SKUs require >= 3.
+    try {
+      validateSeatCountForSku(sku, seatCount)
+    } catch (err) {
+      return apiError(
+        "INVALID_SEAT_COUNT",
+        err instanceof Error ? err.message : "Invalid seat count for SKU",
+        400
+      )
+    }
 
     // Idempotency: check if a license was already issued for this order.
     // We use the orderId as part of the LicenseKey's issuedByProvider field.

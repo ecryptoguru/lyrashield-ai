@@ -8,9 +8,13 @@
  * - order.paid → creditTopUp (for one-time pack purchases)
  * - subscription.created → syncSubscription
  * - subscription.updated → syncSubscription
+ * - subscription.active → syncSubscription
  * - subscription.canceled → syncSubscription (canceled)
  * - subscription.revoked → syncSubscription (canceled)
+ * - subscription.uncanceled → syncSubscription (reactivated)
  * - customer.state_changed → syncSubscription
+ * - refund.created → reverseRefund (reverses minute-pack entitlement on refund;
+ *   pairs with the 14-day Cloud money-back guarantee)
  */
 
 import { createHmac } from "node:crypto"
@@ -110,6 +114,7 @@ export function isHandledPolarEvent(type: string): boolean {
     "subscription.revoked",
     "subscription.uncanceled",
     "customer.state_changed",
+    "refund.created",
   ]
   return handled.includes(type)
 }

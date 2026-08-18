@@ -157,6 +157,36 @@ export function isIndividualSku(sku: LocalSkuId): boolean {
   return sku === "individual_launch" || sku === "individual_regular"
 }
 
+/** Check whether a SKU is a team license (per-seat, min 3 seats). */
+export function isTeamSku(sku: LocalSkuId): boolean {
+  return sku === "team_perpetual" || sku === "team_subscription"
+}
+
+/**
+ * Minimum seats for a team license. The founder-confirmed spec requires
+ * "Team $99/seat perpetual (min 3)" — a team SKU may not be issued for fewer
+ * than this many seats.
+ */
+export const TEAM_MIN_SEATS = 3
+
+/**
+ * Validate the seat count against the SKU's rules.
+ *
+ * - Individual SKUs: 1 seat (the issue route's Zod schema already enforces
+ *   min 1, and the machine cap is fixed at 3 machines regardless).
+ * - Team SKUs: at least {@link TEAM_MIN_SEATS} seats.
+ *
+ * Throws if the seat count violates the SKU's minimum. Callers should catch
+ * and map to a 400 response.
+ */
+export function validateSeatCountForSku(sku: LocalSkuId, seatCount: number): void {
+  if (isTeamSku(sku) && seatCount < TEAM_MIN_SEATS) {
+    throw new Error(
+      `Team licenses require a minimum of ${TEAM_MIN_SEATS} seats (received ${seatCount})`
+    )
+  }
+}
+
 /** Compute the update-eligibility expiry date from a SKU's updateDays. */
 export function computeUpdateEligibleUntil(sku: LocalSkuId, from = new Date()): Date {
   const def = getLocalSku(sku)
@@ -253,6 +283,9 @@ export async function issueLicenseForPolarOrder(params: {
     throw new Error(`Product ID ${productId} is not a recognized Local SKU product`)
   }
   const sku = skuEntry[0] as LocalSkuId
+
+  // B-L02: Enforce the team-SKU minimum seat count (spec: min 3 seats).
+  validateSeatCountForSku(sku, seatCount)
 
   // B-L09: Idempotency with unique constraint catch instead of TOCTOU findFirst.
   // The findFirst + create pattern has a race where two concurrent webhook

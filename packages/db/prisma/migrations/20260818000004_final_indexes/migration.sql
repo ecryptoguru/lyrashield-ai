@@ -2,15 +2,12 @@
 -- These cover the primary dashboard, payout-batch, license, and usage-balance
 -- query patterns identified during schema review.
 
--- Affiliate dashboard KPI: clicks by affiliate within a date range
--- (covered by Click_affiliateId_clickedAt_idx from migration 3, but add a
---  descending variant for "latest first" pagination without a backward scan)
-CREATE INDEX "Click_affiliateId_clickedAt_desc_idx" ON "Click"("affiliateId", "clickedAt DESC);
-
--- Affiliate dashboard KPI: conversions by affiliate within a date range
--- (covered by Conversion_affiliateId_occurredAt_idx from migration 3; add
---  descending variant for latest-first listing)
-CREATE INDEX "Conversion_affiliateId_occurredAt_desc_idx" ON "Conversion"("affiliateId", "occurredAt DESC);
+-- Affiliate dashboard KPI: clicks and conversions by affiliate within a date
+-- range are covered by the ascending Click_affiliateId_clickedAt_idx and
+-- Conversion_affiliateId_occurredAt_idx from migration 3. Postgres can scan an
+-- ascending index backwards for latest-first listing, so no separate DESC
+-- variant is needed (and a DESC variant is not declared in the Prisma schema,
+-- which would cause migrate-diff drift).
 
 -- Affiliate dashboard KPI: commissions by affiliate+status (already indexed
 -- as Commission_affiliateId_status_availableAt_idx). Add a status-only index
