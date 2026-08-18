@@ -8,6 +8,7 @@ import { registerScanWorker, unregisterScanWorker, SCAN_WORKER_HEARTBEAT_MS } fr
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { startScheduleRunner } from "./schedules"
+import { checkScanConsumerLiveness, markScanJobClaimed } from "./consumer-liveness"
 import {
   assertRepositoryScanRuntimeConfigured,
   terminateActiveEngineProcesses,
@@ -136,21 +137,33 @@ async function main(): Promise<void> {
   assertEvidenceStorageConfigured()
   assertRepositoryScanRuntimeConfigured()
 
-  worker = new Worker<ScanJobData, ScanJobResult>(SCAN_QUEUE_NAME, processScanJob, {
-    connection: {
-      url: env.REDIS_URL || "redis://localhost:6379",
-      maxRetriesPerRequest: null,
+  worker = new Worker<ScanJobData, ScanJobResult>(
+    SCAN_QUEUE_NAME,
+    async (job) => {
+      // Record the claim at the top of the processor so the liveness guard can
+      // tell "consumer is alive and claiming" apart from "wedged with work waiting".
+      markScanJobClaimed()
+      return processScanJob(job)
     },
-    concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
-    autorun: false,
-    // BRPOP blocks for up to 10 min per call — but returns instantly when a
-    // job is pushed to the queue. This gives instant scan pickup with only
-    // ~4.3K re-issue commands/month at idle. Stalled checks run every minute
-    // so jobs that are genuinely stuck are retried; reconcileScanQueue() is the
-    // fail-closed backstop that runs both on startup and periodically.
-    drainDelay: 600,
-    stalledInterval: 60_000,
-  })
+    {
+      connection: {
+        url: env.REDIS_URL || "redis://localhost:6379",
+        maxRetriesPerRequest: null,
+      },
+      concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
+      autorun: false,
+      // BRPOP blocks for up to 10 min per call — but returns instantly when a
+      // job is pushed to the queue. This gives instant scan pickup with only
+      // ~4.3K re-issue commands/month at idle. Stalled checks run every minute
+      // so jobs that are genuinely stuck are retried; reconcileScanQueue() is the
+      // fail-closed backstop that runs both on startup and periodically. The
+      // consumer-liveness guard (below) covers the remaining failure mode: the
+      // blocking client silently wedging (taskforcesh/bullmq#4479) so jobs sit
+      // in `wait` while the worker reports ready.
+      drainDelay: 600,
+      stalledInterval: 60_000,
+    }
+  )
 
   await worker.waitUntilReady()
   worker.on("completed", (job, result) => {
@@ -172,11 +185,30 @@ async function main(): Promise<void> {
   // inside reconcileScanQueue() ensures only one worker acts per interval.
   await reconcileScanQueue()
   reconciliationTimer = setInterval(() => {
-    void reconcileScanQueue().catch((error) => {
-      logger.warn("Periodic scan queue reconciliation failed", {
-        error: error instanceof Error ? error.message : String(error),
+    void reconcileScanQueue()
+      .then(async () => {
+        // Consumer-liveness guard: if jobs are waiting in the scan queue but
+        // this consumer has not claimed one within the blocking window + grace,
+        // the BullMQ blocking fetch loop is presumed wedged
+        // (taskforcesh/bullmq#4479 — silently not consuming after a transient
+        // Redis reset). Fail closed so systemd `Restart=always` re-attaches a
+        // healthy consumer. A null result (Redis unavailable) is "no signal" and
+        // never triggers a restart.
+        if (!worker || shuttingDown) return
+        const liveness = await checkScanConsumerLiveness()
+        if (liveness?.wedged) {
+          logger.error(
+            "Scan consumer wedged: jobs waiting but none claimed within the blocking window; restarting to re-attach",
+            { waiting: liveness.waiting, idleForMs: liveness.idleForMs }
+          )
+          await shutdown("CONSUMER_WEDGED", 1)
+        }
       })
-    })
+      .catch((error) => {
+        logger.warn("Periodic scan queue reconciliation failed", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
   }, RECONCILIATION_INTERVAL_MS)
   if (env.LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED === "1") {
     const reap = async () => {
