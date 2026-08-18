@@ -35,7 +35,7 @@ const MethodSchema = z.object({
   payoutMethod: PayoutMethodSchema,
   // C-M03: Tax form fields — previously stripped by Zod, blocking payout eligibility
   taxFormComplete: z.boolean().optional(),
-  taxFormType: z.enum(["w9", "w8ben", "w8ben_e"]).optional(),
+  taxFormType: z.enum(["w9", "w8ben", "w8ben_e", "gstin"]).optional(),
 })
 
 export async function POST(request: Request) {

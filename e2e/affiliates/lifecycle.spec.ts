@@ -47,17 +47,25 @@ test.describe("Affiliate lifecycle", () => {
     await page.getByRole("button", { name: "Submit Application" }).click()
 
     // Verify application was created
-    const affiliate = await expect
-      .poll(async () =>
-        prisma.affiliate.findUnique({
-          where: {
-            userId: (await prisma.user.findUnique({ where: { email: affiliateEmail } }))!.id,
-          },
-        })
-      )
+    // Verify application was created.
+    // RISK-C3/e2e fix: expect.poll(...).not.toBeNull() returns an ExpectResult,
+    // not the polled value — assigning it to `affiliate` then reading
+    // affiliate.status throws TypeError. Split into a poll-for-existence check,
+    // then a separate fetch to read the actual record.
+    await expect
+      .poll(async () => {
+        const u = await prisma.user.findUnique({ where: { email: affiliateEmail } })
+        if (!u) return null
+        return prisma.affiliate.findUnique({ where: { userId: u.id } })
+      })
       .not.toBeNull()
 
-    expect(affiliate.status).toBe("PENDING")
+    const user = await prisma.user.findUnique({ where: { email: affiliateEmail } })
+    const affiliate = await prisma.affiliate.findUnique({
+      where: { userId: user!.id },
+    })
+
+    expect(affiliate!.status).toBe("PENDING")
 
     // 3. Admin approve (directly in DB for E2E)
     await prisma.affiliate.update({

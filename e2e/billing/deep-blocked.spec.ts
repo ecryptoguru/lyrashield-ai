@@ -3,32 +3,30 @@ import { test, expect } from "@playwright/test"
 /**
  * Deep scan is blocked on Trial and Starter plans.
  *
- * Trial and Starter plans do not include Deep/Custom scan access.
- * The scan-create API should return a 403 with "DEEP_NOT_ALLOWED"
- * and the UI should show a "Deep is a Pro feature" message.
+ * These E2E specs verify the Deep-scan billing gate through the browser/API.
+ * They are marked skip because they were authored as stubs against guessed
+ * selectors and a marketing-site URL (port 4321) that is not running in the
+ * Playwright CI (the webServer only starts the app on port 3100), and the
+ * second test destructured { request } but used page (ReferenceError).
+ *
+ * The substantive Deep-gating logic — Deep = Pro+ only, blocked for TRIAL and
+ * STARTER — is covered by the vitest unit tests in
+ * packages/billing/src/entitlements.test.ts, which assert against the real
+ * assertScanAllowed code with a mocked DB.
+ *
+ * To un-skip: (1) create a Starter-plan workspace fixture, (2) call the
+ * scan-create API with mode:"DEEP" and assert the 403 DEEP_NOT_ALLOWED response,
+ * (3) for the UI test, navigate to the app's /pricing (port 3100) and assert
+ * against the real rendered copy. See the diagnosis in the Sprint-10
+ * verification report.
  */
-test("Deep scan blocked on Trial plan", async ({ page, request }) => {
-  // Navigate to scans page
-  await page.goto("/dashboard/scans")
 
-  // Try to select Deep mode — it should be disabled or show a CTA
-  // The actual behavior depends on the UI implementation
-  const deepOption = page.locator('[data-mode="DEEP"]')
-  if (await deepOption.isVisible()) {
-    // If the option is visible, it should be disabled
-    await expect(deepOption).toBeDisabled()
-  }
+test.skip("Deep scan blocked on Trial plan", async () => {
+  // Placeholder: needs a real Trial workspace + the scans UI. Covered by
+  // entitlements.test.ts (vitest) for the Deep-gating logic.
 })
 
-test("Deep scan blocked on Starter plan", async ({ request }) => {
-  // This test verifies the API-level gate
-  // In a real test environment, we'd have a workspace on the Starter plan
-  // and attempt to create a Deep scan via the API.
-
-  // The API should return:
-  // { success: false, error: { code: "DEEP_NOT_ALLOWED", message: "Deep is a Pro feature..." } }
-
-  // For now, we verify the pricing page correctly marks Deep as Pro+
-  await page.goto("http://localhost:4321/pricing")
-  await expect(page.locator("text=Deep / Custom scans enabled")).toBeVisible()
+test.skip("Deep scan blocked on Starter plan", async () => {
+  // Placeholder: needs a Starter-plan fixture + an API call to /api/scans with
+  // mode:"DEEP", asserting 403 DEEP_NOT_ALLOWED. Covered by entitlements.test.ts.
 })

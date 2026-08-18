@@ -35,6 +35,7 @@ export default async function AffiliatePayoutsPage() {
           requestedAt: true,
           paidAt: true,
           failureCode: true,
+          isReserveRelease: true,
         },
       },
     },
@@ -173,6 +174,11 @@ export default async function AffiliatePayoutsPage() {
                     <td className="py-2 pr-4">{new Date(p.requestedAt).toLocaleDateString()}</td>
                     <td className="py-2 pr-4">
                       {p.amount.toString()} {p.currency}
+                      {p.isReserveRelease && (
+                        <span className="ml-2 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-800 dark:bg-purple-950 dark:text-purple-200">
+                          Reserve release
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 pr-4">{p.provider ?? "—"}</td>
                     <td className="py-2 pr-4">

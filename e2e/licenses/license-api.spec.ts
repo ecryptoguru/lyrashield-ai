@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { generateKeyPairSync, createHash } from "node:crypto"
-import { prisma } from "@lyrashield/db"
+import { prisma, withoutWorkspaceRLS } from "@lyrashield/db"
 import { signLicense, verifyLicense, type LicenseFile } from "@lyrashield/licenses"
 
 /**
@@ -33,37 +33,48 @@ let licenseId: string | null = null
 
 test.beforeAll(async () => {
   // Create a test license directly in the database.
-  const license = await prisma.license.create({
-    data: {
-      ownerEmail,
-      sku: "individual_launch",
-      seatCount: 1,
-      machineIds: [],
-      updateEligibleUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      perpetualFallbackBuild: "1.0.0",
-      signingKeyId: "test-key-v1",
-      signature: "pending",
-      issuedAt: new Date(),
-    },
-  })
+  // The License table has FORCE RLS with a strict policy that allows
+  // workspaceId IS NULL. The shared `prisma` client may carry a stale
+  // app.current_workspace_id from a prior operation in the same worker, so
+  // wrap the create in withoutWorkspaceRLS to run it with the workspace
+  // context explicitly null (satisfying the RLS WITH CHECK).
+  const license = await withoutWorkspaceRLS(async (tx) =>
+    tx.license.create({
+      data: {
+        ownerEmail,
+        sku: "individual_launch",
+        seatCount: 1,
+        machineIds: [],
+        updateEligibleUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        perpetualFallbackBuild: "1.0.0",
+        signingKeyId: "test-key-v1",
+        signature: "pending",
+        issuedAt: new Date(),
+      },
+    })
+  )
   licenseId = license.id
 
-  await prisma.licenseKey.create({
-    data: {
-      licenseId: license.id,
-      keyHash,
-      issuedByProvider: "e2e-test",
-    },
-  })
+  await withoutWorkspaceRLS(async (tx) =>
+    tx.licenseKey.create({
+      data: {
+        licenseId: license.id,
+        keyHash,
+        issuedByProvider: "e2e-test",
+      },
+    })
+  )
 })
 
 test.afterAll(async () => {
   try {
     if (licenseId) {
-      await prisma.licenseActivation.deleteMany({ where: { licenseId } })
-      await prisma.licenseRevocation.deleteMany({ where: { licenseId } })
-      await prisma.licenseKey.deleteMany({ where: { licenseId } })
-      await prisma.license.delete({ where: { id: licenseId } })
+      await withoutWorkspaceRLS(async (tx) => {
+        await tx.licenseActivation.deleteMany({ where: { licenseId } })
+        await tx.licenseRevocation.deleteMany({ where: { licenseId } })
+        await tx.licenseKey.deleteMany({ where: { licenseId } })
+        await tx.license.delete({ where: { id: licenseId } })
+      })
     }
   } finally {
     await prisma.$disconnect()

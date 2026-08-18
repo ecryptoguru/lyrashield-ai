@@ -101,7 +101,9 @@ export default async function AffiliateAssetsPage() {
               </li>
               <li>
                 <strong>Tone:</strong> Evidence-backed, technical, honest. Avoid hyperbolic claims,
-                security guarantees, or benchmark comparisons.
+                security guarantees, benchmark comparisons, fear-mongering (FUD), and &ldquo;only
+                we&rdquo; / exclusivity claims. No accuracy, false-positive-rate or coverage numbers
+                unless founder-approved and measured.
               </li>
               <li>
                 <strong>Prohibited:</strong> Do not bid on the brand name &quot;LyraShield&quot; in

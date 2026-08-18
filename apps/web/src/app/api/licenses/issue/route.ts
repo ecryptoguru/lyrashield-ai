@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
-import { type LocalSkuId } from "@lyrashield/pricing"
+import { type LocalSkuId, teamVolumeDiscountPct, teamOrderTotal } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import {
@@ -142,7 +142,9 @@ export async function POST(request: Request) {
       orderId,
     })
 
-    // B-L01: Audit log the issuance
+    // B-L01: Audit log the issuance (including the team volume discount, if any)
+    const volumeDiscountPct = teamVolumeDiscountPct(sku, seatCount)
+    const orderTotalUsd = teamOrderTotal(sku, seatCount)
     await prisma.auditLog
       .create({
         data: {
@@ -150,7 +152,14 @@ export async function POST(request: Request) {
           action: "license.issued",
           resourceType: "license",
           resourceId: license.id,
-          metadata: { buyerEmail, sku, orderId, seatCount },
+          metadata: {
+            buyerEmail,
+            sku,
+            orderId,
+            seatCount,
+            volumeDiscountPct,
+            orderTotalUsd,
+          },
         },
       })
       .catch(() => {})

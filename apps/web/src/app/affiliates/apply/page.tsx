@@ -159,11 +159,55 @@ export default async function AffiliateApplyPage() {
             className="mt-1 block w-full rounded-md border px-3 py-2"
           >
             <option value="">Select...</option>
-            <option value="will_complete">Will complete W-9/W-8BEN/W-8BEN-E</option>
+            <option value="will_complete">Will complete W-9/W-8BEN/W-8BEN-E/GSTIN</option>
             <option value="have_w9">Have W-9 on file</option>
             <option value="have_w8ben">Have W-8BEN on file</option>
             <option value="have_w8ben_e">Have W-8BEN-E on file</option>
+            <option value="have_gstin">Have GSTIN on file (India)</option>
           </select>
+        </div>
+
+        {/* C-L10: Binding program terms acceptance */}
+        <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
+          <h3 className="font-medium text-gray-900 dark:text-white">Affiliate Program Terms</h3>
+          <ul className="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
+            <li>
+              • <strong>Disclosure:</strong> You must clearly disclose your affiliate relationship
+              in every promotion, following FTC (US) and ASA (UK) affiliate-disclosure rules.
+            </li>
+            <li>
+              • <strong>Honest claims only:</strong> No fear-mongering (FUD), no &ldquo;only
+              we&rdquo; / exclusivity claims, and no benchmark, accuracy, false-positive-rate or
+              coverage comparisons.
+            </li>
+            <li>
+              • <strong>No brand bidding:</strong> Do not bid on the brand name
+              &ldquo;LyraShield&rdquo; in search ads. Zero tolerance.
+            </li>
+            <li>
+              • <strong>No self-referrals:</strong> No commission on your own signups, trial
+              conversions or one-time minute packs.
+            </li>
+            <li>
+              • <strong>No upstream naming:</strong> Do not name the underlying scan-engine project.
+              Refer to the product as LyraShield only.
+            </li>
+          </ul>
+          <label className="mt-3 flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input
+              type="checkbox"
+              id="acceptTerms"
+              name="acceptTerms"
+              value="true"
+              required
+              className="mt-1 h-4 w-4 rounded border-gray-300"
+            />
+            <span>
+              I have read and accept the LyraShield Affiliate Program Terms, including the FTC/ASA
+              disclosure obligation, the honest-claims and no-FUD rules, the no-brand-bidding clause
+              and the no-self-referral rule.
+            </span>
+          </label>
         </div>
 
         <button

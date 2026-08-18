@@ -42,6 +42,8 @@ export interface ClawbackResult {
   manualReview: boolean
   /** Whether the original commission was not found. */
   notFound: boolean
+  /** Whether this was a no-op replay (commission already reversed). */
+  replay?: boolean
 }
 
 /**
@@ -75,6 +77,27 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
   const commission = conversion.commissions[0]!
   const originalAmount = commission.amount
   const manualReview = originalAmount.gt(new Prisma.Decimal(CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD))
+
+  // C-M11 / RISK-C3: Idempotency guard for clawback replay. If the commission
+  // is already REVERSED, this is a replayed refund webhook (providers retry).
+  // Skip the decrement and the reversal write — returning reversed:true is
+  // safe (the commission is already reversed), but we must NOT decrement
+  // activeReferrals a second time. Without this guard, a replayed webhook
+  // would double-decrement activeReferrals and corrupt the affiliate's tier
+  // eligibility (the 10+ active referral count that unlocks the 30% rate).
+  if (commission.status === "REVERSED") {
+    logger.info("Clawback: commission already reversed (replay) — skipping", {
+      commissionId: commission.id,
+      externalId,
+    })
+    return {
+      reversed: true,
+      commissionId: commission.id,
+      manualReview,
+      notFound: false,
+      replay: true,
+    }
+  }
 
   // S5: Update the EXISTING commission in place — avoids the unique constraint
   // violation that would occur if we tried to create a new Commission row with

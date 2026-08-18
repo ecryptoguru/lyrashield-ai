@@ -77,7 +77,7 @@ export async function checkPayoutEligibility(affiliateId: string): Promise<Payou
 
   // Check tax form
   if (!payoutMethod?.taxFormComplete) {
-    reasons.push("Tax form not complete (W-9/W-8BEN/W-8BEN-E required)")
+    reasons.push("Tax form not complete (W-9/W-8BEN/W-8BEN-E required, or GSTIN for India)")
   }
 
   // Check no active payout lock (pending/processing payouts)

@@ -61,6 +61,14 @@ export const CLOUD_REFUND_WINDOW_DAYS = 14
 /** Manual review threshold for clawbacks (USD major units). */
 export const CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD = 200
 
+/**
+ * Current version of the binding affiliate program terms. Affiliates must
+ * accept this version when applying; the accepted version is recorded on the
+ * Affiliate record (termsVersion) so there is a durable record of exactly
+ * which terms an affiliate agreed to. Bump this when the terms change.
+ */
+export const AFFILIATE_TERMS_VERSION = "2026-08-18-v1"
+
 export { loadActiveProgram, type AffiliateProgramTerms } from "./program"
 
 export { detectAttribution, type AttributionDetectionResult } from "./attribution/middleware"
@@ -95,6 +103,11 @@ export { expireAttributionTokens, type ExpireResult } from "./commission/expire"
 export { checkPayoutEligibility, type PayoutEligibility } from "./payout/eligibility"
 
 export { computeReserve, isReserveActive, setupReserve, type ReserveInfo } from "./payout/reserve"
+export {
+  releaseReserve,
+  releaseReserveForAffiliate,
+  type ReserveReleaseResult,
+} from "./payout/reserve-release"
 
 export { requestPayout, type PayoutRequestResult } from "./payout/request"
 

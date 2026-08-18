@@ -1,9 +1,31 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { createHash } from "node:crypto"
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { getCachedSession } from "@/lib/cache"
-import { detectFraudSignals } from "@lyrashield/affiliate"
+import { detectFraudSignals, AFFILIATE_TERMS_VERSION } from "@lyrashield/affiliate"
+
+// C-M10: IP / user-agent hashing for fraud-signal signup counts. Mirrors the
+// salted SHA-256 used by the click route so the hashes match across routes.
+function hashIp(value: string): string {
+  const salt = process.env.IP_HASH_SALT ?? "lyrashield-ip-salt-v1"
+  return createHash("sha256")
+    .update(value + salt)
+    .digest("hex")
+}
+
+function getClientIp(request: Request): string | undefined {
+  const headers = ["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"]
+  for (const header of headers) {
+    const value = request.headers.get(header)
+    if (value) {
+      const ip = value.split(",")[0]?.trim()
+      if (ip) return ip
+    }
+  }
+  return undefined
+}
 
 const ApplySchema = z.object({
   userId: z.string().min(1),
@@ -13,7 +35,16 @@ const ApplySchema = z.object({
   audienceType: z.enum(["developers", "security", "devops", "founders", "mixed"]),
   promotionMethods: z.string().min(10).max(2000),
   payoutMethod: z.enum(["razorpayx", "payoneer", "briskpe"]),
-  taxFormStatus: z.enum(["will_complete", "have_w9", "have_w8ben", "have_w8ben_e"]),
+  // C-L10: Binding terms acceptance — the affiliate must affirmatively accept
+  // the program terms (FTC/ASA disclosure, no-FUD, no "only-we"/benchmark
+  // claims, no brand bidding). Approval is gated on this being true. A truthy
+  // string ("true", "on", "1") is accepted because unchecked HTML checkboxes
+  // submit nothing, so we require the checkbox to be explicitly checked.
+  acceptTerms: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => v === true || v === "true" || v === "on" || v === "1")
+    .refine((v) => v === true, "You must accept the affiliate program terms to apply"),
+  taxFormStatus: z.enum(["will_complete", "have_w9", "have_w8ben", "have_w8ben_e", "have_gstin"]),
 })
 
 export async function POST(request: Request) {
@@ -78,9 +109,27 @@ export async function POST(request: Request) {
   })
 
   if (user) {
-    // Count existing signups/applications from the same user email domain
+    // C-M10: Populate signupCountByIp / signupCountByDevice so the RATE_LIMIT_IP and
+    // RATE_LIMIT_DEVICE signals actually evaluate (previously only the disposable-
+    // email check ran). Hash the applicant's IP the same way the click route
+    // does (salted SHA-256) and count prior Clicks from that IP / user-agent hash.
+    const clientIp = getClientIp(request)
+    const ipHash = clientIp ? hashIp(clientIp) : undefined
+    const userAgent = request.headers.get("user-agent")
+    const userAgentHash = userAgent ? hashIp(userAgent) : undefined
+    const [signupCountByIp, signupCountByDevice] = await Promise.all([
+      ipHash ? prisma.click.count({ where: { ipHash } }) : Promise.resolve(0),
+      userAgentHash
+        ? prisma.click.count({ where: { userAgent: userAgentHash } })
+        : Promise.resolve(0),
+    ])
+
     const fraudResult = detectFraudSignals({
       email: user.email,
+      ipHash,
+      userAgent: userAgentHash,
+      signupCountByIp,
+      signupCountByDevice,
     })
 
     if (fraudResult.block) {
@@ -102,6 +151,9 @@ export async function POST(request: Request) {
     data: {
       userId: session.userId,
       status: "PENDING",
+      // C-L10: Record binding terms acceptance (versioned) at application time.
+      acceptedTermsAt: new Date(),
+      termsVersion: AFFILIATE_TERMS_VERSION,
       payoutMethod: {
         type: parsed.data.payoutMethod,
         valid: false,

@@ -1,0 +1,102 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+// Mock prisma before importing the module under test.
+vi.mock("@lyrashield/db", () => ({
+  prisma: {
+    conversion: {
+      findFirst: vi.fn(),
+    },
+    commission: {
+      update: vi.fn(),
+    },
+    affiliate: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+  },
+}))
+
+vi.mock("@lyrashield/logger", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}))
+
+import { onRefund } from "./clawback"
+import { prisma } from "@lyrashield/db"
+
+const REVERSED_COMMISSION = {
+  id: "comm-1",
+  amount: { minus: () => ({ lte: () => false }), gt: () => false, toString: () => "50.0000" },
+  status: "REVERSED",
+}
+
+describe("clawback — RISK-C3 replay guard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("skips the activeReferrals decrement on a replayed refund (commission already REVERSED)", async () => {
+    // The conversion's commission is already REVERSED — this is a replayed
+    // webhook. The guard must return early WITHOUT decrementing activeReferrals.
+    vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
+      id: "conv-1",
+      idempotencyKey: "polar:order-123",
+      subscriptionId: "sub-1",
+      affiliateId: "aff-1",
+      commissions: [REVERSED_COMMISSION],
+    })
+
+    const result = await onRefund({
+      provider: "polar",
+      externalId: "order-123",
+      reason: "REFUND",
+    })
+
+    expect(result.reversed).toBe(true)
+    expect(result.replay).toBe(true)
+    // Critical: the commission update (reversal write) must NOT be called on replay
+    expect(prisma.commission.update).not.toHaveBeenCalled()
+    // Critical: the affiliate activeReferrals decrement must NOT happen on replay
+    expect(prisma.affiliate.findUnique).not.toHaveBeenCalled()
+    expect(prisma.affiliate.update).not.toHaveBeenCalled()
+  })
+
+  it("decrements activeReferrals on a genuine first-time refund (commission PENDING/AVAILABLE/PAID)", async () => {
+    const activeCommission = {
+      id: "comm-2",
+      amount: {
+        minus: () => ({ lte: () => false }),
+        gt: () => false,
+        toString: () => "50.0000",
+      },
+      status: "PAID",
+    }
+    vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
+      id: "conv-2",
+      idempotencyKey: "polar:order-456",
+      subscriptionId: "sub-2",
+      affiliateId: "aff-2",
+      commissions: [activeCommission],
+    })
+    vi.mocked(prisma.affiliate.findUnique).mockResolvedValue({ activeReferrals: 5 })
+    vi.mocked(prisma.commission.update).mockResolvedValue(undefined)
+    vi.mocked(prisma.affiliate.update).mockResolvedValue(undefined)
+
+    const result = await onRefund({
+      provider: "polar",
+      externalId: "order-456",
+      reason: "REFUND",
+    })
+
+    expect(result.reversed).toBe(true)
+    expect(result.replay).toBeUndefined()
+    // The reversal write happened
+    expect(prisma.commission.update).toHaveBeenCalledOnce()
+    // The activeReferrals decrement happened (first-time refund)
+    expect(prisma.affiliate.update).toHaveBeenCalledOnce()
+  })
+})

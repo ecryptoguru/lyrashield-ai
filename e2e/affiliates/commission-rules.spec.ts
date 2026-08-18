@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { prisma } from "@lyrashield/db"
+import { randomUUID } from "node:crypto"
 import {
   onOrderPaid,
   onRefund,
@@ -23,8 +24,11 @@ test.describe("Commission rules", () => {
   let affiliate: { id: string; userId: string }
 
   test.beforeAll(async () => {
+    // User.id has no @default (Better Auth generates it at signup), so supply
+    // an explicit id for the direct prisma.user.create here.
     const user = await prisma.user.create({
       data: {
+        id: randomUUID(),
         email: `comm-rules-${suffix}@example.com`,
         name: "Commission Rules Test",
         emailVerified: true,

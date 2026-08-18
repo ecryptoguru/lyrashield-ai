@@ -215,11 +215,32 @@ export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidR
   // S9: Fraud signal detection — block commission if high-severity signals found
   // C-M09: Pass IP hash, device fingerprint, and user agent hash to detectFraudSignals
   // for comprehensive fraud evaluation (not just email).
+  // C-M10: Populate signupCountByIp / signupCountByDevice so the RATE_LIMIT_IP and
+  // RATE_LIMIT_DEVICE signals actually evaluate. We count prior Clicks from the
+  // same ipHash (IP proxy) and the same userAgent hash (device proxy) — a high
+  // count signals abuse. deviceFingerprint is not persisted on Click, so the
+  // userAgent hash is the available device-correlation key.
+  let signupCountByIp: number | undefined
+  let signupCountByDevice: number | undefined
+  if (payload.ipHash || payload.userAgentHash) {
+    const [byIp, byDevice] = await Promise.all([
+      payload.ipHash
+        ? prisma.click.count({ where: { ipHash: payload.ipHash } })
+        : Promise.resolve(0),
+      payload.userAgentHash
+        ? prisma.click.count({ where: { userAgent: payload.userAgentHash } })
+        : Promise.resolve(0),
+    ])
+    signupCountByIp = byIp
+    signupCountByDevice = byDevice
+  }
   const fraudResult = detectFraudSignals({
     email: customerEmail,
     ipHash: payload.ipHash,
     deviceFingerprint: payload.deviceFingerprint,
     userAgent: payload.userAgentHash,
+    signupCountByIp,
+    signupCountByDevice,
   })
   if (fraudResult.block) {
     logger.warn("Commission blocked by fraud signals", {

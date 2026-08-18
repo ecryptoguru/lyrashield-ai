@@ -60,6 +60,25 @@ export async function POST(request: Request) {
   const data = parsed.data
 
   if (data.action === "approve") {
+    // C-L10: Approval is gated on the affiliate having accepted the binding
+    // program terms. An application without acceptedTermsAt cannot be approved
+    // (it should never happen since the apply route requires acceptTerms, but
+    // this guards against pre-terms-acceptance rows and any path that bypasses
+    // the form).
+    const existingAffiliate = await prisma.affiliate.findUnique({
+      where: { id: data.affiliateId },
+      select: { acceptedTermsAt: true, termsVersion: true },
+    })
+    if (!existingAffiliate?.acceptedTermsAt) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Affiliate has not accepted the program terms — cannot approve",
+        },
+        { status: 400 }
+      )
+    }
+
     const affiliate = await prisma.affiliate.update({
       where: { id: data.affiliateId },
       data: {

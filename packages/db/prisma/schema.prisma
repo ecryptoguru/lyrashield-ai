@@ -1747,6 +1747,8 @@ model Affiliate {
   payoutMethod    Json?
   createdAt       DateTime        @default(now())
   approvedAt      DateTime?
+  acceptedTermsAt DateTime?
+  termsVersion    String?
 
   user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   links          AffiliateLink[]
@@ -1876,6 +1878,8 @@ model Commission {
   earnedAt      DateTime         @default(now())
   availableAt   DateTime?
   reversalOfId  String?
+  reserveReleasedAt DateTime?
+  reserveReleasedAmount Decimal? @db.Decimal(19, 4)
 
   conversion Conversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
   affiliate  Affiliate  @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
@@ -1890,7 +1894,7 @@ model Payout {
   id               String       @id @default(cuid())
   affiliateId      String
   amount           Decimal      @db.Decimal(19, 4)
-  currency         String
+  currency         String       @db.VarChar(3)
   status           PayoutStatus @default(PENDING)
   provider         String?
   providerPayoutId String?      @unique
@@ -1898,6 +1902,7 @@ model Payout {
   requestedAt      DateTime     @default(now())
   paidAt           DateTime?
   failureCode      String?
+  isReserveRelease Boolean       @default(false)
 
   affiliate Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   items     PayoutItem[]
@@ -1908,7 +1913,12 @@ model Payout {
 model PayoutItem {
   id           String  @id @default(cuid())
   payoutId     String
-  commissionId String  @unique
+  // A commission can have up to two payout items: the main payout, and a
+  // later reserve-release payout for the reserved portion that was held back
+  // during the new-affiliate reserve period. Idempotency is enforced by the
+  // release job via Commission.reserveReleasedAt, not by a unique constraint
+  // here.
+  commissionId String
   amount       Decimal @db.Decimal(19, 4)
 
   payout    Payout    @relation(fields: [payoutId], references: [id], onDelete: Cascade)

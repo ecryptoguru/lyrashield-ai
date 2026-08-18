@@ -7,7 +7,7 @@ import {
   detectFraudSignals,
   isSelfReferral,
 } from "@lyrashield/affiliate"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 /**
  * E2E: Attribution matrix.
@@ -35,9 +35,12 @@ test.describe("Attribution matrix", () => {
   let linkB: { id: string; code: string }
 
   test.beforeAll(async () => {
-    // Create two test affiliates
+    // Create two test affiliates.
+    // User.id has no @default (Better Auth generates it at signup), so the
+    // direct prisma.user.create here must supply an explicit id.
     const userA = await prisma.user.create({
       data: {
+        id: randomUUID(),
         email: `attr-a-${suffix}@example.com`,
         name: "Affiliate A",
         emailVerified: true,
@@ -45,6 +48,7 @@ test.describe("Attribution matrix", () => {
     })
     const userB = await prisma.user.create({
       data: {
+        id: randomUUID(),
         email: `attr-b-${suffix}@example.com`,
         name: "Affiliate B",
         emailVerified: true,
