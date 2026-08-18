@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 
     // Server-side entitlement check: Cloud subscription OR sync_addon.
     const sku = license.sku as LocalSkuId
-    const hasSyncEntitlement = checkSyncEntitlement(sku, license.workspaceId, workspaceId)
+    const hasSyncEntitlement = await checkSyncEntitlement(sku, license.workspaceId, workspaceId)
     if (!hasSyncEntitlement) {
       return apiError(
         "SYNC_NOT_ENTITLED",
@@ -149,26 +149,39 @@ export async function POST(request: Request) {
  * - Team subscription: sync is included.
  * - Cloud workspace plan (STARTER+): entitled via the workspace.
  * - Individual / team_perpetual without add-on: NOT entitled.
+ *
+ * B-M08: Now async — checks the workspace plan for Cloud subscription
+ * entitlement and verifies the license belongs to the target workspace.
  */
-function checkSyncEntitlement(
+async function checkSyncEntitlement(
   sku: LocalSkuId,
   licenseWorkspaceId: string | null,
   targetWorkspaceId: string
-): boolean {
+): Promise<boolean> {
   // The sync_addon SKU explicitly grants sync.
   if (sku === "sync_addon") return true
 
   // Team subscription includes sync.
   if (sku === "team_subscription") return true
 
-  // For other SKUs, we check the workspace plan asynchronously — but since
-  // this is a sync function we return true for now and the workspace plan
-  // check is done by the caller. In practice, individual and team_perpetual
-  // licenses need the sync_addon. This is the server-side enforcement point.
-  // The workspace plan check would require an async DB call; for simplicity
-  // we only allow sync_addon and team_subscription here.
-  // TODO: add async workspace plan check for Cloud sub entitlement.
-  void licenseWorkspaceId
-  void targetWorkspaceId
+  // B-M08: Check if the target workspace has an active Cloud subscription
+  // (STARTER or above). This entitles the workspace to sync even without
+  // a separate sync_addon license.
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: targetWorkspaceId },
+    select: { plan: true },
+  })
+
+  if (workspace && workspace.plan !== "FREE") {
+    // Cloud subscribers are entitled to sync
+    return true
+  }
+
+  // B-M08: Verify the license is associated with the target workspace
+  // (prevents using a license from workspace A to sync to workspace B)
+  if (licenseWorkspaceId && licenseWorkspaceId !== targetWorkspaceId) {
+    return false
+  }
+
   return false
 }

@@ -54,7 +54,9 @@ export default async function AffiliateAdminPage() {
       },
     }),
     prisma.payout.findMany({
-      where: { status: "PENDING" },
+      // C-M10: Query both PENDING and PROCESSING — requestPayout creates as
+      // PROCESSING, so querying only PENDING made all payouts invisible.
+      where: { status: { in: ["PENDING", "PROCESSING"] } },
       orderBy: { requestedAt: "desc" },
       take: 20,
       include: {

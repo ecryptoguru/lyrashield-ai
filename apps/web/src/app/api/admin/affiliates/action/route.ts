@@ -123,6 +123,53 @@ export async function POST(request: Request) {
     })
     logger.info("Affiliate suspended", { affiliateId: data.affiliateId })
   } else if (data.action === "approvePayout") {
+    // C-M05: Guard — only approve PENDING/PROCESSING payouts with RESERVED commissions.
+    // Prevents double-pay by approving a FAILED payout whose commissions were re-withdrawn.
+    const payout = await prisma.payout.findUnique({
+      where: { id: data.payoutId },
+      select: { id: true, status: true },
+    })
+
+    if (!payout) {
+      return NextResponse.json(
+        { success: false, error: "Payout not found" },
+        { status: 404 }
+      )
+    }
+
+    if (payout.status !== "PENDING" && payout.status !== "PROCESSING") {
+      return NextResponse.json(
+        { success: false, error: `Payout is ${payout.status}, not PENDING/PROCESSING` },
+        { status: 409 }
+      )
+    }
+
+    // Verify commissions are still RESERVED (not already PAID or released)
+    const items = await prisma.payoutItem.findMany({
+      where: { payoutId: data.payoutId },
+      select: { commissionId: true },
+    })
+
+    if (items.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Payout has no items" },
+        { status: 409 }
+      )
+    }
+
+    const commissions = await prisma.commission.findMany({
+      where: { id: { in: items.map((i) => i.commissionId) } },
+      select: { id: true, status: true },
+    })
+
+    const allReserved = commissions.every((c) => c.status === "RESERVED")
+    if (!allReserved) {
+      return NextResponse.json(
+        { success: false, error: "Payout commissions are not all RESERVED" },
+        { status: 409 }
+      )
+    }
+
     await prisma.payout.update({
       where: { id: data.payoutId },
       data: {
@@ -132,16 +179,12 @@ export async function POST(request: Request) {
     })
 
     // Mark commissions as PAID
-    const items = await prisma.payoutItem.findMany({
-      where: { payoutId: data.payoutId },
-      select: { commissionId: true },
-    })
     await prisma.commission.updateMany({
       where: { id: { in: items.map((i) => i.commissionId) } },
       data: { status: "PAID" },
     })
 
-    logger.info("Payout approved", { payoutId: data.payoutId })
+    logger.info("Payout approved", { payoutId: data.payoutId, adminUserId: session.userId })
   } else if (data.action === "tierOverride") {
     await prisma.affiliate.update({
       where: { id: data.affiliateId },

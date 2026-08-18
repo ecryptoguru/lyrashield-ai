@@ -84,6 +84,8 @@ export async function POST(request: Request) {
   }
 
   // Create the affiliate application
+  // C-M08: taxFormComplete is always false server-side — never self-attested.
+  // Only admin/automation sets it to true after verifying the tax form.
   const affiliate = await prisma.affiliate.create({
     data: {
       userId: session.userId,
@@ -91,7 +93,7 @@ export async function POST(request: Request) {
       payoutMethod: {
         type: parsed.data.payoutMethod,
         valid: false,
-        taxFormComplete: parsed.data.taxFormStatus !== "will_complete",
+        taxFormComplete: false,
         application: {
           name: parsed.data.name,
           website: parsed.data.website,

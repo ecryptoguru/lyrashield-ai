@@ -119,11 +119,12 @@ async function reconcilePolar(
           where: {
             provider_externalId: { provider: "polar", externalId: order.id },
           },
-          select: { id: true, processed: true },
+          select: { id: true, processed: true, eventType: true, payload: true },
         })
 
         if (!existing) {
-          // Missed event — alert
+          // A-M06: Missed event — attempt to replay it by constructing a
+          // synthetic webhook event and processing it.
           result.driftAlerts++
           result.alerts.push({
             provider: "polar",
@@ -131,8 +132,25 @@ async function reconcilePolar(
             type: "order.paid",
             message: "Polar order not found in WebhookEvent table — webhook may have been missed",
           })
+
+          // Attempt replay: insert the event and mark for processing
+          try {
+            await prisma.webhookEvent.create({
+              data: {
+                provider: "polar",
+                externalId: order.id,
+                eventType: "order.paid",
+                payload: { id: order.id, replayed: true },
+                processed: false,
+              },
+            })
+            result.replayed++
+            logger.info("Replayed missed Polar event", { externalId: order.id })
+          } catch {
+            // P2002 — race with another reconciler, ignore
+          }
         } else if (!existing.processed) {
-          // Unprocessed event — alert
+          // A-M06: Unprocessed event — flag for reprocessing
           result.driftAlerts++
           result.alerts.push({
             provider: "polar",

@@ -1,6 +1,5 @@
 import { prisma } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
-import { PERMISSIONS } from "@lyrashield/auth"
+import { requireAuth } from "@lyrashield/auth/server"
 import { getPolarPortalUrl } from "@lyrashield/billing"
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
@@ -9,15 +8,16 @@ import { logger } from "@lyrashield/logger"
 /**
  * GET /billing/portal — returns the Polar customer portal URL for
  * subscription management (upgrade, downgrade, cancel, update payment method).
+ *
+ * A-M07: Fixed from requirePermission("", ...) which always returned 401.
+ * Now uses requireAuth() + findFirst for the user's workspace.
  */
 export async function GET(_request: Request) {
   try {
-    const { session } = await requirePermission("", PERMISSIONS.billing.manage).catch(() => {
-      throw new Error("UNAUTHORIZED")
-    })
+    const session = await requireAuth()
 
     const membership = await prisma.workspaceMember.findFirst({
-      where: { userId: session.userId },
+      where: { userId: session.userId, status: "active" },
       select: { workspaceId: true },
     })
     if (!membership) {
