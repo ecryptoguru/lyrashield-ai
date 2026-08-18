@@ -169,7 +169,13 @@ test.describe("License renewal API", () => {
     const beforeExpiry = beforeLicense.updateEligibleUntil
 
     const res = await request.post("/api/licenses/renew", {
-      data: { licenseKey: rawLicenseKey, renewalSku: "renewal" },
+      // The route requires orderId (used for renewal idempotency) — without it
+      // the Zod validation returns 400.
+      data: {
+        licenseKey: rawLicenseKey,
+        renewalSku: "renewal",
+        orderId: `renewal-order-${testSuffix}`,
+      },
     })
     expect(res.status()).toBe(200)
     const json = await res.json()

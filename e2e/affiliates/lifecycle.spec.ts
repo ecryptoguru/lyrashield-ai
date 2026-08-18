@@ -218,12 +218,20 @@ test.describe("Affiliate lifecycle", () => {
     // Sign back in as the affiliate
     await page.request.post("/api/auth/sign-out", {
       data: {},
-      headers: { Origin: "http://127.0.0.1:3100" },
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
     })
     await page.goto("/sign-in")
     await page.getByLabel("Email").fill(affiliateEmail)
     await page.locator("#password").fill(password)
     await page.getByRole("button", { name: "Sign in" }).click()
+    // New sign-ins land on /onboarding; skip it so the dashboard is reachable.
+    await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
+    await page.request
+      .patch("/api/onboarding", {
+        data: { skipped: true },
+        headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+      })
+      .catch(() => {})
 
     await page.goto("/affiliates/dashboard")
     await expect(page.getByText("Affiliate Dashboard")).toBeVisible()
