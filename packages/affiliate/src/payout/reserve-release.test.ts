@@ -38,6 +38,10 @@ const { FakeDecimal, models, runTransaction } = vi.hoisted(() => {
   const models = {
     affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
     commission: { findMany: vi.fn(), update: vi.fn() },
+    // workspaceMember.findFirst is used to resolve the affiliate's owning
+    // workspace for the audit log (added in the FK-fix). Default to no
+    // membership (returns undefined) so the audit-write is skipped in tests.
+    workspaceMember: { findFirst: vi.fn().mockResolvedValue(null) },
     // payout.create must resolve to an object with an `id` (the code reads
     // payout.id for the payoutItem and auditLog references).
     payout: { create: vi.fn().mockResolvedValue({ id: "payout-test-id" }) },
@@ -98,6 +102,7 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
     vi.mocked(models.payoutItem.create).mockResolvedValue({} as never)
     vi.mocked(models.commission.update).mockResolvedValue({} as never)
     vi.mocked(models.auditLog.create).mockResolvedValue(undefined)
+    vi.mocked(models.workspaceMember.findFirst).mockResolvedValue(null)
   })
 
   it("releases nothing when the reserve is still active (reserveUntil in the future)", async () => {
