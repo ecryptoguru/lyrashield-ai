@@ -10,8 +10,7 @@
  * commission reserveReleasedAt so the job is idempotent.
  */
 
-import { prisma } from "@lyrashield/db"
-import { Prisma } from "@prisma/client"
+import { prisma, Prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { isReserveActive } from "./reserve"
 

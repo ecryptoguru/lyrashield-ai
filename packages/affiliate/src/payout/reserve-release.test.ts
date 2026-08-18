@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@lyrashield/db"
 
-// Mock prisma before importing the module under test.
-vi.mock("@lyrashield/db", () => {
+// Mock @lyrashield/db but keep the real Prisma namespace (for Decimal math) —
+// only the `prisma` client is mocked. This avoids a fragile hand-rolled
+// Decimal stand-in while still isolating the DB.
+vi.mock("@lyrashield/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/db")>()
   return {
+    ...actual,
     prisma: {
       affiliate: {
         findUnique: vi.fn(),
@@ -34,7 +38,8 @@ vi.mock("@lyrashield/logger", () => ({
 import { releaseReserveForAffiliate } from "./reserve-release"
 import { prisma } from "@lyrashield/db"
 
-// Helper: a fake commission with a Decimal-like amount and a payoutItem amount.
+// Helper: a fake commission with a real Prisma.Decimal amount and a payoutItems
+// array (the relation is now one-to-many).
 function fakeCommission(opts: {
   id: string
   amount: string
