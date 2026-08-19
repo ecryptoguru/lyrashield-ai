@@ -7,6 +7,14 @@ interface ApplyFormProps {
   userId: string
 }
 
+const FIELD = "mt-1 block w-full rounded-md border px-3 py-2"
+const ERROR_BOX = "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+const TERMS_BOX =
+  "mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50"
+const SUBMIT_BTN =
+  "w-full rounded-lg bg-primary px-6 py-3 font-semibold " +
+  "text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+
 /**
  * Client apply form. The previous native POST dumped the JSON body into the
  * document (`{success:true}`) and wiped the fields on any error. This keeps
