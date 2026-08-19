@@ -40,4 +40,4 @@ parameters:
     optional: true
   - name: LyraShield API Key
     key: LYRASHIELD_API_KEY
-    placeholder: ls_your_api_key_here
+    placeholder: lsk_your_api_key_here

@@ -14,7 +14,7 @@ const agents = listAgents()
 const faqItems = [
   {
     q: "The MCP server connects but no tools appear",
-    a: "This usually means the package has not yet resolved via npx or the API key is missing or invalid. Check that LYRASHIELD_API_KEY is set in the env block (not just the shell), that your key starts with lsk_, and that the package is available. See the package rollout note below.",
+    a: "This usually means the package has not resolved via npx or the API key is missing or invalid. Check that LYRASHIELD_API_KEY is set in the env block (not just the shell), that your key starts with lsk_, and that your network can reach the npm registry (a corporate proxy or offline mirror can block it).",
   },
   {
     q: "VS Code does not show my MCP server",
@@ -172,8 +172,9 @@ const jsonLd: unknown[] = [
       </code>.
     </li>
     <li>
-      If the package fails to resolve, the <code>@lyrashield/mcp</code> package may not yet be
-      available. Check the LyraShield changelog.
+      If the package fails to resolve, verify you are on Node.js 20+ and that your network can
+      reach the npm registry — a corporate proxy, firewall, or offline mirror is the usual cause.
+      <code>@lyrashield/mcp</code> is published and live on npm.
     </li>
   </ol>
 </DocsLayout>
