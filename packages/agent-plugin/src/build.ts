@@ -126,6 +126,7 @@ ${SKILL_APPENDIX}
                   ...cursorManifest,
                   mcpServers: {
                     lyrashield: {
+                      type: "streamable-http",
                       url: `${LYRASHIELD_API_URL}/api/mcp`,
                     },
                   },
