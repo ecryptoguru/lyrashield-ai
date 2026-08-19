@@ -266,11 +266,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
         </label>
       </div>
 
-      <button
-        type="submit"
-        disabled={loading}
-        className={SUBMIT_BTN}
-      >
+      <button type="submit" disabled={loading} className={SUBMIT_BTN}>
         {loading ? "Submitting…" : "Submit Application"}
       </button>
     </form>
