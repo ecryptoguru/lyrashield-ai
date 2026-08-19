@@ -11,7 +11,7 @@ export const metadata = {
 
 export default async function AffiliateLinksPage() {
   const session = await getCachedSession()
-  if (!session) return null
+  if (!session) redirect("/sign-in?callbackURL=/affiliates/links")
 
   const affiliate = await prisma.affiliate.findUnique({
     where: { userId: session.userId },

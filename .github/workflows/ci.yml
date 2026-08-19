@@ -266,14 +266,17 @@ jobs:
 
       - name: Install Playwright browser
         if: needs.changes.outputs.docs-only != 'true'
+        timeout-minutes: 8
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Marketing browser E2E
         if: needs.changes.outputs.docs-only != 'true'
+        timeout-minutes: 10
         run: pnpm --filter @lyrashield/marketing test:browser
 
       - name: Browser E2E
         if: needs.changes.outputs.docs-only != 'true'
+        timeout-minutes: 15
         # DATABASE_URL: the NOBYPASSRLS runtime role — the app under test runs
         # with RLS enforced, so e2e exercises the real RLS posture.
         # DATABASE_SYSTEM_URL: the privileged (owner) role for cross-workspace

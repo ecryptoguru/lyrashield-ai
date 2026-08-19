@@ -86,6 +86,24 @@ export function signLicense(
   }
 }
 
+/**
+ * Encode a signed license as the canonical detached blob the desktop verifies.
+ *
+ * The payload half is the exact UTF-8 bytes that were signed
+ * (`canonicalJSON` of the five payload fields). The desktop verifies those
+ * received bytes and must not re-serialize.
+ */
+export function encodeLicenseBlob(file: LicenseFile): string {
+  const payloadB64 = signingBytes({
+    sku: file.sku,
+    seatCount: file.seatCount,
+    machineIds: file.machineIds,
+    updateEligibleUntil: file.updateEligibleUntil,
+    perpetualFallbackBuild: file.perpetualFallbackBuild,
+  }).toString("base64")
+  return `${payloadB64}.${file.signature}`
+}
+
 /** Load an ed25519 public key from a SPKI PEM string. */
 export function loadPublicKey(publicKeyPem: string): KeyObject {
   return createPublicKey({ key: publicKeyPem, format: "pem" })

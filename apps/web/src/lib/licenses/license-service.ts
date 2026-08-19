@@ -15,7 +15,7 @@ import {
   timingSafeEqual,
 } from "node:crypto"
 import { env } from "@lyrashield/config"
-import { prisma, getSystemPrisma } from "@lyrashield/db"
+import { getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, type LocalSkuId } from "@lyrashield/pricing"
 import { signLicense, type LicenseFile, type LicenseSku } from "@lyrashield/licenses"
 import { logger } from "@lyrashield/logger"
@@ -28,6 +28,18 @@ export const INDIVIDUAL_MACHINE_CAP = 3
 
 /** Days of update eligibility added per renewal. */
 const RENEWAL_DAYS = 365
+
+/**
+ * Resolve the perpetual-fallback build SERVER-SIDE.
+ *
+ * At issuance and renewal this is the latest published Local/Desktop build
+ * (`LICENSE_PUBLISHED_BUILD`). Client-supplied `currentBuild` is ignored —
+ * trusting it would let a buyer pin an arbitrary keep-forever window.
+ */
+export function resolvePublishedFallbackBuild(): string | null {
+  const published = env.LICENSE_PUBLISHED_BUILD?.trim()
+  return published ? published : null
+}
 
 /**
  * Resolve the ed25519 private key PEM for signing.
@@ -282,9 +294,9 @@ export async function issueLicenseForPolarOrder(params: {
   seatCount: number
   orderId: string
   workspaceId?: string
-  currentBuild?: string
 }): Promise<{ licenseId: string; alreadyIssued: boolean }> {
-  const { productId, buyerEmail, seatCount, orderId, workspaceId, currentBuild } = params
+  const { productId, buyerEmail, seatCount, orderId, workspaceId } = params
+  const fallbackBuild = resolvePublishedFallbackBuild()
 
   // Resolve the SKU from the product ID map.
   const productMap = parseLocalProductIds()
@@ -297,12 +309,14 @@ export async function issueLicenseForPolarOrder(params: {
   // B-L02: Enforce the team-SKU minimum seat count (spec: min 3 seats).
   validateSeatCountForSku(sku, seatCount)
 
+  // NULL-workspaceId License/LicenseKey rows are FORCE-RLS-scoped and invisible
+  // to the ordinary NOBYPASSRLS client. Issuance is a workspace-less system
+  // operation — use the system client for both the idempotency lookup and the
+  // create (mirrors activate/renew).
+  const systemPrisma = getSystemPrisma()
+
   // B-L09: Idempotency with unique constraint catch instead of TOCTOU findFirst.
-  // The findFirst + create pattern has a race where two concurrent webhook
-  // deliveries both pass the check and both create licenses. We still do a
-  // findFirst for the fast path, but the transaction's unique constraint on
-  // issuedByProvider catches the race.
-  const existingKey = await prisma.licenseKey.findFirst({
+  const existingKey = await systemPrisma.licenseKey.findFirst({
     where: { issuedByProvider: `polar:${orderId}` },
   })
   if (existingKey) {
@@ -314,12 +328,9 @@ export async function issueLicenseForPolarOrder(params: {
   const rawKey = generateLicenseKey()
   const keyHash = hashLicenseKey(rawKey)
 
-  // Create the License and LicenseKey in a transaction.
-  // B-L09: Catch P2002 unique constraint violation on issuedByProvider
-  // to handle the concurrent-race case where two webhooks pass the findFirst.
   let license
   try {
-    license = await prisma.$transaction(async (tx) => {
+    license = await systemPrisma.$transaction(async (tx) => {
       const created = await tx.license.create({
         data: {
           workspaceId: workspaceId || null,
@@ -328,7 +339,7 @@ export async function issueLicenseForPolarOrder(params: {
           seatCount,
           machineIds: [],
           updateEligibleUntil,
-          perpetualFallbackBuild: currentBuild ?? null,
+          perpetualFallbackBuild: fallbackBuild,
           signingKeyId: "pending",
           signature: "pending",
           issuedAt: new Date(),
@@ -348,14 +359,13 @@ export async function issueLicenseForPolarOrder(params: {
       return created
     })
   } catch (error) {
-    // P2002 = unique constraint — concurrent race lost, return existing
     if (
       error &&
       typeof error === "object" &&
       "code" in error &&
       (error as { code: string }).code === "P2002"
     ) {
-      const existing = await prisma.licenseKey.findFirst({
+      const existing = await systemPrisma.licenseKey.findFirst({
         where: { issuedByProvider: `polar:${orderId}` },
       })
       if (existing) {
@@ -366,8 +376,7 @@ export async function issueLicenseForPolarOrder(params: {
     throw error
   }
 
-  // Issue the signed license file (updates signature on the License row).
-  await issueSignedLicense(license.id, currentBuild ?? null)
+  await issueSignedLicense(license.id, fallbackBuild)
 
   // TODO(email): Send the license key + license file to buyerEmail via Brevo.
   logger.info("License issued for Polar order", {

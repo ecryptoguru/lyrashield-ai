@@ -38,7 +38,7 @@ vi.mock("./usage/balance", () => ({
 
 vi.mock("./trial", () => ({
   getTrialState: vi.fn().mockResolvedValue({ isExpired: false }),
-  blockOnExpiry: vi.fn(),
+  blockOnExpiry: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock("./grace", () => ({
@@ -129,5 +129,44 @@ describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
     const result = await assertScanAllowed("ws-empty", "STANDARD")
 
     expect(result.allowed).toBe(false)
+  })
+
+  it("blocks STANDARD on an expired trial (TRIAL_EXPIRED)", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
+      plan: "FREE",
+      deepAllowed: false,
+      trialStartedAt: new Date("2026-01-01"),
+    })
+    vi.mocked(getTrialState).mockResolvedValue({
+      isExpired: true,
+      targetsUsed: 0,
+      targetCap: 3,
+    })
+
+    const result = await assertScanAllowed("ws-trial-expired", "STANDARD")
+
+    expect(result.allowed).toBe(false)
+    expect(result.code).toBe("TRIAL_EXPIRED")
+    expect(result.isTrial).toBe(true)
+  })
+
+  it("blocks STANDARD when the trial target cap is reached (TRIAL_TARGET_LIMIT)", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
+      plan: "FREE",
+      deepAllowed: false,
+      trialStartedAt: new Date("2026-08-01"),
+    })
+    vi.mocked(getTrialState).mockResolvedValue({
+      isExpired: false,
+      targetsUsed: 3,
+      targetCap: 3,
+    })
+    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 80 })
+
+    const result = await assertScanAllowed("ws-trial-capped", "STANDARD")
+
+    expect(result.allowed).toBe(false)
+    expect(result.code).toBe("TRIAL_TARGET_LIMIT")
+    expect(result.isTrial).toBe(true)
   })
 })

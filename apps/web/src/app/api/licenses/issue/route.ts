@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
+import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { type LocalSkuId, teamVolumeDiscountPct, teamOrderTotal } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
@@ -10,6 +10,7 @@ import {
   issueSignedLicense,
   parseLocalProductIds,
   requireInternalApiKey,
+  resolvePublishedFallbackBuild,
   validateSeatCountForSku,
 } from "../../../../lib/licenses/license-service"
 
@@ -26,8 +27,6 @@ const IssueSchema = z.object({
   workspaceId: z.string().optional(),
   /** Polar order ID for idempotency. */
   orderId: z.string().min(1),
-  /** The current app build version (for perpetual fallback tracking). */
-  currentBuild: z.string().optional(),
 })
 
 /**
@@ -44,6 +43,9 @@ const IssueSchema = z.object({
  *
  * Idempotency: the `orderId` is checked against existing licenses to avoid
  * duplicate issuance on webhook retries.
+ *
+ * perpetualFallbackBuild is resolved server-side from LICENSE_PUBLISHED_BUILD.
+ * A client-supplied currentBuild is ignored.
  */
 export async function POST(request: Request) {
   try {
@@ -57,7 +59,8 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
-    const { productId, buyerEmail, seatCount, workspaceId, orderId, currentBuild } = parsed.data
+    const { productId, buyerEmail, seatCount, workspaceId, orderId } = parsed.data
+    const fallbackBuild = resolvePublishedFallbackBuild()
 
     // Resolve the SKU from the product ID map.
     const productMap = parseLocalProductIds()
@@ -83,14 +86,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Idempotency: check if a license was already issued for this order.
-    // We use the orderId as part of the LicenseKey's issuedByProvider field.
-    const existingKey = await prisma.licenseKey.findFirst({
+    const systemPrisma = getSystemPrisma()
+    const existingKey = await systemPrisma.licenseKey.findFirst({
       where: { issuedByProvider: `polar:${orderId}` },
     })
     if (existingKey) {
       logger.info("License already issued for order — returning existing", { orderId })
-      const existingLicense = await prisma.license.findUniqueOrThrow({
+      const existingLicense = await systemPrisma.license.findUniqueOrThrow({
         where: { id: existingKey.licenseId },
       })
       return apiSuccess({ licenseId: existingLicense.id, alreadyIssued: true }, 200)
@@ -100,8 +102,7 @@ export async function POST(request: Request) {
     const rawKey = generateLicenseKey()
     const keyHash = hashLicenseKey(rawKey)
 
-    // Create the License and LicenseKey in a transaction.
-    const license = await prisma.$transaction(async (tx) => {
+    const license = await systemPrisma.$transaction(async (tx) => {
       const created = await tx.license.create({
         data: {
           workspaceId: workspaceId || null,
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
           seatCount,
           machineIds: [],
           updateEligibleUntil,
-          perpetualFallbackBuild: currentBuild ?? null,
+          perpetualFallbackBuild: fallbackBuild,
           signingKeyId: "pending",
           signature: "pending",
           issuedAt: new Date(),
@@ -130,11 +131,9 @@ export async function POST(request: Request) {
       return created
     })
 
-    // Issue the signed license file (updates signature on the License row).
-    const licenseFile = await issueSignedLicense(license.id, currentBuild ?? null)
+    const licenseFile = await issueSignedLicense(license.id, fallbackBuild)
 
     // TODO(email): Send the license key + license file to buyerEmail via Brevo.
-    // For now we log it; the email integration will be wired in the webhook handler.
     logger.info("License issued — email pending", {
       licenseId: license.id,
       buyerEmail,
@@ -142,39 +141,34 @@ export async function POST(request: Request) {
       orderId,
     })
 
-    // B-L01: Audit log the issuance (including the team volume discount, if any)
     const volumeDiscountPct = teamVolumeDiscountPct(sku, seatCount)
     const orderTotalUsd = teamOrderTotal(sku, seatCount)
-    await prisma.auditLog
-      .create({
-        data: {
-          workspaceId: workspaceId ?? license.id,
-          action: "license.issued",
-          resourceType: "license",
-          resourceId: license.id,
-          metadata: {
-            buyerEmail,
-            sku,
-            orderId,
-            seatCount,
-            volumeDiscountPct,
-            orderTotalUsd,
+    if (workspaceId) {
+      await prisma.auditLog
+        .create({
+          data: {
+            workspaceId,
+            action: "license.issued",
+            resourceType: "license",
+            resourceId: license.id,
+            metadata: {
+              buyerEmail,
+              sku,
+              orderId,
+              seatCount,
+              volumeDiscountPct,
+              orderTotalUsd,
+            },
           },
-        },
-      })
-      .catch(() => {})
+        })
+        .catch(() => {})
+    }
 
-    // B-M05: Don't return the raw license key in the API response.
-    // The key is delivered via email only (Brevo). Returning it in the
-    // response would leak it via logs, browser history, or network inspection.
-    // Return only the licenseId and a masked key prefix for confirmation.
     const maskedKey = rawKey.slice(0, 8) + "••••••••" + rawKey.slice(-4)
     return apiSuccess(
       {
         licenseId: license.id,
         licenseKeyMasked: maskedKey,
-        // licenseFile is returned for server-side use (webhook handler);
-        // the raw key is NOT included.
         licenseFile,
       },
       201

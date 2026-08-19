@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header"
 import { BillingActions } from "./billing-actions"
 import { BuyPackButton } from "./buy-pack-button"
 import { UpgradeNowButton } from "./upgrade-now-button"
+import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 
@@ -241,14 +242,10 @@ export default async function BillingPage() {
                 Set a monthly spend limit for overage minutes (beyond your included pool). Overage
                 is billed at $0.15/min.
               </p>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">
-                  Current limit:{" "}
-                  {billingAccount?.spendLimitCents
-                    ? `$${(billingAccount.spendLimitCents / 100).toFixed(2)}`
-                    : "Not set"}
-                </span>
-              </div>
+              <SpendLimitForm
+                workspaceId={workspaceId}
+                currentCents={billingAccount?.spendLimitCents ?? null}
+              />
             </CardContent>
           </Card>
         )}

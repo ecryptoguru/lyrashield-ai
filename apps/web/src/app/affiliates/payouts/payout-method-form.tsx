@@ -54,7 +54,11 @@ export function PayoutMethodForm({ affiliateId, currentMethod }: PayoutMethodFor
       await fetch("/affiliates/api/payouts/method", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ affiliateId, payoutMethod: methodData }),
+        body: JSON.stringify({
+          affiliateId,
+          payoutMethod: methodData,
+          taxFormType,
+        }),
       })
       setSaved(true)
       router.refresh()
@@ -219,9 +223,10 @@ export function PayoutMethodForm({ affiliateId, currentMethod }: PayoutMethodFor
           className="mt-1 block w-full rounded-md border px-3 py-2"
         >
           <option value="">Select tax form...</option>
-          <option value="W-9">W-9 (US residents)</option>
-          <option value="W-8BEN">W-8BEN (individual non-US)</option>
-          <option value="W-8BEN-E">W-8BEN-E (entity non-US)</option>
+          <option value="w9">W-9 (US residents)</option>
+          <option value="w8ben">W-8BEN (individual non-US)</option>
+          <option value="w8ben_e">W-8BEN-E (entity non-US)</option>
+          <option value="gstin">GSTIN (India)</option>
         </select>
       </div>
 

@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
+import { encodeLicenseBlob } from "@lyrashield/licenses"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import {
   hashLicenseKey,
@@ -169,7 +170,14 @@ export async function POST(request: Request) {
         .catch(() => {})
     }
 
-    return apiSuccess({ license: licenseFile }, 200)
+    return apiSuccess(
+      {
+        license: licenseFile,
+        blob: encodeLicenseBlob(licenseFile),
+        licenseId: license.id,
+      },
+      200
+    )
   } catch (error) {
     logger.error("License activation failed", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to activate license", 500)
