@@ -274,7 +274,14 @@ jobs:
 
       - name: Browser E2E
         if: needs.changes.outputs.docs-only != 'true'
-        run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" pnpm exec playwright test --grep-invert '@visual'
+        # DATABASE_URL: the NOBYPASSRLS runtime role — the app under test runs
+        # with RLS enforced, so e2e exercises the real RLS posture.
+        # DATABASE_SYSTEM_URL: the privileged (owner) role for cross-workspace
+        # system operations (e.g. license activation's workspace-less global
+        # key-hash lookup). getSystemPrisma() uses this; without it the license
+        # activation/connect/renew/verify flows can't read NULL-workspaceId or
+        # cross-workspace License rows under FORCE RLS.
+        run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" pnpm exec playwright test --grep-invert '@visual'
 
       - name: No code changes
         if: needs.changes.outputs.docs-only == 'true'

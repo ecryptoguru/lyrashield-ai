@@ -8,11 +8,23 @@ type RateLimitEntry = {
 
 const store = new Map<string, RateLimitEntry>()
 
+// Rate-limit ceilings. The defaults match production. Each can be overridden
+// via env so the e2e suite (which fires many auth/api calls from a small set
+// of simulated client IPs in rapid succession) does not collide on the
+// in-memory per-IP buckets. Production deploys leave these unset, so the
+// production limits are unchanged.
 const WINDOW_MS = 60_000
-const AUTH_MAX = 5
-const API_MAX = 30
-const LITE_SCAN_MAX = 5
-const APPROVAL_CREATE_MAX = 10
+const AUTH_MAX = readIntEnv("RATE_LIMIT_AUTH_MAX", 5)
+const API_MAX = readIntEnv("RATE_LIMIT_API_MAX", 30)
+const LITE_SCAN_MAX = readIntEnv("RATE_LIMIT_LITE_SCAN_MAX", 5)
+const APPROVAL_CREATE_MAX = readIntEnv("RATE_LIMIT_APPROVAL_CREATE_MAX", 10)
+
+function readIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
 /**
  * Team invitations created per workspace per minute. Each invitation mints a
  * 7-day bearer token and (when configured) triggers an outbound email, so an
@@ -238,4 +250,39 @@ export async function checkInvitationCreateRateLimit(workspaceId: string) {
   const upstash = await checkUpstash(INVITATION_CREATE_MAX, "60 s", `invite-create:${workspaceId}`)
   if (upstash) return upstash
   return checkInMemory(`invite-create:${workspaceId}`, INVITATION_CREATE_MAX, WINDOW_MS)
+}
+
+// ─── Sprint 10 rate limits ───────────────────────────────────────────────────
+
+/** A-M08: Bounds billing checkout/topup creation per workspace per minute. */
+const BILLING_CHECKOUT_MAX = 10
+export async function checkBillingCheckoutRateLimit(workspaceId: string) {
+  const upstash = await checkUpstash(
+    BILLING_CHECKOUT_MAX,
+    "60 s",
+    `billing-checkout:${workspaceId}`
+  )
+  if (upstash) return upstash
+  return checkInMemory(`billing-checkout:${workspaceId}`, BILLING_CHECKOUT_MAX, WINDOW_MS)
+}
+
+/** B-M02: Bounds license activation/verification per IP per minute. */
+const LICENSE_API_MAX = 10
+export async function checkLicenseApiRateLimit(ip: string) {
+  const upstash = await checkUpstash(LICENSE_API_MAX, "60 s", `license-api:${ip}`)
+  if (upstash) return upstash
+  return checkInMemory(`license-api:${ip}`, LICENSE_API_MAX, WINDOW_MS)
+}
+
+/** C-L02: Bounds affiliate link creation per affiliate per hour. */
+const AFFILIATE_LINK_MAX = 10
+const AFFILIATE_LINK_WINDOW_MS = 60 * 60 * 1000
+export async function checkAffiliateLinkRateLimit(affiliateId: string) {
+  const upstash = await checkUpstash(AFFILIATE_LINK_MAX, "1 h", `affiliate-link:${affiliateId}`)
+  if (upstash) return upstash
+  return checkInMemory(
+    `affiliate-link:${affiliateId}`,
+    AFFILIATE_LINK_MAX,
+    AFFILIATE_LINK_WINDOW_MS
+  )
 }

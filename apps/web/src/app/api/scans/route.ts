@@ -12,6 +12,7 @@ import {
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
+import { assertScanAllowed } from "@lyrashield/billing"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
@@ -165,6 +166,24 @@ export async function POST(request: Request) {
       }
     } else if (target.type) {
       return apiError("TARGET_TYPE_UNSUPPORTED", "This target cannot be reviewed yet.", 400)
+    }
+
+    // ─── Billing entitlement gate (Sprint 10) ───────────────────────────
+    // Block DEEP/CUSTOM scans on TRIAL and STARTER plans; check usage balance;
+    // enforce trial scan-frequency throttle.
+    const entitlement = await assertScanAllowed(workspaceId, canonicalMode)
+    if (!entitlement.allowed) {
+      return apiError(
+        entitlement.code ?? "SCAN_NOT_ALLOWED",
+        entitlement.message ?? "Scan not allowed",
+        403,
+        undefined,
+        {
+          plan: entitlement.plan,
+          isTrial: entitlement.isTrial,
+          remainingMinutes: entitlement.remainingMinutes,
+        }
+      )
     }
 
     const policy = await prisma.policy.findFirst({

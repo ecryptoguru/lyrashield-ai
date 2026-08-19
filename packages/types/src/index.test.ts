@@ -158,6 +158,7 @@ describe("Enum parity (Zod vs Prisma)", () => {
   it("WorkspacePlanSchema matches Prisma enum", () => {
     expect(WorkspacePlanSchema.options).toEqual([
       "FREE",
+      "STARTER",
       "PRO",
       "TEAM",
       "AGENCY",

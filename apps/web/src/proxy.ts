@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { isDev } from "@lyrashield/config"
 import { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } from "@/lib/rate-limit"
+import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
 
 // This is the Next.js 16 middleware entry. Next.js detects `proxy.ts` as the
 // proxy/middleware file; do not create a separate `middleware.ts` or the build
 // will fail with the `middleware-to-proxy` error.
+//
+// Affiliate attribution (S3/S4/S8) was merged from the former middleware.ts:
+// ?ref= param and /r/:code short links are detected here, the IP is salted
+// and SHA-256 hashed before storage, the user-agent is hashed, and the
+// __ls_consent cookie is checked before setting the affiliate cookie.
+// Note: proxy.ts always runs on the Node.js runtime in Next.js 16.
 
 let warnedUnknownIp = false
 const READ_ONLY_AUTH_PATHS = new Set(["/api/auth/providers", "/api/auth/get-session"])
@@ -45,13 +52,133 @@ export function getClientIP(request: NextRequest): string {
 
 function warnUnknownIp(): "unknown" {
   if (!warnedUnknownIp) {
-    // Middleware must remain edge-safe; use the platform logger rather than the Node logger package.
+    // Proxy must remain edge-safe; use the platform logger rather than the Node logger package.
     console.warn(
       "client IP unavailable — TRUSTED_PROXY_IP_HEADER unset or header missing; rate limiting degraded to a shared bucket"
     )
     warnedUnknownIp = true
   }
   return "unknown"
+}
+
+/**
+ * S3: Hash a value (IP or user-agent) with a server-side salt using Web Crypto.
+ * Raw IPs and plaintext UAs are never persisted to the affiliate click store.
+ */
+async function hashWithSalt(value: string): Promise<string> {
+  const salt = process.env.IP_HASH_SALT ?? "lyrashield-ip-salt-v1"
+  const data = new TextEncoder().encode(value + salt)
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+/**
+ * S3: Extract and hash the client IP for affiliate click storage.
+ * Checks common proxy headers (cf-connecting-ip, true-client-ip, etc.).
+ * Returns undefined if no IP header is found.
+ */
+async function getAffiliateIpHash(request: NextRequest): Promise<string | undefined> {
+  const headers = ["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"]
+  for (const header of headers) {
+    const value = request.headers.get(header)
+    if (value) {
+      const ip = value.split(",")[0]?.trim()
+      if (ip) return hashWithSalt(ip)
+    }
+  }
+  return undefined
+}
+
+/**
+ * Handle affiliate attribution for non-API requests.
+ * Detects ?ref= param or /r/:code short link, records the click, and
+ * sets the __ls_aff cookie (subject to consent).
+ *
+ * Returns a NextResponse if the request should be redirected or short-circuited
+ * (e.g. /r/:code redirect), or null to continue with normal proxy processing.
+ */
+async function handleAffiliateAttribution(
+  request: NextRequest,
+  requestHeaders: Headers,
+  csp: string,
+  isLocalPreview: boolean
+): Promise<NextResponse | null> {
+  const { pathname, searchParams } = request.nextUrl
+  const host = request.headers.get("host") ?? ""
+
+  // Subdomain rewrite: affiliates.lyrashieldai.com → /affiliates
+  if (host === "affiliates.lyrashieldai.com" && !pathname.startsWith("/affiliates")) {
+    const url = request.nextUrl.clone()
+    url.pathname = `/affiliates${pathname === "/" ? "" : pathname}`
+    return NextResponse.rewrite(url)
+  }
+
+  // Check for ref= param or /r/:code path
+  const hasRef = searchParams.has("ref")
+  const isShortLink = /^\/r\/[A-Za-z0-9_-]+$/.test(pathname)
+
+  if (!hasRef && !isShortLink) {
+    return null
+  }
+
+  // Detect attribution
+  const cookieToken = parseAffiliateCookie(request.headers.get("cookie"))
+  const ipHash = await getAffiliateIpHash(request)
+  const rawUserAgent = request.headers.get("user-agent") ?? undefined
+  // S4: Hash the user-agent before storing — never store plaintext UA
+  const userAgent = rawUserAgent ? await hashWithSalt(rawUserAgent) : undefined
+
+  // S8: Check consent cookie — GDPR-compliant
+  const consentCookie = request.cookies.get("__ls_consent")?.value
+  const consentGiven = consentCookie === "true"
+
+  const result = await detectAttribution({
+    pathname,
+    searchParams,
+    landingUrl: request.url,
+    referrer: request.headers.get("referer") ?? undefined,
+    ipHash,
+    userAgent,
+    cookieToken,
+    consentGiven,
+  })
+
+  // Handle redirect for /r/:code
+  if (result.redirectUrl) {
+    const redirectUrl = new URL(result.redirectUrl, request.url)
+    const response = NextResponse.redirect(redirectUrl)
+    if (result.setCookie) {
+      response.headers.set("Set-Cookie", result.setCookie)
+    }
+    response.headers.set("Content-Security-Policy", csp)
+    return response
+  }
+
+  // For ?ref= on a page — continue to the page but set cookie
+  if (result.setCookie) {
+    const response = NextResponse.next({
+      request: { headers: requestHeaders },
+    })
+    response.headers.set("Set-Cookie", result.setCookie)
+    response.headers.set("Content-Security-Policy", csp)
+    if (!isLocalPreview) {
+      response.headers.set(
+        "Strict-Transport-Security",
+        "max-age=63072000; includeSubDomains; preload"
+      )
+    }
+    if (
+      pathname.startsWith("/score/") ||
+      pathname.startsWith("/lite-check/") ||
+      pathname.startsWith("/reports/shared/")
+    )
+      response.headers.set("Referrer-Policy", "no-referrer")
+    return response
+  }
+
+  return null
 }
 
 export async function proxy(request: NextRequest) {
@@ -64,13 +191,26 @@ export async function proxy(request: NextRequest) {
   const requestHost = (request.headers.get("host") ?? new URL(request.url).hostname)
     .split(":")[0]
     ?.toLowerCase()
-  const isLocalPreview = requestHost && localPreviewHosts.has(requestHost)
+  const isLocalPreview = Boolean(requestHost && localPreviewHosts.has(requestHost))
   const csp = buildCspHeader(nonce, !isLocalPreview)
 
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)
 
   if (!pathname.startsWith("/api/")) {
+    // Affiliate attribution: detect ?ref= or /r/:code, record click, set cookie.
+    // Returns a response if the request is redirected or has an affiliate cookie;
+    // returns null to continue with normal CSP/HSTS response.
+    const affiliateResponse = await handleAffiliateAttribution(
+      request,
+      requestHeaders,
+      csp,
+      isLocalPreview
+    )
+    if (affiliateResponse) {
+      return affiliateResponse
+    }
+
     const response = NextResponse.next({
       request: { headers: requestHeaders },
     })
