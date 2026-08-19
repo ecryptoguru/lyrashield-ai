@@ -240,8 +240,23 @@ const envSchema = z
     // Identifier of the current signing key (for rotation / revocation lists).
     LICENSE_SIGNING_KEY_ID: z.string().optional().or(z.literal("")),
     // Optional SPKI PEM public key for license verification. If unset, the
-    // public key is derived at runtime from LICENSE_SIGNING_PRIVATE_KEY.
+    // public key is derived from LICENSE_SIGNING_PRIVATE_KEY at runtime.
     LICENSE_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
+    // Azure Key Vault for the production signing key. When NODE_ENV=production
+    // AND this is set, the web app resolves the signing key from Key Vault
+    // (managed identity via DefaultAzureCredential) instead of the env var.
+    // Leave unset in dev to use LICENSE_SIGNING_PRIVATE_KEY directly.
+    LYRASHIELD_KEY_VAULT_NAME: z.string().optional().or(z.literal("")),
+    // Names of the Key Vault secrets holding the signing private/public key.
+    // Defaults match the runbook (docs/ops/license-signing-keys-runbook.md).
+    LICENSE_SIGNING_PRIVATE_KEY_SECRET_NAME: z
+      .string()
+      .optional()
+      .default("license-signing-private-key"),
+    LICENSE_SIGNING_PUBLIC_KEY_SECRET_NAME: z
+      .string()
+      .optional()
+      .default("license-signing-public-key"),
     // Latest published Local/Desktop build (semver). Resolved server-side at
     // license issuance and renewal as perpetualFallbackBuild. Never accept a
     // client-supplied currentBuild for this field.

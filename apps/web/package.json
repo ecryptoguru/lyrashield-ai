@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@azure/identity": "^4.13.0",
+    "@azure/keyvault-secrets": "^4.9.0",
     "@better-auth/oauth-provider": "1.7.0-beta.10",
     "@lyrashield/agent-registry": "workspace:*",
     "@lyrashield/affiliate": "workspace:*",

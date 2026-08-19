@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     // C-08: Always use the server's own public key — never trust a key
     // supplied by the client. An attacker could forge a license and provide
     // their own public key to make verification pass.
-    const serverPublicKeyPem = resolveSigningPublicKey()
+    const serverPublicKeyPem = await resolveSigningPublicKey()
 
     const result = verifyLicense(licenseFile, serverPublicKeyPem)
 
