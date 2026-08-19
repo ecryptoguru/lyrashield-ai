@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header"
 import { BillingActions } from "./billing-actions"
 import { BuyPackButton } from "./buy-pack-button"
 import { UpgradeNowButton } from "./upgrade-now-button"
+import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 
