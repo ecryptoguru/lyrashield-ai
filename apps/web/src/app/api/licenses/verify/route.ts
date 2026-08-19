@@ -1,26 +1,36 @@
 import { z } from "zod"
+import { getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { verifyLicense, type LicenseFile } from "@lyrashield/licenses"
-import { resolveSigningPublicKey } from "../../../../lib/licenses/license-service"
+import {
+  hashLicenseKey,
+  resolveSigningPublicKey,
+} from "../../../../lib/licenses/license-service"
 import { checkLicenseApiRateLimit, clientIpFromRequest } from "../../../../lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 
 const VerifySchema = z.object({
-  licenseFile: z.custom<LicenseFile>(
-    (val): val is LicenseFile =>
-      typeof val === "object" &&
-      val !== null &&
-      typeof (val as LicenseFile).sku === "string" &&
-      typeof (val as LicenseFile).seatCount === "number" &&
-      Array.isArray((val as LicenseFile).machineIds) &&
-      typeof (val as LicenseFile).updateEligibleUntil === "string" &&
-      typeof (val as LicenseFile).signingKeyId === "string" &&
-      typeof (val as LicenseFile).signature === "string" &&
-      typeof (val as LicenseFile).issuedAt === "string",
-    "licenseFile must be a valid LicenseFile object"
-  ),
+  /** Preferred: raw license key. Server looks up revoked against the DB row. */
+  licenseKey: z.string().min(1).max(200).optional(),
+  /** Fallback identity when the client only has the cached license id. */
+  licenseId: z.string().min(1).max(200).optional(),
+  licenseFile: z
+    .custom<LicenseFile>(
+      (val): val is LicenseFile =>
+        typeof val === "object" &&
+        val !== null &&
+        typeof (val as LicenseFile).sku === "string" &&
+        typeof (val as LicenseFile).seatCount === "number" &&
+        Array.isArray((val as LicenseFile).machineIds) &&
+        typeof (val as LicenseFile).updateEligibleUntil === "string" &&
+        typeof (val as LicenseFile).signingKeyId === "string" &&
+        typeof (val as LicenseFile).signature === "string" &&
+        typeof (val as LicenseFile).issuedAt === "string",
+      "licenseFile must be a valid LicenseFile object"
+    )
+    .optional(),
 })
 
 /**
@@ -34,6 +44,10 @@ const VerifySchema = z.object({
  * LICENSE_SIGNING_PRIVATE_KEY or LICENSE_SIGNING_PUBLIC_KEY) — it NEVER
  * accepts a public key from the client. Accepting a client-supplied key
  * would allow an attacker to forge a license and provide their own key.
+ *
+ * RISK-B1: revoke is not expiry. If licenseKey or licenseId is supplied,
+ * the DB row is checked via getSystemPrisma. A revoked license never
+ * rides perpetual-fallback.
  */
 export async function POST(request: Request) {
   try {
@@ -55,24 +69,30 @@ export async function POST(request: Request) {
     }
     const { licenseFile, licenseKey, licenseId } = parsed.data
 
+    if (!licenseFile && !licenseKey && !licenseId) {
+      return apiError("VALIDATION_ERROR", "licenseFile, licenseKey, or licenseId is required", 400)
+    }
+
     // RISK-B1: revoke is not expiry. Perpetual-fallback never applies to a
     // revoked license. Look the row up by key hash (or id) via the system
     // client — NULL-workspaceId licenses are FORCE-RLS-scoped.
     if (licenseKey || licenseId) {
       const systemPrisma = getSystemPrisma()
-      const row = licenseKey
-        ? await systemPrisma.licenseKey.findUnique({
-            where: { keyHash: hashLicenseKey(licenseKey) },
-            include: { license: { select: { id: true, revoked: true } } },
-          })
-        : await systemPrisma.license.findUnique({
-            where: { id: licenseId! },
-            select: { id: true, revoked: true },
-          })
-      const license = licenseKey
-        ? (row as { license?: { id: string; revoked: boolean } } | null)?.license
-        : (row as { id: string; revoked: boolean } | null)
-      if (license?.revoked) {
+      let revoked = false
+      if (licenseKey) {
+        const keyRow = await systemPrisma.licenseKey.findUnique({
+          where: { keyHash: hashLicenseKey(licenseKey) },
+          include: { license: { select: { id: true, revoked: true } } },
+        })
+        revoked = keyRow?.license.revoked === true
+      } else if (licenseId) {
+        const licenseRow = await systemPrisma.license.findUnique({
+          where: { id: licenseId },
+          select: { id: true, revoked: true },
+        })
+        revoked = licenseRow?.revoked === true
+      }
+      if (revoked) {
         return apiSuccess(
           {
             valid: false,
@@ -83,6 +103,20 @@ export async function POST(request: Request) {
           200
         )
       }
+    }
+
+    // Desktop revalidate only sends licenseId. After the revoke check above,
+    // there is nothing left to cryptographically verify without a licenseFile.
+    if (!licenseFile) {
+      return apiSuccess(
+        {
+          valid: true,
+          revoked: false,
+          updateEligible: false,
+          reason: "identity_ok",
+        },
+        200
+      )
     }
 
     // C-08: Always use the server's own public key — never trust a key
