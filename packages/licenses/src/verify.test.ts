@@ -157,6 +157,37 @@ describe("isBuildInstallable — B-L03 version comparison", () => {
     })
     expect(isBuildInstallable(license, "1.0.0")).toBe(false)
   })
+
+  // POLICY (founder-confirmed 2026-08-19): revocation is a HARD STOP that
+  // overrides perpetual fallback. The server signals revocation by nullifying
+  // the signature/signingKeyId to "REVOKED", so the offline client fails
+  // signature verification on the next re-check and deactivates — even when a
+  // perpetualFallbackBuild is present. These two tests pin that the crypto
+  // layer never treats a "REVOKED" marker as a valid signature.
+  it("hard-stop: a license with signature REVOKED never verifies (fallback ignored)", () => {
+    const revoked = makeSignedLicense({
+      perpetualFallbackBuild: "1.2.0",
+      signature: "REVOKED",
+      signingKeyId: "REVOKED",
+    })
+    const result = verifyLicense(revoked, publicKeyPem)
+    expect(result.valid).toBe(false)
+  })
+
+  it("hard-stop: even a date-eligible revoked license fails signature verification", () => {
+    // Still inside the update-eligibility window, but the signature has been
+    // nullified to "REVOKED". isBuildInstallable only inspects dates/fallback
+    // (and would naively return true), so the enforceable invariant lives at
+    // the signature layer: verifyLicense must fail, and the client treats a
+    // failed verification as deactivated regardless of the fallback build.
+    const revoked = makeSignedLicense({
+      perpetualFallbackBuild: "1.2.0",
+      updateEligibleUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      signature: "REVOKED",
+      signingKeyId: "REVOKED",
+    })
+    expect(verifyLicense(revoked, publicKeyPem).valid).toBe(false)
+  })
 })
 
 describe("license wire format — detached blob", () => {

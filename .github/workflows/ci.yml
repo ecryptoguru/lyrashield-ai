@@ -264,9 +264,26 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm build
 
+      # Cache the Playwright browser binary so the install step does not
+      # re-download chromium on every run. Keyed on the @playwright/test
+      # version so a version bump busts the cache. On a hit the browser
+      # download is skipped (only --with-deps system packages run), which is
+      # what makes the install step reliably fit its timeout. Added after the
+      # step timed out at 8 minutes three runs in a row (2026-08-19/20).
+      - name: Cache Playwright browser
+        if: needs.changes.outputs.docs-only != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          # Hash the installed @playwright/test version out of the lockfile so
+          # a Playwright upgrade invalidates the cache automatically.
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Playwright browser
         if: needs.changes.outputs.docs-only != 'true'
-        timeout-minutes: 8
+        timeout-minutes: 15
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Marketing browser E2E
