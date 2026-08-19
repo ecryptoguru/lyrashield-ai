@@ -13,4 +13,8 @@ regexes = [
   '''dummy-ci-only-secret-not-a-real-credential''',
   # Synthetic service_role JWT used only by the URL scanner regression fixture.
   '''eyJhbGciOiJIUzI1NiJ9\.eyJyb2xlIjoic2VydmljZV9yb2xlIn0\.signature123''',
+  # Empty placeholder env vars in .env.example (value is "") — the key NAME
+  # matches the generic-api-key rule but the value is an empty placeholder, not
+  # a real secret. Matches lines like RAZORPAYX_API_KEY="" / PAYONEER_API_SECRET="".
+  '''[A-Z_]*(API_KEY|API_SECRET|SECRET|TOKEN|PASSWORD|PRIVATE_KEY)=""''',
 ]
