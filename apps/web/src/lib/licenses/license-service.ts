@@ -17,7 +17,12 @@ import {
 import { env } from "@lyrashield/config"
 import { getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, type LocalSkuId } from "@lyrashield/pricing"
-import { signLicense, type LicenseFile, type LicenseSku } from "@lyrashield/licenses"
+import {
+  signLicense,
+  encodeLicenseBlob,
+  type LicenseFile,
+  type LicenseSku,
+} from "@lyrashield/licenses"
 import { logger } from "@lyrashield/logger"
 
 /** HTTP header name for the internal API key used by server-to-server routes. */
@@ -214,6 +219,93 @@ export function computeUpdateEligibleUntil(sku: LocalSkuId, from = new Date()): 
   return result
 }
 
+/** Escape HTML special characters for safe interpolation into email markup. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+/**
+ * Email the buyer their raw license key + signed license file via Brevo.
+ *
+ * Called once at issuance (both the internal /api/licenses/issue route and
+ * the Polar webhook path via issueLicenseForPolarOrder). Mirrors the Brevo
+ * pattern in packages/auth: the provider call is a detached promise so a slow
+ * or failing mail send never blocks or fails license issuance — the license
+ * is already persisted, and the buyer can re-retrieve it from the dashboard.
+ * Errors are logged, not thrown.
+ *
+ * The signed license file is sent as the detached blob
+ * (`<base64(canonicalJSON(payload))>.<base64(signature)>`) so the buyer can
+ * paste it straight into the desktop app. The raw key is shown once here and
+ * is NOT recoverable later (only its sha256 hash is stored), so this email is
+ * the buyer's copy of record.
+ */
+export function sendLicenseIssuedEmail(params: {
+  buyerEmail: string
+  rawLicenseKey: string
+  licenseBlob: string
+  sku: string
+}): void {
+  const { buyerEmail, rawLicenseKey, licenseBlob, sku } = params
+  const isProd = env.NODE_ENV === "production"
+
+  if (!isProd) {
+    logger.info("License email not sent in development", { buyerEmail, sku })
+    return
+  }
+  if (!env.BREVO_API_KEY) {
+    logger.error("BREVO_API_KEY is required to send the license email in production", {
+      buyerEmail,
+      sku,
+    })
+    return
+  }
+  const apiKey = env.BREVO_API_KEY
+
+  void (async () => {
+    try {
+      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        signal: AbortSignal.timeout(10_000),
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": apiKey,
+        },
+        body: JSON.stringify({
+          sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
+          to: [{ email: buyerEmail }],
+          subject: "Your LyraShield Local license key",
+          htmlContent:
+            `<p>Thanks for your purchase. Here is your LyraShield Local license (${escapeHtml(sku)}).</p>` +
+            `<p><strong>License key</strong> (keep this safe — it is shown once and cannot be recovered):</p>` +
+            `<p><code>${escapeHtml(rawLicenseKey)}</code></p>` +
+            `<p><strong>Signed license file</strong> — paste this into the app when prompted:</p>` +
+            `<p><code style="word-break:break-all">${escapeHtml(licenseBlob)}</code></p>` +
+            `<p>You can also view and re-download your license from your LyraShield dashboard.</p>`,
+        }),
+      })
+      if (!res.ok) {
+        logger.error("Failed to send license email via Brevo", {
+          status: res.status,
+          buyerEmail,
+          sku,
+        })
+      }
+    } catch (err) {
+      logger.error("Exception while sending license email", {
+        error: err instanceof Error ? err.message : String(err),
+        buyerEmail,
+        sku,
+      })
+    }
+  })()
+}
+
 /**
  * Issue a signed license file from a License database row.
  *
@@ -376,9 +468,17 @@ export async function issueLicenseForPolarOrder(params: {
     throw error
   }
 
-  await issueSignedLicense(license.id, fallbackBuild)
+  const licenseFile = await issueSignedLicense(license.id, fallbackBuild)
 
-  // TODO(email): Send the license key + license file to buyerEmail via Brevo.
+  // Email the buyer their raw key + signed license file. Detached and
+  // non-blocking — a mail failure never fails or rolls back the issuance.
+  sendLicenseIssuedEmail({
+    buyerEmail,
+    rawLicenseKey: rawKey,
+    licenseBlob: encodeLicenseBlob(licenseFile),
+    sku,
+  })
+
   logger.info("License issued for Polar order", {
     licenseId: license.id,
     buyerEmail,
