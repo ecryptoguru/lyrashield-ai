@@ -21,7 +21,7 @@ export default async function AffiliateActivityPage({
   searchParams: Promise<{ tab?: string; page?: string }>
 }) {
   const session = await getCachedSession()
-  if (!session) return null
+  if (!session) redirect("/sign-in?callbackURL=/affiliates/activity")
 
   const affiliate = await prisma.affiliate.findUnique({
     where: { userId: session.userId },

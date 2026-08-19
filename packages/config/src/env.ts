@@ -242,6 +242,10 @@ const envSchema = z
     // Optional SPKI PEM public key for license verification. If unset, the
     // public key is derived at runtime from LICENSE_SIGNING_PRIVATE_KEY.
     LICENSE_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
+    // Latest published Local/Desktop build (semver). Resolved server-side at
+    // license issuance and renewal as perpetualFallbackBuild. Never accept a
+    // client-supplied currentBuild for this field.
+    LICENSE_PUBLISHED_BUILD: z.string().optional().or(z.literal("")),
     // JSON map of Local SKU → Polar product ID, e.g.
     // {"individual_launch":"prod_abc","individual_regular":"prod_def",...}
     POLAR_LOCAL_PRODUCT_IDS: z.string().optional().or(z.literal("")),

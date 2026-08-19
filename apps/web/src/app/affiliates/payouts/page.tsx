@@ -13,7 +13,7 @@ export const metadata = {
 
 export default async function AffiliatePayoutsPage() {
   const session = await getCachedSession()
-  if (!session) return null
+  if (!session) redirect("/sign-in?callbackURL=/affiliates/payouts")
 
   const affiliate = await prisma.affiliate.findUnique({
     where: { userId: session.userId },

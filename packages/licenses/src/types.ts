@@ -54,6 +54,16 @@ export interface LicenseFile extends LicensePayload {
 /** Fields used to construct the canonical signing input (payload only). */
 export type LicenseSigningInput = LicensePayload
 
+/**
+ * Detached wire format exchanged with the desktop client.
+ *
+ * `<base64(canonicalJSON(payload))>.<base64(ed25519 signature)>`
+ *
+ * The signature covers the decoded payload bytes exactly. The desktop must
+ * verify those received bytes and must not re-serialize the payload.
+ */
+export type LicenseBlob = string
+
 /** Result of verifying a license file's signature. */
 export interface LicenseVerificationResult {
   valid: boolean

@@ -479,4 +479,78 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       }
     })
   })
+
+  describe("License NULL-workspaceId (B-L08 + issue path)", () => {
+    const licenseId = `rls-lic-${suffix}`
+    const keyHash = `rls-keyhash-${suffix}`
+
+    afterAll(async () => {
+      await prisma.$executeRaw`DELETE FROM "LicenseKey" WHERE "licenseId" = ${licenseId}`
+      await prisma.$executeRaw`DELETE FROM "License" WHERE id = ${licenseId}`
+    })
+
+    it("lets the privileged client insert a NULL-workspaceId license and key", async () => {
+      // Privileged owner (prisma) bypasses RLS — this is how getSystemPrisma()
+      // issues a direct Polar purchase that is not yet linked to a workspace.
+      await prisma.$executeRaw`
+        INSERT INTO "License" (
+          id, "workspaceId", "ownerEmail", sku, "seatCount", "machineIds",
+          "updateEligibleUntil", "signingKeyId", signature, "issuedAt",
+          revoked, "createdAt", "updatedAt"
+        ) VALUES (
+          ${licenseId}, NULL, ${`rls-${suffix}@example.com`}, 'individual_launch', 1,
+          ARRAY[]::TEXT[], NOW() + interval '365 days', 'test', 'pending', NOW(),
+          false, NOW(), NOW()
+        )
+      `
+      await prisma.$executeRaw`
+        INSERT INTO "LicenseKey" (
+          id, "licenseId", "workspaceId", "keyHash", "issuedByProvider", "createdAt"
+        ) VALUES (
+          ${`rls-lk-${suffix}`}, ${licenseId}, NULL, ${keyHash},
+          ${`polar:rls-${suffix}`}, NOW()
+        )
+      `
+    })
+
+    it("hides the NULL-workspaceId license from a NOBYPASSRLS role with no context", async () => {
+      const count = await asWorkspace(null, async (tx) => {
+        const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+          SELECT count(*)::bigint AS count FROM "License" WHERE id = ${licenseId}
+        `
+        return Number(rows[0]?.count ?? 0)
+      })
+      expect(count).toBe(0)
+    })
+
+    it("hides the NULL-workspaceId license from a different workspace context", async () => {
+      const count = await asWorkspace(otherWorkspaceId, async (tx) => {
+        const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+          SELECT count(*)::bigint AS count FROM "License" WHERE id = ${licenseId}
+        `
+        return Number(rows[0]?.count ?? 0)
+      })
+      expect(count).toBe(0)
+    })
+
+    it("hides the NULL-workspaceId LicenseKey from a NOBYPASSRLS key-hash lookup", async () => {
+      // This is the issue-route bug: prisma.licenseKey.findFirst under
+      // NOBYPASSRLS cannot see a freshly issued NULL-workspaceId key, so
+      // webhook retries would mint a duplicate. The fix is getSystemPrisma().
+      const count = await asWorkspace(null, async (tx) => {
+        const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+          SELECT count(*)::bigint AS count FROM "LicenseKey" WHERE "keyHash" = ${keyHash}
+        `
+        return Number(rows[0]?.count ?? 0)
+      })
+      expect(count).toBe(0)
+    })
+
+    it("lets the privileged client read the NULL-workspaceId key back by hash", async () => {
+      const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "LicenseKey" WHERE "keyHash" = ${keyHash}
+      `
+      expect(rows).toHaveLength(1)
+    })
+  })
 })

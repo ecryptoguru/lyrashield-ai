@@ -1,0 +1,14 @@
+{
+  "comment": "Throwaway test-only ed25519 vector. Node signs canonicalJSON; Rust verifies the exact received bytes. Do not use in production.",
+  "payload": {
+    "sku": "individual_launch",
+    "seatCount": 1,
+    "machineIds": ["machine-golden-1"],
+    "updateEligibleUntil": "2036-01-01T00:00:00.000Z",
+    "perpetualFallbackBuild": "1.2.0"
+  },
+  "canonicalJson": "{\"machineIds\":[\"machine-golden-1\"],\"perpetualFallbackBuild\":\"1.2.0\",\"seatCount\":1,\"sku\":\"individual_launch\",\"updateEligibleUntil\":\"2036-01-01T00:00:00.000Z\"}",
+  "blob": "eyJtYWNoaW5lSWRzIjpbIm1hY2hpbmUtZ29sZGVuLTEiXSwicGVycGV0dWFsRmFsbGJhY2tCdWlsZCI6IjEuMi4wIiwic2VhdENvdW50IjoxLCJza3UiOiJpbmRpdmlkdWFsX2xhdW5jaCIsInVwZGF0ZUVsaWdpYmxlVW50aWwiOiIyMDM2LTAxLTAxVDAwOjAwOjAwLjAwMFoifQ==.f5rJ6rAhcL5+sCgngjFKKvpTz+IBeYuAgnwPyQArw/w9+AHRwIywUv5VYGdrx50ToUO0VVSJhFOOwU71F0UXCg==",
+  "pubkeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAFUhZPhbc8mVOrdGUKeiKkaIcodeNpnYkk1K37s8wWSw=\n-----END PUBLIC KEY-----\n",
+  "pubkeyHex": "1548593e16dcf2654eadd19429e88a91a21ca1d78da676249352b7eecf30592c"
+}

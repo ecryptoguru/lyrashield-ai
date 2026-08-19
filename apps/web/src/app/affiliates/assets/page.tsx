@@ -46,7 +46,7 @@ const ASSETS = [
 
 export default async function AffiliateAssetsPage() {
   const session = await getCachedSession()
-  if (!session) return null
+  if (!session) redirect("/sign-in?callbackURL=/affiliates/assets")
 
   const affiliate = await prisma.affiliate.findUnique({
     where: { userId: session.userId },

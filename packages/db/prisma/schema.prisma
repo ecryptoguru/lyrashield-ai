@@ -1758,6 +1758,8 @@ model Affiliate {
   subscriptions  AffiliateSubscription[]
   conversions    Conversion[]
   attributionTokens AttributionToken[]
+
+  @@index([reserveUntil])
 }
 
 model AffiliateProgram {
@@ -1927,4 +1929,7 @@ model PayoutItem {
   commission Commission @relation(fields: [commissionId], references: [id], onDelete: Restrict)
 
   @@index([commissionId])
+  @@index([payoutId])
+}
+])
 }

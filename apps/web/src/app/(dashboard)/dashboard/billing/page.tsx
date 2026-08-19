@@ -241,14 +241,10 @@ export default async function BillingPage() {
                 Set a monthly spend limit for overage minutes (beyond your included pool). Overage
                 is billed at $0.15/min.
               </p>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">
-                  Current limit:{" "}
-                  {billingAccount?.spendLimitCents
-                    ? `$${(billingAccount.spendLimitCents / 100).toFixed(2)}`
-                    : "Not set"}
-                </span>
-              </div>
+              <SpendLimitForm
+                workspaceId={workspaceId}
+                currentCents={billingAccount?.spendLimitCents ?? null}
+              />
             </CardContent>
           </Card>
         )}
@@ -262,6 +258,18 @@ export default async function BillingPage() {
             <CardContent>
               <Link
                 href="/billing/portal"
+                className={`${buttonVariants({ variant: "outline" })} w-full`}
+              >
+                Open Customer Portal
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  )
+}
+portal"
                 className={`${buttonVariants({ variant: "outline" })} w-full`}
               >
                 Open Customer Portal

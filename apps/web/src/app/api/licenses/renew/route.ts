@@ -2,12 +2,14 @@ import { z } from "zod"
 import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, type LocalSkuId } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
+import { encodeLicenseBlob } from "@lyrashield/licenses"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import {
   hashLicenseKey,
   issueSignedLicense,
   computeUpdateEligibleUntil,
   requireInternalApiKey,
+  resolvePublishedFallbackBuild,
 } from "../../../../lib/licenses/license-service"
 
 export const dynamic = "force-dynamic"
@@ -85,9 +87,11 @@ export async function POST(request: Request) {
         licenseId: license.id,
         orderId,
       })
+      const existingFile = await issueSignedLicense(license.id, license.perpetualFallbackBuild)
       return apiSuccess(
         {
-          license: await issueSignedLicense(license.id, license.perpetualFallbackBuild),
+          license: existingFile,
+          blob: encodeLicenseBlob(existingFile),
           updateEligibleUntil: license.updateEligibleUntil.toISOString(),
           alreadyRenewed: true,
         },
@@ -110,9 +114,16 @@ export async function POST(request: Request) {
 
     // The license row is workspace-less in this route's context, so the update
     // must use the system client (FORCE-RLS-scoped table, NOBYPASSRLS runtime).
+    // On renewal the keep-forever window advances to the latest published
+    // build at this moment. Never reuse a stale client-supplied build.
+    const fallbackBuild = resolvePublishedFallbackBuild()
+
     await systemPrisma.license.update({
       where: { id: license.id },
-      data: { updateEligibleUntil: newExpiry },
+      data: {
+        updateEligibleUntil: newExpiry,
+        perpetualFallbackBuild: fallbackBuild,
+      },
     })
 
     // B-L01: Audit log the renewal. AuditLog.workspaceId is a hard FK to
@@ -133,7 +144,7 @@ export async function POST(request: Request) {
         .catch(() => {})
     }
 
-    const licenseFile = await issueSignedLicense(license.id, license.perpetualFallbackBuild)
+    const licenseFile = await issueSignedLicense(license.id, fallbackBuild)
 
     logger.info("License renewed", {
       licenseId: license.id,
@@ -142,6 +153,19 @@ export async function POST(request: Request) {
     })
 
     return apiSuccess(
+      {
+        license: licenseFile,
+        blob: encodeLicenseBlob(licenseFile),
+        updateEligibleUntil: newExpiry.toISOString(),
+      },
+      200
+    )
+  } catch (error) {
+    logger.error("License renewal failed", { error: String(error) })
+    return apiError("INTERNAL_ERROR", "Failed to renew license", 500)
+  }
+}
+s(
       {
         license: licenseFile,
         updateEligibleUntil: newExpiry.toISOString(),

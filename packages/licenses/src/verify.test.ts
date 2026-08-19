@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest"
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { verify } from "node:crypto"
 import { verifyLicense, isBuildInstallable, type LicenseFile } from "./verify"
-import { signLicense } from "./sign"
+import { signLicense, canonicalJSON, signingBytes, encodeLicenseBlob, loadPublicKey } from "./sign"
 import { generateKeyPairSync } from "node:crypto"
 
 // Generate a test key pair for signing/verifying
@@ -152,5 +156,53 @@ describe("isBuildInstallable — B-L03 version comparison", () => {
       perpetualFallbackBuild: null,
     })
     expect(isBuildInstallable(license, "1.0.0")).toBe(false)
+  })
+})
+   const blob = encodeLicenseBlob(license)
+    const [payloadB64, sigB64] = blob.split(".")
+    expect(payloadB64).toBeTruthy()
+    expect(sigB64).toBe(license.signature)
+    expect(Buffer.from(payloadB64!, "base64").toString("utf8")).toBe(
+      canonicalJSON({
+        sku: license.sku,
+        seatCount: license.seatCount,
+        machineIds: license.machineIds,
+        updateEligibleUntil: license.updateEligibleUntil,
+        perpetualFallbackBuild: license.perpetualFallbackBuild,
+      })
+    )
+  })
+
+  it("golden vector: Node verifies the exact received payload bytes (no re-serialize)", () => {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const golden = JSON.parse(readFileSync(join(here, "golden-license.json"), "utf8")) as {
+      payload: {
+        sku: string
+        seatCount: number
+        machineIds: string[]
+        updateEligibleUntil: string
+        perpetualFallbackBuild: string
+      }
+      canonicalJson: string
+      blob: string
+      pubkeyPem: string
+    }
+    expect(canonicalJSON(golden.payload)).toBe(golden.canonicalJson)
+
+    const [payloadB64, sigB64] = golden.blob.split(".")
+    const receivedBytes = Buffer.from(payloadB64!, "base64")
+    expect(receivedBytes.toString("utf8")).toBe(golden.canonicalJson)
+
+    const ok = verify(
+      null,
+      receivedBytes,
+      loadPublicKey(golden.pubkeyPem),
+      Buffer.from(sigB64!, "base64")
+    )
+    expect(ok).toBe(true)
+
+    // Re-serializing in object-literal order must NOT be what we verify.
+    const reSerialized = Buffer.from(JSON.stringify(golden.payload), "utf8")
+    expect(Buffer.compare(reSerialized, receivedBytes)).not.toBe(0)
   })
 })
