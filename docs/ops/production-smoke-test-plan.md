@@ -424,7 +424,7 @@ the release record. Reconciliation jobs (`billing-reconciliation`,
   removed, journal logs vacuumed. Host disk freed from 32G to 21G used.
 - Second smoke scan `cmt0q9a28000501jnmn1t453t` against `octocat/Hello-World`
   completed successfully: `QUEUED -> PREFLIGHT (passed, 4 checks) -> RUNNING ->
-  COMPLETED`. Duration: 6m 20s. Model: `azure_ai/gpt-5.6-luna` at medium
+COMPLETED`. Duration: 6m 20s. Model: `azure_ai/gpt-5.6-luna` at medium
   reasoning. Cost: $0.048 (26 LLM requests, 86% cache hits). 0 findings.
 - Post-promotion worker logs show no `CONSUMER_WEDGED` or `read ETIMEDOUT`
   entries.
