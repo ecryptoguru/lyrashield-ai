@@ -269,10 +269,12 @@ the Key Vault secret and GitHub secret in the same change window.
 
 ## 6. Current gaps (do not paper over)
 
-1. **No Key Vault client in app code.** `license-service.ts` still resolves
-   `LICENSE_SIGNING_PRIVATE_KEY` from env; production Key Vault read is a
-   `TODO(production)`. Provisioning the vault secret now is correct; the code
-   change to consume it is outstanding.
+1. **Key Vault client.** `license-service.ts` resolves the signing key from
+   Azure Key Vault when `NODE_ENV=production` AND `LYRASHIELD_KEY_VAULT_NAME`
+   is set (managed identity via `DefaultAzureCredential`, cached per process,
+   fail-closed if the vault is unreachable); otherwise it falls back to the
+   `LICENSE_SIGNING_PRIVATE_KEY` env var (dev/CI). Ensure the app's managed
+   identity has `Get` on the vault secrets before relying on this in prod.
 2. **No Tauri release workflow.** No `release-tauri.yml`, no `apps/desktop`,
    no `tauri.conf.json`. The "release build fails closed without
    `LYRASHIELD_LICENSE_PUBKEY_HEX` / `LYRASHIELD_UPDATER_PUBKEY`" behavior

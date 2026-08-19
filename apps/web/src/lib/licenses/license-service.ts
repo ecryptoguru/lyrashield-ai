@@ -42,13 +42,77 @@ export function resolvePublishedFallbackBuild(): string | null {
 }
 
 /**
+ * Lazily-built Azure Key Vault secret client for the production signing key.
+ *
+ * The import of `@azure/keyvault-secrets` / `@azure/identity` is dynamic and
+ * deferred to first use so that local development and CI (which never set
+ * LYRASHIELD_KEY_VAULT_NAME) do not pay the import cost and never require the
+ * Azure SDK to be present in a meaningful way. The resolved client is cached
+ * for the process lifetime.
+ */
+let keyVaultSecretsClient: import("@azure/keyvault-secrets").SecretClient | null = null
+
+function getKeyVaultSecretsClient(): import("@azure/keyvault-secrets").SecretClient {
+  if (keyVaultSecretsClient) return keyVaultSecretsClient
+  const vaultName = env.LYRASHIELD_KEY_VAULT_NAME
+  if (!vaultName) {
+    throw new Error(
+      "LYRASHIELD_KEY_VAULT_NAME is not set — cannot resolve the signing key from Key Vault"
+    )
+  }
+  // Deferred require so the Azure SDK is only loaded when actually used.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SecretClient } =
+    require("@azure/keyvault-secrets") as typeof import("@azure/keyvault-secrets")
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { DefaultAzureCredential } = require("@azure/identity") as typeof import("@azure/identity")
+  keyVaultSecretsClient = new SecretClient(
+    `https://${vaultName}.vault.azure.net`,
+    new DefaultAzureCredential()
+  )
+  return keyVaultSecretsClient
+}
+
+/** Cached Key Vault private key PEM, fetched once per process. */
+let cachedKeyVaultPrivateKey: string | null = null
+
+/**
+ * Whether the production signing key is sourced from Azure Key Vault.
+ * True only in production AND when a vault name is configured; otherwise the
+ * env-provided `LICENSE_SIGNING_PRIVATE_KEY` (dev / CI) is used.
+ */
+function useKeyVaultForSigningKey(): boolean {
+  return env.NODE_ENV === "production" && Boolean(env.LYRASHIELD_KEY_VAULT_NAME)
+}
+
+/**
  * Resolve the ed25519 private key PEM for signing.
  *
- * In development the key is read from `LICENSE_SIGNING_PRIVATE_KEY`. In
- * production this should be fetched from Azure Key Vault — the TODO below
- * marks the integration point.
+ * Resolution order:
+ * 1. Production + `LYRASHIELD_KEY_VAULT_NAME` set → fetch the key from Azure
+ *    Key Vault via managed identity (DefaultAzureCredential). Cached per
+ *    process. Fails closed (throws) if the vault is unreachable or the secret
+ *    is missing — never falls back to env in production-with-vault, so a
+ *    mis-provisioned vault cannot silently sign with a stale env key.
+ * 2. Otherwise → the `LICENSE_SIGNING_PRIVATE_KEY` env var (dev / CI).
  */
-export function resolveSigningPrivateKey(): string {
+export async function resolveSigningPrivateKey(): Promise<string> {
+  if (useKeyVaultForSigningKey()) {
+    if (cachedKeyVaultPrivateKey) return cachedKeyVaultPrivateKey
+    const client = getKeyVaultSecretsClient()
+    const secretName = env.LICENSE_SIGNING_PRIVATE_KEY_SECRET_NAME
+    const secret = await client.getSecret(secretName)
+    const value = secret.value
+    if (!value || !value.includes("-----BEGIN")) {
+      throw new Error(
+        `Key Vault secret "${secretName}" is missing or not a PEM key. ` +
+          "Provision it per docs/ops/license-signing-keys-runbook.md."
+      )
+    }
+    cachedKeyVaultPrivateKey = value
+    return value
+  }
+
   const key = env.LICENSE_SIGNING_PRIVATE_KEY
   if (!key) {
     throw new Error(
@@ -56,7 +120,6 @@ export function resolveSigningPrivateKey(): string {
         "openssl genpkey -algorithm ed25519 -out license_private.pem"
     )
   }
-  // TODO(production): fetch from Azure Key Vault instead of env.
   return key
 }
 
@@ -83,13 +146,25 @@ export function resolveSigningKeyId(): string {
  * The server must NEVER accept a public key from the client — doing so would
  * allow an attacker to forge a license and supply their own key for verification.
  */
-export function resolveSigningPublicKey(): string {
+export async function resolveSigningPublicKey(): Promise<string> {
+  // 1. Explicit env var (supports key separation without a vault round-trip).
   if (env.LICENSE_SIGNING_PUBLIC_KEY) {
     return env.LICENSE_SIGNING_PUBLIC_KEY
   }
 
-  // Derive the public key from the private key.
-  const privateKeyPem = resolveSigningPrivateKey()
+  // 2. Production + vault configured → fetch the public key secret.
+  if (useKeyVaultForSigningKey()) {
+    const client = getKeyVaultSecretsClient()
+    const secretName = env.LICENSE_SIGNING_PUBLIC_KEY_SECRET_NAME
+    const secret = await client.getSecret(secretName)
+    if (secret.value && secret.value.includes("-----BEGIN")) {
+      return secret.value
+    }
+    // Fall through to deriving from the (vault-sourced) private key.
+  }
+
+  // 3. Derive the public key from the private key.
+  const privateKeyPem = await resolveSigningPrivateKey()
   const privateKey = createPrivateKey({ key: privateKeyPem, format: "pem" })
   const derivedPublicKey = createPublicKey(privateKey)
   return derivedPublicKey.export({ type: "spki", format: "pem" }).toString()
@@ -234,7 +309,7 @@ export async function issueSignedLicense(
     throw new Error("LICENSE_REVOKED")
   }
 
-  const privateKey = resolveSigningPrivateKey()
+  const privateKey = await resolveSigningPrivateKey()
   const signingKeyId = resolveSigningKeyId()
 
   const licenseFile = signLicense(
