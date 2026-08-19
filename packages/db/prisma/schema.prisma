@@ -28,6 +28,7 @@ model User {
   oauthaccesstokens  OauthAccessToken[]
   oauthconsents      OauthConsent[]
   deviceCodes        DeviceCode[]
+  affiliate          Affiliate?
 
   @@map("users")
 }
@@ -301,6 +302,7 @@ enum WorkspaceMode {
 
 enum WorkspacePlan {
   FREE
+  STARTER
   PRO
   TEAM
   AGENCY
@@ -497,6 +499,11 @@ model Workspace {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
+  graceUsedMs        Int       @default(0)
+  graceCycleStart    DateTime?
+  deepAllowed        Boolean   @default(false)
+  trialStartedAt     DateTime?
+
   members              WorkspaceMember[]
   projects             Project[]
   targets              Target[]
@@ -526,6 +533,11 @@ model Workspace {
   liveAiSafetySettings LiveAiSafetySettings?
   liveAiSafetyPlans    LiveAiSafetyPlan[]
   liveAiSafetyRuns     LiveAiSafetyRun[]
+  minutePacks          MinutePack[]
+  licenses             License[]
+  licenseActivations   LicenseActivation[]
+  licenseKeys          LicenseKey[]
+  syncCursors          SyncCursor[]
 }
 
 model WorkspaceMember {
@@ -1091,6 +1103,7 @@ model UsageRecord {
   idempotencyKey String?   @unique
   deletedAt      DateTime?
   createdAt      DateTime  @default(now())
+  cycleStart     DateTime?
 
   workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   referralReward ReferralAttribution? @relation("ReferralReward")
@@ -1098,6 +1111,8 @@ model UsageRecord {
   @@index([workspaceId])
   @@index([kind])
   @@index([workspaceId, createdAt])
+  @@index([workspaceId, cycleStart])
+  @@index([workspaceId, cycleStart, kind])
 }
 
 model ScoreSnapshot {
@@ -1340,6 +1355,13 @@ model BillingAccount {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  interval           String?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  canceledAt         DateTime?
+  region             String?
+  spendLimitCents    Int?
+
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([externalId])
@@ -1572,4 +1594,337 @@ model ControlEvidenceVersion {
 
   @@unique([controlEvidenceId, version])
   @@index([status, expiresAt])
+}
+
+// ─── Sprint 10 / Track A: Minute Packs ──────────────────────────────────────
+
+model MinutePack {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  provider         String
+  externalId       String
+  minutes          Int
+  remainingMinutes Int
+  purchasedAt      DateTime @default(now())
+  expiresAt        DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, externalId])
+  @@index([workspaceId, expiresAt])
+  @@index([workspaceId, expiresAt, remainingMinutes])
+}
+
+// ─── Sprint 10 / Track B: Local / Self-Hosted Licensing ─────────────────────
+
+model License {
+  id                    String    @id @default(cuid())
+  workspaceId           String?
+  ownerEmail            String
+  sku                   String
+  seatCount             Int
+  machineIds            String[]  @default([])
+  updateEligibleUntil   DateTime
+  perpetualFallbackBuild String?
+  signingKeyId          String
+  signature             String
+  issuedAt              DateTime
+  revoked               Boolean   @default(false)
+  revokedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  workspace    Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  activations  LicenseActivation[]
+  key          LicenseKey?
+  revocations  LicenseRevocation[]
+  syncCursors  SyncCursor[]
+
+  @@index([ownerEmail])
+  @@index([workspaceId])
+  @@index([workspaceId, sku])
+  @@index([ownerEmail, revoked])
+}
+
+model LicenseActivation {
+  id            String    @id @default(cuid())
+  licenseId     String
+  workspaceId   String?
+  machineId     String
+  activatedAt   DateTime  @default(now())
+  lastSeenAt    DateTime
+  deactivatedAt DateTime?
+
+  license   License    @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@unique([licenseId, machineId])
+  @@index([lastSeenAt])
+  @@index([workspaceId])
+}
+
+model LicenseKey {
+  id                String   @id @default(cuid())
+  licenseId         String   @unique
+  workspaceId       String?
+  keyHash           String   @unique
+  issuedByProvider  String
+  providerProductId String?
+  createdAt         DateTime @default(now())
+
+  license   License    @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+}
+
+model SyncCursor {
+  id                   String   @id @default(cuid())
+  workspaceId          String
+  licenseId            String
+  lastSyncedAt         DateTime
+  lastSyncedFindingId  String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  license   License   @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, licenseId])
+}
+
+model LicenseRevocation {
+  id             String   @id @default(cuid())
+  licenseId      String   @unique
+  revokedAt      DateTime
+  reason         String
+  revokedByKeyId String
+
+  license License @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+}
+
+// ─── Sprint 10 / Track C: Affiliate / Referral-Revenue Domain ───────────────
+// All monetary amounts use Decimal @db.Decimal(19,4). Never Float.
+// ReferralCode/ReferralAttribution (waitlist ladder) remain separate models.
+
+enum AffiliateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum CommissionStatus {
+  PENDING
+  AVAILABLE
+  RESERVED
+  PAID
+  REVERSED
+  EXPIRED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  CANCELED
+}
+
+model Affiliate {
+  id              String          @id @default(cuid())
+  userId          String          @unique
+  status          AffiliateStatus @default(PENDING)
+  promoCode       String?         @unique
+  baseRateBps     Int             @default(2500)
+  tierRateBps     Int             @default(3000)
+  tierThreshold   Int             @default(10)
+  activeReferrals Int             @default(0)
+  reservePct      Int             @default(25)
+  reserveUntil    DateTime?
+  payoutMethod    Json?
+  createdAt       DateTime        @default(now())
+  approvedAt      DateTime?
+  acceptedTermsAt DateTime?
+  termsVersion    String?
+
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links          AffiliateLink[]
+  clicks         Click[]
+  commissions    Commission[]
+  payouts        Payout[]
+  subscriptions  AffiliateSubscription[]
+  conversions    Conversion[]
+  attributionTokens AttributionToken[]
+}
+
+model AffiliateProgram {
+  id                    String   @id @default(cuid())
+  slug                  String   @unique @default("default")
+  attributionWindowDays Int      @default(60)
+  holdDays              Int      @default(30)
+  capMonths             Int      @default(12)
+  baseRateBps           Int      @default(2500)
+  tierRateBps           Int      @default(3000)
+  tierThreshold         Int      @default(10)
+  reservePct            Int      @default(25)
+  reserveDays           Int      @default(90)
+  minPayout             Decimal  @default(100) @db.Decimal(19, 4)
+  currency              String   @default("USD")
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model AffiliateLink {
+  id          String   @id @default(cuid())
+  affiliateId String
+  code        String   @unique
+  campaign    String?
+  subid       String?
+  createdAt   DateTime @default(now())
+
+  affiliate Affiliate        @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  clicks    Click[]
+  attributionTokens AttributionToken[]
+
+  @@index([affiliateId])
+}
+
+model Click {
+  id          String   @id @default(cuid())
+  linkId      String
+  affiliateId String
+  visitorId   String?
+  landingUrl  String?
+  referrer    String?
+  ipHash      String?
+  userAgent   String?
+  subid       String?
+  utm         Json?
+  clickedAt   DateTime @default(now())
+
+  link      AffiliateLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  affiliate Affiliate     @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  attributionTokens AttributionToken[]
+
+  @@index([affiliateId, clickedAt])
+  @@index([visitorId, clickedAt])
+}
+
+model AttributionToken {
+  id          String   @id @default(cuid())
+  tokenHash   String   @unique
+  affiliateId String
+  clickId     String
+  linkId      String
+  expiresAt   DateTime
+  consumed     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  affiliate Affiliate     @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  click     Click         @relation(fields: [clickId], references: [id], onDelete: Cascade)
+  link      AffiliateLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([linkId])
+}
+
+model AffiliateSubscription {
+  id                     String   @id @default(cuid())
+  providerSubscriptionId String   @unique
+  provider               String
+  customerId             String
+  affiliateId            String
+  firstPaidAt            DateTime
+  capEndsAt              DateTime
+  isActive               Boolean  @default(true)
+
+  affiliate  Affiliate   @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  conversions Conversion[]
+}
+
+model Conversion {
+  id                  String   @id @default(cuid())
+  externalId          String
+  idempotencyKey      String   @unique
+  subscriptionId      String?
+  affiliateId         String
+  grossAmount         Decimal  @db.Decimal(19, 4)
+  commissionableAmount Decimal @db.Decimal(19, 4)
+  currency            String   @db.VarChar(3)
+  method              String
+  promoCode           String?
+  subid               String?
+  occurredAt          DateTime
+
+  affiliate     Affiliate            @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  subscription  AffiliateSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  commissions   Commission[]
+
+  @@unique([externalId, affiliateId])
+  @@index([affiliateId, occurredAt])
+}
+
+model Commission {
+  id            String           @id @default(cuid())
+  conversionId  String
+  affiliateId   String
+  rateBps       Int
+  amount        Decimal          @db.Decimal(19, 4)
+  currency      String           @db.VarChar(3)
+  status        CommissionStatus @default(PENDING)
+  earnedAt      DateTime         @default(now())
+  availableAt   DateTime?
+  reversalOfId  String?
+  reserveReleasedAt DateTime?
+  reserveReleasedAmount Decimal? @db.Decimal(19, 4)
+
+  conversion Conversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+  affiliate  Affiliate  @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  // A commission can have up to two payout items: the main payout, and a
+  // later reserve-release payout for the reserved portion held back during
+  // the new-affiliate reserve period.
+  payoutItems PayoutItem[]
+  @@unique([conversionId, affiliateId])
+  @@index([affiliateId, status, availableAt])
+  @@index([status, availableAt])
+}
+
+model Payout {
+  id               String       @id @default(cuid())
+  affiliateId      String
+  amount           Decimal      @db.Decimal(19, 4)
+  currency         String       @db.VarChar(3)
+  status           PayoutStatus @default(PENDING)
+  provider         String?
+  providerPayoutId String?      @unique
+  idempotencyKey   String       @unique
+  requestedAt      DateTime     @default(now())
+  paidAt           DateTime?
+  failureCode      String?
+  isReserveRelease Boolean       @default(false)
+
+  affiliate Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  items     PayoutItem[]
+
+  @@index([status, requestedAt])
+}
+
+model PayoutItem {
+  id           String  @id @default(cuid())
+  payoutId     String
+  // A commission can have up to two payout items: the main payout, and a
+  // later reserve-release payout for the reserved portion that was held back
+  // during the new-affiliate reserve period. Idempotency is enforced by the
+  // release job via Commission.reserveReleasedAt, not by a unique constraint
+  // here.
+  commissionId String
+  amount       Decimal @db.Decimal(19, 4)
+
+  payout    Payout    @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  commission Commission @relation(fields: [commissionId], references: [id], onDelete: Restrict)
+
+  @@index([commissionId])
 }

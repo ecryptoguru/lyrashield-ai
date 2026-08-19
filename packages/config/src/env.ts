@@ -205,9 +205,64 @@ const envSchema = z
 
     // Billing (Sprint 10)
     POLAR_ACCESS_TOKEN: z.string().optional().or(z.literal("")),
+    POLAR_ORG_ID: z.string().optional().or(z.literal("")),
     POLAR_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
+    POLAR_WEBHOOK_TOLERANCE_MS: z.coerce.number().int().positive().max(3_600_000).default(300_000),
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
+    RAZORPAY_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
+    BILLING_GEO_IP_HEADER: z
+      .string()
+      .optional()
+      .or(z.literal("").or(z.literal("cf-connecting-ip"))),
+    // A-L02: Configurable USD→INR conversion rate for Razorpay pricing.
+    // Defaults to 100 per the founder-confirmed spec ("INR = USD x 100"), which
+    // is the same multiplier the pricing catalog and marketing page use for
+    // Cloud plan INR prices (e.g. $29 -> ₹2,900). Keeping the minute-pack path
+    // on the same multiplier avoids undercharging India buyers relative to the
+    // advertised plan pricing. Override with a live FX rate only if the founder
+    // explicitly moves away from the flat x100 convention.
+    BILLING_USD_INR_RATE: z.coerce.number().positive().min(50).max(150).default(100),
+
+    // Local / Desktop Licensing (Track B)
+    // ed25519 PKCS#8 PEM private key for signing offline license files.
+    // In production this is fetched from Azure Key Vault at runtime; in dev it
+    // is provided directly. Generate with:
+    //   openssl genpkey -algorithm ed25519 -out license_private.pem
+    LICENSE_SIGNING_PRIVATE_KEY: z
+      .string()
+      .optional()
+      .or(z.literal(""))
+      .refine(
+        (val) => !val || val.includes("-----BEGIN"),
+        "LICENSE_SIGNING_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
+      ),
+    // Identifier of the current signing key (for rotation / revocation lists).
+    LICENSE_SIGNING_KEY_ID: z.string().optional().or(z.literal("")),
+    // Optional SPKI PEM public key for license verification. If unset, the
+    // public key is derived at runtime from LICENSE_SIGNING_PRIVATE_KEY.
+    LICENSE_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
+    // JSON map of Local SKU → Polar product ID, e.g.
+    // {"individual_launch":"prod_abc","individual_regular":"prod_def",...}
+    POLAR_LOCAL_PRODUCT_IDS: z.string().optional().or(z.literal("")),
+    // Maximum findings accepted per sync batch from a Local client.
+    LYRASHIELD_SYNC_MAX_FINDINGS_PER_BATCH: z.coerce.number().int().min(1).max(5000).default(500),
+    // Internal API key for server-to-server routes (license issue/renew).
+    // When set, callers must send `X-LyraShield-Internal-Key` matching this
+    // value. Leave unset in dev/test to allow unauthenticated internal calls.
+    LYRASHIELD_INTERNAL_API_KEY: z.string().optional().or(z.literal("")),
+
+    // Affiliate / Partner Program (Track C)
+    RAZORPAYX_API_KEY: z.string().optional().or(z.literal("")),
+    RAZORPAYX_API_SECRET: z.string().optional().or(z.literal("")),
+    RAZORPAYX_ACCOUNT_NUMBER: z.string().optional().or(z.literal("")),
+    PAYONEER_API_KEY: z.string().optional().or(z.literal("")),
+    PAYONEER_API_SECRET: z.string().optional().or(z.literal("")),
+    PAYONEER_PARTNER_ID: z.string().optional().or(z.literal("")),
+    AFFILIATE_DEFAULT_PROGRAM_SLUG: z.string().optional().or(z.literal("")).default("default"),
+    AFFILIATE_COOKIE_DOMAIN: z.string().optional().or(z.literal("")).default(".lyrashieldai.com"),
+    AFFILIATE_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().positive().max(365).default(60),
+    AFFILIATE_PAYOUT_MIN_CENTS: z.coerce.number().int().positive().default(10000),
 
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),

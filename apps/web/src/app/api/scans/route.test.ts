@@ -56,6 +56,11 @@ vi.mock("../../../lib/queue", () => ({
   ScanWorkerUnavailableError: class ScanWorkerUnavailableError extends Error {},
 }))
 
+vi.mock("@lyrashield/billing", () => ({
+  assertScanAllowed: vi.fn().mockResolvedValue({ allowed: true }),
+  assertTargetAllowed: vi.fn().mockResolvedValue({ allowed: true }),
+}))
+
 import { POST, GET } from "./route"
 import { prisma, createScan, listScans, updateScanStatus } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -65,6 +70,7 @@ import {
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
 import { checkFreeUrlScanRateLimit } from "../../../lib/rate-limit"
+import { assertScanAllowed } from "@lyrashield/billing"
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost:3000/api/scans", {
@@ -118,6 +124,7 @@ describe("POST /api/scans", () => {
       id: "proof-1",
     } as never)
     vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(assertScanAllowed).mockResolvedValue({ allowed: true } as never)
   })
 
   it("returns 400 for invalid JSON body", async () => {

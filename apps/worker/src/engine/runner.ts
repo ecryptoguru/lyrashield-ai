@@ -441,7 +441,8 @@ async function runEngineProcess(
   shouldCancel?: () => Promise<boolean>,
   readProgressFingerprint?: () => Promise<string | null>,
   maxBudgetUsd?: number,
-  readSpendUsd?: () => Promise<number | null>
+  readSpendUsd?: () => Promise<number | null>,
+  onAgentLoopTick?: (elapsedMs: number) => void
 ): Promise<{
   exitCode: number
   timedOut: boolean
@@ -526,6 +527,11 @@ async function runEngineProcess(
           if (nextFingerprint && nextFingerprint !== progressFingerprint) {
             progressFingerprint = nextFingerprint
             lastProgressAt = Date.now()
+            // Sprint 10: emit wall-clock duration signal to the metering hook
+            // on each agent-loop tick. Per D1: wall-clock, NOT active-loop.
+            if (onAgentLoopTick) {
+              onAgentLoopTick(Date.now() - startedAt)
+            }
           } else if (Date.now() - lastProgressAt >= ENGINE_PROGRESS_STALL_MS) {
             timedOut = true
             timeoutReason = "INACTIVITY"
@@ -943,7 +949,8 @@ export async function runEngine(
   config: ScanConfig,
   scanId: string,
   timeoutMs: number | null = null,
-  shouldCancel?: () => Promise<boolean>
+  shouldCancel?: () => Promise<boolean>,
+  onAgentLoopTick?: (elapsedMs: number) => void
 ): Promise<EngineRunResult> {
   const cmd = buildEngineCommand(config)
   const profile = resolveEngineProfile(config.mode)
@@ -976,7 +983,8 @@ export async function runEngine(
       shouldCancel,
       () => readEngineProgressFingerprint(absWorkDir, scanId),
       config.maxBudgetUsd,
-      () => readEngineSpendUsd(absWorkDir, scanId)
+      () => readEngineSpendUsd(absWorkDir, scanId),
+      onAgentLoopTick
     )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code

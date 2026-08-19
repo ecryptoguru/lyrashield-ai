@@ -2,6 +2,7 @@ import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
+import { recordAgentMinutes, getUsageBalance, enterGrace, debitOverage } from "@lyrashield/billing"
 import {
   buildVibeSecurityInstruction,
   summarizeVibeSecurityCoverage,
@@ -791,7 +792,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           },
           scanId,
           engineTimeoutMs,
-          isScanCancelled
+          isScanCancelled,
+          // Sprint 10: metering hook — called on each agent-loop tick with
+          // wall-clock elapsed ms. The hook is a no-op for now; the final
+          // metering is done after the engine completes. This signal can be
+          // used for real-time balance checks in a future iteration.
+          (_elapsedMs: number) => {
+            // Real-time metering hook — intentionally empty for now.
+            // The final wall-clock duration is recorded after the engine exits.
+          }
         )
       } else if (target.type === "WEB_APP" || target.type === "API") {
         engineResult = {
@@ -829,6 +838,61 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           "External engine skipped for URL targets until it supports pinned transport",
           { targetType: target.type }
         )
+      }
+
+      // ─── Sprint 10: Agent-minute metering (wall-clock) ──────────────────
+      // Record wall-clock agent minutes consumed by the engine run.
+      // Per D1 constraint: minutes are wall-clock, NOT "active-loop" or "thinking time".
+      // Deep/Custom scans consume 3× minutes (applied inside recordAgentMinutes).
+      const engineWallClockMs = Date.now() - scanStartedAtMs
+      try {
+        const billingAccount = await prisma.billingAccount.findUnique({
+          where: { workspaceId },
+          select: { currentPeriodStart: true },
+        })
+        await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
+          mode,
+          phase: "engine_run",
+          cycleStart: billingAccount?.currentPeriodStart ?? undefined,
+        })
+
+        // Check balance after metering — if exhausted, enter grace
+        const balance = await getUsageBalance(workspaceId)
+        if (balance.totalRemaining <= 0) {
+          // Check if overage is available (Team plan with spend limit)
+          const acct = await prisma.billingAccount.findUnique({
+            where: { workspaceId },
+            select: { currentPlan: true, spendLimitCents: true },
+          })
+          const overageAvailable = acct?.currentPlan === "TEAM" && (acct.spendLimitCents ?? 0) > 0
+
+          if (overageAvailable) {
+            // Debit overage for the remaining engine time
+            const overageMinutes = Math.ceil(engineWallClockMs / 60_000)
+            await debitOverage(workspaceId, overageMinutes, scanId, "engine_overage")
+          } else {
+            // Enter grace period (15min cap)
+            const graceResult = await enterGrace(workspaceId, engineWallClockMs)
+            if (!graceResult.shouldContinue) {
+              // Grace exceeded — stop the scan
+              await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+                errorCategory: "BUDGET_EXCEEDED",
+                errorMessage: "Agent-minute balance exhausted and grace period exceeded",
+              })
+              return {
+                status: "failed",
+                errorCategory: "BUDGET_EXCEEDED",
+                errorMessage: "Agent-minute balance exhausted and grace period exceeded",
+              }
+            }
+          }
+        }
+      } catch (meterError) {
+        log.warn("Failed to record agent minutes", {
+          scanId,
+          error: meterError instanceof Error ? meterError.message : String(meterError),
+        })
+        // Non-fatal: don't block the scan if metering fails
       }
 
       // Persist usage before deterministic scanners or finding persistence can
