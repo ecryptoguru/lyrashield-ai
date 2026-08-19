@@ -53,7 +53,37 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
-    const { licenseFile } = parsed.data
+    const { licenseFile, licenseKey, licenseId } = parsed.data
+
+    // RISK-B1: revoke is not expiry. Perpetual-fallback never applies to a
+    // revoked license. Look the row up by key hash (or id) via the system
+    // client — NULL-workspaceId licenses are FORCE-RLS-scoped.
+    if (licenseKey || licenseId) {
+      const systemPrisma = getSystemPrisma()
+      const row = licenseKey
+        ? await systemPrisma.licenseKey.findUnique({
+            where: { keyHash: hashLicenseKey(licenseKey) },
+            include: { license: { select: { id: true, revoked: true } } },
+          })
+        : await systemPrisma.license.findUnique({
+            where: { id: licenseId! },
+            select: { id: true, revoked: true },
+          })
+      const license = licenseKey
+        ? (row as { license?: { id: string; revoked: boolean } } | null)?.license
+        : (row as { id: string; revoked: boolean } | null)
+      if (license?.revoked) {
+        return apiSuccess(
+          {
+            valid: false,
+            updateEligible: false,
+            revoked: true,
+            reason: "LICENSE_REVOKED",
+          },
+          200
+        )
+      }
+    }
 
     // C-08: Always use the server's own public key — never trust a key
     // supplied by the client. An attacker could forge a license and provide
@@ -78,6 +108,7 @@ export async function POST(request: Request) {
     return apiSuccess(
       {
         valid: true,
+        revoked: false,
         updateEligible: result.updateEligible,
         reason: result.reason,
         // Include SKU and expiry for client-side update prompts, but not

@@ -38,7 +38,7 @@ vi.mock("./usage/balance", () => ({
 
 vi.mock("./trial", () => ({
   getTrialState: vi.fn().mockResolvedValue({ isExpired: false }),
-  blockOnExpiry: vi.fn(),
+  blockOnExpiry: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock("./grace", () => ({
