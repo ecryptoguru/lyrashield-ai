@@ -235,12 +235,12 @@ test.describe("Affiliate lifecycle", () => {
 
     // Confirm the affiliate is APPROVED in the DB before asserting the
     // dashboard renders (the dashboard redirects to /affiliates/apply unless
-    // the signed-in user is an APPROVED affiliate).
+    // the signed-in user is an APPROVED affiliate). Query by the affiliate's
+    // id directly (not by userId) so the diagnostic doesn't depend on the
+    // session-userId ↔ User.id mapping.
     await expect
       .poll(async () => {
-        const u = await prisma.user.findUnique({ where: { email: affiliateEmail } })
-        if (!u) return null
-        const a = await prisma.affiliate.findUnique({ where: { userId: u.id } })
+        const a = await prisma.affiliate.findUnique({ where: { id: affiliate.id } })
         return a?.status ?? null
       })
       .toBe("APPROVED")
