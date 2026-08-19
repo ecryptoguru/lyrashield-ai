@@ -4,7 +4,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { verify } from "node:crypto"
 import { verifyLicense, isBuildInstallable, type LicenseFile } from "./verify"
-import { signLicense, canonicalJSON, signingBytes, encodeLicenseBlob, loadPublicKey } from "./sign"
+import { signLicense, canonicalJSON, encodeLicenseBlob, loadPublicKey } from "./sign"
 import { generateKeyPairSync } from "node:crypto"
 
 // Generate a test key pair for signing/verifying
