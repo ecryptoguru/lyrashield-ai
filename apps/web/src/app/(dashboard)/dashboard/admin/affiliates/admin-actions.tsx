@@ -57,9 +57,13 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
         {props.affiliateId && !props.showSuspend && !props.showReactivate && (
           <>
             <button
-              onClick={() => action("approve", { action: "approve", affiliateId: props.affiliateId })}
+              onClick={() =>
+                action("approve", { action: "approve", affiliateId: props.affiliateId })
+              }
               disabled={loading === "approve"}
-              className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              className={
+            "rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          }
             >
               Approve
             </button>
@@ -72,7 +76,9 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
                 )
               }
               disabled={loading === "reject"}
-              className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              className={
+                "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              }
             >
               Reject
             </button>
@@ -89,7 +95,9 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
               )
             }
             disabled={loading === "suspend"}
-            className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            className={
+            "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+          }
           >
             Suspend
           </button>
@@ -101,7 +109,9 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
               action("reactivate", { action: "approve", affiliateId: props.affiliateId })
             }
             disabled={loading === "reactivate"}
-            className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            className={
+            "rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          }
           >
             Reactivate
           </button>
@@ -113,7 +123,9 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
               action("approvePayout", { action: "approvePayout", payoutId: props.payoutId })
             }
             disabled={loading === "approvePayout"}
-            className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            className={
+            "rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          }
           >
             Approve Payout
           </button>
@@ -158,7 +170,9 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
           <button
             type="submit"
             disabled={loading === "tierOverride"}
-            className="rounded-md bg-slate-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+            className={
+            "rounded-md bg-slate-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          }
           >
             Save rates
           </button>
@@ -174,6 +188,11 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
         <p className="text-xs text-green-700" role="status">
           {message}
         </p>
+      )}
+    </div>
+  )
+}
+</p>
       )}
     </div>
   )

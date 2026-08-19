@@ -11,7 +11,7 @@ interface SpendLimitFormProps {
 
 /**
  * Team-only overage spend-limit editor. Posts integer cents to
- * POST /api/billing/spend-limit?workspaceId=… — the API already exists;
+ * POST /api/billing/spend-limit?workspaceId=… — the API already exists
  * this form was the missing client.
  */
 export function SpendLimitForm({ workspaceId, currentCents }: SpendLimitFormProps) {
@@ -36,11 +36,14 @@ export function SpendLimitForm({ workspaceId, currentCents }: SpendLimitFormProp
     }
     const cents = Math.round(parsed * 100)
     try {
-      const res = await fetch(`/api/billing/spend-limit?workspaceId=${encodeURIComponent(workspaceId)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cents }),
-      })
+      const res = await fetch(
+        `/api/billing/spend-limit?workspaceId=${encodeURIComponent(workspaceId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cents }),
+        }
+      )
       const data = (await res.json()) as { success?: boolean; error?: { message?: string } }
       if (!res.ok || !data.success) {
         setError(data.error?.message ?? "Could not update the spend limit.")

@@ -261,10 +261,19 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        className={
+          "w-full rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        }
       >
         {loading ? "Submitting…" : "Submit Application"}
       </button>
     </form>
+  )
+}
+ </button>
+    </form>
+  )
+}
+ </form>
   )
 }
