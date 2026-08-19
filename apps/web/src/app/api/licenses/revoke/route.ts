@@ -54,6 +54,13 @@ export async function POST(request: Request) {
     // or for further sync. The offline client verifies the signature locally
     // (grace), so nullifying the signature forces re-verification which will
     // fail. Sync cursors are deleted so no further findings can be synced.
+    //
+    // POLICY (founder-confirmed 2026-08-19): revocation is a HARD STOP. It
+    // overrides the perpetual-fallback guarantee — `perpetualFallbackBuild`
+    // only ever governs *update eligibility after a license lapses*, never
+    // "keep running after an explicit revocation." A revoked license must not
+    // run any build, including its fallback build. Do not soften this without
+    // an explicit founder decision reversing it.
     await prisma.$transaction(async (tx) => {
       await tx.license.update({
         where: { id: licenseId },
