@@ -3,6 +3,7 @@ import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { type LocalSkuId, teamVolumeDiscountPct, teamOrderTotal } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { encodeLicenseBlob } from "@lyrashield/licenses"
 import {
   generateLicenseKey,
   hashLicenseKey,
@@ -11,6 +12,7 @@ import {
   parseLocalProductIds,
   requireInternalApiKey,
   resolvePublishedFallbackBuild,
+  sendLicenseIssuedEmail,
   validateSeatCountForSku,
 } from "../../../../lib/licenses/license-service"
 
@@ -133,8 +135,16 @@ export async function POST(request: Request) {
 
     const licenseFile = await issueSignedLicense(license.id, fallbackBuild)
 
-    // TODO(email): Send the license key + license file to buyerEmail via Brevo.
-    logger.info("License issued — email pending", {
+    // Email the buyer their raw key + signed license file. Detached and
+    // non-blocking — a mail failure never fails the issuance response.
+    sendLicenseIssuedEmail({
+      buyerEmail,
+      rawLicenseKey: rawKey,
+      licenseBlob: encodeLicenseBlob(licenseFile),
+      sku,
+    })
+
+    logger.info("License issued", {
       licenseId: license.id,
       buyerEmail,
       sku,
