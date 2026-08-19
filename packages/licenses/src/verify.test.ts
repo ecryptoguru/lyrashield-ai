@@ -158,7 +158,11 @@ describe("isBuildInstallable — B-L03 version comparison", () => {
     expect(isBuildInstallable(license, "1.0.0")).toBe(false)
   })
 })
-   const blob = encodeLicenseBlob(license)
+
+describe("license wire format — detached blob", () => {
+  it("encodeLicenseBlob is payloadB64.sigB64 over the signed canonical bytes", () => {
+    const license = makeSignedLicense({ perpetualFallbackBuild: "1.2.0" })
+    const blob = encodeLicenseBlob(license)
     const [payloadB64, sigB64] = blob.split(".")
     expect(payloadB64).toBeTruthy()
     expect(sigB64).toBe(license.signature)
