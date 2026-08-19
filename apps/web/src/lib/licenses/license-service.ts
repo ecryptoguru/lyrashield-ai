@@ -61,10 +61,8 @@ function getKeyVaultSecretsClient(): import("@azure/keyvault-secrets").SecretCli
     )
   }
   // Deferred require so the Azure SDK is only loaded when actually used.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { SecretClient } =
     require("@azure/keyvault-secrets") as typeof import("@azure/keyvault-secrets")
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { DefaultAzureCredential } = require("@azure/identity") as typeof import("@azure/identity")
   keyVaultSecretsClient = new SecretClient(
     `https://${vaultName}.vault.azure.net`,
@@ -81,7 +79,7 @@ let cachedKeyVaultPrivateKey: string | null = null
  * True only in production AND when a vault name is configured; otherwise the
  * env-provided `LICENSE_SIGNING_PRIVATE_KEY` (dev / CI) is used.
  */
-function useKeyVaultForSigningKey(): boolean {
+function isProductionKeyVault(): boolean {
   return env.NODE_ENV === "production" && Boolean(env.LYRASHIELD_KEY_VAULT_NAME)
 }
 
@@ -97,7 +95,7 @@ function useKeyVaultForSigningKey(): boolean {
  * 2. Otherwise → the `LICENSE_SIGNING_PRIVATE_KEY` env var (dev / CI).
  */
 export async function resolveSigningPrivateKey(): Promise<string> {
-  if (useKeyVaultForSigningKey()) {
+  if (isProductionKeyVault()) {
     if (cachedKeyVaultPrivateKey) return cachedKeyVaultPrivateKey
     const client = getKeyVaultSecretsClient()
     const secretName = env.LICENSE_SIGNING_PRIVATE_KEY_SECRET_NAME
@@ -153,7 +151,7 @@ export async function resolveSigningPublicKey(): Promise<string> {
   }
 
   // 2. Production + vault configured → fetch the public key secret.
-  if (useKeyVaultForSigningKey()) {
+  if (isProductionKeyVault()) {
     const client = getKeyVaultSecretsClient()
     const secretName = env.LICENSE_SIGNING_PUBLIC_KEY_SECRET_NAME
     const secret = await client.getSecret(secretName)
