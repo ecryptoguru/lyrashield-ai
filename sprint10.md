@@ -15,6 +15,7 @@ Dev-ready brief for the LyraShield Developer Agent: Sprint 10 billing + usage me
 Build on this foundation; do not recreate it.
 
 **Prisma schema (packages/db):**
+
 - `Workspace.plan : WorkspacePlan` (default `FREE`) and `Workspace.billingStatus : String?`.
 - `enum WorkspacePlan { FREE, PRO, TEAM, AGENCY, BUSINESS, ENTERPRISE }` — **no `STARTER`; add it (see Plan Definitions & Mapping).**
 - `model BillingAccount { workspaceId @unique, provider @default("polar"), externalId?, status @default("free"), currentPlan @default(FREE), trialEndsAt? }`.
@@ -40,15 +41,16 @@ Build on this foundation; do not recreate it.
 Define plans as data (a `plans.ts` in `packages/billing`), keyed to `WorkspacePlan`. Each plan declares: monthly + annual price (USD + INR), protected-target cap, agent-minute monthly pool, scan-depth allowance, feature gates, and sales motion.
 
 **✅ Plan mapping — RESOLVED:** the live `WorkspacePlan` enum is `FREE, PRO, TEAM, AGENCY, BUSINESS, ENTERPRISE`. **Add `STARTER`** via an additive enum migration (`ALTER TYPE "WorkspacePlan" ADD VALUE 'STARTER'`; non-transactional, deployed before code references it). Mapping: self-serve checkout `STARTER→$29, PRO→$99, TEAM→$299`; contact-led top tier (from $499) maps to `AGENCY` (internal only, no checkout). `BUSINESS`/`ENTERPRISE` reserved for Phase 4.
+
 > The `FREE` enum value now represents the **14-day trial state** (not a permanent free tier). See Trial section.
 
-| Plan | Monthly (USD/INR) | Annual (USD/INR, prepaid) | Targets | Agent-min/mo | Scan depth | Sales motion |
-|---|---|---|---|---|---|---|
-| TRIAL (14-day) | $0 | — | 1–2 | **100** | **Standard/Quick only — NO Deep** | self-serve (sign up, no card) |
-| STARTER | $29 / ₹2,900 | $295 / ₹29,500 (15% off) | 3 | **300** | **Standard only — NO Deep** | self-serve checkout |
-| PRO | $99 / ₹9,900 | $950 / ₹95,000 (20% off) | 10 | **1,200** | Standard + **Deep** | self-serve checkout |
-| TEAM | $299 / ₹29,900 | $2,690 / ₹2,69,000 (25% off) | 30 | **4,000** | Full (incl. Deep) | self-serve checkout |
-| AGENCY / ENTERPRISE | **from $499** | custom | custom | custom | Full | **contact-led — no checkout** |
+| Plan                | Monthly (USD/INR) | Annual (USD/INR, prepaid)    | Targets | Agent-min/mo | Scan depth                        | Sales motion                  |
+| ------------------- | ----------------- | ---------------------------- | ------- | ------------ | --------------------------------- | ----------------------------- |
+| TRIAL (14-day)      | $0                | —                            | 1–2     | **100**      | **Standard/Quick only — NO Deep** | self-serve (sign up, no card) |
+| STARTER             | $29 / ₹2,900      | $295 / ₹29,500 (15% off)     | 3       | **300**      | **Standard only — NO Deep**       | self-serve checkout           |
+| PRO                 | $99 / ₹9,900      | $950 / ₹95,000 (20% off)     | 10      | **1,200**    | Standard + **Deep**               | self-serve checkout           |
+| TEAM                | $299 / ₹29,900    | $2,690 / ₹2,69,000 (25% off) | 30      | **4,000**    | Full (incl. Deep)                 | self-serve checkout           |
+| AGENCY / ENTERPRISE | **from $499**     | custom                       | custom  | custom       | Full                              | **contact-led — no checkout** |
 
 **Deep-scan gating (founder-confirmed 2026-08-15):** Deep/Custom scans are **Pro and above only** — **not** available on Trial or Starter. Enforce at scan creation (the scan-depth gate).
 
@@ -65,16 +67,19 @@ Define plans as data (a `plans.ts` in `packages/billing`), keyed to `WorkspacePl
 The trial is the **only** free Cloud surface (no permanent free tier). It's the front door.
 
 **Terms:**
+
 - **14 days**, full-featured on **Standard/Quick** (real scans, findings, fix proposals, reports, MCP, GitHub Action, dashboard). **No credit card required.**
 - **100 agent-minutes**, hard-capped (≈ $0.82 COGS at the corrected rate). Protected targets: small cap (1–2). **No Deep/Custom scans** (Deep is Pro+).
 - **No auto-convert, no card on file** → no surprise charges. On trial end or cap, workspace → read-only/locked + clear upgrade CTA.
 
 **Trial → paid conversion (full-feature on Standard/Quick; convert on limits + clock):**
+
 - Lever = the **100-min / target cap + the 14-day clock**, plus **Deep scans** as the depth-gated Pro feature.
 - The platform features (history, team, continuous monitoring, CI gating) are the reason to stay.
 - Contextual upgrade prompts at trial midpoint, 80% minutes, 2nd-target attempt, a Deep-scan attempt (→ "Deep is a Pro feature"), and expiry. Honest, never dark-pattern.
 
 **Trial abuse controls (no card on file):**
+
 - **Email verification enforced** (Brevo flip) before trial use.
 - 100-min hard cap, target cap, scan-frequency throttle, no Deep.
 - Disposable-email / proxy / device-fingerprint signals flagged; one active trial per user/org.
@@ -87,7 +92,9 @@ The trial is the **only** free Cloud surface (no permanent free tier). It's the 
 ## Usage Metering Spec — protected targets + agent minutes
 
 ### Use existing `UsageRecord`
+
 `UsageRecord` already has `idempotencyKey String? @unique` — **set it on every metered/grant event** so retried jobs/webhooks never double-bill or double-grant. Suggested `kind` values:
+
 - `agent_minute` — quantity in seconds (or ms); metadata: `{ scanId, mode, model, deep: bool, multiplier }`.
 - `protected_target` — one row per target-activation; metadata: `{ targetId }`.
 - `pool_grant` — periodic included-pool grant; metadata: `{ plan, periodStart, grantedMinutes, interval: "month"|"year", source: "polar"|"razorpay"|"trial" }`.
@@ -98,20 +105,23 @@ The trial is the **only** free Cloud surface (no permanent free tier). It's the 
 - `refund_reversal` — on a Cloud 14-day money-back refund, reverse the period pool + entitlement (idempotent).
 
 ### Agent-minute accounting
+
 - Meter **active agent-loop time** per scan, per second, aggregated to the workspace's current billing cycle. **Deep/Custom scans apply a 3× multiplier** before debiting the pool (and Deep is Pro+ only — see gating).
 - The worker already records engine usage/cost telemetry (see `Scan.durationMs`, token/cost fields); the billing layer consumes the **active-loop duration** signal (not wall-clock, not queue time). If active-vs-idle cannot be separated this sprint, bill wall-clock **and clearly mark the published definition as wall-clock** — do not silently bill idle.
 - Maintain a **per-workspace current-cycle balance**: included pool + unexpired purchased packs − consumed − overage. Expose via `getUsageBalance(workspaceId)`. **Draw order: included pool first, then oldest unexpired pack.**
 
 ### Protected-target accounting
+
 - Count active protected targets per workspace against the plan cap. Enforce at target-creation/activation time (not scan time).
 
 ### Period rollover & pack expiry
+
 - On subscription renewal (Polar/Razorpay webhook) grant the new period's included pool as an idempotent `pool_grant` (idempotencyKey = `{workspaceId}:{periodStart}:{plan}`). For **annual** subscriptions, grant the monthly pool each month (pool resets monthly; annual prepayment covers 12 months, not a lump-sum minute grant). Unused included minutes do **not** roll over.
 - **Purchased minute packs are valid 6 months** from purchase; a scheduled job expires unused pack minutes at `expiresAt` via a `topup_expiry` debit (idempotent).
 
 ### Reconciliation
-- `UsageRecord` is the single source of truth for usage; reconcile to both Polar and Razorpay for billing events (webhook idempotency via existing `WebhookEvent @@unique([provider, externalId])`). Per-scan provider cost stays in the existing `scan_cost_ledger` (internal) — never expose cost/spend values on the dashboard.
 
+- `UsageRecord` is the single source of truth for usage; reconcile to both Polar and Razorpay for billing events (webhook idempotency via existing `WebhookEvent @@unique([provider, externalId])`). Per-scan provider cost stays in the existing `scan_cost_ledger` (internal) — never expose cost/spend values on the dashboard.
 
 ### Exhaustion grace period (founder, 2026-08-16)
 
@@ -130,6 +140,7 @@ Supersedes a pure hard wall at pool exhaustion for the **in-flight** scan. The g
 Dual gateway applies to the **three self-serve paid tiers (Starter $29 / Pro $99 / Team $299)** plus **one-time minute-pack purchases**. The **Agency/Enterprise $499 top tier is contact-led** — no checkout/product build; a contact form on the pricing page, founder provisions manually. (The 14-day trial has no checkout — no card required.)
 
 ### Polar (global MoR — default for non-India)
+
 - Polar as merchant of record (handles sales tax/VAT).
 - **Subscriptions:** one Polar product per self-serve tier (Starter/Pro/Team), each with a **monthly AND an annual price** (annual = prepaid, at the 15/20/25% discounted yearly rate).
 - **One-time products:** minute packs (**100/$15, 250/$30, 500/$50**) as Polar one-time purchases → on `order.paid`, credit a `topup_purchase` UsageRecord with a 3-month expiry.
@@ -139,6 +150,7 @@ Dual gateway applies to the **three self-serve paid tiers (Starter $29 / Pro $99
 - **Env:** `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET` (+ product/price IDs in config, not secrets).
 
 ### Razorpay (India)
+
 - Razorpay for Indian customers, INR pricing (monthly + annual USD × 100): ₹2,900 / ₹9,900 / ₹29,900 monthly; ₹29,500 / ₹95,000 / ₹2,69,000 annual.
 - **Geo-IP routing:** detect India (edge/header) → INR + Razorpay; else USD + Polar. Manual currency override.
 - **Recurring:** UPI AutoPay mandates; note the ₹15,000 AutoPay cap — Team (₹29,900/mo) and all annual prepayments exceed it → use card/netbanking mandate or one-time annual invoice; handle gracefully.
@@ -148,6 +160,7 @@ Dual gateway applies to the **three self-serve paid tiers (Starter $29 / Pro $99
 - **Webhooks:** Razorpay subscription/payment events → same internal sync path as Polar.
 
 ### Unify behind one internal contract
+
 Both providers feed a single internal `syncSubscription(workspaceId, provider, externalId, plan, status, interval)` and `creditTopUp(workspaceId, provider, minutes, expiresAt)` → update `BillingAccount` + `Workspace.plan`/`billingStatus`, grant the period pool, or credit the pack. Provider-specific code stays in adapters.
 
 ## Entitlement Gating & Enforcement
@@ -157,15 +170,18 @@ Both providers feed a single internal `syncSubscription(workspaceId, provider, e
 Central `packages/billing/entitlements.ts` exposing `assertScanAllowed(workspaceId, mode)`, `assertTargetAllowed(workspaceId)`, `assertFixPrAllowed(workspaceId)`, `getUsageBalance(workspaceId)`, `getTrialState(workspaceId)`, and `getGraceState(workspaceId)`.
 
 **Enforce at these points:**
+
 - **Scan creation:** check the scan-depth gate — **Deep/Custom require PRO or above (NOT Trial, NOT Starter)**; check agent-minute balance > 0 (or remaining ≥ estimated cost); check scan-frequency throttle for trial. Fail closed with a clear upgrade CTA (a blocked Deep attempt → "Deep is a Pro feature").
 - **Target creation/activation:** enforce protected-target cap per plan (trial: 1–2).
 - **Fix-PR generation:** full-featured in trial and paid (no per-fix cap in the unified model).
 - **Feature gates:** weekly monitoring, Slack/Discord, MCP, GitHub Action, scheduled scans, Jira/Linear, branded reports, client share links, multi-workspace, priority support — per plan map. (Trial = full-featured on Standard/Quick.)
 
 **Trial gating (no card on file):**
+
 - `getTrialState` returns days-left + minutes-left + target usage. Block new agent-min-consuming scans when minutes/targets exhausted OR 14 days elapsed → read-only/locked state + upgrade CTA. Never auto-convert, never charge (no card).
 
 **Soft warnings + exhaustion grace (founder, 2026-08-16):**
+
 - 80%-of-pool usage email/notification before exhaustion.
 - **New scans** at pool exhaustion: hard wall (balance <= 0 → no new agent-min-consuming scans) with an upgrade/top-up CTA. Never bill overage without opt-in (Team spend limit respected as a circuit breaker).
 - **In-flight scan** at pool exhaustion: do NOT hard-stop — grant up to **15 minutes of free grace** to let it finish (see the Exhaustion grace period subsection of the Usage Metering Spec). Finish inside grace → unused grace evaporates, workspace blocked until minutes purchased. Exceed grace → stop the scan and surface "minutes + grace period over."
@@ -179,6 +195,7 @@ Central `packages/billing/entitlements.ts` exposing `assertScanAllowed(workspace
 Currently `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"` (open registration accepts unverified addresses — a known production blocker and a free-tier COGS-abuse vector). Flip to enforced before the free tier opens to public/paid-adjacent traffic.
 
 **Steps:**
+
 1. Provision a **Brevo API key** + a **verified sender address** (founder/ops action — coordinate).
 2. Set `BREVO_API_KEY` and `EMAIL_FROM` (verified sender) as production secrets.
 3. Set the `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` repo variable to `"1"` (deploy workflow reads it, defaults to `"0"`).
@@ -191,6 +208,7 @@ Currently `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"` (open registration accepts
 ## Analytics & Events (privacy-safe, allowlisted)
 
 Emit product-analytics events (PostHog, already wired via `NEXT_PUBLIC_POSTHOG_KEY`) for the monetization funnel — allowlisted, no PII/target/finding data:
+
 - `pricing_viewed {mode: local|cloud}`, `checkout_started {plan, region}`, `checkout_completed {plan, region, provider}`, `checkout_abandoned {plan}`.
 - Trial funnel: `trial_started`, `trial_scan_completed`, `trial_limit_hit {kind}`, `trial_expired`, `trial_upgraded {plan}`.
 - `pool_warning_80 {plan}`, `pool_exhausted {plan}`, `topup_purchased {plan, pack}`, `overage_enabled {plan}`.
@@ -204,11 +222,13 @@ Do NOT emit: cost, spend, budget-cap, target identity, finding content, raw IP, 
 ## Acceptance Criteria (verify before claiming done)
 
 **Plans & schema**
+
 - [ ] `packages/billing` exists with plan definitions as data (3 self-serve tiers monthly+annual, minute packs, contact-led top tier, **14-day trial state**); `STARTER` added to `WorkspacePlan` via additive `ALTER TYPE ... ADD VALUE` migration (non-transactional, deployed before code that references it).
 - [ ] `UsageRecord.idempotencyKey` (already present, unique) is **set on every metered/grant event** — test proves retried webhook/job replays do not double-grant or double-debit.
 - [ ] All new env vars added to `packages/config/src/env.ts` (fail-fast), `.env.example`, and `turbo.json` `globalEnv`; billing secrets wired into `deploy-azure.yml` as `secretref:*`.
 
 **Dual gateway (self-serve tiers only)**
+
 - [ ] Polar: products for Starter/Pro/Team each with monthly + annual prices; one-time minute-pack products (100/$15, 250/$30, 500/$50); hosted checkout; customer portal; webhooks (`order.paid` idempotent pool grant + pack credit, subscription lifecycle) validated with `POLAR_WEBHOOK_SECRET`; webhook idempotency via `WebhookEvent @@unique([provider, externalId])`.
 - [ ] Razorpay: INR subscriptions monthly (₹2,900/₹9,900/₹29,900) + annual (₹29,500/₹95,000/₹2,69,000); UPI AutoPay with >₹15k fallback; one-time minute-pack payments; GSTIN capture + GST-compliant invoices; webhooks → same internal sync path as Polar.
 - [ ] Geo-IP routing selects Polar (USD) vs Razorpay (INR) with a manual override.
@@ -216,21 +236,26 @@ Do NOT emit: cost, spend, budget-cap, target identity, finding content, raw IP, 
 - [ ] **Refund handling:** Cloud 14-day money-back — refund webhook reverses entitlement + idempotent `refund_reversal` + triggers affiliate-commission clawback.
 
 **Trial**
+
 - [ ] 14-day no-card trial: **100 agent-min hard cap, Standard/Quick only (NO Deep)**, 1–2 target cap, email verification required, no auto-convert; expiry/limit → read-only/locked state + upgrade CTA.
 
 **Metering & gating**
+
 - [ ] Agent-minute metering records active-loop time, Deep at 3×, per-cycle balance correct; idempotent monthly pool grant (incl. annual subs granting monthly); included pool no rollover; **minute packs valid 6 months** with idempotent expiry debit; draw order = pool then oldest unexpired pack.
 - [ ] `assertScanAllowed`/`assertTargetAllowed`/`assertFixPrAllowed`/`getTrialState` enforced; **Deep/Custom blocked on Trial + Starter (Pro+ only)**; 80% warning + hard wall + upgrade CTA work.
 - [ ] Downgrade/cancel → read-only/limited state at period end, data retained, audit-logged.
 
 **UI**
+
 - [ ] Billing page shows plan/trial status/interval/usage (no $ cost values), unexpired pack minutes + expiry, portal link, upgrade/downgrade + monthly↔annual, minute-pack purchase, spend limit (Team).
 - [ ] Pricing page: **one page, Local/Cloud toggle**; Cloud view = 3 self-serve tiers with monthly/annual + USD/INR toggles, minute-pack add-on, "Agency/Enterprise from $499" contact-led line; trial CTA (no card); Deep clearly marked Pro+; confirmed copy; agent-minute definition + pack validity (6 months) + overage rate ($0.15/min) + **14-day money-back (Cloud)** published clearly.
 
 **Email verification**
+
 - [ ] Brevo provisioned, secrets set, flag flipped to `"1"`, deploy green, verification enforced before trial opens publicly.
 
 **Quality gates**
+
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` all green; Playwright E2E for trial signup → trial limit, Deep-blocked-on-trial/Starter, checkout (monthly + annual), minute-pack purchase, refund-reversal, and gating happy paths.
 - [ ] No public benchmark/coverage/"only-we"/upstream-engine claims; money-back language only for Cloud, never Local.
 

@@ -9,9 +9,11 @@ Dev-ready brief for the LyraShield Developer Agent: build the custom affiliate/p
 **Owner:** LyraShield Developer Agent. **Repo:** `ecryptoguru/lyrashield-ai` (monorepo, Turborepo/pnpm, Next.js App Router in `apps/web`). **Do NOT route to the Lyrafin Developer Agent.**
 
 ## Goal
+
 Build LyraShield AI's **custom affiliate/partner system + transparent partner dashboard** inside `apps/web`, reachable in-app and via a branded subdomain. Affiliates apply, get manually approved, receive a referral link + promo code, and earn commission on the paid LyraShield products they refer — with a real-time, transparent dashboard for clicks, signups, conversions, commissions, and payouts.
 
 ## Founder-confirmed program parameters (2026-08-15/16 — do not change)
+
 - **Custom build on our platform** (not a third-party affiliate portal). Full transparency is the point.
 - **Host/URL:** in-app at **`app.lyrashieldai.com/affiliates`**; **`affiliates.lyrashieldai.com` 301-redirects** to it.
 - **Commission — Cloud subscriptions:** **25% recurring for 12 months** per referred paid subscription; **30%** at **10+ active** (tier evaluated at commission-creation, prospective). Base = **net (pre-tax, after discounts)**, snapshotted per commission. Annual: 25% of the annual amount as paid.
@@ -24,6 +26,7 @@ Build LyraShield AI's **custom affiliate/partner system + transparent partner da
 - **Payout rail (final v2, 2026-08-16):** **Polar cannot pay affiliates** (collection-only). **Paying entity = the Indian company.** **RazorpayX Payouts API → Indian affiliates** (INR domestic, IMPS/UPI). **Payoneer Enterprise Mass Payouts API → global (non-India) affiliates** from the Indian entity (funded via our Indian AD bank under RBI outward-remittance; enterprise API needs partnership approval + custom quote). **RBI-native fallback: BriskPe (PA-CB I&O) / Cashfree.** **Optional at scale: Trolley** for W-8/W-9/1099/withholding automation. **No Wise** (Wise India is receive-only for business), **no PayPal**, **no Stripe Connect self-serve from India**, **no manual SWIFT** at scale. Build the payout ledger **provider-agnostic**, routing by affiliate region (India → RazorpayX; global → Payoneer). (India tax: purpose code + Form 15CA/15CB + TDS 194H 2% >₹20k/yr + GST 18% if registered + DTAA/treaty for non-residents — confirm with AD bank + tax advisor.)
 
 ## Hard constraints
+
 - Reuse existing referral foundation — do NOT redesign: `ReferralCode`, `ReferralAttribution`, `UsageRecord` (has `idempotencyKey @unique`), `WebhookEvent` (`@@unique([provider, externalId])`) already exist in `packages/db/prisma/schema.prisma`. Build the affiliate domain alongside/around these; keep the waitlist referral ladder as a separate concern.
 - Billing: **Polar (global MoR)** + **Razorpay (India)** for Cloud subscriptions; Local licenses are a one-time purchase flow (see the Local-mode brief). Commission only on **successful payment** webhook events, never on trial start or signup.
 - Money in **`Decimal`**, never Float. All ids `cuid`. Idempotency everywhere (webhooks + payouts).
@@ -38,10 +41,12 @@ Build LyraShield AI's **custom affiliate/partner system + transparent partner da
 Serve inside `apps/web`. **Recommended:** primary surface in-app at `app.lyrashieldai.com/affiliates`, with **`affiliates.lyrashieldai.com` 301-redirecting** to it (or a middleware rewrite mapping the subdomain to the affiliate route group). Founder is flexible on URL — pick the cleanest; document the choice.
 
 **Public (logged-out or logged-in):**
+
 - `/affiliates` — program landing: terms, commission, how it works, apply CTA.
 - `/affiliates/apply` — application form (requires a logged-in `User`): name, website/channel, audience size/type, promotion methods, payout method, tax-form status.
 
 **Partner (approved affiliates, role-gated):**
+
 - `/affiliates/dashboard` — KPI cards + date filter (7d/30d/90d/custom, UTC).
 - `/affiliates/links` — primary referral link + create campaign/SubID link variants, copy/QR/share, promo code display, click-test tool.
 - `/affiliates/activity` — tabs: Clicks / Signups / Conversions, paginated, CSV export.
@@ -50,6 +55,7 @@ Serve inside `apps/web`. **Recommended:** primary surface in-app at `app.lyrashi
 - `/affiliates/assets` — logos, banners, screenshots, email swipes, brand guidelines.
 
 **Admin (founder/ops, `BILLING_ADMIN`/`OWNER`):**
+
 - `/admin/affiliates` — approval queue (approve/reject/suspend), tier override, payout approval, fraud-flag review, brand-bid/coupon monitoring notes.
 
 **Middleware:** detect `?ref=` param or `/r/:code` path on `apps/web` → validate affiliate → record click (async, non-blocking) → set first-party cookie. Subdomain host rewrite to the affiliate route group.
@@ -226,10 +232,12 @@ model PayoutItem {
 ## Attribution & tracking spec
 
 **Referral link formats:**
+
 - `https://lyrashieldai.com/r/{code}?subid={optional}&campaign={optional}`
 - Fallbacks: `https://lyrashieldai.com/?ref={code}`, `https://app.lyrashieldai.com/signup?ref={code}`
 
 **Click capture (middleware, non-blocking):** on `?ref=` or `/r/:code`:
+
 1. Validate `AffiliateLink.code` and `affiliate.status == APPROVED` (edge-cached lookup).
 2. Create a `Click` row (async; don't block the request).
 3. Set **first-party cookie** `__ls_aff` = random token id (DB lookup, not a JWT carrying data), `Max-Age = attributionWindowDays * 86400` (30d = 2,592,000), `Path=/`, `Secure`, `HttpOnly`, `SameSite=Lax`, `Domain=.lyrashieldai.com` so app + subdomain share it.
@@ -238,6 +246,7 @@ model PayoutItem {
 6. Only set the cookie after consent per the CMP; otherwise log an anonymized click (no PII) and do not attribute.
 
 **Attribution precedence (publish this exact rule):**
+
 1. Valid **affiliate promo code** at checkout → credits the code owner.
 2. Else valid unexpired **last-click cookie** → credits its affiliate.
 3. Else unattributed.
@@ -255,10 +264,12 @@ model PayoutItem {
 ## Commission & payout engine
 
 **Commission only on money events:**
+
 - **Polar:** `order.paid` (initial + each successful renewal). Do NOT commission on `subscription.cycled` (fires before payment). Handle `order.refunded`/`refund.created` for clawback.
 - **Razorpay:** `payment.captured` / `subscription.charged` (~order.paid); `refund.created` for clawback.
 
 **On `order.paid` / `payment.captured` webhook (idempotent):**
+
 1. Dedup via `WebhookEvent @@unique([provider, externalId])` (existing model) — if seen, return.
 2. Resolve the customer → `AffiliateSubscription` (persisted at first conversion) or a pending attribution. No affiliate → skip commission.
 3. First payment for a subscription → create `AffiliateSubscription { firstPaidAt: now, capEndsAt: now + capMonths, isActive: true }`.
@@ -269,11 +280,13 @@ model PayoutItem {
 **Clawback (refund/chargeback):** create a reversal — if the commission is still PENDING, cancel/REVERSE it; if AVAILABLE/PAID, create a negative ledger entry offset against the available balance / next payout. Reason codes: `REFUND`, `CHARGEBACK`, `SELF_REFERRAL`, `FRAUD`. Manual review for amounts > $200.
 
 **Payout lifecycle:** `PENDING (30d hold) → AVAILABLE → RESERVED (in a payout) → PAID`; or `REVERSED`. Balances: Pending / Available / Lifetime.
+
 - Eligibility: `available >= minPayout ($100)` AND payout method valid AND tax form complete AND no active payout lock.
 - On request: transactionally `SELECT ... FOR UPDATE` eligible commissions → mark RESERVED → create `Payout` + `PayoutItem[]` → call provider with `idempotencyKey = payout.id` → mark PAID only on provider confirmation; on failure release back to AVAILABLE with `failureCode`.
 - Cadence: affiliate-initiated + optional monthly auto-batch on the 15th.
 
 **Background jobs (BullMQ — consistent with the existing worker):**
+
 - `releaseCommissions` (hourly): PENDING where `availableAt <= now` and not refunded → AVAILABLE.
 - `expireAttributionTokens`: cleanup expired tokens.
 - `payoutScheduler` (monthly, 15th): build eligible payout batches.
@@ -286,6 +299,7 @@ model PayoutItem {
 Match the existing LyraShield dashboard design system (OKLCH tokens, dark mode, a11y). Real-time-ish data (cache aggregates ~5 min in Redis).
 
 **`/affiliates/dashboard` — KPI cards + date filter:**
+
 - Clicks (+ unique), Signups, Paid conversions, Conversion rate (conversions / unique clicks).
 - Active referred customers, Attributed MRR.
 - Earnings: Pending / Available / Paid / Lifetime.
@@ -311,6 +325,7 @@ Match the existing LyraShield dashboard design system (OKLCH tokens, dark mode, 
 ## Fraud controls & program terms (enforce in code + surface in UI)
 
 **Enforced in code:**
+
 - Pay commission only on **paid invoice** (never trial start/signup).
 - **Self-referral rejection** (affiliate.userId == referred userId).
 - Disposable-email / proxy-VPN / device-fingerprint signals flagged on signup; rate-limit signups per IP/device.
@@ -323,11 +338,13 @@ Match the existing LyraShield dashboard design system (OKLCH tokens, dark mode, 
 ## Acceptance criteria (verify before claiming done)
 
 **Schema & attribution**
+
 - [ ] Affiliate domain models added (money in `Decimal`, ids `cuid`); `User.affiliate` back-relation; migrations green.
 - [ ] `?ref=` / `/r/:code` middleware captures clicks (async) and sets a first-party **60-day** cookie (config window), `Secure/HttpOnly/SameSite=Lax/Domain=.lyrashieldai.com`; last-click wins; promo-code override; consent-gated.
 - [ ] Full attribution test matrix passes (expiry, last-click, code-override, tampered cookie, idempotent webhook, cookieless+code, self-referral reject).
 
 **Commission & payout engine**
+
 - [ ] Polar `order.paid` + Razorpay `payment.captured` create Conversion + PENDING Commission idempotently; 25%/30% tier snapshot on Cloud subs; 12-month cap → EXPIRED; net-base calculation frozen; **no commission on minute packs or trial signups; 20% one-time on Local-license sales**; annual Cloud plans commissioned at 25% of annual amount as paid.
 - [ ] Refund/chargeback → automatic reversal/clawback with reason codes; >$200 manual review; Cloud 14-day money-back handled within the hold.
 - [ ] Payout lifecycle (PENDING→AVAILABLE→RESERVED→PAID / REVERSED) with transactional reservation + idempotent provider call; **$100 min; 30-day hold; monthly net-30 batch on the 15th**; tax-form gate before payout.
@@ -336,10 +353,12 @@ Match the existing LyraShield dashboard design system (OKLCH tokens, dark mode, 
 - [ ] Background jobs: releaseCommissions, expireAttributionTokens, payoutScheduler, reconciliationJob (BullMQ).
 
 **UI**
+
 - [ ] All partner routes render with real data (KPIs, links, activity+CSV, commissions ledger, payouts, assets); admin approval queue works; masked customer IDs only.
 - [ ] `app.lyrashieldai.com/affiliates` serves the surface; `affiliates.lyrashieldai.com` 301-redirects to it.
 
 **Quality gates**
+
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` green; Playwright E2E for apply → approve → link → attributed signup → paid webhook → commission → hold → payout happy path.
 - [ ] No customer PII exposed to affiliates; no benchmark/only-we claims; money-back language only for Cloud.
 
