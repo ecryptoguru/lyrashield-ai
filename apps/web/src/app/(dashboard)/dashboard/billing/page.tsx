@@ -269,15 +269,3 @@ export default async function BillingPage() {
     </div>
   )
 }
-portal"
-                className={`${buttonVariants({ variant: "outline" })} w-full`}
-              >
-                Open Customer Portal
-              </Link>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </div>
-  )
-}

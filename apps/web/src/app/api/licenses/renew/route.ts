@@ -165,15 +165,3 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to renew license", 500)
   }
 }
-s(
-      {
-        license: licenseFile,
-        updateEligibleUntil: newExpiry.toISOString(),
-      },
-      200
-    )
-  } catch (error) {
-    logger.error("License renewal failed", { error: String(error) })
-    return apiError("INTERNAL_ERROR", "Failed to renew license", 500)
-  }
-}
