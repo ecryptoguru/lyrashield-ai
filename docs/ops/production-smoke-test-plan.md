@@ -415,11 +415,17 @@ the release record. Reconciliation jobs (`billing-reconciliation`,
 - Worker VM `systemctl status lyrashield-worker` is `active (running)` and logs
   show `Worker ready — processing scan jobs`.
 - `GET https://app.lyrashieldai.com/api/ready/scans` reports `worker: true`.
-- Smoke scan `cmt0okk3s000701hzkum7hozb` against `octocat/Hello-World` was
-  consumed by the worker, progressing `QUEUED → PREFLIGHT`.
-- The scan itself failed at `PREFLIGHT` with `Insufficient host resources for
-  sandbox: free disk 2046MB < minimum 2048MB` (worker VM disk is low), not with
-  a BullMQ consumer wedge or `ioredis` reconnect error.
+- Initial smoke scan `cmt0okk3s000701hzkum7hozb` failed at `PREFLIGHT` with
+  `Insufficient host resources for sandbox: free disk 2046MB < minimum 2048MB`.
+  Root cause: the worker container's `/tmp` was a 2GB tmpfs, 2MB under the
+  2048MB preflight minimum. Fixed by increasing the tmpfs to 4GB in
+  `ops/worker/run-worker.sh` and restarting the worker.
+- Worker VM disk cleaned: 16.68GB of old Docker images pruned, stray container
+  removed, journal logs vacuumed. Host disk freed from 32G to 21G used.
+- Second smoke scan `cmt0q9a28000501jnmn1t453t` against `octocat/Hello-World`
+  completed successfully: `QUEUED -> PREFLIGHT (passed, 4 checks) -> RUNNING ->
+  COMPLETED`. Duration: 6m 20s. Model: `azure_ai/gpt-5.6-luna` at medium
+  reasoning. Cost: $0.048 (26 LLM requests, 86% cache hits). 0 findings.
 - Post-promotion worker logs show no `CONSUMER_WEDGED` or `read ETIMEDOUT`
   entries.
 
@@ -439,8 +445,14 @@ the release record. Reconciliation jobs (`billing-reconciliation`,
 - `pnpm lint` passed (32 successful tasks).
 - `pnpm format:check` passed.
 - `pnpm build` passed.
-- `pnpm test` was attempted; DB-dependent tests were skipped/failed because
-  local Docker Compose was not running. The one non-DB failure
-  (`packages/cli/src/__tests__/installers/agent-plugin.test.ts`) passes when
-  run in isolation, indicating a test-isolation issue rather than a product
-  regression.
+- `pnpm test` passed: 222 test files passed, 1 skipped (1982 tests passed,
+  16 RLS-skipped); 17 marketing test files passed (123 tests); 18 motion tests
+  passed. All suites green after applying migrations to the local Docker
+  Compose Postgres.
+
+### 5.7 Brevo email configuration
+
+- `BREVO_API_KEY` set as a Container App secret (`secretref:brevo-api-key`).
+- `EMAIL_FROM` and `NOTIFICATION_FROM_EMAIL` set to
+  `support@lyrashieldai.com`.
+- App restarted; `/api/ready` reports `database: true, redis: true`.
