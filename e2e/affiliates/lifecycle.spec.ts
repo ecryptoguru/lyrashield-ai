@@ -18,7 +18,10 @@ const affiliateEmail = `e2e-affiliate-${suffix}@example.com`
 const referredEmail = `e2e-referred-${suffix}@example.com`
 
 test.describe("Affiliate lifecycle", () => {
-  test("apply → approve → click → signup → commission → payout", async ({ page }, testInfo) => {
+  test("apply → approve → click → signup → commission → payout", async ({
+    page,
+    browser,
+  }, testInfo) => {
     // Isolate the per-IP fraud/rate-limit counters: the apply route's fraud
     // check counts prior Clicks by the request IP, and many e2e specs share the
     // default 127.0.0.1. Give this test a distinct simulated client IP so the
@@ -214,53 +217,48 @@ test.describe("Affiliate lifecycle", () => {
     })
     expect(releasedCommission!.status).toBe("AVAILABLE")
 
-    // 8. Verify the affiliate dashboard shows the data
-    // Sign back in as the affiliate
-    await page.request.post("/api/auth/sign-out", {
-      data: {},
-      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+    // 8. Verify the affiliate dashboard shows the data.
+    // Use a FRESH browser context (isolated cookie jar) for the affiliate
+    // sign-in — the referred user's session cookie from step 5 otherwise
+    // lingers in the shared page context and the dashboard resolves the
+    // referred user (not an affiliate) instead of the affiliate, redirecting
+    // to /affiliates/apply.
+    const affiliateContext = await browser.newContext({
+      baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL ?? "http://127.0.0.1:3100",
+      extraHTTPHeaders: { "x-forwarded-for": forwardedFor },
     })
-    await page.goto("/sign-in")
-    await page.getByLabel("Email").fill(affiliateEmail)
-    await page.locator("#password").fill(password)
-    await page.getByRole("button", { name: "Sign in" }).click()
-    // New sign-ins land on /onboarding; skip it so the dashboard is reachable.
-    await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
-    await page.request
-      .patch("/api/onboarding", {
-        data: { skipped: true },
-        headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
-      })
-      .catch(() => {})
+    const affiliatePage = await affiliateContext.newPage()
+    try {
+      await affiliatePage.goto("/sign-in")
+      await affiliatePage.getByLabel("Email").fill(affiliateEmail)
+      await affiliatePage.locator("#password").fill(password)
+      await affiliatePage.getByRole("button", { name: "Sign in" }).click()
+      await affiliatePage.waitForURL(/\/(dashboard|onboarding)/)
+      await affiliatePage.request
+        .patch("/api/onboarding", {
+          data: { skipped: true },
+          headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+        })
+        .catch(() => {})
 
-    // Confirm the affiliate is APPROVED in the DB before asserting the
-    // dashboard renders (the dashboard redirects to /affiliates/apply unless
-    // the signed-in user is an APPROVED affiliate). Query by the affiliate's
-    // id directly (not by userId) so the diagnostic doesn't depend on the
-    // session-userId ↔ User.id mapping.
-    await expect
-      .poll(async () => {
-        const a = await prisma.affiliate.findUnique({ where: { id: affiliate.id } })
-        return a?.status ?? null
-      })
-      .toBe("APPROVED")
+      await affiliatePage.goto("/affiliates/dashboard")
+      // The dashboard is a server component that requires an APPROVED affiliate
+      // for the signed-in user. It redirects to /affiliates/apply if the
+      // signed-in user is not an APPROVED affiliate. Assert the page did NOT
+      // redirect away, then check the heading with a networkidle wait.
+      await affiliatePage.waitForLoadState("networkidle").catch(() => {})
+      await expect(affiliatePage).not.toHaveURL(/\/affiliates\/apply/)
+      await expect(affiliatePage.getByRole("heading", { name: "Affiliate Dashboard" })).toBeVisible(
+        { timeout: 20000 }
+      )
 
-    await page.goto("/affiliates/dashboard")
-    // The dashboard is a server component that requires an APPROVED affiliate
-    // for the signed-in user. It redirects to /affiliates/apply if the
-    // signed-in user is not an APPROVED affiliate. Assert the page did NOT
-    // redirect away (i.e. the affiliate dashboard rendered), then check the
-    // heading with a networkidle wait + longer timeout for the render.
-    await page.waitForLoadState("networkidle").catch(() => {})
-    await expect(page).not.toHaveURL(/\/affiliates\/apply/)
-    await expect(page.getByRole("heading", { name: "Affiliate Dashboard" })).toBeVisible({
-      timeout: 20000,
-    })
-
-    // 9. Privacy check: partner dashboard shows masked IDs only
-    await page.goto("/affiliates/activity?tab=signups")
-    // Should NOT show the referred user's email
-    const pageText = await page.textContent("body")
-    expect(pageText).not.toContain(referredEmail)
+      // 9. Privacy check: partner dashboard shows masked IDs only
+      await affiliatePage.goto("/affiliates/activity?tab=signups")
+      // Should NOT show the referred user's email
+      const pageText = await affiliatePage.textContent("body")
+      expect(pageText).not.toContain(referredEmail)
+    } finally {
+      await affiliateContext.close()
+    }
   })
 })
