@@ -172,8 +172,10 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
     lease.assertOwned()
     const jobs = [] as Awaited<ReturnType<typeof queue.getJobs>>
     for (let start = 0; ; start += BATCH_SIZE) {
+      // v6 removed 'paused' from the JobType union; the scan queue is never
+      // paused by the app, so only the active waiting states are queried.
       const page = await queue.getJobs(
-        ["wait", "delayed", "prioritized", "paused"],
+        ["wait", "delayed", "prioritized"],
         start,
         start + BATCH_SIZE - 1
       )

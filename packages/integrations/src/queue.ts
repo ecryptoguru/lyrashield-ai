@@ -118,7 +118,9 @@ export async function getScanQueuePosition(scanId: string): Promise<ScanQueuePos
   if (!redis) return null
   try {
     const queue = getScanQueue()
-    const waiting = await queue.getJobs(["wait", "delayed", "prioritized", "paused"])
+    // v6 removed 'paused' from the JobType union; the scan queue is never
+    // paused by the app, so only the active waiting states are queried.
+    const waiting = await queue.getJobs(["wait", "delayed", "prioritized"])
     const index = waiting.findIndex((job) => job.id === scanId)
     if (index === -1) return null
     return { position: index + 1, waiting: waiting.length }
