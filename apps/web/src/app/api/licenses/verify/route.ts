@@ -3,10 +3,7 @@ import { getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { verifyLicense, type LicenseFile } from "@lyrashield/licenses"
-import {
-  hashLicenseKey,
-  resolveSigningPublicKey,
-} from "../../../../lib/licenses/license-service"
+import { hashLicenseKey, resolveSigningPublicKey } from "../../../../lib/licenses/license-service"
 import { checkLicenseApiRateLimit, clientIpFromRequest } from "../../../../lib/rate-limit"
 
 export const dynamic = "force-dynamic"
