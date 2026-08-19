@@ -233,11 +233,26 @@ test.describe("Affiliate lifecycle", () => {
       })
       .catch(() => {})
 
+    // Confirm the affiliate is APPROVED in the DB before asserting the
+    // dashboard renders (the dashboard redirects to /affiliates/apply unless
+    // the signed-in user is an APPROVED affiliate).
+    await expect
+      .poll(async () => {
+        const u = await prisma.user.findUnique({ where: { email: affiliateEmail } })
+        if (!u) return null
+        const a = await prisma.affiliate.findUnique({ where: { userId: u.id } })
+        return a?.status ?? null
+      })
+      .toBe("APPROVED")
+
     await page.goto("/affiliates/dashboard")
     // The dashboard is a server component that requires an APPROVED affiliate
-    // for the signed-in user. Wait for the page to finish loading and for the
-    // dashboard h1 (rendered by PageHeader) to appear.
+    // for the signed-in user. It redirects to /affiliates/apply if the
+    // signed-in user is not an APPROVED affiliate. Assert the page did NOT
+    // redirect away (i.e. the affiliate dashboard rendered), then check the
+    // heading with a networkidle wait + longer timeout for the render.
     await page.waitForLoadState("networkidle").catch(() => {})
+    await expect(page).not.toHaveURL(/\/affiliates\/apply/)
     await expect(page.getByRole("heading", { name: "Affiliate Dashboard" })).toBeVisible({
       timeout: 20000,
     })
