@@ -270,10 +270,3 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
     </form>
   )
 }
- </button>
-    </form>
-  )
-}
- </form>
-  )
-}

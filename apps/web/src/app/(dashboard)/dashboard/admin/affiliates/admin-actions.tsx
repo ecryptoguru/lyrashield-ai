@@ -192,8 +192,3 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
     </div>
   )
 }
-</p>
-      )}
-    </div>
-  )
-}
