@@ -25,8 +25,14 @@ describe("runtime environment validation", () => {
   })
 
   it("rejects an http egress proxy URL in production (bearer-token cleartext transport)", async () => {
+    // The env loader logs "Invalid environment variables" to console.error
+    // before throwing — that's expected output for this negative test, not a
+    // real failure. Silence it so the CI log isn't polluted with a misleading
+    // error message (the assertion below is what actually verifies the rule).
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
     vi.stubEnv("LYRASHIELD_EGRESS_PROXY_URL", "http://proxy.internal:8080")
     await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+    consoleError.mockRestore()
   })
 
   it("accepts an https egress proxy URL in production", async () => {
