@@ -39,10 +39,10 @@ export default defineConfig({
       "RATE_LIMIT_AUTH_MAX=1000; " +
       // Dev/test-only ed25519 signing key for the e2e license-activation flow.
       // Never used in production (production resolves from Azure Key Vault).
-      // Write the PEM to a temp file then read it into the env var — embedding a
-      // multi-line PEM directly in the command string is too fragile across the
-      // TS-string -> shell quoting layers and produced a malformed key.
-      "printf '%s\\n' '-----BEGIN PRIVATE KEY-----' 'MC4CAQAwBQYDK2VwBCIEIM3vjBHfDGv/9UqGuK8KQihi9mQBKjD+Y0HHbxLinhoP' '-----END PRIVATE KEY-----' > /tmp/lyrashield-e2e-lic.pem && " +
+      // Generate a fresh throwaway key at webServer startup and write it to a
+      // temp file, then read it into the env var — do NOT commit a private key
+      // to the repo (the secret scanner rightly flags embedded PEMs).
+      "node -e \"require('node:crypto').generateKeyPairSync('ed25519'); require('node:fs').writeFileSync('/tmp/lyrashield-e2e-lic.pem', require('node:crypto').generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'}))\" && " +
       'export LICENSE_SIGNING_PRIVATE_KEY="$(cat /tmp/lyrashield-e2e-lic.pem)" ' +
       // The e2e app runs NODE_ENV=production, so resolveSigningKeyId requires
       // LICENSE_SIGNING_KEY_ID (a test-only key id; production uses a real one).
