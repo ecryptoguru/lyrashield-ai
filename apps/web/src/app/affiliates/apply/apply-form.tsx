@@ -227,13 +227,13 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
         <h3 className="font-medium text-gray-900 dark:text-white">Affiliate Program Terms</h3>
         <ul className="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
           <li>
-            • <strong>Disclosure:</strong> You must clearly disclose your affiliate relationship
-            in every promotion, following FTC (US) and ASA (UK) affiliate-disclosure rules.
+            • <strong>Disclosure:</strong> You must clearly disclose your affiliate relationship in
+            every promotion, following FTC (US) and ASA (UK) affiliate-disclosure rules.
           </li>
           <li>
-            • <strong>Honest claims only:</strong> No fear-mongering (FUD), no &ldquo;only
-            we&rdquo; / exclusivity claims, and no benchmark, accuracy, false-positive-rate or
-            coverage comparisons.
+            • <strong>Honest claims only:</strong> No fear-mongering (FUD), no &ldquo;only we&rdquo;
+            / exclusivity claims, and no benchmark, accuracy, false-positive-rate or coverage
+            comparisons.
           </li>
           <li>
             • <strong>No brand bidding:</strong> Do not bid on the brand name
