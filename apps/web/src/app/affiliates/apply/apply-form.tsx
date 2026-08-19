@@ -77,7 +77,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+        <p className={ERROR_BOX} role="alert">
           {error}
         </p>
       )}
@@ -94,7 +94,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
           maxLength={100}
           value={values.name}
           onChange={(e) => set("name", e.target.value)}
-          className="mt-1 block w-full rounded-md border px-3 py-2"
+          className={FIELD}
           placeholder="Jane Doe"
         />
       </div>
@@ -111,7 +111,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
           maxLength={500}
           value={values.website}
           onChange={(e) => set("website", e.target.value)}
-          className="mt-1 block w-full rounded-md border px-3 py-2"
+          className={FIELD}
           placeholder="https://yourblog.com"
         />
       </div>
@@ -126,7 +126,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
           required
           value={values.audienceSize}
           onChange={(e) => set("audienceSize", e.target.value)}
-          className="mt-1 block w-full rounded-md border px-3 py-2"
+          className={FIELD}
         >
           <option value="">Select...</option>
           <option value="<1k">&lt; 1,000</option>
@@ -147,7 +147,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
           required
           value={values.audienceType}
           onChange={(e) => set("audienceType", e.target.value)}
-          className="mt-1 block w-full rounded-md border px-3 py-2"
+          className={FIELD}
         >
           <option value="">Select...</option>
           <option value="developers">Developers / Engineers</option>
@@ -170,7 +170,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
           rows={4}
           value={values.promotionMethods}
           onChange={(e) => set("promotionMethods", e.target.value)}
-          className="mt-1 block w-full rounded-md border px-3 py-2"
+          className={FIELD}
           placeholder="Blog posts, YouTube videos, newsletters, conference talks, etc."
         />
       </div>
@@ -185,7 +185,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
           required
           value={values.payoutMethod}
           onChange={(e) => set("payoutMethod", e.target.value)}
-          className="mt-1 block w-full rounded-md border px-3 py-2"
+          className={FIELD}
         >
           <option value="">Select...</option>
           <option value="razorpayx">RazorpayX (India — INR)</option>
@@ -204,7 +204,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
           required
           value={values.taxFormStatus}
           onChange={(e) => set("taxFormStatus", e.target.value)}
-          className="mt-1 block w-full rounded-md border px-3 py-2"
+          className={FIELD}
         >
           <option value="">Select...</option>
           <option value="will_complete">Will complete W-9/W-8BEN/W-8BEN-E/GSTIN</option>
@@ -215,7 +215,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
         </select>
       </div>
 
-      <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
+      <div className={TERMS_BOX}>
         <h3 className="font-medium text-gray-900 dark:text-white">Affiliate Program Terms</h3>
         <ul className="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
           <li>
@@ -261,9 +261,7 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className={
-          "w-full rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        }
+        className={SUBMIT_BTN}
       >
         {loading ? "Submitting…" : "Submit Application"}
       </button>

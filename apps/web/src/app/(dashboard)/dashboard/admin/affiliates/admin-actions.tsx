@@ -14,6 +14,13 @@ interface AffiliateAdminActionsProps {
   currentTierRate?: number
 }
 
+const BTN_GREEN =
+  "rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+const BTN_RED =
+  "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+const BTN_SLATE =
+  "rounded-md bg-slate-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+
 export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
   const router = useRouter()
   const [loading, setLoading] = useState<string | null>(null)
@@ -61,9 +68,7 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
                 action("approve", { action: "approve", affiliateId: props.affiliateId })
               }
               disabled={loading === "approve"}
-              className={
-            "rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-          }
+              className={BTN_GREEN}
             >
               Approve
             </button>
@@ -76,9 +81,7 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
                 )
               }
               disabled={loading === "reject"}
-              className={
-                "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              }
+              className={BTN_RED}
             >
               Reject
             </button>
@@ -95,9 +98,7 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
               )
             }
             disabled={loading === "suspend"}
-            className={
-            "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-          }
+            className={BTN_RED}
           >
             Suspend
           </button>
@@ -109,9 +110,7 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
               action("reactivate", { action: "approve", affiliateId: props.affiliateId })
             }
             disabled={loading === "reactivate"}
-            className={
-            "rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-          }
+            className={BTN_GREEN}
           >
             Reactivate
           </button>
@@ -123,9 +122,7 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
               action("approvePayout", { action: "approvePayout", payoutId: props.payoutId })
             }
             disabled={loading === "approvePayout"}
-            className={
-            "rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-          }
+            className={BTN_GREEN}
           >
             Approve Payout
           </button>
@@ -167,13 +164,7 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
               className="mt-1 block w-24 rounded-md border px-2 py-1 text-xs"
             />
           </label>
-          <button
-            type="submit"
-            disabled={loading === "tierOverride"}
-            className={
-            "rounded-md bg-slate-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-          }
-          >
+          <button type="submit" disabled={loading === "tierOverride"} className={BTN_SLATE}>
             Save rates
           </button>
         </form>
