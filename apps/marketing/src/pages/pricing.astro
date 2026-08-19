@@ -5,7 +5,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/pricing", origin).toString()
 const title = "Pricing — Cloud & Local Plans | LyraShield AI"
 const description =
-  "Cloud plans from Starter to Team with monthly/annual billing, prepaid minute packs, and a 14-day money-back guarantee. Local licenses for self-hosted use. Agent-minutes are wall-clock time."
+  "Cloud plans from Starter to Team with monthly/annual billing, prepaid minute packs, and a 14-day free trial with no credit card required. Local licenses for self-hosted use. Agent-minutes are wall-clock time."
 
 const jsonLd = [
   {
@@ -259,10 +259,10 @@ const appUrl =
         </a>
       </div>
 
-      <!-- Money-back guarantee -->
+      <!-- Free trial -->
       <div class="mt-12 rounded-lg bg-green-50 p-4 text-center dark:bg-green-900/20">
         <p class="text-sm text-green-800 dark:text-green-400">
-          14-day money-back guarantee on Cloud plans. Cancel anytime.
+          Start with a 14-day free trial — no credit card required. All sales are final; no refunds.
         </p>
       </div>
     </div>
