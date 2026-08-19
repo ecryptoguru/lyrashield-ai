@@ -5604,3 +5604,15 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 5. Complete the separate app-origin scorecard/unfurl/referral gate on the approved public domains and submit the sitemap through selected webmaster accounts.
 6. After pilot evidence, prioritize Security Copilot, visual plans, compliance-lite evidence, and Phase 2 features from real customer demand.
 7. Build a private LyraShield engine evaluation corpus before changing agent architecture or making result-quality claims; measure expected findings/non-findings, evidence correctness, duplicate stability, control coverage, runtime, and token use separately for Luna and Terra.
+
+### Deferred scalability and hardening backlog (v1.1/v2 — not current MVP acceptance criteria)
+
+These items are accepted tradeoffs for the Sprint 10 + BYOK + Affiliate launch. They are **deferred** — not required for MVP launch, but planned for v1.1/v2 with specific trigger metrics. Each has a designated owner and a build trigger so work begins when actually needed, not prematurely.
+
+8. **True active-vs-idle agent-loop signal from the engine (v1.1).** Sprint 10 bills wall-clock agent-minutes because the engine cannot cleanly separate active LLM thinking time from idle/queue time. Until this ships, the public definition of "agent-minute" is **wall-clock duration during an active scan** — marketing copy must not claim "active agent-loop time" or "LLM thinking time." **Deferred fix:** engine emits a true active-loop duration signal (LLM request start → response end, excluding queue/wait time); worker metering consumes this instead of wall-clock. **Trigger:** customer dispute rate on agent-minute billing exceeds 2%. **Owner:** engine team.
+
+9. **`WorkspaceCycleBalance` materialized aggregate (v1.1).** `getUsageBalance` currently sums across `UsageRecord` rows per workspace per cycle — O(rows-in-cycle), fine at hundreds of workspaces. **Deferred fix:** add a `WorkspaceCycleBalance` model updated atomically on each meter/grant/expiry event; balance reads become O(1). **Trigger:** `getUsageBalance` appears in p99 slow queries or workspace count crosses 5,000. **Owner:** Track A backend follow-up.
+
+10. **Affiliate click archival/retention policy (v1.1).** The `Click` table is append-only and grows unbounded. **Deferred fix:** keep raw `Click` rows for 90 days; after 90 days, aggregate into `ClickDailyAggregate { affiliateId, date, clicks, uniqueClicks, conversions }` and delete raw rows; keep aggregates for 36 months. **Trigger:** `Click` table crosses ~50M rows. **Owner:** Track C backend follow-up.
+
+11. **CDN in front of GitHub Releases update assets (v2).** Tauri update manifest + assets are hosted on GitHub Releases, which rate-limits unauthenticated release-asset downloads. Fine for hundreds of users checking for updates daily. **Deferred fix:** put a CDN (Cloudflare R2 + Workers, or Azure CDN) in front of the release assets; update the Tauri updater manifest URL to point at the CDN; keep GitHub Releases as the origin. **Trigger:** daily update-checks cross ~10,000. **Owner:** Track B devops follow-up.
