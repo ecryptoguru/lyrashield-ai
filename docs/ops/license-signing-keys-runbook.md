@@ -6,7 +6,7 @@
 > end-to-end. Every command and secret name below is grounded in the live
 > repository at `main @ 0d61b1a6`.
 >
-> **Scope guard.** This runbook provisions *only* what the current codebase
+> **Scope guard.** This runbook provisions _only_ what the current codebase
 > consumes. It does not invent CI jobs or Tauri updater keys that do not yet
 > exist on `main` — see §6 "Current gaps" for the honest list.
 
@@ -28,14 +28,14 @@ Relevant code:
 Env vars consumed today (from `packages/config/src/env.ts` and
 `.env.example`):
 
-| Variable | Required in prod | What it is |
-|---|---|---|
-| `LICENSE_SIGNING_PRIVATE_KEY` | **Yes, but read from Azure Key Vault at runtime — the `env` fallback is dev-only** | ed25519 PKCS#8 PEM private key. Must start with `-----BEGIN`. |
-| `LICENSE_SIGNING_KEY_ID` | **Yes** (throws in production if unset) | Identifier for rotation / revocation lists, e.g. `license-key-v1`. |
-| `LICENSE_SIGNING_PUBLIC_KEY` | Optional | SPKI PEM public key. If unset, derived from the private key at runtime. |
-| `LICENSE_PUBLISHED_BUILD` | Yes for Local | Latest published Local/Desktop semver; used as `perpetualFallbackBuild` at issue/renew. Never accept a client-supplied value. |
-| `POLAR_LOCAL_PRODUCT_IDS` | Yes for Local checkout | JSON map of Local SKU → Polar product ID, e.g. `{"individual_launch":"prod_abc",...}`. |
-| `LYRASHIELD_INTERNAL_API_KEY` | Yes in prod | Internal API key for server-to-server license issue/renew routes. Sent as `X-LyraShield-Internal-Key`. |
+| Variable                      | Required in prod                                                                   | What it is                                                                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `LICENSE_SIGNING_PRIVATE_KEY` | **Yes, but read from Azure Key Vault at runtime — the `env` fallback is dev-only** | ed25519 PKCS#8 PEM private key. Must start with `-----BEGIN`.                                                                 |
+| `LICENSE_SIGNING_KEY_ID`      | **Yes** (throws in production if unset)                                            | Identifier for rotation / revocation lists, e.g. `license-key-v1`.                                                            |
+| `LICENSE_SIGNING_PUBLIC_KEY`  | Optional                                                                           | SPKI PEM public key. If unset, derived from the private key at runtime.                                                       |
+| `LICENSE_PUBLISHED_BUILD`     | Yes for Local                                                                      | Latest published Local/Desktop semver; used as `perpetualFallbackBuild` at issue/renew. Never accept a client-supplied value. |
+| `POLAR_LOCAL_PRODUCT_IDS`     | Yes for Local checkout                                                             | JSON map of Local SKU → Polar product ID, e.g. `{"individual_launch":"prod_abc",...}`.                                        |
+| `LYRASHIELD_INTERNAL_API_KEY` | Yes in prod                                                                        | Internal API key for server-to-server license issue/renew routes. Sent as `X-LyraShield-Internal-Key`.                        |
 
 > **Fail-closed note.** `resolveSigningKeyId()` in
 > `apps/web/src/lib/licenses/license-service.ts` throws
@@ -66,24 +66,24 @@ current CI to use them.
 
 Consumed by `packages/billing` and `apps/web/src/app/api/billing/*`:
 
-| Variable | Provider | Notes |
-|---|---|---|
-| `POLAR_ACCESS_TOKEN` | Polar | Merchant-of-record API token. |
-| `POLAR_ORG_ID` | Polar | Organization ID. |
-| `POLAR_WEBHOOK_SECRET` | Polar | Standard-Webhooks HMAC secret. |
-| `POLAR_WEBHOOK_TOLERANCE_MS` | Polar | Optional, default `300000` (5 min). |
-| `RAZORPAY_KEY_ID` | Razorpay | India INR gateway. |
-| `RAZORPAY_KEY_SECRET` | Razorpay | Also fallback webhook secret. |
-| `RAZORPAY_WEBHOOK_SECRET` | Razorpay | Dedicated webhook secret preferred. |
-| `BILLING_USD_INR_RATE` | — | Default `100`, bounded `[50, 150]`. |
-| `BILLING_GEO_IP_HEADER` | — | GeoIP header for provider routing. |
+| Variable                     | Provider | Notes                               |
+| ---------------------------- | -------- | ----------------------------------- |
+| `POLAR_ACCESS_TOKEN`         | Polar    | Merchant-of-record API token.       |
+| `POLAR_ORG_ID`               | Polar    | Organization ID.                    |
+| `POLAR_WEBHOOK_SECRET`       | Polar    | Standard-Webhooks HMAC secret.      |
+| `POLAR_WEBHOOK_TOLERANCE_MS` | Polar    | Optional, default `300000` (5 min). |
+| `RAZORPAY_KEY_ID`            | Razorpay | India INR gateway.                  |
+| `RAZORPAY_KEY_SECRET`        | Razorpay | Also fallback webhook secret.       |
+| `RAZORPAY_WEBHOOK_SECRET`    | Razorpay | Dedicated webhook secret preferred. |
+| `BILLING_USD_INR_RATE`       | —        | Default `100`, bounded `[50, 150]`. |
+| `BILLING_GEO_IP_HEADER`      | —        | GeoIP header for provider routing.  |
 
 ### 1d. Affiliate payout providers (Track C)
 
-| Variable | Provider |
-|---|---|
+| Variable                                                                  | Provider                  |
+| ------------------------------------------------------------------------- | ------------------------- |
 | `RAZORPAYX_API_KEY` / `RAZORPAYX_API_SECRET` / `RAZORPAYX_ACCOUNT_NUMBER` | RazorpayX (India payouts) |
-| `PAYONEER_API_KEY` / `PAYONEER_API_SECRET` / `PAYONEER_PARTNER_ID` | Payoneer (global payouts) |
+| `PAYONEER_API_KEY` / `PAYONEER_API_SECRET` / `PAYONEER_PARTNER_ID`        | Payoneer (global payouts) |
 
 ### 1e. Deploy-time secrets already in use (`deploy-azure.yml`)
 
@@ -208,21 +208,21 @@ Open **Settings → Secrets and variables → Actions** on
 
 ### 4a. Secrets (new, for Sprint-10)
 
-| Secret name | Source |
-|---|---|
-| `LICENSE_SIGNING_PRIVATE_KEY` | Contents of `license-signing-private.pem` |
-| `LICENSE_SIGNING_KEY_ID` | `license-key-v1` |
-| `POLAR_ACCESS_TOKEN` | Polar dashboard |
-| `POLAR_ORG_ID` | Polar dashboard |
-| `POLAR_WEBHOOK_SECRET` | Polar webhook settings |
-| `RAZORPAY_KEY_ID` | Razorpay dashboard |
-| `RAZORPAY_KEY_SECRET` | Razorpay dashboard |
-| `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook settings |
-| `LYRASHIELD_INTERNAL_API_KEY` | `openssl rand -hex 32` |
-| `POLAR_LOCAL_PRODUCT_IDS` | JSON map of SKU → Polar product ID |
-| `RAZORPAYX_API_KEY` / `RAZORPAYX_API_SECRET` / `RAZORPAYX_ACCOUNT_NUMBER` | RazorpayX (affiliate payouts) |
-| `PAYONEER_API_KEY` / `PAYONEER_API_SECRET` / `PAYONEER_PARTNER_ID` | Payoneer (affiliate payouts) |
-| `BREVO_API_KEY` | Brevo (already verified locally; still needed on the production Container App — see `docs/deployment/PRODUCTION_DEPLOYMENT.md` blocker #1) |
+| Secret name                                                               | Source                                                                                                                                     |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LICENSE_SIGNING_PRIVATE_KEY`                                             | Contents of `license-signing-private.pem`                                                                                                  |
+| `LICENSE_SIGNING_KEY_ID`                                                  | `license-key-v1`                                                                                                                           |
+| `POLAR_ACCESS_TOKEN`                                                      | Polar dashboard                                                                                                                            |
+| `POLAR_ORG_ID`                                                            | Polar dashboard                                                                                                                            |
+| `POLAR_WEBHOOK_SECRET`                                                    | Polar webhook settings                                                                                                                     |
+| `RAZORPAY_KEY_ID`                                                         | Razorpay dashboard                                                                                                                         |
+| `RAZORPAY_KEY_SECRET`                                                     | Razorpay dashboard                                                                                                                         |
+| `RAZORPAY_WEBHOOK_SECRET`                                                 | Razorpay webhook settings                                                                                                                  |
+| `LYRASHIELD_INTERNAL_API_KEY`                                             | `openssl rand -hex 32`                                                                                                                     |
+| `POLAR_LOCAL_PRODUCT_IDS`                                                 | JSON map of SKU → Polar product ID                                                                                                         |
+| `RAZORPAYX_API_KEY` / `RAZORPAYX_API_SECRET` / `RAZORPAYX_ACCOUNT_NUMBER` | RazorpayX (affiliate payouts)                                                                                                              |
+| `PAYONEER_API_KEY` / `PAYONEER_API_SECRET` / `PAYONEER_PARTNER_ID`        | Payoneer (affiliate payouts)                                                                                                               |
+| `BREVO_API_KEY`                                                           | Brevo (already verified locally; still needed on the production Container App — see `docs/deployment/PRODUCTION_DEPLOYMENT.md` blocker #1) |
 
 You can verify which secrets exist without printing values using the repo's
 `secrets_sync.py` helper (see `lyrashield-github-ops` skill):
@@ -235,10 +235,10 @@ python3 secrets_sync.py --repo ecryptoguru/lyrashield-ai \
 
 ### 4b. Variables (non-secret)
 
-| Variable | Value |
-|---|---|
-| `LICENSE_PUBLISHED_BUILD` | e.g. `0.1.0` — bump on each Local/Desktop release |
-| `BILLING_USD_INR_RATE` | `100` (default; only override on founder instruction) |
+| Variable                  | Value                                                 |
+| ------------------------- | ----------------------------------------------------- |
+| `LICENSE_PUBLISHED_BUILD` | e.g. `0.1.0` — bump on each Local/Desktop release     |
+| `BILLING_USD_INR_RATE`    | `100` (default; only override on founder instruction) |
 
 ### 4c. E2E signing key in CI
 

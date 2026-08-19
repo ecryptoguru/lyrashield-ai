@@ -14,16 +14,16 @@
 
 ## 0. Preconditions — do NOT run in production until all are true
 
-| # | Precondition | How to verify |
-|---|---|---|
-| 1 | Real license signing key provisioned in Azure Key Vault and `LICENSE_SIGNING_KEY_ID` set | `az keyvault secret show --vault-name lyrashieldprodsecrets --name license-signing-private-key`; Container App env has `LICENSE_SIGNING_KEY_ID` |
-| 2 | Polar + Razorpay configured: `POLAR_ACCESS_TOKEN`, `POLAR_ORG_ID`, `POLAR_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `POLAR_LOCAL_PRODUCT_IDS` | `secrets_sync.py check-secrets …`; provider dashboards show webhooks registered |
-| 3 | Brevo flipped in production: `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL` set and `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` | `docs/deployment/PRODUCTION_DEPLOYMENT.md` blocker #1 resolved |
-| 4 | Runtime DB role cannot bypass RLS | run `packages/db/scripts/verify-license-rls-live.sh` (see `license-rls-live-verification.md`) — **must pass 6/6 first** |
-| 5 | `LYRASHIELD_INTERNAL_API_KEY` set on the app | license issue/renew routes return 403 without the header |
-| 6 | Migrations applied through `20260819000000_sprint10_license_affiliate_indexes` | `pnpm --filter @lyrashield/db migrate:deploy` reports up to date |
-| 7 | Worker jobs scheduled: `billing-downgrade`, `billing-expire-packs`, `billing-reconciliation`, `affiliate-*` | worker boot log lists the repeatable jobs |
-| 8 | A dedicated test workspace + test founder account exist for smoke runs; never use a real customer workspace | — |
+| #   | Precondition                                                                                                                                                                              | How to verify                                                                                                                                   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Real license signing key provisioned in Azure Key Vault and `LICENSE_SIGNING_KEY_ID` set                                                                                                  | `az keyvault secret show --vault-name lyrashieldprodsecrets --name license-signing-private-key`; Container App env has `LICENSE_SIGNING_KEY_ID` |
+| 2   | Polar + Razorpay configured: `POLAR_ACCESS_TOKEN`, `POLAR_ORG_ID`, `POLAR_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `POLAR_LOCAL_PRODUCT_IDS` | `secrets_sync.py check-secrets …`; provider dashboards show webhooks registered                                                                 |
+| 3   | Brevo flipped in production: `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL` set and `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1`                                                   | `docs/deployment/PRODUCTION_DEPLOYMENT.md` blocker #1 resolved                                                                                  |
+| 4   | Runtime DB role cannot bypass RLS                                                                                                                                                         | run `packages/db/scripts/verify-license-rls-live.sh` (see `license-rls-live-verification.md`) — **must pass 6/6 first**                         |
+| 5   | `LYRASHIELD_INTERNAL_API_KEY` set on the app                                                                                                                                              | license issue/renew routes return 403 without the header                                                                                        |
+| 6   | Migrations applied through `20260819000000_sprint10_license_affiliate_indexes`                                                                                                            | `pnpm --filter @lyrashield/db migrate:deploy` reports up to date                                                                                |
+| 7   | Worker jobs scheduled: `billing-downgrade`, `billing-expire-packs`, `billing-reconciliation`, `affiliate-*`                                                                               | worker boot log lists the repeatable jobs                                                                                                       |
+| 8   | A dedicated test workspace + test founder account exist for smoke runs; never use a real customer workspace                                                                               | —                                                                                                                                               |
 
 **Rollback / abort (all flows).** If any step fails in a way that writes real
 billing state, do not retry blindly. Abort criteria and the escape hatch per
@@ -57,6 +57,7 @@ Constants (verified in `packages/pricing/src/plans.ts`, `packs.ts`,
 `POST /api/billing/trial/start` `{workspaceId}`.
 
 **Pass criteria:**
+
 - Response `200 {started:true, trialEndsAt}`.
 - DB: `Workspace.trialStartedAt` set, `plan=FREE`, `deepAllowed=false`;
   `BillingAccount` row `status=trialing`, `currentPlan=FREE`, `trialEndsAt` set.
@@ -75,6 +76,7 @@ the workspace = 1.
 **Steps:** add a target → run a **Standard** scan to completion.
 
 **Pass criteria:**
+
 - Scan completes; a `UsageRecord` `kind=agent_minutes` row is written with
   `idempotencyKey="<workspaceId>:<scanId>:<phase>"` and quantity =
   `ceil(ms/60000)` (min 1), no 3× multiplier.
@@ -88,6 +90,7 @@ scan; separately simulate `trialStartedAt` > 14 days ago (staging DB edit or
 time-travel account) → attempt a scan.
 
 **Pass criteria:**
+
 - Over cap → `403 NO_MINUTES_REMAINING` (trial variant message).
 - Past 14 days → `assertScanAllowed` returns `TRIAL_EXPIRED`; `BillingAccount.status`
   flips to `trial_expired` (via `blockOnExpiry`); dashboard shows upgrade CTA;
@@ -103,8 +106,9 @@ combination: `{plan: STARTER|PRO|TEAM, interval: monthly|annual}` via Polar
 provider's **test/sandbox mode first**, then one live-mode micro-purchase.
 
 **Pass criteria:**
+
 - Checkout returns a valid Polar URL / Razorpay subscription id; `429
-  RATE_LIMITED` fires on rapid repeats; `503 PROVIDER_NOT_CONFIGURED` if a
+RATE_LIMITED` fires on rapid repeats; `503 PROVIDER_NOT_CONFIGURED` if a
   token is missing (fail-closed, not a crash).
 - On `subscription.created`/`active` (Polar) or `subscription.activated`
   (Razorpay): within one transaction — `BillingAccount` upserted
@@ -130,6 +134,7 @@ provider's **test/sandbox mode first**, then one live-mode micro-purchase.
 (seed near-zero) and observe grace.
 
 **Pass criteria:**
+
 - Scan completes and meters against the pool.
 - When balance hits 0 mid-scan, worker calls `enterGrace`; `Workspace.graceUsedMs`
   increments, capped at 900000; on exceeding, `AuditLog billing.grace_exceeded`
@@ -142,6 +147,7 @@ provider's **test/sandbox mode first**, then one live-mode micro-purchase.
 Polar and Razorpay; complete payment.
 
 **Pass criteria:**
+
 - Polar `order.paid` / Razorpay `payment.captured` → `MinutePack` row
   (`minutes=100`, `remainingMinutes=100`, `expiresAt ≈ now+180d`,
   `externalId=<order/payment id>`), unique `(workspaceId, externalId)`.
@@ -157,6 +163,7 @@ Polar and Razorpay; complete payment.
 $15), exhaust pool + packs, run a scan that spills into overage.
 
 **Pass criteria:**
+
 - `UsageRecord kind=overage_minutes` with
   `idempotencyKey="<ws>:<scanId>:<phase>:overage"`, debited at $0.15/min.
 - When cumulative cycle overage × $0.15 reaches `spendLimitCents`, further
@@ -169,6 +176,7 @@ $15), exhaust pool + packs, run a scan that spills into overage.
 `refund.created` / `payment.refunded` webhook arrive.
 
 **Pass criteria:**
+
 - `MinutePack.remainingMinutes` zeroed for that `externalId`.
 - `UsageRecord kind=refund_reversal` with
   `idempotencyKey="<ws>:<refundExternalId>"`.
@@ -201,6 +209,7 @@ from `LICENSE_PUBLISHED_BUILD` — client-supplied `currentBuild` is ignored.
 `POLAR_LOCAL_PRODUCT_IDS`) in sandbox, then one live purchase.
 
 **Pass criteria:**
+
 - The Polar `order.paid` path (via `issueLicenseForPolarOrder()` or
   `POST /api/licenses/issue` with the internal key) creates a `License`
   (`workspaceId` possibly NULL) + `LicenseKey` (`keyHash=sha256(rawKey)`,
@@ -215,6 +224,7 @@ from `LICENSE_PUBLISHED_BUILD` — client-supplied `currentBuild` is ignored.
 = 3; Team = 1 per seat).
 
 **Pass criteria:**
+
 - Each new machine returns `200` with `license` + `blob`, records a
   `LicenseActivation` (`lastSeenAt`), and appends to `License.machineIds`.
 - Re-activating the same machine is idempotent (no extra seat consumed).
@@ -227,8 +237,9 @@ window; on reconnect it calls `POST /api/licenses/verify` with the stored
 license file.
 
 **Pass criteria:**
+
 - `verify` with a valid, unexpired license file → `valid:true,
-  updateEligible:true` (signature verified against the **server-side**
+updateEligible:true` (signature verified against the **server-side**
   public key — never a client-supplied key).
 - A tampered file (modified `seatCount`/`machineIds`) →
   `signature_mismatch` (`valid:false`).
@@ -239,6 +250,7 @@ license file.
 **Steps:** as an OWNER, `POST /api/licenses/revoke` `{licenseId, reason}`.
 
 **Pass criteria:**
+
 - Atomic transaction: `License.revoked=true`, `signature/signingKeyId` set to
   `REVOKED`, a `LicenseRevocation` row written, all `LicenseActivation` rows
   deactivated, `SyncCursor` rows for the license deleted.
@@ -277,6 +289,7 @@ default 10000).
 `POST /api/admin/affiliates/action` `{action:"approve"}`.
 
 **Pass criteria:**
+
 - Application writes `Affiliate.acceptedTermsAt` and
   `termsVersion="2026-08-18-v1"` (the FTC/ASA terms gate — an application
   without `acceptTerms` cannot be approved; the admin action asserts
@@ -289,6 +302,7 @@ default 10000).
 `?ref=`) in a fresh browser → complete a referred signup.
 
 **Pass criteria:**
+
 - `/r/:code` records a `Click` (hashed IP/UA) and sets the `__ls_aff` cookie
   (`Path=/; Domain=.lyrashieldai.com; SameSite=Lax; HttpOnly; Secure`,
   Max-Age 5184000 = 60d) — only when consent is given (`__ls_consent`); an
@@ -302,6 +316,7 @@ default 10000).
 **Steps:** the referred user completes a paid Cloud subscription checkout.
 
 **Pass criteria:**
+
 - On the billing `order.paid` / `subscription.*` event, a `Conversion` +
   `Commission` (`status=PENDING`, `availableAt = now + 30d`) is created at
   25% of the net (pre-tax, post-discount) base; commission on annual plans is
@@ -322,6 +337,7 @@ default 10000).
 payout method + tax form on file, then `POST /affiliates/api/payouts/request`.
 
 **Pass criteria:**
+
 - New-affiliate reserve: 25% of commissions held for the first 90 days
   (shown transparently); released after 90 days.
 - Payout eligibility requires: available balance ≥ $100, valid payout method,
@@ -337,6 +353,7 @@ payout method + tax form on file, then `POST /affiliates/api/payouts/request`.
 **Steps:** refund the referred subscription inside the 14-day Cloud window.
 
 **Pass criteria:**
+
 - The matching `Commission` flips to `REVERSED`, amount zeroed;
   `Affiliate.activeReferrals` decremented on first-payment refunds.
 - Commissions > $200 set `manualReview=true`
