@@ -390,7 +390,12 @@ export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidR
 
   let rateBps: number
   if (isAnnual) {
-    // Annual Cloud plans: 25% of annual amount as paid
+    // Annual Cloud plans: FLAT 25% of the annual amount as paid.
+    // POLICY (founder-confirmed 2026-08-19): the 30% tier kicker
+    // (TIER_RATE_BPS at >= TIER_THRESHOLD active referrals) applies to
+    // MONTHLY Cloud plans only. Annual plans always pay the flat
+    // ANNUAL_RATE_BPS regardless of the affiliate's tier — do not route
+    // annual through the tier branch without an explicit founder decision.
     rateBps = ANNUAL_RATE_BPS
   } else if (
     affiliate &&
