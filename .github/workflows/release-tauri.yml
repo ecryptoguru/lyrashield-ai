@@ -188,20 +188,64 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download all release assets
+      - name: Generate or download updater manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         run: |
           TAG="${{ github.ref_name }}"
-          # The tauri-action uploads assets and a latest.json manifest.
-          # We download the manifest, verify it's signed, and publish it
-          # as the canonical latest.json on the release.
+          VERSION="${TAG#v}"
+          # Try to download an existing latest.json from the release (tauri-action may have uploaded one)
           gh release download "$TAG" --pattern "latest.json" --output latest.json || true
-          if [ ! -f latest.json ]; then
-            echo "::error::No latest.json found in release assets"
-            exit 1
+          if [ ! -f latest.json ] || [ ! -s latest.json ]; then
+            echo "No latest.json from tauri-action — generating from release assets"
+            # Download the macOS .tar.gz and Windows .exe to compute signatures
+            gh release download "$TAG" --pattern "*.tar.gz" --dir /tmp/assets/ || true
+            gh release download "$TAG" --pattern "*-setup.exe" --dir /tmp/assets/ --clobber || true
+
+            MAC_TARBALL=$(ls /tmp/assets/*.tar.gz 2>/dev/null | head -1)
+            WIN_INSTALLER=$(ls /tmp/assets/*-setup.exe 2>/dev/null | head -1)
+
+            # Install tauri CLI for signing
+            npm install -g @tauri-apps/cli@2
+
+            MAC_SIGNATURE=""
+            if [ -n "$MAC_TARBALL" ]; then
+              MAC_SIGNATURE=$(npx tauri signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$MAC_TARBALL" 2>/dev/null | grep -oP 'signature:\s*\K.*' || echo "")
+            fi
+            WIN_SIGNATURE=""
+            if [ -n "$WIN_INSTALLER" ]; then
+              WIN_SIGNATURE=$(npx tauri signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$WIN_INSTALLER" 2>/dev/null | grep -oP 'signature:\s*\K.*' || echo "")
+            fi
+
+            # Build the manifest JSON
+            MAC_URL="https://github.com/ecryptoguru/lyrashield-ai/releases/download/${TAG}/$(basename "$MAC_TARBALL" 2>/dev/null || echo '')"
+            WIN_URL="https://github.com/ecryptoguru/lyrashield-ai/releases/download/${TAG}/$(basename "$WIN_INSTALLER" 2>/dev/null || echo '')"
+
+            cat > latest.json <<EOFMANIFEST
+          {
+            "version": "${VERSION}",
+            "notes": "LyraShield Local/Desktop ${TAG}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${MAC_SIGNATURE}",
+                "url": "${MAC_URL}"
+              },
+              "darwin-x86_64": {
+                "signature": "${MAC_SIGNATURE}",
+                "url": "${MAC_URL}"
+              },
+              "windows-x86_64": {
+                "signature": "${WIN_SIGNATURE}",
+                "url": "${WIN_URL}"
+              }
+            }
+          }
+          EOFMANIFEST
           fi
-          echo "Manifest downloaded:"
+          echo "Manifest content:"
           cat latest.json
 
       - name: Verify no private keys in manifest
