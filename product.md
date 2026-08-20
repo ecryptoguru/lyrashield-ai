@@ -18,6 +18,8 @@ The position is the combination, not a claim of unique capability: a solo builde
 
 ## Audience and message
 
+LyraShield now serves two modes: **Cloud** (subscription, hosted) and **Local** (BYOK desktop, one-time license). Same engine, same core loop, one account.
+
 | Audience                 | Useful framing                                                                   |
 | ------------------------ | -------------------------------------------------------------------------------- |
 | AI-assisted solo builder | “You shipped it quickly. Check it before you launch.”                            |
@@ -53,6 +55,8 @@ Lead with a defensible release-assurance record:
 
 SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important coverage layers, but are table stakes individually. Do not overstate parity with dedicated point tools.
 
+Two modes: **Cloud subscription** (we pay LLM costs) and **Local BYOK desktop** (customer's own AI, zero LLM COGS, privacy-first with optional cloud sync).
+
 ## Product status
 
 ### Implemented
@@ -85,7 +89,11 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 - Azure Foundry deployments use direct JSON function tools by default; the configured endpoint accepts baseline Responses and `previous_response_id` but rejects `programmatic_tool_calling`.
 - Protected run limits and versioned per-request GPT-5.6 accounting remain internal; the dashboard shows neither model costs nor spend. Engine findings are not self-verified.
 - **AI App Security scanner (Release A, 2026-08-13).** A deterministic static-analysis scanner for AI-specific risks mapped to the OWASP Top 10 for LLM Applications (2025). Eight signals (AI-01–AI-08) cover prompt-injection input validation, sensitive data in LLM context, AI library supply chain, LLM output in dangerous sinks, unbounded agent permissions, system prompt exposure, unauthenticated vector DB / RAG access, and missing LLM consumption limits. A free browser-local tool at `/tools/ai-app-security-scanner` runs AI-01, AI-02, and AI-04–AI-08 entirely in the browser with no upload; paid Standard and Deep scans rerun the same core across a repository snapshot, add AI-03 advisory enrichment, apply an optional bounded LLM triage overlay (off by default, additive only), and persist a private versioned AI App Security Score with separate coverage. The score is private, immutable, and excluded from public scorecards. Public copy says "mapped to OWASP" and never implies OWASP endorsement, certification, universal detection, or a safety guarantee. See `docs/plans/2026-08-13-ai-app-security-scanner.md` and `docs/claims-readiness.md`.
-- **AI safety evaluation harness (2026-08-13).** `packages/eval-ai-safety/` evaluates LyraShield's deterministic `PromptInjectionGuard` (not an underlying LLM's general safety training) against the OWASP Gen AI Red Teaming Guide (42 test cases; 85.7% expected-outcome match) and the MLCommons AILuminate demo set (292 prompts; 4.5% guard-rule match, observational only). Results are published on `/ai-safety` with bounded, honest language.
+- **AI safety evaluation harness (2026-08-13; updated Sprint 10).** `packages/eval-ai-safety/` evaluates LyraShield's deterministic `PromptInjectionGuard` (not an underlying LLM's general safety training) against the OWASP Gen AI Red Teaming Guide (34 test cases) and the MLCommons AILuminate set (1,200 prompts). Results are published on `/ai-safety` with bounded, honest language.
+- **Cloud billing (Sprint 10, merged 2026-08).** Polar + Razorpay dual-gateway with 14-day trial, plan-based entitlements (TRIAL/STARTER/PRO/TEAM/AGENCY), usage metering (agent-minutes with Deep 3x multiplier), minute packs, overage, grace period, and geo-routing (India→Razorpay/INR, global→Polar/USD).
+- **LyraShield Local/Desktop (Sprint 10, merged 2026-08).** Tauri v2 BYOK desktop app with one-time 1-year license, ed25519 signed licenses, offline grace, perpetual fallback, ChatGPT OAuth + Azure OpenAI BYOK, optional cloud sync, and macOS + Windows builds with code signing.
+- **Affiliate & partner program (Sprint 10, merged 2026-08).** 25% recurring Cloud commission (30% at 10+ active), 20% one-time Local, last-click attribution (60-day cookie), promo code override, fraud controls, and payout ledger (RazorpayX India / Payoneer global) with $100 min payout, net-30, 30-day hold, and new-affiliate reserve.
+- **Evidence storage (Sprint 10).** Envelope encryption (AES-256-GCM) for scan artifacts.
 
 ### Live
 
@@ -94,7 +102,7 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 ### Not implemented
 
-- Billing/plan quotas, provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, constrained intrusive sandbox exploit replay, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities.
+- Provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, constrained intrusive sandbox exploit replay, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities.
 - Production full scans additionally require private evidence storage, BullMQ-compatible TLS Redis, dedicated sandbox-capable worker compute, the authenticated application origin, monitoring/recovery, and transport-level egress enforcement.
 
 See `PRD.md` for the authoritative roadmap.
@@ -110,9 +118,12 @@ See `PRD.md` for the authoritative roadmap.
 
 URL/API targets skip the external engine. SAFE remains a compatibility alias for the canonical repository QUICK profile, and CUSTOM resolves to Deep; neither is an extra one-off dashboard choice. Sol remains an internal accounting model but is not assigned to a preset. Protected limits and provider reconciliation are operator concerns and are not displayed in the product UI. See `userguide.md` for the complete workflow and option reference.
 
+**LyraShield Local/Desktop** is a separate product surface: a Tauri v2 desktop app with BYOK (ChatGPT OAuth + Azure OpenAI), local scanning, and optional cloud sync. Same engine and core loop; one account.
+
 ## Launch and growth
 
-- Open-beta registration is live at `app.lyrashieldai.com/sign-up`; the marketing email form is an optional product-updates subscription, not an access gate. Acquisition flows through the public Lite Check, browser-local tools, public scorecards, referrals, and technical content.
+- Open-beta registration is live at `app.lyrashieldai.com/sign-up`; the marketing email form is an optional product-updates subscription, not an access gate. Acquisition flows through the public Lite Check, browser-local tools, public scorecards, referrals, technical content, and the affiliate program.
+- **Affiliate program** is a growth channel: 25% recurring Cloud commissions (30% at 10+ active), 20% one-time Local, with a transparent on-platform dashboard.
 - Use reports, fix proposals, retests, the public methodology, browser-local tools, and MCP read workflows as demonstrations; do not promise automatic PR creation or use unverified marketing claims.
 - Publish answer-first technical content for AI-built-app security only after founder approval.
 - Keep sample blog posts as drafts until their claims, sources, author, and launch timing are approved.
@@ -128,6 +139,10 @@ Initial themes: secure AI-generated code, security review before SaaS launch, de
 3. Pricing, usage metric, payment-provider scope, and free-tier policy.
 4. Public-launch timing and build-in-public voice.
 5. Approved model/provider and first controlled scan.
+6. One app, two modes: Local (paid license, BYOK) + Cloud (subscription, hosted).
+7. No lifetime deals, no refunds on Local licenses, 14-day money-back on Cloud.
+8. Affiliate: 25% recurring Cloud (30% at 10+), 20% one-time Local, $100 min payout, net-30.
+9. Payouts: RazorpayX (India) + Payoneer (global), no Wise/PayPal/Stripe Connect.
 
 ## Document map
 
@@ -136,3 +151,5 @@ Initial themes: secure AI-generated code, security review before SaaS launch, de
 - `AGENTS.md` — current handoff, immediate blockers, and execution sequence
 - `userguide.md` — complete user workflows, options, permissions, and limitations
 - `apps/marketing/BLOG_AUTHORING.md` — authoring and publication checklist
+
+> `BYOKapp.md`, `affliate.md`, and `sprint10.md` have been removed; their content now lives in `PRD.md`, `codebase.md`, and `monetization.md`.

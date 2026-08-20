@@ -412,6 +412,67 @@ The current dashboard integration supports connecting the GitHub App, loading au
 
 Other integration types exist in the internal schema and roadmap, but the current dashboard should not be read as offering active Slack, Jira, Linear, Teams, ServiceNow, SIEM, or compliance-platform connections.
 
+### 20.5 Billing and plans (Cloud Mode)
+
+LyraShield Cloud offers a 14-day free trial: 100 agent-minutes, Standard and Quick scans only (no Deep), and no card required. When the trial ends, pick a paid plan or let it lapse.
+
+| Plan    | Price        | Minutes/mo | Targets | Deep | Notes                              |
+| ------- | ------------ | ----------: | ------: | ---- | ---------------------------------- |
+| STARTER | $29/mo       |         300 |       5 | No  | Standard + Quick                   |
+| PRO     | $99/mo       |       1,200 |      15 | Yes | Deep enabled                       |
+| TEAM    | $299/mo      |       4,000 |      50 | Yes | Deep + opt-in overage + spend limit |
+| AGENCY  | Contact-led  |     custom  | custom  | Yes | Custom terms                       |
+
+- **Annual billing:** 15–25% discount, prepaid.
+- **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
+- **Minute packs:** 100/$15, 250/$30, 500/$50 — valid 180 days.
+- **Overage:** $0.15/min — Team plan opt-in with a configurable spend limit.
+- **Deep/Custom scans:** 3× agent-minute multiplier, PRO+ only.
+- **Grace period:** 15 min free grace if minutes run out mid-scan.
+- **Refunds:** 14-day money-back on Cloud subscriptions.
+- **Billing page:** manage subscription, buy minute packs, view usage, and set a spend limit (Team).
+
+### 20.6 Affiliate program
+
+- Apply at `/affiliates/apply` (requires a LyraShield account).
+- Manual approval by the LyraShield team.
+- Approved affiliates receive a referral link and a promo code.
+
+Commission:
+
+- 25% recurring on Cloud subscriptions for 12 months; 30% once you reach 10+ active referrals.
+- 20% one-time on Local licenses.
+- No commission on minute packs, trials, or self-referrals.
+
+Attribution uses a last-click cookie (60 days), with a promo code override.
+
+Dashboard at `/affiliates/dashboard` shows clicks, signups, conversions, commissions, and payouts.
+
+Payouts:
+
+- $100 minimum, monthly net-30 on the 15th, with a 30-day hold.
+- Tax form required (W-9 or W-8BEN).
+- New affiliates carry a 20–30% reserve for the first 90 days.
+- Rails: RazorpayX (India, IMPS/UPI) or Payoneer (global).
+
+### 20.7 LyraShield Local/Desktop (BYOK)
+
+LyraShield Local is a desktop app for macOS and Windows. It is a one-time 1-year license with BYOK — you bring your own AI.
+
+- **Supported BYOK:** ChatGPT/OpenAI subscription (OAuth) and Azure OpenAI.
+- **Scan depths:** all depths are available — there is no Cloud-style depth gating because your AI pays, not us.
+- **Metering:** zero agent-minute metering; your AI pays, not LyraShield.
+- **Privacy:** scans run locally. No code, findings, or keys leave your machine.
+- **Optional cloud sync:** connect your LyraShield account to sync findings.
+- **Perpetual fallback:** keep the last eligible build forever after the license expires.
+- **Offline grace:** the app runs without a network using a cached signed license.
+
+Pricing:
+
+- **Individual:** $199 launch / $299 regular — 3 machines.
+- **Team:** $99/seat + $59/seat/yr renewal, or $149/seat/yr subscription with sync.
+- **Refunds:** none on Local licenses.
+
 ## 21. Settings and account deletion
 
 The Settings page displays:
@@ -446,7 +507,7 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 `init`/`install <agent>` choose an install strategy based on the agent. All 24 distinct agents are rendered from `packages/agent-registry`, which produces 30 registry entries. Four clients have confirmed Agent Plugins v1.0.0 manifests; the registry also retains reserved entries for VS Code and GitHub Copilot pending independent verification.
 
-- **Agent Plugin** — for Claude Code, Cursor, OpenAI Codex, and Kiro, the CLI prefers a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key. Pass `--strategy agent-plugin` or `--strategy config-file` to force a specific strategy when both are available.
+- **Agent Plugin** — for Claude Code, Cursor, OpenAI Codex, and Kiro, the CLI prefers a portable plugin install from `@lyrashield/agent-plugin` (currently v0.1.17, which adds Cursor streamable-http transport support). Plugin files land in the client-specific plugin directory and never inline a raw API key. Pass `--strategy agent-plugin` or `--strategy config-file` to force a specific strategy when both are available. The `packages/agent-registry` covers all 24 distinct agents.
 - **Config-file** — 16 clients whose settings can be safely written; the CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
 - **Guided manual** — for the 7 clients whose tooling has no writable config file — Cline, JetBrains AI & Junie, PiCode, OpenClaw, Hermes, Goose, and Aider — `install` prints exact copy-paste command/argument/environment values, generated from the same source of truth the writable installers use.
@@ -514,7 +575,9 @@ The public marketing site, Lite Check, browser-local tools, methodology, and con
 
 The production application has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires application-level readiness/queue/provider alerts, capacity evidence, restore proof, and approved evidence for each additional review profile claimed. No recovery or RPO/RTO claim is made.
 
-Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
+Billing is live with a 14-day free trial and paid plans (Starter, Pro, Team, Agency). The LyraShield Local/Desktop app is available for macOS and Windows (BYOK, one-time license). The affiliate program is open for applications at `/affiliates/apply`.
+
+Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 
 LyraShield does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework), or "adversarial robustness proven." Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate. See `docs/claims-readiness.md` for the full map.
 
@@ -564,3 +627,12 @@ For most solo builders and small teams:
 9. Add Weekly Monitor after the first release.
 
 This keeps routine work simple while preserving deeper review for releases where it provides the most value.
+
+### Local/Desktop workflow (BYOK)
+
+For users who prefer to run scans on their own AI and keep everything local:
+
+1. Activate your LyraShield Local license on macOS or Windows.
+2. Configure BYOK — connect a ChatGPT/OpenAI subscription (OAuth) or Azure OpenAI.
+3. Scan locally; all depths are available with zero agent-minute metering.
+4. Optionally connect your LyraShield account to sync findings to the cloud.

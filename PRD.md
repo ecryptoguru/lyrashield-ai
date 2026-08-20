@@ -522,22 +522,24 @@ lyrashield/
     web/          Next.js 16 product app and REST route handlers
     worker/       BullMQ scan worker, schedulers, scanners, engine runner
     agent/        Headless Agent Action Layer and approval-aware actions
+    desktop/      Tauri v2 BYOK desktop app (LyraShield Local/Desktop)
     marketing/    Astro 7 site on Cloudflare Workers with D1 waitlist/referrals
+    marketing-motion/  Three.js assurance-world motion workspace
   packages/
-    auth/
-    config/
-    db/
-    integrations/
-    logger/
-    mcp/
-    security/
-    types/
-    ui/
+    auth/ config/ db/ integrations/ logger/ mcp/ security/ types/ ui/
+    score/ sdk/ credentials/ egress-proxy/ agent-plugin/ agent-registry/ agent-rules/
+    cli/ cli-alias/
+    billing/      Polar + Razorpay dual-gateway, usage metering, entitlements
+    pricing/      Plan definitions, minute packs, local SKUs
+    licenses/     ed25519 signed license sign/verify
+    affiliate/    Commission engine, attribution, payout ledger
+    eval-ai-safety/  AI safety eval harness (OWASP + MLCommons AILuminate)
+    evidence-storage/  Envelope encryption (AES-256-GCM) for scan artifacts
   docs/
-    deployment/
+    deployment/ ops/ plans/ marketplace/ design/ editorial/ security/
 ```
 
-There is no separate `apps/api`: Next.js route handlers in `apps/web` provide the product API. There is no `packages/billing` yet; billing remains an explicit Phase 1 gap. Terraform, Helm, and a dedicated infrastructure tree are future deployment work, not current repository structure.
+There is no separate `apps/api`: Next.js route handlers in `apps/web` provide the product API. Terraform, Helm, and a dedicated infrastructure tree are future deployment work, not current repository structure.
 
 ## 5.3 Package Responsibilities
 
@@ -593,6 +595,45 @@ packages/cli
 
 packages/agent-rules
   render, add, remove, and validate per-agent rules and skill files
+
+packages/billing
+  Polar + Razorpay dual-gateway billing
+  usage metering (balance, meter, grants, packs, expiry, overage, refund)
+  entitlement gating (assertScanAllowed, assertTargetAllowed)
+  trial lifecycle (14-day, 100 min, 3 targets)
+  grace period (15-min mid-scan)
+  geo-routing (India→Razorpay/INR, global→Polar/USD)
+  subscription sync
+
+packages/pricing
+  plan definitions (TRIAL/STARTER/PRO/TEAM/AGENCY)
+  minute packs (100/$15, 250/$30, 500/$50, 180-day validity)
+  local SKUs (individual/team, perpetual/subscription, sync add-on)
+  single source of truth for all pricing
+
+packages/licenses
+  ed25519 signed license sign/verify
+  canonical JSON for deterministic signing
+  golden-license test vector for cross-platform parity
+  perpetual fallback and update-eligibility logic
+
+packages/affiliate
+  commission engine (25% recurring Cloud, 30% at 10+, 20% one-time Local)
+  attribution (last-click cookie + promo code, 60-day window)
+  fraud controls (disposable email, rate limiting, self-referral)
+  payout ledger (RazorpayX India, Payoneer global, BriskPe fallback)
+  reserve handling (25% for 90 days)
+
+packages/eval-ai-safety
+  OWASP Gen AI Red Teaming test runner (34 test cases)
+  MLCommons AILuminate test runner (1,200 prompts)
+  Markdown and JSON report generation
+
+packages/evidence-storage
+  envelope encryption (AES-256-GCM, "LSEV1" binary format)
+  S3-compatible storage with client-side encryption
+  local filesystem backend for dev
+  fail-closed key management
 
 packages/logger
   structured logging
@@ -5293,16 +5334,16 @@ A fifth code-grounded pass over `main` (post-PR #115 / UX V2), structured in fiv
 
 # PART C — Current Implementation and Release Readiness
 
-> **Status date:** 2026-08-10. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+> **Status date:** 2026-08-20. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
 
 ## C0. Verified repository baseline
 
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
-- Monorepo: 4 apps (`web`, `worker`, `marketing`, `marketing-motion`) and 18 shared packages (`agent-plugin`, `agent-registry`, `agent-rules`, `auth`, `cli`, `cli-alias`, `config`, `credentials`, `db`, `egress-proxy`, `integrations`, `logger`, `mcp`, `score`, `sdk`, `security`, `types`, `ui`).
+- Monorepo: 6 apps (`web`, `worker`, `agent`, `desktop`, `marketing`, `marketing-motion`) and 24 shared packages (`agent-plugin`, `agent-registry`, `agent-rules`, `affiliate`, `auth`, `billing`, `cli`, `cli-alias`, `config`, `credentials`, `db`, `egress-proxy`, `eval-ai-safety`, `evidence-storage`, `integrations`, `licenses`, `logger`, `mcp`, `pricing`, `score`, `sdk`, `security`, `types`, `ui`).
 - PR #247 baseline: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, CodeRabbit, `git diff --check`, **1,482 core tests in 146 files** (8 skipped), **112 marketing tests in 15 files**, **16 motion tests**, and **3 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
 - Current product surface: **40 page route files** and **76 API route files** in `apps/web`.
-- Current data surface: **43 Prisma models** and **21 enums**. The committed migration directory and fresh replay output are authoritative for migration count and order. Postgres RLS covers the direct workspace-scoped tables plus the 9 child tables (`ScanEvent`, `Evidence`, `ScanResultManifest`, `ScanCoverageReceipt`, `FixProposal`, `PullRequest`, `Ticket`, `ScorecardShare`, `ScorecardEvent`). The child tables had policies defined by `20260803000001_child_table_rls`, enabled by `20260803000002_child_table_rls_enable`, disabled by `20260803000003_child_table_rls_disable` after a production `42501` outage, and **re-enabled by `20260807000003_child_table_rls_re_enable` on 2026-08-07** once the cause was traced to a single write path outside `withWorkspaceRLS` (Deep Review v12 P0-1). The manifest and coverage receipts are intentionally child-scoped through `Scan`. Later migrations add hosted OAuth, API-spec support, and OAuth resource binding.
+- Current data surface: **66 Prisma models** and **24 enums**. The committed migration directory and fresh replay output are authoritative for migration count and order. Postgres RLS covers the direct workspace-scoped tables plus the 9 child tables (`ScanEvent`, `Evidence`, `ScanResultManifest`, `ScanCoverageReceipt`, `FixProposal`, `PullRequest`, `Ticket`, `ScorecardShare`, `ScorecardEvent`). The child tables had policies defined by `20260803000001_child_table_rls`, enabled by `20260803000002_child_table_rls_enable`, disabled by `20260803000003_child_table_rls_disable` after a production `42501` outage, and **re-enabled by `20260807000003_child_table_rls_re_enable` on 2026-08-07** once the cause was traced to a single write path outside `withWorkspaceRLS` (Deep Review v12 P0-1). The manifest and coverage receipts are intentionally child-scoped through `Scan`. Later migrations add hosted OAuth, API-spec support, OAuth resource binding, Sprint 10 billing fields, the `MinutePack` model, the full license domain (5 models), and the full affiliate domain (10 models + 3 enums).
 - Monorepo packages now include `packages/score` (the pure, versioned LyraShield Score engine, `lyrashield-score/1.0.0`) and `packages/agent-plugin` (Agent Plugins v1.0.0 portable plugin, Apache-2.0).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
 - **Deep Review v11 remediation (unmerged branch `codex/deep-review-v11`, 2026-08-01):** five-batch review addressing stop-bleeding CLI P0s, structural `workspaceId` tenancy guards, fail-closed RLS for nine child tables, worker recovery hardening, build/deploy integrity (OpenAPI packaging, SHA-pinned GitHub Actions, image-digest deploys, worker image GC safety), and polish/test-regression fixes. lint, typecheck, `git diff --check`, and package unit tests pass; full `pnpm test` reports 1337 passed / 10 skipped / 3 failed, limited to DB integration suites that require a live Postgres/Redis stack.
@@ -5527,6 +5568,44 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - **Verification (2026-08-13).** `pnpm typecheck` 30/30, `pnpm lint` 28/28, `pnpm test:core` 1,754 passed / 9 skipped, `pnpm test:e2e` 4/4, marketing E2E 7 passed / 1 skipped (mobile WebKit has no hardware Tab key), master checklist required checks passed (UX/SEO advisory). See `docs/plans/2026-08-13-ai-app-security-scanner.md` and `codebase.md` §70.
 - **Claims discipline.** Public copy says "mapped to OWASP" and never implies OWASP endorsement, certification, universal detection, or a safety guarantee. The AI score is private and excluded from public scorecards in this release. See `docs/claims-readiness.md`.
 
+### C1.22 Sprint 10 — Cloud billing, usage metering, and entitlements (2026-08-18, Track A)
+
+Sprint 10 Track A is merged to `main`. See `codebase.md` §72 for the full implementation map.
+
+- **Dual-gateway billing.** Polar (global MoR, USD) + Razorpay (India, INR, UPI, GST). Geo-routing resolves the provider server-side from `cf-ipcountry` (only trusted when `TRUSTED_PROXY_IP_HEADER` is configured). Single webhook endpoint handles both providers with idempotent `WebhookEvent` insertion and synchronous Track A/B/C processing.
+- **Plan definitions.** Five cloud plans: TRIAL (14-day, 100 min, 3 targets, no Deep, $0), STARTER ($29/mo or $295/yr, 300 min, 5 targets, no Deep), PRO ($99/mo or $950/yr, 1,200 min, 15 targets, Deep), TEAM ($299/mo or $2,690/yr, 4,000 min, 50 targets, Deep + overage), AGENCY ($499/mo, custom, contact-led). Annual discounts: STARTER 15%, PRO 20%, TEAM 25%. INR = USD × 100.
+- **Usage metering.** Agent-minute accounting with `UsageRecord.idempotencyKey` on every event. Deep/Custom scans apply a 3× multiplier. Draw order: monthly pool → oldest pack (FIFO) → overage. Minute packs: 100/$15, 250/$30, 500/$50, 180-day validity. Overage: $0.15/min (Team opt-in with spend limit). Balance exposed via `getUsageBalance()`.
+- **Trial lifecycle.** 14-day no-card trial: 100 agent-minutes, 3-target cap, Standard/Quick only (no Deep). Email verification enforced. Disposable-email/proxy/device-fingerprint signals flagged. One active trial per user/org.
+- **Grace period.** 15-minute mid-scan grace when balance crosses ≤ 0. Unused grace evaporates (never banked). Does not apply to scans started when balance was already ≤ 0.
+- **Entitlement gating.** `assertScanAllowed()` blocks DEEP/CUSTOM on TRIAL and STARTER, requires remaining minutes > 0, enforces trial scan-frequency throttle, checks overage budget. Called at scan creation in `apps/web/src/app/api/scans/route.ts`.
+- **14-day money-back** on Cloud subscriptions. Refund webhooks reverse entitlement + claw back affiliate commission.
+- **Production provisioning remaining:** Polar/Razorpay credentials, product/price IDs, webhook secrets, and entitlement/usage metering verification against live provider events.
+
+### C1.23 Sprint 10 — BYOK Local/Desktop app and license server (2026-08-18 to 2026-08-20, Track B)
+
+Sprint 10 Track B is merged to `main`. See `codebase.md` §73 for the full implementation map.
+
+- **LyraShield Local/Desktop.** Tauri v2 desktop app (Rust core + React 19 frontend). One-time 1-year license, BYOK (customer's own AI — zero LLM COGS). All scan depths available (no Cloud-style depth gating — the customer's AI pays). Zero agent-minute metering. Privacy: scans run locally, no code/findings/keys leave the machine except explicit opt-in sync.
+- **BYOK providers.** ChatGPT/OpenAI subscription sign-in (OAuth, delegated to engine CLI) + Azure OpenAI subscription (API key + endpoint in OS keychain). Local/self-hosted models deferred (engine requires GPT-5.6 Terra/Luna).
+- **License signing.** ed25519 signed licenses with canonical JSON for deterministic signing. Golden-license test vector ensures Rust ↔ JS cross-platform parity. Azure Key Vault integration for production signing via managed identity. Fails closed if vault unreachable.
+- **Offline grace + perpetual fallback.** App runs without network using cached signed license. After the 1-year update window, the app keeps running the last eligible build indefinitely; it just stops accepting newer updates. Revoked licenses never ride perpetual fallback.
+- **Cloud sync (optional).** Opt-in connect to a LyraShield account → sync findings to the cloud dashboard. Entitlement: sync_addon SKU OR team_subscription OR Cloud plan. Cursor-based monotonicity. Nothing syncs by default.
+- **Desktop release pipeline.** macOS universal DMG (Apple Developer ID signing + notarization) + Windows x64 NSIS (code signing). Engine revision pinned with immutability verification. Signed `latest.json` updater manifest on GitHub Releases.
+- **Pricing.** Individual: $199 launch / $299 regular (3 machines, $59/seat/yr renewal). Team: $99/seat perpetual + $59/seat/yr renewal, or $149/seat/yr subscription. Cloud-sync add-on: $49/seat/yr. 10% off at 10+ seats. No refunds on Local licenses.
+
+### C1.24 Sprint 10 — Affiliate & partner program (2026-08-18, Track C)
+
+Sprint 10 Track C is merged to `main`. See `codebase.md` §74 for the full implementation map.
+
+- **Commission engine.** 25% recurring on Cloud subscriptions (12-month cap), 30% at 10+ active referrals (tier evaluated at commission-creation). Annual plans: flat 25% (tier kicker applies to monthly only — founder-confirmed 2026-08-19). 20% one-time on Local licenses. No commission on minute packs, trials, or self-referrals. Commission base = net (pre-tax, after discounts), snapshotted per commission. Decimal(19,4) precision.
+- **Attribution.** Last-click first-party cookie (`__ls_aff`, 60-day window) + promo-code override. Precedence: promo code > cookie > unattributed. Cross-device persistence for authenticated signups. Self-referral rejection (userId + email comparison).
+- **Fraud controls.** Disposable email detection (10 domains), IP/device rate limiting (>5 signups/IP, >3/device = high severity), device fingerprint duplicates.
+- **Payouts.** $100 minimum, monthly net-30 (paid 15th), 30-day commission hold, tax-form gate (W-9/W-8BEN/W-8BEN-E/GSTIN). New-affiliate reserve: 25% for 90 days, auto-released. Payout rails: RazorpayX (India, IMPS/UPI) + Payoneer (global). No Wise, PayPal, or Stripe Connect.
+- **Clawback.** Reverse commission on refund/chargeback. Automatic, reason-coded, >$200 manual review. Cloud subs: 14-day money-back window. Local licenses: no-refund → clawback only on chargeback.
+- **Dashboard.** In-app at `/affiliates` (landing, apply, dashboard, links, commissions, payouts, activity). KPI cards: clicks, signups, conversions, active referrals, commission status, tier progress. Immutable commission ledger. Payout history with reserve-release tracking.
+- **Terms.** Versioned binding acceptance (`AFFILIATE_TERMS_VERSION = "2026-08-18-v1"`). Brand guardrails: no benchmark/only-we claims, no naming the upstream engine, no FUD. Affiliates never see customer PII (masked customer IDs only).
+- **Production provisioning remaining:** Polar/Razorpay webhook → affiliate dispatch verification against live events, payout provider API credentials (RazorpayX, Payoneer), and tax-form verification workflow.
+
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
@@ -5537,8 +5616,8 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 ### C2.2 Required before self-serve paid launch
 
-1. **Billing and usage enforcement:** provider decision, plan definitions, checkout, webhooks, subscription sync, usage records, scan limits, and billing UI. The existing `BillingAccount`, `UsageRecord`, plan fields, permissions, and environment placeholders are schema foundation only.
-2. **Abuse and cost controls:** per-scan dollar caps are enforced. Plan-aware scan quotas, concurrency entitlements, aggregate account/workspace budgets, and failure/retry ceilings remain required before offering a free or paid public tier.
+1. **Billing and usage enforcement:** **implemented** (Sprint 10, merged to `main`). Polar + Razorpay dual-gateway, plan definitions, checkout, webhooks, subscription sync, usage metering, scan limits, trial, grace, and billing UI are in `packages/billing`, `packages/pricing`, and `apps/web/src/app/billing/`. **Production provisioning remaining:** Polar/Razorpay credentials, product/price IDs, webhook secrets, and entitlement/usage metering verification against live provider events.
+2. **Abuse and cost controls:** per-scan dollar caps are enforced. Plan-aware scan quotas, concurrency entitlements, aggregate account/workspace budgets, and failure/retry ceilings remain required before offering a free or paid public tier. Trial abuse controls (email verification, disposable-email/proxy/device signals, one trial per user/org) are implemented.
 3. **Production observability:** connect the implemented structured request/worker logs and health/readiness routes to actionable monitoring, product analytics, alerts, and incident/runbook ownership.
 4. **Launch validation:** run browser, API, migration, backup/restore, queue recovery, worker cancellation, security-header, public-scorecard metadata/card/badge, revocation, referral, and event-deduplication smoke checks against the real deployed environment.
 
@@ -5578,7 +5657,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 | Sprint 5.5                   | Not started                        | Security Copilot sidebar remains deferred.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Sprint 8.5                   | Not started                        | Visual Security Plan and recap remain deferred.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Sprint 9.5                   | Core complete                      | MCP tools and stdio transport exist; broader client onboarding and tool coverage remain roadmap work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Sprint 10                    | Not started                        | Billing and usage enforcement are the principal self-serve launch blocker.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Sprint 10                    | Complete in code                   | Cloud billing (Polar + Razorpay, trial, plans, metering, entitlements, grace), BYOK Local/Desktop (Tauri v2, ed25519 licenses, Key Vault, cloud sync, release pipeline), and Affiliate program (commission engine, attribution, payouts, dashboard) are implemented and merged to `main`. Production provisioning (provider credentials, webhook verification, payout API credentials) remains. See `codebase.md` §§71–74.                                                                                                                                                                        |
 | Sprint 11                    | Partial                            | UX/security hardening, privacy lifecycle, browser E2E, health/readiness, request instrumentation, serialized audit chaining, fail-closed evidence, prompt-injection guard hardening, queue unification, proxy trust, and Deep Review v4 correctness/UX remediation are done; controlled-scan, production operations/egress, and authenticated-app deployment gates remain.                                                                                                                                                                                                                            |
 | AI App Security (Release A)  | Partial / release evidence pending | The free deterministic tool and private score foundation exist. AI-03 fail-closed receipts, engine-bound LLM triage, calibration, governance extensions, live safety testing, final UX, and final CI/browser proof remain staged work. No certification, compliance, universal-safety, or “implemented and verified” claim is authorized. See `codebase.md` §70 and `docs/plans/2026-08-13-ai-app-security-scanner.md`.                                                                                                                                                                               |
 | Phase 2                      | Not started                        | Enterprise identity, SCIM, advanced policy, private worker, VPC/self-hosting, BYOK/BYOM, and enterprise integrations remain roadmap work.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -5587,7 +5666,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 - A green unit/build gate is not proof of a successful sandbox scan.
 - A healthy Docker stack is not proof that model credentials, sandbox image, egress controls, and engine artifacts work end to end.
-- A schema model is not an implemented product feature: billing is not built merely because billing tables exist.
+- A schema model is not an implemented product feature: billing tables existing was once a foundation; billing is now implemented (Sprint 10), but production provider credentials and live webhook verification remain before paid launch.
 - An indexable marketing Worker is not proof of the application runtime: app-origin deployment, scanner abuse controls, production scans, analytics interpretation, and external-platform unfurl validation remain separate gates.
 - A generated OG image or local share preview is not proof that LinkedIn, X, Bluesky, WhatsApp, or other external caches render the latest card. Validate on the approved public HTTPS origin and use each platform's cache refresh/debug tooling when available.
 - Scorecard views mean deduplicated browser sessions that executed the first-party event call. They do not mean impressions, unique people, crawler fetches, or verified referral conversions.
@@ -5599,8 +5678,9 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 1. Provision private S3-compatible evidence storage, BullMQ-compatible TLS Redis, dedicated sandbox-capable worker compute, and the authenticated application origin; retain the Lite Scanner as a separate passive service.
 2. Run and document the first authorized controlled scan with a pinned sandbox digest.
-3. Decide billing provider, plans, and usage metric; implement Sprint 10 with quota enforcement.
+3. **Sprint 10 is implemented and merged.** Production provisioning remaining: Polar/Razorpay credentials and product/price IDs, webhook secrets, entitlement/usage metering verification against live provider events, Azure Key Vault license-signing keypair deployment, RazorpayX/Payoneer payout API credentials, and tax-form verification workflow.
 4. Add transport-level egress controls and validate migrations, backups, recovery, and observability.
 5. Complete the separate app-origin scorecard/unfurl/referral gate on the approved public domains and submit the sitemap through selected webmaster accounts.
 6. After pilot evidence, prioritize Security Copilot, visual plans, compliance-lite evidence, and Phase 2 features from real customer demand.
 7. Build a private LyraShield engine evaluation corpus before changing agent architecture or making result-quality claims; measure expected findings/non-findings, evidence correctness, duplicate stability, control coverage, runtime, and token use separately for Luna and Terra.
+8. Local/self-hosted model support for the BYOK desktop app is deferred pending engine work (the engine currently requires GPT-5.6 Terra/Luna).

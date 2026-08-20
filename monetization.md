@@ -94,18 +94,18 @@ agent-minutes)│   history/team/monitoring →      │               │
 
 ## Pricing — Cloud mode (subscription)
 
-**Opened by a 14-day, full-feature, no-card free trial** (**100 agent-minutes**, **no Deep scans** — Standard/Quick only). Convert on the agent-minute/target limits + the trial clock; the platform features are the reason to stay.
+**Opened by a 14-day, full-feature, no-card free trial** (**100 agent-minutes**, **3 targets**, **no Deep scans** — Standard/Quick only). Convert on the agent-minute/target limits + the trial clock; the platform features are the reason to stay.
 
 **Self-serve tiers (Polar global MoR + Razorpay India; INR = USD × 100):**
 
 | Tier                    | Monthly (USD/INR)       | Annual (prepaid, USD/INR)        | Targets | Agent-min/mo | Deep scans         |
 | ----------------------- | ----------------------- | -------------------------------- | ------- | ------------ | ------------------ |
-| **Starter**             | $29 / ₹2,900            | **$295 / ₹29,500** (15% off)     | 3       | **300**      | ❌ (Standard only) |
-| **Pro**                 | $99 / ₹9,900            | **$950 / ₹95,000** (20% off)     | 10      | **1,200**    | ✅ (3× meter)      |
-| **Team**                | $299 / ₹29,900          | **$2,690 / ₹2,69,000** (25% off) | 30      | **4,000**    | ✅ (3× meter)      |
+| **Starter**             | $29 / ₹2,900            | **$295 / ₹29,500** (15% off)     | 5       | **300**      | ❌ (Standard only) |
+| **Pro**                 | $99 / ₹9,900            | **$950 / ₹95,000** (20% off)     | 15      | **1,200**    | ✅ (3× meter)      |
+| **Team**                | $299 / ₹29,900          | **$2,690 / ₹2,69,000** (25% off) | 50      | **4,000**    | ✅ (3× meter)      |
 | **Agency / Enterprise** | **from $499 / ₹49,900** | custom                           | custom  | custom       | ✅                 |
 
-**Meter:** protected targets + **agent minutes** (active agent-loop time, published; **Deep/Custom meter at ~3×**). **Overage: $0.15/agent-min.** **Minute top-up packs (valid 12 months):** **100 min / $15 · 250 min / $30 · 500 min / $50** (volume discount). Included monthly pool doesn't roll over. Starter/Pro buy packs; Team can buy packs and/or opt into metered overage + spend limit.
+**Meter:** protected targets + **agent minutes** (active agent-loop time, published; **Deep/Custom meter at ~3×**). **Overage: $0.15/agent-min.** **Minute top-up packs (valid 180 days):** **100 min / $15 · 250 min / $30 · 500 min / $50** (volume discount). Included monthly pool doesn't roll over. Starter/Pro buy packs; Team can buy packs and/or opt into metered overage + spend limit. **Mid-scan grace:** when an agent-minute balance hits 0 mid-scan, the workspace enters a **15-minute grace period** (wall-clock, `GRACE_CAP_MS = 900,000 ms`); the scan continues during grace and is stopped with `STOPPED_BUDGET` if grace is exceeded. Grace resets on cycle rollover.
 
 **Tier feature gates (capacity + collaboration + depth, never core detection):**
 
@@ -114,7 +114,7 @@ agent-minutes)│   history/team/monitoring →      │               │
 - **Team:** + team seats, scheduled scans, Jira/Linear, shared reports.
 - **Agency/Enterprise:** + multi-workspace, branded reports, client share links, priority support; SSO/SCIM/private workers/compliance (Phase 4).
 
-**Trial abuse controls (the trial is the front door):** email verification on, **100 agent-min hard cap, no Deep scans**, small target cap, scan-frequency throttle, no auto-convert, no card required (no surprise charges).
+**Trial abuse controls (the trial is the front door):** email verification on, **100 agent-min hard cap, no Deep scans, 3-target cap**, scan-frequency throttle, no auto-convert, no card required (no surprise charges).
 
 ## Pricing — Local Mode (BYOK License)
 
@@ -124,10 +124,10 @@ agent-minutes)│   history/team/monitoring →      │               │
 
 | SKU                     | Price                                   | Includes                                                                               |
 | ----------------------- | --------------------------------------- | -------------------------------------------------------------------------------------- |
-| **Individual**          | **$199 launch / $299 regular** one-time | 1-year license, up to 3 machines, all updates, perpetual fallback. Renewal **$199/yr** |
+| **Individual**          | **$199 launch / $299 regular** one-time | 1-year license, up to 3 machines, all updates, perpetual fallback. Renewal **$59/yr**  |
 | **Team (perpetual)**    | **$99/seat** one-time (min 3 seats)     | 1 year updates, license manager. Renewal **$59/seat/yr**                               |
-| **Team (subscription)** | **$149/seat/yr** annual                 | includes cloud sync                                                                    |
-| **Cloud-sync add-on**   | **$49/yr** (individuals)                | sync Local findings/reports to a Cloud workspace (included free in any Cloud sub)      |
+| **Team (subscription)** | **$149/seat/yr** annual                 | continuous updates; cloud sync available as **$49/seat/yr** add-on                     |
+| **Cloud-sync add-on**   | **$49/seat/yr**                         | sync Local findings/reports to a Cloud workspace (included free in any Cloud sub)      |
 
 **Volume:** 10% off at 10+ seats. **No lifetime deal** (standing rule).
 
@@ -145,11 +145,12 @@ A **custom-built, application-gated** program on our own platform (transparency 
 
 **Terms (founder-confirmed):**
 
-- **Commission (Cloud subscriptions):** **25% recurring for 12 months**; **30% at 10+ active** referrals. Base = net (pre-tax, after discounts). Annual: 25% of the annual amount as paid.
+- **Commission (Cloud subscriptions):** **25% recurring for 12 months**; **30% at 10+ active** referrals (tier kicker applies to **monthly** subscriptions only). Base = net (pre-tax, after discounts). **Annual: flat 25%** of the annual amount as paid — the 30% tier kicker does **not** apply to annual plans (founder-confirmed, 2026-08-19).
 - **Commission (Local licenses) — v1.1:** **20% one-time** on referred Local-license sales. **Minute packs: no commission.**
 - **Attribution:** 60-day last-click cookie + promo-code override.
 - **Eligibility:** application + manual approval (every deal QA + Ankit approval). No lifetime deals.
 - **Dashboard:** transparent partner dashboard (clicks, signups, conversions, commissions, payouts, assets) at `app.lyrashieldai.com/affiliates` (`affiliates.lyrashieldai.com` redirects).
+- **Binding terms version:** `AFFILIATE_TERMS_VERSION = "2026-08-18-v1"` — affiliates must accept this version when applying; the accepted version is recorded on the Affiliate record so there is a durable record of exactly which terms were agreed to. Bump when terms change.
 
 **Payout rail (final v2, 2026-08-16):**
 
@@ -157,7 +158,7 @@ A **custom-built, application-gated** program on our own platform (transparency 
 - **India affiliates:** **RazorpayX Payouts** — INR domestic, ~₹4–9/payout, instant IMPS/UPI; pairs with our existing Razorpay billing.
 - **Global (non-India) affiliates:** **Payoneer Enterprise Mass Payouts** (primary) — proven affiliate-network scale, API + webhooks, 190+ countries, recipient KYC/tax portal; funded from our Indian AD bank under RBI's outward-remittance route. **Caveat:** enterprise API access needs partnership approval; mass-payout fee is custom/not public — get a quote. **RBI-native fallback: BriskPe (PA-CB I&O)** (or Cashfree). **Optional at scale: Trolley** for W-8/W-9/1099/withholding automation.
 - **Avoid:** Wise India (receive-only for business), Stripe Connect self-serve from India (not eligible), PayPal, manual SWIFT for many affiliates.
-- **Threshold/cadence/hold (unchanged):** $100 min, monthly net-30, 30-day hold, tax-form gate, 20–30% new-affiliate reserve (90 days), automatic clawback on refund/chargeback (incl. the Cloud 14-day money-back).
+- **Threshold/cadence/hold (unchanged):** $100 min, monthly net-30 on the 15th (`PAYOUT_DAY_OF_MONTH = 15`), 30-day hold, tax-form gate, 25% new-affiliate reserve (90 days), automatic clawback on refund/chargeback (incl. the Cloud 14-day money-back, `CLOUD_REFUND_WINDOW_DAYS = 14`).
 - **India tax (confirm with AD bank + tax advisor):** purpose code for affiliate/marketing commission, Form 15CA/15CB, TDS 194H 2% >₹20k/yr/payee, GST 18% if the affiliate is GST-registered, DTAA/treaty rates for non-residents.
 
 **Fraud controls (designed against the documented vectors):** pay only on paid invoice + activation (never signup/trial), self-referral rejection, disposable-email/proxy/device-fingerprint checks, 30-day hold + reserve, automatic clawback, zero-tolerance brand-bidding clause, FTC/ASA disclosure required, honest-claims-only (LyraShield guardrails extend to affiliates; money-back language only for Cloud).
@@ -290,7 +291,7 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 | Risk                                                    | Impact                             | Mitigation                                                                                                                                                           |
 | ------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **No free tier slows PLG**                              | Lower top-of-funnel conversion     | The free tools + GitHub Action + content carry the free burden; the no-card 14-day full trial is the risk-free on-ramp; instrument the funnel to confirm it converts |
-| **Trial abuse (no card)**                               | COGS burn                          | Email verification, 100 agent-min hard cap, no Deep, scan-frequency throttle, 80% warning, no auto-charge                                                            |
+| **Trial abuse (no card)**                               | COGS burn                          | Email verification, 100 agent-min hard cap, no Deep, 3-target cap, scan-frequency throttle, 80% warning, no auto-charge                                                            |
 | **Refund abuse on Cloud (14-day window)**               | Refund fraud / chargebacks         | The affiliate clawback path + hold already handle it; monitor refund rate; the trial reduces "bought-blind" refunds. **Local stays no-refund** (digital goods).      |
 | **Local-mode support burden** (Docker/env/local issues) | Support cost eats license margin   | Clean installer + diagnostics + `doctor` command; community support on Individual, priority on Team; price includes support                                          |
 | **Local models deferred**                               | Some BYOK buyers want local models | Launch on ChatGPT/Azure subs (supported); communicate local models as roadmap; don't overpromise scan quality on weak models                                         |
@@ -335,22 +336,22 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 
 **Cloud (SaaS):**
 
-- **Trial: 14-day, full-feature (Standard/Quick), NO card, 100 agent-min, NO Deep scans.** Convert on limits + clock.
+- **Trial: 14-day, full-feature (Standard/Quick), NO card, 100 agent-min, 3 targets, NO Deep scans.** Convert on limits + clock.
 - Tiers $29/$99/$299 + $499 contact-led; annual 15/20/25% off; INR = USD×100.
-- Meter = targets + agent-minutes (active-loop time, Deep 3×). **Allowances: Starter 300 / Pro 1,200 / Team 4,000 agent-min/mo. Overage $0.15/min. Packs: 100/$15 · 250/$30 · 500/$50 (valid 6 months).** Team metered overage + spend limit.
+- Meter = targets + agent-minutes (active-loop time, Deep 3×). **Allowances: Starter 300 / Pro 1,200 / Team 4,000 agent-min/mo. Targets: Starter 5 / Pro 15 / Team 50. Overage $0.15/min. Packs: 100/$15 · 250/$30 · 500/$50 (valid 180 days, `PACK_VALIDITY_DAYS = 180`).** Team metered overage + spend limit. **Mid-scan grace: 15 min (`GRACE_CAP_MS = 900,000 ms`), then `STOPPED_BUDGET`.**
 - **Deep scans gated to Pro and above** (Starter = Standard only — Starter is the price anchor for Pro).
 - Polar (global MoR) + Razorpay (India). **Refunds: 14-day money-back window on Cloud subscriptions.** EDU/OSS discounted, not free. Marketplace Phase 2. Support: community free / priority on higher tiers.
 
 **Local (BYOK license):**
 
-- $199 launch / $299 regular (3 machines), renewal $199/yr; team $99/seat (min 3) + $59 renewal or $149/seat/yr sub w/ sync; sync $49/yr individual add-on; 10% off 10+ seats; no lifetime deal.
+- $199 launch / $299 regular (3 machines), renewal $59/yr; team $99/seat (min 3) + $59 renewal or $149/seat/yr sub (continuous updates; sync $49/seat/yr add-on); sync $49/seat/yr add-on; 10% off 10+ seats (team_perpetual & team_subscription only); no lifetime deal.
 - BYOK: ChatGPT subscription + Azure at launch; local models later (net-new engine work).
 - License server: thin custom activation/update endpoint; offline grace; perpetual fallback; signed updates. UX: CLI/TUI (devs) + desktop GUI (vibe coders).
 - **Refunds: no-refund on Local licenses** (digital goods, activated). Local mode bills zero agent-minutes; all scan depths available locally.
 
 **Affiliate:**
 
-- **Cloud:** 25% recurring/12mo (30% at 10+ active); 60-day last-click + promo override; net pre-tax base; annual commissioned as paid; subscriptions only (no pack commission); PayPal/Wise $100 net-30; 30-day hold; 20–30% reserve 90 days; clawback on refund/chargeback (incl. the Cloud 14-day money-back); application + approval; custom in-app dashboard.
+- **Cloud:** 25% recurring/12mo (30% at 10+ active, monthly only); 60-day last-click + promo override; net pre-tax base; annual commissioned as paid at **flat 25%** (tier kicker is monthly-only, founder-confirmed 2026-08-19); subscriptions only (no pack commission); RazorpayX (India) / Payoneer (global) $100 net-30 on the 15th; 30-day hold; 25% reserve 90 days; clawback on refund/chargeback (incl. the Cloud 14-day money-back); application + approval; custom in-app dashboard; binding terms `2026-08-18-v1`.
 - **Local (v1.1):** 20% one-time commission on referred Local-license sales.
 
 **Sequencing:** Cloud billing + Local packaging in parallel; affiliate after billing; enterprise/marketplace Phase 4.

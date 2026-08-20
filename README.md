@@ -17,6 +17,7 @@ LyraShield AI is live in **open beta with open registration** — anyone can cre
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
 - Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com)
 - User guide: [userguide.md](userguide.md)
+- LyraShield Local/Desktop: the BYOK desktop app is available as a one-time 1-year license with perpetual fallback. It runs entirely on the customer's own AI (ChatGPT subscription or Azure OpenAI) — no LyraShield cloud account or API key required.
 
 The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease, and the current release gate requires a current-tree Safe retest plus a successful, reconciled Deep run.
 
@@ -55,7 +56,7 @@ Run `npx lyrashield doctor` any time to check what's configured and what's missi
 }
 ```
 
-`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions gated behind human approval) and both stdio and remote Streamable-HTTP transports. Full per-agent setup for Claude Code, Cursor, Windsurf, VS Code, Zed, and 19 others is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations).
+`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions gated behind human approval) and both stdio and remote Streamable-HTTP transports. Full per-agent setup for Claude Code, Cursor, Windsurf, VS Code, Zed, and 19 others is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is now v0.1.17 with Cursor streamable-http support, and the `packages/agent-registry` covers 30 entries across 24 distinct agents.
 
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
@@ -73,13 +74,20 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/worker` — BullMQ scan worker with queue admission, reconciliation, evidence receipts, controlled engine execution, URL/API deterministic scanners (public-surface collector, behavior probes, OpenAPI contract scanner), and worker image provenance verification.
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site.
 - `apps/marketing-motion` — deterministic Three.js assurance-world motion workspace; the Astro site consumes rendered posters and clips.
+- `apps/desktop` — Tauri v2 BYOK desktop app (LyraShield Local/Desktop). Rust core + React frontend, ed25519 license verification, OS keychain BYOK credentials, and optional cloud sync.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
 - `packages/agent-registry` — the single source of truth for 24 distinct coding agents rendered as 30 registry entries; 6 clients have both a config-file and a reserved `agent-plugin` entry. The CLI installers and the docs site are both generated against it.
-- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package that bundles the MCP server and a `lyrashield` skill for the 4 launch clients with Agent Plugins support today (Claude Code, Cursor, OpenAI Codex, Kiro).
+- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package (now v0.1.17 with Cursor streamable-http support) that bundles the MCP server and a `lyrashield` skill for the 4 launch clients with Agent Plugins support today (Claude Code, Cursor, OpenAI Codex, Kiro).
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
-- `packages/*` (remaining) — auth, configuration, database, integrations, logger, score, security, types, UI.
+- `packages/billing` — Polar + Razorpay dual-gateway billing, usage metering, entitlement gating, trial lifecycle, and grace period handling.
+- `packages/pricing` — plan definitions (TRIAL/STARTER/PRO/TEAM/AGENCY), minute packs, and local SKUs.
+- `packages/licenses` — ed25519 signed license sign/verify for the Local/Desktop app.
+- `packages/affiliate` — commission engine, attribution, fraud controls, and payout ledger (RazorpayX/Payoneer).
+- `packages/eval-ai-safety` — AI safety eval harness (OWASP + MLCommons AILuminate).
+- `packages/evidence-storage` — envelope encryption (AES-256-GCM) for scan artifacts.
+- `packages/*` (remaining) — auth, configuration, credentials, database, integrations, logger, score, security, types, UI.
 
 The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution remains deliberately fail-closed until a server-generated patch pipeline is bound to an approval.
 
@@ -114,6 +122,14 @@ git diff --check
 ```
 
 The full worker requires a BullMQ-compatible Redis URL, private evidence storage, the controlled engine image/runtime, and Azure model configuration. It intentionally refuses scan admission if no live worker is registered.
+
+For the desktop app (LyraShield Local/Desktop):
+
+```bash
+cd apps/desktop && pnpm tauri dev
+```
+
+Requires Rust 1.77+ and Docker for scans.
 
 ### Azure AI Foundry runtime configuration
 
@@ -154,6 +170,9 @@ See [the production beta readiness plan](docs/plans/2026-07-20-production-beta-r
 - [codebase.md](codebase.md) — the architecture and implementation map.
 - [PRD.md](PRD.md) — product strategy and the release-readiness backlog.
 - [product.md](product.md) — current positioning and founder decisions.
+- [monetization.md](monetization.md) — business and pricing plan (plans, minute packs, affiliate payouts).
+- [docs/ops/desktop-release-runbook.md](docs/ops/desktop-release-runbook.md) — release procedure for the Local/Desktop app.
+- [docs/ops/license-signing-keys-runbook.md](docs/ops/license-signing-keys-runbook.md) — ed25519 license key generation and rotation.
 
 ## License
 

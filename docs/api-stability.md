@@ -9,6 +9,24 @@ The `/api/v1` surface is **additive-only**. We will not remove fields, rename pa
 - New v1 routes may be introduced.
 - Existing routes may return additional non-breaking status codes.
 
+### Additive surface (current)
+
+The following routes are part of the additive-only surface and will not be removed or have their request shape narrowed without a version bump:
+
+- `/api/licenses/activate` — POST, activate a machine against a Local license
+- `/api/licenses/verify` — POST, verify license signature and check revocation
+- `/api/licenses/issue` — POST, issue a signed license (admin/server-side)
+- `/api/sync/connect` — POST, link Local license to workspace for cloud sync
+- `/api/sync/findings` — POST, sync findings from desktop to cloud workspace
+- `/api/affiliates/apply` — POST, affiliate application
+- `/api/affiliates/click` — POST, click tracking
+- `/api/affiliates/links` — GET/POST, link management
+- `/api/affiliates/payouts/request` — POST, payout request
+- `/api/affiliates/payouts/method` — POST, payout method update
+- `/billing/checkout` — POST, create checkout session (Polar/Razorpay)
+- `/billing/webhook` — POST, webhook endpoint (Polar/Razorpay)
+- `/billing/portal` — GET, customer portal URL
+
 Any change that would cause a correctly written v1 client to break must ship as `/api/v2`.
 
 ## Breaking changes require a new version

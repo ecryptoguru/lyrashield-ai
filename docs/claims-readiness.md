@@ -231,8 +231,10 @@ If LyraShield ever wants to make any guarantee-shaped statement, it must be:
 - `packages/security/src/redos-guard.test.ts` — ReDoS guard tested against adversarial inputs. This is a **deterministic-input robustness test**, not an AI safety evaluation.
 - `packages/security/src/instruction-safety.test.ts` — instruction safety tests.
 - `packages/mcp/src/prompt-injection-guard.test.ts` — prompt injection guard tests.
+- `packages/eval-ai-safety` — AI safety evaluation harness testing the PromptInjectionGuard against OWASP Gen AI Red Teaming Guide (4 assessment areas, 34 test cases) and MLCommons AILuminate demo prompt set (12 hazard categories, 1,200 prompts). Deterministic, reproducible, produces Markdown and JSON reports with block/sanitize/allow rates per category.
+- `packages/evidence-storage` — Envelope encryption (AES-256-GCM) for scan artifacts with self-describing binary format ("LSEV1"), fail-closed key management, S3-compatible storage (Cloudflare R2/AWS S3) with client-side encryption.
 
-None of these constitute a formal AI safety evaluation against a recognized framework.
+The first four entries are defensive filters and deterministic-input robustness tests, not a formal AI safety evaluation on their own. `packages/eval-ai-safety` is the formal first-party evaluation harness against recognized frameworks (OWASP Gen AI Red Teaming Guide and MLCommons AILuminate); see "What can be said honestly today" below for the bounded wording that this supports.
 
 ### What LyraShield would need to do
 
