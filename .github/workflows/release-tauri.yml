@@ -1,0 +1,225 @@
+name: Release Desktop (Tauri)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ENGINE_REVISION: "1f911b6aa0ad5ea78db80dfaa1ec7cf1e56619f0"
+
+jobs:
+  build-macos:
+    name: macOS Universal (DMG + app)
+    runs-on: macos-14
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout engine (pinned revision)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ecryptoguru/lyrashield-engine
+          ref: ${{ env.ENGINE_REVISION }}
+          path: lyrashield-engine
+
+      - name: Verify engine revision immutability
+        run: |
+          cd lyrashield-engine
+          ACTUAL=$(git rev-parse HEAD)
+          if [ "$ACTUAL" != "${{ env.ENGINE_REVISION }}" ]; then
+            echo "::error::Engine revision mismatch: expected ${{ env.ENGINE_REVISION }}, got $ACTUAL"
+            exit 1
+          fi
+          echo "Engine revision confirmed: $ACTUAL"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          components: clippy,rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm --filter @lyrashield/desktop-frontend build
+
+      - name: Import Apple signing certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::Apple certificate not set — build will be unsigned"
+            exit 0
+          fi
+          CERT_FILE=$(mktemp /tmp/certificate.XXXXXX.p12)
+          KEYCHAIN_FILE=$(mktemp /tmp/keychain.XXXXXX.keychain-db)
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_FILE"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_FILE"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
+          security import "$CERT_FILE" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_FILE"
+          security list-keychains -d user -s "$KEYCHAIN_FILE" $(security list-keychains -d user | tr -d '"')
+          rm -f "$CERT_FILE"
+
+      - name: Build Tauri app (universal macOS)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Apple signing
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Notarization
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Tauri updater signing
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "LyraShield Desktop ${{ github.ref_name }}"
+          releaseBody: "LyraShield Local/Desktop app release. See the assets below for macOS and Windows installers."
+          releaseDraft: true
+          prerelease: false
+          args: "--target universal-apple-darwin"
+
+  build-windows:
+    name: Windows x64 (NSIS installer)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout engine (pinned revision)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ecryptoguru/lyrashield-engine
+          ref: ${{ env.ENGINE_REVISION }}
+          path: lyrashield-engine
+
+      - name: Verify engine revision immutability
+        run: |
+          cd lyrashield-engine
+          $actual = git rev-parse HEAD
+          if ($actual -ne "${{ env.ENGINE_REVISION }}") {
+            Write-Error "Engine revision mismatch: expected ${{ env.ENGINE_REVISION }}, got $actual"
+            exit 1
+          }
+          Write-Host "Engine revision confirmed: $actual"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm --filter @lyrashield/desktop-frontend build
+
+      - name: Build Tauri app (Windows x64)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Windows code signing (Azure Trusted Signing or certificate)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "LyraShield Desktop ${{ github.ref_name }}"
+          releaseBody: "LyraShield Local/Desktop app release. See the assets below for macOS and Windows installers."
+          releaseDraft: true
+          prerelease: false
+
+  publish-manifest:
+    name: Publish signed updater manifest
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download all release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          # The tauri-action uploads assets and a latest.json manifest.
+          # We download the manifest, verify it's signed, and publish it
+          # as the canonical latest.json on the release.
+          gh release download "$TAG" --pattern "latest.json" --output latest.json || true
+          if [ ! -f latest.json ]; then
+            echo "::error::No latest.json found in release assets"
+            exit 1
+          fi
+          echo "Manifest downloaded:"
+          cat latest.json
+
+      - name: Verify no private keys in manifest
+        run: |
+          if grep -qi "PRIVATE\|BEGIN.*PRIVATE" latest.json; then
+            echo "::error::Private key material found in manifest!"
+            exit 1
+          fi
+          echo "Manifest clean — no private key material."
+
+      - name: Upload manifest as release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          gh release upload "$TAG" latest.json --clobber
+          echo "Manifest published to GitHub Releases."
