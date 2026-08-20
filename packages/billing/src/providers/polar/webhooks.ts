@@ -32,9 +32,9 @@ export interface PolarWebhookEvent {
  * Validate a Polar webhook signature using Standard Webhooks spec.
  *
  * Headers:
- * - webhooks-id: unique event ID
- * - webhooks-timestamp: Unix timestamp
- * - webhooks-signature: base64 HMAC-SHA256 of `{id}.{timestamp}.{body}`
+ * - webhook-id: unique event ID (legacy `webhooks-*` aliases are accepted)
+ * - webhook-timestamp: Unix timestamp in seconds
+ * - webhook-signature: base64 HMAC-SHA256 of `{id}.{timestamp}.{body}`
  *
  * @returns The parsed event, or throws if validation fails.
  */
@@ -47,32 +47,38 @@ export function validatePolarWebhook(
     throw new Error("POLAR_WEBHOOK_SECRET is not configured")
   }
 
-  const eventId = getHeader(headers, "webhooks-id")
-  const timestamp = getHeader(headers, "webhooks-timestamp")
-  const signature = getHeader(headers, "webhooks-signature")
+  const eventId = getWebhookHeader(headers, "id")
+  const timestamp = getWebhookHeader(headers, "timestamp")
+  const signature = getWebhookHeader(headers, "signature")
 
   if (!eventId || !timestamp || !signature) {
     throw new Error("Missing required webhook headers")
   }
 
   // Check timestamp tolerance
-  const ts = parseInt(timestamp, 10)
-  if (isNaN(ts)) {
+  if (!/^\d+$/.test(timestamp)) {
     throw new Error("Invalid webhook timestamp")
   }
+  const ts = Number(timestamp)
 
   const tolerance = env.POLAR_WEBHOOK_TOLERANCE_MS ?? DEFAULT_TOLERANCE_MS
-  const ageMs = Date.now() - ts
-  if (ageMs > tolerance) {
-    throw new Error(`Webhook timestamp outside tolerance (${ageMs}ms > ${tolerance}ms)`)
+  const ageMs = Date.now() - ts * 1000
+  if (Math.abs(ageMs) > tolerance) {
+    throw new Error(`Webhook timestamp outside tolerance (${ageMs}ms, tolerance ${tolerance}ms)`)
   }
 
   // Verify signature: HMAC-SHA256 of `{id}.{timestamp}.{body}`
   const signedPayload = `${eventId}.${timestamp}.${body}`
-  const expectedSig = createHmac("sha256", secret).update(signedPayload).digest("base64")
+  const signingKey = Buffer.from(secret.replace(/^whsec_/, ""), "base64")
+  if (signingKey.length === 0) {
+    throw new Error("Invalid POLAR_WEBHOOK_SECRET")
+  }
+  const expectedSig = createHmac("sha256", signingKey).update(signedPayload).digest("base64")
 
   // The signature header may contain multiple signatures (space-separated, prefixed with "v1,")
-  const signatures = signature.split(" ").map((s) => s.replace(/^v1,/, ""))
+  const signatures = signature
+    .split(" ")
+    .flatMap((value) => (value.startsWith("v1,") ? [value.slice(3)] : []))
   const isValid = signatures.some((sig) => timingSafeEqual(sig, expectedSig))
 
   if (!isValid) {
@@ -87,6 +93,13 @@ function getHeader(headers: Record<string, string | string[] | undefined>, name:
   const value = headers[name] ?? headers[name.toLowerCase()]
   if (Array.isArray(value)) return value[0] ?? ""
   return value ?? ""
+}
+
+function getWebhookHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: "id" | "timestamp" | "signature"
+): string {
+  return getHeader(headers, `webhook-${name}`) || getHeader(headers, `webhooks-${name}`)
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
