@@ -98,11 +98,13 @@ export {
   type PolarWebhookEvent,
 } from "./providers/polar/webhooks"
 export { processPolarEvent, type PolarAdapterResult } from "./providers/polar/adapter"
+export { resolveProviderId, resolveProviderKey } from "./provider-ids"
 
 // Razorpay provider
 export {
   getRazorpayClient,
   createRazorpaySubscription,
+  getRazorpaySubscriptionCycleCount,
   createRazorpayPaymentLink,
   cancelRazorpaySubscription,
   getRazorpaySubscription,

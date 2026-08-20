@@ -13,6 +13,7 @@
  * - subscription.cancelled → syncSubscription (canceled)
  * - subscription.paused → syncSubscription (paused)
  * - subscription.pending → syncSubscription (past_due)
+ * - refund.created → reverseRefund
  */
 
 import { createHmac } from "node:crypto"
@@ -29,6 +30,12 @@ export interface RazorpayWebhookEvent {
         amount: number
         currency: string
         notes?: Record<string, string>
+      }
+    }
+    refund?: {
+      entity: {
+        id: string
+        payment_id: string
       }
     }
     subscription?: {
@@ -117,7 +124,7 @@ export function isHandledRazorpayEvent(event: string): boolean {
     "subscription.cancelled",
     "subscription.paused",
     "subscription.pending",
-    "payment.refunded",
+    "refund.created",
   ]
   return handled.includes(event)
 }

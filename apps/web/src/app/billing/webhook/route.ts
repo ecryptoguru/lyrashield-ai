@@ -8,8 +8,10 @@ import {
   processRazorpayEvent,
   isHandledPolarEvent,
   isHandledRazorpayEvent,
+  resolveProviderKey,
 } from "@lyrashield/billing"
 import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
+import { env } from "@lyrashield/config"
 import { LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
 import { issueLicenseForPolarOrder } from "@/lib/licenses/license-service"
 
@@ -20,7 +22,8 @@ export const dynamic = "force-dynamic"
  * Billing webhook handler — accepts both Polar and Razorpay webhooks.
  *
  * The provider is determined by the presence of Polar-specific headers
- * (webhooks-id) vs Razorpay-specific headers (X-Razorpay-Signature).
+ * (`webhook-id`, with legacy `webhooks-id` accepted) vs Razorpay-specific
+ * headers (X-Razorpay-Signature).
  *
  * Flow (synchronous, like the GitHub webhook):
  * 1. Validate signature
@@ -43,7 +46,8 @@ export async function POST(request: Request) {
   })
 
   // Detect provider by headers
-  const hasPolarHeaders = headers["webhooks-id"] !== undefined
+  const hasPolarHeaders =
+    headers["webhook-id"] !== undefined || headers["webhooks-id"] !== undefined
   const hasRazorpayHeaders = headers["x-razorpay-signature"] !== undefined
 
   if (!hasPolarHeaders && !hasRazorpayHeaders) {
@@ -66,7 +70,13 @@ export async function POST(request: Request) {
     if (hasPolarHeaders) {
       provider = "polar"
       const event = validatePolarWebhook(body, headers)
-      externalId = (event.data.id as string) ?? crypto.randomUUID()
+      // Standard Webhooks assigns a distinct ID to every delivery. Resource
+      // IDs repeat across subscription updates, so using data.id here would
+      // incorrectly discard later lifecycle events as replays.
+      externalId =
+        (headers["webhook-id"] as string) ??
+        (headers["webhooks-id"] as string) ??
+        crypto.randomUUID()
       eventType = event.type
       payload = event
       payloadRecord = event.data as Record<string, unknown>
@@ -96,7 +106,7 @@ export async function POST(request: Request) {
 
       // Track B: license issuance for Local SKU one-time orders
       if (event.type === "order.paid") {
-        await maybeIssueLicense(provider, externalId, payloadRecord)
+        await maybeIssueLicense(provider, String(event.data.id ?? ""), payloadRecord)
       }
 
       // Track C: affiliate commission/clawback dispatch (non-blocking on failure)
@@ -119,6 +129,7 @@ export async function POST(request: Request) {
       const signature = (headers["x-razorpay-signature"] as string) ?? ""
       const event = validateRazorpayWebhook(body, signature)
       externalId =
+        event.payload.refund?.entity.id ??
         event.payload.payment?.entity.id ??
         event.payload.subscription?.entity.id ??
         crypto.randomUUID()
@@ -190,35 +201,38 @@ export async function POST(request: Request) {
  */
 async function maybeIssueLicense(
   provider: string,
-  externalId: string,
+  orderId: string,
   payload: Record<string, unknown>
 ): Promise<void> {
   try {
-    const productId = (payload.productId ?? payload.skuId) as string | undefined
+    const productId = (payload.product_id ??
+      payload.productId ??
+      payload.sku_id ??
+      payload.skuId) as string | undefined
     if (!productId) return
 
-    // Check if this product ID maps to a Local SKU
-    const isLocalSku = Object.values(LOCAL_SKU_MAP).some((sku) => sku.id === productId)
-    if (!isLocalSku) return
+    const skuId = resolveProviderKey(env.POLAR_LOCAL_PRODUCT_IDS, productId) as LocalSkuId | null
+    if (!skuId || !LOCAL_SKU_MAP[skuId]) return
 
-    const buyerEmail = (payload.customerEmail ?? payload.email) as string | undefined
+    const customer = payload.customer as Record<string, unknown> | undefined
+    const buyerEmail = (payload.customer_email ??
+      payload.customerEmail ??
+      payload.email ??
+      customer?.email) as string | undefined
     if (!buyerEmail) {
       logger.warn("Local SKU order missing buyer email — cannot issue license", {
-        externalId,
+        orderId,
         productId,
       })
       return
     }
 
-    const seatCount = (payload.seatCount as number) ?? 1
-    const sku = Object.values(LOCAL_SKU_MAP).find((s) => s.id === productId) as
-      { id: LocalSkuId } | undefined
-    if (!sku) return
+    const seatCount = (payload.seats ?? payload.seat_count ?? payload.seatCount ?? 1) as number
 
     logger.info("Issuing license for Local SKU order", {
-      externalId,
+      orderId,
       productId,
-      sku: sku.id,
+      sku: skuId,
       buyerEmail,
     })
 
@@ -226,12 +240,12 @@ async function maybeIssueLicense(
       productId,
       buyerEmail,
       seatCount,
-      orderId: externalId,
+      orderId,
     })
   } catch (error) {
     // Non-blocking — license issuance failure should not block the webhook
     logger.error("License issuance failed (non-blocking)", {
-      externalId,
+      orderId,
       error: error instanceof Error ? error.message : String(error),
     })
   }

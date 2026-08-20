@@ -6,6 +6,8 @@ import {
   resolveProvider,
   createPolarCheckout,
   createRazorpaySubscription,
+  getRazorpaySubscriptionCycleCount,
+  resolveProviderId,
   CLOUD_PLAN_MAP,
   type CloudPlanId,
 } from "@lyrashield/billing"
@@ -13,6 +15,7 @@ import { resolveAttribution } from "@lyrashield/affiliate"
 import { apiSuccess, apiError } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
+import { env } from "@lyrashield/config"
 
 const CheckoutSchema = z.object({
   workspaceId: z.string().min(1),
@@ -100,9 +103,15 @@ export async function POST(request: Request) {
 
     if (provider === "polar") {
       // Polar: create hosted checkout
-      // In production, the productId maps to a Polar product configured in the dashboard.
-      // For now, we use a convention: polar_product_{plan}_{interval}
-      const productId = `polar_product_${plan.toLowerCase()}_${interval}`
+      const catalogKey = `${plan.toLowerCase()}_${interval}`
+      const productId = resolveProviderId(env.POLAR_PRODUCT_IDS, catalogKey)
+      if (!productId) {
+        return apiError(
+          "PROVIDER_NOT_CONFIGURED",
+          `Polar product ${catalogKey} is not configured.`,
+          503
+        )
+      }
       const url = await createPolarCheckout({
         productId,
         successUrl,
@@ -120,9 +129,16 @@ export async function POST(request: Request) {
       return apiSuccess({ provider: "polar", url }, 200)
     } else {
       // Razorpay: create subscription
-      // In production, the planId maps to a Razorpay plan configured in the dashboard.
-      const razorpayPlanId = `razorpay_plan_${plan.toLowerCase()}_${interval}`
-      const totalCount = interval === "annual" ? 12 : 1
+      const catalogKey = `${plan.toLowerCase()}_${interval}`
+      const razorpayPlanId = resolveProviderId(env.RAZORPAY_PLAN_IDS, catalogKey)
+      if (!razorpayPlanId) {
+        return apiError(
+          "PROVIDER_NOT_CONFIGURED",
+          `Razorpay plan ${catalogKey} is not configured.`,
+          503
+        )
+      }
+      const totalCount = getRazorpaySubscriptionCycleCount(interval)
       const subscriptionId = await createRazorpaySubscription({
         planId: razorpayPlanId,
         totalCount,
@@ -137,7 +153,17 @@ export async function POST(request: Request) {
         )
       }
 
-      return apiSuccess({ provider: "razorpay", subscriptionId, region }, 200)
+      return apiSuccess(
+        {
+          provider: "razorpay",
+          subscriptionId,
+          // Razorpay key IDs identify the account and are required by its
+          // browser checkout; the API secret remains server-only.
+          keyId: env.RAZORPAY_KEY_ID,
+          region,
+        },
+        200
+      )
     }
   } catch (error) {
     const authErr = authErrorResponse(error)

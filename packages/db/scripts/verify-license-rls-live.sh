@@ -150,7 +150,7 @@ fi
 # --- Step 3: seed workspaces + NULL-workspaceId license via privileged role ---
 echo "== step 3: seed workspaces + NULL-workspaceId License/LicenseKey (privileged) =="
 psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -q \
-  -c "INSERT INTO \"Workspace\" (id, name, slug) VALUES ('${OWNER_WS}', 'RLS live owner', '${OWNER_WS}'), ('${OTHER_WS}', 'RLS live other', '${OTHER_WS}')" \
+  -c "INSERT INTO \"Workspace\" (id, name, slug, \"createdAt\", \"updatedAt\") VALUES ('${OWNER_WS}', 'RLS live owner', '${OWNER_WS}', NOW(), NOW()), ('${OTHER_WS}', 'RLS live other', '${OTHER_WS}', NOW(), NOW())" \
   -c "INSERT INTO \"License\" (id, \"workspaceId\", \"ownerEmail\", sku, \"seatCount\", \"machineIds\", \"updateEligibleUntil\", \"signingKeyId\", signature, \"issuedAt\", revoked, \"createdAt\", \"updatedAt\") VALUES ('${LIC_ID}', NULL, '${OWNER_EMAIL}', 'individual_launch', 1, ARRAY[]::TEXT[], NOW() + interval '365 days', 'test', 'pending', NOW(), false, NOW(), NOW())" \
   -c "INSERT INTO \"LicenseKey\" (id, \"licenseId\", \"workspaceId\", \"keyHash\", \"issuedByProvider\", \"createdAt\") VALUES ('${LICKEY_ID}', '${LIC_ID}', NULL, '${KEY_HASH}', 'polar:rls-live-${SUFFIX}', NOW())"
 
@@ -181,19 +181,19 @@ assert_eq "privileged reads LicenseKey by keyHash" "1" "$PRIV_KEY"
 # c. NOBYPASSRLS, no workspace context -> 0 License rows
 NOCTX_LIC="$(psql "$RUNTIME_URL" -tAc \
   "BEGIN; SELECT set_config('app.current_workspace_id','',true); SELECT count(*) FROM \"License\" WHERE id = '${LIC_ID}'; ROLLBACK;" \
-  | tail -n1 | tr -d '[:space:]')"
+  | grep -E '^[0-9]+$' | tail -n1 | tr -d '[:space:]')"
 assert_eq "NOBYPASSRLS + no context hides License" "0" "$NOCTX_LIC"
 
 # d. NOBYPASSRLS, different workspace context -> 0 rows
 OTHER_LIC="$(psql "$RUNTIME_URL" -tAc \
   "BEGIN; SELECT set_config('app.current_workspace_id','${OTHER_WS}',true); SELECT count(*) FROM \"License\" WHERE id = '${LIC_ID}'; ROLLBACK;" \
-  | tail -n1 | tr -d '[:space:]')"
+  | grep -E '^[0-9]+$' | tail -n1 | tr -d '[:space:]')"
 assert_eq "NOBYPASSRLS + other workspace hides License" "0" "$OTHER_LIC"
 
 # e. NOBYPASSRLS key-hash lookup -> 0 LicenseKey rows (the issue-route bug)
 NOCTX_KEY="$(psql "$RUNTIME_URL" -tAc \
   "BEGIN; SELECT set_config('app.current_workspace_id','',true); SELECT count(*) FROM \"LicenseKey\" WHERE \"keyHash\" = '${KEY_HASH}'; ROLLBACK;" \
-  | tail -n1 | tr -d '[:space:]')"
+  | grep -E '^[0-9]+$' | tail -n1 | tr -d '[:space:]')"
 assert_eq "NOBYPASSRLS key-hash lookup hides LicenseKey" "0" "$NOCTX_KEY"
 
 # f. owning-workspace context still sees its own rows (positive control)
@@ -204,7 +204,7 @@ psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -q \
   -c "INSERT INTO \"License\" (id, \"workspaceId\", \"ownerEmail\", sku, \"seatCount\", \"machineIds\", \"updateEligibleUntil\", \"signingKeyId\", signature, \"issuedAt\", revoked, \"createdAt\", \"updatedAt\") VALUES ('${OWNED_LIC_ID}', '${OWNER_WS}', '${OWNER_EMAIL}', 'individual_launch', 1, ARRAY[]::TEXT[], NOW() + interval '365 days', 'test', 'pending', NOW(), false, NOW(), NOW())"
 OWNED_VIS="$(psql "$RUNTIME_URL" -tAc \
   "BEGIN; SELECT set_config('app.current_workspace_id','${OWNER_WS}',true); SELECT count(*) FROM \"License\" WHERE id = '${OWNED_LIC_ID}'; ROLLBACK;" \
-  | tail -n1 | tr -d '[:space:]')"
+  | grep -E '^[0-9]+$' | tail -n1 | tr -d '[:space:]')"
 assert_eq "owning workspace sees its own License (positive control)" "1" "$OWNED_VIS"
 psql "$ADMIN_URL" -v ON_ERROR_STOP=0 -q -c "DELETE FROM \"License\" WHERE id = '${OWNED_LIC_ID}'" || true
 
