@@ -59,7 +59,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.16",
+      version: "0.1.17",
     })
     // The marketplace catalog is what makes the exported repo addressable via
     // `/plugin marketplace add` and VS Code's "Install Plugin From Source".
@@ -75,14 +75,14 @@ describe("exportMarketplace", () => {
     expect(marketplace).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-marketplace.json",
       name: "lyrashield-ai",
-      version: "0.1.16",
+      version: "0.1.17",
       owner: { name: "LyraShield AI" },
     })
     expect(marketplace.plugins).toHaveLength(1)
     expect(marketplace.plugins?.[0]).toMatchObject({
       name: "lyrashield",
       source: "./",
-      version: "0.1.16",
+      version: "0.1.17",
       license: "Apache-2.0",
     })
     const codexManifest = JSON.parse(
@@ -100,7 +100,7 @@ describe("exportMarketplace", () => {
       await readFile(path.join(output, ".cursor-plugin", "plugin.json"), "utf8")
     ) as { mcpServers?: Record<string, unknown>; variables?: unknown }
     expect(cursorManifest.mcpServers).toEqual({
-      lyrashield: { url: "https://app.lyrashieldai.com/api/mcp" },
+      lyrashield: { type: "streamable-http", url: "https://app.lyrashieldai.com/api/mcp" },
     })
     expect(cursorManifest.variables).toBeUndefined()
     const kiroMcp = JSON.parse(await readFile(path.join(output, ".mcp.kiro.json"), "utf8")) as {

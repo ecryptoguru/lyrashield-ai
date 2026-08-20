@@ -1,6 +1,6 @@
 {
   "name": "lyrashield",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "LyraShield AI security and release-assurance plugin",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
