@@ -110,6 +110,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         with:
+          projectPath: apps/desktop/src-tauri
           tagName: ${{ github.ref_name }}
           releaseName: "LyraShield Desktop ${{ github.ref_name }}"
           releaseBody: "LyraShield Local/Desktop app release. See the assets below for macOS and Windows installers."
@@ -176,6 +177,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         with:
+          projectPath: apps/desktop/src-tauri
           tagName: ${{ github.ref_name }}
           releaseName: "LyraShield Desktop ${{ github.ref_name }}"
           releaseBody: "LyraShield Local/Desktop app release. See the assets below for macOS and Windows installers."
