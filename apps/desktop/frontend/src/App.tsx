@@ -14,7 +14,19 @@ export default function App() {
   const [route, setRoute] = useState<AppRoute>("loading")
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [activeScanId, setActiveScanId] = useState<string | null>(null)
-  const [lastFindings] = useState<{ id: string; severity: string; title: string; description: string | null; filePath: string | null; lineNumber: number | null; status: string; verified: boolean; detectedAt: string }[]>([])
+  const [lastFindings] = useState<
+    {
+      id: string
+      severity: string
+      title: string
+      description: string | null
+      filePath: string | null
+      lineNumber: number | null
+      status: string
+      verified: boolean
+      detectedAt: string
+    }[]
+  >([])
 
   useEffect(() => {
     async function checkLicense() {
@@ -53,12 +65,7 @@ export default function App() {
   }
 
   if (route === "setup") {
-    return (
-      <SetupScreen
-        onComplete={() => setRoute("main")}
-        onBack={() => setRoute("activation")}
-      />
-    )
+    return <SetupScreen onComplete={() => setRoute("main")} onBack={() => setRoute("activation")} />
   }
 
   if (route === "scan") {
@@ -73,12 +80,7 @@ export default function App() {
   }
 
   if (route === "scan_progress" && activeScanId) {
-    return (
-      <ScanProgressScreen
-        scanId={activeScanId}
-        onBack={() => setRoute("main")}
-      />
-    )
+    return <ScanProgressScreen scanId={activeScanId} onBack={() => setRoute("main")} />
   }
 
   if (route === "sync") {

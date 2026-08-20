@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react"
 import type { ChatGptAuthStatus, RuntimeStatus } from "../lib/types"
-import { checkChatGptStatus, getRuntimeStatus, loadAzureConfig, logoutChatGpt, saveAzureConfig, startChatGptLogin } from "../lib/tauri"
+import {
+  checkChatGptStatus,
+  getRuntimeStatus,
+  loadAzureConfig,
+  logoutChatGpt,
+  saveAzureConfig,
+  startChatGptLogin,
+} from "../lib/tauri"
 import { StatusCard } from "../components/StatusCard"
 import { ProviderPicker } from "../components/ProviderPicker"
 
@@ -21,14 +28,20 @@ export function SetupScreen({ onComplete, onBack }: Props) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    getRuntimeStatus().then(setRuntime).catch(() => {})
-    checkChatGptStatus().then(setChatgptStatus).catch(() => {})
-    loadAzureConfig().then((creds) => {
-      if (creds) {
-        setAzureKey(creds.apiKey)
-        setAzureEndpoint(creds.endpoint)
-      }
-    }).catch(() => {})
+    getRuntimeStatus()
+      .then(setRuntime)
+      .catch(() => {})
+    checkChatGptStatus()
+      .then(setChatgptStatus)
+      .catch(() => {})
+    loadAzureConfig()
+      .then((creds) => {
+        if (creds) {
+          setAzureKey(creds.apiKey)
+          setAzureEndpoint(creds.endpoint)
+        }
+      })
+      .catch(() => {})
   }, [])
 
   const engineOk = runtime?.engine.found ?? false
@@ -95,7 +108,10 @@ export function SetupScreen({ onComplete, onBack }: Props) {
             />
           </div>
           <div className="flex justify-between">
-            <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground">
+            <button
+              onClick={onBack}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
               Back
             </button>
             <button
@@ -141,7 +157,10 @@ export function SetupScreen({ onComplete, onBack }: Props) {
               </button>
               {chatgptStatus?.status === "signed_in" && (
                 <button
-                  onClick={async () => { await logoutChatGpt(); setChatgptStatus({ status: "signed_out" }) }}
+                  onClick={async () => {
+                    await logoutChatGpt()
+                    setChatgptStatus({ status: "signed_out" })
+                  }}
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Sign out
@@ -184,9 +203,7 @@ export function SetupScreen({ onComplete, onBack }: Props) {
     <div className="flex h-screen items-center justify-center bg-background">
       <div className="max-w-md space-y-6 text-center">
         <h1 className="text-2xl font-semibold text-foreground">Ready to Scan</h1>
-        <p className="text-sm text-muted-foreground">
-          LyraShield Local is configured and ready.
-        </p>
+        <p className="text-sm text-muted-foreground">LyraShield Local is configured and ready.</p>
         <button
           onClick={onComplete}
           className="rounded-md bg-primary px-6 py-2 text-primary-foreground hover:bg-primary/90"

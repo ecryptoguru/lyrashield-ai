@@ -18,8 +18,20 @@ export interface LicenseFile {
 }
 
 export type LicenseStatus =
-  | { state: "active"; sku: LicenseSku; seatCount: number; machineCount: number; updateEligibleUntil: string; updateEligible: boolean; perpetualFallbackBuild: string | null }
-  | { state: "expired_eligibility"; updateEligibleUntil: string; perpetualFallbackBuild: string | null }
+  | {
+      state: "active"
+      sku: LicenseSku
+      seatCount: number
+      machineCount: number
+      updateEligibleUntil: string
+      updateEligible: boolean
+      perpetualFallbackBuild: string | null
+    }
+  | {
+      state: "expired_eligibility"
+      updateEligibleUntil: string
+      perpetualFallbackBuild: string | null
+    }
   | { state: "revoked" }
   | { state: "none" }
 
@@ -41,9 +53,7 @@ export interface RuntimeStatus {
 }
 
 export type ChatGptAuthStatus =
-  | { status: "signed_in" }
-  | { status: "signed_out" }
-  | { status: "error"; message: string }
+  { status: "signed_in" } | { status: "signed_out" } | { status: "error"; message: string }
 
 export interface AzureCredentials {
   apiKey: string

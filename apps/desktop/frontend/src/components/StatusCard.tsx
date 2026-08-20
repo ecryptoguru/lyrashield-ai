@@ -21,9 +21,7 @@ export function StatusCard({ label, ok, okText, failText, failHint }: Props) {
         <p className={`text-xs ${ok ? "text-success" : "text-destructive"}`}>
           {ok ? okText : failText}
         </p>
-        {!ok && failHint && (
-          <p className="text-xs text-muted-foreground">{failHint}</p>
-        )}
+        {!ok && failHint && <p className="text-xs text-muted-foreground">{failHint}</p>}
       </div>
     </div>
   )
