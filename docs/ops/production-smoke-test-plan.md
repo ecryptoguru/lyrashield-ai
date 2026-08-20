@@ -375,3 +375,84 @@ For each flow above, save: the relevant `WebhookEvent` rows
 samples (redact the raw license key), and commission/payout rows. Attach to
 the release record. Reconciliation jobs (`billing-reconciliation`,
 `affiliate-reconciliation`) should report zero drift after the smoke run.
+
+---
+
+## 5. Sprint-10 close-out evidence (2026-08-20)
+
+### 5.1 License signing smoke (precondition #1)
+
+- Key Vault secrets provisioned and `lyrashield-app` identity granted
+  `Key Vault Secrets User`.
+- Container App env has `LICENSE_SIGNING_KEY_ID=license-key-v1`.
+- Smoke: issued license `cmt0nr1a7000001hzgr13urlt` to
+  `smoke-test-20260820@example.com`; verified via `POST /api/licenses/verify`.
+- Result: `{ valid: true, revoked: false, updateEligible: true, sku: "individual_launch" }`.
+- Smoke license deleted from DB after verification.
+
+### 5.2 Test-account cleanup
+
+- Deleted `devagent-v12+20260807@fusionwaveai.com` (user
+  `oCADQ8yrpy9xfENVpjSAsXU5t4v2pfHJ`) and workspace
+  `30e6ee21-2d50-4f1f-8a0a-9a4f3d8498a7`.
+- Deleted `devagent-v10+20260801@fusionwaveai.com` (user
+  `6p51yuzc8BZ3x7s2JhJTXEhARZpLTghj`) and workspace
+  `5cbb394b-220c-4083-b5dc-02bd4c9fdd61`.
+- Re-verification: both emails and workspace IDs no longer exist.
+
+### 5.3 Scanner `DATABASE_URL` consistency
+
+- Set `lyrashield-scanner` secret `db-url` to the app’s
+  `database-url-restricted` connection string.
+- Restarted scanner; `GET https://scanner.lyrashieldai.com/api/ready` reports
+  `{ "status": "ready", "checks": { "database": true, "redis": true } }`.
+
+### 5.4 BullMQ v6 post-deploy re-verification
+
+- Worker image promoted from `sha256:f6cd7fe62efad996c74d720db9429c85f187180f42b8fd8d4a9c43cd2ea1415a`
+  to `sha256:ab62709b9ea7b894f45c41ecdf2ea095dcfc6a48df3b436dc0065d376e85cfba`
+  (main build `4dc8012`).
+- Worker VM `systemctl status lyrashield-worker` is `active (running)` and logs
+  show `Worker ready — processing scan jobs`.
+- `GET https://app.lyrashieldai.com/api/ready/scans` reports `worker: true`.
+- Initial smoke scan `cmt0okk3s000701hzkum7hozb` failed at `PREFLIGHT` with
+  `Insufficient host resources for sandbox: free disk 2046MB < minimum 2048MB`.
+  Root cause: the worker container's `/tmp` was a 2GB tmpfs, 2MB under the
+  2048MB preflight minimum. Fixed by increasing the tmpfs to 4GB in
+  `ops/worker/run-worker.sh` and restarting the worker.
+- Worker VM disk cleaned: 16.68GB of old Docker images pruned, stray container
+  removed, journal logs vacuumed. Host disk freed from 32G to 21G used.
+- Second smoke scan `cmt0q9a28000501jnmn1t453t` against `octocat/Hello-World`
+  completed successfully: `QUEUED -> PREFLIGHT (passed, 4 checks) -> RUNNING ->
+COMPLETED`. Duration: 6m 20s. Model: `azure_ai/gpt-5.6-luna` at medium
+  reasoning. Cost: $0.048 (26 LLM requests, 86% cache hits). 0 findings.
+- Post-promotion worker logs show no `CONSUMER_WEDGED` or `read ETIMEDOUT`
+  entries.
+
+### 5.5 Marketplace re-export
+
+- Marketplace PR opened:
+  `https://github.com/ecryptoguru/lyrashield-marketplace/pull/9`
+- Source PR opened to keep the export correct:
+  `https://github.com/ecryptoguru/lyrashield-ai/pull/362`
+- Validation: `node scripts/validate.mjs` passed (26 generated artifacts).
+
+### 5.6 Local repository gates
+
+- `main` is at `4dc8012` (clean, no uncommitted changes).
+- `pnpm install --frozen-lockfile` passed.
+- `pnpm typecheck` passed (34 successful tasks).
+- `pnpm lint` passed (32 successful tasks).
+- `pnpm format:check` passed.
+- `pnpm build` passed.
+- `pnpm test` passed: 222 test files passed, 1 skipped (1982 tests passed,
+  16 RLS-skipped); 17 marketing test files passed (123 tests); 18 motion tests
+  passed. All suites green after applying migrations to the local Docker
+  Compose Postgres.
+
+### 5.7 Brevo email configuration
+
+- `BREVO_API_KEY` set as a Container App secret (`secretref:brevo-api-key`).
+- `EMAIL_FROM` and `NOTIFICATION_FROM_EMAIL` set to
+  `support@lyrashieldai.com`.
+- App restarted; `/api/ready` reports `database: true, redis: true`.

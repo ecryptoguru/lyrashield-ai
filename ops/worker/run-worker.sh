@@ -170,7 +170,7 @@ docker create \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=volume,src=lyrashield-worker-runs,dst=/app/apps/worker/lyrashield_runs \
-  --tmpfs /tmp:rw,nosuid,nodev,size=2g \
+  --tmpfs /tmp:rw,nosuid,nodev,size=4g \
   --security-opt no-new-privileges=true \
   --cap-drop ALL \
   --memory 3g \

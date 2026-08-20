@@ -287,3 +287,26 @@ the Key Vault secret and GitHub secret in the same change window.
 4. **Founder-pending items (untouched by design):** revocation-vs-fallback
    policy, annual Cloud 25%-vs-30% tier kicker, and the Cashfree payout
    question are explicitly out of scope here.
+
+---
+
+## 7. Sprint-10 close-out evidence (2026-08-20)
+
+- Key Vault `lyrashieldprodsecrets` now contains:
+  - `license-signing-private-key`
+  - `license-signing-public-key`
+  - `license-signing-key-id` = `license-key-v1`
+- Container App `lyrashield-app` managed identity principal:
+  `c31f949b-e297-4cb9-8605-06cde5b744aa`
+- Key Vault IAM: `Key Vault Secrets User` assigned to the app identity.
+- Container App env:
+  - `LYRASHIELD_KEY_VAULT_NAME=lyrashieldprodsecrets`
+  - `LICENSE_SIGNING_KEY_ID=license-key-v1`
+  - `LYRASHIELD_INTERNAL_API_KEY=secretref:lyrashield-internal-api-key`
+  - `LICENSE_PUBLISHED_BUILD=0.1.0`
+  - `POLAR_LOCAL_PRODUCT_IDS={"individual_launch":"prod_smoke_test"}` (smoke-only map)
+- Smoke test: `POST /api/licenses/issue` + `POST /api/licenses/verify` returned
+  `valid: true`, `signingKeyId: "license-key-v1"`; smoke license deleted.
+- The Key Vault client in `apps/web/src/lib/licenses/license-service.ts` is now
+  wired and verified in production; the temporary `LICENSE_SIGNING_PRIVATE_KEY`
+  env-fallback path is not needed in prod.
