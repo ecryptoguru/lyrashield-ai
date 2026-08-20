@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "pnpm --filter @lyrashield/desktop-frontend build",
+    "tauri:build": "tauri build",
     "frontend:dev": "pnpm --filter @lyrashield/desktop-frontend dev",
     "frontend:build": "pnpm --filter @lyrashield/desktop-frontend build",
     "frontend:typecheck": "pnpm --filter @lyrashield/desktop-frontend typecheck",
