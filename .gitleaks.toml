@@ -7,6 +7,10 @@ regexTarget = "line"
 paths = [
   '''^apps/worker/src/engine/scanners/secrets-scanner\.test\.ts$''',
   '''^\.github/workflows/ci\.yml$''',
+  # Documentation prose references key management, encryption formats, and
+  # storage backends — not actual secrets. The generic-api-key rule matches
+  # terms like "LSEV1" (envelope format ID) in descriptive text.
+  '''^docs/.*\.md$''',
 ]
 regexes = [
   '''secretAccessKey:\s*env\.S3_SECRET_KEY''',
