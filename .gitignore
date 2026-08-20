@@ -52,6 +52,13 @@ packages/db/src/generated/
 docker-data/
 .devin/
 
+# Rust build artifacts (also in apps/desktop/.gitignore, repeated here
+# so IDE source-control views don't surface 10k+ target/ files)
+target/
+
+# Tauri generated files
+gen/schemas/
+
 # Secrets / keys (deploy doc has you download GitHub App .pem)
 *.pem
 *.key
