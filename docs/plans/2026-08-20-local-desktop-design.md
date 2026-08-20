@@ -63,19 +63,19 @@ Privacy promise (literally true): telemetry off by default; code, findings, and 
 
 ### Module map
 
-| Module | Language | Responsibility |
-|--------|----------|----------------|
-| `src/license/` | Rust | ed25519 license verification (port of `@lyrashield/licenses`), blob decode, local storage, golden-vector tests |
-| `src/byok/` | Rust | BYOK credential management: ChatGPT auth (delegated to engine CLI), Azure OpenAI (OS keychain) |
-| `src/runtime/` | Rust | Engine + Docker detection, process spawning utilities |
-| `src/scan/` | Rust | Scan lifecycle: spawn engine, stream progress, parse output, persist to SQLite, SARIF/report export |
-| `src/updater/` | Rust | Update eligibility gating (`isBuildInstallable`), Tauri updater plugin integration |
-| `src/sync/` | Rust | Optional cloud sync client (`/api/sync/*`), batched findings upload, cursor management |
-| `src/api.rs` | Rust | HTTP client for license + sync endpoints (reqwest) |
-| `src/commands.rs` | Rust | Tauri IPC command registration (bridge between Rust core and React frontend) |
-| `frontend/src/screens/` | React/TS | All UI screens |
-| `frontend/src/components/` | React/TS | Reusable UI components |
-| `frontend/src/lib/` | React/TS | Tauri invoke wrappers, shared types |
+| Module                     | Language | Responsibility                                                                                                 |
+| -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `src/license/`             | Rust     | ed25519 license verification (port of `@lyrashield/licenses`), blob decode, local storage, golden-vector tests |
+| `src/byok/`                | Rust     | BYOK credential management: ChatGPT auth (delegated to engine CLI), Azure OpenAI (OS keychain)                 |
+| `src/runtime/`             | Rust     | Engine + Docker detection, process spawning utilities                                                          |
+| `src/scan/`                | Rust     | Scan lifecycle: spawn engine, stream progress, parse output, persist to SQLite, SARIF/report export            |
+| `src/updater/`             | Rust     | Update eligibility gating (`isBuildInstallable`), Tauri updater plugin integration                             |
+| `src/sync/`                | Rust     | Optional cloud sync client (`/api/sync/*`), batched findings upload, cursor management                         |
+| `src/api.rs`               | Rust     | HTTP client for license + sync endpoints (reqwest)                                                             |
+| `src/commands.rs`          | Rust     | Tauri IPC command registration (bridge between Rust core and React frontend)                                   |
+| `frontend/src/screens/`    | React/TS | All UI screens                                                                                                 |
+| `frontend/src/components/` | React/TS | Reusable UI components                                                                                         |
+| `frontend/src/lib/`        | React/TS | Tauri invoke wrappers, shared types                                                                            |
 
 ## 3. Data flows
 
@@ -178,6 +178,7 @@ A revoked license has `signature`/`signingKeyId` set to `"REVOKED"` server-side.
 ### ChatGPT subscription (OAuth)
 
 Delegated entirely to the engine:
+
 - `lyrashield auth login chatgpt` → opens browser, stores token at `~/.strix/subscription-auth.json`
 - `lyrashield auth status` → returns signed-in state
 - `lyrashield auth logout` → clears token
@@ -206,24 +207,24 @@ The desktop spawns these commands; it does not implement OAuth itself.
 
 ## 7. Threat model
 
-| Threat | Mitigation |
-|--------|------------|
-| License forgery (attacker creates fake license) | ed25519 signature verification against bundled public key; server never accepts client-supplied keys |
-| License tampering (attacker modifies stored license) | Signature covers the exact payload bytes; any modification breaks verification |
-| Webview XSS bypasses license check | License verification in compiled Rust core, not webview JS |
-| BYOK credential theft from disk | OS keychain (Keychain/DPAPI/Secret Service), never plaintext |
-| Update channel MITM | Tauri updater verifies artifact signature against bundled pubkey; HTTPS to GitHub |
-| Updater private key compromise | Rotation procedure in runbook; new key shipped via old-key-signed update |
-| Unintended data egress | Only license API + opt-in sync make network calls; no telemetry; engine telemetry forced off |
-| Docker not available → user runs without sandbox | App blocks scan launch until Docker is detected; no bypass mode |
+| Threat                                               | Mitigation                                                                                           |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| License forgery (attacker creates fake license)      | ed25519 signature verification against bundled public key; server never accepts client-supplied keys |
+| License tampering (attacker modifies stored license) | Signature covers the exact payload bytes; any modification breaks verification                       |
+| Webview XSS bypasses license check                   | License verification in compiled Rust core, not webview JS                                           |
+| BYOK credential theft from disk                      | OS keychain (Keychain/DPAPI/Secret Service), never plaintext                                         |
+| Update channel MITM                                  | Tauri updater verifies artifact signature against bundled pubkey; HTTPS to GitHub                    |
+| Updater private key compromise                       | Rotation procedure in runbook; new key shipped via old-key-signed update                             |
+| Unintended data egress                               | Only license API + opt-in sync make network calls; no telemetry; engine telemetry forced off         |
+| Docker not available → user runs without sandbox     | App blocks scan launch until Docker is detected; no bypass mode                                      |
 
 ## 8. PR sequence
 
-| PR | Title | Content |
-|----|-------|---------|
-| #364 | Foundation | Design doc + updater-keys runbook + Tauri scaffold + license activation/verification (Rust ed25519 + golden vectors) + BYOK setup + engine/Docker detection + CI integration |
-| #365 | Functionality | Scan launch + results UI + update system wiring + optional cloud sync |
-| #366 | Release + docs | `release-tauri.yml` (macOS universal + Windows, sign/notarize, `latest.json`) + all ops docs updated |
+| PR   | Title          | Content                                                                                                                                                                      |
+| ---- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #364 | Foundation     | Design doc + updater-keys runbook + Tauri scaffold + license activation/verification (Rust ed25519 + golden vectors) + BYOK setup + engine/Docker detection + CI integration |
+| #365 | Functionality  | Scan launch + results UI + update system wiring + optional cloud sync                                                                                                        |
+| #366 | Release + docs | `release-tauri.yml` (macOS universal + Windows, sign/notarize, `latest.json`) + all ops docs updated                                                                         |
 
 Strictly sequential. PR 1 must merge before PR 2; PR 2 before PR 3.
 

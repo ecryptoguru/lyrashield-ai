@@ -48,29 +48,21 @@ export function LicenseStatusScreen({ status, onLogout }: Props) {
           <p className="text-sm text-muted-foreground">License status</p>
         </div>
         <div className="space-y-3">
-          {sku && (
-            <Row label="Plan" value={formatSku(sku)} />
-          )}
-          {seatCount !== null && (
-            <Row label="Seats" value={String(seatCount)} />
-          )}
-          {machineCount !== null && (
-            <Row label="Activated machines" value={String(machineCount)} />
-          )}
-          <Row label="Update eligibility" value={new Date(updateEligibleUntil).toLocaleDateString()} />
+          {sku && <Row label="Plan" value={formatSku(sku)} />}
+          {seatCount !== null && <Row label="Seats" value={String(seatCount)} />}
+          {machineCount !== null && <Row label="Activated machines" value={String(machineCount)} />}
+          <Row
+            label="Update eligibility"
+            value={new Date(updateEligibleUntil).toLocaleDateString()}
+          />
           <Row
             label="Status"
             value={isExpired ? "Expired (perpetual fallback active)" : "Active"}
             highlight={isExpired ? "warning" : "success"}
           />
-          {fallback && (
-            <Row label="Perpetual fallback build" value={fallback} />
-          )}
+          {fallback && <Row label="Perpetual fallback build" value={fallback} />}
         </div>
-        <button
-          onClick={onLogout}
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
+        <button onClick={onLogout} className="text-sm text-muted-foreground hover:text-foreground">
           Deactivate this machine
         </button>
       </div>
@@ -78,12 +70,21 @@ export function LicenseStatusScreen({ status, onLogout }: Props) {
   )
 }
 
-function Row({ label, value, highlight }: { label: string; value: string; highlight?: "success" | "warning" }) {
-  const color = highlight === "success"
-    ? "text-success"
-    : highlight === "warning"
-    ? "text-warning"
-    : "text-foreground"
+function Row({
+  label,
+  value,
+  highlight,
+}: {
+  label: string
+  value: string
+  highlight?: "success" | "warning"
+}) {
+  const color =
+    highlight === "success"
+      ? "text-success"
+      : highlight === "warning"
+        ? "text-warning"
+        : "text-foreground"
   return (
     <div className="flex justify-between border-b border-border pb-2">
       <span className="text-sm text-muted-foreground">{label}</span>
