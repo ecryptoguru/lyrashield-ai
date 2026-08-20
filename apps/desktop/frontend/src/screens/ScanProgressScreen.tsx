@@ -35,7 +35,9 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
           break
       }
     })
-    return () => { unlisten.then((u) => u()) }
+    return () => {
+      unlisten.then((u) => u())
+    }
   }, [scanId])
 
   async function handleExportSarif() {
@@ -61,11 +63,15 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
             ← Back
           </button>
           <h1 className="text-lg font-semibold text-foreground">Scan {scanId}</h1>
-          <span className={`rounded px-2 py-0.5 text-xs ${
-            status === "running" ? "bg-warning/20 text-warning" :
-            status === "completed" ? "bg-success/20 text-success" :
-            "bg-destructive/20 text-destructive"
-          }`}>
+          <span
+            className={`rounded px-2 py-0.5 text-xs ${
+              status === "running"
+                ? "bg-warning/20 text-warning"
+                : status === "completed"
+                  ? "bg-success/20 text-success"
+                  : "bg-destructive/20 text-destructive"
+            }`}
+          >
             {status}
           </span>
         </div>
@@ -82,9 +88,7 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
       <div className="flex flex-1 overflow-hidden">
         {/* Findings panel */}
         <div className="w-1/2 overflow-y-auto border-r border-border p-4">
-          <h2 className="mb-3 text-sm font-medium text-foreground">
-            Findings ({findings.length})
-          </h2>
+          <h2 className="mb-3 text-sm font-medium text-foreground">Findings ({findings.length})</h2>
           {findings.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {status === "running" ? "Waiting for findings…" : "No findings."}
@@ -95,13 +99,16 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
                 <div key={f.id} className="rounded-md border border-border p-3">
                   <div className="flex items-start justify-between">
                     <span className="text-sm font-medium text-foreground">{f.title}</span>
-                    <span className={`ml-2 rounded px-1.5 py-0.5 text-xs ${severityColor(f.severity)}`}>
+                    <span
+                      className={`ml-2 rounded px-1.5 py-0.5 text-xs ${severityColor(f.severity)}`}
+                    >
                       {f.severity}
                     </span>
                   </div>
                   {f.filePath && (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {f.filePath}{f.lineNumber ? `:${f.lineNumber}` : ""}
+                      {f.filePath}
+                      {f.lineNumber ? `:${f.lineNumber}` : ""}
                     </p>
                   )}
                   {f.description && (
@@ -128,10 +135,15 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
 
 function severityColor(severity: string): string {
   switch (severity.toUpperCase()) {
-    case "CRITICAL": return "bg-destructive/20 text-destructive"
-    case "HIGH": return "bg-critical/20 text-critical"
-    case "MEDIUM": return "bg-warning/20 text-warning"
-    case "LOW": return "bg-primary/20 text-primary"
-    default: return "bg-muted text-muted-foreground"
+    case "CRITICAL":
+      return "bg-destructive/20 text-destructive"
+    case "HIGH":
+      return "bg-critical/20 text-critical"
+    case "MEDIUM":
+      return "bg-warning/20 text-warning"
+    case "LOW":
+      return "bg-primary/20 text-primary"
+    default:
+      return "bg-muted text-muted-foreground"
   }
 }

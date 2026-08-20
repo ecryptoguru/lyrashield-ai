@@ -1,6 +1,18 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import type { AzureCredentials, ChatGptAuthStatus, Finding, LicenseStatus, RuntimeStatus, ScanEvent, ScanMode, ScanTarget, SyncConnection, SyncResult, UpdateCheckResult } from "./types"
+import type {
+  AzureCredentials,
+  ChatGptAuthStatus,
+  Finding,
+  LicenseStatus,
+  RuntimeStatus,
+  ScanEvent,
+  ScanMode,
+  ScanTarget,
+  SyncConnection,
+  SyncResult,
+  UpdateCheckResult,
+} from "./types"
 
 // License
 export async function activateLicense(licenseKey: string, apiUrl?: string): Promise<LicenseStatus> {
@@ -42,7 +54,11 @@ export async function clearAzureConfig(): Promise<void> {
 }
 
 // Scan
-export async function startScan(target: ScanTarget, mode: ScanMode, instruction?: string): Promise<string> {
+export async function startScan(
+  target: ScanTarget,
+  mode: ScanMode,
+  instruction?: string
+): Promise<string> {
   return invoke("start_scan", { target, mode, instruction: instruction ?? null })
 }
 export async function exportSarif(findings: Finding[], scanId: string): Promise<string> {
@@ -52,7 +68,14 @@ export async function exportSarif(findings: Finding[], scanId: string): Promise<
 // Scan events
 export async function onScanEvent(handler: (event: ScanEvent) => void): Promise<() => void> {
   const unlisteners: (() => void)[] = []
-  const events = ["scan://started", "scan://progress", "scan://finding", "scan://completed", "scan://failed", "scan://cancelled"]
+  const events = [
+    "scan://started",
+    "scan://progress",
+    "scan://finding",
+    "scan://completed",
+    "scan://failed",
+    "scan://cancelled",
+  ]
   for (const evt of events) {
     const un = await listen<ScanEvent>(evt, (e) => handler(e.payload))
     unlisteners.push(un)
@@ -66,10 +89,18 @@ export async function checkUpdateEligibility(): Promise<UpdateCheckResult> {
 }
 
 // Sync
-export async function connectWorkspace(apiUrl: string | undefined, workspaceId: string, licenseKey: string): Promise<SyncConnection> {
+export async function connectWorkspace(
+  apiUrl: string | undefined,
+  workspaceId: string,
+  licenseKey: string
+): Promise<SyncConnection> {
   return invoke("connect_workspace", { apiUrl: apiUrl ?? null, workspaceId, licenseKey })
 }
-export async function syncFindings(apiUrl: string | undefined, connection: SyncConnection, findings: Finding[]): Promise<SyncResult[]> {
+export async function syncFindings(
+  apiUrl: string | undefined,
+  connection: SyncConnection,
+  findings: Finding[]
+): Promise<SyncResult[]> {
   return invoke("sync_findings", { apiUrl: apiUrl ?? null, connection, findings })
 }
 export async function disconnectSync(): Promise<void> {
