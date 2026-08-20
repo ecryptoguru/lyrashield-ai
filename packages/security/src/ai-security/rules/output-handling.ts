@@ -1,3 +1,4 @@
+// security-scan-skip-file: detection rules reference dangerous patterns by design
 import {
   detectedSignal,
   inconclusiveSignal,
