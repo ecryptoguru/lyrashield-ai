@@ -127,6 +127,13 @@ assert_eq "multi: app" "true" "$(get_field "$out" "app")"
 assert_eq "multi: marketing" "true" "$(get_field "$out" "marketing")"
 assert_eq "multi: shared" "true" "$(get_field "$out" "shared")"
 
+# --- Test 13: desktop changes trigger desktop CI ---
+out=$(run_classify $'apps/desktop/src-tauri/src/license/mod.rs\napps/desktop/frontend/src/App.tsx')
+assert_eq "desktop: docs-only" "false" "$(get_field "$out" "docs-only")"
+assert_eq "desktop: desktop" "true" "$(get_field "$out" "desktop")"
+assert_eq "desktop: app" "false" "$(get_field "$out" "app")"
+assert_eq "desktop: shared" "false" "$(get_field "$out" "shared")"
+
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then
   exit 1
