@@ -58,6 +58,7 @@ This triggers the `release-tauri.yml` workflow.
 ### 3. Monitor the workflow
 
 The workflow has three jobs:
+
 - `build-macos`: Builds universal DMG + app on macOS-14, signs with Apple Developer ID, notarizes.
 - `build-windows`: Builds NSIS installer on Windows, signs if credentials are present.
 - `publish-manifest`: Downloads the signed `latest.json` from the release, verifies no private key material, and publishes it as the canonical updater manifest.

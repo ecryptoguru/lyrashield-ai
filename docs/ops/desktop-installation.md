@@ -27,6 +27,7 @@ Scans run in a hardened Docker sandbox. Install Docker Desktop:
 - **Windows:** [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
 
 Verify Docker is running:
+
 ```bash
 docker info
 ```
@@ -89,13 +90,17 @@ Only explicitly selected findings leave your machine. The server enforces a maxi
 ## Troubleshooting
 
 ### "Engine not found"
+
 Install the engine: `uv tool install lyrashield`. Ensure it's on your PATH.
 
 ### "Docker not running"
+
 Start Docker Desktop. Run `docker info` to verify.
 
 ### "License activation failed"
+
 Check your license key for typos. Ensure you have network access during activation. Contact support@lyrashieldai.com if the issue persists.
 
 ### "ChatGPT login failed"
+
 Ensure you have a ChatGPT Plus or Pro subscription. The login flow opens a browser — ensure pop-ups are allowed.
