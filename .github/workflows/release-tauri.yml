@@ -112,6 +112,46 @@ jobs:
           prerelease: false
           args: "--target universal-apple-darwin"
 
+      # Notarize the macOS app so Gatekeeper accepts it on first launch. Without
+      # this, even a Developer-ID-signed build shows "cannot be opened because
+      # the developer cannot be verified". Uses App Store Connect API key auth
+      # (not the Apple-ID-password path). Skipped gracefully when the cert or
+      # the notarization creds are not provisioned (e.g. unsigned dev builds).
+      - name: Notarize macOS app
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::notice::No Apple certificate — skipping notarization (unsigned dev build)"
+            exit 0
+          fi
+          if [ -z "$APPLE_API_ISSUER" ] || [ -z "$APPLE_API_KEY_ID" ] || [ -z "$APPLE_API_KEY" ]; then
+            echo "::warning::Apple signing cert present but App Store Connect API creds (APPLE_API_ISSUER / APPLE_API_KEY_ID / APPLE_API_KEY) are not set — app is signed but NOT notarized; Gatekeeper will warn."
+            exit 0
+          fi
+          # App Store Connect API key file (notarytool -p expects the .p8 content path)
+          KEY_FILE=$(mktemp /tmp/AuthKey.XXXXXX.p8)
+          echo "$APPLE_API_KEY" | base64 --decode > "$KEY_FILE" 2>/dev/null || printf '%s' "$APPLE_API_KEY" > "$KEY_FILE"
+          # Notarize every produced .dmg (and .app.zip if present)
+          shopt -s nullglob
+          ARTIFACTS=( apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app )
+          for ART in "${ARTIFACTS[@]}"; do
+            [ -e "$ART" ] || continue
+            echo "Notarizing: $ART"
+            xcrun notarytool submit "$ART" \
+              --key "$KEY_FILE" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" \
+              --wait --timeout 30m
+            # Staple the ticket so the app verifies offline too
+            case "$ART" in
+              *.dmg) xcrun stapler staple "$ART" ;;
+              *.app) xcrun stapler staple "$ART" ;;
+            esac
+          done
+          rm -f "$KEY_FILE"
+
   build-windows:
     name: Windows x64 (NSIS installer)
     runs-on: windows-latest
@@ -263,3 +303,29 @@ jobs:
           TAG="${{ github.ref_name }}"
           gh release upload "$TAG" latest.json --clobber
           echo "Manifest published to GitHub Releases."
+
+      # LICENSE_PUBLISHED_BUILD pins the perpetual-fallback build on the server
+      # (apps/web/src/lib/licenses/license-service.ts resolvePublishedFallbackBuild).
+      # It is a Container App env var set by deploy-azure.yml and is NOT safe to
+      # auto-write from here: a partial `az containerapp update` would clobber the
+      # other env vars, and a full redeploy is too heavy a side effect for a
+      # desktop release. So we surface the exact value + the one command instead
+      # of letting it be forgotten on release day. (Founder deploy-gated.)
+      - name: Remind to bump LICENSE_PUBLISHED_BUILD
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          {
+            echo "### ⚠️ Post-release step — bump the fallback build"
+            echo ""
+            echo "Set the app Container App's \`LICENSE_PUBLISHED_BUILD\` to \`${VERSION}\` so new"
+            echo "licenses pin this build as their perpetual-fallback version:"
+            echo ""
+            echo "\`\`\`bash"
+            echo "az containerapp update --name \"\$AZURE_APP_CONTAINER_APP_NAME\" \\"
+            echo "  --resource-group \"\$AZURE_RESOURCE_GROUP\" \\"
+            echo "  --set-env-vars \"LICENSE_PUBLISHED_BUILD=${VERSION}\""
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::LICENSE_PUBLISHED_BUILD should be set to ${VERSION} on the app Container App (see job summary)."
