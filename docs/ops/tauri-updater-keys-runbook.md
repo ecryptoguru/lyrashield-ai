@@ -21,6 +21,7 @@ npx tauri signer generate -w ~/.tauri/lyrashield-updater.key
 You will be prompted for a password. Choose a strong password and store it in your password manager.
 
 This produces:
+
 - `~/.tauri/lyrashield-updater.key` — the private key (password-encrypted)
 - A public key string printed to stdout (starts with `dW50cn...`)
 
@@ -52,10 +53,10 @@ Copy `~/.tauri/lyrashield-updater.key` to a USB drive and store it in a physical
 
 In the `ecryptoguru/lyrashield-ai` repository settings → Secrets and variables → Actions:
 
-| Secret name | Value |
-|-------------|-------|
-| `TAURI_SIGNING_PRIVATE_KEY` | Contents of `~/.tauri/lyrashield-updater.key` (the file body, base64 if needed) |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The password you chose in step 1 |
+| Secret name                          | Value                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Contents of `~/.tauri/lyrashield-updater.key` (the file body, base64 if needed) |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The password you chose in step 1                                                |
 
 ```bash
 # To get the file contents for pasting into GitHub:
@@ -90,23 +91,23 @@ Separately from the Tauri updater key, macOS builds require:
 
 Add these as GitHub Actions secrets:
 
-| Secret name | Value |
-|-------------|-------|
-| `APPLE_CERTIFICATE` | Base64-encoded `.p12` file |
-| `APPLE_CERTIFICATE_PASSWORD` | `.p12` export password |
-| `APPLE_SIGNING_IDENTITY` | "Developer ID Application: LyraShield (TEAM_ID)" |
-| `APPLE_API_KEY` | Base64-encoded App Store Connect API key (.p8 file) |
-| `APPLE_API_ISSUER` | App Store Connect issuer ID |
-| `APPLE_API_KEY_PATH` | Path where the workflow writes the API key (e.g. `/tmp/apple_api_key.p8`) |
+| Secret name                  | Value                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `APPLE_CERTIFICATE`          | Base64-encoded `.p12` file                                                |
+| `APPLE_CERTIFICATE_PASSWORD` | `.p12` export password                                                    |
+| `APPLE_SIGNING_IDENTITY`     | "Developer ID Application: LyraShield (TEAM_ID)"                          |
+| `APPLE_API_KEY`              | Base64-encoded App Store Connect API key (.p8 file)                       |
+| `APPLE_API_ISSUER`           | App Store Connect issuer ID                                               |
+| `APPLE_API_KEY_PATH`         | Path where the workflow writes the API key (e.g. `/tmp/apple_api_key.p8`) |
 
 ## 6. Windows code signing
 
 For Windows builds, provision a code signing certificate (EV or OV). Add as GitHub Actions secrets:
 
-| Secret name | Value |
-|-------------|-------|
-| `WINDOWS_CERTIFICATE` | Base64-encoded `.pfx` file |
-| `WINDOWS_CERTIFICATE_PASSWORD` | `.pfx` export password |
+| Secret name                    | Value                      |
+| ------------------------------ | -------------------------- |
+| `WINDOWS_CERTIFICATE`          | Base64-encoded `.pfx` file |
+| `WINDOWS_CERTIFICATE_PASSWORD` | `.pfx` export password     |
 
 > Alternative: Azure Trusted Signing can be used instead of a PFX file. If using Trusted Signing, the workflow uses the Azure signing action instead of the PFX-based approach.
 

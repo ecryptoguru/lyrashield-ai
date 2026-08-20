@@ -48,16 +48,16 @@ export default function App() {
   }
 
   if (route === "setup") {
-    return (
-      <SetupScreen
-        onComplete={() => setRoute("main")}
-        onBack={() => setRoute("activation")}
-      />
-    )
+    return <SetupScreen onComplete={() => setRoute("main")} onBack={() => setRoute("activation")} />
   }
 
-  return <LicenseStatusScreen status={licenseStatus} onLogout={async () => {
-    await clearLicense()
-    setRoute("activation")
-  }} />
+  return (
+    <LicenseStatusScreen
+      status={licenseStatus}
+      onLogout={async () => {
+        await clearLicense()
+        setRoute("activation")
+      }}
+    />
+  )
 }
