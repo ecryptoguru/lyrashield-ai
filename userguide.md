@@ -416,12 +416,12 @@ Other integration types exist in the internal schema and roadmap, but the curren
 
 LyraShield Cloud offers a 14-day free trial: 100 agent-minutes, Standard and Quick scans only (no Deep), and no card required. When the trial ends, pick a paid plan or let it lapse.
 
-| Plan    | Price        | Minutes/mo | Targets | Deep | Notes                              |
-| ------- | ------------ | ----------: | ------: | ---- | ---------------------------------- |
-| STARTER | $29/mo       |         300 |       5 | No  | Standard + Quick                   |
-| PRO     | $99/mo       |       1,200 |      15 | Yes | Deep enabled                       |
-| TEAM    | $299/mo      |       4,000 |      50 | Yes | Deep + opt-in overage + spend limit |
-| AGENCY  | Contact-led  |     custom  | custom  | Yes | Custom terms                       |
+| Plan    | Price       | Minutes/mo | Targets | Deep | Notes                               |
+| ------- | ----------- | ---------: | ------: | ---- | ----------------------------------- |
+| STARTER | $29/mo      |        300 |       5 | No   | Standard + Quick                    |
+| PRO     | $99/mo      |      1,200 |      15 | Yes  | Deep enabled                        |
+| TEAM    | $299/mo     |      4,000 |      50 | Yes  | Deep + opt-in overage + spend limit |
+| AGENCY  | Contact-led |     custom |  custom | Yes  | Custom terms                        |
 
 - **Annual billing:** 15–25% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).

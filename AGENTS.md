@@ -50,6 +50,7 @@ Owner: engineering + founder authorization.
 Owner: engineering + founder.
 
 Sprint 10 is merged to `main`. The remaining work is **production provisioning only**:
+
 - Configure Polar and Razorpay credentials, product/price IDs, and webhook secrets.
 - Provision Azure Key Vault for license signing (`lyrashieldprodsecrets`).
 - Verify entitlement gating and usage metering end-to-end against live provider events.

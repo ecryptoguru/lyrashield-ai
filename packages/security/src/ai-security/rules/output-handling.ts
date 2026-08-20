@@ -23,7 +23,8 @@ function isDangerousUse(line: string, variable: string): boolean {
 
   const evalCall = "eval" + "("
   if (lower.includes(evalCall) && hasVariableNear(line, variable, evalCall)) return true
-  if (lower.includes("new function(") && hasVariableNear(line, variable, "new function(")) // security-scan-ok: matches new Function() in scanned source, not executed
+  if (lower.includes("new function(") && hasVariableNear(line, variable, "new function("))
+    // security-scan-ok: matches new Function() in scanned source, not executed
     return true
   if (
     (lower.includes(".exec(") || lower.includes("child_process.exec")) &&

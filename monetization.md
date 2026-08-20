@@ -122,12 +122,12 @@ agent-minutes)│   history/team/monitoring →      │               │
 
 **Model:** one-time payment, **1-year license, all updates included, perpetual fallback** (keep the last eligible build forever after the year; it never deactivates). Renewal for continued updates at a discount.
 
-| SKU                     | Price                                   | Includes                                                                               |
-| ----------------------- | --------------------------------------- | -------------------------------------------------------------------------------------- |
-| **Individual**          | **$199 launch / $299 regular** one-time | 1-year license, up to 3 machines, all updates, perpetual fallback. Renewal **$59/yr**  |
-| **Team (perpetual)**    | **$99/seat** one-time (min 3 seats)     | 1 year updates, license manager. Renewal **$59/seat/yr**                               |
-| **Team (subscription)** | **$149/seat/yr** annual                 | continuous updates; cloud sync available as **$49/seat/yr** add-on                     |
-| **Cloud-sync add-on**   | **$49/seat/yr**                         | sync Local findings/reports to a Cloud workspace (included free in any Cloud sub)      |
+| SKU                     | Price                                   | Includes                                                                              |
+| ----------------------- | --------------------------------------- | ------------------------------------------------------------------------------------- |
+| **Individual**          | **$199 launch / $299 regular** one-time | 1-year license, up to 3 machines, all updates, perpetual fallback. Renewal **$59/yr** |
+| **Team (perpetual)**    | **$99/seat** one-time (min 3 seats)     | 1 year updates, license manager. Renewal **$59/seat/yr**                              |
+| **Team (subscription)** | **$149/seat/yr** annual                 | continuous updates; cloud sync available as **$49/seat/yr** add-on                    |
+| **Cloud-sync add-on**   | **$49/seat/yr**                         | sync Local findings/reports to a Cloud workspace (included free in any Cloud sub)     |
 
 **Volume:** 10% off at 10+ seats. **No lifetime deal** (standing rule).
 
@@ -291,7 +291,7 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 | Risk                                                    | Impact                             | Mitigation                                                                                                                                                           |
 | ------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **No free tier slows PLG**                              | Lower top-of-funnel conversion     | The free tools + GitHub Action + content carry the free burden; the no-card 14-day full trial is the risk-free on-ramp; instrument the funnel to confirm it converts |
-| **Trial abuse (no card)**                               | COGS burn                          | Email verification, 100 agent-min hard cap, no Deep, 3-target cap, scan-frequency throttle, 80% warning, no auto-charge                                                            |
+| **Trial abuse (no card)**                               | COGS burn                          | Email verification, 100 agent-min hard cap, no Deep, 3-target cap, scan-frequency throttle, 80% warning, no auto-charge                                              |
 | **Refund abuse on Cloud (14-day window)**               | Refund fraud / chargebacks         | The affiliate clawback path + hold already handle it; monitor refund rate; the trial reduces "bought-blind" refunds. **Local stays no-refund** (digital goods).      |
 | **Local-mode support burden** (Docker/env/local issues) | Support cost eats license margin   | Clean installer + diagnostics + `doctor` command; community support on Individual, priority on Team; price includes support                                          |
 | **Local models deferred**                               | Some BYOK buyers want local models | Launch on ChatGPT/Azure subs (supported); communicate local models as roadmap; don't overpromise scan quality on weak models                                         |
