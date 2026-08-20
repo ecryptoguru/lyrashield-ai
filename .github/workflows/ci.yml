@@ -57,6 +57,7 @@ jobs:
       docs-only: ${{ steps.classify.outputs.docs-only }}
       marketing: ${{ steps.classify.outputs.marketing }}
       app: ${{ steps.classify.outputs.app }}
+      desktop: ${{ steps.classify.outputs.desktop }}
       shared: ${{ steps.classify.outputs.shared }}
     steps:
       - name: Configure git default branch
@@ -592,6 +593,87 @@ jobs:
 
           echo "::error::Live homepage is missing '${missing}' after 8 attempts — the deploy did not land."
           exit 1
+
+  desktop-rust:
+    name: Desktop Rust (cargo)
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          components: clippy,rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Format check
+        working-directory: apps/desktop/src-tauri
+        run: cargo fmt -- --check
+
+      - name: Clippy
+        working-directory: apps/desktop/src-tauri
+        run: cargo clippy -- -D warnings
+
+      - name: Test (includes golden-vector parity)
+        working-directory: apps/desktop/src-tauri
+        run: cargo test
+
+      - name: Build (arm64)
+        working-directory: apps/desktop/src-tauri
+        run: cargo build --target aarch64-apple-darwin
+
+      - name: Build (x86_64 cross-compile)
+        working-directory: apps/desktop/src-tauri
+        run: cargo build --target x86_64-apple-darwin
+
+  desktop-frontend:
+    name: Desktop Frontend (Vite/React)
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @lyrashield/desktop-frontend typecheck
+
+      - name: Lint
+        run: pnpm --filter @lyrashield/desktop-frontend lint
+
+      - name: Build
+        run: pnpm --filter @lyrashield/desktop-frontend build
 
   deploy-azure:
     name: Deploy to Azure

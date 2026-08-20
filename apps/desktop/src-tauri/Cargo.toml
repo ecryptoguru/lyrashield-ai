@@ -1,0 +1,48 @@
+[package]
+name = "lyrashield-desktop"
+version = "0.1.0"
+description = "LyraShield Local — BYOK desktop security scanner"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "lyrashield_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-updater = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-os = "2"
+tauri-plugin-store = "2"
+
+# License verification (ed25519)
+ed25519-dalek = { version = "2", features = ["pkcs8", "pem"] }
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP client (license activation + sync)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# OS keychain (BYOK credentials)
+keyring = "3"
+
+# Async runtime + process spawning
+tokio = { version = "1", features = ["process", "io-util", "rt-multi-thread", "macros", "sync", "time"] }
+
+# Utilities
+which = "7"
+semver = "1"
+thiserror = "2"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

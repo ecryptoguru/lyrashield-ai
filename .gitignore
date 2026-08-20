@@ -57,6 +57,8 @@ docker-data/
 *.key
 *.crt
 !packages/db/prisma/certs/supabase-root-2021-ca.crt
+# Desktop license verification uses a bundled PUBLIC key (not a secret)
+!apps/desktop/src-tauri/resources/license-signing-public-key.pem
 *.p12
 
 # Vercel

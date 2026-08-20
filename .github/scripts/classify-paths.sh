@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Path classifier for CI change detection.
 #
-# Reads file paths from stdin (one per line) and outputs four boolean outputs
+# Reads file paths from stdin (one per line) and outputs five boolean outputs
 # to GITHUB_OUTPUT (or stdout when run outside a workflow):
 #   docs-only  — every changed file is a docs/config/agent-rules file
 #   marketing  — at least one file is under apps/marketing or apps/marketing-motion
 #   app        — at least one file is under apps/web or apps/worker
+#   desktop    — at least one file is under apps/desktop
 #   shared     — at least one file is in a shared location (packages/, root config, .github/)
 #
 # Extracted from .github/workflows/ci.yml by Deep Review v12 (P1-5) so the
@@ -21,11 +22,13 @@ set -euo pipefail
 docs_pattern='^(\.gitignore|\.prettierignore|\.prettierrc\.json|\.editorconfig|\.gitattributes|\.nvmrc|\.python-version|LICENSE|renovate\.json|.*\.md|\.devin/|\.claude/|\.codeium/|\.cursor/|\.agents/|\.windsurf/)$'
 marketing_pattern='^apps/(marketing|marketing-motion)/'
 app_pattern='^apps/(web|worker)/'
+desktop_pattern='^apps/desktop/'
 shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|playwright\.marketing\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|run-all-tests\.mjs|\.github/)'
 
 docs_only=true
 marketing=false
 app=false
+desktop=false
 shared=false
 
 while IFS= read -r f; do
@@ -38,6 +41,9 @@ while IFS= read -r f; do
   fi
   if echo "$f" | grep -qE "$app_pattern"; then
     app=true
+  fi
+  if echo "$f" | grep -qE "$desktop_pattern"; then
+    desktop=true
   fi
   if echo "$f" | grep -qE "$shared_pattern"; then
     shared=true
@@ -52,7 +58,7 @@ done
 # the engine-worker-contract gate (they need marketing|shared or app|shared).
 # Routing unknowns to shared is the safe direction: it over-runs CI rather than
 # under-deploying. (Deep Review v13, P1-7.)
-if [[ "$docs_only" == "false" && "$marketing" == "false" && "$app" == "false" && "$shared" == "false" ]]; then
+if [[ "$docs_only" == "false" && "$marketing" == "false" && "$app" == "false" && "$desktop" == "false" && "$shared" == "false" ]]; then
   shared=true
 fi
 
@@ -60,10 +66,12 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
   echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
   echo "app=$app" >> "$GITHUB_OUTPUT"
+  echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
   echo "shared=$shared" >> "$GITHUB_OUTPUT"
 else
   echo "docs-only=$docs_only"
   echo "marketing=$marketing"
   echo "app=$app"
+  echo "desktop=$desktop"
   echo "shared=$shared"
 fi
