@@ -45,6 +45,11 @@ artifacts/devpost-video/
 .playwright-cli/
 output/playwright/
 
+# Local build/runtime scratch (regenerate on build/test)
+apps/agent/
+tmp-*-test/
+lyrashield_runs/
+
 # Prisma generated (tracked via migrations)
 packages/db/src/generated/
 
