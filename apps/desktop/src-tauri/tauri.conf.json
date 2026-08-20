@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../../frontend/dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeDevCommand": "pnpm --filter @lyrashield/desktop-frontend dev",
+    "beforeBuildCommand": "pnpm --filter @lyrashield/desktop-frontend build"
   },
   "app": {
     "windows": [
