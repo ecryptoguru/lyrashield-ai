@@ -28,7 +28,13 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      "export BETTER_AUTH_URL=http://127.0.0.1:3100 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 " +
+      // The standalone Next.js server doesn't load .env, so forward the
+      // database URLs that the app needs at runtime. DATABASE_SYSTEM_URL is
+      // required for privileged system operations (e.g. license activation's
+      // cross-workspace key-hash lookup via getSystemPrisma()). CI sets these
+      // explicitly in the workflow; locally they come from .env loaded above.
+      `export DATABASE_URL="${process.env.DATABASE_URL ?? ""}" DATABASE_SYSTEM_URL="${process.env.DATABASE_SYSTEM_URL ?? ""}" ` +
+      "BETTER_AUTH_URL=http://127.0.0.1:3100 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 " +
       "NEXT_PUBLIC_MARKETING_URL=https://lyrashieldai.com " +
       "ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3100 TRUSTED_PROXY_IP_HEADER=x-forwarded-for " +
       "HOSTNAME=127.0.0.1 PORT=3100 NODE_ENV=production LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 " +
@@ -36,7 +42,7 @@ export default defineConfig({
       // small set of simulated client IPs in rapid succession. Raise the
       // in-memory auth rate limit so the suite doesn't trip the 5/min default
       // and produce flaky cross-test interference. Production leaves this unset.
-      "RATE_LIMIT_AUTH_MAX=1000; " +
+      "RATE_LIMIT_AUTH_MAX=1000 RATE_LIMIT_LICENSE_API_MAX=1000; " +
       // Dev/test-only ed25519 signing key for the e2e license-activation flow.
       // Never used in production (production resolves from Azure Key Vault).
       // Generate a fresh throwaway key at webServer startup and write it to a
