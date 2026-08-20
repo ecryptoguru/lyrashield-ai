@@ -739,28 +739,6 @@ importers:
         specifier: ^6.0.0
         version: 6.0.3
 
-  packages/eval-ai-safety:
-    dependencies:
-      '@lyrashield/logger':
-        specifier: workspace:*
-        version: link:../logger
-      '@lyrashield/mcp':
-        specifier: workspace:*
-        version: link:../mcp
-    devDependencies:
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.13.3
-      tsx:
-        specifier: ^4.19.0
-        version: 4.23.8
-      typescript:
-        specifier: ^6.0.0
-        version: 6.0.3
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.8)(yaml@2.9.0)
-
   packages/evidence-storage:
     dependencies:
       '@aws-sdk/client-s3':
