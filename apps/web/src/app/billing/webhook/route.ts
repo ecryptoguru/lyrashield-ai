@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic"
  * Billing webhook handler — accepts both Polar and Razorpay webhooks.
  *
  * The provider is determined by the presence of Polar-specific headers
- * (webhooks-id) vs Razorpay-specific headers (X-Razorpay-Signature).
+ * (`webhook-id`, with legacy `webhooks-id` accepted) vs Razorpay-specific
+ * headers (X-Razorpay-Signature).
  *
  * Flow (synchronous, like the GitHub webhook):
  * 1. Validate signature
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
   })
 
   // Detect provider by headers
-  const hasPolarHeaders = headers["webhooks-id"] !== undefined
+  const hasPolarHeaders = headers["webhook-id"] !== undefined || headers["webhooks-id"] !== undefined
   const hasRazorpayHeaders = headers["x-razorpay-signature"] !== undefined
 
   if (!hasPolarHeaders && !hasRazorpayHeaders) {
@@ -69,7 +70,10 @@ export async function POST(request: Request) {
       // Standard Webhooks assigns a distinct ID to every delivery. Resource
       // IDs repeat across subscription updates, so using data.id here would
       // incorrectly discard later lifecycle events as replays.
-      externalId = (headers["webhooks-id"] as string) ?? crypto.randomUUID()
+      externalId =
+        (headers["webhook-id"] as string) ??
+        (headers["webhooks-id"] as string) ??
+        crypto.randomUUID()
       eventType = event.type
       payload = event
       payloadRecord = event.data as Record<string, unknown>
