@@ -4,7 +4,17 @@ import { connectWorkspace, disconnectSync, syncFindings } from "../lib/tauri"
 
 interface Props {
   licenseKey: string
-  findings: { id: string; severity: string; title: string; description: string | null; filePath: string | null; lineNumber: number | null; status: string; verified: boolean; detectedAt: string }[]
+  findings: {
+    id: string
+    severity: string
+    title: string
+    description: string | null
+    filePath: string | null
+    lineNumber: number | null
+    status: string
+    verified: boolean
+    detectedAt: string
+  }[]
 }
 
 export function SyncScreen({ licenseKey, findings }: Props) {
@@ -70,8 +80,8 @@ export function SyncScreen({ licenseKey, findings }: Props) {
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold text-foreground">Cloud Sync</h1>
             <p className="text-sm text-muted-foreground">
-              Connect your LyraShield workspace to sync findings. Sync is off by default —
-              only explicitly selected findings leave your machine.
+              Connect your LyraShield workspace to sync findings. Sync is off by default — only
+              explicitly selected findings leave your machine.
             </p>
           </div>
           <div className="space-y-4">
@@ -110,18 +120,27 @@ export function SyncScreen({ licenseKey, findings }: Props) {
         </div>
         <div className="space-y-4">
           <div className="rounded-md bg-muted/30 p-3 text-sm">
-            <p className="text-muted-foreground">Findings to sync: <span className="font-medium text-foreground">{findings.length}</span></p>
+            <p className="text-muted-foreground">
+              Findings to sync:{" "}
+              <span className="font-medium text-foreground">{findings.length}</span>
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">Max 500 per batch.</p>
           </div>
 
           {results.length > 0 && (
             <div className="space-y-1">
               {results.map((r, i) => (
-                <p key={i} className={`text-sm ${r.status === "success" ? "text-success" : r.status === "error" ? "text-destructive" : "text-warning"}`}>
-                  {r.status === "success" ? `Synced ${r.syncedCount} findings` :
-                   r.status === "entitlement_missing" ? `Entitlement missing: ${r.message}` :
-                   r.status === "cursor_rewind" ? `Cursor rewind: ${r.message}` :
-                   `Error: ${r.message}`}
+                <p
+                  key={i}
+                  className={`text-sm ${r.status === "success" ? "text-success" : r.status === "error" ? "text-destructive" : "text-warning"}`}
+                >
+                  {r.status === "success"
+                    ? `Synced ${r.syncedCount} findings`
+                    : r.status === "entitlement_missing"
+                      ? `Entitlement missing: ${r.message}`
+                      : r.status === "cursor_rewind"
+                        ? `Cursor rewind: ${r.message}`
+                        : `Error: ${r.message}`}
                 </p>
               ))}
             </div>

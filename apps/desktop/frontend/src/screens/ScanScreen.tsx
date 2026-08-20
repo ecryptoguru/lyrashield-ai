@@ -24,8 +24,8 @@ export function ScanScreen({ onScanStarted }: Props) {
         targetType === "repo"
           ? { type: "repo", path, branch: branch || null }
           : targetType === "url"
-          ? { type: "url", url }
-          : { type: "local_path", path }
+            ? { type: "url", url }
+            : { type: "local_path", path }
 
       const scanId = await startScan(target, mode, instruction || undefined)
       onScanStarted(scanId)
@@ -93,7 +93,11 @@ export function ScanScreen({ onScanStarted }: Props) {
                 type="text"
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
-                placeholder={targetType === "repo" ? "/path/to/repo or https://github.com/user/repo" : "/path/to/project"}
+                placeholder={
+                  targetType === "repo"
+                    ? "/path/to/repo or https://github.com/user/repo"
+                    : "/path/to/project"
+                }
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
               />
             </div>
@@ -101,7 +105,9 @@ export function ScanScreen({ onScanStarted }: Props) {
 
           {targetType === "repo" && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Branch (optional)</label>
+              <label className="mb-1 block text-sm font-medium text-foreground">
+                Branch (optional)
+              </label>
               <input
                 type="text"
                 value={branch}
@@ -132,7 +138,9 @@ export function ScanScreen({ onScanStarted }: Props) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">Custom instruction (optional)</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">
+              Custom instruction (optional)
+            </label>
             <textarea
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
