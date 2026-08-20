@@ -44,7 +44,8 @@ export async function POST(request: Request) {
   })
 
   // Detect provider by headers
-  const hasPolarHeaders = headers["webhook-id"] !== undefined || headers["webhooks-id"] !== undefined
+  const hasPolarHeaders =
+    headers["webhook-id"] !== undefined || headers["webhooks-id"] !== undefined
   const hasRazorpayHeaders = headers["x-razorpay-signature"] !== undefined
 
   if (!hasPolarHeaders && !hasRazorpayHeaders) {
