@@ -66,7 +66,10 @@ export async function POST(request: Request) {
     if (hasPolarHeaders) {
       provider = "polar"
       const event = validatePolarWebhook(body, headers)
-      externalId = (event.data.id as string) ?? crypto.randomUUID()
+      // Standard Webhooks assigns a distinct ID to every delivery. Resource
+      // IDs repeat across subscription updates, so using data.id here would
+      // incorrectly discard later lifecycle events as replays.
+      externalId = (headers["webhooks-id"] as string) ?? crypto.randomUUID()
       eventType = event.type
       payload = event
       payloadRecord = event.data as Record<string, unknown>
@@ -96,7 +99,7 @@ export async function POST(request: Request) {
 
       // Track B: license issuance for Local SKU one-time orders
       if (event.type === "order.paid") {
-        await maybeIssueLicense(provider, externalId, payloadRecord)
+        await maybeIssueLicense(provider, String(event.data.id ?? ""), payloadRecord)
       }
 
       // Track C: affiliate commission/clawback dispatch (non-blocking on failure)
@@ -119,6 +122,7 @@ export async function POST(request: Request) {
       const signature = (headers["x-razorpay-signature"] as string) ?? ""
       const event = validateRazorpayWebhook(body, signature)
       externalId =
+        event.payload.refund?.entity.id ??
         event.payload.payment?.entity.id ??
         event.payload.subscription?.entity.id ??
         crypto.randomUUID()
@@ -190,7 +194,7 @@ export async function POST(request: Request) {
  */
 async function maybeIssueLicense(
   provider: string,
-  externalId: string,
+  orderId: string,
   payload: Record<string, unknown>
 ): Promise<void> {
   try {
@@ -204,7 +208,7 @@ async function maybeIssueLicense(
     const buyerEmail = (payload.customerEmail ?? payload.email) as string | undefined
     if (!buyerEmail) {
       logger.warn("Local SKU order missing buyer email — cannot issue license", {
-        externalId,
+        orderId,
         productId,
       })
       return
@@ -216,7 +220,7 @@ async function maybeIssueLicense(
     if (!sku) return
 
     logger.info("Issuing license for Local SKU order", {
-      externalId,
+      orderId,
       productId,
       sku: sku.id,
       buyerEmail,
@@ -226,12 +230,12 @@ async function maybeIssueLicense(
       productId,
       buyerEmail,
       seatCount,
-      orderId: externalId,
+      orderId,
     })
   } catch (error) {
     // Non-blocking — license issuance failure should not block the webhook
     logger.error("License issuance failed (non-blocking)", {
-      externalId,
+      orderId,
       error: error instanceof Error ? error.message : String(error),
     })
   }

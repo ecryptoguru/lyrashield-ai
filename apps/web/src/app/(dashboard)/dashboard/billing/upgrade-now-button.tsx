@@ -4,6 +4,7 @@ import { useState } from "react"
 import { buttonVariants } from "@lyrashield/ui"
 import { TrendingUp } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { openRazorpaySubscriptionCheckout } from "@/lib/razorpay-checkout"
 
 interface UpgradeNowButtonProps {
   workspaceId: string
@@ -28,8 +29,12 @@ export function UpgradeNowButton({ workspaceId }: UpgradeNowButtonProps) {
       const data = await res.json()
       if (data.success && data.data?.url) {
         window.location.href = data.data.url
-      } else if (data.success && data.data?.subscriptionId) {
-        router.push("/dashboard/billing?subscription=" + data.data.subscriptionId)
+      } else if (data.success && data.data?.subscriptionId && data.data?.keyId) {
+        await openRazorpaySubscriptionCheckout({
+          keyId: data.data.keyId,
+          subscriptionId: data.data.subscriptionId,
+          onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
+        })
       } else {
         console.error("Upgrade failed", data)
       }

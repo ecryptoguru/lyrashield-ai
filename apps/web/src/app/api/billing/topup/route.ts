@@ -5,6 +5,7 @@ import {
   resolveProvider,
   createPolarOneTimeCheckout,
   createRazorpayPaymentLink,
+  resolveProviderId,
   MINUTE_PACK_MAP,
   type PackId,
 } from "@lyrashield/billing"
@@ -71,7 +72,14 @@ export async function POST(request: Request) {
 
     if (provider === "polar") {
       // Polar: one-time checkout
-      const productId = `polar_pack_${packId}`
+      const productId = resolveProviderId(env.POLAR_PRODUCT_IDS, packId)
+      if (!productId) {
+        return apiError(
+          "PROVIDER_NOT_CONFIGURED",
+          `Polar product ${packId} is not configured.`,
+          503
+        )
+      }
       const url = await createPolarOneTimeCheckout({
         productId,
         successUrl,
