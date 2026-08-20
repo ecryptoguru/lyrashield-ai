@@ -49,7 +49,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_FOUNDER_PROVIDED_UPDATER_PUBKEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI5Rjg2OTUwQ0NCRTc1MkIKUldRcmRiN01VR240dWRHcUFRY3pZd1Y4UUdWUTk3c2NCc0dHdzlBaEljaVlzNFE1Z0xDL09jVWMK",
       "endpoints": [
         "https://github.com/ecryptoguru/lyrashield-ai/releases/latest/download/latest.json"
       ],
