@@ -267,7 +267,7 @@ export async function checkBillingCheckoutRateLimit(workspaceId: string) {
 }
 
 /** B-M02: Bounds license activation/verification per IP per minute. */
-const LICENSE_API_MAX = 10
+const LICENSE_API_MAX = readIntEnv("RATE_LIMIT_LICENSE_API_MAX", 10)
 export async function checkLicenseApiRateLimit(ip: string) {
   const upstash = await checkUpstash(LICENSE_API_MAX, "60 s", `license-api:${ip}`)
   if (upstash) return upstash
