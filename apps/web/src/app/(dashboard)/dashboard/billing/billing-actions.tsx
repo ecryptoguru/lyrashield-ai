@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { buttonVariants } from "@lyrashield/ui"
 import { useRouter } from "next/navigation"
+import { openRazorpaySubscriptionCheckout } from "@/lib/razorpay-checkout"
 
 interface BillingActionsProps {
   plan: string
@@ -32,9 +33,12 @@ export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingAc
       const data = await res.json()
       if (data.success && data.data?.url) {
         window.location.href = data.data.url
-      } else if (data.success && data.data?.subscriptionId) {
-        // Razorpay subscription — redirect to billing page with subscription ID
-        router.push("/dashboard/billing?subscription=" + data.data.subscriptionId)
+      } else if (data.success && data.data?.subscriptionId && data.data?.keyId) {
+        await openRazorpaySubscriptionCheckout({
+          keyId: data.data.keyId,
+          subscriptionId: data.data.subscriptionId,
+          onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
+        })
       } else {
         console.error("Checkout failed", data)
       }

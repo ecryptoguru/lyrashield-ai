@@ -9,6 +9,19 @@ import Razorpay from "razorpay"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 
+const MAX_RAZORPAY_SUBSCRIPTION_YEARS = 100
+
+/**
+ * Razorpay subscriptions need a finite number of billing cycles. Use its
+ * documented maximum duration so a customer remains subscribed until they
+ * cancel, rather than silently ending after one billing period.
+ */
+export function getRazorpaySubscriptionCycleCount(interval: "monthly" | "annual"): number {
+  return interval === "monthly"
+    ? MAX_RAZORPAY_SUBSCRIPTION_YEARS * 12
+    : MAX_RAZORPAY_SUBSCRIPTION_YEARS
+}
+
 let clientInstance: Razorpay | null = null
 
 /**

@@ -8,7 +8,7 @@
  * - subscription.cancelled → syncSubscription (canceled)
  * - subscription.paused → syncSubscription (paused)
  * - subscription.pending → syncSubscription (past_due)
- * - payment.refunded → reverseRefund
+ * - refund.created → reverseRefund
  */
 
 import { logger } from "@lyrashield/logger"
@@ -113,21 +113,22 @@ export async function processRazorpayEvent(
         return { handled: true, action: `subscription.${status}`, workspaceId }
       }
 
-      case "payment.refunded": {
+      case "refund.created": {
         const payment = event.payload.payment?.entity
-        if (!payment) {
-          return { handled: false, action: "payment.refunded.no_data", workspaceId: null }
+        const refund = event.payload.refund?.entity
+        if (!payment || !refund) {
+          return { handled: false, action: "refund.created.no_data", workspaceId: null }
         }
 
         const notes = payment.notes ?? {}
         const workspaceId = notes.workspaceId ?? null
         if (!workspaceId) {
-          return { handled: false, action: "payment.refunded.no_workspace", workspaceId: null }
+          return { handled: false, action: "refund.created.no_workspace", workspaceId: null }
         }
 
-        await reverseRefund(workspaceId, payment.id)
+        await reverseRefund(workspaceId, refund.payment_id)
 
-        return { handled: true, action: "payment.refunded.reversed", workspaceId }
+        return { handled: true, action: "refund.created.reversed", workspaceId }
       }
 
       default:
