@@ -68,6 +68,9 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
       case "subscription.created":
       case "subscription.updated":
       case "subscription.active":
+      case "subscription.paused":
+      case "subscription.resumed":
+      case "subscription.past_due":
       case "subscription.canceled":
       case "subscription.revoked":
       case "subscription.uncanceled": {
@@ -82,13 +85,12 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         const status = mapPolarSubscriptionStatus(event.type, data)
         const interval = (metadata.interval ?? "monthly") as BillingInterval
 
-        const periodStart = data.currentPeriodStart
-          ? new Date(data.currentPeriodStart as string)
-          : undefined
-        const periodEnd = data.currentPeriodEnd
-          ? new Date(data.currentPeriodEnd as string)
-          : undefined
-        const canceledAt = data.canceledAt ? new Date(data.canceledAt as string) : undefined
+        const currentPeriodStart = data.current_period_start ?? data.currentPeriodStart
+        const currentPeriodEnd = data.current_period_end ?? data.currentPeriodEnd
+        const canceledAtValue = data.canceled_at ?? data.canceledAt
+        const periodStart = currentPeriodStart ? new Date(currentPeriodStart as string) : undefined
+        const periodEnd = currentPeriodEnd ? new Date(currentPeriodEnd as string) : undefined
+        const canceledAt = canceledAtValue ? new Date(canceledAtValue as string) : undefined
 
         await syncSubscription({
           workspaceId,
@@ -160,15 +162,28 @@ function mapPolarSubscriptionStatus(
   const status = (data.status ?? "active") as string
 
   switch (eventType) {
-    case "subscription.canceled":
     case "subscription.revoked":
       return "canceled"
     case "subscription.uncanceled":
+    case "subscription.resumed":
       return "active"
     case "subscription.active":
       return "active"
+    case "subscription.paused":
+      return "paused"
+    case "subscription.past_due":
+      return "past_due"
+    case "subscription.canceled":
+      return data.status === "active" ? "active" : "canceled"
     default:
-      if (status === "past_due" || status === "incomplete" || status === "trialing") {
+      if (
+        status === "active" ||
+        status === "canceled" ||
+        status === "paused" ||
+        status === "past_due" ||
+        status === "incomplete" ||
+        status === "trialing"
+      ) {
         return status as SubscriptionStatus
       }
       // Fail-closed: unknown status defaults to past_due, not active.

@@ -8,8 +8,10 @@ import {
   processRazorpayEvent,
   isHandledPolarEvent,
   isHandledRazorpayEvent,
+  resolveProviderKey,
 } from "@lyrashield/billing"
 import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
+import { env } from "@lyrashield/config"
 import { LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
 import { issueLicenseForPolarOrder } from "@/lib/licenses/license-service"
 
@@ -203,14 +205,20 @@ async function maybeIssueLicense(
   payload: Record<string, unknown>
 ): Promise<void> {
   try {
-    const productId = (payload.productId ?? payload.skuId) as string | undefined
+    const productId = (payload.product_id ??
+      payload.productId ??
+      payload.sku_id ??
+      payload.skuId) as string | undefined
     if (!productId) return
 
-    // Check if this product ID maps to a Local SKU
-    const isLocalSku = Object.values(LOCAL_SKU_MAP).some((sku) => sku.id === productId)
-    if (!isLocalSku) return
+    const skuId = resolveProviderKey(env.POLAR_LOCAL_PRODUCT_IDS, productId) as LocalSkuId | null
+    if (!skuId || !LOCAL_SKU_MAP[skuId]) return
 
-    const buyerEmail = (payload.customerEmail ?? payload.email) as string | undefined
+    const customer = payload.customer as Record<string, unknown> | undefined
+    const buyerEmail = (payload.customer_email ??
+      payload.customerEmail ??
+      payload.email ??
+      customer?.email) as string | undefined
     if (!buyerEmail) {
       logger.warn("Local SKU order missing buyer email — cannot issue license", {
         orderId,
@@ -219,15 +227,12 @@ async function maybeIssueLicense(
       return
     }
 
-    const seatCount = (payload.seatCount as number) ?? 1
-    const sku = Object.values(LOCAL_SKU_MAP).find((s) => s.id === productId) as
-      { id: LocalSkuId } | undefined
-    if (!sku) return
+    const seatCount = (payload.seats ?? payload.seat_count ?? payload.seatCount ?? 1) as number
 
     logger.info("Issuing license for Local SKU order", {
       orderId,
       productId,
-      sku: sku.id,
+      sku: skuId,
       buyerEmail,
     })
 

@@ -98,7 +98,7 @@ export {
   type PolarWebhookEvent,
 } from "./providers/polar/webhooks"
 export { processPolarEvent, type PolarAdapterResult } from "./providers/polar/adapter"
-export { resolveProviderId } from "./provider-ids"
+export { resolveProviderId, resolveProviderKey } from "./provider-ids"
 
 // Razorpay provider
 export {
