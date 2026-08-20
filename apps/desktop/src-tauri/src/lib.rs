@@ -7,6 +7,9 @@ mod commands;
 mod license;
 mod machine_id;
 mod runtime;
+mod scan;
+mod sync;
+mod updater;
 
 use commands::*;
 
@@ -30,6 +33,12 @@ pub fn run() {
             save_azure_config,
             load_azure_config,
             clear_azure_config,
+            start_scan,
+            export_sarif,
+            check_update_eligibility,
+            connect_workspace,
+            sync_findings,
+            disconnect_sync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LyraShield desktop app");

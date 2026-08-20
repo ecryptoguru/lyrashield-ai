@@ -59,3 +59,74 @@ export interface AzureCredentials {
   apiKey: string
   endpoint: string
 }
+
+export type ScanMode = "safe" | "quick" | "standard" | "deep" | "custom" | "url"
+
+export type ScanTarget =
+  | { type: "repo"; path: string; branch: string | null }
+  | { type: "url"; url: string }
+  | { type: "local_path"; path: string }
+
+export interface Finding {
+  id: string
+  severity: string
+  title: string
+  description: string | null
+  filePath: string | null
+  lineNumber: number | null
+  status: string
+  verified: boolean
+  detectedAt: string
+}
+
+export type ScanStatus = "pending" | "running" | "completed" | "failed" | "cancelled"
+
+export interface ScanSummary {
+  scanId: string
+  target: string
+  mode: ScanMode
+  status: ScanStatus
+  startedAt: string
+  completedAt: string | null
+  findingCount: number
+}
+
+export interface ScanDetail {
+  scanId: string
+  target: string
+  mode: ScanMode
+  status: ScanStatus
+  startedAt: string
+  completedAt: string | null
+  findingCount: number
+  findings: Finding[]
+}
+
+export type ScanEvent =
+  | { type: "started"; scanId: string }
+  | { type: "progress"; scanId: string; line: string; stream: string }
+  | { type: "finding"; scanId: string; finding: Finding }
+  | { type: "completed"; scanId: string; exitCode: number; findingCount: number }
+  | { type: "failed"; scanId: string; error: string }
+  | { type: "cancelled"; scanId: string }
+
+export type UpdateCheckResult =
+  | { state: "available"; version: string; currentVersion: string; notes: string | null }
+  | { state: "not_available"; currentVersion: string }
+  | { state: "license_expired"; currentVersion: string; perpetualFallbackBuild: string | null }
+  | { state: "no_license" }
+  | { state: "error"; message: string }
+
+export interface SyncConnection {
+  workspaceId: string
+  licenseKey: string
+  cursor: string | null
+  connectedAt: string
+  lastSyncAt: string | null
+}
+
+export type SyncResult =
+  | { status: "success"; syncedCount: number; newCursor: string }
+  | { status: "entitlement_missing"; message: string }
+  | { status: "cursor_rewind"; serverCursor: string; message: string }
+  | { status: "error"; message: string }

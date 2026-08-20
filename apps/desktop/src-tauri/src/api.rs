@@ -2,6 +2,12 @@ use crate::license::types::{ActivateResponse, LicenseFile, VerifyServerResponse}
 
 const DEFAULT_API_URL: &str = "https://app.lyrashieldai.com";
 
+/// A simple HTTP response wrapper.
+pub struct HttpResponse {
+    pub status: reqwest::StatusCode,
+    pub body: String,
+}
+
 /// HTTP client for the LyraShield license + sync API.
 pub struct ApiClient {
     base_url: String,
@@ -16,6 +22,29 @@ impl ApiClient {
             .build()
             .map_err(|e| format!("failed to build HTTP client: {}", e))?;
         Ok(Self { base_url, client })
+    }
+
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// Generic POST request.
+    pub async fn post(&self, url: &str, body: &serde_json::Value) -> Result<HttpResponse, String> {
+        let resp = self
+            .client
+            .post(url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("request failed: {}", e))?;
+
+        let status = resp.status();
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("failed to read response: {}", e))?;
+
+        Ok(HttpResponse { status, body: text })
     }
 
     /// `POST /api/licenses/activate` — activate a license key on this machine.
@@ -57,10 +86,6 @@ impl ApiClient {
     }
 
     /// `POST /api/licenses/verify` — server-side revocation check.
-    ///
-    /// Sends the license file for server-side verification. The server checks
-    /// the revocation list and returns `revoked: true` if the license has been
-    /// revoked by the founder.
     pub async fn verify(&self, license_file: &LicenseFile) -> Result<VerifyServerResponse, String> {
         let url = format!("{}/api/licenses/verify", self.base_url);
         let body = serde_json::json!({
