@@ -33,7 +33,7 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 - **Marketing:** deployed and indexable at `https://lyrashieldai.com` with D1/Rate Limit/KV bindings, sitemap/robots/`llms.txt`, security headers, PostHog. Lite Scanner live at `https://scanner.lyrashieldai.com`. Authenticated app live at `https://app.lyrashieldai.com` with open registration.
 - **Agent plugin:** `@lyrashield/agent-plugin` v0.1.17 with Cursor streamable-http support. `packages/agent-registry` covers 30 entries across 24 distinct agents. 4 confirmed client shims: Claude Code, Cursor, OpenAI Codex, Kiro.
 - PR CI runs core, marketing, motion, and Chromium E2E suites plus lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, RLS reproduction, and pinned-engine provenance/worker contract gate. Desktop CI builds (Tauri macOS + Windows) run on PRs touching `apps/desktop`; `release-tauri.yml` handles production desktop releases. `git diff --check` remains a required local/review check. Local Docker Compose builds `web`, `migrate`, and `worker` images and starts a healthy full stack.
-- **Production recovery and egress (2026-08-21):** PR #377 added Prisma client generation to the isolated restore drill; a manual run completed encrypted backup, restore, schema/RLS/audit verification, and application startup. PR #376 added the digest-pinned egress-proxy image and Azure deployment hook. The production proxy now uses a system-managed identity with a Key Vault secret reference, allows ingress only from the dedicated worker VM, and the worker was refreshed through its existing DNS-pinned egress policy; external proxy health requests are denied. A Redis source-IP restriction using the Container Apps environment's displayed static IP caused a new app revision to time out and was rolled back. Redis remains public and non-TLS, so the private/TLS Redis release gate remains open.
+- **Production recovery and egress (2026-08-21):** PR #377 added Prisma client generation to the isolated restore drill; a manual run completed encrypted backup, restore, schema/RLS/audit verification, and application startup. PR #376 added the digest-pinned egress-proxy image and Azure deployment hook. PR #380 pinned engine `dd588c379ae6614e0914b8adb41d94f0c1e86c26`, enforced the authenticated proxy for production URL scans, and moved BullMQ to the managed Upstash TLS TCP endpoint. The verified worker digest `sha256:3adcd2c67ff86dda960851c85799a10e0f42553d49a13d5a0a18a32f01363f49` is live; authenticated Redis returned `PONG`, the production queue was empty at cutover, `AllowRedis6379` was deleted, and the stopped legacy `lyrashield-redis` container has restart disabled but is retained for rollback. The live worker proof denied a direct arbitrary public fetch, allowed the authenticated proxy fetch, and returned `ssrf_blocked` for a loopback target. A literal private-network Redis endpoint remains an enterprise option, not an open-beta prerequisite.
 
 ## Current execution queue
 
@@ -43,7 +43,7 @@ Owner: engineering + founder authorization.
 
 1. Standard/Luna scan completed (2026-07-29). Deep/Terra still needs its own approved run.
 2. Promote only an inspected sandbox image digest. Production image provenance and approval remain separate operational gates.
-3. Complete the remaining full-scan runtime gate: BullMQ-compatible private/TLS Redis and any outstanding private S3/evidence proof. Dedicated worker compute and the authenticated Next.js application origin are live; transport-level egress is deployed separately.
+3. Complete the remaining full-scan runtime gates: private S3/evidence proof plus monitoring and capacity evidence. Managed authenticated TLS BullMQ Redis, dedicated worker compute, the authenticated Next.js application origin, and the three-part transport-level egress proof are complete.
 4. Keep Docker health, engine CLI availability, local sandbox execution, and production controlled-scan proof as separate claims.
 
 ### 2. Sprint 10 production provisioning
@@ -69,7 +69,7 @@ Backup/restore is proven by the 2026-08-21 encrypted backup and isolated restore
 
 Owner: engineering / infrastructure.
 
-Transport-level egress control with DNS pinning is deployed through the worker-only proxy. Complete private/TLS Redis and the remaining production data/evidence, monitoring, and capacity gates before expanding untrusted scan exposure.
+Transport-level egress control with DNS pinning is deployed through the worker-only proxy, and managed authenticated TLS BullMQ Redis is live without an Azure public `6379` rule. Complete the remaining production data/evidence, monitoring, and capacity gates before expanding untrusted scan exposure.
 
 ### 5. Marketing launch gate
 

@@ -98,10 +98,11 @@ describe("scan worker availability", () => {
     expect(mocks.queueAdd).not.toHaveBeenCalled()
   })
 
-  it("does not treat a heartbeat as ready when no BullMQ consumer is connected", async () => {
+  it("uses the expiring worker heartbeat when Redis does not expose cross-client names", async () => {
     await registerScanWorker("worker-1", 1_000)
     mocks.queueWorkersCount.mockResolvedValue(0)
 
-    expect(await isScanWorkerAvailable(2_000)).toBe(false)
+    expect(await isScanWorkerAvailable(2_000)).toBe(true)
+    expect(mocks.queueWorkersCount).not.toHaveBeenCalled()
   })
 })

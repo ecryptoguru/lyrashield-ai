@@ -370,18 +370,56 @@ jobs:
             sync_upstash_secrets "$AZURE_SCANNER_CONTAINER_APP_NAME"
           fi
 
-      - name: Sync BullMQ Redis secret to app
+      - name: Sync BullMQ Redis secret to Container Apps
         env:
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: |
-          if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
+          sync_bullmq_secret() {
+            local container_app="$1"
             timeout --foreground 180s az containerapp secret set \
               --only-show-errors \
-              --name "$AZURE_APP_CONTAINER_APP_NAME" \
+              --name "$container_app" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --secrets "bullmq-redis-url=${BULLMQ_REDIS_URL}"
+          }
+          if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
+            sync_bullmq_secret "$AZURE_APP_CONTAINER_APP_NAME"
+          fi
+          if [ -n "$AZURE_SCANNER_CONTAINER_APP_NAME" ]; then
+            sync_bullmq_secret "$AZURE_SCANNER_CONTAINER_APP_NAME"
+          fi
+
+      - name: Verify email verification credentials
+        env:
+          EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: |
+          if [ "$EMAIL_VERIFICATION_REQUIRED" != "1" ]; then
+            exit 0
+          fi
+          verify_brevo_secret() {
+            local container_app="$1"
+            local secret_name
+            secret_name=$(az containerapp secret list \
+              --name "$container_app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "[?name == 'brevo-api-key'].name | [0]" \
+              --output tsv)
+            if [ "$secret_name" != "brevo-api-key" ]; then
+              echo "::error::${container_app} requires the pre-provisioned brevo-api-key Container App secret while email verification is enabled."
+              exit 1
+            fi
+          }
+          if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
+            verify_brevo_secret "$AZURE_APP_CONTAINER_APP_NAME"
+          fi
+          if [ -n "$AZURE_SCANNER_CONTAINER_APP_NAME" ]; then
+            verify_brevo_secret "$AZURE_SCANNER_CONTAINER_APP_NAME"
           fi
 
       # Garbage-collect GitHub App secrets so rotation deletes what is no longer needed.
@@ -470,6 +508,7 @@ jobs:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
+          EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
         run: |
@@ -479,6 +518,10 @@ jobs:
           OAUTH_ENV=()
           if [ -n "${GITHUB_APP_CLIENT_ID}" ] && [ -n "${GITHUB_APP_CLIENT_SECRET}" ]; then
             OAUTH_ENV=("GITHUB_APP_CLIENT_ID=secretref:github-app-client-id" "GITHUB_APP_CLIENT_SECRET=secretref:github-app-client-secret")
+          fi
+          EMAIL_ENV=()
+          if [ "$EMAIL_VERIFICATION_REQUIRED" = "1" ]; then
+            EMAIL_ENV=("BREVO_API_KEY=secretref:brevo-api-key")
           fi
           az containerapp update \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
@@ -497,6 +540,7 @@ jobs:
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
               "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
+              "${EMAIL_ENV[@]}" \
               "${OAUTH_ENV[@]}"
 
       - name: Deploy scanner Container App
@@ -506,12 +550,17 @@ jobs:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
+          EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: |
           OAUTH_ENV=()
           if [ -n "${GITHUB_APP_CLIENT_ID}" ] && [ -n "${GITHUB_APP_CLIENT_SECRET}" ]; then
             OAUTH_ENV=("GITHUB_APP_CLIENT_ID=secretref:github-app-client-id" "GITHUB_APP_CLIENT_SECRET=secretref:github-app-client-secret")
+          fi
+          EMAIL_ENV=()
+          if [ "$EMAIL_VERIFICATION_REQUIRED" = "1" ]; then
+            EMAIL_ENV=("BREVO_API_KEY=secretref:brevo-api-key")
           fi
           az containerapp update \
             --name "$AZURE_SCANNER_CONTAINER_APP_NAME" \
@@ -522,12 +571,14 @@ jobs:
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
+              "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
               "GITHUB_APP_ID=secretref:github-app-id" \
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
               "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
+              "${EMAIL_ENV[@]}" \
               "${OAUTH_ENV[@]}"
 
       - name: Deploy egress-proxy Container App

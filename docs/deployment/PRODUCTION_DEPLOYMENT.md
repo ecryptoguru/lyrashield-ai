@@ -16,19 +16,19 @@
 
 Accepted risks that are live right now. Each one is a deliberate decision, not an oversight, and each has a defined way out. Review this list before any traffic-growth campaign.
 
-### 1. Email verification is disabled in production — Brevo key verified locally, production secrets not yet provisioned
+### 1. Email verification is enabled in production — Brevo secrets are required on both application surfaces
 
-**Status:** partially resolved. A Brevo API key is provisioned and verified locally (a live test email was sent and accepted by Brevo on 2026-08-08). `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` with `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` boots cleanly in `NODE_ENV=production` locally. However, the production `lyrashield-app` Container App still runs with `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0` and no `BREVO_API_KEY` secret, so production registration still accepts unverified addresses.
+**Status:** resolved on 2026-08-21. Both `lyrashield-app` and `lyrashield-scanner` run with `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` and a `BREVO_API_KEY=secretref:brevo-api-key` binding. Their production readiness checks pass. The deployment workflow verifies that the pre-provisioned `brevo-api-key` secret exists on every configured Container App before updating a verification-enabled revision.
 
-**Exposure.** Until the production Container App secrets are set, registration is open in production, so anyone can create an account against an address they do not control and it will reach the dashboard. That permits impersonation of a real person or brand (`ceo@customer.example`), bot and throwaway sign-ups, and inflated activation numbers. Referral attribution is partly protected — rewards only settle after a referred workspace completes a real scan — but sign-up-level abuse is unmitigated.
+**Regression boundary.** Do not remove either secret or disable the workflow validation while email verification is enabled. A missing provider credential is a boot-time error, not a reason to accept unverified registration.
 
 **Brevo IP security.** Brevo's "Block unknown IP addresses" setting is disabled at the account level. Azure Container Apps Consumption has 180+ dynamic outbound NAT IPs that cannot be statically allowlisted; maintaining an IP allowlist would silently break email sending when the NAT pool changes. The trade-off is that any holder of the Brevo API key can send emails from any IP — protect the key accordingly.
 
 **Way out (small, well-defined).**
 
 1. A Brevo API key is provisioned and verified. The sender address (`support@lyrashieldai.com`) must be verified in Brevo.
-2. Set `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` as production secrets on the `lyrashield-app` Container App.
-3. Set the `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` environment variable to `1` on the Container App (or via a repository variable read by `deploy-azure.yml`).
+2. Pre-provision the `brevo-api-key` Container App secret on both `lyrashield-app` and `lyrashield-scanner`; bind `EMAIL_FROM` and `NOTIFICATION_FROM_EMAIL` where email is sent.
+3. Set the `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` repository variable to `1`; `deploy-azure.yml` binds the existing secret to both Container Apps and fails before deployment if either secret is missing.
 4. Deploy. `packages/auth` enforces verification once the flag and the provider are both present; the boot-time refinement in `packages/config/src/env.ts` guarantees the two can never disagree.
 
 **Do not** re-enable the flag without the key. The deploy will fail fast by design rather than silently accepting unverified sign-ups.
@@ -278,9 +278,8 @@ ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
 TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
 
 # Email. The schema default is "1" and production refuses to boot when verification
-# is required but no provider is configured. Currently "0" — see
-# "Known production blockers" above before changing it.
-LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
+# is required but no provider is configured. Production keeps this enabled.
+LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="1"
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"
 
