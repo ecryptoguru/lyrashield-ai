@@ -107,6 +107,7 @@ export async function listApprovals(params: ListApprovalsParams): Promise<{
       actionName: true,
       inputHash: true,
       status: true,
+      attempts: true,
       input: true,
       requestedById: true,
       approvedById: true,
@@ -216,10 +217,87 @@ export async function consumeApproval(approvalId: string, workspaceId: string): 
   return result.count === 1
 }
 
+/** Maximum execution attempts before an approval becomes terminally EXECUTION_FAILED. */
+export const MAX_APPROVAL_EXECUTION_ATTEMPTS = 3
+
+/**
+ * Atomically claim an APPROVED approval for execution. Exactly one concurrent
+ * caller wins (count === 1) and may run side effects; every other caller loses.
+ * Hash and expiry are enforced inside the claim predicate so a raced or
+ * mismatched request can never transition the row.
+ */
+export async function claimApprovalExecution(
+  approvalId: string,
+  workspaceId: string,
+  inputHash: string
+): Promise<boolean> {
+  const update = await prisma.agentApproval.updateMany({
+    where: {
+      id: approvalId,
+      workspaceId,
+      status: "APPROVED",
+      inputHash,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    data: { status: "EXECUTING", attempts: { increment: 1 } },
+  })
+  return update.count === 1
+}
+
+/**
+ * Compare-and-set completion: only the EXECUTING owner transitions to EXECUTED
+ * and stores its result. Losers can never overwrite the winner's result.
+ */
+export async function completeApprovalExecution(
+  approvalId: string,
+  workspaceId: string,
+  result: Record<string, unknown>
+): Promise<boolean> {
+  const update = await prisma.agentApproval.updateMany({
+    where: { id: approvalId, workspaceId, status: "EXECUTING" },
+    data: { status: "EXECUTED", executedAt: new Date(), result },
+  })
+  return update.count === 1
+}
+
+/**
+ * Settle a failed execution. While the attempt budget lasts, the row returns
+ * to APPROVED so the next poll retries; past the budget it becomes terminally
+ * EXECUTION_FAILED with the stored error result (replay-safe, never re-runs).
+ */
+export async function failApprovalExecution(
+  approvalId: string,
+  workspaceId: string,
+  errorResult?: Record<string, unknown>
+): Promise<"RETRYABLE" | "TERMINAL"> {
+  const released = await prisma.agentApproval.updateMany({
+    where: {
+      id: approvalId,
+      workspaceId,
+      status: "EXECUTING",
+      attempts: { lt: MAX_APPROVAL_EXECUTION_ATTEMPTS },
+    },
+    data: { status: "APPROVED" },
+  })
+  if (released.count === 1) return "RETRYABLE"
+
+  await prisma.agentApproval.updateMany({
+    where: { id: approvalId, workspaceId, status: "EXECUTING" },
+    data: { status: "EXECUTION_FAILED", ...(errorResult ? { result: errorResult } : {}) },
+  })
+  logger.warn("Agent approval execution failed terminally", { approvalId, workspaceId })
+  return "TERMINAL"
+}
+
+/**
+ * Expire stale approvals whose TTL has passed. Covers both never-approved
+ * PENDING rows and APPROVED rows nobody executed; EXECUTING rows are
+ * mid-flight claims and are deliberately left alone.
+ */
 export async function expireStaleApprovals(workspaceId?: string): Promise<number> {
   const result = await prisma.agentApproval.updateMany({
     where: {
-      status: "PENDING",
+      status: { in: ["PENDING", "APPROVED"] },
       expiresAt: { lt: new Date() },
       ...(workspaceId ? { workspaceId } : {}),
     },

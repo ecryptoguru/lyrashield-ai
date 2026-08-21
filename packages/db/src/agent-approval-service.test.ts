@@ -19,9 +19,14 @@ vi.mock("@lyrashield/logger", () => ({
 import { prisma } from "./client"
 import {
   approveApproval,
+  claimApprovalExecution,
+  completeApprovalExecution,
   consumeApproval,
   denyApproval,
+  expireStaleApprovals,
+  failApprovalExecution,
   hashInput,
+  MAX_APPROVAL_EXECUTION_ATTEMPTS,
   saveApprovalResult,
   verifyInputHash,
 } from "./agent-approval-service"
@@ -103,6 +108,107 @@ describe("agent approval mutation errors", () => {
     await expect(denyApproval("approval-1", "workspace-1", "admin-1")).rejects.toMatchObject({
       name: "ApprovalMutationError",
       code: "NOT_PENDING",
+    })
+  })
+})
+
+describe("approval execution claim state machine", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("claims only APPROVED, hash-matching, unexpired rows and increments attempts", async () => {
+    agentApproval.updateMany.mockResolvedValue({ count: 1 })
+
+    await expect(claimApprovalExecution("approval-1", "workspace-1", "hash-1")).resolves.toBe(true)
+    expect(agentApproval.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "approval-1",
+        workspaceId: "workspace-1",
+        status: "APPROVED",
+        inputHash: "hash-1",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
+      },
+      data: { status: "EXECUTING", attempts: { increment: 1 } },
+    })
+  })
+
+  it("loses the claim when the row is not claimable (count 0)", async () => {
+    agentApproval.updateMany.mockResolvedValue({ count: 0 })
+
+    await expect(claimApprovalExecution("approval-1", "workspace-1", "hash-1")).resolves.toBe(false)
+  })
+
+  it("completes only from EXECUTING and stores the winner's result", async () => {
+    agentApproval.updateMany.mockResolvedValue({ count: 1 })
+
+    const result = { content: [{ type: "text", text: "done" }], isError: false }
+    await expect(completeApprovalExecution("approval-1", "workspace-1", result)).resolves.toBe(true)
+    expect(agentApproval.updateMany).toHaveBeenCalledWith({
+      where: { id: "approval-1", workspaceId: "workspace-1", status: "EXECUTING" },
+      data: { status: "EXECUTED", executedAt: expect.any(Date), result },
+    })
+
+    agentApproval.updateMany.mockResolvedValue({ count: 0 })
+    await expect(completeApprovalExecution("approval-1", "workspace-1", result)).resolves.toBe(
+      false
+    )
+  })
+
+  it("releases an in-budget failure back to APPROVED for retry", async () => {
+    agentApproval.updateMany.mockResolvedValueOnce({ count: 1 })
+
+    await expect(failApprovalExecution("approval-1", "workspace-1")).resolves.toBe("RETRYABLE")
+    expect(agentApproval.updateMany).toHaveBeenCalledTimes(1)
+    expect(agentApproval.updateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: "approval-1",
+        workspaceId: "workspace-1",
+        status: "EXECUTING",
+        attempts: { lt: MAX_APPROVAL_EXECUTION_ATTEMPTS },
+      },
+      data: { status: "APPROVED" },
+    })
+  })
+
+  it("marks a past-budget failure terminally EXECUTION_FAILED and stores the error result", async () => {
+    // Release misses (attempts at cap), then terminal transition wins.
+    agentApproval.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 })
+
+    const errorResult = { content: [{ type: "text", text: '{"error":"boom"}' }], isError: true }
+    await expect(failApprovalExecution("approval-1", "workspace-1", errorResult)).resolves.toBe(
+      "TERMINAL"
+    )
+    expect(agentApproval.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: "approval-1", workspaceId: "workspace-1", status: "EXECUTING" },
+      data: { status: "EXECUTION_FAILED", result: errorResult },
+    })
+  })
+
+  it("expires stale PENDING and APPROVED rows without touching mid-flight EXECUTING claims", async () => {
+    agentApproval.updateMany.mockResolvedValue({ count: 2 })
+
+    await expect(expireStaleApprovals()).resolves.toBe(2)
+    expect(agentApproval.updateMany).toHaveBeenCalledWith({
+      where: {
+        status: { in: ["PENDING", "APPROVED"] },
+        expiresAt: { lt: expect.any(Date) },
+      },
+      data: { status: "EXPIRED" },
+    })
+  })
+
+  it("scopes the expiry sweep to one workspace when given", async () => {
+    agentApproval.updateMany.mockResolvedValue({ count: 0 })
+
+    await expireStaleApprovals("workspace-7")
+    expect(agentApproval.updateMany).toHaveBeenCalledWith({
+      where: {
+        status: { in: ["PENDING", "APPROVED"] },
+        expiresAt: { lt: expect.any(Date) },
+        workspaceId: "workspace-7",
+      },
+      data: { status: "EXPIRED" },
     })
   })
 })

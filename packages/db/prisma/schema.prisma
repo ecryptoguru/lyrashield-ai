@@ -1466,7 +1466,9 @@ model Retest {
 enum ApprovalStatus {
   PENDING
   APPROVED
+  EXECUTING
   EXECUTED
+  EXECUTION_FAILED
   DENIED
   EXPIRED
 }
@@ -1477,6 +1479,7 @@ model AgentApproval {
   actionName    String
   inputHash     String
   status        ApprovalStatus @default(PENDING)
+  attempts      Int            @default(0)
   input         Json
   requestedById String
   approvedById  String?
