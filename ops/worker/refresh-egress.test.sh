@@ -7,10 +7,15 @@ repo_root=$(cd -- "$(dirname "$0")/../.." && pwd)
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 fake_bin="$test_dir/bin"
+restart_pending_file="$test_dir/restart-pending"
 mkdir -p "$fake_bin"
 
 cat >"$fake_bin/docker" <<'EOF'
 #!/bin/sh
+if [ "$1" = "exec" ]; then
+  [ "${DOCKER_WORKER_ACTIVE:-0}" = "1" ]
+  exit
+fi
 case "$5" in
   *Subnet*)
     if [ "$3" = "bridge" ]; then echo "172.17.0.0/16"; else echo "172.18.0.0/16"; fi
@@ -65,23 +70,31 @@ iptables_capture="$test_dir/iptables.rules"
 : >"$systemctl_capture"
 
 run_refresh() {
+  worker_active="$1"
   PATH="$fake_bin:$PATH" \
+  DOCKER_WORKER_ACTIVE="$worker_active" \
   SYSTEMCTL_CAPTURE="$systemctl_capture" \
   IPTABLES_CAPTURE="$iptables_capture" \
   LYRASHIELD_WORKER_ENV_FILE="$environment_file" \
   LYRASHIELD_EGRESS_PIN_FILE="$pin_file" \
+  LYRASHIELD_EGRESS_RESTART_PENDING_FILE="$restart_pending_file" \
   LYRASHIELD_REFRESH_PINNED_HOSTS=1 \
   LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE=1 \
   sh "$repo_root/ops/worker/refresh-egress.sh"
 }
 
-run_refresh
-grep -q '^--no-block try-restart lyrashield-worker.service$' "$systemctl_capture"
+run_refresh 1
+test ! -s "$systemctl_capture"
+test -e "$restart_pending_file"
 grep -q '^proxy.test 8.8.4.4 443$' "$pin_file"
 grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT' "$iptables_capture"
 
+run_refresh 0
+grep -q '^--no-block try-restart lyrashield-worker.service$' "$systemctl_capture"
+test ! -e "$restart_pending_file"
+
 restart_count=$(wc -l <"$systemctl_capture" | tr -d ' ')
-run_refresh
+run_refresh 0
 test "$(wc -l <"$systemctl_capture" | tr -d ' ')" = "$restart_count"
 
 echo "refresh-egress pin-rotation test passed"
