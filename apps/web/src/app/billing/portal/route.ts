@@ -1,6 +1,7 @@
 import { prisma } from "@lyrashield/db"
 import { requireAuth } from "@lyrashield/auth/server"
 import { getPolarPortalUrl } from "@lyrashield/billing"
+import { env } from "@lyrashield/config"
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
@@ -45,10 +46,17 @@ export async function GET(_request: Request) {
       return apiSuccess({ url }, 200)
     }
 
-    // Razorpay doesn't have a self-serve portal — redirect to support
+    // Razorpay doesn't have a self-serve portal — send customers to the
+    // dashboard billing page built from validated config. Fail closed with an
+    // explicit configuration error instead of ever returning `${undefined}`.
+    const appUrl = env.NEXT_PUBLIC_APP_URL
+    if (!appUrl) {
+      logger.error("NEXT_PUBLIC_APP_URL is not configured; cannot build billing fallback URL")
+      return apiError("CONFIGURATION_ERROR", "Billing portal is not configured.", 503)
+    }
     return apiSuccess(
       {
-        url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
+        url: `${appUrl}/dashboard/billing`,
         message:
           "Razorpay customers: manage your subscription from the dashboard or contact support.",
       },

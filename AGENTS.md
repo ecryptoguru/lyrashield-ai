@@ -71,6 +71,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Add focused regression coverage for changed behavior, especially security, money, tenancy, evidence, and lifecycle paths.
 - Verify relevant work with lint, typecheck, tests, build, formatting, migrations, security scans, browser proof, and `git diff --check`.
 - Money is `Decimal @db.Decimal(19,4)`, never Float. IDs are cuid. Webhooks, usage, packs, refunds, commissions, and payouts are idempotent.
+- Decimal policy: billing/ledger amounts are `Decimal(19,4)`. Telemetry and analytics may use purpose-specific decimal scales; never migrate telemetry values into money columns or vice versa without an explicit reviewed schema change.
 - Public copy must not claim certification, compliance, guaranteed security, universal detection, adversarial robustness, or unnamed “AI safety testing.”
 - Never expose model costs in dashboard/public payloads or name the upstream engine publicly.
 - Desktop contains no LyraShield model keys. Production license signing uses managed identity and fails closed.

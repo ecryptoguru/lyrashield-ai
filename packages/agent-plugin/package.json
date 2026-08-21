@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@lyrashield/agent-rules": "workspace:*",
+    "@lyrashield/mcp": "workspace:*",
     "ajv": "^8.17.1"
   },
   "devDependencies": {

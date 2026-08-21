@@ -447,6 +447,9 @@ importers:
       '@lyrashield/agent-rules':
         specifier: workspace:*
         version: link:../agent-rules
+      '@lyrashield/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       ajv:
         specifier: ^8.17.1
         version: 8.20.0
