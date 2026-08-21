@@ -1,9 +1,14 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { access, mkdtemp, readFile, rm } from "node:fs/promises"
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
+import { createAllTools } from "@lyrashield/mcp"
 import { exportMarketplace } from "../export.js"
+
+const execFileAsync = promisify(execFile)
 
 const outputs: string[] = []
 afterEach(async () => {
@@ -22,6 +27,8 @@ describe("exportMarketplace", () => {
       license: string
       forbidden: string[]
       generatedFiles: string[]
+      artifactVersions?: Record<string, string>
+      mutatingTools?: string[]
     }
     const plugin = JSON.parse(await readFile(path.join(output, "plugin.json"), "utf8")) as {
       license: string
@@ -176,5 +183,82 @@ describe("exportMarketplace", () => {
     ).resolves.toContain('width="400"')
     const icon = await readFile(path.join(output, "assets", "lyrashield-400.png"))
     expect(icon.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a")
+
+    // Gemini policy is catalog-derived: the exporter must emit the exact set of
+    // mutating tools recorded in the MCP catalog, into both gemini manifests.
+    const mutating = createAllTools({ apiBaseUrl: "", apiKey: "" })
+      .filter((tool) => tool.mutating)
+      .map((tool) => tool.name)
+    expect(manifest.mutatingTools).toEqual(mutating)
+    for (const location of ["gemini-extension.json", "gemini-extension/gemini-extension.json"]) {
+      const gemini = JSON.parse(await readFile(path.join(output, location), "utf8")) as {
+        excludeTools?: string[]
+        version?: string
+      }
+      expect(gemini.excludeTools).toEqual(mutating)
+      expect(gemini.version).toBe(manifest.artifactVersions?.gemini)
+    }
+
+    // Manifest versions must match each artifact's own source-of-truth file.
+    expect(manifest.artifactVersions).toEqual({
+      zed: "0.1.1",
+      gemini: "0.1.0",
+      codebuff: "0.1.2",
+      openclaw: "0.1.0",
+    })
   })
 })
+
+describe("exported validator", () => {
+  it("passes against a fresh temp-dir export", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
+  })
+
+  it("fails when an artifact version drifts from the manifest", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    const manifestPath = path.join(output, "manifest.json")
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      artifactVersions: Record<string, string>
+    }
+    manifest.artifactVersions.zed = "9.9.9"
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
+
+    await expect(runValidator(output)).rejects.toThrow(
+      /manifest\.artifactVersions\.zed \(9\.9\.9\) must match/
+    )
+  })
+
+  it("fails when the exported gemini excludeTools drift from the manifest", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    const geminiPath = path.join(output, "gemini-extension", "gemini-extension.json")
+    const gemini = JSON.parse(await readFile(geminiPath, "utf8")) as { excludeTools: string[] }
+    gemini.excludeTools = [...gemini.excludeTools.slice(0, -1)]
+    await writeFile(geminiPath, `${JSON.stringify(gemini, null, 2)}\n`, "utf8")
+
+    await expect(runValidator(output)).rejects.toThrow(/excludeTools must equal/)
+  })
+})
+
+/**
+ * Runs the exported validator (the exact scripts/validate.mjs shipped into the
+ * tree) against an exported marketplace directory.
+ */
+async function runValidator(output: string): Promise<string> {
+  const validator = path.join(output, "scripts", "validate.mjs")
+  await access(validator)
+  try {
+    const { stdout } = await execFileAsync(process.execPath, [validator], { cwd: output })
+    return stdout
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : String(error))
+  }
+}

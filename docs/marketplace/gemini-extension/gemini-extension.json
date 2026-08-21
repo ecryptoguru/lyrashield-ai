@@ -19,6 +19,5 @@
       }
     }
   },
-  "contextFileName": "GEMINI.md",
-  "excludeTools": ["propose_fix", "execute_fix"]
+  "contextFileName": "GEMINI.md"
 }

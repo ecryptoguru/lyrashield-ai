@@ -80,4 +80,57 @@ assert(
   "marketplace catalog versions must track plugin.json"
 )
 
-console.log(`Marketplace validation passed (${manifest.generatedFiles.length} generated artifacts).`)
+// Artifact versions recorded in the manifest must match each artifact's own
+// source-of-truth file, so a version bump that skips the manifest fails here.
+function parseVersion(text, pattern, label) {
+  const match = text.match(pattern)
+  assert(match?.[1], `could not parse ${label} version`)
+  return match[1]
+}
+
+const versions = manifest.artifactVersions
+assert(versions && typeof versions === "object", "manifest.artifactVersions is required")
+for (const [artifact, [file, pattern, label]] of Object.entries({
+  gemini: [
+    "gemini-extension/gemini-extension.json",
+    /"version"\s*:\s*"([^"]+)"/,
+    "gemini-extension.json",
+  ],
+  zed: ["zed-extension/extension.toml", /^version\s*=\s*"([^"]+)"/m, "zed extension.toml"],
+  codebuff: ["codebuff/lyrashield-review.ts", /^\s*version:\s*"([^"]+)"/m, "codebuff agent"],
+  openclaw: ["openclaw/SKILL.md", /^version:\s*(\S+)\s*$/m, "openclaw SKILL.md"],
+})) {
+  const actual = parseVersion(await readFile(path.join(root, file), "utf8"), pattern, label)
+  assert(
+    versions[artifact] === actual,
+    `manifest.artifactVersions.${artifact} (${versions[artifact]}) must match ${label} (${actual})`
+  )
+}
+
+// The Gemini extension must exclude exactly the catalog-derived mutating tool
+// set recorded in the manifest by the exporter.
+const excluded = manifest.mutatingTools
+assert(
+  Array.isArray(excluded) && excluded.length > 0,
+  "manifest.mutatingTools must be a non-empty array"
+)
+for (const name of excluded) {
+  assert(
+    typeof name === "string" && name.startsWith("lyrashield_"),
+    `unexpected tool name in manifest.mutatingTools: ${name}`
+  )
+}
+const geminiManifest = await readJson("gemini-extension/gemini-extension.json")
+assert(
+  JSON.stringify(geminiManifest.excludeTools) === JSON.stringify(excluded),
+  "gemini-extension.json excludeTools must equal the manifest-recorded mutating tool set"
+)
+const rootGemini = await readJson("gemini-extension.json")
+assert(
+  JSON.stringify(rootGemini.excludeTools) === JSON.stringify(excluded),
+  "root gemini-extension.json excludeTools must equal the manifest-recorded mutating tool set"
+)
+
+console.log(
+  `Marketplace validation passed (${manifest.generatedFiles.length} generated artifacts).`
+)

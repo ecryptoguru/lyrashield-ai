@@ -87,7 +87,6 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         <span> on X</span>
       )} in the meantime.
     </p>
-    <p id="waitlist-position" class="mt-3 hidden text-sm font-medium text-text"></p>
     <p id="waitlist-referral" class="mt-2 hidden text-sm text-text-muted">
       Share LyraShield with others.
     </p>
@@ -248,20 +247,6 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
           referralEl.classList.remove("hidden")
           document.getElementById("waitlist-share-actions")?.classList.remove("hidden")
           document.getElementById("waitlist-share-actions")?.classList.add("flex")
-          const positionResponse = await fetch(
-            `/api/waitlist/position?code=${encodeURIComponent(result.referralCode)}`
-          )
-          if (positionResponse.ok) {
-            const position = (await positionResponse.json()) as {
-              position: number
-              referrals: number
-            }
-            const positionEl = document.getElementById("waitlist-position")
-            if (positionEl) {
-              positionEl.textContent = `You're #${position.position} on the waitlist${position.referrals ? ` · ${position.referrals} referral${position.referrals === 1 ? "" : "s"}` : ""}.`
-              positionEl.classList.remove("hidden")
-            }
-          }
         }
 
         if (window.posthog?.__loaded) {
