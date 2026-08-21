@@ -123,6 +123,28 @@ export async function requireAuth(): Promise<AuthSession> {
   return session
 }
 
+/**
+ * Platform-level authority is stored on the User row itself, never derived
+ * from workspace membership or tenant roles. Only "PLATFORM_OPERATOR" grants
+ * global (cross-workspace) administrative capabilities such as affiliate
+ * program administration.
+ */
+export async function isPlatformOperator(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { platformRole: true },
+  })
+  return user?.platformRole === "PLATFORM_OPERATOR"
+}
+
+export async function requirePlatformOperator(): Promise<AuthSession> {
+  const session = await requireAuth()
+  if (!(await isPlatformOperator(session.userId))) {
+    throw new Error("FORBIDDEN")
+  }
+  return session
+}
+
 export async function getWorkspaceMembership(
   workspaceId: string,
   userId: string

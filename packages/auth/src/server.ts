@@ -7,6 +7,8 @@ export {
   getWorkspaceMembership,
   requireWorkspaceAccess,
   requirePermission,
+  isPlatformOperator,
+  requirePlatformOperator,
 } from "./session"
 export type { AuthSession, WorkspaceContext, ApiKeyAuthContext } from "./session"
 export type { OAuthAuthContext } from "./session"

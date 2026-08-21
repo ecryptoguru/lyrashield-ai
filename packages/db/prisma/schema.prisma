@@ -20,6 +20,10 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Platform-level authority, independent of any workspace/tenant role.
+  // Only value is "PLATFORM_OPERATOR"; null means an ordinary tenant user.
+  platformRole String?
+
   sessions           Session[]
   accounts           Account[]
   verifications      Verification[]

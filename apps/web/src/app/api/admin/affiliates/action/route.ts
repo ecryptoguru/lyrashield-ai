@@ -3,7 +3,7 @@ import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
+import { isPlatformOperator } from "@lyrashield/auth/server"
 import { setupReserve } from "@lyrashield/affiliate"
 
 const ActionSchema = z.discriminatedUnion("action", [
@@ -31,24 +31,49 @@ const ActionSchema = z.discriminatedUnion("action", [
   }),
 ])
 
+/**
+ * Write an audit row for this route through the extended Prisma client.
+ * AuditLog.workspaceId is a hard FK to Workspace — global affiliate
+ * administration is not workspace-scoped, so the row attaches to the actor's
+ * active workspace when one exists and is skipped otherwise (mirrors the
+ * license renew route's conditional workspaceId handling).
+ */
+async function writeAffiliateAudit(
+  actorUserId: string,
+  data: { action: string; resourceType: string; resourceId?: string; metadata?: object }
+) {
+  const workspaceId = await getCachedWorkspaceId(actorUserId).catch(() => null)
+  if (!workspaceId) return
+  await prisma.auditLog
+    .create({
+      data: {
+        workspaceId,
+        actorUserId,
+        ...data,
+      },
+    })
+    .catch(() => {})
+}
+
 export async function POST(request: Request) {
   const session = await getCachedSession()
   if (!session) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
   }
 
-  const workspaceId = await getCachedWorkspaceId(session.userId)
-  if (!workspaceId) {
-    return NextResponse.json({ success: false, error: "No workspace" }, { status: 403 })
-  }
-
-  // Check admin permissions
-  const membership = await prisma.workspaceMember.findFirst({
-    where: { workspaceId, userId: session.userId },
-    select: { role: true },
-  })
-
-  if (!membership || !hasPermission(membership.role, PERMISSIONS.affiliate.admin)) {
+  // Global affiliate administration is platform-operator authority. It never
+  // derives from workspace membership or tenant roles, and does not require
+  // the operator to belong to any workspace.
+  if (!(await isPlatformOperator(session.userId))) {
+    // Audit the denied mutation attempt (best-effort; requires a workspace
+    // context for the AuditLog FK).
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.admin_denied",
+      resourceType: "affiliate_admin_action",
+    })
+    logger.warn("Affiliate admin action denied — not a platform operator", {
+      userId: session.userId,
+    })
     return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 })
   }
 
@@ -119,15 +144,11 @@ export async function POST(request: Request) {
     }
 
     // C-M06: Write persistent audit log with admin userId
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.approved",
-        resourceType: "affiliate",
-        resourceId: data.affiliateId,
-        actorUserId: session.userId,
-        metadata: { affiliateId: data.affiliateId },
-      },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.approved",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: { affiliateId: data.affiliateId },
     })
 
     logger.info("Affiliate approved", {
@@ -141,15 +162,11 @@ export async function POST(request: Request) {
     })
 
     // C-M06: Audit log
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.rejected",
-        resourceType: "affiliate",
-        resourceId: data.affiliateId,
-        actorUserId: session.userId,
-        metadata: { affiliateId: data.affiliateId },
-      },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.rejected",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: { affiliateId: data.affiliateId },
     })
 
     logger.info("Affiliate rejected", {
@@ -163,15 +180,11 @@ export async function POST(request: Request) {
     })
 
     // C-M06: Audit log
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.suspended",
-        resourceType: "affiliate",
-        resourceId: data.affiliateId,
-        actorUserId: session.userId,
-        metadata: { affiliateId: data.affiliateId },
-      },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.suspended",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: { affiliateId: data.affiliateId },
     })
 
     logger.info("Affiliate suspended", {
@@ -235,15 +248,11 @@ export async function POST(request: Request) {
     })
 
     // C-M06: Audit log
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.payout_approved",
-        resourceType: "payout",
-        resourceId: data.payoutId,
-        actorUserId: session.userId,
-        metadata: { payoutId: data.payoutId, commissionCount: items.length },
-      },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.payout_approved",
+      resourceType: "payout",
+      resourceId: data.payoutId,
+      metadata: { payoutId: data.payoutId, commissionCount: items.length },
     })
 
     logger.info("Payout approved", { payoutId: data.payoutId, adminUserId: session.userId })
@@ -257,18 +266,14 @@ export async function POST(request: Request) {
     })
 
     // C-M06: Audit log
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.tier_override",
-        resourceType: "affiliate",
-        resourceId: data.affiliateId,
-        actorUserId: session.userId,
-        metadata: {
-          affiliateId: data.affiliateId,
-          baseRateBps: data.baseRateBps,
-          tierRateBps: data.tierRateBps,
-        },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.tier_override",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: {
+        affiliateId: data.affiliateId,
+        baseRateBps: data.baseRateBps,
+        tierRateBps: data.tierRateBps,
       },
     })
 

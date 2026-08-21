@@ -177,53 +177,59 @@ export async function resolveSigningPublicKey(): Promise<string> {
  * Verify the internal API key on server-to-server routes (license issue/renew).
  *
  * When `LYRASHIELD_INTERNAL_API_KEY` is set, the request must include the
- * `X-LyraShield-Internal-Key` header matching that value. When the env var is
- * unset (dev/test), the check is skipped with a warning so local development
- * and e2e tests are not blocked.
+ * `X-LyraShield-Internal-Key` header matching that value. Comparison is
+ * timing-safe: both sides are SHA-256 hashed first so `timingSafeEqual`
+ * always receives fixed-length inputs (a differing raw length can no longer
+ * short-circuit and leak length information).
+ *
+ * When the env var is absent or empty, production REJECTS every request
+ * (fail closed) while dev/test keep the explicit unauthenticated allow with a
+ * warning. Logged failure reasons are bounded ("internal_key_missing" |
+ * "internal_key_mismatch") and never include key material.
  *
  * @returns `null` if the check passes, or a `Response` (403) if it fails.
  */
 export function requireInternalApiKey(request: Request): Response | null {
-  const expectedKey = env.LYRASHIELD_INTERNAL_API_KEY
+  const expectedKey = env.LYRASHIELD_INTERNAL_API_KEY?.trim()
+  const providedKey = request.headers.get(INTERNAL_API_KEY_HEADER)
 
-  // Dev/test convenience: if no internal key is configured, allow the request.
   if (!expectedKey) {
+    if (env.NODE_ENV === "production") {
+      logger.error("LYRASHIELD_INTERNAL_API_KEY is not set — rejecting internal API request", {
+        reason: "internal_key_missing",
+      })
+      return internalApiKeyFailure()
+    }
+    // Dev/test convenience: explicit allow so local development and e2e
+    // tests are not blocked. Never acceptable in production.
     logger.warn(
       "LYRASHIELD_INTERNAL_API_KEY is not set — internal API routes are unauthenticated. " +
-        "Set this variable in production to protect license issue/renew endpoints."
+        "Production rejects these requests until the variable is configured."
     )
     return null
   }
 
-  const providedKey = request.headers.get(INTERNAL_API_KEY_HEADER)
-  // B-M01: Use constant-time comparison to prevent timing side-channel attacks.
-  // A plain !== comparison leaks byte-by-byte timing information that can
-  // be used to recover the key over many requests.
-  if (!providedKey) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: { code: "FORBIDDEN", message: "Missing or invalid internal API key" },
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } }
-    )
-  }
-
-  const provided = Buffer.from(providedKey)
-  const expected = Buffer.from(expectedKey)
-  // Length guard: timingSafeEqual throws on different lengths, which would
-  // leak the key length via timing. Compare lengths first, then content.
-  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: { code: "FORBIDDEN", message: "Missing or invalid internal API key" },
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } }
-    )
+  if (!providedKey || !timingSafeEqual(sha256(providedKey), sha256(expectedKey))) {
+    logger.warn("Internal API key verification failed", { reason: "internal_key_mismatch" })
+    return internalApiKeyFailure()
   }
 
   return null
+}
+
+function sha256(value: string): Buffer {
+  return createHash("sha256").update(value).digest()
+}
+
+/** Generic failure response — never distinguishes why verification failed. */
+function internalApiKeyFailure(): Response {
+  return new Response(
+    JSON.stringify({
+      success: false,
+      error: { code: "FORBIDDEN", message: "Missing or invalid internal API key" },
+    }),
+    { status: 403, headers: { "Content-Type": "application/json" } }
+  )
 }
 
 /**

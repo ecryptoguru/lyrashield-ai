@@ -1,8 +1,8 @@
 import { prisma } from "@lyrashield/db"
-import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { getCachedSession } from "@/lib/cache"
 import { redirect } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
-import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
+import { isPlatformOperator } from "@lyrashield/auth/server"
 import { AffiliateAdminActions } from "./admin-actions"
 
 export const metadata = {
@@ -13,18 +13,9 @@ export default async function AffiliateAdminPage() {
   const session = await getCachedSession()
   if (!session) return null
 
-  const workspaceId = await getCachedWorkspaceId(session.userId)
-  if (!workspaceId) {
-    redirect("/onboarding")
-  }
-
-  // Check admin permissions
-  const membership = await prisma.workspaceMember.findFirst({
-    where: { workspaceId, userId: session.userId },
-    select: { role: true },
-  })
-
-  if (!membership || !hasPermission(membership.role, PERMISSIONS.affiliate.admin)) {
+  // Global affiliate administration is platform-operator authority — it never
+  // derives from workspace membership or tenant roles.
+  if (!(await isPlatformOperator(session.userId))) {
     redirect("/dashboard")
   }
 
