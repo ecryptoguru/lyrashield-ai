@@ -135,14 +135,15 @@ export type UpdateCheckResult =
 
 export interface SyncConnection {
   workspaceId: string
-  licenseKey: string
+  seq: number
+  lastSyncedFindingId: string | null
   cursor: string | null
   connectedAt: string
   lastSyncAt: string | null
 }
 
 export type SyncResult =
-  | { status: "success"; syncedCount: number; newCursor: string }
+  | { status: "success"; syncedCount: number; newSeq: number; newCursor: string }
   | { status: "entitlement_missing"; message: string }
-  | { status: "cursor_rewind"; serverCursor: string; message: string }
+  | { status: "cursor_rewind"; serverSeq: number; serverCursor: string; message: string }
   | { status: "error"; message: string }

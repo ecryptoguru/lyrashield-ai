@@ -93,7 +93,41 @@ pub fn clear_license() -> Result<(), String> {
     if path.exists() {
         fs::remove_file(&path).map_err(|e| format!("failed to remove license: {}", e))?;
     }
+    // Also clear keychain raw key
+    let _ = clear_license_key();
     Ok(())
+}
+
+// ── Raw license key in OS keychain (never in React/localStorage) ──
+const KEYCHAIN_SERVICE: &str = "lyrashield";
+const LICENSE_KEY_ACCOUNT: &str = "license-key";
+
+pub fn save_license_key(key: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, LICENSE_KEY_ACCOUNT)
+        .map_err(|e| format!("keychain entry: {}", e))?;
+    entry
+        .set_password(key)
+        .map_err(|e| format!("save license key to keychain: {}", e))
+}
+
+pub fn load_license_key() -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, LICENSE_KEY_ACCOUNT)
+        .map_err(|e| format!("keychain entry: {}", e))?;
+    match entry.get_password() {
+        Ok(v) => Ok(Some(v)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("read license key from keychain: {}", e)),
+    }
+}
+
+pub fn clear_license_key() -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, LICENSE_KEY_ACCOUNT)
+        .map_err(|e| format!("keychain entry: {}", e))?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("clear license key: {}", e)),
+    }
 }
 
 #[cfg(test)]

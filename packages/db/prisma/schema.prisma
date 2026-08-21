@@ -1737,6 +1737,7 @@ model SyncCursor {
   id                   String   @id @default(cuid())
   workspaceId          String
   licenseId            String
+  seq                  BigInt   @default(0) @db.BigInt
   lastSyncedAt         DateTime
   lastSyncedFindingId  String?
   createdAt            DateTime @default(now())
@@ -1746,6 +1747,7 @@ model SyncCursor {
   license   License   @relation(fields: [licenseId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, licenseId])
+  @@index([seq])
 }
 
 model LicenseRevocation {

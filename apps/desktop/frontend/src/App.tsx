@@ -89,12 +89,7 @@ export default function App() {
   }
 
   if (route === "sync") {
-    return (
-      <SyncScreen
-        licenseKey={licenseStatus?.state === "active" ? "" : ""}
-        findings={lastFindings}
-      />
-    )
+    return <SyncScreen findings={lastFindings} />
   }
 
   // main

@@ -50,6 +50,8 @@ pub fn run() {
             check_update_eligibility,
             connect_workspace,
             sync_findings,
+            get_sync_state,
+            fetch_sync_cursor,
             disconnect_sync,
         ])
         .run(tauri::generate_context!())

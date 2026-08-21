@@ -44,8 +44,9 @@ CREATE INDEX IF NOT EXISTS idx_scans_started_at ON scans(started_at DESC);
 CREATE TABLE IF NOT EXISTS sync_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     workspace_id TEXT,
-    license_key TEXT,
+    seq INTEGER NOT NULL DEFAULT 0,
     cursor TEXT,
+    last_synced_finding_id TEXT,
     connected_at TEXT,
     last_sync_at TEXT
 );

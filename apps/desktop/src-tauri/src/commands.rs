@@ -36,6 +36,8 @@ pub async fn activate_license(
         ));
     }
     store::save_license(&response.license, &response.license_id, &response.blob)?;
+    // Store raw key in OS keychain for sync (never in React/localStorage)
+    let _ = store::save_license_key(&license_key);
     Ok(license_status_from_file(&response.license))
 }
 
@@ -247,18 +249,30 @@ pub async fn check_update_eligibility(
 pub async fn connect_workspace(
     api_url: Option<String>,
     workspace_id: String,
-    license_key: String,
 ) -> Result<SyncConnection, String> {
-    sync::connect_workspace(api_url, &workspace_id, &license_key).await
+    sync::connect_workspace(api_url, &workspace_id).await
 }
 
 #[tauri::command]
 pub async fn sync_findings(
     api_url: Option<String>,
-    connection: SyncConnection,
+    workspace_id: String,
     findings: Vec<Finding>,
 ) -> Result<Vec<SyncResult>, String> {
-    Ok(sync::sync_findings(api_url, &connection, &findings).await)
+    Ok(sync::sync_findings(api_url, &workspace_id, &findings).await)
+}
+
+#[tauri::command]
+pub async fn get_sync_state() -> Result<Option<SyncConnection>, String> {
+    sync::get_sync_state().await
+}
+
+#[tauri::command]
+pub async fn fetch_sync_cursor(
+    api_url: Option<String>,
+    workspace_id: String,
+) -> Result<SyncConnection, String> {
+    sync::fetch_and_adopt_cursor(api_url, &workspace_id).await
 }
 
 #[tauri::command]

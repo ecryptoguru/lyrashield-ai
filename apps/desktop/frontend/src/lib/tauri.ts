@@ -121,20 +121,28 @@ export async function checkUpdateEligibility(apiUrl?: string): Promise<UpdateChe
   return invoke("check_update_eligibility", { apiUrl: apiUrl ?? null })
 }
 
-// Sync
+// Sync — raw key never in React; Rust keychain holds it
 export async function connectWorkspace(
   apiUrl: string | undefined,
-  workspaceId: string,
-  licenseKey: string
+  workspaceId: string
 ): Promise<SyncConnection> {
-  return invoke("connect_workspace", { apiUrl: apiUrl ?? null, workspaceId, licenseKey })
+  return invoke("connect_workspace", { apiUrl: apiUrl ?? null, workspaceId })
 }
 export async function syncFindings(
   apiUrl: string | undefined,
-  connection: SyncConnection,
+  workspaceId: string,
   findings: Finding[]
 ): Promise<SyncResult[]> {
-  return invoke("sync_findings", { apiUrl: apiUrl ?? null, connection, findings })
+  return invoke("sync_findings", { apiUrl: apiUrl ?? null, workspaceId, findings })
+}
+export async function getSyncState(): Promise<SyncConnection | null> {
+  return invoke("get_sync_state")
+}
+export async function fetchSyncCursor(
+  apiUrl: string | undefined,
+  workspaceId: string
+): Promise<SyncConnection> {
+  return invoke("fetch_sync_cursor", { apiUrl: apiUrl ?? null, workspaceId })
 }
 export async function disconnectSync(): Promise<void> {
   return invoke("disconnect_sync")

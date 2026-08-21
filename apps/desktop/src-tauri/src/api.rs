@@ -54,6 +54,22 @@ impl ApiClient {
         Ok(HttpResponse { status, body: text })
     }
 
+    /// Generic GET request.
+    pub async fn get(&self, url: &str) -> Result<HttpResponse, String> {
+        let resp = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| format!("request failed: {}", e))?;
+        let status = resp.status();
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("failed to read response: {}", e))?;
+        Ok(HttpResponse { status, body: text })
+    }
+
     /// `POST /api/licenses/activate` — activate a license key on this machine.
     pub async fn activate(
         &self,

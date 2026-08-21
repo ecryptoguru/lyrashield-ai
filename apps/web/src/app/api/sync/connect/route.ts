@@ -1,5 +1,6 @@
 import { z } from "zod"
-import { prisma, getSystemPrisma } from "@lyrashield/db"
+import { prisma } from "@lyrashield/db"
+import { withWorkspaceRLS, findLicenseForSyncByKeyHash } from "@lyrashield/db"
 import { requireAuth } from "@lyrashield/auth/server"
 import { type LocalSkuId } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
@@ -10,28 +11,21 @@ import { hashLicenseKey } from "../../../../lib/licenses/license-service"
 export const dynamic = "force-dynamic"
 
 const ConnectSchema = z.object({
-  /** The workspace to link sync to. */
   workspaceId: z.string().min(1),
-  /** License key proving sync entitlement (the $49/yr sync_addon or a Cloud sub). */
   licenseKey: z.string().min(1).max(200),
 })
 
 /**
  * POST /api/sync/connect
  *
- * Link a Local license to a LyraShield workspace for cloud sync. The server
- * enforces sync entitlement server-side: the license must either be a Cloud
- * subscription OR have the $49/yr `sync_addon` SKU.
+ * Device-bound authenticated sync connect. Requires an authenticated session
+ * (requireAuth) AND proof-of-possession of the raw license key (hashed and
+ * resolved via narrow privileged adapter). The raw key is never logged nor
+ * returned. All cursor writes are bound to the authenticated workspace via
+ * withWorkspaceRLS (NOBYPASSRLS-safe).
  *
- * H-01: The caller must provide the raw license KEY (not just the ID) as
- * proof of ownership. The key is hashed and verified against the LicenseKey
- * record. Additionally, if the license is already linked to a different
- * workspace, the caller must also be a member of that workspace — this
- * prevents an attacker with a stolen key from hijacking the license to
- * their own workspace.
- *
- * The desktop client calls this once during setup; subsequent sync batches
- * use the established SyncCursor.
+ * SyncCursor now carries a monotonic `seq` (BIGINT) for CAS. connect returns
+ * the current seq so the desktop's trusted native store can seed its cursor.
  */
 export async function POST(request: Request) {
   try {
@@ -43,7 +37,6 @@ export async function POST(request: Request) {
     }
     const { workspaceId, licenseKey } = parsed.data
 
-    // Verify the user has access to the workspace.
     const membership = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: session.userId } },
     })
@@ -51,32 +44,17 @@ export async function POST(request: Request) {
       return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
     }
 
-    // H-01: Look up the license by key hash — this proves the caller possesses
-    // the actual license key, not just the ID.
-    // Sync connect resolves a license by key hash — a workspace-less global
-    // lookup (the license may not be linked to the caller's workspace yet).
-    // Use the system client (cross-workspace privileged read) since the
-    // FORCE-RLS-scoped client would not find NULL-workspaceId keys under a
-    // NOBYPASSRLS role.
-    const systemPrisma = getSystemPrisma()
+    // Narrow privileged lookup — single purpose, minimal projection
     const keyHash = hashLicenseKey(licenseKey)
-    const licenseKeyRow = await systemPrisma.licenseKey.findUnique({
-      where: { keyHash },
-      include: { license: true },
-    })
-    if (!licenseKeyRow) {
+    const row = await findLicenseForSyncByKeyHash(keyHash)
+    if (!row) {
       return apiError("LICENSE_KEY_NOT_FOUND", "The provided license key is not recognized", 404)
     }
-
-    const license = licenseKeyRow.license
+    const license = row.license
     if (license.revoked) {
       return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
     }
 
-    // H-01: Prevent license hijacking. If the license is already linked to a
-    // different workspace, the caller must also be a member of that workspace
-    // to re-link it. This prevents a user with a stolen key from hijacking
-    // someone else's license into their own workspace.
     if (license.workspaceId && license.workspaceId !== workspaceId) {
       const owningMembership = await prisma.workspaceMember.findUnique({
         where: {
@@ -86,44 +64,51 @@ export async function POST(request: Request) {
       if (!owningMembership || owningMembership.status !== "active") {
         return apiError(
           "LICENSE_ALREADY_LINKED",
-          "This license is already linked to another workspace. " +
-            "Contact the workspace owner to transfer it.",
+          "This license is already linked to another workspace. Contact the workspace owner to transfer it.",
           403
         )
       }
     }
 
-    // Server-side entitlement check: Cloud subscription OR sync_addon.
     const sku = license.sku as LocalSkuId
     const hasSyncEntitlement = await checkSyncEntitlement(sku, license.workspaceId, workspaceId)
     if (!hasSyncEntitlement) {
       return apiError(
         "SYNC_NOT_ENTITLED",
-        "Cloud sync requires an active Cloud subscription or the $49/yr Cloud Sync Add-on. " +
-          "Purchase the add-on from your LyraShield account settings.",
+        "Cloud sync requires an active Cloud subscription or the $49/yr Cloud Sync Add-on.",
         402
       )
     }
 
-    // Link the license to the workspace if not already linked.
     if (license.workspaceId !== workspaceId) {
+      // License workspace linkage is a privileged cross-workspace write (license row is not RLS-scoped).
+      // Use direct prisma (not workspace-RLS) for this single column update; cursor RLS is separate.
       await prisma.license.update({
         where: { id: license.id },
         data: { workspaceId },
       })
     }
 
-    // Create or update the SyncCursor.
-    const cursor = await prisma.syncCursor.upsert({
-      where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
-      create: {
-        workspaceId,
-        licenseId: license.id,
-        lastSyncedAt: new Date(),
-      },
-      update: {
-        lastSyncedAt: new Date(),
-      },
+    // Cursor create/update must be workspace-bound (withWorkspaceRLS) so NOBYPASSRLS role cannot leak.
+    const cursor = await withWorkspaceRLS(workspaceId, async (tx) => {
+      const existing = await tx.syncCursor.findUnique({
+        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
+      })
+      if (existing) {
+        // Touch lastSyncedAt but preserve seq
+        return tx.syncCursor.update({
+          where: { id: existing.id },
+          data: { lastSyncedAt: new Date() },
+        })
+      }
+      return tx.syncCursor.create({
+        data: {
+          workspaceId,
+          licenseId: license.id,
+          seq: BigInt(0),
+          lastSyncedAt: new Date(),
+        },
+      })
     })
 
     logger.info("Sync connected", {
@@ -137,6 +122,9 @@ export async function POST(request: Request) {
         connected: true,
         syncCursorId: cursor.id,
         licenseId: license.id,
+        seq: Number(cursor.seq),
+        lastSyncedAt: cursor.lastSyncedAt.toISOString(),
+        lastSyncedFindingId: cursor.lastSyncedFindingId ?? null,
       },
       200
     )
@@ -148,46 +136,18 @@ export async function POST(request: Request) {
   }
 }
 
-/**
- * Check whether the license SKU or workspace plan grants sync entitlement.
- *
- * - `sync_addon` SKU: explicitly entitled.
- * - Team subscription: sync is included.
- * - Cloud workspace plan (STARTER+): entitled via the workspace.
- * - Individual / team_perpetual without add-on: NOT entitled.
- *
- * B-M08: Now async — checks the workspace plan for Cloud subscription
- * entitlement and verifies the license belongs to the target workspace.
- */
 async function checkSyncEntitlement(
   sku: LocalSkuId,
   licenseWorkspaceId: string | null,
   targetWorkspaceId: string
 ): Promise<boolean> {
-  // The sync_addon SKU explicitly grants sync.
   if (sku === "sync_addon") return true
-
-  // Team subscription includes sync.
   if (sku === "team_subscription") return true
-
-  // B-M08: Check if the target workspace has an active Cloud subscription
-  // (STARTER or above). This entitles the workspace to sync even without
-  // a separate sync_addon license.
   const workspace = await prisma.workspace.findUnique({
     where: { id: targetWorkspaceId },
     select: { plan: true },
   })
-
-  if (workspace && workspace.plan !== "FREE") {
-    // Cloud subscribers are entitled to sync
-    return true
-  }
-
-  // B-M08: Verify the license is associated with the target workspace
-  // (prevents using a license from workspace A to sync to workspace B)
-  if (licenseWorkspaceId && licenseWorkspaceId !== targetWorkspaceId) {
-    return false
-  }
-
+  if (workspace && workspace.plan !== "FREE") return true
+  if (licenseWorkspaceId && licenseWorkspaceId !== targetWorkspaceId) return false
   return false
 }
