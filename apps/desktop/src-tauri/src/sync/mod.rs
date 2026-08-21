@@ -87,12 +87,18 @@ fn ensure_sync_table(conn: &rusqlite::Connection) -> Result<(), String> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("collect: {}", e))?;
     if !cols.contains(&"seq".to_string()) {
-        conn.execute("ALTER TABLE sync_state ADD COLUMN seq INTEGER NOT NULL DEFAULT 0", [])
-            .map_err(|e| format!("add seq: {}", e))?;
+        conn.execute(
+            "ALTER TABLE sync_state ADD COLUMN seq INTEGER NOT NULL DEFAULT 0",
+            [],
+        )
+        .map_err(|e| format!("add seq: {}", e))?;
     }
     if !cols.contains(&"last_synced_finding_id".to_string()) {
-        conn.execute("ALTER TABLE sync_state ADD COLUMN last_synced_finding_id TEXT", [])
-            .map_err(|e| format!("add last_synced_finding_id: {}", e))?;
+        conn.execute(
+            "ALTER TABLE sync_state ADD COLUMN last_synced_finding_id TEXT",
+            [],
+        )
+        .map_err(|e| format!("add last_synced_finding_id: {}", e))?;
     }
     Ok(())
 }
@@ -148,7 +154,8 @@ fn load_sync_state_blocking() -> Result<Option<SyncConnection>, String> {
     if let Some(row) = rows.next().map_err(|e| format!("next: {}", e))? {
         let workspace_id: String = row.get(0).map_err(|e| format!("col0: {}", e))?;
         let seq: i64 = row.get(1).unwrap_or(0);
-        let last_synced_finding_id: Option<String> = row.get(2).map_err(|e| format!("col2: {}", e))?;
+        let last_synced_finding_id: Option<String> =
+            row.get(2).map_err(|e| format!("col2: {}", e))?;
         let connected_at: Option<String> = row.get(3).map_err(|e| format!("col3: {}", e))?;
         let last_sync_at: Option<String> = row.get(4).map_err(|e| format!("col4: {}", e))?;
         Ok(Some(SyncConnection {
@@ -195,14 +202,19 @@ pub async fn connect_workspace(
         return Err(format!("license not found: {}", resp.body));
     }
     if !resp.status.is_success() {
-        return Err(format!("sync connect failed ({}): {}", resp.status, resp.body));
+        return Err(format!(
+            "sync connect failed ({}): {}",
+            resp.status, resp.body
+        ));
     }
     let envelope: ApiEnvelope<ConnectData> = serde_json::from_str(&resp.body)
         .map_err(|e| format!("parse connect envelope: {} body:{}", e, resp.body))?;
     if !envelope.success {
         return Err(format!("connect envelope success=false: {}", resp.body));
     }
-    let data = envelope.data.ok_or_else(|| format!("connect missing data: {}", resp.body))?;
+    let data = envelope
+        .data
+        .ok_or_else(|| format!("connect missing data: {}", resp.body))?;
     let seq = data.seq.unwrap_or(0);
     let last_synced_finding_id = data.last_synced_finding_id;
     let now = chrono::Utc::now().to_rfc3339();
@@ -216,10 +228,12 @@ pub async fn connect_workspace(
     };
     let ws = workspace_id.to_string();
     let last_clone = last_synced_finding_id.clone();
-    tokio::task::spawn_blocking(move || save_sync_state_blocking(&ws, seq, last_clone.as_deref(), &now))
-        .await
-        .map_err(|e| format!("join: {}", e))?
-        .map_err(|e| format!("save state: {}", e))?;
+    tokio::task::spawn_blocking(move || {
+        save_sync_state_blocking(&ws, seq, last_clone.as_deref(), &now)
+    })
+    .await
+    .map_err(|e| format!("join: {}", e))?
+    .map_err(|e| format!("save state: {}", e))?;
     Ok(conn)
 }
 
@@ -307,11 +321,19 @@ pub async fn sync_findings(
                 let server_seq = serde_json::from_str::<ApiEnvelope<CursorData>>(&resp.body)
                     .ok()
                     .and_then(|e| e.data)
-                    .and_then(|d| d.seq.or_else(|| d.cursor.and_then(|c| c.parse::<u64>().ok())))
+                    .and_then(|d| {
+                        d.seq
+                            .or_else(|| d.cursor.and_then(|c| c.parse::<u64>().ok()))
+                    })
                     .unwrap_or(current_seq);
                 let detail_seq = serde_json::from_str::<serde_json::Value>(&resp.body)
                     .ok()
-                    .and_then(|v| v.get("error").and_then(|e| e.get("details")).and_then(|d| d.get("currentSeq")).and_then(|n| n.as_u64()))
+                    .and_then(|v| {
+                        v.get("error")
+                            .and_then(|e| e.get("details"))
+                            .and_then(|d| d.get("currentSeq"))
+                            .and_then(|n| n.as_u64())
+                    })
                     .unwrap_or(server_seq);
                 results.push(SyncResult::CursorRewind {
                     server_seq: detail_seq,
@@ -366,7 +388,10 @@ pub async fn sync_findings(
     results
 }
 
-pub async fn fetch_and_adopt_cursor(api_url: Option<String>, workspace_id: &str) -> Result<SyncConnection, String> {
+pub async fn fetch_and_adopt_cursor(
+    api_url: Option<String>,
+    workspace_id: &str,
+) -> Result<SyncConnection, String> {
     let license_key = load_license_key_from_keychain()?;
     let client = ApiClient::new(api_url)?;
     let url = format!(
@@ -377,12 +402,20 @@ pub async fn fetch_and_adopt_cursor(api_url: Option<String>, workspace_id: &str)
     );
     let resp = client.get(&url).await?;
     if !resp.status.is_success() {
-        return Err(format!("cursor fetch failed ({}): {}", resp.status, resp.body));
+        return Err(format!(
+            "cursor fetch failed ({}): {}",
+            resp.status, resp.body
+        ));
     }
     let envelope: ApiEnvelope<CursorData> = serde_json::from_str(&resp.body)
         .map_err(|e| format!("parse cursor envelope: {} body:{}", e, resp.body))?;
-    let data = envelope.data.ok_or_else(|| format!("cursor missing data: {}", resp.body))?;
-    let seq = data.seq.or_else(|| data.cursor.and_then(|c| c.parse::<u64>().ok())).unwrap_or(0);
+    let data = envelope
+        .data
+        .ok_or_else(|| format!("cursor missing data: {}", resp.body))?;
+    let seq = data
+        .seq
+        .or_else(|| data.cursor.and_then(|c| c.parse::<u64>().ok()))
+        .unwrap_or(0);
     let last_synced_finding_id = data.last_synced_finding_id;
     let now = chrono::Utc::now().to_rfc3339();
     let conn = SyncConnection {
@@ -395,10 +428,12 @@ pub async fn fetch_and_adopt_cursor(api_url: Option<String>, workspace_id: &str)
     };
     let ws = workspace_id.to_string();
     let id_clone = last_synced_finding_id.clone();
-    tokio::task::spawn_blocking(move || save_sync_state_blocking(&ws, seq, id_clone.as_deref(), &now))
-        .await
-        .map_err(|e| format!("join: {}", e))?
-        .map_err(|e| format!("save: {}", e))?;
+    tokio::task::spawn_blocking(move || {
+        save_sync_state_blocking(&ws, seq, id_clone.as_deref(), &now)
+    })
+    .await
+    .map_err(|e| format!("join: {}", e))?
+    .map_err(|e| format!("save: {}", e))?;
     Ok(conn)
 }
 

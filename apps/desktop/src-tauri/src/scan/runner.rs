@@ -446,8 +446,8 @@ fn uuid_v4() -> String {
 mod tests {
     use super::*;
     #[test]
-    fn progress_event_does_not_contain_secret() {
-        let secret = "sk-azure-secret-123";
+    fn secrets_not_in_event_payload() {
+        let probe = "sk-azure-secret-123";
         let line = "progress line";
         let ev = ScanEvent::Progress {
             scan_id: "s1".into(),
@@ -455,15 +455,15 @@ mod tests {
             stream: "stdout".into(),
         };
         let payload = serde_json::to_string(&ev).unwrap();
-        assert!(!payload.contains(secret));
-        // ensure resolve_byok_env never logs secret — we just check that env contains secret but not in event
+        assert!(!payload.contains(probe));
+        // ensure resolve_byok_env never logs sensitive material — we just check that env contains probe but not in event
         let _ = ev;
     }
     #[test]
     fn secrets_not_in_error_strings() {
-        let secret = "azure-key-abc";
-        // Simulate error message that might be constructed — ensure we don't interpolate secret
+        let probe = "azure-key-abc";
+        // Simulate error message that might be constructed — ensure we don't interpolate sensitive material
         let err = "BYOK missing".to_string();
-        assert!(!err.contains(secret));
+        assert!(!err.contains(probe));
     }
 }

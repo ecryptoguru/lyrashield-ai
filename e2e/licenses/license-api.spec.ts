@@ -169,6 +169,7 @@ test.describe("License renewal API", () => {
     const beforeExpiry = beforeLicense.updateEligibleUntil
 
     const res = await request.post("/api/licenses/renew", {
+      headers: { "X-LyraShield-Internal-Key": "e2e-internal-key" },
       // The route requires orderId (used for renewal idempotency) — without it
       // the Zod validation returns 400.
       data: {
