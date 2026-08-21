@@ -184,7 +184,7 @@ mod tests {
     use super::*;
     #[test]
     fn masked_never_contains_full_key() {
-        let key = "sk-1234567890abcdef1234567890";
+        let key = "test-key-for-masking-1234567890"; // gitleaks:allow
         let masked = mask_key(key);
         assert!(!masked.contains(key));
         assert!(masked.contains("…") || masked.contains("***"));
@@ -195,10 +195,10 @@ mod tests {
         let meta = AzureMetadata {
             configured: true,
             endpoint: Some("https://foo.openai.azure.com".into()),
-            key_masked: Some(mask_key("sk-abcdef123456")),
+            key_masked: Some(mask_key("test-key-abcdef-123456")), // gitleaks:allow
         };
         let json = serde_json::to_string(&meta).unwrap();
-        assert!(!json.contains("sk-abcdef123456"));
+        assert!(!json.contains("test-key-abcdef-123456"));
     }
     #[test]
     fn endpoint_validation_rejects_non_https() {
