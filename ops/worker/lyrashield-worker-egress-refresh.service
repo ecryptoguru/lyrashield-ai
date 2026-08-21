@@ -5,4 +5,6 @@ Requires=docker.service lyrashield-worker-secrets.service
 
 [Service]
 Type=oneshot
+Environment=LYRASHIELD_REFRESH_PINNED_HOSTS=1
+Environment=LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE=1
 ExecStart=/usr/local/libexec/lyrashield-refresh-egress

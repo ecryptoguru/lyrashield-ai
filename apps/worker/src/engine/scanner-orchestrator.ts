@@ -331,6 +331,17 @@ export async function runScannerOrchestrator(
   // Source scanners must never report an empty or unvalidated repository
   // workspace as clean. The engine supplies the checkout after cloning it.
   const targetUrl = target.url ?? ""
+  if (
+    targetUrl &&
+    config.urlProfile &&
+    env.NODE_ENV === "production" &&
+    (!env.LYRASHIELD_EGRESS_PROXY_URL || !env.LYRASHIELD_EGRESS_PROXY_SECRET)
+  ) {
+    const message =
+      "Production URL scans require the authenticated egress proxy; retry after worker configuration is restored"
+    await addScanEvent(scanId, "scanner", "error", message, { scanner: "url" })
+    throw new Error(message)
+  }
   const hasSourceCheckout = target.type === "REPO" && Boolean(workspaceDir)
   const coverageIssues: ScannerCoverageIssue[] = []
   let dependencyInventory: ResolvedDependencyInventory | undefined

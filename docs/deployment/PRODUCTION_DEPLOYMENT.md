@@ -215,7 +215,7 @@ rule.
 
 1. Public HTTPS application and marketing origins plus all trusted auth origins are decided. Scorecard canonical/OG/Twitter URLs must resolve to the application origin.
 2. Production Postgres migrations and the CI migration-drift check pass. Before applying `20260714170000_integration_global_external_id_unique`, resolve any duplicate non-null `(type, externalId)` bindings explicitly; the migration intentionally fails rather than silently reassigning an installation.
-3. Redis is private/TLS-protected and reachable by both web and worker. `REDIS_URL` (redis://) is for the BullMQ job queue; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (HTTPS REST) are for distributed rate limiting only. The two are never interchangeable.
+3. Redis is managed, authenticated, TLS-protected, and reachable by both web and worker without exposing an unauthenticated public Redis port. `REDIS_URL` (`rediss://`) is the Upstash TCP endpoint for BullMQ; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are the HTTPS interface for distributed rate limiting. The two protocols are never interchangeable. A literal private-network endpoint remains an enterprise deployment option rather than an open-beta prerequisite.
 4. All secrets are supplied through the platform's secret manager, never committed files.
 5. The worker runs on disposable, dedicated scan infrastructure. It must not share a host, Docker daemon, filesystem, network namespace, or secret boundary with the web application, database, or unrelated workloads.
 6. The worker reaches that isolated Docker daemon through `DOCKER_HOST=ssh://...` or a mutually authenticated `tcp://...` endpoint. A production worker fails fast for a local Unix socket; `docker-compose.yml` is development-only.
@@ -250,7 +250,7 @@ one-time secret:
 The live Lite Scanner is a separate passive API and cannot be promoted into the full worker by configuration alone. A controlled repository scan requires all of the following:
 
 - migrated PostgreSQL for application and scan state;
-- a private/TLS `redis://` or `rediss://` service compatible with BullMQ and reachable by both web and worker—Upstash REST URL/token variables are for distributed rate limiting via `@upstash/ratelimit` and do not replace `REDIS_URL`. In production, `REDIS_URL` points to the Azure VM-hosted Redis instance, while `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` point to a separate Upstash free plan instance;
+- a managed authenticated `rediss://` service compatible with BullMQ and reachable by both web and worker. Production uses the Upstash TLS TCP endpoint for `REDIS_URL`; the Upstash REST URL/token variables remain the separate HTTP interface used by `@upstash/ratelimit` and do not replace `REDIS_URL`;
 - a deployed authenticated Next.js application origin to create targets, authorize users, enqueue scans, and render retained results;
 - dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, controlled access to the digest-pinned sandbox runtime, and a dedicated internal network shared only with scan sandboxes;
 - an authorized Luna/Terra/fallback model route and provider credentials;
@@ -266,8 +266,8 @@ Set only the production values appropriate to each process. Web and Lite Scanner
 ```bash
 DATABASE_URL="postgresql://..."
 DATABASE_DIRECT_URL="postgresql://..." # direct migration connection when using a pooler
-REDIS_URL="rediss://..."  # BullMQ job queue (Azure VM-hosted Redis in production)
-UPSTASH_REDIS_REST_URL="https://..."  # Distributed rate limiting (separate Upstash instance)
+REDIS_URL="rediss://..."  # BullMQ job queue (Upstash TLS TCP endpoint in production)
+UPSTASH_REDIS_REST_URL="https://..."  # Distributed rate limiting REST endpoint
 UPSTASH_REDIS_REST_TOKEN="..."  # Required when UPSTASH_REDIS_REST_URL is set
 BETTER_AUTH_SECRET="..."
 BETTER_AUTH_URL="https://app.example.com"
@@ -300,7 +300,7 @@ AZURE_AD_TENANT_ID="common"
 
 ### Worker-only configuration
 
-The production worker also requires the restricted runtime database URL and the separate privileged ownership-check URL. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. Do not set `DATABASE_SYSTEM_URL` on web or Lite Scanner processes.
+The production worker also requires the restricted runtime database URL and the separate privileged ownership-check URL. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. It also requires the authenticated egress-proxy URL and secret so a worker cannot accept production URL jobs without the safe fetch boundary. Do not set `DATABASE_SYSTEM_URL` on web or Lite Scanner processes.
 
 ```bash
 DATABASE_URL="postgresql://..." # worker-database-url; RLS-restricted runtime role

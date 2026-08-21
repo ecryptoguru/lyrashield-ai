@@ -7,7 +7,7 @@ The worker container joins two Docker networks:
 - `bridge` supplies deny-by-default outbound connectivity enforced in `DOCKER-USER`;
 - `lyrashield-sandbox` is an internal Docker network used only for worker-to-sandbox control traffic.
 
-Sandbox containers join only the internal network and therefore have no default external route. The egress policy permits DNS-only access to Azure's virtual resolver and resolves and permits only Postgres, Redis, Azure AI, R2, the authenticated URL-scan egress proxy, GitHub, OSV, CISA KEV, FIRST EPSS, and `api.parallel.ai` (Parallel Search) endpoints. The Redis endpoint in the egress allowlist is the Azure VM-hosted Redis used by BullMQ via `REDIS_URL`; the Upstash Redis REST endpoint (`UPSTASH_REDIS_REST_URL`) is used only for distributed rate limiting and is a separate service. Worker startup stores the complete approved IPv4 answer set and injects it into the container's hosts file, closing the resolver-to-connect race for CDN and anycast endpoints. Metadata, private, loopback, benchmark, and multicast ranges are rejected before the final deny. A timer refreshes firewall answers every five minutes while retaining the running container's pinned set; a failed refresh leaves the last complete policy in place. Restart the worker to promote a refreshed pin set.
+Sandbox containers join only the internal network and therefore have no default external route. The egress policy permits DNS-only access to Azure's virtual resolver and resolves and permits only Postgres, Redis, Azure AI, R2, the authenticated URL-scan egress proxy, GitHub, OSV, CISA KEV, FIRST EPSS, and `api.parallel.ai` (Parallel Search) endpoints. BullMQ uses the managed Upstash TLS TCP endpoint via `REDIS_URL`; `UPSTASH_REDIS_REST_URL` remains the HTTPS interface for distributed rate limiting and is never a BullMQ connection string. Worker startup stores the complete approved IPv4 answer set and injects it into the container's hosts file, closing the resolver-to-connect race for CDN and anycast endpoints. Metadata, private, loopback, benchmark, and multicast ranges are rejected before the final deny. Every five minutes the timer resolves a complete fresh pin set, applies its firewall rules atomically, and restarts the worker only when the set changed so its pinned hosts remain synchronized. A failed refresh leaves the prior policy and running worker in place.
 
 ## Worker image contract
 
@@ -43,7 +43,7 @@ systemctl enable --now lyrashield-worker-egress-refresh.timer
 systemctl enable --now lyrashield-worker.service
 ```
 
-Do not place secrets in the runtime configuration. `refresh-secrets.sh` owns the exact Key Vault-to-environment mapping and fails closed when a required secret is absent or empty. The Key Vault must contain both `worker-database-url` (the RLS-restricted runtime role) and `worker-database-system-url` (the privileged ownership-check role). `run-worker.sh` initializes the persistent runs volume through a networkless one-shot container, then starts the application as the image's non-root user.
+Do not place secrets in the runtime configuration. `refresh-secrets.sh` owns the exact Key Vault-to-environment mapping and fails closed when a required secret is absent or empty. The Key Vault must contain both `worker-database-url` (the RLS-restricted runtime role) and `worker-database-system-url` (the privileged ownership-check role), the BullMQ TLS endpoint as `worker-redis-url`, and both authenticated egress-proxy secrets. `run-worker.sh` initializes the persistent runs volume through a networkless one-shot container, then starts the application as the image's non-root user.
 
 Keep `LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED=1`. The defaults run every 15 minutes and consider only resources at least 24 hours old. The reaper selects containers by the `strix-run-id` label and directories under the fixed checkout/run roots, skips running containers and scans in `QUEUED`, `PREFLIGHT`, `RUNNING`, or `VERIFYING`, and fails safe when scan ownership cannot be read. `REQUIRES_APPROVAL` occurs before worker execution and owns no checkout, run directory, or sandbox container. Do not replace the reaper with `docker system prune` or broad filesystem deletion.
 
@@ -62,6 +62,8 @@ Before enabling scan admission:
 9. Run the stale-resource reaper acceptance case: an old stopped owned fixture is removed, an active/running fixture is retained, and the result is visible in worker logs.
 
 Inspect `/run/lyrashield-egress-hosts` only as root when diagnosing endpoint drift. Every line must contain an approved hostname, one public IPv4 address, and its TCP port. Never hand-edit the file or add an unreviewed destination.
+
+Run `sh ops/worker/refresh-egress.test.sh` on Linux to verify DNS rotation, atomic pin replacement, and change-only worker restarts.
 
 ## URL-scan egress proxy
 

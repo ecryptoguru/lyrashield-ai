@@ -26,17 +26,26 @@ describe("runtime environment validation", () => {
 
   it("rejects an http egress proxy URL in production (bearer-token cleartext transport)", async () => {
     vi.stubEnv("LYRASHIELD_EGRESS_PROXY_URL", "http://proxy.internal:8080")
+    vi.stubEnv("LYRASHIELD_EGRESS_PROXY_SECRET", "test-proxy-secret")
     await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
   })
 
   it("accepts an https egress proxy URL in production", async () => {
     vi.stubEnv("LYRASHIELD_EGRESS_PROXY_URL", "https://proxy.internal:8443")
+    vi.stubEnv("LYRASHIELD_EGRESS_PROXY_SECRET", "test-proxy-secret")
     await expect(import("./env")).resolves.toBeDefined()
+  })
+
+  it("rejects an incomplete egress proxy credential pair", async () => {
+    vi.stubEnv("LYRASHIELD_EGRESS_PROXY_URL", "https://proxy.internal:8443")
+    vi.stubEnv("LYRASHIELD_EGRESS_PROXY_SECRET", "")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
   })
 
   it("accepts an http egress proxy URL outside production", async () => {
     vi.stubEnv("NODE_ENV", "development")
     vi.stubEnv("LYRASHIELD_EGRESS_PROXY_URL", "http://localhost:8080")
+    vi.stubEnv("LYRASHIELD_EGRESS_PROXY_SECRET", "test-proxy-secret")
     await expect(import("./env")).resolves.toBeDefined()
   })
 })
