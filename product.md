@@ -103,7 +103,7 @@ Two modes: **Cloud subscription** (we pay LLM costs) and **Local BYOK desktop** 
 ### Not implemented
 
 - Provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, constrained intrusive sandbox exploit replay, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities.
-- Production full scans additionally require private evidence storage, BullMQ-compatible TLS Redis, dedicated sandbox-capable worker compute, the authenticated application origin, monitoring/recovery, and transport-level egress enforcement.
+- Production Standard scans now have a promoted sandbox-capable worker, managed BullMQ-compatible TLS Redis, an authenticated application origin, backup/restore proof, and transport-level egress enforcement. Broad full-scan availability still requires private evidence-storage proof, monitoring/capacity evidence, and approved proof for each additional review profile.
 
 See `PRD.md` for the authoritative roadmap.
 
