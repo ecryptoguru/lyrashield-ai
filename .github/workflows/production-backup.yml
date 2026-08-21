@@ -78,7 +78,7 @@ jobs:
             --env PG_URL="$pg_dump_url" \
             --volume "$RUNNER_TEMP:/backup" \
             postgres:17-alpine \
-            sh -ceu 'pg_dump --format=custom --schema=public --no-owner --no-acl --file="/backup/'"$backup_name"'" "$PG_URL"'
+            sh -ceu 'pg_dump --format=custom --schema=public --schema=app --no-owner --no-acl --file="/backup/'"$backup_name"'" "$PG_URL"'
 
           dump_sha256="$(sha256sum "$dump_path" | awk '{print $1}')"
           printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | \
@@ -87,7 +87,7 @@ jobs:
 
           aws s3 cp "$encrypted_path" "s3://$R2_BACKUP_BUCKET/$object_key" \
             --endpoint-url "$R2_S3_ENDPOINT" \
-            --metadata "sha256=$dump_sha256,backup-format=postgres-custom,schema=public" \
+            --metadata "sha256=$dump_sha256,backup-format=postgres-custom,schemas=public-app" \
             --no-progress
 
           remote_sha256="$(aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$object_key" \
@@ -214,8 +214,116 @@ jobs:
             sleep 2
           done
           docker cp "$dump_path" lyrashield-restore-postgres:/tmp/backup.dump
+
+          # Archives created before app was included contain public RLS policies
+          # and a trigger that reference these functions. Bootstrap them only for
+          # those retained legacy archives so pg_restore can recreate public.
+          legacy_public_only=0
+          if ! pg_restore --list "$dump_path" | grep -Eq ' SCHEMA - app( |$)'; then
+            legacy_public_only=1
+            docker exec -i lyrashield-restore-postgres psql -v ON_ERROR_STOP=1 \
+              -U restore -d lyrashield_restore <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS app;
+          CREATE OR REPLACE FUNCTION app.current_workspace_id() RETURNS TEXT
+          LANGUAGE sql STABLE
+          SET search_path = pg_catalog, app
+          AS $$ SELECT NULLIF(current_setting('app.current_workspace_id', true), '') $$;
+
+          CREATE OR REPLACE FUNCTION app.validate_ai_security_score_snapshot_scope()
+          RETURNS trigger
+          LANGUAGE plpgsql
+          SET search_path = pg_catalog, public
+          AS $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM "Scan"
+              WHERE "id" = NEW."scanId"
+                AND "workspaceId" = NEW."workspaceId"
+                AND "targetId" = NEW."targetId"
+                AND "deletedAt" IS NULL
+            ) THEN
+              RAISE EXCEPTION 'AI security score snapshot scan/target/workspace mismatch'
+                USING ERRCODE = '23514';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM "Target"
+              WHERE "id" = NEW."targetId"
+                AND "workspaceId" = NEW."workspaceId"
+                AND "deletedAt" IS NULL
+            ) THEN
+              RAISE EXCEPTION 'AI security score snapshot target/workspace mismatch'
+                USING ERRCODE = '23514';
+            END IF;
+
+            RETURN NEW;
+          END;
+          $$;
+          SQL
+          fi
           docker exec lyrashield-restore-postgres pg_restore \
             -U restore -d lyrashield_restore --clean --if-exists --no-owner --no-acl /tmp/backup.dump
+
+          if [ "$legacy_public_only" -eq 1 ]; then
+            docker exec -i lyrashield-restore-postgres psql -v ON_ERROR_STOP=1 \
+              -U restore -d lyrashield_restore <<'SQL'
+          CREATE OR REPLACE FUNCTION app.current_workspace_id() RETURNS TEXT
+          LANGUAGE sql STABLE
+          SET search_path = pg_catalog, app
+          AS $$ SELECT NULLIF(current_setting('app.current_workspace_id', true), '') $$;
+
+          CREATE OR REPLACE FUNCTION app.validate_ai_security_score_snapshot_scope()
+          RETURNS trigger
+          LANGUAGE plpgsql
+          SET search_path = pg_catalog, public
+          AS $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM "Scan"
+              WHERE "id" = NEW."scanId"
+                AND "workspaceId" = NEW."workspaceId"
+                AND "targetId" = NEW."targetId"
+                AND "deletedAt" IS NULL
+            ) THEN
+              RAISE EXCEPTION 'AI security score snapshot scan/target/workspace mismatch'
+                USING ERRCODE = '23514';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM "Target"
+              WHERE "id" = NEW."targetId"
+                AND "workspaceId" = NEW."workspaceId"
+                AND "deletedAt" IS NULL
+            ) THEN
+              RAISE EXCEPTION 'AI security score snapshot target/workspace mismatch'
+                USING ERRCODE = '23514';
+            END IF;
+
+            RETURN NEW;
+          END;
+          $$;
+
+          CREATE OR REPLACE FUNCTION app.verify_api_key(p_hash text)
+          RETURNS TABLE (
+            id text, "workspaceId" text, scopes text[], "createdById" text,
+            prefix text, "hashedKey" text, "revokedAt" timestamp(3),
+            "expiresAt" timestamp(3), "deletedAt" timestamp(3), "lastUsedAt" timestamp(3)
+          )
+          LANGUAGE sql STABLE SECURITY DEFINER
+          SET search_path = pg_catalog, app, public
+          AS $$
+            SELECT id, "workspaceId", scopes, "createdById", prefix, "hashedKey", "revokedAt",
+              "expiresAt", "deletedAt", "lastUsedAt"
+            FROM public."ApiKey" WHERE "hashedKey" = p_hash LIMIT 1
+          $$;
+
+          CREATE OR REPLACE FUNCTION app.touch_api_key_last_used(p_id text)
+          RETURNS void
+          LANGUAGE sql SECURITY DEFINER
+          SET search_path = pg_catalog, app, public
+          AS $$ UPDATE public."ApiKey" SET "lastUsedAt" = now() WHERE id = p_id $$;
+          SQL
+          fi
 
       - name: Verify schema and audit chains
         shell: bash
