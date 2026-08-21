@@ -17,9 +17,9 @@ LyraShield AI is live in **open beta with open registration** — anyone can cre
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
 - Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com)
 - User guide: [userguide.md](userguide.md)
-- LyraShield Local/Desktop: the BYOK desktop app is available as a one-time 1-year license with perpetual fallback. It runs entirely on the customer's own AI (ChatGPT subscription or Azure OpenAI) — no LyraShield cloud account or API key required.
+- LyraShield Local/Desktop: the BYOK desktop implementation supports a one-time 1-year license with perpetual fallback and customer-supplied ChatGPT/OpenAI or Azure OpenAI credentials. Public production distribution remains a separate signing and release gate.
 
-The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease, and the current release gate requires a current-tree Safe retest plus a successful, reconciled Deep run.
+The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease. The current Standard/Luna acceptance is complete; broader exposure still requires the evidence-storage, monitoring/capacity, failure-recovery, and separate authorized Deep/Terra gates in `PRD.md`.
 
 ## Use it from your coding agent
 
@@ -85,9 +85,10 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `packages/pricing` — plan definitions (TRIAL/STARTER/PRO/TEAM/AGENCY), minute packs, and local SKUs.
 - `packages/licenses` — ed25519 signed license sign/verify for the Local/Desktop app.
 - `packages/affiliate` — commission engine, attribution, fraud controls, and payout ledger (RazorpayX/Payoneer).
-- `packages/eval-ai-safety` — AI safety eval harness (OWASP + MLCommons AILuminate).
 - `packages/evidence-storage` — envelope encryption (AES-256-GCM) for scan artifacts.
 - `packages/*` (remaining) — auth, configuration, credentials, database, integrations, logger, score, security, types, UI.
+
+The former `packages/eval-ai-safety` runner was removed as unused. Its versioned 2026-08-13 result artifact remains in `apps/marketing/src/data/ai-safety-results.json`; the current fixed live AI safety catalog lives in `packages/types/src/ai-safety-tests.ts`.
 
 The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution remains deliberately fail-closed until a server-generated patch pipeline is bound to an approval.
 
@@ -162,13 +163,15 @@ The application pins an exact engine commit in `.github/workflows/deploy-azure.y
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
 - Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before any deploy. Operator promotion of that digest on the worker VM remains a separate manual action.
 
-See [the production beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md) for the exact deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
+See [PRD release status](PRD.md#9-release-status) and the [production smoke-test plan](docs/ops/production-smoke-test-plan.md) for the current deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
 
 ## Further reading
 
 - [AGENTS.md](AGENTS.md) — current implementation state, execution queue, and non-negotiable rules for anyone (human or AI) working in this codebase.
 - [codebase.md](codebase.md) — the architecture and implementation map.
 - [PRD.md](PRD.md) — product strategy and the release-readiness backlog.
+- [Phase2.md](Phase2.md) — verbatim Phase 2 and future-roadmap archive from the original PRD.
+- [docs/README.md](docs/README.md) — documentation ownership, categories, and retention policy.
 - [product.md](product.md) — current positioning and founder decisions.
 - [monetization.md](monetization.md) — business and pricing plan (plans, minute packs, affiliate payouts).
 - [docs/ops/desktop-release-runbook.md](docs/ops/desktop-release-runbook.md) — release procedure for the Local/Desktop app.

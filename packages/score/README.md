@@ -28,4 +28,4 @@ const result = computeScore(findings, { mode: "STANDARD", isDefaultBranch: true 
 ## See also
 
 - `packages/db/src/score-service.ts`
-- `codebase.md` §33 for the scorecard and sharing architecture.
+- `codebase.md` sections 5–7 for result integrity, scorecard sharing, and API boundaries.

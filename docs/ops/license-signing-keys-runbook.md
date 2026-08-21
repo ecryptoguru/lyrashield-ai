@@ -43,24 +43,15 @@ Env vars consumed today (from `packages/config/src/env.ts` and
 > and the var is unset. The private key is likewise required — the app refuses
 > to sign rather than issuing an unsigned license.
 
-### 1b. Tauri desktop updater — **NOT YET ON MAIN**
+### 1b. Tauri desktop updater
 
-As of `main @ 0d61b1a6` there is **no** `apps/desktop` directory, no
-`tauri.conf.json`, and no `.github/workflows/release-tauri.yml`. The codebase
-has no Tauri updater signing key wiring to provision against. When the
-desktop release pipeline is built, the secrets it will need are the standard
-Tauri v2 set:
+The desktop and `.github/workflows/release-tauri.yml` are on `main`. Provision:
 
-- `TAURI_SIGNING_PRIVATE_KEY` (content of the `*.key` file from
-  `npx tauri signer generate`)
-- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-- Apple Developer ID + App Store Connect credentials + notarytool profile
-  for macOS signing/notarization
+- GitHub secret `TAURI_UPDATER_PRIVATE_KEY` with the `*.key` content from `npx tauri signer generate`;
+- GitHub secret `TAURI_UPDATER_KEY_PASSWORD`;
+- Apple Developer ID and App Store Connect credentials for macOS signing and notarization.
 
-Those are listed here so the provisioning owner knows the full eventual set,
-but **no secret named `TAURI_*` or `LYRASHIELD_UPDATER_PUBKEY` is consumed by
-any workflow or code on `main` today.** Do not create them expecting the
-current CI to use them.
+The workflow maps the repository secrets to Tauri's `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables. The matching public key is committed in `apps/desktop/src-tauri/tauri.conf.json`. Follow `docs/ops/tauri-updater-keys-runbook.md` for generation, dual backup, and rotation.
 
 ### 1c. Billing providers (Cloud)
 
@@ -257,8 +248,8 @@ that trusts the new key plus a bundled revocation list, dual-sign during a
 review. Increment `LICENSE_SIGNING_KEY_ID` (e.g. `license-key-v2`) and update
 the Key Vault secret and GitHub secret in the same change window.
 
-> **Warning — updater key loss.** When the Tauri desktop release pipeline is
-> built, its updater private key (`TAURI_SIGNING_PRIVATE_KEY`) is a
+> **Warning — updater key loss.** The Tauri desktop release pipeline's
+> updater private key (stored as GitHub secret `TAURI_UPDATER_PRIVATE_KEY`) is a
 > **single point of permanent failure**: losing it means you can no longer
 > push updates to existing installs. Back it up in at least two independent
 > secure locations (e.g. Key Vault + an offline hardware token) at generation
@@ -267,7 +258,7 @@ the Key Vault secret and GitHub secret in the same change window.
 
 ---
 
-## 6. Current gaps (do not paper over)
+## 6. Current release gates (do not paper over)
 
 1. **Key Vault client.** `license-service.ts` resolves the signing key from
    Azure Key Vault when `NODE_ENV=production` AND `LYRASHIELD_KEY_VAULT_NAME`
@@ -275,18 +266,16 @@ the Key Vault secret and GitHub secret in the same change window.
    fail-closed if the vault is unreachable); otherwise it falls back to the
    `LICENSE_SIGNING_PRIVATE_KEY` env var (dev/CI). Ensure the app's managed
    identity has `Get` on the vault secrets before relying on this in prod.
-2. **No Tauri release workflow.** No `release-tauri.yml`, no `apps/desktop`,
-   no `tauri.conf.json`. The "release build fails closed without
-   `LYRASHIELD_LICENSE_PUBKEY_HEX` / `LYRASHIELD_UPDATER_PUBKEY`" behavior
-   does not exist yet — do not create those secrets expecting CI to consume
-   them.
-3. **License issue email.** `apps/web/src/app/api/licenses/issue/route.ts`
-   has a `TODO(email)` — the license key is not yet emailed to the buyer via
-   Brevo on issue. Provisioning `BREVO_API_KEY` unblocks the surrounding
-   infra but the call site is still TODO.
-4. **Founder-pending items (untouched by design):** revocation-vs-fallback
-   policy, annual Cloud 25%-vs-30% tier kicker, and the Cashfree payout
-   question are explicitly out of scope here.
+2. **Desktop production signing.** The Tauri release workflow and committed
+   updater public key exist. Before publishing, verify the two updater
+   repository secrets, dual backup, production license public key, macOS
+   signing/notarization, Windows signing, signed updater manifest, and install.
+3. **License email delivery.** `sendLicenseIssuedEmail()` is wired through
+   Brevo. Retain a production delivery smoke proving the buyer receives the
+   raw key and signed file without logging or persisting the raw key.
+4. **Commercial operations.** Live paid-provider activation, RazorpayX/
+   Payoneer payout API access, tax-form handling, and clawback operations are
+   separate release gates.
 
 ---
 

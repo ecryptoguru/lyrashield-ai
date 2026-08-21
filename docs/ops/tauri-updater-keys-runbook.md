@@ -1,6 +1,6 @@
 # Tauri Updater Signing Keys — Provisioning Runbook
 
-> Status: **Action required before PR #366 (release pipeline) can run.** The founder must generate the updater keypair and provision the GitHub Actions secrets before the first `release-tauri.yml` run.
+> Status: **Verify before the first production desktop release.** The release workflow exists; the founder must confirm the updater keypair, backups, and GitHub Actions secrets before publishing.
 
 ## Why this matters
 
@@ -53,10 +53,10 @@ Copy `~/.tauri/lyrashield-updater.key` to a USB drive and store it in a physical
 
 In the `ecryptoguru/lyrashield-ai` repository settings → Secrets and variables → Actions:
 
-| Secret name                          | Value                                                                           |
-| ------------------------------------ | ------------------------------------------------------------------------------- |
-| `TAURI_SIGNING_PRIVATE_KEY`          | Contents of `~/.tauri/lyrashield-updater.key` (the file body, base64 if needed) |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The password you chose in step 1                                                |
+| Secret name                  | Value                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `TAURI_UPDATER_PRIVATE_KEY`  | Contents of `~/.tauri/lyrashield-updater.key` (the file body, base64 if needed) |
+| `TAURI_UPDATER_KEY_PASSWORD` | The password you chose in step 1                                                |
 
 ```bash
 # To get the file contents for pasting into GitHub:
@@ -65,7 +65,7 @@ cat ~/.tauri/lyrashield-updater.key | base64 | pbcopy  # macOS
 
 ## 4. Embed the public key in tauri.conf.json
 
-The public key string from step 1 goes into `apps/desktop/tauri.conf.json`:
+The public key string from step 1 goes into `apps/desktop/src-tauri/tauri.conf.json`:
 
 ```json
 {
@@ -80,7 +80,7 @@ The public key string from step 1 goes into `apps/desktop/tauri.conf.json`:
 }
 ```
 
-This is done in PR #364 (foundation). The public key is safe to commit — only the private key is secret.
+The public key is committed in `apps/desktop/src-tauri/tauri.conf.json`; only the private key and password are secret. `release-tauri.yml` maps the two repository secrets above to Tauri's `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables.
 
 ## 5. Apple Developer ID + App Store Connect (macOS signing/notarization)
 

@@ -1,8 +1,8 @@
 # LyraShield AI — Claims Readiness Map
 
-> **Status:** Source-of-truth for what LyraShield AI can and cannot claim today, and what it would take to make each prohibited claim legitimate. Maintained alongside `AGENTS.md` and `docs/superpowers/plans/2026-08-13-ai-assurance-governance.md`.
+> **Status:** Source of truth for what LyraShield AI can and cannot claim today, and what it would take to make each prohibited claim legitimate. Maintained alongside `AGENTS.md` and `docs/ai-assurance-framework-mapping.md`.
 >
-> **Last reviewed:** 2026-08-14
+> **Last reviewed:** 2026-08-21
 >
 > **Owner:** Founder (with engineering, security, and legal input)
 
@@ -231,10 +231,10 @@ If LyraShield ever wants to make any guarantee-shaped statement, it must be:
 - `packages/security/src/redos-guard.test.ts` — ReDoS guard tested against adversarial inputs. This is a **deterministic-input robustness test**, not an AI safety evaluation.
 - `packages/security/src/instruction-safety.test.ts` — instruction safety tests.
 - `packages/mcp/src/prompt-injection-guard.test.ts` — prompt injection guard tests.
-- `packages/eval-ai-safety` — AI safety evaluation harness testing the PromptInjectionGuard against OWASP Gen AI Red Teaming Guide (4 assessment areas, 34 test cases) and MLCommons AILuminate demo prompt set (12 hazard categories, 1,200 prompts). Deterministic, reproducible, produces Markdown and JSON reports with block/sanitize/allow rates per category.
+- `apps/marketing/src/data/ai-safety-results.json` — versioned result artifact from the 2026-08-13 PromptInjectionGuard evaluation: 42 OWASP cases across four assessment areas and an observational MLCommons AILuminate demo run of 292 prompts across three categories.
 - `packages/evidence-storage` — Envelope encryption (AES-256-GCM) for scan artifacts with self-describing binary format ("LSEV1"), fail-closed key management, S3-compatible storage (Cloudflare R2/AWS S3) with client-side encryption.
 
-The first four entries are defensive filters and deterministic-input robustness tests, not a formal AI safety evaluation on their own. `packages/eval-ai-safety` is the formal first-party evaluation harness against recognized frameworks (OWASP Gen AI Red Teaming Guide and MLCommons AILuminate); see "What can be said honestly today" below for the bounded wording that this supports.
+The first four entries are defensive filters and deterministic-input robustness tests, not a formal AI safety evaluation on their own. The recorded first-party result supports only the bounded wording below. The historical runner was removed as unused in `b96e597`, so the artifact is inspectable but cannot currently be rerun from a clean checkout.
 
 ### What LyraShield would need to do
 
@@ -270,7 +270,7 @@ The first four entries are defensive filters and deterministic-input robustness 
 ### What can be said honestly today
 
 - "Engine includes a prompt-injection guard for MCP tool calls" (true — `prompt-injection-guard.ts`).
-- "Prompt-injection guard evaluated against the OWASP Gen AI Red Teaming Guide (42 test cases, 4 assessment areas) — 85.7% matched the declared outcome and expected detection patterns" — **DONE** (see `/ai-safety` and `packages/eval-ai-safety/`).
+- "Prompt-injection guard evaluated against the OWASP Gen AI Red Teaming Guide (42 test cases, 4 assessment areas) — 85.7% matched the declared outcome and expected detection patterns" — **RECORDED** (see `/ai-safety` and `apps/marketing/src/data/ai-safety-results.json`; rerunnable harness pending).
 - "Prompt-injection guard run against the MLCommons AILuminate demo prompt set (292 prompts, 3 hazard categories) — 4.5% matched guard rules" — **DONE** as an observational scope check (see `/ai-safety`). The corpus supplies no prompt-injection oracle, so this is not a pass rate or safety score.
 - "AI safety tested against [named framework]" — now defensible for OWASP and MLCommons AILuminate, with the bounded wording above. Not defensible for NIST ARIA (requires their evaluation) or ISO 42119-8 (standard not yet published).
 - "AI safety tested" without qualification — **still not defensible**; it implies a formal evaluation by a third party. The current evaluation is first-party only.
@@ -370,7 +370,7 @@ These apply to **classifiers with continuous input spaces** (vision models). For
 
 ## Recommended sequencing
 
-1. **Done:** built the AI safety eval harness (`packages/eval-ai-safety/`) and ran it against the OWASP Gen AI Red Teaming Guide (42 test cases; 85.7% expected-outcome match) and MLCommons AILuminate demo (292 prompts; 4.5% guard-rule match, observational only). Published bounded results on `/ai-safety`.
+1. **Recorded:** published the 2026-08-13 OWASP result (42 cases; 85.7% expected-outcome match) and AILuminate demo observation (292 prompts; 4.5% guard-rule match) on `/ai-safety`. Restore or replace the removed runner before claiming clean-checkout reproducibility.
 2. **Next:** get independent review of the results (third-party red-team firm or academic lab). This upgrades from "first-party evaluated" to "independently reviewed."
 3. **Months 2–6:** start the SOC 2 Type II observation window. Build the evidence automation and policy library. Engage a CPA firm.
 4. **Months 3–6:** build the adversarial eval harness and run it. Publish results. This unlocks "evaluated against [benchmark] with [measured] attack success rate."

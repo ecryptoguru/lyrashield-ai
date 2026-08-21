@@ -12,9 +12,9 @@
 - Public scorecard pages, social card images, SVG badges, referral capture, and privacy-safe funnel events are served by the Next.js app origin, not the marketing Worker.
 - S3-compatible evidence storage is mandatory for scans that may produce PoC/code-location artifacts. Email, GitHub OAuth/App integration, and monitoring providers use separate credentials.
 
-## Known production blockers
+## Production gates and current status
 
-Accepted risks that are live right now. Each one is a deliberate decision, not an oversight, and each has a defined way out. Review this list before any traffic-growth campaign.
+This section mixes completed controls, regression boundaries, and unresolved gates. Review each status before any traffic-growth campaign; a resolved item remains here when its configuration or proof must be preserved.
 
 ### 1. Email verification is enabled in production — Brevo secrets are required on both application surfaces
 
@@ -119,23 +119,24 @@ keep threshold. The 2026-08-01 update splits worker cleanup into its own step wi
 app/scanner images as `image:tag@sha256:<digest>` so the running container is pinned to an
 immutable manifest even if the `:latest` tag moves.
 
-### 5. Production backups are running; restore proof remains required
+### 5. Production backup and restore proof completed; monitoring remains
 
-**Status:** backup automation is live. The production backup workflow completed successfully on
-2026-08-12 after the required repository credentials were provisioned. A successful backup is
-operational evidence, not an RPO/RTO claim: restore the artifact into an isolated environment and
-verify application-level integrity before making recovery claims.
+**Status:** backup automation is live. On 2026-08-21 an encrypted backup was restored into an
+isolated environment and schema, RLS, audit-chain, and application startup checks passed. This is
+one restore drill, not an RPO/RTO claim. Alerting on missed backups, recurring restore drills,
+capacity evidence, and named recovery ownership remain required.
 
 **Operating rule.** Keep the backup destination and credentials separate from ordinary evidence
 storage where practical, retain the workflow run and artifact metadata as release evidence, and
-alert on a missed scheduled run or failed upload. Do not infer a successful restore from a green
-backup workflow.
+alert on a missed scheduled run or failed upload. Keep the exact drill artifact and assertions;
+do not generalize one successful drill into guaranteed recovery time or data-loss bounds.
 
-### 6. GitHub App connect path requires app creation + 4 secrets — currently unprovisioned (blocks new signups)
+### 6. GitHub App connect path is provisioned; ownership proof remains load-bearing
 
-**Status:** intentionally degraded, but unblocked by F1's four-way onboarding. As of 2026-07-30,
-`LYRASHIELD_GITHUB_APP_ID`, `LYRASHIELD_GITHUB_APP_SLUG`, `LYRASHIELD_GITHUB_APP_PRIVATE_KEY`, and `LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET` are
-set as repo secrets and injected as `GITHUB_APP_*` env vars in the Container Apps.
+**Status:** the GitHub App and its six repository secrets are configured. The callback requires
+OAuth-during-installation ownership proof and fails closed when client credentials are absent.
+Re-run the positive install, duplicate-workspace rejection, reconnect, and webhook-delivery checks
+after any App permission, credential, callback, or deployment change.
 
 **Exposure.** `POST /api/integrations/github/install` calls `getInstallAppUrl()`, which throws
 `GITHUB_APP_SLUG not configured` when `GITHUB_APP_SLUG` is empty. The route catches it and
@@ -162,7 +163,7 @@ from a callback-supplied parameter. Those gates are load-bearing, not placeholde
 `PRODUCTION_DEPLOYMENT.md` prerequisites and `AGENTS.md`'s "GitHub installations and Fix PRs"
 rule.
 
-**Way out — one-time GitHub App creation + 4 repo secrets + deploy plumbing (already shipped).**
+**Provisioning and rotation checklist.**
 
 1. **Create the GitHub App** (owner: `ecryptoguru`, same account that owns `lyrashield-ai`):
    - `https://github.com/settings/apps/new`
@@ -177,7 +178,7 @@ rule.
    - **Privacy / visibility**: the App must be **Public** for any account other than the owner to install it — a Private App 404s `https://github.com/apps/<slug>/installations/new` for everyone else, which surfaces to users as GitHub claiming the app does not exist. "Public" governs who may _install_; it does not grant anyone access to your repos. Keep installs scoped to specific `ecryptoguru` repos (or "all repos on the account" if the boundary is governed by the per-workspace allowed-repo list instead).
 
 2. **Note the six values the deploy pipeline needs:**
-   - `GITHUB_APP_ID` — numeric app id from the App settings page (e.g. `1234567`).
+   - `GITHUB_APP_ID` — numeric App ID from the GitHub App settings page.
    - `GITHUB_APP_SLUG` — the slug from the URL `https://github.com/apps/<slug>` (e.g. `lyrashield-ai`).
    - `GITHUB_APP_PRIVATE_KEY` — PEM private key: scroll to the bottom of the App settings page, `Generate a private key`, download the `.pem`, paste the full contents including `-----BEGIN RSA PRIVATE KEY-----`/`-----END RSA PRIVATE KEY-----`. GitHub rotates this immediately when a new one is generated — the old one stops working the instant the new one exists.
    - `GITHUB_WEBHOOK_SECRET` — the webhook secret you generated in step 1.
@@ -188,8 +189,8 @@ rule.
    - `LYRASHIELD_GITHUB_APP_ID`, `LYRASHIELD_GITHUB_APP_SLUG`, `LYRASHIELD_GITHUB_APP_PRIVATE_KEY`, `LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET`, `LYRASHIELD_GITHUB_APP_CLIENT_ID`, `LYRASHIELD_GITHUB_APP_CLIENT_SECRET`.
 
 4. **Deploy wiring — already shipped in `.github/workflows/deploy-azure.yml` (PR #180+):**
-   - `Verify GitHub App credentials` — warns (not errors) if any of the 4 secrets are missing, so existing deploys keep working; onboarding's three non-GitHub paths cover signups in the meantime.
-   - `Sync GitHub App secrets to Container Apps` — when all 4 secrets are set, on every deploy it runs `az containerapp secret set` on both the app and scanner Container Apps with 4 secret names (`github-app-id`, `github-app-slug`, `github-app-private-key`, `github-webhook-secret`). Rotating a GitHub secret therefore also rotates the Container App's copy. When any one secret is missing the entire sync step is skipped (avoids half-configured deploys that would 500 on a different path).
+   - `Verify GitHub App credentials` checks the four core App secrets and separately warns when either OAuth client secret is missing; without the OAuth pair, new workspace binding fails closed.
+   - `Sync GitHub App secrets to Container Apps` syncs the four core secrets and the OAuth client pair to both Container Apps. Rotating a repository secret therefore also rotates the Container App copy; avoid partial configuration.
    - `Deploy app Container App` / `Deploy scanner Container App` — `--set-env-vars` now includes `GITHUB_APP_ID=secretref:github-app-id` etc. `secretref:` requires the Container App to already define a secret with that name — provisioned by the sync step just above on every deploy, so rotation is automatic and a fresh Container App gets its secrets for the first time.
 
 5. **Verify after the deploy — run the flow to completion, not just to the redirect.** The previous version of this checklist stopped at "the install URL opens", which is exactly why a callback that could never create a binding went unnoticed:

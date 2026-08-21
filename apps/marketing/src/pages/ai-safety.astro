@@ -291,9 +291,10 @@ const jsonLd = [
     <h2 class="text-2xl font-semibold text-text" data-reveal>Methodology</h2>
     <div class="mt-4 max-w-3xl space-y-4 text-text-muted" data-reveal>
       <p>
-        The evaluation harness lives in <code>packages/eval-ai-safety/</code>. It is deterministic:
-        it tests a regex-based guard, not an LLM. Results are reproducible and do not require GPU,
-        API credits, or network access (after the one-time AILuminate CSV download).
+        The recorded result artifact lives in <code>apps/marketing/src/data/ai-safety-results.json</code>.
+        It came from a deterministic evaluation of a regex-based guard, not an LLM. The historical
+        runner was removed from the active workspace, so the artifact is inspectable but the run is
+        not currently reproducible from a clean checkout.
       </p>
       <p>
         <strong>OWASP suite (42 test cases):</strong> synthetic inputs across four assessment areas

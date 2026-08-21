@@ -41,4 +41,4 @@ Prompt caching is enabled by default for supported GPT-5.6 routes. Engine artifa
 
 - `ops/worker/README.md`
 - `packages/integrations`
-- `codebase.md` §21 and later sections for scan orchestration details.
+- `codebase.md` sections 4–6 for scan orchestration, runtime contracts, and domain maps.

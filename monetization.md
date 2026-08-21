@@ -2,13 +2,11 @@
 
 LyraShield AI master business & monetization plan (Aug 2026): one app with Local (BYOK license) + Cloud (SaaS) modes, unified pricing, free-tools funnel, affiliate program, GTM, sequencing, unit economics, risks, and metrics — all founder-confirmed decisions synthesized for fastest path to revenue.
 
-## Executive Summary
-
-# LyraShield AI — Master Business & Monetization Plan (August 2026)
+## Executive summary
 
 **The company in one sentence:** LyraShield AI is an agent-native application-security product for AI-built software, sold as **one app with two modes** — a **Local mode** (runs on the user's machine on the user's own AI — zero COGS to us) and a **Cloud mode** (hosted SaaS platform) — sharing one engine, one account, one brand.
 
-**Current state (verified, 2026-08):** the product is Phase-1 feature-complete and in **open beta** — the Cloud dashboard is live with open registration, a production scan has run end-to-end, the engine is BYOK-capable (ChatGPT/Azure subscriptions), the CLI/MCP/GitHub-Action ship, and a content engine (161 articles + 13 /compare pages + 6 free tools + Lite Check) is live. **The one gap between us and revenue is billing.**
+**Current state (verified, 2026-08-21):** the product is in **open beta** with open registration. Cloud billing, Local/Desktop licensing, and the affiliate ledger are implemented; Polar/Razorpay test configuration and signed webhook smoke are complete. Live paid activation, production desktop signing/distribution proof, payout API provisioning, and tax-form operations remain release gates.
 
 **The monetization strategy (all founder-confirmed):**
 
@@ -17,11 +15,9 @@ LyraShield AI master business & monetization plan (Aug 2026): one app with Local
 - **Affiliate program** pays 25% recurring / 12 months to drive low-CAC acquisition.
 - **Free tools + content + GitHub Action** are the only free surfaces — the top-of-funnel that feeds both paid modes.
 
-**The plan optimizes for fastest path to sustainable revenue:** build Cloud billing and Local-mode packaging **in parallel** (they're independent), open the **affiliate program** once billing exists, and let the already-live free/content engine feed the funnel. No lifetime deals, no permanent free tier, no refunds — clean, margin-safe, honest.
+**The plan optimizes for fastest path to sustainable revenue:** activate the implemented Cloud billing and Local-mode packaging only after their production gates, then open the affiliate program when payout operations are ready. No lifetime deals or permanent free tier; Cloud retains its 14-day refund window and activated Local licenses remain non-refundable.
 
 **The single most important thing to understand:** Local mode is the **fast-cash, privacy-led, zero-COGS** product; Cloud mode is the **compounding-MRR platform**. They share an engine and an account, and Cloud sync is the bridge that upgrades a Local user into a Cloud subscriber.
-
-## Product & Current State
 
 ## Product & what's actually built
 
@@ -44,9 +40,7 @@ LyraShield AI master business & monetization plan (Aug 2026): one app with Local
 - **Free surface:** Lite Check (`/scan`) + 6 browser-local tools (incl. AI App Security scanner) + methodology + sample report.
 - **Content engine:** 161 authority articles + 13 /compare pages.
 - **Engine:** GPT-5.6 Terra/Luna routing, ChatGPT-subscription auth, Docker-sandboxed, telemetry off.
-- **The gap:** billing (plans, checkout, metering, gating) — Sprint 10.
-
-## Monetization Architecture
+- **Commercial release gates:** live paid-provider activation, production desktop signing/distribution proof, payout APIs, and tax-form operations.
 
 ## Monetization architecture — two modes, one account, separate purchases
 
@@ -88,9 +82,7 @@ agent-minutes)│   history/team/monitoring →      │               │
 - **Cloud:** convert at trial end / agent-minute or target cap. Stay for the platform (history, team, monitoring, CI gating).
 - **Local:** convert on full scan depths, machine seats, update eligibility. Renew yearly for updates.
 
-**Sequencing:** build **Cloud billing (Sprint 10)** and **Local-mode packaging** in **parallel** (independent builds sharing the engine); open the **affiliate program** once billing is live.
-
-## Pricing — Cloud Mode (SaaS)
+**Sequencing:** Cloud billing and Local-mode packaging are implemented. Activate them after production verification; open the affiliate program after collection, payout, tax, and clawback operations are proven.
 
 ## Pricing — Cloud mode (subscription)
 
@@ -116,8 +108,6 @@ agent-minutes)│   history/team/monitoring →      │               │
 
 **Trial abuse controls (the trial is the front door):** email verification on, **100 agent-min hard cap, no Deep scans, 3-target cap**, scan-frequency throttle, no auto-convert, no card required (no surprise charges).
 
-## Pricing — Local Mode (BYOK License)
-
 ## Pricing — Local mode (one-time 1-year license)
 
 **Model:** one-time payment, **1-year license, all updates included, perpetual fallback** (keep the last eligible build forever after the year; it never deactivates). Renewal for continued updates at a discount.
@@ -136,8 +126,6 @@ agent-minutes)│   history/team/monitoring →      │               │
 **Why these prices:** $199–299 anchors between generic dev tools ($59–99 one-time) and the Burp Pro security anchor ($475/yr); renewal at ~33–50% off matches the dev-tool norm (JetBrains/Nova/TablePlus/BoltAI). BYOK means margin ≈ license price minus payment/distribution fees — clean, immediate cash with no COGS risk.
 
 **Local vs Cloud positioning (never blurred):** **Local = your machine, your AI, one price. Cloud = our platform, the full loop, a subscription.**
-
-## Affiliate & Partner Program
 
 ## Affiliate & partner program
 
@@ -165,8 +153,6 @@ A **custom-built, application-gated** program on our own platform (transparency 
 
 **Influencer/creator motion:** pure affiliate for micro creators/agencies; **hybrid (small flat fee + affiliate tail)** for mid dev creators; flat-fee sponsorship + affiliate for larger dev YouTube/newsletters. Each deal individually QA + founder-approved. Local-license referrals give creators a clean one-time payout story alongside the recurring Cloud tail.
 
-## Free Tools & Content Funnel
-
 ## Free tools & content — the top of funnel (all free, zero/low COGS)
 
 Since there's **no free product tier**, the free surface is the entire acquisition engine. It must be instrumented to prove which surface drives revenue.
@@ -187,16 +173,14 @@ Since there's **no free product tier**, the free surface is the entire acquisiti
 
 **This funnel has near-zero marginal cost** (static tools, content, the user's own runner for the Action) — it's the most capital-efficient acquisition we have, and it's already built.
 
-## GTM & Launch Sequence
-
 ## GTM & launch sequence (fastest path to revenue)
 
-**Guiding principle:** the product is built and open; the only thing between us and revenue is **billing**. Everything sequences around removing that blocker and switching on the already-built funnel.
+**Guiding principle:** the product and commercial code paths are built; paid launch remains an operational activation decision. Everything sequences around proving provider events, signing/distribution, payouts, tax handling, and support ownership before switching on the funnel.
 
-**Phase 0 — monetization plumbing (in parallel, independent builds):**
+**Phase 0 — monetization plumbing (implemented; production activation pending):**
 
-- **Track A:** Sprint-10 **Cloud billing** (Polar + Razorpay, plans, metering, gating, billing page, trial logic, email-verification flip). _[LyraShield Developer Agent]_
-- **Track B:** **Local-mode packaging** (BYOK ChatGPT/Azure config, local UX CLI/TUI + GUI, license/activation/update server, optional cloud sync). _[LyraShield Developer Agent]_
+- **Track A:** Cloud billing (Polar + Razorpay, plans, metering, gating, billing page, trial logic, email verification) is implemented and test-configured; live provider activation and event-backed entitlement/metering proof remain.
+- **Track B:** Local-mode packaging (BYOK ChatGPT/Azure configuration, desktop GUI, license/activation/update server, optional cloud sync) is implemented; production signing, distribution, and activation proof remain.
 - **Both harden the shared engine.** Neither blocks the other.
 
 **Phase 1 — open paid Cloud:**
@@ -284,8 +268,6 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 
 **Verdict:** the raised allowances trade a few margin points (95%→~90%) for meaningfully better conversion fuel, and the lowered overage/pack rates remove the "steep markup" objection. Margins remain excellent across every tier and mode.
 
-## Risks & Mitigations
-
 ## Risks & mitigations
 
 | Risk                                                    | Impact                             | Mitigation                                                                                                                                                           |
@@ -299,8 +281,6 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 | **Affiliate fraud**                                     | Direct payout loss                 | Pay-on-invoice + activation gate, self-referral rejection, holds + reserve, clawback, brand-bid ban, manual approval                                                 |
 | **Cannibalization (Local vs Cloud)**                    | Local steals Cloud subs            | Cloud sync is the explicit bridge; keep the full loop (CI gating, continuous monitoring, team) Cloud-only; position as modes, not rivals                             |
 | **Engine quality claims**                               | Trust/compliance                   | No benchmark/accuracy/coverage claims until measured + founder-approved; honest evidence-state language everywhere                                                   |
-
-## Metrics & Targets
 
 ## Metrics & targets (instrument these)
 
@@ -323,8 +303,6 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 **North-star for fastest success:** **trial→paid conversion** (Cloud) and **license sales + renewal** (Local) — these two prove the two engines work.
 
 **Targets to set with founder:** first-90-day numbers for trial→paid %, Cloud MRR, Local licenses sold, and affiliate-driven MRR once billing + Local are live.
-
-## Decision Register
 
 ## Decision register — everything founder-confirmed (Aug 2026)
 
