@@ -104,7 +104,32 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --spider -q http://127.0.0.1:3000/api/health || exit 1
 CMD ["node", "server.js"]
 
-# ─── Stage 4: Worker engine environment ──────────────────────────────────────
+# ─── Stage 4: Dedicated egress-proxy runtime ─────────────────────────────────
+FROM workspace-builder AS egress-proxy-deps
+
+RUN pnpm --filter @lyrashield/egress-proxy build && \
+    pnpm --filter @lyrashield/egress-proxy deploy --prod --legacy /egress-proxy-runtime
+
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS egress-proxy
+
+RUN addgroup --system lyrashield && \
+    adduser --system --ingroup lyrashield --home /app lyrashield
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --chown=lyrashield:lyrashield --from=egress-proxy-deps /egress-proxy-runtime ./
+COPY --chown=lyrashield:lyrashield --from=egress-proxy-deps /app/packages/egress-proxy/dist ./dist
+
+EXPOSE 4000
+
+USER lyrashield
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --spider -q http://127.0.0.1:4000/health || exit 1
+CMD ["node", "dist/index.js"]
+
+# ─── Stage 5: Worker engine environment ──────────────────────────────────────
 # The `engine` named build context is supplied only by the worker service in
 # docker-compose.yml, so web/migration builds remain independent of the sibling
 # engine repository.
@@ -125,7 +150,7 @@ RUN python3 -m venv /opt/uv-bootstrap && \
     /opt/lyrashield-venv/bin/lyrashield --version && \
     rm -rf /opt/uv-bootstrap
 
-# ─── Stage 5: Dedicated worker runtime ───────────────────────────────────────
+# ─── Stage 6: Dedicated worker runtime ───────────────────────────────────────
 # Do not inherit `builder`: it contains the web production build and causes the
 # worker image to be needlessly large. The worker needs only workspace runtime
 # packages, its TypeScript entry point, the generated Prisma client, and the
