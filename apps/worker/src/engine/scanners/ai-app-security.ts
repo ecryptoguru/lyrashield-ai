@@ -1,6 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex */
 import { lstat, readFile, readdir } from "fs/promises"
-import { join, relative } from "path"
+import { join, relative, sep } from "path"
 import { logger } from "@lyrashield/logger"
 import {
   AI_SECURITY_CONTROLS,
@@ -10,6 +10,7 @@ import {
   scanAiSecurityFiles,
   summarizeAiSecurityCoverage,
   type AIScanFile,
+  type AIScanLimit,
   type AIScanResult,
   type AISecuritySignalState,
 } from "@lyrashield/security/ai-security"
@@ -31,6 +32,7 @@ export interface AiAppSecurityScanConfig {
   signal?: AbortSignal
   dependencyInventory?: ResolvedDependencyInventory
   advisoryBatch?: AdvisoryBatchResult
+  mode?: string
 }
 
 export interface AiAppSecurityScanResult {
@@ -38,6 +40,25 @@ export interface AiAppSecurityScanResult {
   aiScanResult: AIScanResult
   ai03AdvisoryFresh: boolean
   ai03Coverage: Ai03CoverageReceipt
+  discovery: AiAppSecurityDiscoveryReceipt
+}
+
+export interface AiAppSecurityDiscoveryReceipt {
+  version: "ai-app-security-discovery/1"
+  mode: "QUICK" | "STANDARD" | "DEEP"
+  maxFiles: number
+  eligibleFiles: number
+  scannedFiles: number
+  skippedFiles: number
+  scannedBytes: number
+  representativeSkippedPaths: string[]
+  skippedByReason: {
+    fileLimit: number
+    totalByteLimit: number
+    oversized: number
+    unreadable: number
+  }
+  limitsReached: AIScanLimit[]
 }
 
 export interface Ai03CoverageReceipt {
@@ -75,14 +96,92 @@ const IGNORED_DIRECTORIES = new Set([
   "coverage",
   "vendor",
   ".astro",
+  ".cache",
+  ".nyc_output",
+  ".playwright-mcp",
+  ".turbo",
+  ".vercel",
+  "playwright-report",
+  "test-results",
 ])
 
-const MAX_FILES = 200
+const MAX_FILES_BY_MODE = {
+  QUICK: 200,
+  STANDARD: 500,
+  DEEP: 1_000,
+} as const
 const MAX_FILE_BYTES = 1024 * 1024
 const MAX_TOTAL_BYTES = 10 * 1024 * 1024
 const MAX_WALL_TIME_MS = 60_000
 const MAX_WALK_ENTRIES = 50_000
 const MAX_WALK_DEPTH = 40
+const MAX_REPRESENTATIVE_SKIPPED_PATHS = 20
+
+const HIGH_PRIORITY_FILES = new Set([
+  "bun.lock",
+  "composer.json",
+  "deno.json",
+  "deno.jsonc",
+  "next.config.js",
+  "next.config.ts",
+  "package-lock.json",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pyproject.toml",
+  "requirements.json",
+  "tsconfig.json",
+  "vercel.json",
+  "yarn.lock",
+])
+
+const LOW_PRIORITY_SEGMENTS = new Set([
+  "__fixtures__",
+  "__mocks__",
+  "__snapshots__",
+  "__tests__",
+  "examples",
+  "fixtures",
+  "mocks",
+  "samples",
+  "spec",
+  "specs",
+  "test",
+  "tests",
+])
+
+export function resolveAiAppSecurityDiscoveryMode(
+  mode?: string
+): AiAppSecurityDiscoveryReceipt["mode"] {
+  switch (mode?.trim().toUpperCase()) {
+    case "STANDARD":
+      return "STANDARD"
+    case "DEEP":
+    case "CUSTOM":
+      return "DEEP"
+    default:
+      return "QUICK"
+  }
+}
+
+function comparePaths(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function sourcePriority(filePath: string): number {
+  const normalized = filePath.split(sep).join("/").toLowerCase()
+  const segments = normalized.split("/")
+  const fileName = segments.at(-1) ?? normalized
+  if (HIGH_PRIORITY_FILES.has(fileName) || segments[0] === ".github" || segments[0] === ".agents") {
+    return 0
+  }
+  if (
+    segments.some((segment) => LOW_PRIORITY_SEGMENTS.has(segment)) ||
+    /(?:^|[._-])(fixture|mock|sample|spec|test)s?(?:[._-]|$)/.test(fileName)
+  ) {
+    return 2
+  }
+  return 1
+}
 
 function toLanguage(extension: string): AIScanFile["language"] {
   switch (extension) {
@@ -115,10 +214,18 @@ function throwIfAborted(signal?: AbortSignal): void {
 async function collectSourceFiles(
   repoPath: string,
   coverageIssues: ScannerCoverageIssue[],
+  mode: AiAppSecurityDiscoveryReceipt["mode"],
   signal?: AbortSignal
-): Promise<AIScanFile[]> {
+): Promise<{ files: AIScanFile[]; discovery: AiAppSecurityDiscoveryReceipt }> {
+  type Candidate = { fullPath: string; path: string; size: number }
+  const candidates: Candidate[] = []
   const selected: AIScanFile[] = []
+  const skippedPaths: string[] = []
+  const skippedByReason = { fileLimit: 0, totalByteLimit: 0, oversized: 0, unreadable: 0 }
+  const limitsReached = new Set<AIScanLimit>()
+  const maxFiles = MAX_FILES_BY_MODE[mode]
   let totalBytes = 0
+  let statUnreadable = 0
 
   async function walk(directory: string, depth: number, state: { entries: number }): Promise<void> {
     throwIfAborted(signal)
@@ -135,12 +242,26 @@ async function collectSourceFiles(
     try {
       entries = await readdir(directory, { withFileTypes: true, encoding: "utf8" })
     } catch {
+      recordCoverageIssue(coverageIssues, {
+        scanner: "ai_app_security",
+        status: "partial",
+        subject: relative(repoPath, directory) || ".",
+        reason: "AI App Security scan could not read source directory",
+      })
       return
     }
 
+    entries.sort((left, right) => comparePaths(left.name, right.name))
     for (const entry of entries) {
       throwIfAborted(signal)
-      if (++state.entries > MAX_WALK_ENTRIES) break
+      if (++state.entries > MAX_WALK_ENTRIES) {
+        recordCoverageIssue(coverageIssues, {
+          scanner: "ai_app_security",
+          status: "bounded",
+          reason: "AI App Security source discovery reached its bounded repository walk limit",
+        })
+        break
+      }
       if (entry.isSymbolicLink()) continue
       const fullPath = join(directory, entry.name)
 
@@ -154,47 +275,14 @@ async function collectSourceFiles(
       if (!entry.isFile()) continue
       const extension = fullPath.slice(fullPath.lastIndexOf("."))
       if (!SUPPORTED_EXTENSIONS.has(extension)) continue
-      if (selected.length >= MAX_FILES) {
-        recordCoverageIssue(coverageIssues, {
-          scanner: "ai_app_security",
-          status: "bounded",
-          reason: `AI App Security scan file count limit reached (${MAX_FILES})`,
-        })
-        return
-      }
-
       try {
         const stats = await lstat(fullPath)
         if (!stats.isFile()) continue
-        if (stats.size > MAX_FILE_BYTES) {
-          recordCoverageIssue(coverageIssues, {
-            scanner: "ai_app_security",
-            status: "bounded",
-            subject: relative(repoPath, fullPath),
-            reason: `AI App Security scan skipped file exceeding ${MAX_FILE_BYTES} bytes`,
-          })
-          continue
-        }
-        if (totalBytes + stats.size > MAX_TOTAL_BYTES) {
-          recordCoverageIssue(coverageIssues, {
-            scanner: "ai_app_security",
-            status: "bounded",
-            reason: `AI App Security scan total size limit reached (${MAX_TOTAL_BYTES} bytes)`,
-          })
-          return
-        }
-
-        const content = await readFile(fullPath, "utf8")
-        const file: AIScanFile = {
-          path: relative(repoPath, fullPath),
-          content,
-          size: content.length,
-          extension,
-          language: toLanguage(extension),
-        }
-        selected.push(file)
-        totalBytes += file.size
+        candidates.push({ fullPath, path: relative(repoPath, fullPath), size: stats.size })
       } catch {
+        statUnreadable++
+        skippedByReason.unreadable++
+        skippedPaths.push(relative(repoPath, fullPath))
         recordCoverageIssue(coverageIssues, {
           scanner: "ai_app_security",
           status: "partial",
@@ -206,7 +294,93 @@ async function collectSourceFiles(
   }
 
   await walk(repoPath, 0, { entries: 0 })
-  return selected
+  candidates.sort(
+    (left, right) =>
+      sourcePriority(left.path) - sourcePriority(right.path) || comparePaths(left.path, right.path)
+  )
+
+  for (const candidate of candidates) {
+    throwIfAborted(signal)
+    if (candidate.size > MAX_FILE_BYTES) {
+      skippedByReason.oversized++
+      skippedPaths.push(candidate.path)
+      limitsReached.add("max_file_bytes")
+      continue
+    }
+    if (selected.length >= maxFiles) {
+      skippedByReason.fileLimit++
+      skippedPaths.push(candidate.path)
+      limitsReached.add("max_files")
+      continue
+    }
+    if (totalBytes + candidate.size > MAX_TOTAL_BYTES) {
+      skippedByReason.totalByteLimit++
+      skippedPaths.push(candidate.path)
+      limitsReached.add("max_total_bytes")
+      continue
+    }
+
+    try {
+      const content = await readFile(candidate.fullPath, "utf8")
+      selected.push({
+        path: candidate.path,
+        content,
+        size: candidate.size,
+        extension: candidate.fullPath.slice(candidate.fullPath.lastIndexOf(".")),
+        language: toLanguage(candidate.fullPath.slice(candidate.fullPath.lastIndexOf("."))),
+      })
+      totalBytes += candidate.size
+    } catch {
+      skippedByReason.unreadable++
+      skippedPaths.push(candidate.path)
+      recordCoverageIssue(coverageIssues, {
+        scanner: "ai_app_security",
+        status: "partial",
+        subject: candidate.path,
+        reason: "AI App Security scan could not read source file",
+      })
+    }
+  }
+
+  const discovery: AiAppSecurityDiscoveryReceipt = {
+    version: "ai-app-security-discovery/1",
+    mode,
+    maxFiles,
+    eligibleFiles: candidates.length + statUnreadable,
+    scannedFiles: selected.length,
+    skippedFiles: skippedPaths.length,
+    scannedBytes: totalBytes,
+    representativeSkippedPaths: skippedPaths.slice(0, MAX_REPRESENTATIVE_SKIPPED_PATHS),
+    skippedByReason,
+    limitsReached: [...limitsReached],
+  }
+
+  if (skippedByReason.fileLimit > 0) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "ai_app_security",
+      status: "bounded",
+      reason: `AI App Security scanned ${selected.length} of ${discovery.eligibleFiles} eligible files; ${skippedByReason.fileLimit} exceeded the ${mode} file limit (${maxFiles})`,
+      metadata: { ...discovery },
+    })
+  }
+  if (skippedByReason.oversized > 0) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "ai_app_security",
+      status: "bounded",
+      reason: `AI App Security skipped ${skippedByReason.oversized} file(s) exceeding ${MAX_FILE_BYTES} bytes`,
+      metadata: { ...discovery },
+    })
+  }
+  if (skippedByReason.totalByteLimit > 0) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "ai_app_security",
+      status: "bounded",
+      reason: `AI App Security skipped ${skippedByReason.totalByteLimit} file(s) after reaching the ${MAX_TOTAL_BYTES}-byte scan limit`,
+      metadata: { ...discovery },
+    })
+  }
+
+  return { files: selected, discovery }
 }
 
 type DependencyResolution = {
@@ -516,11 +690,13 @@ export async function scanAiAppSecurity({
   signal,
   dependencyInventory,
   advisoryBatch: injectedAdvisoryBatch,
+  mode: requestedMode,
 }: AiAppSecurityScanConfig): Promise<AiAppSecurityScanResult> {
   logger.info("Starting AI App Security scan phase")
   throwIfAborted(signal)
 
-  const files = await collectSourceFiles(repoPath, coverageIssues, signal)
+  const mode = resolveAiAppSecurityDiscoveryMode(requestedMode)
+  const { files, discovery } = await collectSourceFiles(repoPath, coverageIssues, mode, signal)
   if (files.length === 0) {
     recordCoverageIssue(coverageIssues, {
       scanner: "ai_app_security",
@@ -552,7 +728,7 @@ export async function scanAiAppSecurity({
           noFindingCount: 0,
           inconclusiveCount: 0,
           controls: notAssessedControls,
-          limitsReached: ["max_files"],
+          limitsReached: discovery.limitsReached,
           unsupportedFiles: [],
           truncatedFiles: [],
         },
@@ -560,7 +736,7 @@ export async function scanAiAppSecurity({
           files: 0,
           bytes: 0,
           scannedAt: new Date().toISOString(),
-          limitsReached: ["max_files"],
+          limitsReached: discovery.limitsReached,
           detectorVersion: AI_SECURITY_DETECTOR_VERSION,
         },
       },
@@ -578,17 +754,24 @@ export async function scanAiAppSecurity({
         resolvedPackages: 0,
         unresolvedReasons: ["No supported source files found"],
       },
+      discovery,
     }
   }
 
   const result = scanAiSecurityFiles(files, {
     limits: {
-      maxFiles: MAX_FILES,
+      maxFiles: discovery.maxFiles,
       maxFileBytes: MAX_FILE_BYTES,
       maxTotalBytes: MAX_TOTAL_BYTES,
       maxWallTimeMs: MAX_WALL_TIME_MS,
     },
   })
+  result.coverage.limitsReached = [
+    ...new Set([...result.coverage.limitsReached, ...discovery.limitsReached]),
+  ]
+  result.provenance.limitsReached = [
+    ...new Set([...result.provenance.limitsReached, ...discovery.limitsReached]),
+  ]
 
   const findings: EngineVulnerability[] = []
   for (const signal of result.signals) {
@@ -738,5 +921,11 @@ export async function scanAiAppSecurity({
     advisoryFindings: findings.length - detectedCount,
   })
 
-  return { findings, aiScanResult: result, ai03AdvisoryFresh: ai03Coverage.fresh, ai03Coverage }
+  return {
+    findings,
+    aiScanResult: result,
+    ai03AdvisoryFresh: ai03Coverage.fresh,
+    ai03Coverage,
+    discovery,
+  }
 }

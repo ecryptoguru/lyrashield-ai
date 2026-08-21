@@ -141,6 +141,94 @@ describe("scanAiAppSecurity", () => {
     })
   })
 
+  it("prioritizes production source and expands the file limit by scan mode", async () => {
+    await mkdir(join(tempDir, "src"), { recursive: true })
+    await mkdir(join(tempDir, "tests", "unit"), { recursive: true })
+    await writeFile(join(tempDir, "src", "z-critical.ts"), VULNERABLE_TS)
+    await Promise.all(
+      Array.from({ length: 216 }, (_, index) =>
+        writeFile(
+          join(tempDir, "tests", "unit", `${String(index).padStart(3, "0")}.test.ts`),
+          SAFE_TS
+        )
+      )
+    )
+
+    const quickCoverage: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const quick = await scanAiAppSecurity({
+      repoPath: tempDir,
+      workspaceDir: tempDir,
+      coverageIssues: quickCoverage,
+      mode: "QUICK",
+    })
+
+    expect(quick.findings).toContainEqual(expect.objectContaining({ id: "AI-01" }))
+    expect(quick.discovery).toMatchObject({
+      mode: "QUICK",
+      maxFiles: 200,
+      eligibleFiles: 217,
+      scannedFiles: 200,
+      skippedFiles: 17,
+      skippedByReason: { fileLimit: 17 },
+    })
+    expect(quick.discovery.representativeSkippedPaths).toHaveLength(17)
+    expect(
+      quick.discovery.representativeSkippedPaths.every((filePath) =>
+        filePath.startsWith(join("tests", "unit"))
+      )
+    ).toBe(true)
+    expect(quick.aiScanResult.coverage.limitsReached).toContain("max_files")
+    expect(quickCoverage).toContainEqual(
+      expect.objectContaining({
+        scanner: "ai_app_security",
+        status: "bounded",
+        metadata: expect.objectContaining({ eligibleFiles: 217, scannedFiles: 200 }),
+      })
+    )
+
+    const standardCoverage: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const standard = await scanAiAppSecurity({
+      repoPath: tempDir,
+      workspaceDir: tempDir,
+      coverageIssues: standardCoverage,
+      mode: "STANDARD",
+    })
+
+    expect(standard.discovery).toMatchObject({
+      mode: "STANDARD",
+      maxFiles: 500,
+      eligibleFiles: 217,
+      scannedFiles: 217,
+      skippedFiles: 0,
+    })
+    expect(standard.aiScanResult.coverage.limitsReached).not.toContain("max_files")
+    expect(standardCoverage.some((issue) => issue.status === "bounded")).toBe(false)
+  })
+
+  it("excludes generated and browser-test artifact directories", async () => {
+    await mkdir(join(tempDir, "src"), { recursive: true })
+    await mkdir(join(tempDir, ".vercel", "output"), { recursive: true })
+    await mkdir(join(tempDir, ".playwright-mcp"), { recursive: true })
+    await mkdir(join(tempDir, "test-results"), { recursive: true })
+    await writeFile(join(tempDir, "src", "index.ts"), SAFE_TS)
+    await writeFile(join(tempDir, ".vercel", "output", "config.json"), "{}")
+    await writeFile(join(tempDir, ".playwright-mcp", "state.json"), "{}")
+    await writeFile(join(tempDir, "test-results", "results.json"), "{}")
+
+    const result = await scanAiAppSecurity({
+      repoPath: tempDir,
+      workspaceDir: tempDir,
+      coverageIssues: [],
+      mode: "QUICK",
+    })
+
+    expect(result.discovery).toMatchObject({
+      eligibleFiles: 1,
+      scannedFiles: 1,
+      skippedFiles: 0,
+    })
+  })
+
   it("aborts when the signal is already aborted", async () => {
     const controller = new AbortController()
     controller.abort()

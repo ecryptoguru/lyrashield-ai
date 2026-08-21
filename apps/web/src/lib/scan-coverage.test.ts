@@ -51,4 +51,39 @@ describe("getScannerCoverageWarnings", () => {
       ])
     ).toEqual([])
   })
+
+  it("keeps bounded discovery counts and safe skipped-path samples", () => {
+    expect(
+      getScannerCoverageWarnings([
+        {
+          stage: "scanner",
+          level: "warning",
+          message: SCANNER_COVERAGE_EVENT_MESSAGE,
+          metadata: {
+            scanner: "ai_app_security",
+            status: "bounded",
+            reason: "AI App Security file limit reached",
+            metadata: {
+              eligibleFiles: 217,
+              scannedFiles: 200,
+              skippedFiles: 17,
+              representativeSkippedPaths: ["tests/unit/urlSafety.test.ts", 42],
+            },
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        scanner: "ai_app_security",
+        status: "bounded",
+        reason: "AI App Security file limit reached",
+        discovery: {
+          eligibleFiles: 217,
+          scannedFiles: 200,
+          skippedFiles: 17,
+          representativeSkippedPaths: ["tests/unit/urlSafety.test.ts"],
+        },
+      },
+    ])
+  })
 })

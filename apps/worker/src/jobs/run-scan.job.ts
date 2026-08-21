@@ -1415,6 +1415,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
         engineFindingCount: orchestratorResult.engineFindings.length,
         coverageIssues: orchestratorResult.coverageIssues,
+        aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
         matchedControlRanks: coverage.matchedControlRanks,
         urlExecution: orchestratorResult.urlExecution,
         engineExecution,

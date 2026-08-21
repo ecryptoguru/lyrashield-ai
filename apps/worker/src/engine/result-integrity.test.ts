@@ -50,7 +50,7 @@ describe("result integrity", () => {
     expect(receipts.find((receipt) => receipt.scanner === "secrets")).toMatchObject({
       status: "COMPLETED",
     })
-    expect(receipts).toHaveLength(56)
+    expect(receipts).toHaveLength(57)
     expect(receipts.find((receipt) => receipt.controlId === "vibe-34")).toMatchObject({
       status: "BLOCKED",
       metadata: expect.objectContaining({ outcome: "EVIDENCE_REQUIRED" }),
@@ -197,6 +197,53 @@ describe("result integrity", () => {
     })
   })
 
+  it("persists AI App Security discovery counts and blocks clean claims when bounded", () => {
+    const discovery = {
+      version: "ai-app-security-discovery/1" as const,
+      mode: "QUICK" as const,
+      maxFiles: 200,
+      eligibleFiles: 206,
+      scannedFiles: 200,
+      skippedFiles: 6,
+      scannedBytes: 1024,
+      representativeSkippedPaths: ["tests/unit/200.test.ts"],
+      skippedByReason: { fileLimit: 6, totalByteLimit: 0, oversized: 0, unreadable: 0 },
+      limitsReached: ["max_files" as const],
+    }
+    const receipts = buildCoverageReceipts({
+      scanId: "scan-1",
+      target: { id: "target-1", type: "REPO", repoFullName: "acme/app" },
+      sourceCheckoutAvailable: true,
+      engineFindingCount: 0,
+      aiAppSecurityDiscovery: discovery,
+      coverageIssues: [
+        {
+          scanner: "ai_app_security",
+          status: "bounded",
+          reason: "AI App Security file limit reached",
+          metadata: { ...discovery },
+        },
+      ],
+    })
+
+    expect(receipts.find((receipt) => receipt.controlId === "ai_app_security")).toMatchObject({
+      status: "BLOCKED",
+      metadata: {
+        discovery: expect.objectContaining({
+          eligibleFiles: 206,
+          scannedFiles: 200,
+          skippedFiles: 6,
+          representativeSkippedPaths: ["tests/unit/200.test.ts"],
+        }),
+        issues: [expect.objectContaining({ metadata: discovery })],
+      },
+    })
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-33")).toMatchObject({
+      status: "BLOCKED",
+      metadata: expect.objectContaining({ outcome: "INCONCLUSIVE" }),
+    })
+  })
+
   it("stores urlExecution aggregate scope and no raw response bodies", async () => {
     vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
 
@@ -299,7 +346,7 @@ describe("result integrity", () => {
         data: expect.objectContaining({
           manifest: expect.objectContaining({
             coverage: expect.any(Array),
-            scannerContractVersion: "2026-07-18",
+            scannerContractVersion: "2026-08-21",
             engineExecution: expect.objectContaining({
               model: "azure_ai/gpt-5.6-luna",
               imageDigest: "sha256:abc",
