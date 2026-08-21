@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const mockEnv = vi.hoisted(() => ({
+  NODE_ENV: "test",
+  SCANNER_PHASE_TIMEOUT_MS: 600_000,
+  LYRASHIELD_EGRESS_PROXY_URL: "",
+  LYRASHIELD_EGRESS_PROXY_SECRET: "",
+  LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS: 10_000,
+  LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS: 30_000,
+}))
+
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
-vi.mock("@lyrashield/config", () => ({ env: { SCANNER_PHASE_TIMEOUT_MS: 600_000 } }))
+vi.mock("@lyrashield/config", () => ({ env: mockEnv }))
 
 vi.mock("@lyrashield/db", () => ({
   addScanEvent: vi.fn().mockResolvedValue(undefined),
@@ -173,6 +182,9 @@ const sourceCheckout = "/tmp/strix_repos/test/repo"
 describe("runScannerOrchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockEnv.NODE_ENV = "test"
+    mockEnv.LYRASHIELD_EGRESS_PROXY_URL = ""
+    mockEnv.LYRASHIELD_EGRESS_PROXY_SECRET = ""
   })
 
   it("runs all scanners and merges findings", async () => {
@@ -263,6 +275,47 @@ describe("runScannerOrchestrator", () => {
 
     expect(scanUrl).toHaveBeenCalled()
     expect(result.urlFindings.length).toBe(1)
+  })
+
+  it("fails closed before a production URL scan when the egress proxy is unavailable", async () => {
+    mockEnv.NODE_ENV = "production"
+
+    await expect(
+      runScannerOrchestrator({
+        scanId: "scan-no-egress-proxy",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        target: {
+          id: "target-1",
+          type: "WEB_APP",
+          url: "https://example.test",
+          name: "Web target",
+        },
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        engineFindings: [],
+        urlProfile: {
+          id: "WEB_APP_SAFE",
+          targetType: "WEB_APP",
+          mode: "SAFE",
+          label: "Surface Review",
+          description: "...",
+          maxDocuments: 1,
+          maxAssets: 6,
+          maxDepth: 0,
+          maxTotalBytes: 8 * 1024 * 1024,
+          maxResponseBytes: 3 * 1024 * 1024,
+          maxConcurrency: 3,
+          maxWallTimeMs: 60_000,
+          maxOperations: 0,
+          maxMethodProbes: 0,
+          maxOriginProbes: 0,
+          allowedMethods: ["GET"],
+          requiresApiSpec: false,
+        },
+      })
+    ).rejects.toThrow("Production URL scans require the authenticated egress proxy")
+    expect(scanUrl).not.toHaveBeenCalled()
   })
 
   it("normalizes all findings with correct severity", async () => {

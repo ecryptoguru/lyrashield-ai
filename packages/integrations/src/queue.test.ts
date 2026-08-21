@@ -73,8 +73,8 @@ describe("scan worker availability", () => {
   })
 
   it("supports multiple workers and expires stale heartbeats", async () => {
-    expect(SCAN_WORKER_HEARTBEAT_MS).toBe(60_000)
-    expect(SCAN_WORKER_TTL_MS).toBe(SCAN_WORKER_HEARTBEAT_MS * 5)
+    expect(SCAN_WORKER_HEARTBEAT_MS).toBe(120_000)
+    expect(SCAN_WORKER_TTL_MS).toBe(300_000)
 
     await registerScanWorker("worker-1", 1_000)
     await registerScanWorker("worker-2", 2_000)

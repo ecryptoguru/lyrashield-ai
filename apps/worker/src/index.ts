@@ -28,7 +28,7 @@ let billingJobsTimers: NodeJS.Timeout[] | null = null
 let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
-const RECONCILIATION_INTERVAL_MS = 60_000
+export const RECONCILIATION_INTERVAL_MS = 300_000
 
 // Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
 // so the dependency is only loaded when configured.
@@ -190,7 +190,7 @@ async function main(): Promise<void> {
     logger.error("Worker error", { error: error.message, stack: error.stack })
   })
 
-  // Reconcile once on startup and then every minute. The distributed lease
+  // Reconcile once on startup and then every five minutes. The distributed lease
   // inside reconcileScanQueue() ensures only one worker acts per interval.
   await reconcileScanQueue()
   reconciliationTimer = setInterval(() => {
@@ -259,8 +259,8 @@ async function main(): Promise<void> {
     queue: SCAN_QUEUE_NAME,
     concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
   })
-  // Minimal heartbeat: every 30 min, just enough to keep /api/ready/scans
-  // accurate. Registration is also refreshed after each job completes.
+  // Refresh every two minutes, leaving more than one missed interval before
+  // the five-minute worker registration expires. Jobs also refresh it on completion.
   heartbeatTimer = setInterval(() => {
     void registerScanWorker(workerId)
       .then(refreshWorkerReadiness)

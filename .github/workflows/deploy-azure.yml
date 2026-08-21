@@ -16,7 +16,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: 1f911b6aa0ad5ea78db80dfaa1ec7cf1e56619f0
+  ENGINE_REVISION: dd588c379ae6614e0914b8adb41d94f0c1e86c26
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -281,6 +281,23 @@ jobs:
           fi
           echo "Shared rate-limiting credentials present."
 
+      - name: Verify BullMQ Redis credential
+        env:
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: |
+          if [ -z "${BULLMQ_REDIS_URL}" ]; then
+            echo "::error::BULLMQ_REDIS_URL is not set. The app cannot enqueue production scans without the BullMQ TLS endpoint. This is separate from the Upstash HTTPS REST credentials used for rate limiting."
+            exit 1
+          fi
+          case "${BULLMQ_REDIS_URL}" in
+            rediss://*) ;;
+            *)
+              echo "::error::BULLMQ_REDIS_URL must use rediss:// TLS in production."
+              exit 1
+              ;;
+          esac
+          echo "BullMQ TLS Redis credential present."
+
       - name: Verify evidence envelope key
         env:
           LYRASHIELD_EVIDENCE_KEK: ${{ secrets.LYRASHIELD_EVIDENCE_KEK }}
@@ -348,6 +365,20 @@ jobs:
           fi
           if [ -n "$AZURE_SCANNER_CONTAINER_APP_NAME" ]; then
             sync_upstash_secrets "$AZURE_SCANNER_CONTAINER_APP_NAME"
+          fi
+
+      - name: Sync BullMQ Redis secret to app
+        env:
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: |
+          if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
+            timeout --foreground 180s az containerapp secret set \
+              --only-show-errors \
+              --name "$AZURE_APP_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets "bullmq-redis-url=${BULLMQ_REDIS_URL}"
           fi
 
       # Garbage-collect GitHub App secrets so rotation deletes what is no longer needed.
@@ -455,6 +486,7 @@ jobs:
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
+              "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
               "LYRASHIELD_EVIDENCE_KEK=secretref:lyrashield-evidence-kek" \

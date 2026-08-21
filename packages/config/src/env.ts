@@ -304,6 +304,15 @@ const envSchema = z
     }
   )
   .refine(
+    (val) =>
+      Boolean(val.LYRASHIELD_EGRESS_PROXY_URL) === Boolean(val.LYRASHIELD_EGRESS_PROXY_SECRET),
+    {
+      path: ["LYRASHIELD_EGRESS_PROXY_SECRET"],
+      message:
+        "LYRASHIELD_EGRESS_PROXY_URL and LYRASHIELD_EGRESS_PROXY_SECRET must be configured together",
+    }
+  )
+  .refine(
     // Web search is fail-closed: enabling it without an API key would fail at
     // engine runtime and produce a confusing scan error. Build-time builds may
     // not have the key, so the check is skipped during the Next.js build phase.

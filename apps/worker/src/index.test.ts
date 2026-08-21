@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest"
 import { readFile, stat } from "node:fs/promises"
-import { refreshWorkerReadiness, removeWorkerReadiness } from "./index"
+import { RECONCILIATION_INTERVAL_MS, refreshWorkerReadiness, removeWorkerReadiness } from "./index"
 
 describe("worker readiness lifecycle", () => {
   afterEach(async () => {
@@ -20,5 +20,9 @@ describe("worker readiness lifecycle", () => {
   it("removes the readiness marker without throwing when it is missing", async () => {
     await removeWorkerReadiness()
     await expect(removeWorkerReadiness()).resolves.toBeUndefined()
+  })
+
+  it("paces idle queue reconciliation for managed Redis command budgets", () => {
+    expect(RECONCILIATION_INTERVAL_MS).toBe(300_000)
   })
 })

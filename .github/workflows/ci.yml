@@ -261,6 +261,10 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm test
 
+      - name: Test worker egress pin rotation
+        if: needs.changes.outputs.docs-only != 'true'
+        run: sh ops/worker/refresh-egress.test.sh
+
       - name: Build
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm build

@@ -7,6 +7,7 @@ worker_network="${LYRASHIELD_WORKER_NETWORK:-bridge}"
 sandbox_network="${LYRASHIELD_SANDBOX_NETWORK:-lyrashield-sandbox}"
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
 refresh_pins="${LYRASHIELD_REFRESH_PINNED_HOSTS:-0}"
+restart_worker_on_pin_change="${LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE:-0}"
 
 if [ ! -r "$environment_file" ]; then
   echo "Worker environment file is unavailable: $environment_file" >&2
@@ -41,8 +42,9 @@ if [ -z "$worker_subnet" ] || [ -z "$worker_bridge" ] || [ -z "$sandbox_subnet" 
   exit 1
 fi
 
-temporary_rules=$(mktemp /run/lyrashield-egress.XXXXXX)
-temporary_pins=$(mktemp /run/lyrashield-egress-hosts.XXXXXX)
+pin_dir=$(dirname "$pin_file")
+temporary_rules=$(mktemp "${pin_dir}/lyrashield-egress-rules.XXXXXX")
+temporary_pins=$(mktemp "${pin_file}.XXXXXX")
 trap 'rm -f "$temporary_rules" "$temporary_pins"' EXIT HUP INT TERM
 
 if [ ! -s "$pin_file" ]; then
@@ -162,10 +164,17 @@ EOF
 
 iptables -N "$chain_name" 2>/dev/null || true
 iptables-restore --noflush <"$temporary_rules"
+pins_changed=0
 if [ "$refresh_pins" = "1" ]; then
-  chmod 600 "$temporary_pins"
-  mv -f "$temporary_pins" "$pin_file"
+  if ! cmp -s "$temporary_pins" "$pin_file"; then
+    chmod 600 "$temporary_pins"
+    mv -f "$temporary_pins" "$pin_file"
+    pins_changed=1
+  fi
 fi
 if ! iptables -C DOCKER-USER -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name" 2>/dev/null; then
   iptables -I DOCKER-USER 1 -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name"
+fi
+if [ "$pins_changed" = "1" ] && [ "$restart_worker_on_pin_change" = "1" ]; then
+  systemctl --no-block try-restart lyrashield-worker.service
 fi
