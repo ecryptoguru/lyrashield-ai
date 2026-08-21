@@ -1393,16 +1393,19 @@ model Invitation {
 }
 
 model WebhookEvent {
-  id          String    @id @default(cuid())
-  workspaceId String?
-  provider    String
-  eventType   String
-  externalId  String
-  payload     Json
-  processed   Boolean   @default(false)
-  processedAt DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id             String    @id @default(cuid())
+  workspaceId    String?
+  provider       String
+  eventType      String
+  externalId     String
+  // How externalId was resolved: "delivery" (provider per-delivery event id)
+  // or "derived" (deterministic digest of event facts). Legacy rows: null.
+  identitySource String?
+  payload        Json
+  processed      Boolean   @default(false)
+  processedAt    DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

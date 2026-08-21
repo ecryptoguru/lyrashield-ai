@@ -112,6 +112,8 @@ export {
 export {
   validateRazorpayWebhook,
   isHandledRazorpayEvent,
+  resolveRazorpayEventIdentity,
   type RazorpayWebhookEvent,
 } from "./providers/razorpay/webhooks"
 export { processRazorpayEvent, type RazorpayAdapterResult } from "./providers/razorpay/adapter"
+export { WebhookAuthError, WebhookPayloadError } from "./webhook-errors"

@@ -19,6 +19,7 @@
 
 import { createHmac } from "node:crypto"
 import { env } from "@lyrashield/config"
+import { WebhookAuthError, WebhookPayloadError } from "../../webhook-errors"
 
 /** Default webhook tolerance in milliseconds (5 minutes). */
 const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000
@@ -44,7 +45,7 @@ export function validatePolarWebhook(
 ): PolarWebhookEvent {
   const secret = env.POLAR_WEBHOOK_SECRET
   if (!secret) {
-    throw new Error("POLAR_WEBHOOK_SECRET is not configured")
+    throw new WebhookAuthError("not_configured", "POLAR_WEBHOOK_SECRET is not configured")
   }
 
   const eventId = getWebhookHeader(headers, "id")
@@ -52,26 +53,29 @@ export function validatePolarWebhook(
   const signature = getWebhookHeader(headers, "signature")
 
   if (!eventId || !timestamp || !signature) {
-    throw new Error("Missing required webhook headers")
+    throw new WebhookAuthError("missing_signature", "Missing required webhook headers")
   }
 
   // Check timestamp tolerance
   if (!/^\d+$/.test(timestamp)) {
-    throw new Error("Invalid webhook timestamp")
+    throw new WebhookAuthError("invalid_signature", "Invalid webhook timestamp")
   }
   const ts = Number(timestamp)
 
   const tolerance = env.POLAR_WEBHOOK_TOLERANCE_MS ?? DEFAULT_TOLERANCE_MS
   const ageMs = Date.now() - ts * 1000
   if (Math.abs(ageMs) > tolerance) {
-    throw new Error(`Webhook timestamp outside tolerance (${ageMs}ms, tolerance ${tolerance}ms)`)
+    throw new WebhookAuthError(
+      "stale_timestamp",
+      `Webhook timestamp outside tolerance (${ageMs}ms, tolerance ${tolerance}ms)`
+    )
   }
 
   // Verify signature: HMAC-SHA256 of `{id}.{timestamp}.{body}`
   const signedPayload = `${eventId}.${timestamp}.${body}`
   const signingKey = Buffer.from(secret.replace(/^whsec_/, ""), "base64")
   if (signingKey.length === 0) {
-    throw new Error("Invalid POLAR_WEBHOOK_SECRET")
+    throw new WebhookAuthError("not_configured", "Invalid POLAR_WEBHOOK_SECRET")
   }
   const expectedSig = createHmac("sha256", signingKey).update(signedPayload).digest("base64")
 
@@ -82,10 +86,15 @@ export function validatePolarWebhook(
   const isValid = signatures.some((sig) => timingSafeEqual(sig, expectedSig))
 
   if (!isValid) {
-    throw new Error("Invalid webhook signature")
+    throw new WebhookAuthError("invalid_signature", "Invalid webhook signature")
   }
 
-  const parsed = JSON.parse(body) as PolarWebhookEvent
+  let parsed: PolarWebhookEvent
+  try {
+    parsed = JSON.parse(body) as PolarWebhookEvent
+  } catch {
+    throw new WebhookPayloadError("Polar webhook body is not valid JSON")
+  }
   return parsed
 }
 
