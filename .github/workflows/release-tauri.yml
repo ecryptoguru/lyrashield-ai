@@ -58,13 +58,13 @@ jobs:
           cache: pnpm
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # v1 (stable)
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
           components: clippy,rustfmt
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/desktop/src-tauri
 
@@ -74,14 +74,21 @@ jobs:
       - name: Build frontend
         run: pnpm --filter @lyrashield/desktop-frontend build
 
+      # Fail-closed: release builds must be signed. Unsigned builds are not acceptable
+      # for updater distribution — the updater requires valid signatures to prevent
+      # downgrade/drift attacks. Missing cert fails the job.
       - name: Import Apple signing certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           if [ -z "$APPLE_CERTIFICATE" ]; then
-            echo "::warning::Apple certificate not set — build will be unsigned"
-            exit 0
+            echo "::error::Apple certificate (APPLE_CERTIFICATE_P12) is required for signed release — refusing to publish unsigned macOS artifact"
+            exit 1
+          fi
+          if [ -z "$APPLE_CERTIFICATE_PASSWORD" ]; then
+            echo "::error::APPLE_CERTIFICATE_PASSWORD is required"
+            exit 1
           fi
           CERT_FILE=$(mktemp /tmp/certificate.XXXXXX.p12)
           KEYCHAIN_FILE=$(mktemp /tmp/keychain.XXXXXX.keychain-db)
@@ -95,12 +102,10 @@ jobs:
           rm -f "$CERT_FILE"
 
       - name: Build Tauri app (universal macOS)
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Apple signing — when no certificate is set, Tauri skips codesigning
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
-          # Tauri updater signing
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         with:
@@ -112,11 +117,9 @@ jobs:
           prerelease: false
           args: "--target universal-apple-darwin"
 
-      # Notarize the macOS app so Gatekeeper accepts it on first launch. Without
-      # this, even a Developer-ID-signed build shows "cannot be opened because
-      # the developer cannot be verified". Uses App Store Connect API key auth
-      # (not the Apple-ID-password path). Skipped gracefully when the cert or
-      # the notarization creds are not provisioned (e.g. unsigned dev builds).
+      # Notarization is required for Gatekeeper acceptance. Fail-closed: a signed
+      # but un-notarized build would show "cannot be opened" on first launch.
+      # Missing Apple API credentials now fail the release rather than warning.
       - name: Notarize macOS app
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
@@ -125,26 +128,27 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: |
           if [ -z "$APPLE_CERTIFICATE" ]; then
-            echo "::notice::No Apple certificate — skipping notarization (unsigned dev build)"
-            exit 0
+            echo "::error::Apple certificate missing — cannot notarize (previous step should have failed)"
+            exit 1
           fi
           if [ -z "$APPLE_API_ISSUER" ] || [ -z "$APPLE_API_KEY_ID" ] || [ -z "$APPLE_API_KEY" ]; then
-            echo "::warning::Apple signing cert present but App Store Connect API creds (APPLE_API_ISSUER / APPLE_API_KEY_ID / APPLE_API_KEY) are not set — app is signed but NOT notarized; Gatekeeper will warn."
-            exit 0
+            echo "::error::Apple signing cert present but App Store Connect API creds (APPLE_API_ISSUER / APPLE_API_KEY_ID / APPLE_API_KEY) are not set — refusing to publish un-notarized artifact"
+            exit 1
           fi
-          # App Store Connect API key file (notarytool -p expects the .p8 content path)
           KEY_FILE=$(mktemp /tmp/AuthKey.XXXXXX.p8)
           echo "$APPLE_API_KEY" | base64 --decode > "$KEY_FILE" 2>/dev/null || printf '%s' "$APPLE_API_KEY" > "$KEY_FILE"
-          # Notarize every produced .dmg (and .app.zip if present)
           shopt -s nullglob
           ARTIFACTS=( apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app )
+          if [ ${#ARTIFACTS[@]} -eq 0 ]; then
+            echo "::error::No macOS artifacts found for notarization (expected dmg/app)"
+            exit 1
+          fi
           for ART in "${ARTIFACTS[@]}"; do
             [ -e "$ART" ] || continue
             echo "Notarizing: $ART"
             xcrun notarytool submit "$ART" \
               --key "$KEY_FILE" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" \
               --wait --timeout 30m
-            # Staple the ticket so the app verifies offline too
             case "$ART" in
               *.dmg) xcrun stapler staple "$ART" ;;
               *.app) xcrun stapler staple "$ART" ;;
@@ -188,12 +192,12 @@ jobs:
           cache: pnpm
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # v1 (stable)
         with:
           components: clippy,rustfmt
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/desktop/src-tauri
 
@@ -204,10 +208,9 @@ jobs:
         run: pnpm --filter @lyrashield/desktop-frontend build
 
       - name: Build Tauri app (Windows x64)
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Windows code signing (Azure Trusted Signing or certificate)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         with:
@@ -228,42 +231,121 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Generate or download updater manifest
+      # Dependency: Node 24 + pnpm required for manifest validator (licensed: MIT).
+      # Version consistency source: tag (github.ref_name) is canonical.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies (for validator)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify version consistency (tag <-> tauri.conf.json)
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-.*)?$ ]]; then
+            echo "::error::Tag '$TAG' must be semver with v prefix (e.g. v0.1.0)"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          TAURI_VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "$TAURI_VERSION" != "$VERSION" ]; then
+            echo "::error::Version mismatch: tag $TAG (version $VERSION) != tauri.conf.json version $TAURI_VERSION — bump tauri.conf.json to match tag"
+            exit 1
+          fi
+          echo "Version consistency ✓ tag $TAG == tauri.conf.json $TAURI_VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Generate updater manifest (fail-closed)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
+          echo "Generating manifest for $TAG (version $VERSION)"
+
+          # Fail if updater private key not configured — signing is required
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::TAURI_UPDATER_PRIVATE_KEY is not set — updater signing required"
+            exit 1
+          fi
+
           # Try to download an existing latest.json from the release (tauri-action may have uploaded one)
-          gh release download "$TAG" --pattern "latest.json" --output latest.json || true
-          if [ ! -f latest.json ] || [ ! -s latest.json ]; then
-            echo "No latest.json from tauri-action — generating from release assets"
-            # Download the macOS .tar.gz and Windows .exe to compute signatures
-            gh release download "$TAG" --pattern "*.tar.gz" --dir /tmp/assets/ || true
-            gh release download "$TAG" --pattern "*-setup.exe" --dir /tmp/assets/ --clobber || true
+          # If present, we still re-validate and re-generate to enforce version/asset consistency.
+          gh release download "$TAG" --pattern "latest.json" --output /tmp/latest-existing.json 2>/dev/null || true
+          if [ -f /tmp/latest-existing.json ] && [ -s /tmp/latest-existing.json ]; then
+            echo "Found existing latest.json from tauri-action — will validate downstream, but regenerating from assets for consistency"
+          fi
 
-            MAC_TARBALL=$(ls /tmp/assets/*.tar.gz 2>/dev/null | head -1)
-            WIN_INSTALLER=$(ls /tmp/assets/*-setup.exe 2>/dev/null | head -1)
+          mkdir -p /tmp/assets
+          echo "Downloading release assets for $TAG"
+          gh release download "$TAG" --pattern "*.tar.gz" --dir /tmp/assets/ || true
+          gh release download "$TAG" --pattern "*-setup.exe" --dir /tmp/assets/ --clobber || true
 
-            # Install tauri CLI for signing
-            npm install -g @tauri-apps/cli@2
+          MAC_TARBALL=$(ls /tmp/assets/*.tar.gz 2>/dev/null | head -1 || true)
+          WIN_INSTALLER=$(ls /tmp/assets/*-setup.exe 2>/dev/null | head -1 || true)
 
-            MAC_SIGNATURE=""
-            if [ -n "$MAC_TARBALL" ]; then
-              MAC_SIGNATURE=$(npx tauri signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$MAC_TARBALL" 2>/dev/null | grep -oP 'signature:\s*\K.*' || echo "")
-            fi
-            WIN_SIGNATURE=""
-            if [ -n "$WIN_INSTALLER" ]; then
-              WIN_SIGNATURE=$(npx tauri signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$WIN_INSTALLER" 2>/dev/null | grep -oP 'signature:\s*\K.*' || echo "")
-            fi
+          # Fail-closed: missing platform asset aborts release
+          if [ -z "$MAC_TARBALL" ] || [ ! -f "$MAC_TARBALL" ]; then
+            echo "::error::Missing macOS tarball asset (*.tar.gz) for $TAG — failing closed. Assets in /tmp/assets:"
+            ls -la /tmp/assets/ || true
+            gh release view "$TAG" --json assets --jq '.assets[].name' || true
+            exit 1
+          fi
+          if [ -z "$WIN_INSTALLER" ] || [ ! -f "$WIN_INSTALLER" ]; then
+            echo "::error::Missing Windows installer asset (*-setup.exe) for $TAG — failing closed"
+            ls -la /tmp/assets/ || true
+            gh release view "$TAG" --json assets --jq '.assets[].name' || true
+            exit 1
+          fi
 
-            # Build the manifest JSON
-            MAC_URL="https://github.com/ecryptoguru/lyrashield-ai/releases/download/${TAG}/$(basename "$MAC_TARBALL" 2>/dev/null || echo '')"
-            WIN_URL="https://github.com/ecryptoguru/lyrashield-ai/releases/download/${TAG}/$(basename "$WIN_INSTALLER" 2>/dev/null || echo '')"
+          # Fail-closed: asset filename must contain version (asset <-> tag consistency)
+          if [[ "$(basename "$MAC_TARBALL")" != *"$VERSION"* ]]; then
+            echo "::error::macOS asset '$(basename "$MAC_TARBALL")' does not contain version $VERSION"
+            exit 1
+          fi
+          if [[ "$(basename "$WIN_INSTALLER")" != *"$VERSION"* ]]; then
+            echo "::error::Windows asset '$(basename "$WIN_INSTALLER")' does not contain version $VERSION"
+            exit 1
+          fi
 
-            cat > latest.json <<EOFMANIFEST
+          # Install tauri CLI for signing (pinned major)
+          npm install -g @tauri-apps/cli@2
+
+          # Fail-closed signing — no || echo "" fallback. Empty signature aborts.
+          echo "Signing macOS artifact: $MAC_TARBALL"
+          MAC_SIGNATURE=$(npx tauri signer sign "$MAC_TARBALL" 2>&1 | grep -oP 'signature:\s*\K.*' || true)
+          if [ -z "$MAC_SIGNATURE" ]; then
+            echo "::error::Failed to sign macOS artifact or empty signature for $MAC_TARBALL"
+            echo "Signer output above should contain signature; check TAURI_SIGNING_PRIVATE_KEY validity"
+            exit 1
+          fi
+
+          echo "Signing Windows artifact: $WIN_INSTALLER"
+          WIN_SIGNATURE=$(npx tauri signer sign "$WIN_INSTALLER" 2>&1 | grep -oP 'signature:\s*\K.*' || true)
+          if [ -z "$WIN_SIGNATURE" ]; then
+            echo "::error::Failed to sign Windows artifact or empty signature for $WIN_INSTALLER"
+            exit 1
+          fi
+
+          # Fail-closed: empty URL/signature check before writing manifest
+          MAC_URL="https://github.com/ecryptoguru/lyrashield-ai/releases/download/${TAG}/$(basename "$MAC_TARBALL")"
+          WIN_URL="https://github.com/ecryptoguru/lyrashield-ai/releases/download/${TAG}/$(basename "$WIN_INSTALLER")"
+          if [ -z "$MAC_SIGNATURE" ] || [ -z "$WIN_SIGNATURE" ] || [ -z "$MAC_URL" ] || [ -z "$WIN_URL" ]; then
+            echo "::error::Empty signature or URL after signing — failing closed"
+            exit 1
+          fi
+
+          cat > latest.json <<EOFMANIFEST
           {
             "version": "${VERSION}",
             "notes": "LyraShield Local/Desktop ${TAG}",
@@ -284,25 +366,39 @@ jobs:
             }
           }
           EOFMANIFEST
-          fi
-          echo "Manifest content:"
+
+          echo "Manifest generated:"
           cat latest.json
 
-      - name: Verify no private keys in manifest
-        run: |
+          # Licensed guard: private key must never leak into manifest (MIT validator dependency)
           if grep -qi "PRIVATE\|BEGIN.*PRIVATE" latest.json; then
-            echo "::error::Private key material found in manifest!"
+            echo "::error::Private key material found in manifest! Failing closed."
             exit 1
           fi
-          echo "Manifest clean — no private key material."
+          echo "Manifest private-key guard ✓"
 
-      - name: Upload manifest as release asset
+      - name: Validate updater manifest schema
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "Validating latest.json against schema (version $VERSION)"
+          node scripts/validate-updater-manifest.mjs latest.json --expected-version "$VERSION"
+          echo "Schema validation ✓"
+
+      # Atomic single-step upload post-validation: validation must pass before this step executes.
+      # No separate fallback upload; one clobber upload after all guards.
+      - name: Upload manifest as release asset (atomic)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          # Re-validate before upload to ensure atomicity (no TOCTOU between validate and upload)
+          node scripts/validate-updater-manifest.mjs latest.json --expected-version "$VERSION"
           gh release upload "$TAG" latest.json --clobber
-          echo "Manifest published to GitHub Releases."
+          echo "Manifest published to GitHub Releases ✓ version $VERSION"
 
       # LICENSE_PUBLISHED_BUILD pins the perpetual-fallback build on the server
       # (apps/web/src/lib/licenses/license-service.ts resolvePublishedFallbackBuild).
