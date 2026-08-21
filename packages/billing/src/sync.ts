@@ -94,9 +94,9 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
       billingStatus = status
   }
 
-  // Wrap all writes in a single transaction for atomicity.
-  // The monthly pool grant and grace reset are called outside the transaction
-  // because they perform their own independent writes with idempotency keys.
+  // Wrap domain writes in a single transaction for atomicity.
+  // Audit log is created post-commit best-effort so a hash-chain failure
+  // cannot roll back the billing state transition.
   await prisma.$transaction(async (tx) => {
     // Update billing account
     await tx.billingAccount.upsert({
@@ -132,9 +132,10 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
         deepAllowed,
       },
     })
+  })
 
-    // Audit log
-    await tx.auditLog.create({
+  try {
+    await prisma.auditLog.create({
       data: {
         workspaceId,
         action: "billing.subscription_synced",
@@ -149,7 +150,13 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
         },
       },
     })
-  })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
+      workspaceId,
+      action: "billing.subscription_synced",
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 
   // Grant monthly pool on active subscription (outside the transaction —
   // grantMonthlyPool and resetGrace perform their own idempotent writes).
@@ -185,8 +192,6 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
  * Data is preserved; scans are blocked by the entitlement gate.
  */
 export async function downgradeToFree(workspaceId: string, reason: string): Promise<void> {
-  // A-M02: Wrap all writes in a single transaction for atomicity,
-  // matching the pattern used in syncSubscription.
   await prisma.$transaction(async (tx) => {
     await tx.workspace.update({
       where: { id: workspaceId },
@@ -203,8 +208,10 @@ export async function downgradeToFree(workspaceId: string, reason: string): Prom
         currentPlan: "FREE",
       },
     })
+  })
 
-    await tx.auditLog.create({
+  try {
+    await prisma.auditLog.create({
       data: {
         workspaceId,
         action: "billing.downgraded",
@@ -213,7 +220,13 @@ export async function downgradeToFree(workspaceId: string, reason: string): Prom
         metadata: { reason },
       },
     })
-  })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
+      workspaceId,
+      action: "billing.downgraded",
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 
   logger.info("Workspace downgraded to FREE", { workspaceId, reason })
 }

@@ -1313,11 +1313,13 @@ model Notification {
   status      String    @default("pending")
   sentAt      DateTime?
   metadata    Json?
+  dedupeKey   String?
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@unique([channel, dedupeKey])
   @@index([workspaceId])
   @@index([userId])
   @@index([status])

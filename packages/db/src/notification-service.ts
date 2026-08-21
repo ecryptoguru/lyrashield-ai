@@ -1,6 +1,25 @@
+import { createHash } from "node:crypto"
 import { prisma } from "./client"
+import { Prisma } from "./generated/prisma"
 import type { Notification } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
+
+export function computeNotificationDedupeKey(input: {
+  workspaceId: string
+  type: string
+  title: string
+  body: string
+  dedupeKey?: string
+}): string {
+  if (input.dedupeKey) return input.dedupeKey
+  return createHash("sha256")
+    .update(`${input.workspaceId}:${input.type}:${input.title}:${input.body}`)
+    .digest("hex")
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
 
 export async function createNotification(params: {
   workspaceId: string
@@ -10,28 +29,65 @@ export async function createNotification(params: {
   title: string
   body: string
   metadata?: Record<string, unknown>
+  dedupeKey?: string
 }): Promise<Notification> {
-  const notification = await prisma.notification.create({
-    data: {
-      workspaceId: params.workspaceId,
-      ...(params.userId ? { userId: params.userId } : {}),
-      channel: params.channel,
-      type: params.type,
-      title: params.title,
-      body: params.body,
-      status: "pending",
-      ...(params.metadata ? { metadata: params.metadata } : {}),
-    },
-  })
-
-  logger.info("Notification created", {
+  const dedupeKey = computeNotificationDedupeKey({
     workspaceId: params.workspaceId,
-    notificationId: notification.id,
     type: params.type,
-    channel: params.channel,
+    title: params.title,
+    body: params.body,
+    dedupeKey: params.dedupeKey,
   })
+  try {
+    const notification = await prisma.notification.create({
+      data: {
+        workspaceId: params.workspaceId,
+        ...(params.userId ? { userId: params.userId } : {}),
+        channel: params.channel,
+        type: params.type,
+        title: params.title,
+        body: params.body,
+        status: "pending",
+        dedupeKey,
+        ...(params.metadata ? { metadata: params.metadata } : {}),
+      },
+    })
 
-  return notification
+    logger.info("Notification created", {
+      workspaceId: params.workspaceId,
+      notificationId: notification.id,
+      type: params.type,
+      channel: params.channel,
+    })
+
+    return notification
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      const existing = await prisma.notification.findFirst({
+        where: { channel: params.channel, dedupeKey },
+      })
+      if (existing) {
+        // retry path: refresh existing row with latest payload
+        const updated = await prisma.notification.update({
+          where: { id: existing.id },
+          data: {
+            title: params.title,
+            body: params.body,
+            ...(params.metadata ? { metadata: params.metadata } : {}),
+            ...(params.userId ? { userId: params.userId } : {}),
+          },
+        })
+        logger.info("Notification deduped (existing reused)", {
+          workspaceId: params.workspaceId,
+          notificationId: existing.id,
+          type: params.type,
+          channel: params.channel,
+        })
+        return updated
+      }
+    }
+    throw error
+  }
 }
 
 export async function getNotification(
@@ -169,6 +225,7 @@ export async function createAndSendNotification(params: {
   body: string
   workspaceName?: string
   channels?: readonly string[]
+  dedupeKey?: string
   sendFn: (
     channel: string,
     payload: { type: string; title: string; body: string; workspaceName?: string }
@@ -177,13 +234,70 @@ export async function createAndSendNotification(params: {
   const channels = params.channels ?? DEFAULT_CHANNELS
 
   for (const channel of channels) {
-    const notification = await createNotification({
+    const dedupeKey = computeNotificationDedupeKey({
       workspaceId: params.workspaceId,
-      channel,
       type: params.type,
       title: params.title,
       body: params.body,
+      dedupeKey: params.dedupeKey,
     })
+
+    let notification: Notification | null = null
+    try {
+      notification = await prisma.notification.create({
+        data: {
+          workspaceId: params.workspaceId,
+          channel,
+          type: params.type,
+          title: params.title,
+          body: params.body,
+          status: "pending",
+          dedupeKey,
+        },
+      })
+      logger.info("Notification created", {
+        workspaceId: params.workspaceId,
+        notificationId: notification.id,
+        type: params.type,
+        channel,
+      })
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        const existing = await prisma.notification.findFirst({
+          where: { channel, dedupeKey },
+        })
+        if (!existing) throw error
+        // concurrent duplicate already sent -> suppress second send
+        if (existing.status === "sent") {
+          logger.info("Notification deduped (already sent, suppressing duplicate send)", {
+            workspaceId: params.workspaceId,
+            notificationId: existing.id,
+            type: params.type,
+            channel,
+          })
+          continue
+        }
+        // retry path: update existing with latest payload and reuse it
+        notification = await prisma.notification.update({
+          where: { id: existing.id },
+          data: {
+            title: params.title,
+            body: params.body,
+            status: "pending",
+          },
+        })
+        logger.info("Notification deduped (retry updating existing)", {
+          workspaceId: params.workspaceId,
+          notificationId: existing.id,
+          type: params.type,
+          channel,
+        })
+      } else {
+        throw error
+      }
+    }
+
+    if (!notification) continue
 
     const sent = await params.sendFn(channel, {
       type: params.type,

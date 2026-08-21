@@ -338,7 +338,7 @@ export async function createScorecardShare(targetId: string, workspaceId: string
   })
   const publicPayload = buildScorecardPayload(snapshot, resolvedFindings)
 
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  const result = await withWorkspaceRLS(workspaceId, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${snapshot.id}, 0))`
     const existingShare = await tx.scorecardShare.findFirst({
       where: { snapshotId: snapshot.id, revokedAt: null },
@@ -361,15 +361,6 @@ export async function createScorecardShare(targetId: string, workspaceId: string
         createdById: userId,
       },
     })
-    await tx.auditLog.create({
-      data: {
-        workspaceId,
-        actorUserId: userId,
-        action: "scorecard.share.created",
-        resourceType: "scorecardShare",
-        resourceId: share.id,
-      },
-    })
     return {
       share,
       referralCode: referralCode.code,
@@ -377,6 +368,28 @@ export async function createScorecardShare(targetId: string, workspaceId: string
       ...(await getScorecardShareStats(tx, share.id, referralCode.id)),
     }
   })
+
+  if (result.created) {
+    try {
+      await prisma.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId: userId,
+          action: "scorecard.share.created",
+          resourceType: "scorecardShare",
+          resourceId: result.share.id,
+        },
+      })
+    } catch (error) {
+      logger.error("Failed to create audit log", {
+        workspaceId,
+        action: "scorecard.share.created",
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  return result
 }
 
 async function getScorecardShareStats(
@@ -397,26 +410,37 @@ async function getScorecardShareStats(
 }
 
 export async function revokeScorecardShare(id: string, workspaceId: string, userId: string) {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  const updated = await withWorkspaceRLS(workspaceId, async (tx) => {
     const share = await tx.scorecardShare.findFirst({
       where: { id, revokedAt: null, snapshot: { workspaceId } },
     })
     if (!share) return null
-    const updated = await tx.scorecardShare.update({
+    const result = await tx.scorecardShare.update({
       where: { id },
       data: { revokedAt: new Date() },
     })
-    await tx.auditLog.create({
-      data: {
-        workspaceId,
-        actorUserId: userId,
-        action: "scorecard.share.revoked",
-        resourceType: "scorecardShare",
-        resourceId: id,
-      },
-    })
-    return updated
+    return result
   })
+  if (updated) {
+    try {
+      await prisma.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId: userId,
+          action: "scorecard.share.revoked",
+          resourceType: "scorecardShare",
+          resourceId: id,
+        },
+      })
+    } catch (error) {
+      logger.error("Failed to create audit log", {
+        workspaceId,
+        action: "scorecard.share.revoked",
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+  return updated
 }
 
 export async function getPublicScorecard(slug: string) {
