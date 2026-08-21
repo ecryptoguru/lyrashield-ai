@@ -43,7 +43,13 @@ export async function requestPayout(params: {
     return { success: false, error: "Affiliate not found" }
   }
 
-  let payout: { id: string; amount: Prisma.Decimal; currency: string; itemCount: number; capturedIds: string[] }
+  let payout: {
+    id: string
+    amount: Prisma.Decimal
+    currency: string
+    itemCount: number
+    capturedIds: string[]
+  }
   try {
     payout = await prisma.$transaction(async (tx) => {
       const eligibility = await checkPayoutEligibility(affiliateId)
@@ -118,7 +124,13 @@ export async function requestPayout(params: {
         })
       }
 
-      return { id: newPayout.id, amount: totalAmount, currency, itemCount: items.length, capturedIds }
+      return {
+        id: newPayout.id,
+        amount: totalAmount,
+        currency,
+        itemCount: items.length,
+        capturedIds,
+      }
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Payout transaction failed"
@@ -135,7 +147,12 @@ export async function requestPayout(params: {
 
   if (sendFn) {
     try {
-      const result = await sendFn(payout.id, payout.amount.toString(), payout.currency, affiliate.payoutMethod)
+      const result = await sendFn(
+        payout.id,
+        payout.amount.toString(),
+        payout.currency,
+        affiliate.payoutMethod
+      )
 
       if (result.success) {
         // One internal tx with CAS predicates, persist provider identity for convergent retry
@@ -177,7 +194,12 @@ export async function requestPayout(params: {
           providerPayoutId: result.providerPayoutId,
         })
 
-        return { success: true, payoutId: payout.id, amount: payout.amount.toString(), itemCount: payout.itemCount }
+        return {
+          success: true,
+          payoutId: payout.id,
+          amount: payout.amount.toString(),
+          itemCount: payout.itemCount,
+        }
       } else {
         // Provider failed — release ONLY captured commissions (CAS), one tx
         await prisma.$transaction(async (tx) => {
@@ -193,7 +215,10 @@ export async function requestPayout(params: {
           await tx.payoutItem.deleteMany({ where: { payoutId: payout.id } })
         })
 
-        logger.error("Payout provider failed", { payoutId: payout.id, providerError: result.error ?? "unknown" })
+        logger.error("Payout provider failed", {
+          payoutId: payout.id,
+          providerError: result.error ?? "unknown",
+        })
 
         return { success: false, payoutId: payout.id, error: "Provider payout failed" }
       }
@@ -225,5 +250,10 @@ export async function requestPayout(params: {
     amount: payout.amount.toString(),
   })
 
-  return { success: true, payoutId: payout.id, amount: payout.amount.toString(), itemCount: payout.itemCount }
+  return {
+    success: true,
+    payoutId: payout.id,
+    amount: payout.amount.toString(),
+    itemCount: payout.itemCount,
+  }
 }

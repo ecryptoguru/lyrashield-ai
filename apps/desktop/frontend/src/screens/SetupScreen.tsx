@@ -123,7 +123,10 @@ export function SetupScreen({ onComplete, onBack }: Props) {
             />
           </div>
           <div className="flex justify-between">
-            <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground">
+            <button
+              onClick={onBack}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
               Back
             </button>
             <button

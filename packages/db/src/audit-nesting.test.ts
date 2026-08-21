@@ -3,10 +3,7 @@ import { join, relative } from "node:path"
 import { describe, expect, it } from "vitest"
 
 const repoRoot = process.cwd()
-const allowlist = new Set([
-  "packages/db/src/client.ts",
-  "packages/db/src/account-deletion.ts",
-])
+const allowlist = new Set(["packages/db/src/client.ts", "packages/db/src/account-deletion.ts"])
 
 function sourceFiles(directory: string): string[] {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- test scans only repo source roots.

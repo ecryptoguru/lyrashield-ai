@@ -85,13 +85,21 @@ export async function POST(request: Request) {
     // Detection-state-only validation BEFORE any DB write
     for (const f of findings) {
       if (f.verified === true) {
-        return apiError("FORGED_VERIFICATION", "verified must be false for local evidence sync", 400)
+        return apiError(
+          "FORGED_VERIFICATION",
+          "verified must be false for local evidence sync",
+          400
+        )
       }
       // Map FIXED -> FIXED_PENDING_RETEST, reject other terminal/unknown
       const mapped = STATUS_FIX_MAPPING[f.status] ?? f.status
       if (mapped === "FIXED") {
         // Direct FIXED not allowed (should have been mapped)
-        return apiError("FORGED_TERMINAL_STATUS", "FIXED status not allowed via sync; use FIXED_PENDING_RETEST", 400)
+        return apiError(
+          "FORGED_TERMINAL_STATUS",
+          "FIXED status not allowed via sync; use FIXED_PENDING_RETEST",
+          400
+        )
       }
       if (!ALLOWED_SYNC_STATUSES.has(mapped)) {
         return apiError("INVALID_STATUS", `status '${f.status}' not allowed via sync`, 400)
@@ -118,7 +126,9 @@ export async function POST(request: Request) {
     // Need cursor existence check — must be bound to workspace via RLS
     // Fetch cursor inside withWorkspaceRLS to respect NOBYPASSRLS, but we need seq for CAS, so do a preliminary fetch via withWorkspaceRLS read
     const cursorPre = await withWorkspaceRLS(workspaceId, async (tx) =>
-      tx.syncCursor.findUnique({ where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } } })
+      tx.syncCursor.findUnique({
+        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
+      })
     )
     if (!cursorPre) {
       return apiError(
@@ -133,9 +143,15 @@ export async function POST(request: Request) {
     if (expectedSeq === undefined) {
       // For new cursors at seq 0, allow missing expectedSeq as 0
       if (currentSeq !== 0) {
-        return apiError("CURSOR_STALE", "expectedSeq is required for monotonic sync", 409, undefined, {
-          currentSeq,
-        })
+        return apiError(
+          "CURSOR_STALE",
+          "expectedSeq is required for monotonic sync",
+          409,
+          undefined,
+          {
+            currentSeq,
+          }
+        )
       }
       expectedSeq = 0
     }
@@ -188,10 +204,16 @@ export async function POST(request: Request) {
           200
         )
       }
-      return apiError("CURSOR_STALE", "Stale cursor — batch was reordered or replayed with different content", 409, undefined, {
-        currentSeq,
-        expectedSeq,
-      })
+      return apiError(
+        "CURSOR_STALE",
+        "Stale cursor — batch was reordered or replayed with different content",
+        409,
+        undefined,
+        {
+          currentSeq,
+          expectedSeq,
+        }
+      )
     }
 
     // Inside withWorkspaceRLS atomic transaction: create/find scan, upsert findings (verified forced false), persist reports, CAS seq increment
@@ -200,9 +222,14 @@ export async function POST(request: Request) {
       const fresh = await tx.syncCursor.findUnique({
         where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
       })
-      if (!fresh) throw Object.assign(new Error("SYNC_NOT_CONNECTED"), { code: "SYNC_NOT_CONNECTED" })
+      if (!fresh)
+        throw Object.assign(new Error("SYNC_NOT_CONNECTED"), { code: "SYNC_NOT_CONNECTED" })
       if (Number(fresh.seq) !== expectedSeq) {
-        throw Object.assign(new Error("CURSOR_STALE"), { code: "CURSOR_STALE", currentSeq: Number(fresh.seq), expectedSeq })
+        throw Object.assign(new Error("CURSOR_STALE"), {
+          code: "CURSOR_STALE",
+          currentSeq: Number(fresh.seq),
+          expectedSeq,
+        })
       }
 
       // Find or create synthetic LOCAL_SYNC scan
@@ -229,7 +256,8 @@ export async function POST(request: Request) {
       }
 
       let persistedFindings = 0
-      const lastFindingId = findings.length > 0 ? findings[findings.length - 1]!.id : fresh.lastSyncedFindingId
+      const lastFindingId =
+        findings.length > 0 ? findings[findings.length - 1]!.id : fresh.lastSyncedFindingId
 
       for (const finding of findings) {
         const externalId = `local:${license.id}:${finding.id}`
@@ -356,10 +384,16 @@ export async function POST(request: Request) {
     if (maybeCode === "CURSOR_STALE" || maybeCode === "CURSOR_CONCURRENT") {
       const cur = (error as { currentSeq?: number }).currentSeq
       const exp = (error as { expectedSeq?: number }).expectedSeq
-      return apiError("CURSOR_STALE", "Stale or concurrent cursor — fetch latest seq and retry", 409, undefined, {
-        currentSeq: cur,
-        expectedSeq: exp,
-      })
+      return apiError(
+        "CURSOR_STALE",
+        "Stale or concurrent cursor — fetch latest seq and retry",
+        409,
+        undefined,
+        {
+          currentSeq: cur,
+          expectedSeq: exp,
+        }
+      )
     }
     if (maybeCode === "SYNC_NOT_CONNECTED") {
       return apiError("SYNC_NOT_CONNECTED", "Sync has not been established", 409)

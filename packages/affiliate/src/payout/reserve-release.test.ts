@@ -49,7 +49,11 @@ const { FakeDecimal, models, runTransaction } = vi.hoisted(() => {
 
   const models = {
     affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
-    commission: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    commission: {
+      findMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     // workspaceMember.findFirst is used to resolve the affiliate's owning
     // workspace for the audit log (added in the FK-fix). Default to no
     // membership (returns undefined) so the audit-write is skipped in tests.
@@ -155,8 +159,10 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
     // Two payout items (one per commission)
     expect(prisma.payoutItem.create).toHaveBeenCalledTimes(2)
     // Each commission was marked reserveReleasedAt (updateMany with CAS)
-    const updateCalls = (prisma.commission.updateMany as unknown as ReturnType<typeof vi.fn>).mock.calls.length
-    const legacyUpdateCalls = (prisma.commission.update as unknown as ReturnType<typeof vi.fn>).mock.calls.length
+    const updateCalls = (prisma.commission.updateMany as unknown as ReturnType<typeof vi.fn>).mock
+      .calls.length
+    const legacyUpdateCalls = (prisma.commission.update as unknown as ReturnType<typeof vi.fn>).mock
+      .calls.length
     expect(updateCalls + legacyUpdateCalls).toBe(2)
   })
 
@@ -191,8 +197,10 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
 
     expect(result.released).toBe(1)
     expect(result.totalAmount.toString()).toBe("0.0000") // nothing to pay
-    const updCalls = (prisma.commission.updateMany as unknown as ReturnType<typeof vi.fn>).mock.calls.length
-    const legCalls = (prisma.commission.update as unknown as ReturnType<typeof vi.fn>).mock.calls.length
+    const updCalls = (prisma.commission.updateMany as unknown as ReturnType<typeof vi.fn>).mock
+      .calls.length
+    const legCalls = (prisma.commission.update as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .length
     expect(updCalls + legCalls).toBe(1)
   })
 })

@@ -424,7 +424,7 @@ export async function issueLicenseForProviderOrder(params: {
     })
 
     // Issue signed file outside creation transaction
-    const licenseFile = await issueSignedLicense(license.id, fallbackBuild)
+    await issueSignedLicense(license.id, fallbackBuild)
 
     // Delivery: mark DELIVERING, attempt email, then DELIVERED or DELIVERY_FAILED
     await systemPrisma.licenseKey.update({
@@ -570,7 +570,9 @@ export async function issueLicenseForProviderOrder(params: {
  * then marks usedAt. Generic 404 for not found / expired / already used.
  * Never logs token or key.
  */
-export async function retrieveLicenseByToken(token: string): Promise<{ licenseKey: string; licenseBlob: string; licenseId: string } | null> {
+export async function retrieveLicenseByToken(
+  token: string
+): Promise<{ licenseKey: string; licenseBlob: string; licenseId: string } | null> {
   if (!token || typeof token !== "string" || token.length < 10) return null
   const tokenHash = hashRetrievalToken(token)
   const systemPrisma = getSystemPrisma()
@@ -598,7 +600,10 @@ export async function retrieveLicenseByToken(token: string): Promise<{ licenseKe
   // Reconstruct blob from stored license; ensure signature exists
   let licenseFile: LicenseFile
   if (!license.signature || license.signature === "pending") {
-    licenseFile = await issueSignedLicense(license.id, license.perpetualFallbackBuild ?? resolvePublishedFallbackBuild())
+    licenseFile = await issueSignedLicense(
+      license.id,
+      license.perpetualFallbackBuild ?? resolvePublishedFallbackBuild()
+    )
   } else {
     // Rebuild file without re-signing, using stored signature
     licenseFile = {

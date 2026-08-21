@@ -133,10 +133,7 @@ function buildKey(
 export async function uploadEncryptedArtifact(
   input: UploadEncryptedArtifactInput
 ): Promise<UploadEncryptedArtifactResult> {
-  if (
-    input.encryptionKeyRef !== undefined &&
-    input.encryptionKeyRef !== EVIDENCE_KEY_REF
-  ) {
+  if (input.encryptionKeyRef !== undefined && input.encryptionKeyRef !== EVIDENCE_KEY_REF) {
     throw new Error("encryptionKeyRef is internal-only")
   }
   const {

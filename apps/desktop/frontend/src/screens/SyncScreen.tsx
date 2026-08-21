@@ -78,7 +78,8 @@ export function SyncScreen({ findings }: Props) {
             <h1 className="text-2xl font-semibold text-foreground">Cloud Sync</h1>
             <p className="text-sm text-muted-foreground">
               Connect your LyraShield workspace to sync findings. Sync is off by default — only
-              explicitly selected findings leave your machine. Raw license key stays in OS keychain, never in browser storage.
+              explicitly selected findings leave your machine. Raw license key stays in OS keychain,
+              never in browser storage.
             </p>
           </div>
           <div className="space-y-4">
@@ -112,7 +113,8 @@ export function SyncScreen({ findings }: Props) {
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold text-foreground">Cloud Sync</h1>
           <p className="text-sm text-muted-foreground">
-            Connected to workspace <code className="text-foreground">{connection.workspaceId}</code> seq={connection.seq}
+            Connected to workspace <code className="text-foreground">{connection.workspaceId}</code>{" "}
+            seq={connection.seq}
           </p>
         </div>
         <div className="space-y-4">
@@ -121,7 +123,9 @@ export function SyncScreen({ findings }: Props) {
               Findings to sync:{" "}
               <span className="font-medium text-foreground">{findings.length}</span>
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Max 500 per batch. Seq monotonic CAS.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Max 500 per batch. Seq monotonic CAS.
+            </p>
           </div>
 
           {results.length > 0 && (

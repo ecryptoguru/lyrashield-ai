@@ -2,9 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const loggerMocks = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
 
-const envState = vi.hoisted(
-  () => ({ NODE_ENV: "test" }) as Record<string, string | undefined>
-)
+const envState = vi.hoisted(() => ({ NODE_ENV: "test" }) as Record<string, string | undefined>)
 
 vi.mock("@lyrashield/config", () => ({
   env: envState,

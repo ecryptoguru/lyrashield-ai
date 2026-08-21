@@ -61,7 +61,9 @@ export async function GET(request: Request) {
     }
 
     const cursor = await withWorkspaceRLS(workspaceId, async (tx) =>
-      tx.syncCursor.findUnique({ where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } } })
+      tx.syncCursor.findUnique({
+        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
+      })
     )
     if (!cursor) {
       return apiError("SYNC_NOT_CONNECTED", "Sync has not been established", 409)
@@ -123,7 +125,9 @@ export async function PUT(request: Request) {
     }
 
     const cursor = await withWorkspaceRLS(workspaceId, async (tx) =>
-      tx.syncCursor.findUnique({ where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } } })
+      tx.syncCursor.findUnique({
+        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
+      })
     )
     if (!cursor) {
       return apiError("SYNC_NOT_CONNECTED", "Sync has not been established", 409)
@@ -162,10 +166,16 @@ export async function PUT(request: Request) {
         )
       }
       // Forward jump without findings is not allowed — findings CAS is the only valid advance
-      return apiError("CURSOR_FORWARD_JUMP", "Cursor can only advance via POST /api/sync/findings", 409, undefined, {
-        currentSeq,
-        requestedSeq,
-      })
+      return apiError(
+        "CURSOR_FORWARD_JUMP",
+        "Cursor can only advance via POST /api/sync/findings",
+        409,
+        undefined,
+        {
+          currentSeq,
+          requestedSeq,
+        }
+      )
     }
 
     // Legacy lastSyncedFindingId-only update: reject unless already equal (no-op)
@@ -185,7 +195,11 @@ export async function PUT(request: Request) {
           200
         )
       }
-      return apiError("CURSOR_UPDATE_REJECTED", "Cursor position can only be updated via findings sync", 409)
+      return apiError(
+        "CURSOR_UPDATE_REJECTED",
+        "Cursor position can only be updated via findings sync",
+        409
+      )
     }
 
     // No fields to update — return current

@@ -463,7 +463,7 @@ mod tests {
     fn secrets_not_in_error_strings() {
         let secret = "azure-key-abc";
         // Simulate error message that might be constructed — ensure we don't interpolate secret
-        let err = format!("BYOK missing");
+        let err = "BYOK missing".to_string();
         assert!(!err.contains(secret));
     }
 }

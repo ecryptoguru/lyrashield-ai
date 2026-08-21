@@ -1,12 +1,32 @@
 /** Shared v1 envelope fixtures — single source of truth for TS + Rust golden tests. */
-import activateEnvelope from "./activate-envelope.json" with { type: "json" }
-import verifyEnvelope from "./verify-envelope.json" with { type: "json" }
+export const activateFixture = {
+  success: true,
+  data: {
+    version: 1,
+    license: {
+      sku: "individual_launch",
+      seatCount: 1,
+      machineIds: ["machine-golden-1"],
+      updateEligibleUntil: "2036-01-01T00:00:00.000Z",
+      perpetualFallbackBuild: "1.2.0",
+      signingKeyId: "golden-test-key",
+      signature:
+        "f5rJ6rAhcL5+sCgngjFKKvpTz+IBeYuAgnwPyQArw/w9+AHRwIywUv5VYGdrx50ToUO0VVSJhFOOwU71F0UXCg==",
+      issuedAt: "2026-01-01T00:00:00.000Z",
+    },
+    blob: "eyJtYWNoaW5lSWRzIjpbIm1hY2hpbmUtZ29sZGVuLTEiXSwicGVycGV0dWFsRmFsbGJhY2tCdWlsZCI6IjEuMi4wIiwic2VhdENvdW50IjoxLCJza3UiOiJpbmRpdmlkdWFsX2xhdW5jaCIsInVwZGF0ZUVsaWdpYmxlVW50aWwiOiIyMDM2LTAxLTAxVDAwOjAwOjAwLjAwMFoifQ==.f5rJ6rAhcL5+sCgngjFKKvpTz+IBeYuAgnwPyQArw/w9+AHRwIywUv5VYGdrx50ToUO0VVSJhFOOwU71F0UXCg==",
+    licenseId: "lic_test_123",
+  },
+} as const
 
-export const activateFixture = activateEnvelope as {
-  success: true
-  data: { version: 1; license: unknown; blob: string; licenseId: string }
-}
-export const verifyFixture = verifyEnvelope as {
-  success: true
-  data: { version: 1; valid: boolean; revoked: boolean; updateEligible: boolean }
-}
+export const verifyFixture = {
+  success: true,
+  data: {
+    version: 1,
+    valid: true,
+    revoked: false,
+    updateEligible: true,
+    sku: "individual_launch",
+    updateEligibleUntil: "2036-01-01T00:00:00.000Z",
+  },
+} as const

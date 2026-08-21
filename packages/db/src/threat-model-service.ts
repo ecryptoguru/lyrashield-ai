@@ -139,7 +139,10 @@ export async function saveThreatModel(input: {
         createdById: input.createdById,
       },
     })
-    await tx.threatModel.update({ where: { id: model.id }, data: { currentVersionId: createdVal.id } })
+    await tx.threatModel.update({
+      where: { id: model.id },
+      data: { currentVersionId: createdVal.id },
+    })
     return { created: createdVal, modelId: model.id, version: versionVal }
   })
   try {

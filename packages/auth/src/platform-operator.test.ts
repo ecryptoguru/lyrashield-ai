@@ -32,9 +32,7 @@ describe("platform-operator identity (independent of tenant roles)", () => {
     expect(await isPlatformOperator("user-1")).toBe(true)
 
     for (const role of ["PLATFORM_operator", " platform_operator", "ADMIN", "", null]) {
-      userFindUnique.mockResolvedValue(
-        role === null ? null : { platformRole: role }
-      )
+      userFindUnique.mockResolvedValue(role === null ? null : { platformRole: role })
       expect(await isPlatformOperator("user-1")).toBe(false)
     }
   })

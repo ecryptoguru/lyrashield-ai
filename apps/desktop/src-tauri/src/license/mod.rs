@@ -464,7 +464,7 @@ mod tests {
     // === Guard tests per spec: wrong machine, revoked, expired, unknown id, unreachable, 5xx, malformed, no subprocess before guard ===
 
     fn test_pubkey_and_sign(file: &mut types::LicenseFile) -> String {
-        use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
+        use ed25519_dalek::pkcs8::EncodePublicKey;
         use ed25519_dalek::{Signer, SigningKey};
         // Generate a deterministic test key (seed 0..32)
         let seed = [1u8; 32];
@@ -539,7 +539,7 @@ mod tests {
             .lock()
             .unwrap();
         let machine_id = crate::machine_id::generate_machine_id();
-        let (mut stored, pubkey) = make_valid_stored(&machine_id);
+        let (mut stored, _pubkey) = make_valid_stored(&machine_id);
         // Tamper to wrong machine
         stored.license.machine_ids = vec!["wrong-machine".into()];
         // Re-sign with wrong machine so signature still valid but membership fails
@@ -593,7 +593,7 @@ mod tests {
             .lock()
             .unwrap();
         let machine_id = crate::machine_id::generate_machine_id();
-        let (mut stored, pubkey) = make_valid_stored(&machine_id);
+        let (mut stored, _pubkey) = make_valid_stored(&machine_id);
         stored.license.update_eligible_until = "2020-01-01T00:00:00.000Z".into();
         // Re-sign after changing date
         let pubkey2 = test_pubkey_and_sign(&mut stored.license);
@@ -635,6 +635,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn test_guard_unreachable_non_operational() {
         let _lock = crate::license::TEST_ENV_LOCK
             .get_or_init(|| std::sync::Mutex::new(()))
@@ -657,6 +658,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn test_guard_5xx_non_operational() {
         let _lock = crate::license::TEST_ENV_LOCK
             .get_or_init(|| std::sync::Mutex::new(()))
@@ -693,6 +695,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn test_guard_malformed_non_operational() {
         let _lock = crate::license::TEST_ENV_LOCK
             .get_or_init(|| std::sync::Mutex::new(()))
@@ -728,6 +731,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn test_guard_unknown_id_non_operational() {
         let _lock = crate::license::TEST_ENV_LOCK
             .get_or_init(|| std::sync::Mutex::new(()))

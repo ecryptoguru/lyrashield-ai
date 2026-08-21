@@ -43,7 +43,10 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
         }
         // If replay shows terminal state, don't stay running
         const last = events[events.length - 1]?.event
-        if (last && (last.type === "completed" || last.type === "failed" || last.type === "cancelled")) {
+        if (
+          last &&
+          (last.type === "completed" || last.type === "failed" || last.type === "cancelled")
+        ) {
           // status already set
         }
       })
@@ -148,7 +151,11 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
           <h2 className="mb-3 text-sm font-medium text-foreground">Findings ({findings.length})</h2>
           {findings.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {status === "running" ? "Waiting for findings…" : status === "cancelled" ? "Scan cancelled." : "No findings."}
+              {status === "running"
+                ? "Waiting for findings…"
+                : status === "cancelled"
+                  ? "Scan cancelled."
+                  : "No findings."}
             </p>
           ) : (
             <div className="space-y-2">
@@ -156,7 +163,9 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
                 <div key={f.id} className="rounded-md border border-border p-3">
                   <div className="flex items-start justify-between">
                     <span className="text-sm font-medium text-foreground">{f.title}</span>
-                    <span className={`ml-2 rounded px-1.5 py-0.5 text-xs ${severityColor(f.severity)}`}>
+                    <span
+                      className={`ml-2 rounded px-1.5 py-0.5 text-xs ${severityColor(f.severity)}`}
+                    >
                       {f.severity}
                     </span>
                   </div>

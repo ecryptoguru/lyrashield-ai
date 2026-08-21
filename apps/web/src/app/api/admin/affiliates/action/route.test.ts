@@ -87,9 +87,7 @@ describe("POST /api/admin/affiliates/action (platform-operator gate)", () => {
       getCachedWorkspaceIdMock.mockResolvedValue(`ws-${role}`)
       isPlatformOperatorMock.mockResolvedValue(false)
 
-      const response = await POST(
-        actionRequest({ action: "approve", affiliateId: "aff-1" })
-      )
+      const response = await POST(actionRequest({ action: "approve", affiliateId: "aff-1" }))
 
       expect(response.status, `${role} must not administer affiliates`).toBe(403)
       expect(mockPrisma.affiliate.update).not.toHaveBeenCalled()

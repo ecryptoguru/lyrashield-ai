@@ -162,7 +162,10 @@ export async function POST(request: Request) {
     // Delivery: attempt retrieval email with tracking; raw key never emailed
     await systemPrisma.licenseKey.update({
       where: { licenseId: license.id },
-      data: { fulfillmentStatus: FULFILLMENT_STATUS.DELIVERING, deliveryAttempts: { increment: 1 } },
+      data: {
+        fulfillmentStatus: FULFILLMENT_STATUS.DELIVERING,
+        deliveryAttempts: { increment: 1 },
+      },
     })
     try {
       await sendLicenseRetrievalEmail({
@@ -179,7 +182,10 @@ export async function POST(request: Request) {
       const msg = deliveryError instanceof Error ? deliveryError.message : String(deliveryError)
       await systemPrisma.licenseKey.update({
         where: { licenseId: license.id },
-        data: { fulfillmentStatus: FULFILLMENT_STATUS.DELIVERY_FAILED, lastDeliveryError: msg.slice(0, 500) },
+        data: {
+          fulfillmentStatus: FULFILLMENT_STATUS.DELIVERY_FAILED,
+          lastDeliveryError: msg.slice(0, 500),
+        },
       })
       logger.error("License delivery failed for internal issue", { orderId })
       // Do not fail the HTTP request — license is minted and retrievable via token retry

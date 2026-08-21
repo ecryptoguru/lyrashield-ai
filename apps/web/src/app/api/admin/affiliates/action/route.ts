@@ -224,12 +224,20 @@ export async function POST(request: Request) {
 
     const commissions = await prisma.commission.findMany({
       where: { id: { in: items.map((i) => i.commissionId) } },
-      select: { id: true, status: true, affiliateId: true, reserveReleasedAt: true, reserveReleasedAmount: true, amount: true },
+      select: {
+        id: true,
+        status: true,
+        affiliateId: true,
+        reserveReleasedAt: true,
+        reserveReleasedAmount: true,
+        amount: true,
+      },
     })
 
     if (!payout.isReserveRelease) {
       // Ordinary payout: must be all RESERVED and owned by payout.affiliateId
-      const allReserved = commissions.length === items.length && commissions.every((c) => c.status === "RESERVED")
+      const allReserved =
+        commissions.length === items.length && commissions.every((c) => c.status === "RESERVED")
       const ownershipOk = commissions.every((c) => c.affiliateId === payout.affiliateId)
       if (!allReserved || !ownershipOk) {
         return NextResponse.json(
@@ -244,7 +252,10 @@ export async function POST(request: Request) {
           data: { status: "PAID", paidAt: new Date() },
         })
         if (upd.count === 0) {
-          const existing = await tx.payout.findUnique({ where: { id: data.payoutId }, select: { status: true } })
+          const existing = await tx.payout.findUnique({
+            where: { id: data.payoutId },
+            select: { status: true },
+          })
           if (existing?.status === "PAID") return
           throw new Error("Payout status changed concurrently")
         }
@@ -256,11 +267,17 @@ export async function POST(request: Request) {
     } else {
       // Reserve-release payout: validate reserveReleasedAt, ownership, amount, replay identity
       if (commissions.length !== items.length) {
-        return NextResponse.json({ success: false, error: "Payout items do not match commissions" }, { status: 409 })
+        return NextResponse.json(
+          { success: false, error: "Payout items do not match commissions" },
+          { status: 409 }
+        )
       }
       const ownershipOk = commissions.every((c) => c.affiliateId === payout.affiliateId)
       if (!ownershipOk) {
-        return NextResponse.json({ success: false, error: "Reserve-release ownership mismatch" }, { status: 409 })
+        return NextResponse.json(
+          { success: false, error: "Reserve-release ownership mismatch" },
+          { status: 409 }
+        )
       }
       const allReleased = commissions.every((c) => c.reserveReleasedAt !== null)
       if (!allReleased) {
@@ -270,11 +287,22 @@ export async function POST(request: Request) {
         )
       }
       // Amount validation: payout.amount must equal sum of payoutItems, and each item must match reserveReleasedAmount
-      const sum = items.reduce((acc: InstanceType<typeof Prisma.Decimal>, i: { amount: unknown }) => {
-        const dec = i.amount instanceof Prisma.Decimal ? (i.amount as InstanceType<typeof Prisma.Decimal>) : new Prisma.Decimal(String(i.amount))
-        return (acc as unknown as { add: (v: unknown) => InstanceType<typeof Prisma.Decimal> }).add(dec)
-      }, new Prisma.Decimal(0) as InstanceType<typeof Prisma.Decimal>)
-      const payoutAmount = payout.amount instanceof Prisma.Decimal ? (payout.amount as InstanceType<typeof Prisma.Decimal>) : new Prisma.Decimal(String(payout.amount))
+      const sum = items.reduce(
+        (acc: InstanceType<typeof Prisma.Decimal>, i: { amount: unknown }) => {
+          const dec =
+            i.amount instanceof Prisma.Decimal
+              ? (i.amount as InstanceType<typeof Prisma.Decimal>)
+              : new Prisma.Decimal(String(i.amount))
+          return (
+            acc as unknown as { add: (v: unknown) => InstanceType<typeof Prisma.Decimal> }
+          ).add(dec)
+        },
+        new Prisma.Decimal(0) as InstanceType<typeof Prisma.Decimal>
+      )
+      const payoutAmount =
+        payout.amount instanceof Prisma.Decimal
+          ? (payout.amount as InstanceType<typeof Prisma.Decimal>)
+          : new Prisma.Decimal(String(payout.amount))
       const sumStr = (sum as unknown as { toString: () => string }).toString()
       const payoutStr = (payoutAmount as unknown as { toString: () => string }).toString()
       if (sumStr !== payoutStr) {
@@ -282,7 +310,10 @@ export async function POST(request: Request) {
         const sumNum = Number.parseFloat(sumStr)
         const payoutNum = Number.parseFloat(payoutStr)
         if (Math.abs(sumNum - payoutNum) > 1e-9) {
-          return NextResponse.json({ success: false, error: "Payout amount does not match sum of items" }, { status: 409 })
+          return NextResponse.json(
+            { success: false, error: "Payout amount does not match sum of items" },
+            { status: 409 }
+          )
         }
       }
       // Per-commission amount identity (replay safe): each item amount must equal commission.reserveReleasedAmount
@@ -296,7 +327,10 @@ export async function POST(request: Request) {
             const a = Number.parseFloat(itemStr)
             const b = Number.parseFloat(releasedStr)
             if (Math.abs(a - b) > 1e-9) {
-              return NextResponse.json({ success: false, error: "Reserve-release amount mismatch" }, { status: 409 })
+              return NextResponse.json(
+                { success: false, error: "Reserve-release amount mismatch" },
+                { status: 409 }
+              )
             }
           }
         }
@@ -308,7 +342,10 @@ export async function POST(request: Request) {
           data: { status: "PAID", paidAt: new Date() },
         })
         if (upd.count === 0) {
-          const existing = await tx.payout.findUnique({ where: { id: data.payoutId }, select: { status: true } })
+          const existing = await tx.payout.findUnique({
+            where: { id: data.payoutId },
+            select: { status: true },
+          })
           if (existing?.status === "PAID") return
           throw new Error("Payout status changed concurrently")
         }

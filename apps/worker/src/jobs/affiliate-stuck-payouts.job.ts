@@ -41,7 +41,15 @@ export async function releaseStuckProcessingPayouts(opts?: {
       status: "PROCESSING",
       requestedAt: { lt: threshold },
     },
-    select: { id: true, affiliateId: true, requestedAt: true, provider: true, providerPayoutId: true, amount: true, currency: true },
+    select: {
+      id: true,
+      affiliateId: true,
+      requestedAt: true,
+      provider: true,
+      providerPayoutId: true,
+      amount: true,
+      currency: true,
+    },
     take: batchSize,
     orderBy: { requestedAt: "asc" },
   })
@@ -108,7 +116,10 @@ export async function releaseStuckProcessingPayouts(opts?: {
           where: { id: payout.id, status: "PROCESSING" },
           data: {
             status: "FAILED",
-            failureCode: providerStatus === "FAILED" ? "PROVIDER_FAILED_RECONCILED" : "STUCK_PROCESSING_TIMEOUT",
+            failureCode:
+              providerStatus === "FAILED"
+                ? "PROVIDER_FAILED_RECONCILED"
+                : "STUCK_PROCESSING_TIMEOUT",
             ...(providerPayoutId ? { providerPayoutId } : {}),
           },
         })
