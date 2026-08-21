@@ -417,6 +417,7 @@ A capability is done only when relevant layers are complete:
 ## 13. Documentation ownership
 
 - [PRD.md](./PRD.md): product strategy, accepted scope, release status, backlog, and founder decisions.
+- [Phase2.md](./Phase2.md): verbatim archive of original Phase 2 and future-roadmap material; historical status labels are not current truth.
 - [codebase.md](./codebase.md): architecture, code map, runtime contracts, and compact implementation ledger.
 - [AGENTS.md](./AGENTS.md): immediate handoff, non-negotiable rules, landmines, and execution queue.
 - [product.md](./product.md): positioning and commercial decision register.
@@ -424,3 +425,4 @@ A capability is done only when relevant layers are complete:
 - [monetization.md](./monetization.md): pricing and affiliate economics.
 - `docs/deployment/*`: deployment and recovery runbooks.
 - `docs/ops/*`: signing, desktop, RLS, and operational runbooks.
+- [docs/README.md](./docs/README.md): documentation map and retention rules.

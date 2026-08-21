@@ -17,9 +17,9 @@ LyraShield AI is live in **open beta with open registration** — anyone can cre
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
 - Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com)
 - User guide: [userguide.md](userguide.md)
-- LyraShield Local/Desktop: the BYOK desktop app is available as a one-time 1-year license with perpetual fallback. It runs entirely on the customer's own AI (ChatGPT subscription or Azure OpenAI) — no LyraShield cloud account or API key required.
+- LyraShield Local/Desktop: the BYOK desktop implementation supports a one-time 1-year license with perpetual fallback and customer-supplied ChatGPT/OpenAI or Azure OpenAI credentials. Public production distribution remains a separate signing and release gate.
 
-The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease, and the current release gate requires a current-tree Safe retest plus a successful, reconciled Deep run.
+The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease. The current Standard/Luna acceptance is complete; broader exposure still requires the evidence-storage, monitoring/capacity, failure-recovery, and separate authorized Deep/Terra gates in `PRD.md`.
 
 ## Use it from your coding agent
 
@@ -170,6 +170,8 @@ See [PRD release status](PRD.md#9-release-status) and the [production smoke-test
 - [AGENTS.md](AGENTS.md) — current implementation state, execution queue, and non-negotiable rules for anyone (human or AI) working in this codebase.
 - [codebase.md](codebase.md) — the architecture and implementation map.
 - [PRD.md](PRD.md) — product strategy and the release-readiness backlog.
+- [Phase2.md](Phase2.md) — verbatim Phase 2 and future-roadmap archive from the original PRD.
+- [docs/README.md](docs/README.md) — documentation ownership, categories, and retention policy.
 - [product.md](product.md) — current positioning and founder decisions.
 - [monetization.md](monetization.md) — business and pricing plan (plans, minute packs, affiliate payouts).
 - [docs/ops/desktop-release-runbook.md](docs/ops/desktop-release-runbook.md) — release procedure for the Local/Desktop app.

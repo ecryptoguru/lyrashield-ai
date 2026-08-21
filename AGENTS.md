@@ -132,11 +132,13 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 ## Documentation ownership
 
 - [PRD.md](./PRD.md): strategy, scope, release status, backlog, founder decisions.
+- [Phase2.md](./Phase2.md): verbatim original Phase 2/future-roadmap archive; do not treat historical status as current.
 - [codebase.md](./codebase.md): architecture, code map, runtime contracts, compact history.
 - [AGENTS.md](./AGENTS.md): current handoff, queue, rules, landmines.
 - [product.md](./product.md): positioning and commercial decisions.
 - [userguide.md](./userguide.md): user workflows and limitations.
 - [monetization.md](./monetization.md): pricing and affiliate economics.
 - `docs/deployment/*` and `docs/ops/*`: deployment and operational procedures.
+- [docs/README.md](./docs/README.md): document ownership and retention map.
 
 After merge, remove branch-only wording and update all affected truth documents. Keep historical detail in Git/PRs, not copied into current summaries.

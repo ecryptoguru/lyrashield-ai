@@ -414,6 +414,8 @@ Other integration types exist in the internal schema and roadmap, but the curren
 
 ### 20.5 Billing and plans (Cloud Mode)
 
+These are the configured commercial terms. Live checkout and charging remain disabled until the founder activates the production providers.
+
 LyraShield Cloud offers a 14-day free trial: 100 agent-minutes, Standard and Quick scans only (no Deep), and no card required. When the trial ends, pick a paid plan or let it lapse.
 
 | Plan    | Price       | Minutes/mo | Targets | Deep | Notes                               |
@@ -573,9 +575,9 @@ For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai
 
 The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role, and repository scan admission fails closed when the worker heartbeat is absent. The current production Standard/Luna acceptance scan exercised the promoted worker with Luna/medium-only routing, reconciled accounting, retained findings and receipts, and a sealed result manifest. That target- and version-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Terra run remains a separate gate.
 
-The production application has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires application-level readiness/queue/provider alerts, capacity evidence, restore proof, and approved evidence for each additional review profile claimed. No recovery or RPO/RTO claim is made.
+The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires production proof for private evidence persistence, application-level readiness/queue/provider alerts, capacity evidence, failure recovery, and each additional review profile claimed. No recovery or RPO/RTO claim is made.
 
-Billing is live with a 14-day free trial and paid plans (Starter, Pro, Team, Agency). The LyraShield Local/Desktop app is available for macOS and Windows (BYOK, one-time license). The affiliate program is open for applications at `/affiliates/apply`.
+Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. Polar/Razorpay test configuration and signed webhook smoke are complete, but live paid activation, production desktop distribution/signing proof, payout API provisioning, and the public affiliate opening remain controlled release gates.
 
 Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 

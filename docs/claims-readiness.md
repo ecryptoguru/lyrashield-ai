@@ -1,8 +1,8 @@
 # LyraShield AI — Claims Readiness Map
 
-> **Status:** Source-of-truth for what LyraShield AI can and cannot claim today, and what it would take to make each prohibited claim legitimate. Maintained alongside `AGENTS.md` and `docs/superpowers/plans/2026-08-13-ai-assurance-governance.md`.
+> **Status:** Source of truth for what LyraShield AI can and cannot claim today, and what it would take to make each prohibited claim legitimate. Maintained alongside `AGENTS.md` and `docs/ai-assurance-framework-mapping.md`.
 >
-> **Last reviewed:** 2026-08-14
+> **Last reviewed:** 2026-08-21
 >
 > **Owner:** Founder (with engineering, security, and legal input)
 

@@ -3,12 +3,14 @@
 > **Purpose.** Validate the three Sprint-10 flows in production after
 > provisioning: **Cloud billing**, **Local BYOK licensing**, and the
 > **Affiliate program**. Each flow lists exact steps, pass/fail criteria, and
-> the log/DB evidence to capture. Grounded in the codebase at
-> `main @ 0d61b1a6`.
+> the log/DB evidence to capture. The procedure originated at
+> `main @ 0d61b1a6`; recorded evidence sections retain their historical
+> revision. Use `PRD.md` and `AGENTS.md` for current release status.
 >
 > **This is a validation plan, not a change plan.** No product behavior is
-> modified here. Founder-pending items (revocation-vs-fallback policy, the
-> annual Cloud 25%-vs-30% tier kicker, Cashfree) are out of scope.
+> modified here. Revocation hard-stop and the flat 25% annual affiliate rate
+> are resolved product rules; payout-provider activation remains an
+> operational gate.
 
 ---
 
@@ -437,9 +439,9 @@ COMPLETED`. Duration: 6m 20s. Model: `azure_ai/gpt-5.6-luna` at medium
   `https://github.com/ecryptoguru/lyrashield-ai/pull/362`
 - Validation: `node scripts/validate.mjs` passed (26 generated artifacts).
 
-### 5.6 Local repository gates
+### 5.6 Recorded local repository gates
 
-- `main` is at `4dc8012` (clean, no uncommitted changes).
+- At capture time, `main` was `4dc8012` (clean, no uncommitted changes). This is historical evidence, not the current repository head.
 - `pnpm install --frozen-lockfile` passed.
 - `pnpm typecheck` passed (34 successful tasks).
 - `pnpm lint` passed (32 successful tasks).
