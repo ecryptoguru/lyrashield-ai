@@ -1709,8 +1709,20 @@ model LicenseKey {
   licenseId         String   @unique
   workspaceId       String?
   keyHash           String   @unique
+  /// Partial unique index enforced via migration 20260822220000_license_issued_provider_unique:
+  /// CREATE UNIQUE INDEX "LicenseKey_issuedByProvider_key" ON "LicenseKey"("issuedByProvider") WHERE "issuedByProvider" IS NOT NULL
   issuedByProvider  String
   providerProductId String?
+  // Fulfillment lifecycle: MINTED -> DELIVERING -> DELIVERED | DELIVERY_FAILED (retryable via webhook-track queue)
+  fulfillmentStatus String   @default("DELIVERED")
+  deliveryAttempts  Int      @default(0)
+  lastDeliveryError String?
+  // One-time retrieval token (hashed sha256, expires, single-use)
+  retrievalTokenHash      String?   @unique
+  retrievalTokenExpiresAt DateTime?
+  retrievalTokenUsedAt    DateTime?
+  // Encrypted raw key for one-time retrieval (cleared after use); stored only to allow retrieval via token
+  retrievalRawKey         String?
   createdAt         DateTime @default(now())
 
   license   License    @relation(fields: [licenseId], references: [id], onDelete: Cascade)

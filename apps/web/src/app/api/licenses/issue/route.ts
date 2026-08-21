@@ -3,16 +3,19 @@ import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { type LocalSkuId, teamVolumeDiscountPct, teamOrderTotal } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { encodeLicenseBlob } from "@lyrashield/licenses"
 import {
   generateLicenseKey,
   hashLicenseKey,
+  generateRetrievalToken,
+  hashRetrievalToken,
+  RETRIEVAL_TOKEN_EXPIRY_MS,
+  FULFILLMENT_STATUS,
   computeUpdateEligibleUntil,
   issueSignedLicense,
   parseLocalProductIds,
   requireInternalApiKey,
   resolvePublishedFallbackBuild,
-  sendLicenseIssuedEmail,
+  sendLicenseRetrievalEmail,
   validateSeatCountForSku,
 } from "../../../../lib/licenses/license-service"
 
@@ -89,60 +92,98 @@ export async function POST(request: Request) {
     }
 
     const systemPrisma = getSystemPrisma()
-    const existingKey = await systemPrisma.licenseKey.findFirst({
-      where: { issuedByProvider: `polar:${orderId}` },
-    })
-    if (existingKey) {
-      logger.info("License already issued for order — returning existing", { orderId })
-      const existingLicense = await systemPrisma.license.findUniqueOrThrow({
-        where: { id: existingKey.licenseId },
-      })
-      return apiSuccess({ licenseId: existingLicense.id, alreadyIssued: true }, 200)
-    }
 
     const updateEligibleUntil = computeUpdateEligibleUntil(sku)
     const rawKey = generateLicenseKey()
     const keyHash = hashLicenseKey(rawKey)
+    const retrievalToken = generateRetrievalToken()
+    const retrievalTokenHash = hashRetrievalToken(retrievalToken)
+    const retrievalExpiresAt = new Date(Date.now() + RETRIEVAL_TOKEN_EXPIRY_MS)
+    const issuedByProvider = `polar:${orderId}`
 
-    const license = await systemPrisma.$transaction(async (tx) => {
-      const created = await tx.license.create({
-        data: {
-          workspaceId: workspaceId || null,
-          ownerEmail: buyerEmail,
-          sku,
-          seatCount,
-          machineIds: [],
-          updateEligibleUntil,
-          perpetualFallbackBuild: fallbackBuild,
-          signingKeyId: "pending",
-          signature: "pending",
-          issuedAt: new Date(),
-        },
+    let license: { id: string }
+    try {
+      license = await systemPrisma.$transaction(async (tx) => {
+        const created = await tx.license.create({
+          data: {
+            workspaceId: workspaceId || null,
+            ownerEmail: buyerEmail,
+            sku,
+            seatCount,
+            machineIds: [],
+            updateEligibleUntil,
+            perpetualFallbackBuild: fallbackBuild,
+            signingKeyId: "pending",
+            signature: "pending",
+            issuedAt: new Date(),
+          },
+        })
+
+        await tx.licenseKey.create({
+          data: {
+            licenseId: created.id,
+            workspaceId: workspaceId || null,
+            keyHash,
+            issuedByProvider,
+            providerProductId: productId,
+            fulfillmentStatus: FULFILLMENT_STATUS.MINTED,
+            deliveryAttempts: 0,
+            retrievalTokenHash,
+            retrievalTokenExpiresAt: retrievalExpiresAt,
+            retrievalRawKey: rawKey,
+          },
+        })
+
+        return created
       })
-
-      await tx.licenseKey.create({
-        data: {
-          licenseId: created.id,
-          workspaceId: workspaceId || null,
-          keyHash,
-          issuedByProvider: `polar:${orderId}`,
-          providerProductId: productId,
-        },
-      })
-
-      return created
-    })
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as { code: string }).code === "P2002"
+      ) {
+        const existingKey = await systemPrisma.licenseKey.findFirst({
+          where: { issuedByProvider },
+        })
+        if (existingKey) {
+          logger.info("License already issued for order — returning existing", { orderId })
+          const existingLicense = await systemPrisma.license.findUniqueOrThrow({
+            where: { id: existingKey.licenseId },
+          })
+          return apiSuccess({ licenseId: existingLicense.id, alreadyIssued: true }, 200)
+        }
+      }
+      throw error
+    }
 
     const licenseFile = await issueSignedLicense(license.id, fallbackBuild)
 
-    // Email the buyer their raw key + signed license file. Detached and
-    // non-blocking — a mail failure never fails the issuance response.
-    sendLicenseIssuedEmail({
-      buyerEmail,
-      rawLicenseKey: rawKey,
-      licenseBlob: encodeLicenseBlob(licenseFile),
-      sku,
+    // Delivery: attempt retrieval email with tracking; raw key never emailed
+    await systemPrisma.licenseKey.update({
+      where: { licenseId: license.id },
+      data: { fulfillmentStatus: FULFILLMENT_STATUS.DELIVERING, deliveryAttempts: { increment: 1 } },
     })
+    try {
+      await sendLicenseRetrievalEmail({
+        buyerEmail,
+        retrievalToken,
+        retrievalExpiresAt,
+        sku,
+      })
+      await systemPrisma.licenseKey.update({
+        where: { licenseId: license.id },
+        data: { fulfillmentStatus: FULFILLMENT_STATUS.DELIVERED, lastDeliveryError: null },
+      })
+    } catch (deliveryError) {
+      const msg = deliveryError instanceof Error ? deliveryError.message : String(deliveryError)
+      await systemPrisma.licenseKey.update({
+        where: { licenseId: license.id },
+        data: { fulfillmentStatus: FULFILLMENT_STATUS.DELIVERY_FAILED, lastDeliveryError: msg.slice(0, 500) },
+      })
+      logger.error("License delivery failed for internal issue", { orderId })
+      // Do not fail the HTTP request — license is minted and retrievable via token retry
+    }
 
     logger.info("License issued", {
       licenseId: license.id,

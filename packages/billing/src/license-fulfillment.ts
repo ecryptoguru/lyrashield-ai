@@ -2,15 +2,15 @@
  * License fulfillment from provider orders (webhook Track B).
  *
  * Generalized from the Polar-only path so Razorpay local purchases mint
- * licenses too. Idempotency mechanism unchanged: `issuedByProvider` stores
- * `<provider>:<orderId>` and a unique-constraint catch resolves races.
- *
- * Signing keys resolve from LICENSE_SIGNING_PRIVATE_KEY (dev/CI) or Azure Key
- * Vault via managed identity (production). Key Vault resolution fails closed —
- * never falls back to an env key in production-with-vault.
+ * licenses too. Idempotency via partial unique index on `issuedByProvider`
+ * (migration 20260822220000) — insert-first atomic claim, P2002 loser fetches
+ * existing idempotently. Delivery is tracked (fulfillmentStatus +
+ * deliveryAttempts) and retryable via webhook-track queue before track
+ * completion. Email never contains raw key — one-time retrieval token link
+ * instead. Retrieval route is one-time, hashed, expiring.
  */
 
-import { createHash, createPrivateKey, createPublicKey, randomUUID } from "node:crypto"
+import { createHash, createPrivateKey, createPublicKey, randomUUID, randomBytes } from "node:crypto"
 import { env } from "@lyrashield/config"
 import { getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
@@ -35,27 +35,29 @@ const RENEWAL_DAYS = 365
  */
 export const TEAM_MIN_SEATS = 3
 
+/** One-time retrieval token expiry in days */
+export const RETRIEVAL_TOKEN_EXPIRY_DAYS = 7
+export const RETRIEVAL_TOKEN_EXPIRY_MS = RETRIEVAL_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000
+
+/** Fulfillment lifecycle */
+export const FULFILLMENT_STATUS = {
+  MINTED: "MINTED",
+  DELIVERING: "DELIVERING",
+  DELIVERED: "DELIVERED",
+  DELIVERY_FAILED: "DELIVERY_FAILED",
+  // legacy alias
+  FAILED: "DELIVERY_FAILED",
+} as const
+export type FulfillmentStatus = (typeof FULFILLMENT_STATUS)[keyof typeof FULFILLMENT_STATUS]
+
 /**
  * Resolve the perpetual-fallback build SERVER-SIDE.
- *
- * At issuance and renewal this is the latest published Local/Desktop build
- * (`LICENSE_PUBLISHED_BUILD`). Client-supplied `currentBuild` is ignored —
- * trusting it would let a buyer pin an arbitrary keep-forever window.
  */
 export function resolvePublishedFallbackBuild(): string | null {
   const published = env.LICENSE_PUBLISHED_BUILD?.trim()
   return published ? published : null
 }
 
-/**
- * Lazily-built Azure Key Vault secret client for the production signing key.
- *
- * The import of `@azure/keyvault-secrets` / `@azure/identity` is dynamic and
- * deferred to first use so that local development and CI (which never set
- * LYRASHIELD_KEY_VAULT_NAME) do not pay the import cost and never require the
- * Azure SDK to be present in a meaningful way. The resolved client is cached
- * for the process lifetime.
- */
 let keyVaultSecretsClient: import("@azure/keyvault-secrets").SecretClient | null = null
 
 function getKeyVaultSecretsClient(): import("@azure/keyvault-secrets").SecretClient {
@@ -66,7 +68,6 @@ function getKeyVaultSecretsClient(): import("@azure/keyvault-secrets").SecretCli
       "LYRASHIELD_KEY_VAULT_NAME is not set — cannot resolve the signing key from Key Vault"
     )
   }
-  // Deferred require so the Azure SDK is only loaded when actually used.
   const { SecretClient } =
     require("@azure/keyvault-secrets") as typeof import("@azure/keyvault-secrets")
   const { DefaultAzureCredential } = require("@azure/identity") as typeof import("@azure/identity")
@@ -77,29 +78,12 @@ function getKeyVaultSecretsClient(): import("@azure/keyvault-secrets").SecretCli
   return keyVaultSecretsClient
 }
 
-/** Cached Key Vault private key PEM, fetched once per process. */
 let cachedKeyVaultPrivateKey: string | null = null
 
-/**
- * Whether the production signing key is sourced from Azure Key Vault.
- * True only in production AND when a vault name is configured; otherwise the
- * env-provided `LICENSE_SIGNING_PRIVATE_KEY` (dev / CI) is used.
- */
 function isProductionKeyVault(): boolean {
   return env.NODE_ENV === "production" && Boolean(env.LYRASHIELD_KEY_VAULT_NAME)
 }
 
-/**
- * Resolve the ed25519 private key PEM for signing.
- *
- * Resolution order:
- * 1. Production + `LYRASHIELD_KEY_VAULT_NAME` set → fetch the key from Azure
- *    Key Vault via managed identity (DefaultAzureCredential). Cached per
- *    process. Fails closed (throws) if the vault is unreachable or the secret
- *    is missing — never falls back to env in production-with-vault, so a
- *    mis-provisioned vault cannot silently sign with a stale env key.
- * 2. Otherwise → the `LICENSE_SIGNING_PRIVATE_KEY` env var (dev / CI).
- */
 export async function resolveSigningPrivateKey(): Promise<string> {
   if (isProductionKeyVault()) {
     if (cachedKeyVaultPrivateKey) return cachedKeyVaultPrivateKey
@@ -127,11 +111,6 @@ export async function resolveSigningPrivateKey(): Promise<string> {
   return key
 }
 
-/** Resolve the signing key identifier (for rotation / revocation).
- *
- * B-L05: In production, LICENSE_SIGNING_KEY_ID must be set explicitly.
- * The fallback "license-key-v1" is only for development.
- */
 export function resolveSigningKeyId(): string {
   const keyId = env.LICENSE_SIGNING_KEY_ID
   if (!keyId && env.NODE_ENV === "production") {
@@ -140,24 +119,10 @@ export function resolveSigningKeyId(): string {
   return keyId || "license-key-v1"
 }
 
-/**
- * Resolve the ed25519 public key (SPKI PEM) for license verification.
- *
- * Resolution order:
- * 1. `LICENSE_SIGNING_PUBLIC_KEY` env var (explicit, supports key separation).
- * 2. Production + vault configured → fetch the public key secret.
- * 3. Derived from `LICENSE_SIGNING_PRIVATE_KEY` at runtime.
- *
- * The server must NEVER accept a public key from the client — doing so would
- * allow an attacker to forge a license and supply their own key for verification.
- */
 export async function resolveSigningPublicKey(): Promise<string> {
-  // 1. Explicit env var (supports key separation without a vault round-trip).
   if (env.LICENSE_SIGNING_PUBLIC_KEY) {
     return env.LICENSE_SIGNING_PUBLIC_KEY
   }
-
-  // 2. Production + vault configured → fetch the public key secret.
   if (isProductionKeyVault()) {
     const client = getKeyVaultSecretsClient()
     const secretName = env.LICENSE_SIGNING_PUBLIC_KEY_SECRET_NAME
@@ -165,45 +130,28 @@ export async function resolveSigningPublicKey(): Promise<string> {
     if (secret.value && secret.value.includes("-----BEGIN")) {
       return secret.value
     }
-    // Fall through to deriving from the (vault-sourced) private key.
   }
-
-  // 3. Derive the public key from the private key.
   const privateKeyPem = await resolveSigningPrivateKey()
   const privateKey = createPrivateKey({ key: privateKeyPem, format: "pem" })
   const derivedPublicKey = createPublicKey(privateKey)
   return derivedPublicKey.export({ type: "spki", format: "pem" }).toString()
 }
 
-/** Determine the machine cap for a given SKU. */
 export function machineCapForSku(sku: LocalSkuId, seatCount: number): number {
   if (sku === "individual_launch" || sku === "individual_regular") {
     return INDIVIDUAL_MACHINE_CAP
   }
-  // Team: one machine per seat.
   return seatCount
 }
 
-/** Check whether a SKU is an individual (single-user) license. */
 export function isIndividualSku(sku: LocalSkuId): boolean {
   return sku === "individual_launch" || sku === "individual_regular"
 }
 
-/** Check whether a SKU is a team license (per-seat, min 3 seats). */
 export function isTeamSku(sku: LocalSkuId): boolean {
   return sku === "team_perpetual" || sku === "team_subscription"
 }
 
-/**
- * Validate the seat count against the SKU's rules.
- *
- * - Individual SKUs: 1 seat (the issue route's Zod schema already enforces
- *   min 1, and the machine cap is fixed at 3 machines regardless).
- * - Team SKUs: at least {@link TEAM_MIN_SEATS} seats.
- *
- * Throws if the seat count violates the SKU's minimum. Callers should catch
- * and map to a 400 response.
- */
 export function validateSeatCountForSku(sku: LocalSkuId, seatCount: number): void {
   if (isTeamSku(sku) && seatCount < TEAM_MIN_SEATS) {
     throw new Error(
@@ -212,7 +160,6 @@ export function validateSeatCountForSku(sku: LocalSkuId, seatCount: number): voi
   }
 }
 
-/** Compute the update-eligibility expiry date from a SKU's updateDays. */
 export function computeUpdateEligibleUntil(sku: LocalSkuId, from = new Date()): Date {
   const def = getLocalSku(sku)
   const days = def?.updateDays ?? RENEWAL_DAYS
@@ -221,7 +168,6 @@ export function computeUpdateEligibleUntil(sku: LocalSkuId, from = new Date()): 
   return result
 }
 
-/** Escape HTML special characters for safe interpolation into email markup. */
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -231,89 +177,23 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;")
 }
 
-/**
- * Email the buyer their raw license key + signed license file via Brevo.
- *
- * Called once at issuance (the internal /api/licenses/issue route and the
- * provider webhook fulfillment path). Mirrors the Brevo pattern in
- * packages/auth: the provider call is a detached promise so a slow or failing
- * mail send never blocks or fails license issuance — the license is already
- * persisted, and the buyer can re-retrieve it from the dashboard. Errors are
- * logged, not thrown.
- */
-export function sendLicenseIssuedEmail(params: {
-  buyerEmail: string
-  rawLicenseKey: string
-  licenseBlob: string
-  sku: string
-}): void {
-  const { buyerEmail, rawLicenseKey, licenseBlob, sku } = params
-  const isProd = env.NODE_ENV === "production"
-
-  if (!isProd) {
-    logger.info("License email not sent in development", { sku })
-    return
-  }
-  if (!env.BREVO_API_KEY) {
-    logger.error("BREVO_API_KEY is required to send the license email in production", { sku })
-    return
-  }
-  const apiKey = env.BREVO_API_KEY
-
-  void (async () => {
-    try {
-      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        signal: AbortSignal.timeout(10_000),
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": apiKey,
-        },
-        body: JSON.stringify({
-          sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
-          to: [{ email: buyerEmail }],
-          subject: "Your LyraShield Local license key",
-          htmlContent:
-            `<p>Thanks for your purchase. Here is your LyraShield Local license (${escapeHtml(sku)}).</p>` +
-            `<p><strong>License key</strong> (keep this safe — it is shown once and cannot be recovered):</p>` +
-            `<p><code>${escapeHtml(rawLicenseKey)}</code></p>` +
-            `<p><strong>Signed license file</strong> — paste this into the app when prompted:</p>` +
-            `<p><code style="word-break:break-all">${escapeHtml(licenseBlob)}</code></p>` +
-            `<p>You can also view and re-download your license from your LyraShield dashboard.</p>`,
-        }),
-      })
-      if (!res.ok) {
-        logger.error("Failed to send license email via Brevo", {
-          status: res.status,
-          sku,
-        })
-      }
-    } catch (err) {
-      logger.error("Exception while sending license email", {
-        error: err instanceof Error ? err.message : String(err),
-        sku,
-      })
-    }
-  })()
-}
-
-/**
- * Hash a raw license key string for storage / lookup. We store only the hash
- * (SHA-256) so that a database leak does not expose usable license keys.
- */
 export function hashLicenseKey(rawKey: string): string {
   return createHash("sha256").update(rawKey).digest("hex")
 }
 
-/** Generate a new random license key string. */
 export function generateLicenseKey(): string {
   return `LYRA-${randomUUID().toUpperCase()}`
 }
 
-/**
- * Parse the POLAR_LOCAL_PRODUCT_IDS env var into a SKU → product ID map.
- * Returns an empty map if unset or invalid.
- */
+export function generateRetrievalToken(): string {
+  // 32 bytes hex + uuid for entropy
+  return randomBytes(32).toString("hex") + "-" + randomUUID()
+}
+
+export function hashRetrievalToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex")
+}
+
 export function parseLocalProductIds(): Record<string, string> {
   const raw = env.POLAR_LOCAL_PRODUCT_IDS
   if (!raw) return {}
@@ -325,19 +205,10 @@ export function parseLocalProductIds(): Record<string, string> {
   }
 }
 
-/**
- * Issue a signed license file from a License database row.
- *
- * Reads the current machineIds and updateEligibleUntil from the row, signs
- * the payload, and persists the signature back to the License record.
- */
 export async function issueSignedLicense(
   licenseId: string,
   perpetualFallbackBuild: string | null
 ): Promise<LicenseFile> {
-  // License issuance is called from workspace-less routes (activate, renew,
-  // sync connect) — the license is FORCE-RLS-scoped and may be NULL-workspaceId,
-  // so the RLS-scoped client would not see it. Use the system client.
   const systemPrisma = getSystemPrisma()
   const license = await systemPrisma.license.findUniqueOrThrow({ where: { id: licenseId } })
 
@@ -374,12 +245,6 @@ export async function issueSignedLicense(
   return licenseFile
 }
 
-/**
- * Resolve the Local SKU for a provider product identifier.
- *
- * 1. Direct SKU id (Razorpay notes carry the catalog skuId verbatim).
- * 2. Reverse lookup of POLAR_LOCAL_PRODUCT_IDS (Polar product → skuId).
- */
 function resolveLocalSkuFromProductId(productId: string): LocalSkuId | null {
   if (productId in LOCAL_SKU_MAP) return productId as LocalSkuId
   const productMap = parseLocalProductIds()
@@ -388,13 +253,110 @@ function resolveLocalSkuFromProductId(productId: string): LocalSkuId | null {
 }
 
 /**
+ * Send retrieval link email (one-time token, expiring). Throws on Brevo failure
+ * so caller can mark DELIVERY_FAILED and keep webhook track retryable.
+ * Never logs token.
+ */
+export async function sendLicenseRetrievalEmail(params: {
+  buyerEmail: string
+  retrievalToken: string
+  retrievalExpiresAt: Date
+  sku: string
+  licenseBlob?: string
+}): Promise<void> {
+  const { buyerEmail, retrievalToken, retrievalExpiresAt, sku } = params
+  const isProd = env.NODE_ENV === "production"
+
+  // In non-production, log minimally without token
+  if (!isProd) {
+    logger.info("License retrieval email not sent in development", { sku })
+    return
+  }
+  if (!env.BREVO_API_KEY) {
+    logger.error("BREVO_API_KEY is required to send the license email in production", { sku })
+    throw new Error("brevo_api_key_missing")
+  }
+  const apiKey = env.BREVO_API_KEY
+  const appUrl = env.NEXT_PUBLIC_APP_URL || "https://app.lyrashieldai.com"
+  const retrievalUrl = `${appUrl.replace(/\/$/, "")}/api/licenses/retrieve?token=${encodeURIComponent(retrievalToken)}`
+  // Also provide direct retrieval endpoint hint
+  const expiryStr = retrievalExpiresAt.toISOString().slice(0, 10)
+
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    signal: AbortSignal.timeout(10_000),
+    headers: {
+      "Content-Type": "application/json",
+      "api-key": apiKey,
+    },
+    body: JSON.stringify({
+      sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
+      to: [{ email: buyerEmail }],
+      subject: "Your LyraShield Local license — retrieval link inside",
+      htmlContent:
+        `<p>Thanks for your purchase. Your LyraShield Local license (${escapeHtml(sku)}) is ready.</p>` +
+        `<p><strong>One-time retrieval link</strong> (expires ${escapeHtml(expiryStr)}, single use):</p>` +
+        `<p><a href="${escapeHtml(retrievalUrl)}">${escapeHtml(retrievalUrl)}</a></p>` +
+        `<p>This link will let you retrieve your license key and signed license file <strong>once</strong>. After first retrieval or expiry it becomes invalid. Keep your key safe.</p>` +
+        `<p>If you need help, contact support with your order email.</p>` +
+        `<p>Alternatively POST your token to <code>/api/licenses/retrieve</code> with <code>{"token":"..."}</code>.</p>`,
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    logger.error("Failed to send license email via Brevo", {
+      status: res.status,
+      sku,
+    })
+    throw new Error(`brevo_delivery_failed:${res.status}:${body.slice(0, 200)}`)
+  }
+}
+
+/**
+ * Back-compat wrapper used by old call sites — now delegates to retrieval email
+ * without logging raw key. Kept to avoid breaking imports; new code should call
+ * sendLicenseRetrievalEmail directly. The rawLicenseKey param is ignored except
+ * for logging sku; email never contains raw key.
+ */
+export function sendLicenseIssuedEmail(params: {
+  buyerEmail: string
+  rawLicenseKey: string
+  licenseBlob: string
+  sku: string
+  retrievalToken?: string
+  retrievalExpiresAt?: Date
+}): void {
+  // Fire-and-forget wrapper for legacy callers (e.g., issue route before migration).
+  // New fulfillment path uses sendLicenseRetrievalEmail with await and delivery tracking.
+  if (params.retrievalToken && params.retrievalExpiresAt) {
+    void sendLicenseRetrievalEmail({
+      buyerEmail: params.buyerEmail,
+      retrievalToken: params.retrievalToken,
+      retrievalExpiresAt: params.retrievalExpiresAt,
+      sku: params.sku,
+    }).catch((err) => {
+      logger.error("Exception while sending license email", {
+        error: err instanceof Error ? err.message : String(err),
+        sku: params.sku,
+      })
+    })
+    return
+  }
+  // If no retrieval token provided, generate a deprecation warning — caller should migrate.
+  logger.warn("sendLicenseIssuedEmail called without retrieval token — email not sent", {
+    sku: params.sku,
+  })
+}
+
+/**
  * Issue a license for a provider one-time order of a Local SKU product.
  *
- * Track B integration point called from the webhook track executor (web
- * ingress and worker retry alike). Idempotent on orderId — if a license was
- * already issued for this order, returns the existing one.
- *
- * Creates a `License` + `LicenseKey` and issues a signed license file.
+ * Idempotent via partial unique index on issuedByProvider (insert-first).
+ * Concurrent losers get P2002 and fetch existing idempotently.
+ * Delivery attempts are tracked (fulfillmentStatus + deliveryAttempts) and
+ * Brevo failures are retryable via the webhook-track queue (throw before
+ * track completion). Email contains retrieval link + expiry, NOT raw key.
+ * Retrieval token is hashed sha256 with expiry and usedAt for one-time use.
  */
 export async function issueLicenseForProviderOrder(params: {
   provider: string
@@ -407,42 +369,26 @@ export async function issueLicenseForProviderOrder(params: {
   const { provider, productId, buyerEmail, seatCount, orderId, workspaceId } = params
   const fallbackBuild = resolvePublishedFallbackBuild()
 
-  // Resolve the SKU from the product ID (direct catalog id or Polar map).
   const sku = resolveLocalSkuFromProductId(productId)
   if (!sku) {
     throw new Error(`Product ID ${productId} is not a recognized Local SKU product`)
   }
 
-  // B-L02: Enforce the team-SKU minimum seat count (spec: min 3 seats).
   validateSeatCountForSku(sku, seatCount)
 
   const issuedByProvider = `${provider}:${orderId}`
-
-  // NULL-workspaceId License/LicenseKey rows are FORCE-RLS-scoped and invisible
-  // to the ordinary NOBYPASSRLS client. Issuance is a workspace-less system
-  // operation — use the system client for both the idempotency lookup and the
-  // create (mirrors activate/renew).
   const systemPrisma = getSystemPrisma()
-
-  // B-L09: Idempotency with unique constraint catch instead of TOCTOU findFirst.
-  const existingKey = await systemPrisma.licenseKey.findFirst({
-    where: { issuedByProvider },
-  })
-  if (existingKey) {
-    logger.info("License already issued for order — returning existing", {
-      provider,
-      orderId,
-    })
-    return { licenseId: existingKey.licenseId, alreadyIssued: true }
-  }
 
   const updateEligibleUntil = computeUpdateEligibleUntil(sku)
   const rawKey = generateLicenseKey()
   const keyHash = hashLicenseKey(rawKey)
+  const retrievalToken = generateRetrievalToken()
+  const retrievalTokenHash = hashRetrievalToken(retrievalToken)
+  const retrievalExpiresAt = new Date(Date.now() + RETRIEVAL_TOKEN_EXPIRY_MS)
 
-  let license
+  // Atomic claim: insert-first using unique index
   try {
-    license = await systemPrisma.$transaction(async (tx) => {
+    const license = await systemPrisma.$transaction(async (tx) => {
       const created = await tx.license.create({
         data: {
           workspaceId: workspaceId || null,
@@ -465,46 +411,218 @@ export async function issueLicenseForProviderOrder(params: {
           keyHash,
           issuedByProvider,
           providerProductId: productId,
+          fulfillmentStatus: FULFILLMENT_STATUS.MINTED,
+          deliveryAttempts: 0,
+          retrievalTokenHash,
+          retrievalTokenExpiresAt: retrievalExpiresAt,
+          retrievalTokenUsedAt: null,
+          retrievalRawKey: rawKey,
         },
       })
 
       return created
     })
+
+    // Issue signed file outside creation transaction
+    const licenseFile = await issueSignedLicense(license.id, fallbackBuild)
+
+    // Delivery: mark DELIVERING, attempt email, then DELIVERED or DELIVERY_FAILED
+    await systemPrisma.licenseKey.update({
+      where: { licenseId: license.id },
+      data: {
+        fulfillmentStatus: FULFILLMENT_STATUS.DELIVERING,
+        deliveryAttempts: { increment: 1 },
+      },
+    })
+
+    try {
+      await sendLicenseRetrievalEmail({
+        buyerEmail,
+        retrievalToken,
+        retrievalExpiresAt,
+        sku,
+      })
+    } catch (deliveryError) {
+      const msg = deliveryError instanceof Error ? deliveryError.message : String(deliveryError)
+      await systemPrisma.licenseKey.update({
+        where: { licenseId: license.id },
+        data: {
+          fulfillmentStatus: FULFILLMENT_STATUS.DELIVERY_FAILED,
+          lastDeliveryError: msg.slice(0, 500),
+        },
+      })
+      logger.error("License delivery failed — will retry via webhook track", {
+        provider,
+        orderId,
+        sku,
+      })
+      throw new Error(`license_delivery_failed:${msg.slice(0, 200)}`)
+    }
+
+    await systemPrisma.licenseKey.update({
+      where: { licenseId: license.id },
+      data: {
+        fulfillmentStatus: FULFILLMENT_STATUS.DELIVERED,
+        lastDeliveryError: null,
+      },
+    })
+
+    logger.info("License issued for provider order", {
+      provider,
+      licenseId: license.id,
+      sku,
+      orderId,
+    })
+
+    return { licenseId: license.id, alreadyIssued: false }
   } catch (error) {
-    if (
+    const isP2002 =
       error &&
       typeof error === "object" &&
       "code" in error &&
       (error as { code: string }).code === "P2002"
-    ) {
+
+    // P2002 on issuedByProvider means concurrent winner already inserted
+    if (isP2002) {
       const existing = await systemPrisma.licenseKey.findFirst({
         where: { issuedByProvider },
+        include: { license: true },
       })
       if (existing) {
-        logger.info("License race resolved — returning existing", { provider, orderId })
-        return { licenseId: existing.licenseId, alreadyIssued: true }
+        // If already delivered, idempotent success
+        if (existing.fulfillmentStatus === FULFILLMENT_STATUS.DELIVERED) {
+          logger.info("License race resolved — returning existing delivered", { provider, orderId })
+          return { licenseId: existing.licenseId, alreadyIssued: true }
+        }
+
+        // If delivery failed / minted / delivering, retry delivery once before giving up
+        // Generate a fresh token for the retry (old token plaintext not available)
+        const retryToken = generateRetrievalToken()
+        const retryHash = hashRetrievalToken(retryToken)
+        const retryExpires = new Date(Date.now() + RETRIEVAL_TOKEN_EXPIRY_MS)
+
+        try {
+          await systemPrisma.licenseKey.update({
+            where: { id: existing.id },
+            data: {
+              fulfillmentStatus: FULFILLMENT_STATUS.DELIVERING,
+              deliveryAttempts: { increment: 1 },
+              retrievalTokenHash: retryHash,
+              retrievalTokenExpiresAt: retryExpires,
+              retrievalTokenUsedAt: null,
+              lastDeliveryError: null,
+            },
+          })
+
+          const skuForRetry = existing.license.sku
+          await sendLicenseRetrievalEmail({
+            buyerEmail,
+            retrievalToken: retryToken,
+            retrievalExpiresAt: retryExpires,
+            sku: skuForRetry,
+          })
+
+          await systemPrisma.licenseKey.update({
+            where: { id: existing.id },
+            data: {
+              fulfillmentStatus: FULFILLMENT_STATUS.DELIVERED,
+              lastDeliveryError: null,
+            },
+          })
+
+          logger.info("License race resolved — delivery retry succeeded", { provider, orderId })
+          return { licenseId: existing.licenseId, alreadyIssued: true }
+        } catch (retryError) {
+          const msg = retryError instanceof Error ? retryError.message : String(retryError)
+          await systemPrisma.licenseKey.update({
+            where: { id: existing.id },
+            data: {
+              fulfillmentStatus: FULFILLMENT_STATUS.DELIVERY_FAILED,
+              lastDeliveryError: msg.slice(0, 500),
+            },
+          })
+          logger.error("License race delivery retry failed", { provider, orderId })
+          throw new Error(`license_delivery_failed:${msg.slice(0, 200)}`)
+        }
       }
     }
+
+    // If error was delivery failure from the newly created license, re-throw as is
+    if (error instanceof Error && error.message.startsWith("license_delivery_failed")) {
+      throw error
+    }
+
+    // For other P2002 that wasn't issuedByProvider (e.g., keyHash collision extremely unlikely), fallback fetch
+    if (isP2002) {
+      const fallback = await systemPrisma.licenseKey.findFirst({ where: { issuedByProvider } })
+      if (fallback) {
+        logger.info("License race resolved via fallback", { provider, orderId })
+        return { licenseId: fallback.licenseId, alreadyIssued: true }
+      }
+    }
+
     throw error
   }
+}
 
-  const licenseFile = await issueSignedLicense(license.id, fallbackBuild)
+/**
+ * One-time retrieval via token (hashed lookup). Returns key+blob once,
+ * then marks usedAt. Generic 404 for not found / expired / already used.
+ * Never logs token or key.
+ */
+export async function retrieveLicenseByToken(token: string): Promise<{ licenseKey: string; licenseBlob: string; licenseId: string } | null> {
+  if (!token || typeof token !== "string" || token.length < 10) return null
+  const tokenHash = hashRetrievalToken(token)
+  const systemPrisma = getSystemPrisma()
 
-  // Email the buyer their raw key + signed license file. Detached and
-  // non-blocking — a mail failure never fails or rolls back the issuance.
-  sendLicenseIssuedEmail({
-    buyerEmail,
-    rawLicenseKey: rawKey,
-    licenseBlob: encodeLicenseBlob(licenseFile),
-    sku,
+  const keyRow = await systemPrisma.licenseKey.findUnique({
+    where: { retrievalTokenHash: tokenHash },
+    include: { license: true },
   })
 
-  logger.info("License issued for provider order", {
-    provider,
-    licenseId: license.id,
-    sku,
-    orderId,
-  })
+  if (!keyRow) return null
+  if (keyRow.retrievalTokenUsedAt) return null
+  if (keyRow.retrievalTokenExpiresAt && new Date() > keyRow.retrievalTokenExpiresAt) return null
+  if (!keyRow.retrievalRawKey) return null
 
-  return { licenseId: license.id, alreadyIssued: false }
+  const rawKey = keyRow.retrievalRawKey
+
+  // Mark used atomically — prevent concurrent double retrieval
+  const updated = await systemPrisma.licenseKey.updateMany({
+    where: { id: keyRow.id, retrievalTokenUsedAt: null },
+    data: { retrievalTokenUsedAt: new Date() },
+  })
+  if (updated.count === 0) return null // race lost
+
+  const license = keyRow.license
+  // Reconstruct blob from stored license; ensure signature exists
+  let licenseFile: LicenseFile
+  if (!license.signature || license.signature === "pending") {
+    licenseFile = await issueSignedLicense(license.id, license.perpetualFallbackBuild ?? resolvePublishedFallbackBuild())
+  } else {
+    // Rebuild file without re-signing, using stored signature
+    licenseFile = {
+      sku: license.sku as LicenseSku,
+      seatCount: license.seatCount,
+      machineIds: license.machineIds,
+      updateEligibleUntil: license.updateEligibleUntil.toISOString(),
+      perpetualFallbackBuild: license.perpetualFallbackBuild ?? null,
+      signature: license.signature,
+      signingKeyId: license.signingKeyId,
+      issuedAt: license.issuedAt.toISOString(),
+    } as unknown as LicenseFile
+  }
+
+  const blob = encodeLicenseBlob(licenseFile)
+
+  // Clear raw key after successful retrieval to reduce exposure (optional but reduces DB leak risk)
+  // Do not await failure — log minimally without key
+  await systemPrisma.licenseKey
+    .update({
+      where: { id: keyRow.id },
+      data: { retrievalRawKey: null },
+    })
+    .catch(() => {})
+
+  return { licenseKey: rawKey, licenseBlob: blob, licenseId: license.id }
 }

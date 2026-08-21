@@ -475,6 +475,10 @@ Pricing:
 - **Team:** $99/seat + $59/seat/yr renewal, or $149/seat/yr subscription with sync.
 - **Refunds:** none on Local licenses.
 
+### License delivery and retrieval
+
+After a Local license purchase (Polar or Razorpay), you receive an email with a **one-time retrieval link** (expires in 7 days, single use). The email never contains the raw license key itself. Open the link or `POST {"token":"..."}` to `/api/licenses/retrieve` to retrieve your license key and signed license file **once**. The link expires after first retrieval or after 7 days and then returns a generic `404 Not Found` (no oracle). The retrieval token is stored only as a SHA-256 hash with an expiry and single-use marker, and is never logged. If email delivery fails, the system marks the fulfillment as `DELIVERY_FAILED` and retries automatically via the webhook-track queue before the webhook is considered complete; concurrent webhook deliveries mint only one license. If your link expired or was already used, contact support to re-issue.
+
 ## 21. Settings and account deletion
 
 The Settings page displays:

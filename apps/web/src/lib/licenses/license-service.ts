@@ -18,7 +18,11 @@ export {
   parseLocalProductIds,
   generateLicenseKey,
   hashLicenseKey,
+  generateRetrievalToken,
+  hashRetrievalToken,
   sendLicenseIssuedEmail,
+  sendLicenseRetrievalEmail,
+  retrieveLicenseByToken,
   computeUpdateEligibleUntil,
   validateSeatCountForSku,
   machineCapForSku,
@@ -26,6 +30,8 @@ export {
   isTeamSku,
   INDIVIDUAL_MACHINE_CAP,
   TEAM_MIN_SEATS,
+  RETRIEVAL_TOKEN_EXPIRY_DAYS,
+  FULFILLMENT_STATUS,
 } from "@lyrashield/billing"
 
 import { timingSafeEqual } from "node:crypto"
