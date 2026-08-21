@@ -318,11 +318,19 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 This proves bounded runtime, Luna routing, accounting, receipt persistence, and terminal completion for that target and revision. It does not prove universal coverage, finding correctness, or security.
 
+### AI App Security coverage remediation — 2026-08-21
+
+- PR #386 (`8ee6fd5`) preserves the historical scan's bounded result while correcting future scan coverage and evidence.
+- File selection now prioritizes production/config sources, excludes generated artifacts, and uses mode caps of 200 for Quick/Safe, 500 for Standard, and 1,000 for Deep/Custom while retaining byte, time, walk-depth, and entry bounds.
+- Discovery records eligible, scanned, skipped, and reason counts plus a bounded skipped-path sample. These limits flow into scoring, coverage issues, dashboard disclosure, and an immutable `ai_app_security` family receipt; incomplete AI coverage cannot support a clean claim.
+- A 217-file regression fixture proves Quick remains honestly bounded at 200 while still scanning vulnerable production code, and Standard evaluates all 217 files.
+- Production deployment: app revision `lyrashield-app--0000155`; worker product `8ee6fd50e55bfb6d3ca20c6b9209e8a9423c2056`; worker digest `sha256:d7dd33c2823a6152cc5b99d27ce6ef9e1acccf7cb203fff9def4550789054b01`; worker health and `/api/ready/scans` passed.
+
 ### Infrastructure evidence — 2026-08-21
 
-- Web revision: `lyrashield-app--0000153`, ready for scans.
-- Worker product revision: `8f5257a96f5d8cbd299f5152215ac401ed16755c`.
-- Worker digest: `sha256:03f7a6b2d14bda224b14a9641a9acaeafa54c400f1b13fae3f002cdbb59e4f44`.
+- Web revision: `lyrashield-app--0000155`, ready for scans.
+- Worker product revision: `8ee6fd50e55bfb6d3ca20c6b9209e8a9423c2056`.
+- Worker digest: `sha256:d7dd33c2823a6152cc5b99d27ce6ef9e1acccf7cb203fff9def4550789054b01`.
 - Engine revision: `dd588c379ae6614e0914b8adb41d94f0c1e86c26`; engine version 1.2.1.
 - Upstash BullMQ `rediss://` returned `PONG`; queue was empty before acceptance and heartbeat was live.
 - Azure public Redis `6379` rule is deleted.
