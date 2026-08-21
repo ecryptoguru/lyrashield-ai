@@ -1,12 +1,15 @@
 import {
+  claimApprovalExecution,
+  completeApprovalExecution,
   createApproval,
-  executeApproval,
+  failApprovalExecution,
   findPendingApprovalByHash,
   getApproval,
   hashInput,
   verifyInputHash,
 } from "@lyrashield/db"
 import { McpServer, type McpToolResult, type RemoteApprovalGate } from "@lyrashield/mcp"
+import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { checkApprovalCreateRateLimit } from "../../../lib/rate-limit"
 
@@ -36,6 +39,20 @@ function pendingDecision(approvalId: string): {
 
 function denied(reason: string): { approved: false; reason: string } {
   return { approved: false, reason }
+}
+
+type StoredApproval = Awaited<ReturnType<typeof getApproval>>
+
+/** Replay a stored EXECUTED result without re-running the tool. */
+function storedResult(approval: NonNullable<StoredApproval>): {
+  approved: true
+  result: McpToolResult
+} {
+  const stored = approval.result as { content?: unknown[]; isError?: boolean } | undefined
+  const content = Array.isArray(stored?.content)
+    ? (stored.content as { type: string; text: string }[])
+    : [{ type: "text", text: JSON.stringify(stored ?? approval.result) }]
+  return { approved: true, result: { content, isError: stored?.isError } as McpToolResult }
 }
 
 function stripApprovalId(args: Record<string, unknown>): Record<string, unknown> {
@@ -91,6 +108,7 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
 
     const approval = await getApproval(approvalIdArg, workspaceId)
     if (!approval) {
+      // Includes approvals that exist but belong to another workspace: fail closed.
       return denied(`Approval not found: ${approvalIdArg}`)
     }
 
@@ -103,11 +121,7 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
     }
 
     if (approval.status === "EXECUTED") {
-      const stored = approval.result as { content?: unknown[]; isError?: boolean } | undefined
-      const content = Array.isArray(stored?.content)
-        ? (stored.content as { type: string; text: string }[])
-        : [{ type: "text", text: JSON.stringify(stored ?? approval.result) }]
-      return { approved: true, result: { content, isError: stored?.isError } as McpToolResult }
+      return storedResult(approval)
     }
 
     if (approval.status === "PENDING") {
@@ -118,22 +132,51 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
       return denied(`Approval is ${approval.status.toLowerCase()}`)
     }
 
-    // Execute the approved action and store the result for idempotent replays.
-    const executionServer = new McpServer({ toolContext, allowMutations: true })
-    const toolResult = await executionServer.callTool(toolName, toolArgs)
+    // Claim the authorization BEFORE any side effect. Exactly one concurrent
+    // poller wins the claim; the hash and expiry are re-enforced inside the
+    // claim predicate so a raced request can never execute stale input.
+    const claimed = await claimApprovalExecution(approval.id, workspaceId, approval.inputHash)
 
-    const storedResult = { content: toolResult.content, isError: toolResult.isError }
-    const executed = await executeApproval(approval.id, workspaceId, storedResult)
-
-    if (!executed) {
-      // Another concurrent request may have won the race; return the stored result.
+    if (!claimed) {
       const latest = await getApproval(approval.id, workspaceId)
-      const stored = latest?.result as { content?: unknown[]; isError?: boolean } | undefined
-      if (latest?.status === "EXECUTED" && stored) {
-        const content = Array.isArray(stored.content)
-          ? (stored.content as { type: string; text: string }[])
-          : [{ type: "text", text: JSON.stringify(stored) }]
-        return { approved: true, result: { content, isError: stored.isError } as McpToolResult }
+      if (latest?.status === "EXECUTED" && latest.result != null) {
+        return storedResult(latest)
+      }
+      return pendingDecision(approval.id)
+    }
+
+    const executionServer = new McpServer({ toolContext, allowMutations: true })
+    let toolResult: McpToolResult
+    try {
+      toolResult = await executionServer.callTool(toolName, toolArgs)
+    } catch (error) {
+      logger.error("Approved MCP tool execution threw", {
+        approvalId: approval.id,
+        workspaceId,
+        actionName: toolName,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      const errorResult = {
+        content: [{ type: "text", text: JSON.stringify({ error: "Tool execution failed" }) }],
+        isError: true,
+      }
+      const outcome = await failApprovalExecution(approval.id, workspaceId, errorResult)
+      return outcome === "RETRYABLE"
+        ? pendingDecision(approval.id)
+        : denied("Approval execution failed; request a new approval.")
+    }
+
+    const settled = await completeApprovalExecution(approval.id, workspaceId, {
+      content: toolResult.content,
+      isError: toolResult.isError,
+    })
+
+    if (!settled) {
+      // The claim was lost after the fact (should not happen — only the claim
+      // owner settles); fall back to whatever state is now stored.
+      const latest = await getApproval(approval.id, workspaceId)
+      if (latest?.status === "EXECUTED" && latest.result != null) {
+        return storedResult(latest)
       }
       return pendingDecision(approval.id)
     }

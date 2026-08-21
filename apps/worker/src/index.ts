@@ -9,6 +9,7 @@ import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
+import { startApprovalExpiryRunner } from "./approval-expiry"
 import { checkScanConsumerLiveness, markScanJobClaimed } from "./consumer-liveness"
 import {
   assertRepositoryScanRuntimeConfigured,
@@ -25,6 +26,7 @@ let heartbeatTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
 let staleResourceReaperTimer: NodeJS.Timeout | null = null
 let billingJobsTimers: NodeJS.Timeout[] | null = null
+let approvalExpiryTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
@@ -101,6 +103,11 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     }
     billingJobsTimers = null
     logger.info("Billing jobs scheduler stopped")
+  }
+  if (approvalExpiryTimer) {
+    clearInterval(approvalExpiryTimer)
+    approvalExpiryTimer = null
+    logger.info("Approval expiry runner stopped")
   }
   if (scheduleRunner) {
     clearInterval(scheduleRunner)
@@ -297,6 +304,8 @@ async function main(): Promise<void> {
   logger.info("Schedule runner started", { intervalMs: 60_000 })
 
   billingJobsTimers = startBillingJobsScheduler()
+
+  approvalExpiryTimer = startApprovalExpiryRunner()
 }
 
 if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
