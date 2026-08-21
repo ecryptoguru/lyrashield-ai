@@ -6,6 +6,8 @@ import {
   type TxtResolver,
 } from "@lyrashield/security"
 import { LiveAiSafetyPlanSchema, type LiveAiSafetyPlan } from "@lyrashield/types"
+import { logger } from "@lyrashield/logger"
+import { prisma } from "./client"
 import { withWorkspaceRLS } from "./rls"
 
 const DNS_CHALLENGE_TTL_MS = 60 * 60 * 1000
@@ -55,18 +57,27 @@ export async function issueDnsDomainVerification(input: {
       : await tx.targetDomainVerification.create({
           data: { workspaceId: input.workspaceId, domain, ...data },
         })
-    await tx.auditLog.create({
+    return record
+  })
+
+  try {
+    await prisma.auditLog.create({
       data: {
         workspaceId: input.workspaceId,
         actorUserId: input.createdById,
         action: "target.domain_verification_requested",
         resourceType: "targetDomainVerification",
-        resourceId: record.id,
+        resourceId: verification.id,
         metadata: { domain, method: "DNS_TXT", expiresAt: expiresAt.toISOString() },
       },
     })
-    return record
-  })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
+      workspaceId: input.workspaceId,
+      action: "target.domain_verification_requested",
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 
   // The DNS value is public but is shown only in this issuance response; it is never logged.
   return { verification, token, expiresAt }
@@ -81,7 +92,7 @@ export async function verifyDnsDomainVerification(input: {
 }) {
   const now = input.now ?? new Date()
   const resolver = input.resolveTxt ?? resolveTxt
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
+  const { updated, expiresAt } = await withWorkspaceRLS(input.workspaceId, async (tx) => {
     const verification = await tx.targetDomainVerification.findFirst({
       where: { id: input.verificationId, workspaceId: input.workspaceId, method: "DNS_TXT" },
     })
@@ -107,12 +118,16 @@ export async function verifyDnsDomainVerification(input: {
       throw new LiveAiSafetyError("DOMAIN_VERIFICATION_PROOF_NOT_FOUND")
     }
 
-    const expiresAt = new Date(now.getTime() + DOMAIN_PROOF_TTL_MS)
-    const updated = await tx.targetDomainVerification.update({
+    const expiresAtVal = new Date(now.getTime() + DOMAIN_PROOF_TTL_MS)
+    const result = await tx.targetDomainVerification.update({
       where: { id: verification.id },
-      data: { status: "VERIFIED", verifiedAt: now, lastCheckedAt: now, expiresAt },
+      data: { status: "VERIFIED", verifiedAt: now, lastCheckedAt: now, expiresAt: expiresAtVal },
     })
-    await tx.auditLog.create({
+    return { updated: result, expiresAt: expiresAtVal }
+  })
+
+  try {
+    await prisma.auditLog.create({
       data: {
         workspaceId: input.workspaceId,
         actorUserId: input.actorUserId,
@@ -126,8 +141,14 @@ export async function verifyDnsDomainVerification(input: {
         },
       },
     })
-    return updated
-  })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
+      workspaceId: input.workspaceId,
+      action: "target.domain_verified",
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  return updated
 }
 
 export async function upsertLiveAiSafetySettings(input: {
@@ -138,13 +159,16 @@ export async function upsertLiveAiSafetySettings(input: {
   if (input.incidentContact && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.incidentContact)) {
     throw new LiveAiSafetyError("LIVE_AI_SAFETY_INVALID_INCIDENT_CONTACT")
   }
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
-    const settings = await tx.liveAiSafetySettings.upsert({
+  const settings = await withWorkspaceRLS(input.workspaceId, async (tx) => {
+    const result = await tx.liveAiSafetySettings.upsert({
       where: { workspaceId: input.workspaceId },
       create: input,
       update: { incidentContact: input.incidentContact },
     })
-    await tx.auditLog.create({
+    return result
+  })
+  try {
+    await prisma.auditLog.create({
       data: {
         workspaceId: input.workspaceId,
         actorUserId: input.createdById,
@@ -153,8 +177,14 @@ export async function upsertLiveAiSafetySettings(input: {
         resourceId: settings.id,
       },
     })
-    return settings
-  })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
+      workspaceId: input.workspaceId,
+      action: "live_ai_safety.settings_updated",
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  return settings
 }
 
 export async function createLiveAiSafetyPlan(input: LiveAiSafetyPlan & { createdById: string }) {
@@ -163,7 +193,7 @@ export async function createLiveAiSafetyPlan(input: LiveAiSafetyPlan & { created
   const plan = parsed.data
   const endpointDomain = requireDomain(plan.endpointUrl)
 
-  return withWorkspaceRLS(plan.workspaceId, async (tx) => {
+  const created = await withWorkspaceRLS(plan.workspaceId, async (tx) => {
     const [workspace, target] = await Promise.all([
       tx.workspace.findUnique({ where: { id: plan.workspaceId }, select: { plan: true } }),
       tx.target.findFirst({
@@ -204,7 +234,7 @@ export async function createLiveAiSafetyPlan(input: LiveAiSafetyPlan & { created
       if (!credential) throw new LiveAiSafetyError("LIVE_AI_SAFETY_CREDENTIAL_NOT_FOUND")
     }
 
-    const created = await tx.liveAiSafetyPlan.create({
+    const result = await tx.liveAiSafetyPlan.create({
       data: {
         workspaceId: plan.workspaceId,
         targetId: plan.targetId,
@@ -223,7 +253,10 @@ export async function createLiveAiSafetyPlan(input: LiveAiSafetyPlan & { created
         createdById: input.createdById,
       },
     })
-    await tx.auditLog.create({
+    return result
+  })
+  try {
+    await prisma.auditLog.create({
       data: {
         workspaceId: plan.workspaceId,
         actorUserId: input.createdById,
@@ -233,6 +266,12 @@ export async function createLiveAiSafetyPlan(input: LiveAiSafetyPlan & { created
         metadata: { targetId: plan.targetId, domain: endpointDomain, caseCount: plan.cases.length },
       },
     })
-    return created
-  })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
+      workspaceId: plan.workspaceId,
+      action: "live_ai_safety.plan_created",
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  return created
 }

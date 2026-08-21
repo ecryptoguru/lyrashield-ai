@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto"
+import { logger } from "@lyrashield/logger"
+import { prisma } from "./client"
 import { withWorkspaceRLS } from "./rls"
 
 export type AiSystemProfileInput = {
@@ -92,7 +94,7 @@ export async function upsertAiSystemProfile(input: {
   validateAiSystemProfile(input.profile)
   const checksum = createHash("sha256").update(canonicalize(input.profile)).digest("hex")
 
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
+  const { updated, created, version } = await withWorkspaceRLS(input.workspaceId, async (tx) => {
     const target = await tx.target.findFirst({
       where: { id: input.targetId, workspaceId: input.workspaceId, deletedAt: null },
       select: { id: true },
@@ -115,26 +117,29 @@ export async function upsertAiSystemProfile(input: {
       })
     }
 
-    const version = record.version + (record.currentVersionId ? 1 : 0)
-    const created = await tx.aiSystemProfileVersion.create({
+    const versionVal = record.version + (record.currentVersionId ? 1 : 0)
+    const createdVal = await tx.aiSystemProfileVersion.create({
       data: {
         aiSystemProfileId: record.id,
-        version,
+        version: versionVal,
         profile: input.profile,
         checksum,
         createdById: input.createdById,
       },
     })
-    const updated = await tx.aiSystemProfile.update({
+    const updatedVal = await tx.aiSystemProfile.update({
       where: { id: record.id },
       data: {
-        version,
+        version: versionVal,
         profile: input.profile,
-        currentVersionId: created.id,
+        currentVersionId: createdVal.id,
         updatedById: input.createdById,
       },
     })
-    await tx.auditLog.create({
+    return { updated: updatedVal, created: createdVal, version: versionVal }
+  })
+  try {
+    await prisma.auditLog.create({
       data: {
         workspaceId: input.workspaceId,
         actorUserId: input.createdById,
@@ -144,12 +149,18 @@ export async function upsertAiSystemProfile(input: {
         metadata: { versionId: created.id, version, checksum },
       },
     })
-    return {
-      profile: updated,
-      version: created,
-      inventorySummary: buildAiSystemInventorySummary(input.profile),
-    }
-  })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
+      workspaceId: input.workspaceId,
+      action: "ai_assurance.profile.version_created",
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  return {
+    profile: updated,
+    version: created,
+    inventorySummary: buildAiSystemInventorySummary(input.profile),
+  }
 }
 
 export async function getAiSystemProfile(workspaceId: string, targetId: string) {
