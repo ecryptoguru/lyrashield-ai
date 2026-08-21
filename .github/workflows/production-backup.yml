@@ -219,7 +219,7 @@ jobs:
           # and a trigger that reference these functions. Bootstrap them only for
           # those retained legacy archives so pg_restore can recreate public.
           legacy_public_only=0
-          if ! pg_restore --list "$dump_path" | grep -Eq ' SCHEMA - app$'; then
+          if ! pg_restore --list "$dump_path" | grep -Eq ' SCHEMA - app( |$)'; then
             legacy_public_only=1
             docker exec -i lyrashield-restore-postgres psql -v ON_ERROR_STOP=1 \
               -U restore -d lyrashield_restore <<'SQL'
