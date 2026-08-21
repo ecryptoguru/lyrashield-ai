@@ -85,9 +85,10 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `packages/pricing` — plan definitions (TRIAL/STARTER/PRO/TEAM/AGENCY), minute packs, and local SKUs.
 - `packages/licenses` — ed25519 signed license sign/verify for the Local/Desktop app.
 - `packages/affiliate` — commission engine, attribution, fraud controls, and payout ledger (RazorpayX/Payoneer).
-- `packages/eval-ai-safety` — AI safety eval harness (OWASP + MLCommons AILuminate).
 - `packages/evidence-storage` — envelope encryption (AES-256-GCM) for scan artifacts.
 - `packages/*` (remaining) — auth, configuration, credentials, database, integrations, logger, score, security, types, UI.
+
+The former `packages/eval-ai-safety` runner was removed as unused. Its versioned 2026-08-13 result artifact remains in `apps/marketing/src/data/ai-safety-results.json`; the current fixed live AI safety catalog lives in `packages/types/src/ai-safety-tests.ts`.
 
 The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution remains deliberately fail-closed until a server-generated patch pipeline is bound to an approval.
 
@@ -162,7 +163,7 @@ The application pins an exact engine commit in `.github/workflows/deploy-azure.y
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
 - Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before any deploy. Operator promotion of that digest on the worker VM remains a separate manual action.
 
-See [the production beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md) for the exact deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
+See [PRD release status](PRD.md#9-release-status) and the [production smoke-test plan](docs/ops/production-smoke-test-plan.md) for the current deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
 
 ## Further reading
 
