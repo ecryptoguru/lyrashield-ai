@@ -6,6 +6,7 @@ export interface ScannerCoverageIssue {
   status: ScannerCoverageStatus
   subject?: string
   reason: string
+  metadata?: Record<string, unknown>
 }
 
 export function recordCoverageIssue(

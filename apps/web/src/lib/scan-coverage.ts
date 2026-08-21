@@ -12,11 +12,44 @@ export interface ScannerCoverageWarning {
   status: string
   subject?: string
   reason: string
+  discovery?: {
+    eligibleFiles: number
+    scannedFiles: number
+    skippedFiles: number
+    representativeSkippedPaths: string[]
+  }
 }
 
 function readString(metadata: Record<string, unknown> | null | undefined, key: string) {
   const value = metadata?.[key]
   return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+function readDiscovery(metadata: Record<string, unknown> | null | undefined) {
+  const value = metadata?.metadata
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const discovery = value as Record<string, unknown>
+  const eligibleFiles = discovery.eligibleFiles
+  const scannedFiles = discovery.scannedFiles
+  const skippedFiles = discovery.skippedFiles
+  if (
+    !Number.isInteger(eligibleFiles) ||
+    !Number.isInteger(scannedFiles) ||
+    !Number.isInteger(skippedFiles)
+  ) {
+    return undefined
+  }
+  const representativeSkippedPaths = Array.isArray(discovery.representativeSkippedPaths)
+    ? discovery.representativeSkippedPaths
+        .filter((path): path is string => typeof path === "string")
+        .slice(0, 20)
+    : []
+  return {
+    eligibleFiles: eligibleFiles as number,
+    scannedFiles: scannedFiles as number,
+    skippedFiles: skippedFiles as number,
+    representativeSkippedPaths,
+  }
 }
 
 /**
@@ -39,6 +72,15 @@ export function getScannerCoverageWarnings(events: ScanCoverageEvent[]): Scanner
     if (!scanner || !status || !reason) return []
 
     const subject = readString(event.metadata, "subject")
-    return [{ scanner, status, reason, ...(subject ? { subject } : {}) }]
+    const discovery = readDiscovery(event.metadata)
+    return [
+      {
+        scanner,
+        status,
+        reason,
+        ...(subject ? { subject } : {}),
+        ...(discovery ? { discovery } : {}),
+      },
+    ]
   })
 }

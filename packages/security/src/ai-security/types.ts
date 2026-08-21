@@ -1,4 +1,4 @@
-export const AI_SECURITY_DETECTOR_VERSION = "ai-app-security/2026-08-13.1" as const
+export const AI_SECURITY_DETECTOR_VERSION = "ai-app-security/2026-08-21.1" as const
 
 export const AI_SECURITY_SCORE_VERSION = "ai-app-security-score/1.0.0" as const
 

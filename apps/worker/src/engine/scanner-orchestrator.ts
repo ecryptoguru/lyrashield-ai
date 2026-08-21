@@ -14,7 +14,11 @@ import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanOpenApi } from "./scanners/openapi-scanner"
-import { scanAiAppSecurity, type AiAppSecurityScanResult } from "./scanners/ai-app-security"
+import {
+  scanAiAppSecurity,
+  type AiAppSecurityDiscoveryReceipt,
+  type AiAppSecurityScanResult,
+} from "./scanners/ai-app-security"
 import type { UrlScanProfile, UrlExecutionSummary } from "@lyrashield/types"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
 import { scanMlSupplyChain } from "./scanners/ml-supply-chain-scanner"
@@ -26,6 +30,7 @@ import { recordCoverageIssue, type ScannerCoverageIssue } from "./scanner-covera
 import {
   redactUrlForLogs,
   createEgressProxyFetchFn,
+  AI_SECURITY_DETECTOR_VERSION,
   type AISecurityCoverage,
   type AISecuritySignal,
 } from "@lyrashield/security"
@@ -70,6 +75,7 @@ export interface ScannerOrchestratorResult {
   aiAppSecurityCoverage?: AISecurityCoverage
   ai03AdvisoryFresh?: boolean
   ai03Coverage?: AiAppSecurityScanResult["ai03Coverage"]
+  aiAppSecurityDiscovery?: AiAppSecurityDiscoveryReceipt
 }
 
 async function withScannerPhaseTimeout<T>(
@@ -260,6 +266,7 @@ async function runAiAppSecurityScan(
   workspaceDir: string,
   coverageIssues: ScannerCoverageIssue[],
   signal: AbortSignal,
+  mode: string,
   dependencyInventory?: ResolvedDependencyInventory,
   advisoryBatch?: AdvisoryBatchResult
 ): Promise<AiAppSecurityScanResult> {
@@ -270,6 +277,7 @@ async function runAiAppSecurityScan(
       workspaceDir,
       coverageIssues,
       signal,
+      mode,
       dependencyInventory,
       advisoryBatch,
     })
@@ -312,6 +320,13 @@ export async function runScannerOrchestrator(
 ): Promise<ScannerOrchestratorResult> {
   const { scanId, targetId, target, engineFindings, workspaceDir } = config
   const scannerPhaseTimeoutMs = config.scannerPhaseTimeoutMs ?? env.SCANNER_PHASE_TIMEOUT_MS
+  const normalizedMode = config.mode.trim().toUpperCase()
+  const aiAppSecurityMode =
+    normalizedMode === "STANDARD"
+      ? "STANDARD"
+      : normalizedMode === "DEEP" || normalizedMode === "CUSTOM"
+        ? "DEEP"
+        : "QUICK"
 
   const scanWorkspace = workspaceDir ?? join(process.cwd(), "lyrashield_runs", scanId)
   const absWorkspace = resolve(scanWorkspace)
@@ -436,6 +451,7 @@ export async function runScannerOrchestrator(
               absWorkspace,
               coverageIssues,
               signal,
+              config.mode,
               dependencyInventory,
               advisoryBatch
             )
@@ -444,7 +460,7 @@ export async function runScannerOrchestrator(
               aiScanResult: {
                 signals: [],
                 coverage: {
-                  version: "ai-app-security/2026-08-13.1",
+                  version: AI_SECURITY_DETECTOR_VERSION,
                   totalControls: 8,
                   assessedCount: 0,
                   notAssessedCount: 8,
@@ -461,7 +477,7 @@ export async function runScannerOrchestrator(
                   bytes: 0,
                   scannedAt: new Date().toISOString(),
                   limitsReached: [],
-                  detectorVersion: "ai-app-security/2026-08-13.1",
+                  detectorVersion: AI_SECURITY_DETECTOR_VERSION,
                 },
               } as import("@lyrashield/security").AIScanResult,
               ai03AdvisoryFresh: false,
@@ -477,6 +493,28 @@ export async function runScannerOrchestrator(
                 requestedPackages: 0,
                 resolvedPackages: 0,
                 unresolvedReasons: ["AI App Security scan requires a source checkout"],
+              },
+              discovery: {
+                version: "ai-app-security-discovery/1",
+                mode: aiAppSecurityMode,
+                maxFiles:
+                  aiAppSecurityMode === "DEEP"
+                    ? 1_000
+                    : aiAppSecurityMode === "STANDARD"
+                      ? 500
+                      : 200,
+                eligibleFiles: 0,
+                scannedFiles: 0,
+                skippedFiles: 0,
+                scannedBytes: 0,
+                representativeSkippedPaths: [],
+                skippedByReason: {
+                  fileLimit: 0,
+                  totalByteLimit: 0,
+                  oversized: 0,
+                  unreadable: 0,
+                },
+                limitsReached: [],
               },
             } as AiAppSecurityScanResult),
         hasSourceCheckout
@@ -501,6 +539,7 @@ export async function runScannerOrchestrator(
   let aiAppSecurityCoverage: AISecurityCoverage | undefined
   let ai03AdvisoryFresh: boolean | undefined
   let ai03Coverage: AiAppSecurityScanResult["ai03Coverage"] | undefined
+  let aiAppSecurityDiscovery: AiAppSecurityDiscoveryReceipt | undefined
   for (let index = 0; index < scannerResults.length; index++) {
     const result = scannerResults[index]
     const value =
@@ -520,6 +559,7 @@ export async function runScannerOrchestrator(
         aiAppSecurityCoverage = value.aiScanResult.coverage
         ai03AdvisoryFresh = value.ai03AdvisoryFresh
         ai03Coverage = value.ai03Coverage
+        aiAppSecurityDiscovery = value.discovery
       }
     } else if (Array.isArray(value)) {
       rawFindings.push(value)
@@ -678,5 +718,6 @@ export async function runScannerOrchestrator(
     aiAppSecurityCoverage,
     ai03AdvisoryFresh,
     ai03Coverage,
+    aiAppSecurityDiscovery,
   }
 }

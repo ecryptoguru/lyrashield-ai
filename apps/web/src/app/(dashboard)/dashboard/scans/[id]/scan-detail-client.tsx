@@ -823,6 +823,29 @@ export function ScanDetailClient({
                           )}
                         </div>
                         <p className="text-muted-foreground mt-1">{warning.reason}</p>
+                        {warning.discovery && (
+                          <div className="text-muted-foreground mt-2 text-xs">
+                            <p>
+                              Scanned {warning.discovery.scannedFiles} of{" "}
+                              {warning.discovery.eligibleFiles} eligible files;{" "}
+                              {warning.discovery.skippedFiles} skipped.
+                            </p>
+                            {warning.discovery.representativeSkippedPaths.length > 0 && (
+                              <details className="mt-1">
+                                <summary className="text-foreground cursor-pointer font-medium">
+                                  Review skipped-path sample
+                                </summary>
+                                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                                  {warning.discovery.representativeSkippedPaths.map((filePath) => (
+                                    <li key={filePath} className="wrap-break-word font-mono">
+                                      {filePath}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>

@@ -5,6 +5,7 @@ import type { UrlExecutionSummary } from "@lyrashield/types"
 import type { EngineVulnerability } from "./output-parser"
 import type { NormalizedFinding } from "./normalizer"
 import type { ScannerCoverageIssue } from "./scanner-coverage"
+import type { AiAppSecurityDiscoveryReceipt } from "./scanners/ai-app-security"
 
 type ResultTarget = {
   id: string
@@ -20,6 +21,7 @@ type ResultManifestInput = {
   sourceCheckoutAvailable: boolean
   engineFindingCount: number
   coverageIssues: ScannerCoverageIssue[]
+  aiAppSecurityDiscovery?: AiAppSecurityDiscoveryReceipt
   matchedControlRanks?: number[]
   urlExecution?: UrlExecutionSummary
   engineExecution?: {
@@ -49,8 +51,8 @@ type ResultManifestInput = {
 
 type FindingInput = EngineVulnerability | NormalizedFinding
 
-const MANIFEST_VERSION = 3
-const SCANNER_CONTRACT_VERSION = "2026-07-18"
+const MANIFEST_VERSION = 4
+const SCANNER_CONTRACT_VERSION = "2026-08-21"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
 
@@ -185,7 +187,7 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
         ...engineStatus.metadata,
       },
     },
-    ...["sca", "secrets", "agent_config", "ml_supply_chain"].map((scanner) => {
+    ...["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security"].map((scanner) => {
       const status = scannerStatus(
         scanner,
         repositoryTarget && input.sourceCheckoutAvailable,
@@ -195,7 +197,13 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
         scanner,
         controlId: scanner,
         ...status,
-        metadata: { sourceCheckoutAvailable: input.sourceCheckoutAvailable, ...status.metadata },
+        metadata: {
+          sourceCheckoutAvailable: input.sourceCheckoutAvailable,
+          ...(scanner === "ai_app_security"
+            ? { discovery: input.aiAppSecurityDiscovery ?? null }
+            : {}),
+          ...status.metadata,
+        },
       }
     }),
     {
