@@ -219,7 +219,8 @@ jobs:
           # and a trigger that reference these functions. Bootstrap them only for
           # those retained legacy archives so pg_restore can recreate public.
           legacy_public_only=0
-          if ! pg_restore --list "$dump_path" | grep -Eq ' SCHEMA - app( |$)'; then
+          if ! docker run --rm --volume "$RUNNER_TEMP:/backup:ro" postgres:17-alpine \
+            pg_restore --list /backup/backup.dump | grep -Eq ' SCHEMA - app( |$)'; then
             legacy_public_only=1
             docker exec -i lyrashield-restore-postgres psql -v ON_ERROR_STOP=1 \
               -U restore -d lyrashield_restore <<'SQL'
@@ -330,8 +331,16 @@ jobs:
         run: |
           set -euo pipefail
           query() { docker exec lyrashield-restore-postgres psql -U restore -d lyrashield_restore -Atqc "$1"; }
-          test "$(query 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')" -gt 0
-          test "$(query "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('User', 'Workspace', 'AuditLog', 'Scan')")" = 4
+          migration_count="$(query 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')"
+          test "$migration_count" -gt 0 || {
+            echo "::error title=Restore missing migrations::Expected restored Prisma migrations, found $migration_count"
+            exit 1
+          }
+          core_table_count="$(query "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('User', 'Workspace', 'AuditLog', 'Scan')")"
+          test "$core_table_count" = 4 || {
+            echo "::error title=Restore missing core tables::Expected 4 core tables, found $core_table_count"
+            exit 1
+          }
 
           query "SELECT COALESCE(json_agg(json_build_object(
             'id', id, 'workspaceId', \"workspaceId\", 'actorUserId', \"actorUserId\", 'action', action,
