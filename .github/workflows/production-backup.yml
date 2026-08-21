@@ -336,7 +336,7 @@ jobs:
             echo "::error title=Restore missing migrations::Expected restored Prisma migrations, found $migration_count"
             exit 1
           }
-          core_table_count="$(query "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('User', 'Workspace', 'AuditLog', 'Scan')")"
+          core_table_count="$(query "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users', 'Workspace', 'AuditLog', 'Scan')")"
           test "$core_table_count" = 4 || {
             echo "::error title=Restore missing core tables::Expected 4 core tables, found $core_table_count"
             exit 1
