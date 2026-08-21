@@ -1954,17 +1954,20 @@ model Payout {
 }
 
 model PayoutItem {
-  id           String  @id @default(cuid())
-  payoutId     String
+  id               String  @id @default(cuid())
+  payoutId         String
   // A commission can have up to two payout items: the main payout, and a
   // later reserve-release payout for the reserved portion that was held back
-  // during the new-affiliate reserve period. Idempotency is enforced by the
-  // release job via Commission.reserveReleasedAt, not by a unique constraint
-  // here.
-  commissionId String
-  amount       Decimal @db.Decimal(19, 4)
+  // during the new-affiliate reserve period. The ordinary (non-reserve) payout
+  // item is unique per commission via a partial unique index:
+  //   CREATE UNIQUE INDEX ... ON "PayoutItem"("commissionId") WHERE "isReserveRelease"=false
+  // Prisma cannot express partial indexes, so the index is created in raw SQL
+  // migration 20260822200000_payout_item_ordinary_unique.
+  commissionId     String
+  amount           Decimal @db.Decimal(19, 4)
+  isReserveRelease Boolean @default(false)
 
-  payout    Payout    @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  payout     Payout     @relation(fields: [payoutId], references: [id], onDelete: Cascade)
   commission Commission @relation(fields: [commissionId], references: [id], onDelete: Restrict)
 
   @@index([commissionId])

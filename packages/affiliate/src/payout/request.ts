@@ -1,9 +1,11 @@
 /**
  * Payout request — transactional flow.
  *
- * SELECT...FOR UPDATE eligible commissions → mark RESERVED → create Payout +
- * PayoutItem[] → call provider with idempotencyKey=payout.id → mark PAID only
- * on provider confirmation; on failure release back to AVAILABLE.
+ * Capture-only discipline: eligible commission IDs are captured once atomically
+ * and every later step references ONLY that captured set (no re-query by
+ * status). Provider call is outside the tx; finalize/release is a single
+ * internal tx with CAS predicates and provider identity persisted for
+ * convergent retry.
  */
 
 import { Prisma } from "@lyrashield/db"
@@ -20,22 +22,9 @@ export interface PayoutRequestResult {
   error?: string
 }
 
-/**
- * Request a payout for an affiliate.
- *
- * Uses a transaction to atomically:
- *  1. Lock eligible AVAILABLE commissions
- *  2. Mark them RESERVED
- *  3. Create Payout + PayoutItem records
- *
- * The provider call is made outside the transaction; on failure, commissions
- * are released back to AVAILABLE.
- */
 export async function requestPayout(params: {
   affiliateId: string
-  /** Provider name override (auto-detected from payout method if not given). */
   provider?: string
-  /** Optional provider send function. If not provided, payout stays PENDING. */
   sendFn?: (
     payoutId: string,
     amount: string,
@@ -54,68 +43,57 @@ export async function requestPayout(params: {
     return { success: false, error: "Affiliate not found" }
   }
 
-  let payout: { id: string; amount: Prisma.Decimal; currency: string; itemCount: number }
+  let payout: { id: string; amount: Prisma.Decimal; currency: string; itemCount: number; capturedIds: string[] }
   try {
     payout = await prisma.$transaction(async (tx) => {
-      // Re-check eligibility inside the transaction to avoid TOCTOU.
       const eligibility = await checkPayoutEligibility(affiliateId)
       if (!eligibility.eligible) {
         throw new Error(eligibility.reasons.join("; "))
       }
 
-      // Atomically reserve ALL available commissions (AVAILABLE → RESERVED).
-      // This is the concurrency guard: only one transaction can succeed in
-      // flipping the rows because updateMany is atomic.
+      // Capture-only: read AVAILABLE commissions once
+      const available = await tx.commission.findMany({
+        where: { affiliateId, status: "AVAILABLE" },
+        select: { id: true, amount: true, currency: true },
+      })
+
+      if (available.length === 0) {
+        throw new Error("No available commissions to pay out")
+      }
+
+      const capturedIds = available.map((c) => c.id)
+
+      // CAS reserve: only AVAILABLE rows in captured set can become RESERVED
       const reserveResult = await tx.commission.updateMany({
-        where: {
-          affiliateId,
-          status: "AVAILABLE",
-        },
+        where: { id: { in: capturedIds }, status: "AVAILABLE" },
         data: { status: "RESERVED" },
       })
 
       if (reserveResult.count === 0) {
         throw new Error("No available commissions to pay out")
       }
-
-      // Read the now-reserved commissions.
-      const commissions = await tx.commission.findMany({
-        where: {
-          affiliateId,
-          status: "RESERVED",
-        },
-        select: { id: true, amount: true, currency: true },
-      })
-
-      if (commissions.length === 0) {
-        throw new Error("No available commissions to pay out")
+      if (reserveResult.count !== capturedIds.length) {
+        // Partial capture = concurrent winner took some; abort to avoid mixing stale set
+        throw new Error("Concurrent payout conflict — retry")
       }
 
-      // Apply reserve hold if active
       const reserveActive = isReserveActive(affiliate.reserveUntil)
       const reservePct = affiliate.reservePct
 
       let totalAmount = new Prisma.Decimal(0)
       const items: { commissionId: string; amount: Prisma.Decimal }[] = []
-      const currency = commissions[0]!.currency
+      const currency = available[0]!.currency
 
-      for (const c of commissions) {
+      for (const c of available) {
         let itemAmount = c.amount
-
         if (reserveActive) {
-          // Hold reservePct — only pay out (100 - reservePct)%
           const releasePct = new Prisma.Decimal(100 - reservePct)
           itemAmount = c.amount.mul(releasePct).div(100)
         }
-
         totalAmount = totalAmount.add(itemAmount)
         items.push({ commissionId: c.id, amount: itemAmount })
       }
 
-      // Create Payout
-      // C-M07: Pre-generate a UUID for the idempotencyKey instead of using
-      // empty string. The empty string caused concurrent payout creations to
-      // collide on the unique constraint.
       const payoutId = crypto.randomUUID()
       const newPayout = await tx.payout.create({
         data: {
@@ -129,27 +107,24 @@ export async function requestPayout(params: {
         },
       })
 
-      // Create PayoutItems (commissions are already RESERVED from updateMany)
-      // C-M04: For reserved commissions, track the held amount separately.
-      // The commission stays RESERVED (not PAID) for the reserve portion,
-      // and the PayoutItem records the actual paid amount.
       for (const item of items) {
         await tx.payoutItem.create({
           data: {
             payoutId: newPayout.id,
             commissionId: item.commissionId,
             amount: item.amount,
+            isReserveRelease: false,
           },
         })
       }
 
-      return { id: newPayout.id, amount: totalAmount, currency, itemCount: items.length }
+      return { id: newPayout.id, amount: totalAmount, currency, itemCount: items.length, capturedIds }
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Payout transaction failed"
-    // Distinguish eligibility/no-commissions errors from unexpected failures
     if (
       message.includes("No available commissions") ||
+      message.includes("Concurrent payout") ||
       message.includes("eligibility") ||
       message.includes("; ")
     ) {
@@ -158,42 +133,42 @@ export async function requestPayout(params: {
     throw error
   }
 
-  // Call provider (outside transaction)
   if (sendFn) {
     try {
-      const result = await sendFn(
-        payout.id,
-        payout.amount.toString(),
-        payout.currency,
-        affiliate.payoutMethod
-      )
+      const result = await sendFn(payout.id, payout.amount.toString(), payout.currency, affiliate.payoutMethod)
 
       if (result.success) {
-        // Mark PAID
-        await prisma.payout.update({
-          where: { id: payout.id },
-          data: {
-            status: "PAID",
-            providerPayoutId: result.providerPayoutId,
-            paidAt: new Date(),
-          },
-        })
+        // One internal tx with CAS predicates, persist provider identity for convergent retry
+        await prisma.$transaction(async (tx) => {
+          const updated = await tx.payout.updateMany({
+            where: { id: payout.id, status: "PROCESSING" },
+            data: {
+              status: "PAID",
+              providerPayoutId: result.providerPayoutId,
+              paidAt: new Date(),
+            },
+          })
+          if (updated.count === 0) {
+            const existing = await tx.payout.findUnique({
+              where: { id: payout.id },
+              select: { status: true, providerPayoutId: true },
+            })
+            if (existing?.status === "PAID") {
+              // Convergent retry: already finalized, ensure provider identity is persisted if missing
+              if (!existing.providerPayoutId && result.providerPayoutId) {
+                await tx.payout.updateMany({
+                  where: { id: payout.id, status: "PAID" },
+                  data: { providerPayoutId: result.providerPayoutId },
+                })
+              }
+              logger.info("Payout already PAID — convergent retry", { payoutId: payout.id })
+            }
+          }
 
-        // C-M04: Mark commissions PAID. The PayoutItem.amount records the
-        // actual paid amount; the difference between Commission.amount and
-        // PayoutItem.amount is the reserved portion. A separate release job
-        // (affiliate-payout-reserve-release) will create follow-up PayoutItems
-        // for the reserved amounts after the reserve period expires.
-        // For now, marking PAID is correct because the payout was sent and
-        // the commission is no longer AVAILABLE/RESERVED for new payouts.
-        const items = await prisma.payoutItem.findMany({
-          where: { payoutId: payout.id },
-          select: { commissionId: true },
-        })
-
-        await prisma.commission.updateMany({
-          where: { id: { in: items.map((i) => i.commissionId) } },
-          data: { status: "PAID" },
+          await tx.commission.updateMany({
+            where: { id: { in: payout.capturedIds }, status: "RESERVED" },
+            data: { status: "PAID" },
+          })
         })
 
         logger.info("Payout completed", {
@@ -202,39 +177,38 @@ export async function requestPayout(params: {
           providerPayoutId: result.providerPayoutId,
         })
 
-        return {
-          success: true,
-          payoutId: payout.id,
-          amount: payout.amount.toString(),
-          itemCount: payout.itemCount,
-        }
+        return { success: true, payoutId: payout.id, amount: payout.amount.toString(), itemCount: payout.itemCount }
       } else {
-        // Provider failed — release back to AVAILABLE
-        await releasePayoutCommissions(payout.id)
-        // C-L04: Map to generic failure code; log full error server-side only
-        await prisma.payout.update({
-          where: { id: payout.id },
-          data: { status: "FAILED", failureCode: "PROVIDER_ERROR" },
+        // Provider failed — release ONLY captured commissions (CAS), one tx
+        await prisma.$transaction(async (tx) => {
+          const updated = await tx.payout.updateMany({
+            where: { id: payout.id, status: "PROCESSING" },
+            data: { status: "FAILED", failureCode: "PROVIDER_ERROR" },
+          })
+          if (updated.count === 0) return
+          await tx.commission.updateMany({
+            where: { id: { in: payout.capturedIds }, status: "RESERVED", affiliateId },
+            data: { status: "AVAILABLE" },
+          })
+          await tx.payoutItem.deleteMany({ where: { payoutId: payout.id } })
         })
 
-        logger.error("Payout provider failed", {
-          payoutId: payout.id,
-          providerError: result.error ?? "unknown",
-        })
+        logger.error("Payout provider failed", { payoutId: payout.id, providerError: result.error ?? "unknown" })
 
-        return {
-          success: false,
-          payoutId: payout.id,
-          error: "Provider payout failed",
-        }
+        return { success: false, payoutId: payout.id, error: "Provider payout failed" }
       }
     } catch (error) {
-      // Provider threw — release back
-      await releasePayoutCommissions(payout.id)
-      // C-L04: Generic failure code; log full error server-side only
-      await prisma.payout.update({
-        where: { id: payout.id },
-        data: { status: "FAILED", failureCode: "PROVIDER_EXCEPTION" },
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.payout.updateMany({
+          where: { id: payout.id, status: "PROCESSING" },
+          data: { status: "FAILED", failureCode: "PROVIDER_EXCEPTION" },
+        })
+        if (updated.count === 0) return
+        await tx.commission.updateMany({
+          where: { id: { in: payout.capturedIds }, status: "RESERVED", affiliateId },
+          data: { status: "AVAILABLE" },
+        })
+        await tx.payoutItem.deleteMany({ where: { payoutId: payout.id } })
       })
 
       logger.error("Payout provider exception", {
@@ -242,43 +216,14 @@ export async function requestPayout(params: {
         error: error instanceof Error ? error.message : String(error),
       })
 
-      return {
-        success: false,
-        payoutId: payout.id,
-        error: "Provider exception",
-      }
+      return { success: false, payoutId: payout.id, error: "Provider exception" }
     }
   }
 
-  // No sendFn — leave as PROCESSING (manual confirmation expected)
   logger.info("Payout created (pending provider confirmation)", {
     payoutId: payout.id,
     amount: payout.amount.toString(),
   })
 
-  return {
-    success: true,
-    payoutId: payout.id,
-    amount: payout.amount.toString(),
-    itemCount: payout.itemCount,
-  }
-}
-
-/**
- * Release all commissions in a payout back to AVAILABLE.
- */
-async function releasePayoutCommissions(payoutId: string): Promise<void> {
-  const items = await prisma.payoutItem.findMany({
-    where: { payoutId },
-    select: { commissionId: true },
-  })
-
-  await prisma.commission.updateMany({
-    where: { id: { in: items.map((i) => i.commissionId) } },
-    data: { status: "AVAILABLE" },
-  })
-
-  await prisma.payoutItem.deleteMany({
-    where: { payoutId },
-  })
+  return { success: true, payoutId: payout.id, amount: payout.amount.toString(), itemCount: payout.itemCount }
 }
