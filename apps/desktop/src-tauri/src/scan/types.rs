@@ -139,3 +139,19 @@ pub enum ScanEvent {
         scan_id: String,
     },
 }
+
+/// Persisted scan event with monotonic sequence number for replay-from-zero.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SequencedEvent {
+    pub seq: u64,
+    pub event: ScanEvent,
+}
+
+/// Terminal crash codes for durable terminal state mapping.
+#[derive(Debug, Clone, Copy)]
+pub enum CrashCode {
+    SpawnFailed = 100,
+    PersistenceFailed = 101,
+    Cancelled = 102,
+    EngineCrash = 103,
+}

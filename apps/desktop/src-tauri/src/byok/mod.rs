@@ -6,7 +6,6 @@ use std::collections::HashMap;
 const KEYCHAIN_SERVICE: &str = "lyrashield";
 const AZURE_ACCOUNT: &str = "azure-openai";
 
-/// ChatGPT authentication status (delegated to the engine CLI).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum ChatGptAuthStatus {
@@ -15,23 +14,31 @@ pub enum ChatGptAuthStatus {
     Error { message: String },
 }
 
-/// Azure OpenAI credentials stored in the OS keychain.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AzureCredentials {
     pub api_key: String,
     pub endpoint: String,
 }
 
-/// Check ChatGPT auth status by spawning `lyrashield auth status`.
+/// Metadata only — never exposes raw secrets to React.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AzureMetadata {
+    pub configured: bool,
+    pub endpoint: Option<String>,
+    pub key_masked: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ByokStatus {
+    pub chatgpt: ChatGptAuthStatus,
+    pub azure: AzureMetadata,
+}
+
 pub fn check_chatgpt_auth() -> ChatGptAuthStatus {
     let result = run_engine_command(&["auth".into(), "status".into()], &HashMap::new());
-
     if !result.success {
-        // `auth status` returns non-zero when not signed in.
         return ChatGptAuthStatus::SignedOut;
     }
-
-    // The engine prints "Signed in" or similar on success.
     if result.stdout.to_lowercase().contains("signed in") || result.stdout.contains("✓") {
         ChatGptAuthStatus::SignedIn
     } else {
@@ -39,16 +46,11 @@ pub fn check_chatgpt_auth() -> ChatGptAuthStatus {
     }
 }
 
-/// Start the ChatGPT OAuth login flow by spawning `lyrashield auth login chatgpt`.
-///
-/// This opens a browser and blocks until the user completes the flow.
-/// The engine stores the token at `~/.strix/subscription-auth.json`.
 pub fn login_chatgpt() -> Result<(), String> {
     let result = run_engine_command(
         &["auth".into(), "login".into(), "chatgpt".into()],
         &HashMap::new(),
     );
-
     if result.success {
         Ok(())
     } else {
@@ -61,10 +63,8 @@ pub fn login_chatgpt() -> Result<(), String> {
     }
 }
 
-/// Log out of ChatGPT by spawning `lyrashield auth logout`.
 pub fn logout_chatgpt() -> Result<(), String> {
     let result = run_engine_command(&["auth".into(), "logout".into()], &HashMap::new());
-
     if result.success {
         Ok(())
     } else {
@@ -72,14 +72,45 @@ pub fn logout_chatgpt() -> Result<(), String> {
     }
 }
 
-/// Save Azure OpenAI credentials to the OS keychain.
+fn mask_key(key: &str) -> String {
+    if key.len() <= 8 {
+        return "***".to_string();
+    }
+    let start = &key[..4];
+    let end = &key[key.len() - 4..];
+    format!("{}…{}", start, end)
+}
+
+fn validate_azure_endpoint(endpoint: &str) -> Result<(), String> {
+    let e = endpoint.trim();
+    if e.is_empty() {
+        return Err("endpoint is empty".into());
+    }
+    if !e.starts_with("https://") {
+        return Err("endpoint must be https://".into());
+    }
+    if !e.contains("openai.azure.com") && !e.contains("openai.azure.us") {
+        return Err("endpoint must be an Azure OpenAI endpoint".into());
+    }
+    Ok(())
+}
+
+pub fn validate_azure_credentials(api_key: &str, endpoint: &str) -> Result<(), String> {
+    if api_key.trim().len() < 8 {
+        return Err("API key too short".into());
+    }
+    validate_azure_endpoint(endpoint)?;
+    Ok(())
+}
+
+/// Save Azure credentials — native validation before persisting, never logs raw key.
 pub fn save_azure_credentials(api_key: &str, endpoint: &str) -> Result<(), String> {
+    validate_azure_credentials(api_key, endpoint)?;
     let creds = serde_json::to_string(&AzureCredentials {
         api_key: api_key.to_string(),
         endpoint: endpoint.to_string(),
     })
     .map_err(|e| format!("failed to serialize azure creds: {}", e))?;
-
     let entry = Entry::new(KEYCHAIN_SERVICE, AZURE_ACCOUNT)
         .map_err(|e| format!("failed to create keychain entry: {}", e))?;
     entry
@@ -87,11 +118,9 @@ pub fn save_azure_credentials(api_key: &str, endpoint: &str) -> Result<(), Strin
         .map_err(|e| format!("failed to save azure creds to keychain: {}", e))
 }
 
-/// Load Azure OpenAI credentials from the OS keychain.
 pub fn load_azure_credentials() -> Result<Option<AzureCredentials>, String> {
     let entry = Entry::new(KEYCHAIN_SERVICE, AZURE_ACCOUNT)
         .map_err(|e| format!("failed to create keychain entry: {}", e))?;
-
     match entry.get_password() {
         Ok(creds_str) => {
             let creds: AzureCredentials = serde_json::from_str(&creds_str)
@@ -103,7 +132,6 @@ pub fn load_azure_credentials() -> Result<Option<AzureCredentials>, String> {
     }
 }
 
-/// Clear Azure OpenAI credentials from the OS keychain.
 pub fn clear_azure_credentials() -> Result<(), String> {
     let entry = Entry::new(KEYCHAIN_SERVICE, AZURE_ACCOUNT)
         .map_err(|e| format!("failed to create keychain entry: {}", e))?;
@@ -111,5 +139,70 @@ pub fn clear_azure_credentials() -> Result<(), String> {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(format!("failed to clear azure creds: {}", e)),
+    }
+}
+
+/// Metadata-only view for React — never returns raw api_key.
+pub fn get_azure_metadata() -> Result<AzureMetadata, String> {
+    match load_azure_credentials()? {
+        Some(creds) => {
+            // Validate stored creds natively before reporting ready
+            let valid = validate_azure_credentials(&creds.api_key, &creds.endpoint).is_ok();
+            Ok(AzureMetadata {
+                configured: valid,
+                endpoint: Some(creds.endpoint),
+                key_masked: Some(mask_key(&creds.api_key)),
+            })
+        }
+        None => Ok(AzureMetadata {
+            configured: false,
+            endpoint: None,
+            key_masked: None,
+        }),
+    }
+}
+
+pub fn get_byok_status() -> Result<ByokStatus, String> {
+    let chatgpt = check_chatgpt_auth();
+    let azure = get_azure_metadata()?;
+    Ok(ByokStatus { chatgpt, azure })
+}
+
+/// Ensure at least one BYOK provider is configured — used to fail before scan creation.
+pub fn require_byok_ready() -> Result<(), String> {
+    let status = get_byok_status()?;
+    let chat_ready = matches!(status.chatgpt, ChatGptAuthStatus::SignedIn);
+    if chat_ready || status.azure.configured {
+        Ok(())
+    } else {
+        Err("BYOK not configured — setup required".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn masked_never_contains_full_key() {
+        let key = "sk-1234567890abcdef1234567890";
+        let masked = mask_key(key);
+        assert!(!masked.contains(key));
+        assert!(masked.contains("…") || masked.contains("***"));
+    }
+    #[test]
+    fn metadata_never_exposes_key() {
+        // Save and get metadata path should not ceil raw key; we test mask logic
+        let meta = AzureMetadata {
+            configured: true,
+            endpoint: Some("https://foo.openai.azure.com".into()),
+            key_masked: Some(mask_key("sk-abcdef123456")),
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(!json.contains("sk-abcdef123456"));
+    }
+    #[test]
+    fn endpoint_validation_rejects_non_https() {
+        assert!(validate_azure_endpoint("http://bad").is_err());
+        assert!(validate_azure_endpoint("https://my.openai.azure.com").is_ok());
     }
 }
