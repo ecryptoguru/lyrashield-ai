@@ -17,7 +17,7 @@ LyraShield is **one app, two modes** — Cloud (subscription, hosted) and Local 
 
 Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraShield AI**; the canonical marketing domain is **`lyrashieldai.com`**. Trademark clearance remains a founder/legal decision.
 
-## Current verified state — 2026-08-20
+## Current verified state — 2026-08-21
 
 - **Product status:** LyraShield AI is live in **open beta with open registration**. Access is via **create a free account** at `https://app.lyrashieldai.com/sign-up`; the marketing email form is an optional product-updates subscription, not an access gate. Never describe the product as pre-launch or invite a reader to join a waitlist. The `waitlist` route, D1 table, `WAITLIST_RL` binding, and `WAITLIST_IP_SALT` secret keep their implemented names — those are code-level identifiers, not status copy.
 - **One app, two modes:** Cloud (subscription, hosted, we pay LLM costs) and Local (BYOK desktop, one-time license, customer's own AI — zero LLM COGS). Both share the same engine and core loop. Cloud sync is the optional bridge.
@@ -33,6 +33,7 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 - **Marketing:** deployed and indexable at `https://lyrashieldai.com` with D1/Rate Limit/KV bindings, sitemap/robots/`llms.txt`, security headers, PostHog. Lite Scanner live at `https://scanner.lyrashieldai.com`. Authenticated app live at `https://app.lyrashieldai.com` with open registration.
 - **Agent plugin:** `@lyrashield/agent-plugin` v0.1.17 with Cursor streamable-http support. `packages/agent-registry` covers 30 entries across 24 distinct agents. 4 confirmed client shims: Claude Code, Cursor, OpenAI Codex, Kiro.
 - PR CI runs core, marketing, motion, and Chromium E2E suites plus lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, RLS reproduction, and pinned-engine provenance/worker contract gate. Desktop CI builds (Tauri macOS + Windows) run on PRs touching `apps/desktop`; `release-tauri.yml` handles production desktop releases. `git diff --check` remains a required local/review check. Local Docker Compose builds `web`, `migrate`, and `worker` images and starts a healthy full stack.
+- **Production recovery and egress (2026-08-21):** PR #377 added Prisma client generation to the isolated restore drill; a manual run completed encrypted backup, restore, schema/RLS/audit verification, and application startup. PR #376 added the digest-pinned egress-proxy image and Azure deployment hook. The production proxy now uses a system-managed identity with a Key Vault secret reference, allows ingress only from the dedicated worker VM, and the worker was refreshed through its existing DNS-pinned egress policy; external proxy health requests are denied. Redis ingress is narrowed to the Container Apps environment and worker VM, but the current Redis endpoint is still public and non-TLS, so the private/TLS Redis release gate remains open.
 
 ## Current execution queue
 
@@ -42,7 +43,7 @@ Owner: engineering + founder authorization.
 
 1. Standard/Luna scan completed (2026-07-29). Deep/Terra still needs its own approved run.
 2. Promote only an inspected sandbox image digest. Production image provenance and approval remain separate operational gates.
-3. Provision the full-scan runtime: BullMQ-compatible TLS Redis, private S3-compatible evidence storage, dedicated worker compute, authenticated Next.js application origin.
+3. Complete the remaining full-scan runtime gate: BullMQ-compatible private/TLS Redis and any outstanding private S3/evidence proof. Dedicated worker compute and the authenticated Next.js application origin are live; transport-level egress is deployed separately.
 4. Keep Docker health, engine CLI availability, local sandbox execution, and production controlled-scan proof as separate claims.
 
 ### 2. Sprint 10 production provisioning
@@ -51,7 +52,7 @@ Owner: engineering + founder.
 
 Sprint 10 is merged to `main`. The remaining work is **production provisioning only**:
 
-- Configure Polar and Razorpay credentials, product/price IDs, and webhook secrets.
+- Polar and Razorpay test credentials, product/price IDs, webhook secrets, signed webhook smoke, and non-charge test objects are configured. Live paid activation remains a separate founder-controlled payment decision.
 - Provision Azure Key Vault for license signing (`lyrashieldprodsecrets`).
 - Verify entitlement gating and usage metering end-to-end against live provider events.
 - Provision RazorpayX and Payoneer payout API credentials for affiliate payouts.
@@ -62,13 +63,13 @@ Sprint 10 is merged to `main`. The remaining work is **production provisioning o
 
 Owner: engineering.
 
-Connect the implemented structured logs and web/scan readiness signals to the selected monitoring platform. Define alerts and incident ownership, then prove backup/restore, worker cancellation, queue recovery under production failure injection, and capacity in the target environment.
+Backup/restore is proven by the 2026-08-21 encrypted backup and isolated restore drill. Continue with worker cancellation, queue recovery under production failure injection, capacity, and incident ownership evidence in the target environment.
 
 ### 4. Deployment defense in depth
 
 Owner: engineering / infrastructure.
 
-Provision production data stores, evidence storage, secrets, TLS, backups, monitoring, and worker capacity. Add transport-level egress control with DNS pinning before exposing scans to untrusted targets at scale; application SSRF checks are not a substitute.
+Transport-level egress control with DNS pinning is deployed through the worker-only proxy. Complete private/TLS Redis and the remaining production data/evidence, monitoring, and capacity gates before expanding untrusted scan exposure.
 
 ### 5. Marketing launch gate
 
