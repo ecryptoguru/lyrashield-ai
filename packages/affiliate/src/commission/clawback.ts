@@ -26,6 +26,8 @@ export interface RefundPayload {
   provider: string
   /** External order/charge id. */
   externalId: string
+  /** Provider refund row id (propagated from the normalized domain event). */
+  refundId?: string | null
   /** Refund amount in major currency units. */
   refundAmount?: string
   /** Reason code. */

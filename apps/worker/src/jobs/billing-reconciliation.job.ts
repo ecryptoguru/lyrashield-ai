@@ -13,8 +13,8 @@
 
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { getPolarClient } from "@lyrashield/billing"
-import { getRazorpayClient } from "@lyrashield/billing"
+import { getPolarClient, getRazorpayClient, WEBHOOK_TRACK_MAX_ATTEMPTS } from "@lyrashield/billing"
+import { enqueueWebhookTrackRetry } from "@lyrashield/integrations"
 
 export interface ReconciliationResult {
   /** Number of Polar events checked. */
@@ -25,6 +25,10 @@ export interface ReconciliationResult {
   replayed: number
   /** Number of drift alerts raised. */
   driftAlerts: number
+  /** Number of incomplete webhook tracks re-enqueued for retry. */
+  tracksReEnqueued: number
+  /** Number of dead-lettered tracks skipped (terminal — need manual triage). */
+  deadLetterSkipped: number
   /** Details of drift alerts. */
   alerts: ReconciliationAlert[]
 }
@@ -35,6 +39,12 @@ export interface ReconciliationAlert {
   type: string
   message: string
 }
+
+/** A pending track older than this is stranded (crashed before execution). */
+const STRANDED_PENDING_MIN_AGE_MS = 10 * 60_000
+
+/** Upper bound on retries enqueued per reconciliation run. */
+const TRACK_RETRY_BATCH_LIMIT = 50
 
 /**
  * Run the billing reconciliation job.
@@ -49,6 +59,8 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
     razorpayChecked: 0,
     replayed: 0,
     driftAlerts: 0,
+    tracksReEnqueued: 0,
+    deadLetterSkipped: 0,
     alerts: [],
   }
 
@@ -61,11 +73,16 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
   // Check for unprocessed webhook events in the DB
   await checkUnprocessedEvents(result)
 
+  // Re-enqueue incomplete required-tracks (findings 12 / 18A)
+  await reEnqueueIncompleteTracks(result)
+
   logger.info("Billing reconciliation complete", {
     polarChecked: result.polarChecked,
     razorpayChecked: result.razorpayChecked,
     replayed: result.replayed,
     driftAlerts: result.driftAlerts,
+    tracksReEnqueued: result.tracksReEnqueued,
+    deadLetterSkipped: result.deadLetterSkipped,
   })
 
   return result
@@ -291,6 +308,58 @@ async function checkUnprocessedEvents(result: ReconciliationResult): Promise<voi
       externalId: event.externalId,
       type: event.eventType,
       message: `Unprocessed ${event.provider} webhook event: ${event.eventType}`,
+    })
+  }
+}
+
+/**
+ * Re-enqueue incomplete required-tracks (findings 12 / 18A).
+ *
+ * Selects track rows that are pending-but-stranded (older than the stranded
+ * window) or failed while under the bounded attempt cap, and enqueues one
+ * bounded batch of retry jobs. Dead-lettered tracks are terminal — counted
+ * and skipped so they surface for manual triage without infinite retries.
+ */
+async function reEnqueueIncompleteTracks(result: ReconciliationResult): Promise<void> {
+  const strandedCutoff = new Date(Date.now() - STRANDED_PENDING_MIN_AGE_MS)
+
+  const incomplete = await prisma.webhookEventTrack.findMany({
+    where: {
+      OR: [
+        { status: "pending", createdAt: { lt: strandedCutoff } },
+        { status: "failed", attempts: { lt: WEBHOOK_TRACK_MAX_ATTEMPTS } },
+      ],
+    },
+    select: { id: true, webhookEventId: true, track: true },
+    orderBy: { updatedAt: "asc" },
+    take: TRACK_RETRY_BATCH_LIMIT + 25,
+  })
+
+  for (const row of incomplete) {
+    if (result.tracksReEnqueued >= TRACK_RETRY_BATCH_LIMIT) break
+    try {
+      await enqueueWebhookTrackRetry({ webhookEventId: row.webhookEventId, track: row.track })
+      result.tracksReEnqueued++
+    } catch (error) {
+      logger.warn("Reconciliation could not enqueue webhook track retry", {
+        webhookEventId: row.webhookEventId,
+        track: row.track,
+        reason: "retry_enqueue_failed",
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  // Dead letters: count only (bounded summary), never re-enqueue.
+  result.deadLetterSkipped = await prisma.webhookEventTrack.count({
+    where: { status: "dead_letter" },
+  })
+
+  if (result.tracksReEnqueued > 0 || result.deadLetterSkipped > 0) {
+    logger.info("Webhook track reconciliation sweep", {
+      reEnqueued: result.tracksReEnqueued,
+      deadLetterSkipped: result.deadLetterSkipped,
+      scanned: incomplete.length,
     })
   }
 }

@@ -4,20 +4,15 @@ import { logger } from "@lyrashield/logger"
 import {
   validatePolarWebhook,
   validateRazorpayWebhook,
-  processPolarEvent,
-  processRazorpayEvent,
-  isHandledPolarEvent,
-  isHandledRazorpayEvent,
   resolveRazorpayEventIdentity,
-  resolveProviderKey,
+  normalizeProviderEvent,
+  runApplicableTracks,
   WebhookAuthError,
   WebhookPayloadError,
 } from "@lyrashield/billing"
 import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
-import { env } from "@lyrashield/config"
+import { enqueueWebhookTrackRetry } from "@lyrashield/integrations"
 import { createHash } from "node:crypto"
-import { LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
-import { issueLicenseForPolarOrder } from "@/lib/licenses/license-service"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -41,12 +36,16 @@ export const dynamic = "force-dynamic"
  * 2. Insert WebhookEvent FIRST — the DB unique constraint is the concurrency
  *    arbiter: of simultaneous duplicate deliveries exactly one inserts and
  *    processes; losers answer 200 without side effects.
- * 3. Process the event synchronously BEFORE responding:
- *    a. Track A: syncSubscription / creditTopUp (billing entitlements)
- *    b. Track B: issue license for Local SKU Polar one-time orders
- *    c. Track C: affiliate commission/clawback via webhook-dispatch
- * 4. Update WebhookEvent: processed=true, processedAt=now()
- * 5. Respond 200
+ * 3. Process the event synchronously BEFORE responding via durable required
+ *    tracks (findings 12 / 18A) — one WebhookEventTrack row per applicable
+ *    track, executed through the shared executor:
+ *    a. billing:   entitlements / pack credit / refund reversal adapters
+ *    b. license:   Local SKU purchase fulfillment (both providers)
+ *    c. affiliate: commission/clawback via normalized domain events
+ *    A failed track marks its row "failed", enqueues a durable BullMQ retry,
+ *    and answers 5xx so the provider also redelivers. The parent `processed`
+ *    flag is DERIVED: true only when every applicable track succeeded.
+ * 4. Respond 200 only when every applicable track row is "succeeded".
  *
  * Single webhook ingress — Track C never registers a second webhook route.
  * Both tracks consume the same idempotent WebhookEvent rows.
@@ -196,6 +195,7 @@ export async function POST(request: Request) {
   }
 
   // ── Phase 2: claim via unique constraint (concurrency arbiter) ────────────
+  let claimedEventId: string | null = null
   try {
     const inserted = await insertWebhookEvent(
       provider,
@@ -207,7 +207,7 @@ export async function POST(request: Request) {
     if (!inserted) {
       const existingEvent = await prisma.webhookEvent.findUnique({
         where: { provider_externalId: { provider, externalId } },
-        select: { processed: true, createdAt: true },
+        select: { id: true, processed: true, createdAt: true },
       })
       if (!existingEvent) {
         // Row vanished between the P2002 and this lookup (practically
@@ -219,6 +219,7 @@ export async function POST(request: Request) {
         })
       } else if (existingEvent.processed) {
         // Exact replay of an already-processed event — acknowledge immediately.
+        // Zero extra side effects: every applicable track is already succeeded.
         logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
         return NextResponse.json({ success: true }, { status: 200 })
       } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
@@ -226,18 +227,86 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true }, { status: 200 })
       } else {
         logger.info("Reprocessing stranded webhook event", { provider, eventType, externalId })
+        claimedEventId = existingEvent.id
       }
+    } else {
+      claimedEventId = inserted.id
     }
 
-    // ── Phase 3: synchronous side effects (Tracks A/B/C) ────────────────────
-    await processTracks(provider, externalId, eventType, payload)
+    if (!claimedEventId) {
+      // Unreachable in practice (row vanished between P2002 and lookup);
+      // fail closed with 5xx so the provider redelivers instead of running
+      // required tracks without durable state.
+      logger.error("Webhook event claim lost after arbiter", {
+        provider,
+        eventType,
+        externalId,
+        reason: "claim_lost",
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+        },
+        { status: 500 }
+      )
+    }
 
-    // Mark as processed only after all side effects succeed
-    await markProcessed(provider, externalId)
+    // ── Phase 3: durable required tracks (billing/license/affiliate) ─────────
+    const normalized = normalizeProviderEvent({
+      provider,
+      eventType,
+      payload,
+      deliveryId: externalId,
+    })
+    const summary = await runApplicableTracks({
+      webhookEventId: claimedEventId,
+      event: normalized,
+      rawPayload: payload,
+      handlers: { dispatchAffiliate },
+    })
+
+    if (!summary.allSucceeded) {
+      // Durably queue one bounded retry per failed track (dead-lettered tracks
+      // are terminal and are NOT re-enqueued). An enqueue failure is logged
+      // with a reason code — the answer is 5xx either way, so the provider
+      // redelivery remains the additional recovery path.
+      for (const failure of summary.failures) {
+        try {
+          await enqueueWebhookTrackRetry({
+            webhookEventId: claimedEventId,
+            track: failure.track,
+          })
+        } catch (enqueueError) {
+          logger.error("Webhook track retry enqueue failed", {
+            webhookEventId: claimedEventId,
+            track: failure.track,
+            reason: "retry_enqueue_failed",
+            error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
+          })
+        }
+      }
+      logger.warn("Webhook answered 5xx — required track(s) not satisfied", {
+        provider,
+        eventType,
+        externalId,
+        webhookEventId: claimedEventId,
+        failedTracks: summary.failures.map((f) => f.track),
+        deadLetteredTracks: summary.deadLettered.map((f) => f.track),
+        reason: "required_track_failed",
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+        },
+        { status: 500 }
+      )
+    }
   } catch (error) {
     // Transient processing failure — answer 5xx so the provider retries.
-    // The unprocessed row remains; redelivery reprocesses it once the
-    // in-flight window has passed.
+    // The unprocessed row (and any pending/failed track rows) remain; the
+    // durable retry queue plus provider redelivery recover them.
     logger.error("Webhook processing failed", {
       provider,
       eventType,
@@ -258,120 +327,9 @@ export async function POST(request: Request) {
 }
 
 /**
- * Run Tracks A/B/C for a claimed webhook event.
- * Order is contractual: entitlements → license issuance → affiliate dispatch.
- */
-async function processTracks(
-  provider: "polar" | "razorpay",
-  externalId: string,
-  eventType: string,
-  payload: unknown
-): Promise<void> {
-  if (provider === "polar") {
-    const event = payload as Parameters<typeof processPolarEvent>[0]
-    // Track A: billing entitlements
-    if (isHandledPolarEvent(event.type)) {
-      await processPolarEvent(event)
-    }
-    // Track B: license issuance for Local SKU one-time orders
-    if (event.type === "order.paid") {
-      await maybeIssueLicense(provider, String(event.data.id ?? ""), event.data)
-    }
-  } else {
-    const event = payload as Parameters<typeof processRazorpayEvent>[0]
-    // Track A: billing entitlements
-    if (isHandledRazorpayEvent(event.event)) {
-      await processRazorpayEvent(event)
-    }
-  }
-
-  // Track C: affiliate commission/clawback dispatch (non-blocking on failure)
-  const entityRecord =
-    provider === "polar"
-      ? ((payload as { data?: Record<string, unknown> }).data ?? {})
-      : ((
-          payload as {
-            payload?: { payment?: { entity: unknown }; subscription?: { entity: unknown } }
-          }
-        ).payload?.payment?.entity ??
-        (payload as { payload?: { subscription?: { entity: unknown } } }).payload?.subscription
-          ?.entity ??
-        {})
-  await dispatchAffiliate({
-    provider,
-    event: eventType,
-    payload: entityRecord as Record<string, unknown>,
-  }).catch((err) => {
-    logger.error("Affiliate dispatch failed (non-blocking)", {
-      provider,
-      event: eventType,
-      externalId,
-      error: err instanceof Error ? err.message : String(err),
-    })
-  })
-}
-
-/**
- * Check if a Polar order is for a Local SKU product and issue a license if so.
- * Called on `order.paid` events. Idempotent — the license issue endpoint
- * checks for existing licenses by orderId.
- */
-async function maybeIssueLicense(
-  provider: string,
-  orderId: string,
-  payload: Record<string, unknown>
-): Promise<void> {
-  try {
-    const productId = (payload.product_id ??
-      payload.productId ??
-      payload.sku_id ??
-      payload.skuId) as string | undefined
-    if (!productId) return
-
-    const skuId = resolveProviderKey(env.POLAR_LOCAL_PRODUCT_IDS, productId) as LocalSkuId | null
-    if (!skuId || !LOCAL_SKU_MAP[skuId]) return
-
-    const customer = payload.customer as Record<string, unknown> | undefined
-    const buyerEmail = (payload.customer_email ??
-      payload.customerEmail ??
-      payload.email ??
-      customer?.email) as string | undefined
-    if (!buyerEmail) {
-      logger.warn("Local SKU order missing buyer email — cannot issue license", {
-        orderId,
-        productId,
-      })
-      return
-    }
-
-    const seatCount = (payload.seats ?? payload.seat_count ?? payload.seatCount ?? 1) as number
-
-    // Log bounded identifiers only — never buyer email or other customer PII.
-    logger.info("Issuing license for Local SKU order", {
-      orderId,
-      productId,
-      sku: skuId,
-    })
-
-    await issueLicenseForPolarOrder({
-      productId,
-      buyerEmail,
-      seatCount,
-      orderId,
-    })
-  } catch (error) {
-    // Non-blocking — license issuance failure should not block the webhook
-    logger.error("License issuance failed (non-blocking)", {
-      orderId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
-}
-
-/**
  * Insert a WebhookEvent row, idempotent on (provider, externalId).
  * The DB unique constraint arbitrates concurrent duplicates: exactly one
- * caller inserts. Returns false to signal a duplicate/replay.
+ * caller inserts. Returns null to signal a duplicate/replay.
  */
 async function insertWebhookEvent(
   provider: string,
@@ -379,9 +337,9 @@ async function insertWebhookEvent(
   identitySource: "delivery" | "derived",
   eventType: string,
   payload: unknown
-): Promise<boolean> {
+): Promise<{ id: string } | null> {
   try {
-    await prisma.webhookEvent.create({
+    const created = await prisma.webhookEvent.create({
       data: {
         provider,
         externalId,
@@ -390,8 +348,9 @@ async function insertWebhookEvent(
         processed: false,
         identitySource,
       },
+      select: { id: true },
     })
-    return true
+    return created
   } catch (error) {
     // P2002 = unique constraint — duplicate delivery, arbiter says we lost
     if (
@@ -401,18 +360,8 @@ async function insertWebhookEvent(
       (error as { code: string }).code === "P2002"
     ) {
       logger.debug("Webhook event duplicate (constraint arbiter)", { provider, externalId })
-      return false
+      return null
     }
     throw error
   }
-}
-
-/**
- * Mark a WebhookEvent as processed after all synchronous side effects succeed.
- */
-async function markProcessed(provider: string, externalId: string): Promise<void> {
-  await prisma.webhookEvent.updateMany({
-    where: { provider, externalId, processed: false },
-    data: { processed: true, processedAt: new Date() },
-  })
 }

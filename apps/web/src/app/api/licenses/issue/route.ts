@@ -40,7 +40,7 @@ const IssueSchema = z.object({
  *
  * This route is protected by an internal API key (`X-LyraShield-Internal-Key`)
  * so that external users cannot generate free licenses. The primary webhook
- * handler calls `issueLicenseForPolarOrder()` directly; this route is a
+ * handler calls `issueLicenseForProviderOrder()` directly; this route is a
  * fallback/internal API.
  *
  * Idempotency: the `orderId` is checked against existing licenses to avoid

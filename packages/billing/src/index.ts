@@ -117,3 +117,58 @@ export {
 } from "./providers/razorpay/webhooks"
 export { processRazorpayEvent, type RazorpayAdapterResult } from "./providers/razorpay/adapter"
 export { WebhookAuthError, WebhookPayloadError } from "./webhook-errors"
+
+// Normalized provider domain events (finding 18A)
+export {
+  normalizeProviderEvent,
+  type BillingProviderName,
+  type ProductKind,
+  type NormalizedEventKind,
+  type NormalizedBillingEvent,
+  type SubscriptionPaidEvent,
+  type SubscriptionRenewedEvent,
+  type LocalPurchasePaidEvent,
+  type RefundCompletedEvent,
+  type EntitlementTransitionedEvent,
+} from "./domain-events"
+
+// Durable required-track execution + state (finding 12)
+export {
+  WEBHOOK_TRACK_IDS,
+  WEBHOOK_TRACK_MAX_ATTEMPTS,
+  computeApplicableTracks,
+  ensureWebhookTrackRows,
+  markTrackSucceeded,
+  markTrackFailed,
+  syncDerivedProcessedState,
+  boundTrackError,
+  executeWebhookTrack,
+  runApplicableTracks,
+  retryWebhookTrack,
+  type WebhookTrackId,
+  type WebhookTrackHandlers,
+  type TrackFailure,
+  type TrackRunSummary,
+  type WebhookTrackRetryOutcome,
+} from "./webhook-tracks"
+
+// License fulfillment (Track B, provider-generalized)
+export {
+  issueLicenseForProviderOrder,
+  issueSignedLicense,
+  resolvePublishedFallbackBuild,
+  resolveSigningPrivateKey,
+  resolveSigningKeyId,
+  resolveSigningPublicKey,
+  parseLocalProductIds,
+  generateLicenseKey,
+  hashLicenseKey,
+  sendLicenseIssuedEmail,
+  computeUpdateEligibleUntil,
+  validateSeatCountForSku,
+  machineCapForSku,
+  isIndividualSku,
+  isTeamSku,
+  INDIVIDUAL_MACHINE_CAP,
+  TEAM_MIN_SEATS,
+} from "./license-fulfillment"

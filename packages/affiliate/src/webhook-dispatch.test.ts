@@ -1,124 +1,176 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-// Mock the commission handlers so we can assert which branch dispatch took.
+const onOrderPaidMock = vi.fn().mockResolvedValue({ commissionId: "c_1" })
+const onRefundMock = vi.fn().mockResolvedValue({ reversed: true })
+const onLocalOrderPaidMock = vi.fn().mockResolvedValue({ commissionId: "lc_1" })
+
 vi.mock("./commission/engine", () => ({
-  onOrderPaid: vi.fn(),
-}))
-vi.mock("./commission/local", () => ({
-  onLocalOrderPaid: vi.fn(),
+  onOrderPaid: (...args: unknown[]) => onOrderPaidMock(...args),
 }))
 vi.mock("./commission/clawback", () => ({
-  onRefund: vi.fn(),
+  onRefund: (...args: unknown[]) => onRefundMock(...args),
+}))
+vi.mock("./commission/local", () => ({
+  onLocalOrderPaid: (...args: unknown[]) => onLocalOrderPaidMock(...args),
 }))
 vi.mock("@lyrashield/logger", () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
 import { dispatch } from "./webhook-dispatch"
-import { onOrderPaid } from "./commission/engine"
-import { onLocalOrderPaid } from "./commission/local"
 
-describe("webhook-dispatch — minute-pack no-commission guard (C2)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+beforeEach(() => {
+  onOrderPaidMock.mockClear().mockResolvedValue({ commissionId: "c_1" })
+  onRefundMock.mockClear().mockResolvedValue({ reversed: true })
+  onLocalOrderPaidMock.mockClear().mockResolvedValue({ commissionId: "lc_1" })
+})
 
-  it("skips commission for a Polar minute-pack order (productId polar_pack_100)", async () => {
-    const result = await dispatch({
-      provider: "polar",
-      event: "order.paid",
-      payload: {
-        id: "order-pk100",
-        productId: "polar_pack_100",
-        amount: "15.00",
-        currency: "USD",
-        metadata: { workspaceId: "ws-1", packId: "pack_100" },
-      },
-    })
-
-    expect(result.handled).toBe(true)
-    // The Cloud subscription handler must NOT be called for a minute pack
-    expect(onOrderPaid).not.toHaveBeenCalled()
-    // The Local-SKU handler must NOT be called either
-    expect(onLocalOrderPaid).not.toHaveBeenCalled()
-  })
-
-  it("skips commission for a Razorpay minute-pack order (packId in metadata)", async () => {
+describe("affiliate webhook-dispatch — normalized event fan-out", () => {
+  it("e) refund.completed kind fires clawback exactly once with refundId propagated", async () => {
     const result = await dispatch({
       provider: "razorpay",
-      event: "order.paid",
-      payload: {
-        id: "order-rzpk250",
-        productId: "razorpay_pack_250",
-        amount: "30.00",
-        currency: "USD",
-        metadata: { workspaceId: "ws-2", packId: "pack_250" },
+      kind: "refund_completed",
+      rawType: "refund.created",
+      productKind: "unknown",
+      refundId: "rfnd_R_77",
+      entity: {
+        id: "rfnd_R_77",
+        payment_id: "pay_R_9",
+        order_id: "order_R_9",
+        amount: 4900,
       },
     })
 
     expect(result.handled).toBe(true)
-    expect(onOrderPaid).not.toHaveBeenCalled()
-    expect(onLocalOrderPaid).not.toHaveBeenCalled()
+    expect(onRefundMock).toHaveBeenCalledTimes(1)
+    expect(onRefundMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "razorpay",
+        externalId: "order_R_9",
+        refundId: "rfnd_R_77",
+        reason: "REFUND",
+      })
+    )
+    expect(onOrderPaidMock).not.toHaveBeenCalled()
   })
 
-  it("routes a Cloud subscription order.paid to the Cloud commission handler", async () => {
-    vi.mocked(onOrderPaid).mockResolvedValue({
-      conversionId: "conv-1",
-      commissionId: "comm-1",
-      amount: "24.7500",
-      rateBps: 2500,
-      status: "PENDING",
-      expired: false,
-      duplicate: false,
-    })
-
-    const result = await dispatch({
+  it("chargeback.created raw type maps to CHARGEBACK reason", async () => {
+    await dispatch({
       provider: "polar",
-      event: "order.paid",
-      payload: {
-        id: "order-sub1",
-        productId: "polar_product_pro_monthly",
-        amount: "99.00",
-        currency: "USD",
-        subscriptionId: "sub-1",
-        metadata: { workspaceId: "ws-3", plan: "PRO", interval: "monthly" },
-      },
+      kind: "refund_completed",
+      rawType: "chargeback.created",
+      productKind: "unknown",
+      refundId: "ref_C_1",
+      entity: { id: "ref_C_1", order_id: "ord_C_1" },
     })
 
-    expect(result.handled).toBe(true)
-    expect(onOrderPaid).toHaveBeenCalledOnce()
+    expect(onRefundMock).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "CHARGEBACK", isChargeback: true })
+    )
   })
 
-  it("routes a Local-SKU order.paid to the Local commission handler (20% one-time)", async () => {
-    vi.mocked(onLocalOrderPaid).mockResolvedValue({
-      conversionId: "conv-2",
-      commissionId: "comm-2",
-      amount: "19.8000",
-      rateBps: 2000,
-      status: "PENDING",
-      expired: false,
-      duplicate: false,
-    })
-
+  it("f) minute-pack paid event creates NO commission", async () => {
     const result = await dispatch({
       provider: "polar",
-      event: "order.paid",
-      payload: {
-        id: "order-local1",
-        productId: "individual_launch",
-        amount: "199.00",
-        currency: "USD",
-        metadata: { workspaceId: "ws-4" },
+      kind: "local_purchase_paid",
+      rawType: "order.paid",
+      productKind: "minute_pack",
+      entity: { id: "ord_PACK", productId: "polar_pack_250" },
+    })
+
+    // C2: skipped explicitly — never routed to a commission handler.
+    expect(result.handled).toBe(true)
+    expect(result.result).toEqual({ skipped: "minute_pack_no_commission" })
+    expect(onOrderPaidMock).not.toHaveBeenCalled()
+    expect(onLocalOrderPaidMock).not.toHaveBeenCalled()
+    expect(onRefundMock).not.toHaveBeenCalled()
+  })
+
+  it("minute-pack exclusion also holds via structural detection when productKind disagrees", async () => {
+    // Defense in depth: even if the normalizer mislabels, the structural
+    // predicate still skips commissions.
+    await dispatch({
+      provider: "razorpay",
+      kind: "subscription_paid",
+      rawType: "payment.captured",
+      productKind: "unknown",
+      entity: { id: "pay_PACK", notes: { packId: "pack_100" } },
+    })
+
+    expect(onOrderPaidMock).not.toHaveBeenCalled()
+    expect(onLocalOrderPaidMock).not.toHaveBeenCalled()
+  })
+
+  it("local purchase routes to the local commission handler", async () => {
+    await dispatch({
+      provider: "polar",
+      kind: "local_purchase_paid",
+      rawType: "order.paid",
+      productKind: "local",
+      entity: {
+        id: "ord_LOCAL",
+        productId: "individual_regular",
+        customerEmail: "buyer@example.com",
+        amount: "299",
       },
     })
 
-    expect(result.handled).toBe(true)
-    expect(onLocalOrderPaid).toHaveBeenCalledOnce()
-    expect(onOrderPaid).not.toHaveBeenCalled()
+    expect(onLocalOrderPaidMock).toHaveBeenCalledTimes(1)
+    expect(onOrderPaidMock).not.toHaveBeenCalled()
+  })
+
+  it("cloud subscription paid routes to the recurring commission engine", async () => {
+    await dispatch({
+      provider: "polar",
+      kind: "subscription_paid",
+      rawType: "order.paid",
+      productKind: "subscription",
+      entity: {
+        id: "ord_SUB",
+        subscriptionId: "sub_Z",
+        customerId: "cus_1",
+        customerEmail: "sub@example.com",
+        amount: "49",
+        metadata: { affToken: "tok123" },
+      },
+    })
+
+    expect(onOrderPaidMock).toHaveBeenCalledTimes(1)
+    expect(onOrderPaidMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "polar",
+        externalId: "ord_SUB",
+        cookieToken: "tok123",
+      })
+    )
+    expect(onLocalOrderPaidMock).not.toHaveBeenCalled()
+  })
+
+  it("entitlement transitions carry no commission relevance", async () => {
+    const result = await dispatch({
+      provider: "razorpay",
+      kind: "entitlement_transitioned",
+      rawType: "subscription.cancelled",
+      productKind: "subscription",
+      entity: { id: "sub_C" },
+    })
+
+    expect(result.handled).toBe(false)
+    expect(onOrderPaidMock).not.toHaveBeenCalled()
+    expect(onRefundMock).not.toHaveBeenCalled()
+  })
+
+  it("handler errors propagate — silent catches die (caller owns retry semantics)", async () => {
+    onRefundMock.mockRejectedValue(new Error("db down"))
+    await expect(
+      dispatch({
+        provider: "polar",
+        kind: "refund_completed",
+        rawType: "refund.created",
+        productKind: "unknown",
+        refundId: "r1",
+        entity: { id: "r1", order_id: "o1" },
+      })
+    ).rejects.toThrow("db down")
   })
 })

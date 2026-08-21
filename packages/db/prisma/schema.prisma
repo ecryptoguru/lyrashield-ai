@@ -1409,9 +1409,38 @@ model WebhookEvent {
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  tracks WebhookEventTrack[]
+
   @@unique([provider, externalId])
   @@index([workspaceId])
   @@index([processed])
+}
+
+/// Durable per-track processing state for a WebhookEvent (billing/license/
+/// affiliate). The parent `processed` flag is DERIVED: true only when every
+/// applicable track row is "succeeded". Child rows are loaded only through
+/// webhookEventId; workspaceId mirrors the parent for traceability and is not
+/// auto-scoped (not in WORKSPACE_SCOPED_MODELS — no RLS policy on this table).
+model WebhookEventTrack {
+  id             String    @id @default(cuid())
+  webhookEventId String
+  workspaceId    String?
+  // "billing" | "license" | "affiliate"
+  track          String
+  // "pending" | "succeeded" | "failed" | "dead_letter"
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  // Bounded reason string (truncated, identifiers/reason codes only).
+  lastError      String?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  webhookEvent WebhookEvent @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
+
+  @@unique([webhookEventId, track])
+  @@index([status])
+  @@index([track, status])
 }
 
 model Retest {
