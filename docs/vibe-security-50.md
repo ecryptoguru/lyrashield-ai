@@ -32,7 +32,7 @@ Repository scans use Luna/medium for Safe, Quick, and Standard. Deep and Custom 
 
 ## Release proof
 
-Unit and contract tests prove registry completeness, instruction delivery, evidence separation, URL signatures, dependency parsing, agent-instruction detection, CI confused-deputy detection, and orchestration. An approved production Standard repository scan exercised the deployed worker/engine path and stored a Vibe Security 50 ledger. That run is target- and version-scoped, included inconclusive and evidence-required receipts, and is not proof of all controls, universal coverage, or a security guarantee. Broader production assurance still requires current image provenance, retained artifacts, and deployment-level evidence.
+Unit and contract tests prove registry completeness, instruction delivery, evidence separation, URL signatures, dependency parsing, agent-instruction detection, CI confused-deputy detection, and orchestration. The current production Standard repository acceptance exercised the promoted worker/engine path and stored a Vibe Security 50 ledger. That run is target- and version-scoped, included inconclusive and evidence-required receipts, and is not proof of all controls, universal coverage, or a security guarantee. Broader production assurance still requires private evidence-storage proof, monitoring/capacity evidence, and approved proof for each additional review profile.
 
 ## Claims discipline
 
