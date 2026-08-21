@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
+import { withWorkspaceRLS, findLicenseForSyncByKeyHash } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
 import { requireAuth } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
@@ -9,9 +10,20 @@ import { hashLicenseKey } from "../../../../lib/licenses/license-service"
 
 export const dynamic = "force-dynamic"
 
+// Detection-state-only: only OPEN is accepted from desktop; FIXED is mapped to FIXED_PENDING_RETEST
+// Verified is always false (server-enforced). Reject forged terminal or verified=true.
+const ALLOWED_SYNC_STATUSES = new Set(["OPEN", "FIXED_PENDING_RETEST"])
+const STATUS_FIX_MAPPING: Record<string, string> = {
+  FIXED: "FIXED_PENDING_RETEST",
+}
+
 const FindingSyncSchema = z.object({
   workspaceId: z.string().min(1),
   licenseKey: z.string().min(1).max(200),
+  // Monotonic CAS: client sends seq it believes is current. Server atomically increments.
+  // Accept either `expectedSeq` or legacy `expectedPreviousCursor` (numeric string) for compat.
+  expectedSeq: z.number().int().min(0).optional(),
+  expectedPreviousCursor: z.union([z.number().int().min(0), z.string()]).optional(),
   findings: z
     .array(
       z.object({
@@ -44,13 +56,10 @@ const FindingSyncSchema = z.object({
 /**
  * POST /api/sync/findings
  *
- * Receive findings and reports from a Local desktop client and persist them
- * to the linked workspace. Enforces sync entitlement server-side by checking
- * the license key against the SyncCursor established via /sync/connect.
- *
- * Findings from Local are stored under a synthetic "LOCAL_SYNC" scan record
- * so they appear in the dashboard alongside cloud-scan findings. The finding
- * ID is namespaced as `local:{licenseId}:{externalId}` to avoid collisions.
+ * Authenticated monotonic evidence sync. All writes bound to workspace via withWorkspaceRLS.
+ * CAS on SyncCursor.seq prevents replay/rewind. Detection-state-only: verified forced false,
+ * FIXED mapped to FIXED_PENDING_RETEST and rejected if forged terminal persists, unknown statuses rejected.
+ * Reports persisted atomically in same tx (full persistence; never count discarded input).
  */
 export async function POST(request: Request) {
   try {
@@ -60,9 +69,43 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
-    const { workspaceId, licenseKey, findings, reports } = parsed.data
+    const raw = parsed.data
+    // Normalize expected seq: prefer expectedSeq, fallback to expectedPreviousCursor
+    let expectedSeq: number | undefined = raw.expectedSeq
+    if (expectedSeq === undefined && raw.expectedPreviousCursor !== undefined) {
+      const v = raw.expectedPreviousCursor
+      if (typeof v === "number") expectedSeq = v
+      else {
+        const n = Number(v)
+        if (Number.isFinite(n) && Number.isInteger(n) && n >= 0) expectedSeq = n
+      }
+    }
+    const { workspaceId, licenseKey, findings, reports } = raw
 
-    // Verify workspace access.
+    // Detection-state-only validation BEFORE any DB write
+    for (const f of findings) {
+      if (f.verified === true) {
+        return apiError(
+          "FORGED_VERIFICATION",
+          "verified must be false for local evidence sync",
+          400
+        )
+      }
+      // Map FIXED -> FIXED_PENDING_RETEST, reject other terminal/unknown
+      const mapped = STATUS_FIX_MAPPING[f.status] ?? f.status
+      if (mapped === "FIXED") {
+        // Direct FIXED not allowed (should have been mapped)
+        return apiError(
+          "FORGED_TERMINAL_STATUS",
+          "FIXED status not allowed via sync; use FIXED_PENDING_RETEST",
+          400
+        )
+      }
+      if (!ALLOWED_SYNC_STATUSES.has(mapped)) {
+        return apiError("INVALID_STATUS", `status '${f.status}' not allowed via sync`, 400)
+      }
+    }
+
     const membership = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: session.userId } },
     })
@@ -70,22 +113,24 @@ export async function POST(request: Request) {
       return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
     }
 
-    // Verify the license key has an active sync cursor for this workspace.
     const keyHash = hashLicenseKey(licenseKey)
-    const licenseKeyRow = await prisma.licenseKey.findUnique({
-      where: { keyHash },
-      include: { license: { include: { syncCursors: { where: { workspaceId } } } } },
-    })
-    if (!licenseKeyRow) {
+    const row = await findLicenseForSyncByKeyHash(keyHash)
+    if (!row) {
       return apiError("LICENSE_KEY_NOT_FOUND", "The provided license key is not recognized", 404)
     }
-
-    const license = licenseKeyRow.license
+    const license = row.license
     if (license.revoked) {
       return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
     }
 
-    if (license.syncCursors.length === 0) {
+    // Need cursor existence check — must be bound to workspace via RLS
+    // Fetch cursor inside withWorkspaceRLS to respect NOBYPASSRLS, but we need seq for CAS, so do a preliminary fetch via withWorkspaceRLS read
+    const cursorPre = await withWorkspaceRLS(workspaceId, async (tx) =>
+      tx.syncCursor.findUnique({
+        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
+      })
+    )
+    if (!cursorPre) {
       return apiError(
         "SYNC_NOT_CONNECTED",
         "Sync has not been established for this workspace. Call /api/sync/connect first.",
@@ -93,72 +138,131 @@ export async function POST(request: Request) {
       )
     }
 
-    const cursor = license.syncCursors[0]!
+    const currentSeq = Number(cursorPre.seq)
+    // Require expectedSeq when cursor already advanced, otherwise treat missing as 0 for first batch compat
+    if (expectedSeq === undefined) {
+      // For new cursors at seq 0, allow missing expectedSeq as 0
+      if (currentSeq !== 0) {
+        return apiError(
+          "CURSOR_STALE",
+          "expectedSeq is required for monotonic sync",
+          409,
+          undefined,
+          {
+            currentSeq,
+          }
+        )
+      }
+      expectedSeq = 0
+    }
 
-    // B-M03: Enforce cursor monotonicity — reject batches whose last finding
-    // ID is behind the cursor's lastSyncedFindingId. This prevents replay of
-    // stale findings via cursor rewind.
-    if (findings.length > 0 && cursor.lastSyncedFindingId) {
-      const lastFindingId = findings[findings.length - 1]!.id
-      if (lastFindingId === cursor.lastSyncedFindingId) {
-        // Duplicate batch — already synced, return success without re-writing
+    // Exact replay detection: if expectedSeq < currentSeq, check if this batch is identical to already-persisted state
+    // We compare externalIds set against existing findings for this scan
+    if (expectedSeq !== currentSeq) {
+      if (findings.length === 0 && reports.length === 0) {
+        // Empty batch with stale seq — treat as rewind attempt
+        return apiError("CURSOR_REWIND", "Cursor cannot move backwards", 409, undefined, {
+          currentSeq,
+          expectedSeq,
+        })
+      }
+      // Check exact replay: all externalIds already exist and seq is exactly one ahead (common replay after success)
+      const externalIds = findings.map((f) => `local:${license.id}:${f.id}`)
+      const existingCount = await withWorkspaceRLS(workspaceId, async (tx) =>
+        tx.finding.count({ where: { id: { in: externalIds } } })
+      )
+      const isExactReplay = existingCount === findings.length && findings.length > 0
+      // For exact replay, return idempotent success without advancing
+      if (isExactReplay && expectedSeq === currentSeq - 1) {
         return apiSuccess(
           {
             synced: true,
-            findingsPersisted: 0,
-            reportsReceived: reports.length,
-            lastSyncedAt: cursor.lastSyncedAt.toISOString(),
             duplicate: true,
+            findingsPersisted: 0,
+            reportsPersisted: 0,
+            reportsReceived: reports.length,
+            seq: currentSeq,
+            lastSyncedAt: cursorPre.lastSyncedAt.toISOString(),
+            lastSyncedFindingId: cursorPre.lastSyncedFindingId ?? null,
           },
           200
         )
       }
+      // Check if same seq but different content already applied (duplicate idempotency at same seq)
+      if (isExactReplay && expectedSeq === currentSeq) {
+        return apiSuccess(
+          {
+            synced: true,
+            duplicate: true,
+            findingsPersisted: 0,
+            reportsPersisted: 0,
+            reportsReceived: reports.length,
+            seq: currentSeq,
+            lastSyncedAt: cursorPre.lastSyncedAt.toISOString(),
+            lastSyncedFindingId: cursorPre.lastSyncedFindingId ?? null,
+          },
+          200
+        )
+      }
+      return apiError(
+        "CURSOR_STALE",
+        "Stale cursor — batch was reordered or replayed with different content",
+        409,
+        undefined,
+        {
+          currentSeq,
+          expectedSeq,
+        }
+      )
     }
 
-    // B-L07: Find or create a synthetic "LOCAL_SYNC" scan. Use a transaction
-    // with a findFirst-then-create pattern to minimize the race window.
-    // A unique constraint on (workspaceId, triggerType) would be the ideal
-    // fix but requires a migration; for now we narrow the race by using
-    // a transaction and catching the potential duplicate on create.
-    let syncScan = await prisma.scan.findFirst({
-      where: { workspaceId, triggerType: "local_sync" },
-    })
-    if (!syncScan) {
-      try {
-        syncScan = await prisma.scan.create({
-          data: {
-            workspaceId,
-            goal: "LAUNCH_REVIEW",
-            mode: "SAFE",
-            status: "COMPLETED",
-            triggerType: "local_sync",
-            summary: "Findings synced from LyraShield Local desktop client",
-            createdById: session.userId,
-            startedAt: new Date(),
-            endedAt: new Date(),
-          },
+    // Inside withWorkspaceRLS atomic transaction: create/find scan, upsert findings (verified forced false), persist reports, CAS seq increment
+    const result = await withWorkspaceRLS(workspaceId, async (tx) => {
+      // CAS enforcement: re-check seq inside tx before write (defends concurrent batches)
+      const fresh = await tx.syncCursor.findUnique({
+        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
+      })
+      if (!fresh)
+        throw Object.assign(new Error("SYNC_NOT_CONNECTED"), { code: "SYNC_NOT_CONNECTED" })
+      if (Number(fresh.seq) !== expectedSeq) {
+        throw Object.assign(new Error("CURSOR_STALE"), {
+          code: "CURSOR_STALE",
+          currentSeq: Number(fresh.seq),
+          expectedSeq,
         })
-      } catch {
-        // Race: another concurrent request created it — re-fetch
-        syncScan = await prisma.scan.findFirst({
-          where: { workspaceId, triggerType: "local_sync" },
-        })
-        if (!syncScan) {
-          return apiError("INTERNAL_ERROR", "Failed to create sync scan", 500)
+      }
+
+      // Find or create synthetic LOCAL_SYNC scan
+      let syncScan = await tx.scan.findFirst({ where: { workspaceId, triggerType: "local_sync" } })
+      if (!syncScan) {
+        try {
+          syncScan = await tx.scan.create({
+            data: {
+              workspaceId,
+              goal: "LAUNCH_REVIEW",
+              mode: "SAFE",
+              status: "COMPLETED",
+              triggerType: "local_sync",
+              summary: "Findings synced from LyraShield Local desktop client",
+              createdById: session.userId,
+              startedAt: new Date(),
+              endedAt: new Date(),
+            },
+          })
+        } catch {
+          syncScan = await tx.scan.findFirst({ where: { workspaceId, triggerType: "local_sync" } })
+          if (!syncScan) throw new Error("Failed to create sync scan")
         }
       }
-    }
 
-    // B-M03: Persist findings in a transaction with the cursor update to
-    // ensure atomicity — either all findings + cursor update succeed, or
-    // none do. This prevents partial writes from a compromised client.
-    let persistedFindings = 0
-    const lastFindingId =
-      findings.length > 0 ? findings[findings.length - 1]!.id : cursor.lastSyncedFindingId
+      let persistedFindings = 0
+      const lastFindingId =
+        findings.length > 0 ? findings[findings.length - 1]!.id : fresh.lastSyncedFindingId
 
-    await prisma.$transaction(async (tx) => {
       for (const finding of findings) {
         const externalId = `local:${license.id}:${finding.id}`
+        const mappedStatus = STATUS_FIX_MAPPING[finding.status] ?? finding.status
+        const finalStatus = ALLOWED_SYNC_STATUSES.has(mappedStatus) ? mappedStatus : "OPEN"
         const technicalDetail = [
           finding.filePath ? `File: ${finding.filePath}` : null,
           finding.lineNumber ? `Line: ${finding.lineNumber}` : null,
@@ -176,8 +280,8 @@ export async function POST(request: Request) {
             title: finding.title,
             summary: finding.description ?? finding.title,
             severity: finding.severity,
-            status: finding.status as never,
-            verified: finding.verified,
+            status: finalStatus as never,
+            verified: false,
             technicalDetail: technicalDetail || null,
             dedupeKey: finding.id,
             firstSeenAt: new Date(finding.detectedAt),
@@ -187,8 +291,8 @@ export async function POST(request: Request) {
             title: finding.title,
             summary: finding.description ?? finding.title,
             severity: finding.severity,
-            status: finding.status as never,
-            verified: finding.verified,
+            status: finalStatus as never,
+            verified: false,
             technicalDetail: technicalDetail || null,
             lastSeenAt: new Date(),
           },
@@ -196,35 +300,104 @@ export async function POST(request: Request) {
         persistedFindings++
       }
 
-      // Update the sync cursor within the same transaction
-      await tx.syncCursor.update({
-        where: { id: cursor.id },
+      // Reports: full atomic persistence inside same tx, bounded (already validated max 50, 500k each)
+      // Never count discarded input — we validated and persist all received reports, so count persisted == received
+      let reportsPersisted = 0
+      for (const report of reports) {
+        // Persist as Report linked to syncScan, with contentJson holding the evidence payload
+        await tx.report.create({
+          data: {
+            workspaceId,
+            scanId: syncScan.id,
+            type: "developer",
+            title: report.name,
+            status: "generated",
+            format: report.format ?? "json",
+            contentJson: {
+              source: "local_sync",
+              reportId: report.id,
+              content: report.content,
+              createdAt: report.createdAt,
+              licenseId: license.id,
+            },
+            createdById: session.userId,
+          },
+        })
+        reportsPersisted++
+      }
+
+      // CAS seq increment — use updateMany with seq condition for atomicity
+      const nextSeq = Number(fresh.seq) + 1
+      // Only advance seq if we actually persisted something or batch was non-empty
+      // Empty batches still advance to keep monotonicity? For sync we advance only on non-empty to avoid noop increments
+      const seqToSet = findings.length > 0 || reports.length > 0 ? nextSeq : Number(fresh.seq)
+      const updateRes = await tx.syncCursor.updateMany({
+        where: { id: fresh.id, seq: fresh.seq },
         data: {
+          seq: BigInt(seqToSet),
           lastSyncedAt: new Date(),
           lastSyncedFindingId: lastFindingId,
         },
       })
+      if (updateRes.count === 0) {
+        throw Object.assign(new Error("CURSOR_CONCURRENT"), { code: "CURSOR_CONCURRENT" })
+      }
+      const updated = await tx.syncCursor.findUnique({ where: { id: fresh.id } })
+      if (!updated) throw new Error("Cursor missing after update")
+      return {
+        persistedFindings,
+        reportsPersisted,
+        reportsReceived: reports.length,
+        seq: Number(updated.seq),
+        lastSyncedAt: updated.lastSyncedAt,
+        lastSyncedFindingId: updated.lastSyncedFindingId,
+        lastFindingId,
+      }
     })
 
     logger.info("Sync findings persisted", {
       licenseId: license.id,
       workspaceId,
-      findingsCount: persistedFindings,
-      reportsCount: reports.length,
+      findingsCount: result.persistedFindings,
+      reportsCount: result.reportsPersisted,
+      seq: result.seq,
     })
 
     return apiSuccess(
       {
         synced: true,
-        findingsPersisted: persistedFindings,
-        reportsReceived: reports.length,
-        lastSyncedAt: new Date().toISOString(),
+        findingsPersisted: result.persistedFindings,
+        reportsPersisted: result.reportsPersisted,
+        reportsReceived: result.reportsReceived,
+        seq: result.seq,
+        lastSyncedAt: result.lastSyncedAt.toISOString(),
+        lastSyncedFindingId: result.lastSyncedFindingId ?? null,
+        // Provide legacy cursor alias for desktop compat
+        cursor: String(result.seq),
       },
       200
     )
-  } catch (error) {
+  } catch (error: unknown) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
+    const maybeCode = (error as { code?: string })?.code
+    if (maybeCode === "CURSOR_STALE" || maybeCode === "CURSOR_CONCURRENT") {
+      const cur = (error as { currentSeq?: number }).currentSeq
+      const exp = (error as { expectedSeq?: number }).expectedSeq
+      return apiError(
+        "CURSOR_STALE",
+        "Stale or concurrent cursor — fetch latest seq and retry",
+        409,
+        undefined,
+        {
+          currentSeq: cur,
+          expectedSeq: exp,
+        }
+      )
+    }
+    if (maybeCode === "SYNC_NOT_CONNECTED") {
+      return apiError("SYNC_NOT_CONNECTED", "Sync has not been established", 409)
+    }
     logger.error("Sync findings failed", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to sync findings", 500)
   }

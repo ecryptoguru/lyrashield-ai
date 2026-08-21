@@ -33,11 +33,27 @@ const { FakeDecimal, models, runTransaction } = vi.hoisted(() => {
     plus(other: { toString: () => string }) {
       return new FakeDecimal(this.n + Number.parseFloat(String(other)))
     }
+    mul(other: { toString: () => string }) {
+      return new FakeDecimal(this.n * Number.parseFloat(String(other)))
+    }
+    div(other: { toString: () => string }) {
+      return new FakeDecimal(this.n / Number.parseFloat(String(other)))
+    }
+    add(other: { toString: () => string }) {
+      return this.plus(other)
+    }
+    equals(other: { toString: () => string }) {
+      return Math.abs(this.n - Number.parseFloat(String(other))) < 1e-9
+    }
   }
 
   const models = {
     affiliate: { findUnique: vi.fn(), findMany: vi.fn() },
-    commission: { findMany: vi.fn(), update: vi.fn() },
+    commission: {
+      findMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     // workspaceMember.findFirst is used to resolve the affiliate's owning
     // workspace for the audit log (added in the FK-fix). Default to no
     // membership (returns undefined) so the audit-write is skipped in tests.
@@ -45,7 +61,7 @@ const { FakeDecimal, models, runTransaction } = vi.hoisted(() => {
     // payout.create must resolve to an object with an `id` (the code reads
     // payout.id for the payoutItem and auditLog references).
     payout: { create: vi.fn().mockResolvedValue({ id: "payout-test-id" }) },
-    payoutItem: { create: vi.fn() },
+    payoutItem: { create: vi.fn(), deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     auditLog: { create: vi.fn().mockResolvedValue(undefined) },
   }
 
@@ -100,7 +116,9 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
     // transaction writes resolve correctly.
     vi.mocked(models.payout.create).mockResolvedValue({ id: "payout-test-id" })
     vi.mocked(models.payoutItem.create).mockResolvedValue({} as never)
+    vi.mocked(models.payoutItem.deleteMany).mockResolvedValue({ count: 0 } as never)
     vi.mocked(models.commission.update).mockResolvedValue({} as never)
+    vi.mocked(models.commission.updateMany).mockResolvedValue({ count: 1 } as never)
     vi.mocked(models.auditLog.create).mockResolvedValue(undefined)
     vi.mocked(models.workspaceMember.findFirst).mockResolvedValue(null)
   })
@@ -140,8 +158,12 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
     expect(prisma.payout.create).toHaveBeenCalledOnce()
     // Two payout items (one per commission)
     expect(prisma.payoutItem.create).toHaveBeenCalledTimes(2)
-    // Each commission was marked reserveReleasedAt
-    expect(prisma.commission.update).toHaveBeenCalledTimes(2)
+    // Each commission was marked reserveReleasedAt (updateMany with CAS)
+    const updateCalls = (prisma.commission.updateMany as unknown as ReturnType<typeof vi.fn>).mock
+      .calls.length
+    const legacyUpdateCalls = (prisma.commission.update as unknown as ReturnType<typeof vi.fn>).mock
+      .calls.length
+    expect(updateCalls + legacyUpdateCalls).toBe(2)
   })
 
   it("is idempotent — commissions already released (reserveReleasedAt set) are filtered out", async () => {
@@ -175,6 +197,10 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
 
     expect(result.released).toBe(1)
     expect(result.totalAmount.toString()).toBe("0.0000") // nothing to pay
-    expect(prisma.commission.update).toHaveBeenCalledOnce()
+    const updCalls = (prisma.commission.updateMany as unknown as ReturnType<typeof vi.fn>).mock
+      .calls.length
+    const legCalls = (prisma.commission.update as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .length
+    expect(updCalls + legCalls).toBe(1)
   })
 })

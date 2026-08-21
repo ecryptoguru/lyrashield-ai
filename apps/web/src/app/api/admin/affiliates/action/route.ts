@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
+import { Prisma, prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
+import { isPlatformOperator } from "@lyrashield/auth/server"
 import { setupReserve } from "@lyrashield/affiliate"
 
 const ActionSchema = z.discriminatedUnion("action", [
@@ -31,24 +31,49 @@ const ActionSchema = z.discriminatedUnion("action", [
   }),
 ])
 
+/**
+ * Write an audit row for this route through the extended Prisma client.
+ * AuditLog.workspaceId is a hard FK to Workspace — global affiliate
+ * administration is not workspace-scoped, so the row attaches to the actor's
+ * active workspace when one exists and is skipped otherwise (mirrors the
+ * license renew route's conditional workspaceId handling).
+ */
+async function writeAffiliateAudit(
+  actorUserId: string,
+  data: { action: string; resourceType: string; resourceId?: string; metadata?: object }
+) {
+  const workspaceId = await getCachedWorkspaceId(actorUserId).catch(() => null)
+  if (!workspaceId) return
+  await prisma.auditLog
+    .create({
+      data: {
+        workspaceId,
+        actorUserId,
+        ...data,
+      },
+    })
+    .catch(() => {})
+}
+
 export async function POST(request: Request) {
   const session = await getCachedSession()
   if (!session) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
   }
 
-  const workspaceId = await getCachedWorkspaceId(session.userId)
-  if (!workspaceId) {
-    return NextResponse.json({ success: false, error: "No workspace" }, { status: 403 })
-  }
-
-  // Check admin permissions
-  const membership = await prisma.workspaceMember.findFirst({
-    where: { workspaceId, userId: session.userId },
-    select: { role: true },
-  })
-
-  if (!membership || !hasPermission(membership.role, PERMISSIONS.affiliate.admin)) {
+  // Global affiliate administration is platform-operator authority. It never
+  // derives from workspace membership or tenant roles, and does not require
+  // the operator to belong to any workspace.
+  if (!(await isPlatformOperator(session.userId))) {
+    // Audit the denied mutation attempt (best-effort; requires a workspace
+    // context for the AuditLog FK).
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.admin_denied",
+      resourceType: "affiliate_admin_action",
+    })
+    logger.warn("Affiliate admin action denied — not a platform operator", {
+      userId: session.userId,
+    })
     return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 })
   }
 
@@ -119,15 +144,11 @@ export async function POST(request: Request) {
     }
 
     // C-M06: Write persistent audit log with admin userId
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.approved",
-        resourceType: "affiliate",
-        resourceId: data.affiliateId,
-        actorUserId: session.userId,
-        metadata: { affiliateId: data.affiliateId },
-      },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.approved",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: { affiliateId: data.affiliateId },
     })
 
     logger.info("Affiliate approved", {
@@ -141,15 +162,11 @@ export async function POST(request: Request) {
     })
 
     // C-M06: Audit log
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.rejected",
-        resourceType: "affiliate",
-        resourceId: data.affiliateId,
-        actorUserId: session.userId,
-        metadata: { affiliateId: data.affiliateId },
-      },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.rejected",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: { affiliateId: data.affiliateId },
     })
 
     logger.info("Affiliate rejected", {
@@ -163,15 +180,11 @@ export async function POST(request: Request) {
     })
 
     // C-M06: Audit log
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.suspended",
-        resourceType: "affiliate",
-        resourceId: data.affiliateId,
-        actorUserId: session.userId,
-        metadata: { affiliateId: data.affiliateId },
-      },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.suspended",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: { affiliateId: data.affiliateId },
     })
 
     logger.info("Affiliate suspended", {
@@ -179,15 +192,18 @@ export async function POST(request: Request) {
       adminUserId: session.userId,
     })
   } else if (data.action === "approvePayout") {
-    // C-M05: Guard — only approve PENDING/PROCESSING payouts with RESERVED commissions.
-    // Prevents double-pay by approving a FAILED payout whose commissions were re-withdrawn.
     const payout = await prisma.payout.findUnique({
       where: { id: data.payoutId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, isReserveRelease: true, amount: true, affiliateId: true },
     })
 
     if (!payout) {
       return NextResponse.json({ success: false, error: "Payout not found" }, { status: 404 })
+    }
+
+    // Replay safe: already PAID is idempotent success
+    if (payout.status === "PAID") {
+      return NextResponse.json({ success: true })
     }
 
     if (payout.status !== "PENDING" && payout.status !== "PROCESSING") {
@@ -197,10 +213,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verify commissions are still RESERVED (not already PAID or released)
     const items = await prisma.payoutItem.findMany({
       where: { payoutId: data.payoutId },
-      select: { commissionId: true },
+      select: { commissionId: true, amount: true },
     })
 
     if (items.length === 0) {
@@ -209,41 +224,141 @@ export async function POST(request: Request) {
 
     const commissions = await prisma.commission.findMany({
       where: { id: { in: items.map((i) => i.commissionId) } },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        affiliateId: true,
+        reserveReleasedAt: true,
+        reserveReleasedAmount: true,
+        amount: true,
+      },
     })
 
-    const allReserved = commissions.every((c) => c.status === "RESERVED")
-    if (!allReserved) {
-      return NextResponse.json(
-        { success: false, error: "Payout commissions are not all RESERVED" },
-        { status: 409 }
+    if (!payout.isReserveRelease) {
+      // Ordinary payout: must be all RESERVED and owned by payout.affiliateId
+      const allReserved =
+        commissions.length === items.length && commissions.every((c) => c.status === "RESERVED")
+      const ownershipOk = commissions.every((c) => c.affiliateId === payout.affiliateId)
+      if (!allReserved || !ownershipOk) {
+        return NextResponse.json(
+          { success: false, error: "Payout commissions are not all RESERVED" },
+          { status: 409 }
+        )
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const upd = await tx.payout.updateMany({
+          where: { id: data.payoutId, status: { in: ["PENDING", "PROCESSING"] } },
+          data: { status: "PAID", paidAt: new Date() },
+        })
+        if (upd.count === 0) {
+          const existing = await tx.payout.findUnique({
+            where: { id: data.payoutId },
+            select: { status: true },
+          })
+          if (existing?.status === "PAID") return
+          throw new Error("Payout status changed concurrently")
+        }
+        await tx.commission.updateMany({
+          where: { id: { in: items.map((i) => i.commissionId) }, status: "RESERVED" },
+          data: { status: "PAID" },
+        })
+      })
+    } else {
+      // Reserve-release payout: validate reserveReleasedAt, ownership, amount, replay identity
+      if (commissions.length !== items.length) {
+        return NextResponse.json(
+          { success: false, error: "Payout items do not match commissions" },
+          { status: 409 }
+        )
+      }
+      const ownershipOk = commissions.every((c) => c.affiliateId === payout.affiliateId)
+      if (!ownershipOk) {
+        return NextResponse.json(
+          { success: false, error: "Reserve-release ownership mismatch" },
+          { status: 409 }
+        )
+      }
+      const allReleased = commissions.every((c) => c.reserveReleasedAt !== null)
+      if (!allReleased) {
+        return NextResponse.json(
+          { success: false, error: "Reserve not yet released for all commissions" },
+          { status: 409 }
+        )
+      }
+      // Amount validation: payout.amount must equal sum of payoutItems, and each item must match reserveReleasedAmount
+      const sum = items.reduce(
+        (acc: InstanceType<typeof Prisma.Decimal>, i: { amount: unknown }) => {
+          const dec =
+            i.amount instanceof Prisma.Decimal
+              ? (i.amount as InstanceType<typeof Prisma.Decimal>)
+              : new Prisma.Decimal(String(i.amount))
+          return (
+            acc as unknown as { add: (v: unknown) => InstanceType<typeof Prisma.Decimal> }
+          ).add(dec)
+        },
+        new Prisma.Decimal(0) as InstanceType<typeof Prisma.Decimal>
       )
+      const payoutAmount =
+        payout.amount instanceof Prisma.Decimal
+          ? (payout.amount as InstanceType<typeof Prisma.Decimal>)
+          : new Prisma.Decimal(String(payout.amount))
+      const sumStr = (sum as unknown as { toString: () => string }).toString()
+      const payoutStr = (payoutAmount as unknown as { toString: () => string }).toString()
+      if (sumStr !== payoutStr) {
+        // Fallback numeric compare for Decimal string variants (e.g., 35.0000 vs 35)
+        const sumNum = Number.parseFloat(sumStr)
+        const payoutNum = Number.parseFloat(payoutStr)
+        if (Math.abs(sumNum - payoutNum) > 1e-9) {
+          return NextResponse.json(
+            { success: false, error: "Payout amount does not match sum of items" },
+            { status: 409 }
+          )
+        }
+      }
+      // Per-commission amount identity (replay safe): each item amount must equal commission.reserveReleasedAmount
+      for (const item of items) {
+        const c = commissions.find((cc) => cc.id === item.commissionId)
+        if (!c) continue
+        if (c.reserveReleasedAmount !== null && c.reserveReleasedAmount !== undefined) {
+          const itemStr = String(item.amount)
+          const releasedStr = String(c.reserveReleasedAmount)
+          if (itemStr !== releasedStr) {
+            const a = Number.parseFloat(itemStr)
+            const b = Number.parseFloat(releasedStr)
+            if (Math.abs(a - b) > 1e-9) {
+              return NextResponse.json(
+                { success: false, error: "Reserve-release amount mismatch" },
+                { status: 409 }
+              )
+            }
+          }
+        }
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const upd = await tx.payout.updateMany({
+          where: { id: data.payoutId, status: { in: ["PENDING", "PROCESSING"] } },
+          data: { status: "PAID", paidAt: new Date() },
+        })
+        if (upd.count === 0) {
+          const existing = await tx.payout.findUnique({
+            where: { id: data.payoutId },
+            select: { status: true },
+          })
+          if (existing?.status === "PAID") return
+          throw new Error("Payout status changed concurrently")
+        }
+        // No commission status change — commissions already PAID, reserve already marked
+      })
     }
 
-    await prisma.payout.update({
-      where: { id: data.payoutId },
-      data: {
-        status: "PAID",
-        paidAt: new Date(),
-      },
-    })
-
-    // Mark commissions as PAID
-    await prisma.commission.updateMany({
-      where: { id: { in: items.map((i) => i.commissionId) } },
-      data: { status: "PAID" },
-    })
-
     // C-M06: Audit log
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.payout_approved",
-        resourceType: "payout",
-        resourceId: data.payoutId,
-        actorUserId: session.userId,
-        metadata: { payoutId: data.payoutId, commissionCount: items.length },
-      },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.payout_approved",
+      resourceType: "payout",
+      resourceId: data.payoutId,
+      metadata: { payoutId: data.payoutId, commissionCount: items.length },
     })
 
     logger.info("Payout approved", { payoutId: data.payoutId, adminUserId: session.userId })
@@ -257,18 +372,14 @@ export async function POST(request: Request) {
     })
 
     // C-M06: Audit log
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: workspaceId,
-        action: "affiliate.tier_override",
-        resourceType: "affiliate",
-        resourceId: data.affiliateId,
-        actorUserId: session.userId,
-        metadata: {
-          affiliateId: data.affiliateId,
-          baseRateBps: data.baseRateBps,
-          tierRateBps: data.tierRateBps,
-        },
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.tier_override",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: {
+        affiliateId: data.affiliateId,
+        baseRateBps: data.baseRateBps,
+        tierRateBps: data.tierRateBps,
       },
     })
 

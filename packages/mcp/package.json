@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./tool-policy": {
+      "types": "./dist/tool-policy.d.ts",
+      "import": "./dist/tool-policy.js"
     }
   },
   "bin": {

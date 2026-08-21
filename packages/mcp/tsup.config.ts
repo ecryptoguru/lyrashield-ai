@@ -10,11 +10,12 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     "stdio-transport": "src/stdio-transport.ts",
+    "tool-policy": "src/tool-policy.ts",
   },
   format: ["esm"],
   target: "node24",
   tsconfig: "tsconfig.build.json",
-  dts: { entry: { index: "src/index.ts" } },
+  dts: { entry: { index: "src/index.ts", "tool-policy": "src/tool-policy.ts" } },
   sourcemap: true,
   clean: true,
   splitting: false,

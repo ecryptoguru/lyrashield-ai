@@ -15,7 +15,10 @@
     "@lyrashield/pricing": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@polar-sh/sdk": "^0.33.0",
-    "razorpay": "^2.9.6"
+    "razorpay": "^2.9.6",
+    "@lyrashield/licenses": "workspace:*",
+    "@azure/keyvault-secrets": "^4.9.0",
+    "@azure/identity": "^4.13.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

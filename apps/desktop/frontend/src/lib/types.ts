@@ -60,6 +60,22 @@ export interface AzureCredentials {
   endpoint: string
 }
 
+export interface AzureMetadata {
+  configured: boolean
+  endpoint: string | null
+  keyMasked: string | null
+}
+
+export interface ByokStatus {
+  chatgpt: ChatGptAuthStatus
+  azure: AzureMetadata
+}
+
+export interface SequencedEvent {
+  seq: number
+  event: ScanEvent
+}
+
 export type ScanMode = "safe" | "quick" | "standard" | "deep" | "custom" | "url"
 
 export type ScanTarget =
@@ -119,14 +135,15 @@ export type UpdateCheckResult =
 
 export interface SyncConnection {
   workspaceId: string
-  licenseKey: string
+  seq: number
+  lastSyncedFindingId: string | null
   cursor: string | null
   connectedAt: string
   lastSyncAt: string | null
 }
 
 export type SyncResult =
-  | { status: "success"; syncedCount: number; newCursor: string }
+  | { status: "success"; syncedCount: number; newSeq: number; newCursor: string }
   | { status: "entitlement_missing"; message: string }
-  | { status: "cursor_rewind"; serverCursor: string; message: string }
+  | { status: "cursor_rewind"; serverSeq: number; serverCursor: string; message: string }
   | { status: "error"; message: string }

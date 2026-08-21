@@ -12,6 +12,7 @@
     "format:check": "git ls-files -z -- '*.ts' '*.tsx' '*.md' '*.json' '*.yml' '*.yaml' | xargs -0 prettier --check",
     "db:generate": "pnpm --filter @lyrashield/db generate",
     "db:migrate": "pnpm --filter @lyrashield/db migrate",
+    "prisma:migrate:check": "pnpm --filter @lyrashield/db exec prisma migrate diff --from-migrations ./prisma/migrations --to-schema ./prisma/schema.prisma --exit-code",
     "db:push": "pnpm --filter @lyrashield/db push",
     "db:seed": "pnpm --filter @lyrashield/db seed",
     "db:studio": "pnpm --filter @lyrashield/db studio",

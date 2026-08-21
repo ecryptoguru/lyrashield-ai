@@ -13,7 +13,6 @@
     "updater:default",
     "updater:allow-check",
     "updater:allow-download",
-    "updater:allow-install",
     "shell:allow-open",
     "os:default"
   ]

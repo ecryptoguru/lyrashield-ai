@@ -20,6 +20,10 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Platform-level authority, independent of any workspace/tenant role.
+  // Only value is "PLATFORM_OPERATOR"; null means an ordinary tenant user.
+  platformRole String?
+
   sessions           Session[]
   accounts           Account[]
   verifications      Verification[]
@@ -1309,11 +1313,13 @@ model Notification {
   status      String    @default("pending")
   sentAt      DateTime?
   metadata    Json?
+  dedupeKey   String?
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@unique([channel, dedupeKey])
   @@index([workspaceId])
   @@index([userId])
   @@index([status])
@@ -1389,22 +1395,54 @@ model Invitation {
 }
 
 model WebhookEvent {
-  id          String    @id @default(cuid())
-  workspaceId String?
-  provider    String
-  eventType   String
-  externalId  String
-  payload     Json
-  processed   Boolean   @default(false)
-  processedAt DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id             String    @id @default(cuid())
+  workspaceId    String?
+  provider       String
+  eventType      String
+  externalId     String
+  // How externalId was resolved: "delivery" (provider per-delivery event id)
+  // or "derived" (deterministic digest of event facts). Legacy rows: null.
+  identitySource String?
+  payload        Json
+  processed      Boolean   @default(false)
+  processedAt    DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  tracks WebhookEventTrack[]
 
   @@unique([provider, externalId])
   @@index([workspaceId])
   @@index([processed])
+}
+
+/// Durable per-track processing state for a WebhookEvent (billing/license/
+/// affiliate). The parent `processed` flag is DERIVED: true only when every
+/// applicable track row is "succeeded". Child rows are loaded only through
+/// webhookEventId; workspaceId mirrors the parent for traceability and is not
+/// auto-scoped (not in WORKSPACE_SCOPED_MODELS — no RLS policy on this table).
+model WebhookEventTrack {
+  id             String    @id @default(cuid())
+  webhookEventId String
+  workspaceId    String?
+  // "billing" | "license" | "affiliate"
+  track          String
+  // "pending" | "succeeded" | "failed" | "dead_letter"
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  // Bounded reason string (truncated, identifiers/reason codes only).
+  lastError      String?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  webhookEvent WebhookEvent @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
+
+  @@unique([webhookEventId, track])
+  @@index([status])
+  @@index([track, status])
 }
 
 model Retest {
@@ -1430,7 +1468,9 @@ model Retest {
 enum ApprovalStatus {
   PENDING
   APPROVED
+  EXECUTING
   EXECUTED
+  EXECUTION_FAILED
   DENIED
   EXPIRED
 }
@@ -1441,6 +1481,7 @@ model AgentApproval {
   actionName    String
   inputHash     String
   status        ApprovalStatus @default(PENDING)
+  attempts      Int            @default(0)
   input         Json
   requestedById String
   approvedById  String?
@@ -1670,8 +1711,20 @@ model LicenseKey {
   licenseId         String   @unique
   workspaceId       String?
   keyHash           String   @unique
+  /// Partial unique index enforced via migration 20260822220000_license_issued_provider_unique:
+  /// CREATE UNIQUE INDEX "LicenseKey_issuedByProvider_key" ON "LicenseKey"("issuedByProvider") WHERE "issuedByProvider" IS NOT NULL
   issuedByProvider  String
   providerProductId String?
+  // Fulfillment lifecycle: MINTED -> DELIVERING -> DELIVERED | DELIVERY_FAILED (retryable via webhook-track queue)
+  fulfillmentStatus String   @default("DELIVERED")
+  deliveryAttempts  Int      @default(0)
+  lastDeliveryError String?
+  // One-time retrieval token (hashed sha256, expires, single-use)
+  retrievalTokenHash      String?   @unique
+  retrievalTokenExpiresAt DateTime?
+  retrievalTokenUsedAt    DateTime?
+  // Encrypted raw key for one-time retrieval (cleared after use); stored only to allow retrieval via token
+  retrievalRawKey         String?
   createdAt         DateTime @default(now())
 
   license   License    @relation(fields: [licenseId], references: [id], onDelete: Cascade)
@@ -1684,6 +1737,7 @@ model SyncCursor {
   id                   String   @id @default(cuid())
   workspaceId          String
   licenseId            String
+  seq                  BigInt   @default(0) @db.BigInt
   lastSyncedAt         DateTime
   lastSyncedFindingId  String?
   createdAt            DateTime @default(now())
@@ -1693,6 +1747,7 @@ model SyncCursor {
   license   License   @relation(fields: [licenseId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, licenseId])
+  @@index([seq])
 }
 
 model LicenseRevocation {
@@ -1915,17 +1970,20 @@ model Payout {
 }
 
 model PayoutItem {
-  id           String  @id @default(cuid())
-  payoutId     String
+  id               String  @id @default(cuid())
+  payoutId         String
   // A commission can have up to two payout items: the main payout, and a
   // later reserve-release payout for the reserved portion that was held back
-  // during the new-affiliate reserve period. Idempotency is enforced by the
-  // release job via Commission.reserveReleasedAt, not by a unique constraint
-  // here.
-  commissionId String
-  amount       Decimal @db.Decimal(19, 4)
+  // during the new-affiliate reserve period. The ordinary (non-reserve) payout
+  // item is unique per commission via a partial unique index:
+  //   CREATE UNIQUE INDEX ... ON "PayoutItem"("commissionId") WHERE "isReserveRelease"=false
+  // Prisma cannot express partial indexes, so the index is created in raw SQL
+  // migration 20260822200000_payout_item_ordinary_unique.
+  commissionId     String
+  amount           Decimal @db.Decimal(19, 4)
+  isReserveRelease Boolean @default(false)
 
-  payout    Payout    @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  payout     Payout     @relation(fields: [payoutId], references: [id], onDelete: Cascade)
   commission Commission @relation(fields: [commissionId], references: [id], onDelete: Restrict)
 
   @@index([commissionId])

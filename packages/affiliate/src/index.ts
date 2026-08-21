@@ -124,4 +124,4 @@ export { detectFraudSignals, type FraudSignal, type FraudResult } from "./fraud/
 
 export { isSelfReferral } from "./fraud/selfreferral"
 
-export { dispatch, type WebhookDispatchInput } from "./webhook-dispatch"
+export { dispatch, type NormalizedEventDispatchInput } from "./webhook-dispatch"

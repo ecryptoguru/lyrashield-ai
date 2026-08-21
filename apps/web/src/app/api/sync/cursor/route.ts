@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
+import { withWorkspaceRLS, findLicenseForSyncByKeyHash } from "@lyrashield/db"
 import { requireAuth } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
@@ -16,14 +17,18 @@ const CursorQuerySchema = z.object({
 const CursorUpdateSchema = z.object({
   workspaceId: z.string().min(1),
   licenseKey: z.string().min(1).max(200),
+  // Monotonic numeric cursor
+  seq: z.number().int().min(0).optional(),
+  // Legacy alias (string numeric) — accept but coerce
+  expectedSeq: z.number().int().min(0).optional(),
   lastSyncedFindingId: z.string().optional(),
 })
 
 /**
- * GET /api/sync/cursor?workspaceId=...&licenseKey=...
+ * GET /api/sync/cursor
  *
- * Retrieve the sync cursor for resumable sync. The desktop client uses this
- * to determine where to resume after a network interruption.
+ * Returns the authoritative numeric seq for resumable sync (single trusted store).
+ * Desktop's native store must adopt this seq; local cursor is not trusted.
  */
 export async function GET(request: Request) {
   try {
@@ -38,7 +43,6 @@ export async function GET(request: Request) {
     }
     const { workspaceId, licenseKey } = parsed.data
 
-    // Verify workspace access.
     const membership = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: session.userId } },
     })
@@ -47,27 +51,30 @@ export async function GET(request: Request) {
     }
 
     const keyHash = hashLicenseKey(licenseKey)
-    const licenseKeyRow = await prisma.licenseKey.findUnique({
-      where: { keyHash },
-      include: { license: { include: { syncCursors: { where: { workspaceId } } } } },
-    })
-    if (!licenseKeyRow) {
+    const row = await findLicenseForSyncByKeyHash(keyHash)
+    if (!row) {
       return apiError("LICENSE_KEY_NOT_FOUND", "The provided license key is not recognized", 404)
     }
-
-    const license = licenseKeyRow.license
+    const license = row.license
     if (license.revoked) {
       return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
     }
 
-    if (license.syncCursors.length === 0) {
+    const cursor = await withWorkspaceRLS(workspaceId, async (tx) =>
+      tx.syncCursor.findUnique({
+        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
+      })
+    )
+    if (!cursor) {
       return apiError("SYNC_NOT_CONNECTED", "Sync has not been established", 409)
     }
 
-    const cursor = license.syncCursors[0]!
     return apiSuccess(
       {
         cursorId: cursor.id,
+        seq: Number(cursor.seq),
+        // Canonical seq string alias for older desktop builds
+        cursor: String(cursor.seq),
         lastSyncedAt: cursor.lastSyncedAt.toISOString(),
         lastSyncedFindingId: cursor.lastSyncedFindingId,
       },
@@ -84,9 +91,9 @@ export async function GET(request: Request) {
 /**
  * PUT /api/sync/cursor
  *
- * Update the sync cursor after a batch has been processed. This enables
- * resumable sync: if the connection drops mid-batch, the client resumes from
- * the last committed cursor position.
+ * Monotonic seq advancement only. Rejects any attempt to move seq backwards (rewind)
+ * or to set lastSyncedFindingId without advancing seq via the findings CAS path.
+ * Direct cursor writes cannot carry findings; use POST /findings for evidence.
  */
 export async function PUT(request: Request) {
   try {
@@ -96,9 +103,10 @@ export async function PUT(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
-    const { workspaceId, licenseKey, lastSyncedFindingId } = parsed.data
+    const { workspaceId, licenseKey } = parsed.data
+    const requestedSeq = parsed.data.seq ?? parsed.data.expectedSeq
+    const { lastSyncedFindingId } = parsed.data
 
-    // Verify workspace access.
     const membership = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: session.userId } },
     })
@@ -107,70 +115,101 @@ export async function PUT(request: Request) {
     }
 
     const keyHash = hashLicenseKey(licenseKey)
-    const licenseKeyRow = await prisma.licenseKey.findUnique({
-      where: { keyHash },
-      include: { license: { include: { syncCursors: { where: { workspaceId } } } } },
-    })
-    if (!licenseKeyRow) {
+    const row = await findLicenseForSyncByKeyHash(keyHash)
+    if (!row) {
       return apiError("LICENSE_KEY_NOT_FOUND", "The provided license key is not recognized", 404)
     }
-
-    const license = licenseKeyRow.license
+    const license = row.license
     if (license.revoked) {
       return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
     }
 
-    if (license.syncCursors.length === 0) {
+    const cursor = await withWorkspaceRLS(workspaceId, async (tx) =>
+      tx.syncCursor.findUnique({
+        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
+      })
+    )
+    if (!cursor) {
       return apiError("SYNC_NOT_CONNECTED", "Sync has not been established", 409)
     }
 
-    const cursor = license.syncCursors[0]!
+    const currentSeq = Number(cursor.seq)
 
-    // B-M04: Enforce monotonic cursor advancement — reject attempts to move
-    // the cursor backwards. The new lastSyncedFindingId must be different from
-    // (ahead of) the current one. We use string comparison as a heuristic;
-    // the findings route already enforces ordering at the batch level.
-    if (lastSyncedFindingId && cursor.lastSyncedFindingId) {
-      if (lastSyncedFindingId === cursor.lastSyncedFindingId) {
-        // No-op — same position, just update timestamp
-        const updated = await prisma.syncCursor.update({
-          where: { id: cursor.id },
-          data: { lastSyncedAt: new Date() },
+    // If client requests explicit seq, enforce monotonicity
+    if (requestedSeq !== undefined) {
+      if (requestedSeq < currentSeq) {
+        logger.warn("Sync cursor rewind attempt rejected", {
+          cursorId: cursor.id,
+          current: currentSeq,
+          attempted: requestedSeq,
+          userId: session.userId,
         })
+        return apiError("CURSOR_REWIND", "Cursor cannot move backwards", 409, undefined, {
+          currentSeq,
+          requestedSeq,
+        })
+      }
+      if (requestedSeq === currentSeq) {
+        // No-op — touch timestamp
+        const updated = await withWorkspaceRLS(workspaceId, async (tx) =>
+          tx.syncCursor.update({ where: { id: cursor.id }, data: { lastSyncedAt: new Date() } })
+        )
         return apiSuccess(
           {
             cursorId: updated.id,
+            seq: Number(updated.seq),
+            cursor: String(updated.seq),
             lastSyncedAt: updated.lastSyncedAt.toISOString(),
             lastSyncedFindingId: updated.lastSyncedFindingId,
           },
           200
         )
       }
-      // Log potential rewind attempts for monitoring
-      if (lastSyncedFindingId < cursor.lastSyncedFindingId) {
-        logger.warn("Sync cursor rewind attempt rejected", {
-          cursorId: cursor.id,
-          current: cursor.lastSyncedFindingId,
-          attempted: lastSyncedFindingId,
-          userId: session.userId,
-        })
-        return apiError("CURSOR_REWIND", "Cursor cannot move backwards", 409)
-      }
+      // Forward jump without findings is not allowed — findings CAS is the only valid advance
+      return apiError(
+        "CURSOR_FORWARD_JUMP",
+        "Cursor can only advance via POST /api/sync/findings",
+        409,
+        undefined,
+        {
+          currentSeq,
+          requestedSeq,
+        }
+      )
     }
 
-    const updated = await prisma.syncCursor.update({
-      where: { id: cursor.id },
-      data: {
-        lastSyncedAt: new Date(),
-        lastSyncedFindingId: lastSyncedFindingId ?? cursor.lastSyncedFindingId,
-      },
-    })
+    // Legacy lastSyncedFindingId-only update: reject unless already equal (no-op)
+    if (lastSyncedFindingId !== undefined) {
+      if (lastSyncedFindingId === cursor.lastSyncedFindingId) {
+        const updated = await withWorkspaceRLS(workspaceId, async (tx) =>
+          tx.syncCursor.update({ where: { id: cursor.id }, data: { lastSyncedAt: new Date() } })
+        )
+        return apiSuccess(
+          {
+            cursorId: updated.id,
+            seq: Number(updated.seq),
+            cursor: String(updated.seq),
+            lastSyncedAt: updated.lastSyncedAt.toISOString(),
+            lastSyncedFindingId: updated.lastSyncedFindingId,
+          },
+          200
+        )
+      }
+      return apiError(
+        "CURSOR_UPDATE_REJECTED",
+        "Cursor position can only be updated via findings sync",
+        409
+      )
+    }
 
+    // No fields to update — return current
     return apiSuccess(
       {
-        cursorId: updated.id,
-        lastSyncedAt: updated.lastSyncedAt.toISOString(),
-        lastSyncedFindingId: updated.lastSyncedFindingId,
+        cursorId: cursor.id,
+        seq: currentSeq,
+        cursor: String(currentSeq),
+        lastSyncedAt: cursor.lastSyncedAt.toISOString(),
+        lastSyncedFindingId: cursor.lastSyncedFindingId,
       },
       200
     )

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { logger } from "@lyrashield/logger"
 import { prisma } from "./client"
 import { withWorkspaceRLS } from "./rls"
 
@@ -162,26 +163,31 @@ type AiAssuranceAuditAction =
   | "ai_assurance.evidence.artifacts_added"
   | "ai_assurance.evidence.not_applicable"
 
-function logAiAssuranceAudit(
-  tx: {
-    auditLog: { create: typeof prisma.auditLog.create }
-  },
+async function logAiAssuranceAuditBestEffort(
   workspaceId: string,
   actorUserId: string,
   action: AiAssuranceAuditAction,
   resourceId: string,
   metadata?: Record<string, unknown>
 ) {
-  return tx.auditLog.create({
-    data: {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId,
+        action,
+        resourceType: "controlEvidence",
+        resourceId,
+        metadata,
+      },
+    })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
       workspaceId,
-      actorUserId,
       action,
-      resourceType: "controlEvidence",
-      resourceId,
-      metadata,
-    },
-  })
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 function stableStringify(value: unknown): string {
@@ -232,7 +238,7 @@ export async function createControlEvidence(
     throw new Error(`Invalid control evidence control ID: ${input.controlId}`)
   }
 
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
+  const { version, evidenceId } = await withWorkspaceRLS(input.workspaceId, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.targetId}:${input.controlId}`}, 0))`
 
     let evidence = await tx.controlEvidence.findFirst({
@@ -269,7 +275,7 @@ export async function createControlEvidence(
       null
     )
 
-    const version = await tx.controlEvidenceVersion.create({
+    const versionVal = await tx.controlEvidenceVersion.create({
       data: {
         controlEvidenceId: evidence.id,
         version: nextVersion,
@@ -284,20 +290,21 @@ export async function createControlEvidence(
 
     await tx.controlEvidence.update({
       where: { id: evidence.id },
-      data: { currentVersionId: version.id },
+      data: { currentVersionId: versionVal.id },
     })
 
-    await logAiAssuranceAudit(
-      tx,
-      input.workspaceId,
-      input.createdById,
-      "ai_assurance.evidence.created",
-      evidence.id,
-      { versionId: version.id, controlId: input.controlId }
-    )
-
-    return version as unknown as ControlEvidenceVersionSummary
+    return { version: versionVal, evidenceId: evidence.id }
   })
+
+  await logAiAssuranceAuditBestEffort(
+    input.workspaceId,
+    input.createdById,
+    "ai_assurance.evidence.created",
+    evidenceId,
+    { versionId: version.id, controlId: input.controlId }
+  )
+
+  return version as unknown as ControlEvidenceVersionSummary
 }
 
 /**
@@ -313,7 +320,7 @@ export async function markControlEvidenceNotApplicable(
   }
   if (!input.reason.trim()) throw new Error("EVIDENCE_NOT_APPLICABLE_REASON_REQUIRED")
 
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
+  const { version, evidenceId } = await withWorkspaceRLS(input.workspaceId, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.targetId}:${input.controlId}`}, 0))`
 
     let evidence = await tx.controlEvidence.findFirst({
@@ -345,7 +352,7 @@ export async function markControlEvidenceNotApplicable(
       null,
       null
     )
-    const version = await tx.controlEvidenceVersion.create({
+    const versionVal = await tx.controlEvidenceVersion.create({
       data: {
         controlEvidenceId: evidence.id,
         version: nextVersion,
@@ -359,98 +366,106 @@ export async function markControlEvidenceNotApplicable(
     })
     await tx.controlEvidence.update({
       where: { id: evidence.id },
-      data: { currentVersionId: version.id },
+      data: { currentVersionId: versionVal.id },
     })
-    await logAiAssuranceAudit(
-      tx,
-      input.workspaceId,
-      input.createdById,
-      "ai_assurance.evidence.not_applicable",
-      evidence.id,
-      { versionId: version.id, controlId: input.controlId }
-    )
-    return version as unknown as ControlEvidenceVersionSummary
+    return { version: versionVal, evidenceId: evidence.id }
   })
+  await logAiAssuranceAuditBestEffort(
+    input.workspaceId,
+    input.createdById,
+    "ai_assurance.evidence.not_applicable",
+    evidenceId,
+    { versionId: version.id, controlId: input.controlId }
+  )
+  return version as unknown as ControlEvidenceVersionSummary
 }
 
 export async function reviseControlEvidence(
   input: ReviseControlEvidenceInput
 ): Promise<ControlEvidenceVersionSummary> {
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.evidenceId}, 0))`
+  const { version, evidenceId, previousVersionId } = await withWorkspaceRLS(
+    input.workspaceId,
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.evidenceId}, 0))`
 
-    const evidence = await tx.controlEvidence.findFirst({
-      where: {
-        id: input.evidenceId,
-        workspaceId: input.workspaceId,
-      },
-    })
+      const evidence = await tx.controlEvidence.findFirst({
+        where: {
+          id: input.evidenceId,
+          workspaceId: input.workspaceId,
+        },
+      })
 
-    if (!evidence || !evidence.currentVersionId) {
-      throw new Error("EVIDENCE_NOT_FOUND")
-    }
+      if (!evidence || !evidence.currentVersionId) {
+        throw new Error("EVIDENCE_NOT_FOUND")
+      }
 
-    const current = await tx.controlEvidenceVersion.findUnique({
-      where: { id: evidence.currentVersionId },
-    })
+      const current = await tx.controlEvidenceVersion.findUnique({
+        where: { id: evidence.currentVersionId },
+      })
 
-    if (!current) {
-      throw new Error("EVIDENCE_VERSION_NOT_FOUND")
-    }
+      if (!current) {
+        throw new Error("EVIDENCE_VERSION_NOT_FOUND")
+      }
 
-    const nextVersion =
-      (await tx.controlEvidenceVersion.count({
-        where: { controlEvidenceId: evidence.id },
-      })) + 1
+      const nextVersion =
+        (await tx.controlEvidenceVersion.count({
+          where: { controlEvidenceId: evidence.id },
+        })) + 1
 
-    const artifactManifest = (current.artifactManifest as unknown as ArtifactManifestItem[]) ?? []
+      const artifactManifest = (current.artifactManifest as unknown as ArtifactManifestItem[]) ?? []
 
-    const checksum = buildVersionChecksum(
-      nextVersion,
-      "SUBMITTED",
-      input.attestation,
-      input.expiresAt,
-      artifactManifest,
-      input.createdById,
-      null,
-      null
-    )
-
-    const version = await tx.controlEvidenceVersion.create({
-      data: {
-        controlEvidenceId: evidence.id,
-        version: nextVersion,
-        status: "SUBMITTED",
-        attestation: input.attestation,
-        expiresAt: input.expiresAt,
+      const checksum = buildVersionChecksum(
+        nextVersion,
+        "SUBMITTED",
+        input.attestation,
+        input.expiresAt,
         artifactManifest,
-        checksum,
-        createdById: input.createdById,
-      },
-    })
+        input.createdById,
+        null,
+        null
+      )
 
-    await tx.controlEvidence.update({
-      where: { id: evidence.id },
-      data: { currentVersionId: version.id },
-    })
+      const versionVal = await tx.controlEvidenceVersion.create({
+        data: {
+          controlEvidenceId: evidence.id,
+          version: nextVersion,
+          status: "SUBMITTED",
+          attestation: input.attestation,
+          expiresAt: input.expiresAt,
+          artifactManifest,
+          checksum,
+          createdById: input.createdById,
+        },
+      })
 
-    await logAiAssuranceAudit(
-      tx,
-      input.workspaceId,
-      input.createdById,
-      "ai_assurance.evidence.revised",
-      evidence.id,
-      { versionId: version.id, previousVersionId: current.id }
-    )
+      await tx.controlEvidence.update({
+        where: { id: evidence.id },
+        data: { currentVersionId: versionVal.id },
+      })
 
-    return version as unknown as ControlEvidenceVersionSummary
-  })
+      return {
+        version: versionVal,
+        evidenceId: evidence.id,
+        previousVersionId: current.id,
+      }
+    }
+  )
+
+  await logAiAssuranceAuditBestEffort(
+    input.workspaceId,
+    input.createdById,
+    "ai_assurance.evidence.revised",
+    evidenceId,
+    { versionId: version.id, previousVersionId }
+  )
+
+  return version as unknown as ControlEvidenceVersionSummary
 }
 
 export async function reviewControlEvidence(
   input: ReviewControlEvidenceInput
 ): Promise<ControlEvidenceVersionSummary> {
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
+  const { version, evidenceId } = await withWorkspaceRLS(input.workspaceId, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.evidenceId}, 0))`
 
     const evidence = await tx.controlEvidence.findFirst({
@@ -499,7 +514,7 @@ export async function reviewControlEvidence(
       reviewedAt
     )
 
-    const version = await tx.controlEvidenceVersion.create({
+    const versionVal = await tx.controlEvidenceVersion.create({
       data: {
         controlEvidenceId: evidence.id,
         version: nextVersion,
@@ -516,20 +531,21 @@ export async function reviewControlEvidence(
 
     await tx.controlEvidence.update({
       where: { id: evidence.id },
-      data: { currentVersionId: version.id },
+      data: { currentVersionId: versionVal.id },
     })
 
-    await logAiAssuranceAudit(
-      tx,
-      input.workspaceId,
-      input.reviewerId,
-      "ai_assurance.evidence.reviewed",
-      evidence.id,
-      { versionId: version.id, status: input.status }
-    )
-
-    return version as unknown as ControlEvidenceVersionSummary
+    return { version: versionVal, evidenceId: evidence.id }
   })
+
+  await logAiAssuranceAuditBestEffort(
+    input.workspaceId,
+    input.reviewerId,
+    "ai_assurance.evidence.reviewed",
+    evidenceId,
+    { versionId: version.id, status: input.status }
+  )
+
+  return version as unknown as ControlEvidenceVersionSummary
 }
 
 export async function acceptControlEvidence(input: {
@@ -597,7 +613,7 @@ export async function listControlEvidence(
 export async function addControlEvidenceArtifacts(
   input: AddControlEvidenceArtifactsInput
 ): Promise<ControlEvidenceVersionSummary> {
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
+  const { version, evidenceId } = await withWorkspaceRLS(input.workspaceId, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.evidenceId}, 0))`
 
     const evidence = await tx.controlEvidence.findFirst({
@@ -639,7 +655,7 @@ export async function addControlEvidenceArtifacts(
       null
     )
 
-    const version = await tx.controlEvidenceVersion.create({
+    const versionVal = await tx.controlEvidenceVersion.create({
       data: {
         controlEvidenceId: evidence.id,
         version: nextVersion,
@@ -656,20 +672,21 @@ export async function addControlEvidenceArtifacts(
 
     await tx.controlEvidence.update({
       where: { id: evidence.id },
-      data: { currentVersionId: version.id },
+      data: { currentVersionId: versionVal.id },
     })
 
-    await logAiAssuranceAudit(
-      tx,
-      input.workspaceId,
-      input.createdById,
-      "ai_assurance.evidence.artifacts_added",
-      evidence.id,
-      { versionId: version.id, artifactCount: input.manifestItems.length }
-    )
-
-    return version as unknown as ControlEvidenceVersionSummary
+    return { version: versionVal, evidenceId: evidence.id }
   })
+
+  await logAiAssuranceAuditBestEffort(
+    input.workspaceId,
+    input.createdById,
+    "ai_assurance.evidence.artifacts_added",
+    evidenceId,
+    { versionId: version.id, artifactCount: input.manifestItems.length }
+  )
+
+  return version as unknown as ControlEvidenceVersionSummary
 }
 
 export function aiAssuranceStateForVersion(

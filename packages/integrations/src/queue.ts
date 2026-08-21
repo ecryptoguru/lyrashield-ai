@@ -98,6 +98,55 @@ export async function enqueueScan(data: ScanJobData): Promise<string> {
 }
 
 /**
+ * Durable retry queue for failed webhook required-tracks (findings 12 / 18A).
+ *
+ * One BullMQ queue owned here (single connection factory, like the scan
+ * queue); the WebhookEventTrack DB row owns attempt counting and
+ * dead-lettering, so BullMQ-level attempts stay at 1 and a transient worker
+ * crash can never double-count the budget.
+ */
+export const WEBHOOK_TRACK_RETRY_QUEUE_NAME = "webhook-track-retry"
+
+export interface WebhookTrackRetryJobData {
+  webhookEventId: string
+  /** "billing" | "license" | "affiliate" */
+  track: string
+}
+
+let webhookTrackRetryQueue: Queue<WebhookTrackRetryJobData, void> | null = null
+
+export function getWebhookTrackRetryQueue(): Queue<WebhookTrackRetryJobData, void> {
+  if (!webhookTrackRetryQueue) {
+    webhookTrackRetryQueue = new Queue<WebhookTrackRetryJobData, void>(
+      WEBHOOK_TRACK_RETRY_QUEUE_NAME,
+      {
+        connection: getConnectionOpts(),
+        defaultJobOptions,
+      }
+    )
+  }
+  return webhookTrackRetryQueue
+}
+
+/**
+ * Enqueue a retry for one webhook track. jobId = `<eventId>:<track>` so
+ * concurrent/repeated enqueues for the same event+track dedupe while one is
+ * already waiting/delayed/active.
+ */
+export async function enqueueWebhookTrackRetry(
+  data: WebhookTrackRetryJobData,
+  opts: { delayMs?: number } = {}
+): Promise<string> {
+  const queue = getWebhookTrackRetryQueue()
+  const job = await queue.add("webhook-track-retry", data, {
+    jobId: `${data.webhookEventId}:${data.track}`,
+    attempts: 1,
+    ...(opts.delayMs !== undefined ? { delay: opts.delayMs } : {}),
+  })
+  return job.id!
+}
+
+/**
  * A scan's 1-based position in the run queue (and the total number waiting), so
  * the dashboard can tell the user how far from the front their scan is.
  *

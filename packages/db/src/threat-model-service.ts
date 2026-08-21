@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto"
+import { logger } from "@lyrashield/logger"
+import { prisma } from "./client"
 import { withWorkspaceRLS } from "./rls"
 
 const MAX_SCALAR_LENGTH = 4_000
@@ -110,7 +112,7 @@ export async function saveThreatModel(input: {
 }) {
   validateThreatModel(input.content)
   const checksum = createHash("sha256").update(canonicalize(input.content)).digest("hex")
-  return withWorkspaceRLS(input.workspaceId, async (tx) => {
+  const { created, modelId, version } = await withWorkspaceRLS(input.workspaceId, async (tx) => {
     const target = await tx.target.findFirst({
       where: { id: input.targetId, workspaceId: input.workspaceId, deletedAt: null },
       select: { id: true },
@@ -127,29 +129,41 @@ export async function saveThreatModel(input: {
         include: { currentVersion: { select: { version: true } } },
       })
     }
-    const version = (model.currentVersion?.version ?? 0) + 1
-    const created = await tx.threatModelVersion.create({
+    const versionVal = (model.currentVersion?.version ?? 0) + 1
+    const createdVal = await tx.threatModelVersion.create({
       data: {
         threatModelId: model.id,
-        version,
+        version: versionVal,
         content: input.content,
         checksum,
         createdById: input.createdById,
       },
     })
-    await tx.threatModel.update({ where: { id: model.id }, data: { currentVersionId: created.id } })
-    await tx.auditLog.create({
+    await tx.threatModel.update({
+      where: { id: model.id },
+      data: { currentVersionId: createdVal.id },
+    })
+    return { created: createdVal, modelId: model.id, version: versionVal }
+  })
+  try {
+    await prisma.auditLog.create({
       data: {
         workspaceId: input.workspaceId,
         actorUserId: input.createdById,
         action: "ai_assurance.threat_model.version_created",
         resourceType: "threatModel",
-        resourceId: model.id,
+        resourceId: modelId,
         metadata: { versionId: created.id, version, checksum },
       },
     })
-    return created
-  })
+  } catch (error) {
+    logger.error("Failed to create audit log", {
+      workspaceId: input.workspaceId,
+      action: "ai_assurance.threat_model.version_created",
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  return created
 }
 
 export async function getThreatModel(workspaceId: string, targetId: string) {

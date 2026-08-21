@@ -9,7 +9,7 @@ import {
 import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { verifyVulnerability } from "./verifier"
 import type { NormalizedFinding } from "./normalizer"
-import { uploadEvidence } from "./evidence-storage"
+import { deleteEncryptedArtifact, uploadEvidence } from "./evidence-storage"
 import { persistDetectionReceipt } from "./result-integrity"
 import { createHash } from "node:crypto"
 
@@ -132,12 +132,26 @@ async function persistEvidence(
   }
 
   if (newEvidence.length > 0) {
-    await withWorkspaceRLS(workspaceId, async (tx) =>
-      tx.evidence.createMany({
-        data: newEvidence,
-        skipDuplicates: true,
-      })
-    )
+    try {
+      await withWorkspaceRLS(workspaceId, async (tx) =>
+        tx.evidence.createMany({
+          data: newEvidence,
+          skipDuplicates: true,
+        })
+      )
+    } catch (error) {
+      await Promise.all(
+        newEvidence.map(({ storageUri }) =>
+          deleteEncryptedArtifact(storageUri).catch((deleteError) => {
+            logger.error("Failed to compensate evidence artifact after metadata failure", {
+              storageUri,
+              error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+            })
+          })
+        )
+      )
+      throw error
+    }
   }
 }
 

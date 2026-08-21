@@ -4,16 +4,15 @@ import { logger } from "@lyrashield/logger"
 import {
   validatePolarWebhook,
   validateRazorpayWebhook,
-  processPolarEvent,
-  processRazorpayEvent,
-  isHandledPolarEvent,
-  isHandledRazorpayEvent,
-  resolveProviderKey,
+  resolveRazorpayEventIdentity,
+  normalizeProviderEvent,
+  runApplicableTracks,
+  WebhookAuthError,
+  WebhookPayloadError,
 } from "@lyrashield/billing"
 import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
-import { env } from "@lyrashield/config"
-import { LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
-import { issueLicenseForPolarOrder } from "@/lib/licenses/license-service"
+import { enqueueWebhookTrackRetry } from "@lyrashield/integrations"
+import { createHash } from "node:crypto"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -25,19 +24,82 @@ export const dynamic = "force-dynamic"
  * (`webhook-id`, with legacy `webhooks-id` accepted) vs Razorpay-specific
  * headers (X-Razorpay-Signature).
  *
+ * Event identity (dedupe key = @@unique([provider, externalId])):
+ * - Polar: the Standard Webhooks delivery id (`webhook-id`) — distinct per
+ *   delivery, so lifecycle events on one subscription never collide.
+ * - Razorpay: `X-Razorpay-Event-ID` header when present; otherwise a stable
+ *   sha256 digest of `event|primaryResourceId|created_at`. Never random —
+ *   the same logical redelivery must always resolve to the same identity.
+ *
  * Flow (synchronous, like the GitHub webhook):
- * 1. Validate signature
- * 2. Insert WebhookEvent (idempotent on @@unique([provider, externalId]))
- * 3. Process the event synchronously BEFORE responding:
- *    a. Track A: syncSubscription / creditTopUp (billing entitlements)
- *    b. Track B: issue license for Local SKU Polar one-time orders
- *    c. Track C: affiliate commission/clawback via webhook-dispatch
- * 4. Update WebhookEvent: processed=true, processedAt=now()
- * 5. Respond 200
+ * 1. Validate signature (401/400 on auth/payload failures — see below)
+ * 2. Insert WebhookEvent FIRST — the DB unique constraint is the concurrency
+ *    arbiter: of simultaneous duplicate deliveries exactly one inserts and
+ *    processes; losers answer 200 without side effects.
+ * 3. Process the event synchronously BEFORE responding via durable required
+ *    tracks (findings 12 / 18A) — one WebhookEventTrack row per applicable
+ *    track, executed through the shared executor:
+ *    a. billing:   entitlements / pack credit / refund reversal adapters
+ *    b. license:   Local SKU purchase fulfillment (both providers)
+ *    c. affiliate: commission/clawback via normalized domain events
+ *    A failed track marks its row "failed", enqueues a durable BullMQ retry,
+ *    and answers 5xx so the provider also redelivers. The parent `processed`
+ *    flag is DERIVED: true only when every applicable track succeeded.
+ * 4. Respond 200 only when every applicable track row is "succeeded".
  *
  * Single webhook ingress — Track C never registers a second webhook route.
  * Both tracks consume the same idempotent WebhookEvent rows.
  */
+
+/**
+ * ponytail: in-flight window heuristic — an unprocessed row younger than this
+ * is assumed to belong to a concurrent delivery (skip + 200); older unprocessed
+ * rows are crash/failure strays and are reprocessed. If providers ever overlap
+ * >60s processing runs, replace with a lease column (commit-3 territory).
+ */
+const REPROCESS_MIN_AGE_MS = 60_000
+
+/** Response class map for validation-phase failures. */
+function authErrorResponse(error: unknown): NextResponse | null {
+  if (error instanceof WebhookAuthError) {
+    // Auth-layer rejection: missing/invalid signature or anti-replay failure.
+    // Non-retryable — retrying identical garbage can never succeed. 401 for
+    // signature problems; stale timestamps and misconfig keep 400/500 below.
+    const status =
+      error.reason === "missing_signature" || error.reason === "invalid_signature"
+        ? 401
+        : error.reason === "stale_timestamp"
+          ? 400
+          : 500
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "WEBHOOK_UNAUTHORIZED", message: "Webhook authentication failed" },
+      },
+      { status }
+    )
+  }
+  if (error instanceof WebhookPayloadError) {
+    // Signature was valid but the body is unusable — non-retryable.
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "WEBHOOK_MALFORMED_PAYLOAD", message: "Webhook payload rejected" },
+      },
+      { status: 400 }
+    )
+  }
+  return null
+}
+
+/**
+ * Deterministic fallback identity when a provider omits its delivery id.
+ * sha256 over provider-scoped event facts — same inputs, same id, forever.
+ */
+function deriveIdentity(parts: (string | number)[]): string {
+  return createHash("sha256").update(parts.join("|")).digest("hex")
+}
+
 export async function POST(request: Request) {
   const body = await request.text()
   const headers: Record<string, string | string[] | undefined> = {}
@@ -62,126 +124,196 @@ export async function POST(request: Request) {
 
   let provider: "polar" | "razorpay"
   let externalId: string
+  let identitySource: "delivery" | "derived"
   let eventType: string
   let payload: unknown
-  let payloadRecord: Record<string, unknown>
 
+  // ── Phase 1: signature + payload validation (response-classified) ────────
   try {
     if (hasPolarHeaders) {
       provider = "polar"
       const event = validatePolarWebhook(body, headers)
-      // Standard Webhooks assigns a distinct ID to every delivery. Resource
-      // IDs repeat across subscription updates, so using data.id here would
-      // incorrectly discard later lifecycle events as replays.
-      externalId =
-        (headers["webhook-id"] as string) ??
-        (headers["webhooks-id"] as string) ??
-        crypto.randomUUID()
+      const deliveryId =
+        (headers["webhook-id"] as string) ?? (headers["webhooks-id"] as string) ?? ""
+      if (deliveryId) {
+        externalId = deliveryId
+        identitySource = "delivery"
+      } else {
+        // Validator enforces webhook-id presence, so this is defense-in-depth:
+        // deterministic digest instead of a random id that would break dedupe.
+        externalId = deriveIdentity([
+          event.type,
+          String(event.data?.id ?? ""),
+          String(headers["webhook-timestamp"] ?? ""),
+        ])
+        identitySource = "derived"
+      }
       eventType = event.type
       payload = event
-      payloadRecord = event.data as Record<string, unknown>
-
-      // Insert webhook event (idempotent)
-      const inserted = await insertWebhookEvent(provider, externalId, eventType, payload)
-      if (!inserted) {
-        // A-M04: Replay — check if the existing event was never processed.
-        // If it's still unprocessed, reattempt processing instead of silently
-        // returning 200 and permanently stranding the event.
-        const existingEvent = await prisma.webhookEvent.findUnique({
-          where: { provider_externalId: { provider, externalId } },
-          select: { processed: true },
-        })
-        if (existingEvent?.processed) {
-          return NextResponse.json({ success: true }, { status: 200 })
-        }
-        // Fall through to reprocess the unprocessed event
-        logger.info("Reprocessing unprocessed webhook event", { provider, externalId })
-      }
-
-      // Process synchronously before responding
-      // Track A: billing entitlements
-      if (isHandledPolarEvent(event.type)) {
-        await processPolarEvent(event)
-      }
-
-      // Track B: license issuance for Local SKU one-time orders
-      if (event.type === "order.paid") {
-        await maybeIssueLicense(provider, String(event.data.id ?? ""), payloadRecord)
-      }
-
-      // Track C: affiliate commission/clawback dispatch (non-blocking on failure)
-      await dispatchAffiliate({
-        provider,
-        event: eventType,
-        payload: payloadRecord,
-      }).catch((err) => {
-        logger.error("Affiliate dispatch failed (non-blocking)", {
-          provider,
-          event: eventType,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      })
-
-      // Mark as processed
-      await markProcessed(provider, externalId)
     } else {
       provider = "razorpay"
       const signature = (headers["x-razorpay-signature"] as string) ?? ""
       const event = validateRazorpayWebhook(body, signature)
-      externalId =
-        event.payload.refund?.entity.id ??
-        event.payload.payment?.entity.id ??
-        event.payload.subscription?.entity.id ??
-        crypto.randomUUID()
+      const identity = resolveRazorpayEventIdentity(
+        event,
+        headers["x-razorpay-event-id"] as string | undefined
+      )
+      if (!identity) {
+        throw new WebhookPayloadError("Razorpay webhook carries no primary resource id")
+      }
+      externalId = identity.externalId
+      identitySource = identity.identitySource
       eventType = event.event
       payload = event
-      payloadRecord = (event.payload.payment?.entity ??
-        event.payload.subscription?.entity ??
-        {}) as Record<string, unknown>
-
-      // Insert webhook event (idempotent)
-      const inserted = await insertWebhookEvent(provider, externalId, eventType, payload)
-      if (!inserted) {
-        // A-M04: Replay — check if the existing event was never processed.
-        const existingEvent = await prisma.webhookEvent.findUnique({
-          where: { provider_externalId: { provider, externalId } },
-          select: { processed: true },
-        })
-        if (existingEvent?.processed) {
-          return NextResponse.json({ success: true }, { status: 200 })
-        }
-        logger.info("Reprocessing unprocessed webhook event", { provider, externalId })
-      }
-
-      // Process synchronously before responding
-      // Track A: billing entitlements
-      if (isHandledRazorpayEvent(event.event)) {
-        await processRazorpayEvent(event)
-      }
-
-      // Track C: affiliate commission/clawback dispatch (non-blocking on failure)
-      await dispatchAffiliate({
-        provider,
-        event: eventType,
-        payload: payloadRecord,
-      }).catch((err) => {
-        logger.error("Affiliate dispatch failed (non-blocking)", {
-          provider,
-          event: eventType,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      })
-
-      // Mark as processed
-      await markProcessed(provider, externalId)
     }
   } catch (error) {
-    logger.error("Webhook validation/processing failed", {
+    const classified = authErrorResponse(error)
+    if (classified) {
+      logger.warn("Webhook validation rejected", {
+        provider: hasPolarHeaders ? "polar" : "razorpay",
+        reason:
+          error instanceof WebhookAuthError
+            ? error.reason
+            : error instanceof WebhookPayloadError
+              ? "malformed_payload"
+              : "validation_failed",
+      })
+      return classified
+    }
+    logger.error("Webhook validation failed unexpectedly", {
       provider: hasPolarHeaders ? "polar" : "razorpay",
+      reason: "processing_failed",
       error: error instanceof Error ? error.message : String(error),
     })
-    // A-M04: Return 500 (not 400) on processing errors so the provider retries.
-    // Returning 400 causes the provider to stop retrying, permanently stranding events.
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+      },
+      { status: 500 }
+    )
+  }
+
+  // ── Phase 2: claim via unique constraint (concurrency arbiter) ────────────
+  let claimedEventId: string | null = null
+  try {
+    const inserted = await insertWebhookEvent(
+      provider,
+      externalId,
+      identitySource,
+      eventType,
+      payload
+    )
+    if (!inserted) {
+      const existingEvent = await prisma.webhookEvent.findUnique({
+        where: { provider_externalId: { provider, externalId } },
+        select: { id: true, processed: true, createdAt: true },
+      })
+      if (!existingEvent) {
+        // Row vanished between the P2002 and this lookup (practically
+        // unreachable) — treat as a fresh claim and process below.
+        logger.info("Webhook event row vanished after duplicate insert", {
+          provider,
+          eventType,
+          externalId,
+        })
+      } else if (existingEvent.processed) {
+        // Exact replay of an already-processed event — acknowledge immediately.
+        // Zero extra side effects: every applicable track is already succeeded.
+        logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
+        return NextResponse.json({ success: true }, { status: 200 })
+      } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
+        logger.info("Concurrent duplicate delivery skipped", { provider, eventType, externalId })
+        return NextResponse.json({ success: true }, { status: 200 })
+      } else {
+        logger.info("Reprocessing stranded webhook event", { provider, eventType, externalId })
+        claimedEventId = existingEvent.id
+      }
+    } else {
+      claimedEventId = inserted.id
+    }
+
+    if (!claimedEventId) {
+      // Unreachable in practice (row vanished between P2002 and lookup);
+      // fail closed with 5xx so the provider redelivers instead of running
+      // required tracks without durable state.
+      logger.error("Webhook event claim lost after arbiter", {
+        provider,
+        eventType,
+        externalId,
+        reason: "claim_lost",
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+        },
+        { status: 500 }
+      )
+    }
+
+    // ── Phase 3: durable required tracks (billing/license/affiliate) ─────────
+    const normalized = normalizeProviderEvent({
+      provider,
+      eventType,
+      payload,
+      deliveryId: externalId,
+    })
+    const summary = await runApplicableTracks({
+      webhookEventId: claimedEventId,
+      event: normalized,
+      rawPayload: payload,
+      handlers: { dispatchAffiliate },
+    })
+
+    if (!summary.allSucceeded) {
+      // Durably queue one bounded retry per failed track (dead-lettered tracks
+      // are terminal and are NOT re-enqueued). An enqueue failure is logged
+      // with a reason code — the answer is 5xx either way, so the provider
+      // redelivery remains the additional recovery path.
+      for (const failure of summary.failures) {
+        try {
+          await enqueueWebhookTrackRetry({
+            webhookEventId: claimedEventId,
+            track: failure.track,
+          })
+        } catch (enqueueError) {
+          logger.error("Webhook track retry enqueue failed", {
+            webhookEventId: claimedEventId,
+            track: failure.track,
+            reason: "retry_enqueue_failed",
+            error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
+          })
+        }
+      }
+      logger.warn("Webhook answered 5xx — required track(s) not satisfied", {
+        provider,
+        eventType,
+        externalId,
+        webhookEventId: claimedEventId,
+        failedTracks: summary.failures.map((f) => f.track),
+        deadLetteredTracks: summary.deadLettered.map((f) => f.track),
+        reason: "required_track_failed",
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+        },
+        { status: 500 }
+      )
+    }
+  } catch (error) {
+    // Transient processing failure — answer 5xx so the provider retries.
+    // The unprocessed row (and any pending/failed track rows) remain; the
+    // durable retry queue plus provider redelivery recover them.
+    logger.error("Webhook processing failed", {
+      provider,
+      eventType,
+      externalId,
+      reason: "processing_failed",
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json(
       {
         success: false,
@@ -195,105 +327,41 @@ export async function POST(request: Request) {
 }
 
 /**
- * Check if a Polar order is for a Local SKU product and issue a license if so.
- * Called on `order.paid` events. Idempotent — the license issue endpoint
- * checks for existing licenses by orderId.
- */
-async function maybeIssueLicense(
-  provider: string,
-  orderId: string,
-  payload: Record<string, unknown>
-): Promise<void> {
-  try {
-    const productId = (payload.product_id ??
-      payload.productId ??
-      payload.sku_id ??
-      payload.skuId) as string | undefined
-    if (!productId) return
-
-    const skuId = resolveProviderKey(env.POLAR_LOCAL_PRODUCT_IDS, productId) as LocalSkuId | null
-    if (!skuId || !LOCAL_SKU_MAP[skuId]) return
-
-    const customer = payload.customer as Record<string, unknown> | undefined
-    const buyerEmail = (payload.customer_email ??
-      payload.customerEmail ??
-      payload.email ??
-      customer?.email) as string | undefined
-    if (!buyerEmail) {
-      logger.warn("Local SKU order missing buyer email — cannot issue license", {
-        orderId,
-        productId,
-      })
-      return
-    }
-
-    const seatCount = (payload.seats ?? payload.seat_count ?? payload.seatCount ?? 1) as number
-
-    logger.info("Issuing license for Local SKU order", {
-      orderId,
-      productId,
-      sku: skuId,
-      buyerEmail,
-    })
-
-    await issueLicenseForPolarOrder({
-      productId,
-      buyerEmail,
-      seatCount,
-      orderId,
-    })
-  } catch (error) {
-    // Non-blocking — license issuance failure should not block the webhook
-    logger.error("License issuance failed (non-blocking)", {
-      orderId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
-}
-
-/**
  * Insert a WebhookEvent row, idempotent on (provider, externalId).
- * If the event already exists, it's a replay — return false to signal skip.
- * Returns true if the row was newly inserted.
+ * The DB unique constraint arbitrates concurrent duplicates: exactly one
+ * caller inserts. Returns null to signal a duplicate/replay.
  */
 async function insertWebhookEvent(
   provider: string,
   externalId: string,
+  identitySource: "delivery" | "derived",
   eventType: string,
   payload: unknown
-): Promise<boolean> {
+): Promise<{ id: string } | null> {
   try {
-    await prisma.webhookEvent.create({
+    const created = await prisma.webhookEvent.create({
       data: {
         provider,
         externalId,
         eventType,
         payload: payload as Record<string, unknown>,
         processed: false,
+        identitySource,
       },
+      select: { id: true },
     })
-    return true
+    return created
   } catch (error) {
-    // P2002 = unique constraint — replay, ignore
+    // P2002 = unique constraint — duplicate delivery, arbiter says we lost
     if (
       error &&
       typeof error === "object" &&
       "code" in error &&
       (error as { code: string }).code === "P2002"
     ) {
-      logger.debug("Webhook event replay (already processed)", { provider, externalId })
-      return false
+      logger.debug("Webhook event duplicate (constraint arbiter)", { provider, externalId })
+      return null
     }
     throw error
   }
-}
-
-/**
- * Mark a WebhookEvent as processed after all synchronous side effects succeed.
- */
-async function markProcessed(provider: string, externalId: string): Promise<void> {
-  await prisma.webhookEvent.updateMany({
-    where: { provider, externalId, processed: false },
-    data: { processed: true, processedAt: new Date() },
-  })
 }

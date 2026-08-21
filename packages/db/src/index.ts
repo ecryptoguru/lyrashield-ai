@@ -232,6 +232,7 @@ export {
   type ThreatModelInput,
   type ThreatModelThreat,
 } from "./threat-model-service"
+export { findLicenseForSyncByKeyHash } from "./sync-license"
 
 export {
   createApproval,
@@ -243,6 +244,10 @@ export {
   consumeApproval,
   saveApprovalResult,
   executeApproval,
+  claimApprovalExecution,
+  completeApprovalExecution,
+  failApprovalExecution,
+  MAX_APPROVAL_EXECUTION_ATTEMPTS,
   expireStaleApprovals,
   hashInput,
   verifyInputHash,

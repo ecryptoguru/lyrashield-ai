@@ -4,11 +4,20 @@ import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
-import { registerScanWorker, unregisterScanWorker, SCAN_WORKER_HEARTBEAT_MS } from "./queue"
+import {
+  registerScanWorker,
+  unregisterScanWorker,
+  SCAN_WORKER_HEARTBEAT_MS,
+  WEBHOOK_TRACK_RETRY_QUEUE_NAME,
+  type WebhookTrackRetryJobData,
+} from "@lyrashield/integrations"
+import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
+import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
 import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
+import { startApprovalExpiryRunner } from "./approval-expiry"
 import { checkScanConsumerLiveness, markScanJobClaimed } from "./consumer-liveness"
 import {
   assertRepositoryScanRuntimeConfigured,
@@ -20,11 +29,13 @@ import { reapStaleScanResources } from "./engine/stale-resource-reaper"
 import { observeWorkerRun } from "./worker-lifecycle"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
+let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
 let staleResourceReaperTimer: NodeJS.Timeout | null = null
 let billingJobsTimers: NodeJS.Timeout[] | null = null
+let approvalExpiryTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
@@ -102,6 +113,11 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     billingJobsTimers = null
     logger.info("Billing jobs scheduler stopped")
   }
+  if (approvalExpiryTimer) {
+    clearInterval(approvalExpiryTimer)
+    approvalExpiryTimer = null
+    logger.info("Approval expiry runner stopped")
+  }
   if (scheduleRunner) {
     clearInterval(scheduleRunner)
     scheduleRunner = null
@@ -127,6 +143,18 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
       }
     }
     logger.info("BullMQ worker closed", { workerId: localWorker.id })
+  }
+
+  // Close the webhook-track retry worker the same way — no new retry jobs are
+  // accepted once closing starts; in-flight track retries finish or time out.
+  if (webhookTrackRetryWorker) {
+    const retryClosed = webhookTrackRetryWorker.close()
+    webhookTrackRetryWorker = null
+    await Promise.race([
+      retryClosed.then(() => "closed" as const),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 10_000)),
+    ])
+    logger.info("Webhook track retry worker closed")
   }
 
   const terminatedEngineProcesses = terminateActiveEngineProcesses()
@@ -204,6 +232,48 @@ async function main(): Promise<void> {
 
   worker.on("error", (error) => {
     logger.error("Worker error", { error: error.message, stack: error.stack })
+  })
+
+  // Webhook required-track retries (findings 12 / 18A). Separate BullMQ queue
+  // + worker sharing the same connection options; the processor delegates to
+  // the shared executor in @lyrashield/billing via injected handlers.
+  webhookTrackRetryWorker = new Worker<WebhookTrackRetryJobData, void>(
+    WEBHOOK_TRACK_RETRY_QUEUE_NAME,
+    async (job) => {
+      const result = await processWebhookTrackRetry(job, { dispatchAffiliate })
+      logger.info("Webhook track retry processed", {
+        jobId: job.id,
+        webhookEventId: job.data.webhookEventId,
+        track: job.data.track,
+        outcome: result.outcome,
+        reEnqueued: result.reEnqueued,
+      })
+    },
+    {
+      connection: {
+        url: env.REDIS_URL || "redis://localhost:6379",
+        maxRetriesPerRequest: null,
+      },
+      concurrency: 2,
+      autorun: false,
+    }
+  )
+  await webhookTrackRetryWorker.waitUntilReady()
+  webhookTrackRetryWorker.on("failed", (job, error) => {
+    logger.error("Webhook track retry job failed in queue", {
+      jobId: job?.id,
+      webhookEventId: job?.data?.webhookEventId,
+      track: job?.data?.track,
+      reason: error.message,
+    })
+  })
+  webhookTrackRetryWorker.on("error", (error) => {
+    logger.error("Webhook track retry worker error", { error: error.message })
+  })
+  webhookTrackRetryWorker.run().catch((error) => {
+    logger.error("Webhook track retry worker stopped unexpectedly", {
+      error: error instanceof Error ? error.message : String(error),
+    })
   })
 
   // Reconcile once on startup and then every five minutes. The distributed lease
@@ -297,6 +367,8 @@ async function main(): Promise<void> {
   logger.info("Schedule runner started", { intervalMs: 60_000 })
 
   billingJobsTimers = startBillingJobsScheduler()
+
+  approvalExpiryTimer = startApprovalExpiryRunner()
 }
 
 if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {

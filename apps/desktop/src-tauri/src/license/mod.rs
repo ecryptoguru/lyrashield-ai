@@ -6,7 +6,10 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use ed25519_dalek::{Signature, VerifyingKey};
 use std::collections::BTreeMap;
+use std::sync::{Mutex, OnceLock};
 use types::{LicenseFile, LicenseVerificationResult};
+
+pub static TEST_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// Produce a deterministic JSON string for signing.
 ///
@@ -286,6 +289,80 @@ pub fn is_build_installable(license_file: &LicenseFile, build_version: &str) -> 
     }
 }
 
+/// Single guard validating signature, machine membership, revocation, and eligibility pre scan/updater.
+/// All failures are non-operational. Must be called BEFORE any subprocess or updater install.
+pub async fn ensure_license_operational(
+    api_url: Option<String>,
+    public_key_pem: &str,
+) -> Result<types::StoredLicense, String> {
+    // Load persisted v1 StoredLicense with immutable licenseId.
+    let stored = store::load_license()
+        .map_err(|e| format!("failed to load license: {}", e))?
+        .ok_or_else(|| "no stored license".to_string())?;
+
+    if stored.version != 1 {
+        return Err(format!("unsupported license version: {}", stored.version));
+    }
+    if stored.license_id.is_empty() {
+        return Err("missing licenseId — re-activate required".into());
+    }
+
+    // Local signature verification.
+    let verification = verify_license(&stored.license, public_key_pem);
+    if !verification.valid {
+        return Err(format!(
+            "license signature invalid: {}",
+            verification.reason.unwrap_or_else(|| "unknown".into())
+        ));
+    }
+
+    // Machine binding — must be member.
+    let machine_id = crate::machine_id::generate_machine_id();
+    if !stored.license.machine_ids.contains(&machine_id) {
+        return Err(format!(
+            "machine not bound: {} not in {:?}",
+            machine_id, stored.license.machine_ids
+        ));
+    }
+
+    // Identified server revocation check — requires licenseId. All transport/parse failures are non-operational.
+    let client = crate::api::ApiClient::new(api_url)
+        .map_err(|e| format!("failed to build api client: {}", e))?;
+    let server = client
+        .verify(&stored.license, &stored.license_id)
+        .await
+        .map_err(|e| format!("license revalidation failed: {}", e))?;
+    if server.revoked || !server.valid {
+        return Err(format!(
+            "license revoked or invalid: {}",
+            server.reason.unwrap_or_else(|| "unknown".into())
+        ));
+    }
+
+    // Eligibility — updater and scan both gate on it per spec (all failures non-operational).
+    if !verification.update_eligible {
+        return Err("update eligibility expired".into());
+    }
+
+    Ok(stored)
+}
+
+/// Check eligibility for a specific build version under the operational license.
+pub async fn ensure_update_installable(
+    api_url: Option<String>,
+    public_key_pem: &str,
+    target_version: &str,
+) -> Result<types::StoredLicense, String> {
+    let stored = ensure_license_operational(api_url, public_key_pem).await?;
+    if !is_build_installable(&stored.license, target_version) {
+        return Err(format!(
+            "build {} not installable under perpetual fallback {:?}",
+            target_version, stored.license.perpetual_fallback_build
+        ));
+    }
+    Ok(stored)
+}
+
 /// Simple semver comparison: returns -1, 0, or 1.
 ///
 /// Port of `compareVersions` in `packages/licenses/src/verify.ts`.
@@ -382,5 +459,330 @@ mod tests {
     fn test_compare_versions_different_lengths() {
         assert_eq!(compare_versions("1.0", "1.0.0"), 0);
         assert_eq!(compare_versions("1.0.1", "1.0"), 1);
+    }
+
+    // === Guard tests per spec: wrong machine, revoked, expired, unknown id, unreachable, 5xx, malformed, no subprocess before guard ===
+
+    fn test_pubkey_and_sign(file: &mut types::LicenseFile) -> String {
+        use ed25519_dalek::pkcs8::EncodePublicKey;
+        use ed25519_dalek::{Signer, SigningKey};
+        // Generate a deterministic test key (seed 0..32)
+        let seed = [1u8; 32];
+        let signing_key = SigningKey::from_bytes(&seed);
+        let verifying_key = signing_key.verifying_key();
+        let pubkey_pem = verifying_key.to_public_key_pem(Default::default()).unwrap();
+        // Build signing input and sign
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "machineIds".into(),
+            serde_json::Value::Array(
+                file.machine_ids
+                    .iter()
+                    .map(|id| serde_json::Value::String(id.clone()))
+                    .collect(),
+            ),
+        );
+        map.insert(
+            "perpetualFallbackBuild".into(),
+            match &file.perpetual_fallback_build {
+                Some(b) => serde_json::Value::String(b.clone()),
+                None => serde_json::Value::Null,
+            },
+        );
+        map.insert(
+            "seatCount".into(),
+            serde_json::Value::Number(file.seat_count.into()),
+        );
+        map.insert("sku".into(), serde_json::to_value(&file.sku).unwrap());
+        map.insert(
+            "updateEligibleUntil".into(),
+            serde_json::Value::String(file.update_eligible_until.clone()),
+        );
+        let payload = serde_json::Value::Object(map);
+        let bytes = crate::license::canonical_json(&payload).into_bytes();
+        let sig = signing_key.sign(&bytes);
+        file.signature = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
+        file.signing_key_id = "test-key".into();
+        file.issued_at = "2026-01-01T00:00:00.000Z".into();
+        pubkey_pem
+    }
+
+    fn make_valid_stored(machine_id: &str) -> (types::StoredLicense, String) {
+        let mut file = types::LicenseFile {
+            sku: types::LicenseSku::IndividualLaunch,
+            seat_count: 1,
+            machine_ids: vec![machine_id.to_string()],
+            update_eligible_until: "2036-01-01T00:00:00.000Z".into(),
+            perpetual_fallback_build: Some("1.2.0".into()),
+            signing_key_id: String::new(),
+            signature: String::new(),
+            issued_at: String::new(),
+        };
+        let pubkey = test_pubkey_and_sign(&mut file);
+        let stored = types::StoredLicense {
+            version: 1,
+            license_id: "lic_test_123".into(),
+            license: file,
+            blob: "testblob".into(),
+        };
+        (stored, pubkey)
+    }
+
+    fn test_pubkey_and_sign_alias(file: &mut types::LicenseFile) -> String {
+        test_pubkey_and_sign(file)
+    }
+
+    #[test]
+    fn test_guard_wrong_machine_non_operational() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        let machine_id = crate::machine_id::generate_machine_id();
+        let (mut stored, _pubkey) = make_valid_stored(&machine_id);
+        // Tamper to wrong machine
+        stored.license.machine_ids = vec!["wrong-machine".into()];
+        // Re-sign with wrong machine so signature still valid but membership fails
+        let pubkey2 = test_pubkey_and_sign(&mut stored.license);
+        // Use temp dir for store
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
+            .unwrap();
+        // Now re-load and check machine membership fails before server
+        // We test verify_license still valid but ensure_license_operational should fail on machine check
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let res = rt.block_on(async {
+            // Use a mock server that would succeed if reached, but machine check fails first
+            crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey2)
+                .await
+        });
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("machine not bound"));
+    }
+
+    #[test]
+    fn test_guard_revoked_signature_non_operational() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        let machine_id = crate::machine_id::generate_machine_id();
+        let (mut stored, pubkey) = make_valid_stored(&machine_id);
+        stored.license.signature = "REVOKED".into();
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
+            .unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let res = rt.block_on(async {
+            crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey)
+                .await
+        });
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.contains("signature invalid") || err.contains("invalid"));
+    }
+
+    #[test]
+    fn test_guard_expired_eligibility_non_operational() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        let machine_id = crate::machine_id::generate_machine_id();
+        let (mut stored, _pubkey) = make_valid_stored(&machine_id);
+        stored.license.update_eligible_until = "2020-01-01T00:00:00.000Z".into();
+        // Re-sign after changing date
+        let pubkey2 = test_pubkey_and_sign(&mut stored.license);
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
+            .unwrap();
+        // Mock server that returns success
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let res = rt.block_on(async {
+            // Start a mock server that returns valid verify response
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                if let Ok((mut stream, _)) = listener.accept().await {
+                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                    let mut buf = [0u8; 4096];
+                    let _ = stream.read(&mut buf).await;
+                    let body = r#"{"success":true,"data":{"version":1,"valid":true,"revoked":false,"updateEligible":true}}"#;
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(resp.as_bytes()).await;
+                }
+            });
+            let url = format!("http://{}", addr);
+            let result = crate::license::ensure_license_operational(Some(url), &pubkey2).await;
+            // Give server time to handle
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            drop(server);
+            result
+        });
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.contains("eligibility expired") || err.contains("update_eligibility"));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn test_guard_unreachable_non_operational() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        let machine_id = crate::machine_id::generate_machine_id();
+        let (stored, pubkey) = make_valid_stored(&machine_id);
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
+            .unwrap();
+        // Use an unreachable address (port 1 is typically closed)
+        let res =
+            crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey)
+                .await;
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.contains("revalidation failed") || err.contains("request failed"));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn test_guard_5xx_non_operational() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        let machine_id = crate::machine_id::generate_machine_id();
+        let (stored, pubkey) = make_valid_stored(&machine_id);
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
+            .unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let body =
+                    r#"{"success":false,"error":{"code":"INTERNAL_ERROR","message":"oops"}}"#;
+                let resp = format!(
+                    "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+            }
+        });
+        let url = format!("http://{}", addr);
+        let res = crate::license::ensure_license_operational(Some(url), &pubkey).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn test_guard_malformed_non_operational() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        let machine_id = crate::machine_id::generate_machine_id();
+        let (stored, pubkey) = make_valid_stored(&machine_id);
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
+            .unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let body = r#"not json at all"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+            }
+        });
+        let url = format!("http://{}", addr);
+        let res = crate::license::ensure_license_operational(Some(url), &pubkey).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn test_guard_unknown_id_non_operational() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        let machine_id = crate::machine_id::generate_machine_id();
+        let (stored, pubkey) = make_valid_stored(&machine_id);
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
+            .unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let body = r#"{"success":true,"data":{"version":1,"valid":false,"revoked":true,"updateEligible":false,"reason":"UNKNOWN_LICENSE"}}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+            }
+        });
+        let url = format!("http://{}", addr);
+        let res = crate::license::ensure_license_operational(Some(url), &pubkey).await;
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.contains("revoked") || err.contains("UNKNOWN"));
+    }
+
+    #[test]
+    fn test_no_subprocess_before_guard() {
+        // Ensure the guard is the first side effect in start_scan — no Command::new before ensure_license_operational.
+        let src = include_str!("../commands.rs");
+        let guard_pos = src
+            .find("ensure_license_operational")
+            .expect("guard must exist");
+        let spawn_pos = src.find("Command::new").unwrap_or(usize::MAX);
+        // The scan runner spawn is in scan/mod.rs; but commands.rs must gate before calling scan::start_scan.
+        // Check that ensure_license_operational appears before scan::start_scan
+        let scan_call = src.find("scan::start_scan").expect("scan call must exist");
+        assert!(guard_pos < scan_call, "guard must be before scan spawn");
+        // Also ensure no direct process spawn in commands.rs before guard
+        if spawn_pos != usize::MAX {
+            assert!(guard_pos < spawn_pos, "guard must be before any subprocess");
+        }
     }
 }

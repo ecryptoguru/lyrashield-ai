@@ -271,7 +271,8 @@ const envSchema = z
     LYRASHIELD_SYNC_MAX_FINDINGS_PER_BATCH: z.coerce.number().int().min(1).max(5000).default(500),
     // Internal API key for server-to-server routes (license issue/renew).
     // When set, callers must send `X-LyraShield-Internal-Key` matching this
-    // value. Leave unset in dev/test to allow unauthenticated internal calls.
+    // value. Optional for dev/test convenience only — production runtime
+    // REJECTS internal API requests when this is absent or empty.
     LYRASHIELD_INTERNAL_API_KEY: z.string().optional().or(z.literal("")),
 
     // Affiliate / Partner Program (Track C)

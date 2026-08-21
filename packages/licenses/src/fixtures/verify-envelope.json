@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "data": {
+    "version": 1,
+    "valid": true,
+    "revoked": false,
+    "updateEligible": true,
+    "sku": "individual_launch",
+    "updateEligibleUntil": "2036-01-01T00:00:00.000Z"
+  }
+}

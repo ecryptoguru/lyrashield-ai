@@ -465,7 +465,7 @@ LyraShield Local is a desktop app for macOS and Windows. It is a one-time 1-year
 - **Scan depths:** all depths are available — there is no Cloud-style depth gating because your AI pays, not us.
 - **Metering:** zero agent-minute metering; your AI pays, not LyraShield.
 - **Privacy:** scans run locally. No code, findings, or keys leave your machine.
-- **Optional cloud sync:** connect your LyraShield account to sync findings.
+- **Optional cloud sync:** connect your LyraShield account to sync findings (see Cloud sync below — monotonic, device-bound).
 - **Perpetual fallback:** keep the last eligible build forever after the license expires.
 - **Offline grace:** the app runs without a network using a cached signed license.
 
@@ -474,6 +474,10 @@ Pricing:
 - **Individual:** $199 launch / $299 regular — 3 machines.
 - **Team:** $99/seat + $59/seat/yr renewal, or $149/seat/yr subscription with sync.
 - **Refunds:** none on Local licenses.
+
+### License delivery and retrieval
+
+After a Local license purchase (Polar or Razorpay), you receive an email with a **one-time retrieval link** (expires in 7 days, single use). The email never contains the raw license key itself. Open the link or `POST {"token":"..."}` to `/api/licenses/retrieve` to retrieve your license key and signed license file **once**. The link expires after first retrieval or after 7 days and then returns a generic `404 Not Found` (no oracle). The retrieval token is stored only as a SHA-256 hash with an expiry and single-use marker, and is never logged. If email delivery fails, the system marks the fulfillment as `DELIVERY_FAILED` and retries automatically via the webhook-track queue before the webhook is considered complete; concurrent webhook deliveries mint only one license. If your link expired or was already used, contact support to re-issue.
 
 ## 21. Settings and account deletion
 
@@ -638,3 +642,14 @@ For users who prefer to run scans on their own AI and keep everything local:
 2. Configure BYOK — connect a ChatGPT/OpenAI subscription (OAuth) or Azure OpenAI.
 3. Scan locally; all depths are available with zero agent-minute metering.
 4. Optionally connect your LyraShield account to sync findings to the cloud.
+
+### 20.8 Cloud sync (Local → Cloud) — authenticated monotonic evidence sync
+
+- **Device-bound proof:** the raw license key is stored only in the OS keychain (Rust native). It never lives in React state or browser localStorage, and is never returned in API responses. All sync calls require an authenticated web session (`requireAuth`) plus the key proof (hashed, narrow privileged lookup).
+- **Workspace binding:** sync is bound to a single workspace via `withWorkspaceRLS`. Direct-purchase licenses (`workspaceId = NULL`) become bound on first `POST /api/sync/connect`; subsequent calls are rejected unless the caller is a member of that workspace. Under a `NOBYPASSRLS` DB role the binding is enforced at the DB layer.
+- **Monotonic sequence:** `SyncCursor.seq` (BIGINT, `20260822190000_sync_cursor_sequence`) is the sole ordering primitive. Every `POST /api/sync/findings` must send `expectedSeq` (current trusted seq). The server does a CAS (`updateMany where seq = expectedSeq` inside `withWorkspaceRLS`); concurrent batches with the same expected seq — exactly one wins, the other gets `409 CURSOR_STALE`. Stale or reordered distinct batches are rejected; exact replays of the same findings at `expectedSeq = currentSeq` or `currentSeq-1` are idempotent (`duplicate:true`, seq unchanged).
+- **Detection-state-only:** the server forces `verified = false` and maps `FIXED → FIXED_PENDING_RETEST`; any `verified:true`, `status = FIXED` (unless mapped), or unknown status is rejected (`400 FORGED_VERIFICATION / INVALID_STATUS / FORGED_TERMINAL_STATUS`). Only `OPEN` (and the mapped `FIXED_PENDING_RETEST`) traverse the boundary.
+- **Reports atomic:** `reports[]` (max 50, 500 kB each) are persisted atomically in the same `withWorkspaceRLS` transaction as findings, via the `Report` model (`contentJson` holds the local evidence payload). Either all findings + reports + seq advance commit, or none do. Discarded/bounded input is never counted (`reportsPersisted` vs `reportsReceived`).
+- **Trusted native cursor:** the desktop keeps one trusted cursor row (`sync_state` id=1, `seq` INTEGER) in native SQLite. It is the only source of `expectedSeq`; the server's `GET /api/sync/cursor` (`seq` / `cursor` alias, `lastSyncedFindingId`, `lastSyncedAt`) is the authoritative source on restart or `409` rewind. The client parses the actual envelope `data.seq` / `data.cursor`, not a top-level `cursor` string heuristic, and adopts the server seq on conflict.
+- **Restart & rewind recovery:** after a crash or `409 CURSOR_REWIND`, call `GET /api/sync/cursor` (or `fetch_and_adopt_cursor` in Rust) to adopt the server seq before retrying. `PUT /api/sync/cursor` cannot advance seq — only `POST /api/sync/findings` CAS can.
+- **Logout / revoke:** revoked licenses are rejected on every sync endpoint; `disconnect` clears the native `sync_state` row (keychain license remains for activation).

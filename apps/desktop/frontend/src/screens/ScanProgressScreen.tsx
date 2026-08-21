@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import type { Finding, ScanEvent } from "../lib/types"
-import { exportSarif, onScanEvent } from "../lib/tauri"
+import { cancelScan, exportSarif, getScanEvents, onScanEvent } from "../lib/tauri"
 
 interface Props {
   scanId: string
@@ -10,8 +10,48 @@ interface Props {
 export function ScanProgressScreen({ scanId, onBack }: Props) {
   const [progressLines, setProgressLines] = useState<string[]>([])
   const [findings, setFindings] = useState<Finding[]>([])
-  const [status, setStatus] = useState<"running" | "completed" | "failed">("running")
+  const [status, setStatus] = useState<"running" | "completed" | "failed" | "cancelled">("running")
   const [error, setError] = useState<string | null>(null)
+
+  // Replay-from-zero on mount to recover crashed scans
+  useEffect(() => {
+    getScanEvents(scanId, 0)
+      .then((events) => {
+        for (const se of events) {
+          const ev = se.event
+          if (ev.scanId !== scanId) continue
+          switch (ev.type) {
+            case "progress":
+              setProgressLines((prev) => [...prev.slice(-200), ev.line])
+              break
+            case "finding":
+              setFindings((prev) => [...prev, ev.finding])
+              break
+            case "completed":
+              setStatus("completed")
+              break
+            case "failed":
+              setStatus("failed")
+              setError(ev.error)
+              break
+            case "cancelled":
+              setStatus("cancelled")
+              break
+            default:
+              break
+          }
+        }
+        // If replay shows terminal state, don't stay running
+        const last = events[events.length - 1]?.event
+        if (
+          last &&
+          (last.type === "completed" || last.type === "failed" || last.type === "cancelled")
+        ) {
+          // status already set
+        }
+      })
+      .catch(() => {})
+  }, [scanId])
 
   useEffect(() => {
     const unlisten = onScanEvent((event: ScanEvent) => {
@@ -31,7 +71,7 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
           setError(event.error)
           break
         case "cancelled":
-          setStatus("completed")
+          setStatus("cancelled")
           break
       }
     })
@@ -55,6 +95,15 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
     }
   }
 
+  async function handleCancel() {
+    try {
+      await cancelScan(scanId)
+      setStatus("cancelled")
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   return (
     <div className="flex h-screen flex-col bg-background">
       <div className="flex items-center justify-between border-b border-border p-4">
@@ -69,29 +118,44 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
                 ? "bg-warning/20 text-warning"
                 : status === "completed"
                   ? "bg-success/20 text-success"
-                  : "bg-destructive/20 text-destructive"
+                  : status === "cancelled"
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-destructive/20 text-destructive"
             }`}
           >
             {status}
           </span>
         </div>
-        {findings.length > 0 && status !== "running" && (
-          <button
-            onClick={handleExportSarif}
-            className="rounded-md border border-border px-3 py-1 text-sm hover:bg-accent"
-          >
-            Export SARIF
-          </button>
-        )}
+        <div className="flex gap-2">
+          {status === "running" && (
+            <button
+              onClick={handleCancel}
+              className="rounded-md border border-destructive px-3 py-1 text-sm text-destructive hover:bg-destructive/10"
+            >
+              Cancel
+            </button>
+          )}
+          {findings.length > 0 && status !== "running" && (
+            <button
+              onClick={handleExportSarif}
+              className="rounded-md border border-border px-3 py-1 text-sm hover:bg-accent"
+            >
+              Export SARIF
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Findings panel */}
         <div className="w-1/2 overflow-y-auto border-r border-border p-4">
           <h2 className="mb-3 text-sm font-medium text-foreground">Findings ({findings.length})</h2>
           {findings.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {status === "running" ? "Waiting for findings…" : "No findings."}
+              {status === "running"
+                ? "Waiting for findings…"
+                : status === "cancelled"
+                  ? "Scan cancelled."
+                  : "No findings."}
             </p>
           ) : (
             <div className="space-y-2">
@@ -120,8 +184,6 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
           )}
           {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
         </div>
-
-        {/* Progress panel */}
         <div className="w-1/2 overflow-y-auto bg-muted/30 p-4">
           <h2 className="mb-3 text-sm font-medium text-foreground">Engine output</h2>
           <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">

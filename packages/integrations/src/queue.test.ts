@@ -106,3 +106,42 @@ describe("scan worker availability", () => {
     expect(mocks.queueWorkersCount).not.toHaveBeenCalled()
   })
 })
+
+describe("webhook track retry queue", () => {
+  beforeEach(() => {
+    mocks.queueAdd.mockReset().mockResolvedValue({ id: "job_9" })
+  })
+
+  it("enqueues with a deterministic event+track jobId and BullMQ attempts pinned to 1", async () => {
+    const { enqueueWebhookTrackRetry, WEBHOOK_TRACK_RETRY_QUEUE_NAME } = await import("./queue")
+
+    expect(WEBHOOK_TRACK_RETRY_QUEUE_NAME).toBe("webhook-track-retry")
+
+    const id = await enqueueWebhookTrackRetry({
+      webhookEventId: "evt_abc",
+      track: "license",
+    })
+
+    expect(id).toBe("job_9")
+    expect(mocks.queueAdd).toHaveBeenCalledWith(
+      "webhook-track-retry",
+      { webhookEventId: "evt_abc", track: "license" },
+      { jobId: "evt_abc:license", attempts: 1 }
+    )
+  })
+
+  it("forwards an optional delay for scheduled next attempts", async () => {
+    const { enqueueWebhookTrackRetry } = await import("./queue")
+
+    await enqueueWebhookTrackRetry(
+      { webhookEventId: "evt_delay", track: "affiliate" },
+      { delayMs: 60_000 }
+    )
+
+    expect(mocks.queueAdd).toHaveBeenCalledWith(
+      "webhook-track-retry",
+      { webhookEventId: "evt_delay", track: "affiliate" },
+      { jobId: "evt_delay:affiliate", attempts: 1, delay: 60_000 }
+    )
+  })
+})

@@ -37,6 +37,14 @@ export {
   type PackId,
 } from "./packs"
 
+// Webhook payload classification predicates (single source of truth for the
+// billing normalizer and the affiliate dispatcher).
+export {
+  extractProductId,
+  isLocalSkuOrderPayload,
+  isMinutePackOrderPayload,
+} from "./payload-detect"
+
 import { CLOUD_PLAN_MAP, type CloudPlanId } from "./plans"
 import { LOCAL_SKU_MAP, type LocalSkuId } from "./local"
 import { MINUTE_PACK_MAP, type PackId } from "./packs"

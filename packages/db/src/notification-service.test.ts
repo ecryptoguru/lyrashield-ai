@@ -82,14 +82,15 @@ describe("notification-service", () => {
 
       expect(result.status).toBe("pending")
       expect(mockPrisma.notification.create).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           workspaceId: "ws-1",
           channel: "in_app",
           type: "scan.completed",
           title: "Scan Completed",
           body: "Scan finished",
           status: "pending",
-        },
+          dedupeKey: expect.any(String),
+        }),
       })
     })
 
@@ -107,7 +108,7 @@ describe("notification-service", () => {
       })
 
       expect(mockPrisma.notification.create).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           workspaceId: "ws-1",
           userId: "user-1",
           channel: "email",
@@ -115,8 +116,9 @@ describe("notification-service", () => {
           title: "Critical Finding",
           body: "XSS found",
           status: "pending",
+          dedupeKey: expect.any(String),
           metadata: { severity: "CRITICAL" },
-        },
+        }),
       })
     })
   })

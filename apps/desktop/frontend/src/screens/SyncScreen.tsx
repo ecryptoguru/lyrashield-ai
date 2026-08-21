@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react"
 import type { SyncConnection, SyncResult } from "../lib/types"
-import { connectWorkspace, disconnectSync, syncFindings } from "../lib/tauri"
+import { connectWorkspace, disconnectSync, getSyncState, syncFindings } from "../lib/tauri"
 
 interface Props {
-  licenseKey: string
   findings: {
     id: string
     severity: string
@@ -17,7 +16,7 @@ interface Props {
   }[]
 }
 
-export function SyncScreen({ licenseKey, findings }: Props) {
+export function SyncScreen({ findings }: Props) {
   const [workspaceId, setWorkspaceId] = useState("")
   const [connection, setConnection] = useState<SyncConnection | null>(null)
   const [connecting, setConnecting] = useState(false)
@@ -26,24 +25,20 @@ export function SyncScreen({ licenseKey, findings }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Load saved connection from localStorage
-    const saved = localStorage.getItem("syncConnection")
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as SyncConnection
-        // Use a microtask to avoid synchronous setState in effect
-        Promise.resolve().then(() => setConnection(parsed))
-      } catch {}
-    }
+    // Load trusted cursor from native store (single source of truth)
+    getSyncState()
+      .then((saved) => {
+        if (saved) setConnection(saved)
+      })
+      .catch(() => {})
   }, [])
 
   async function handleConnect() {
     setConnecting(true)
     setError(null)
     try {
-      const conn = await connectWorkspace(undefined, workspaceId, licenseKey)
+      const conn = await connectWorkspace(undefined, workspaceId)
       setConnection(conn)
-      localStorage.setItem("syncConnection", JSON.stringify(conn))
     } catch (e) {
       setError(String(e))
     } finally {
@@ -57,8 +52,11 @@ export function SyncScreen({ licenseKey, findings }: Props) {
     setError(null)
     setResults([])
     try {
-      const syncResults = await syncFindings(undefined, connection, findings)
+      const syncResults = await syncFindings(undefined, connection.workspaceId, findings)
       setResults(syncResults)
+      // Refresh trusted state after sync
+      const refreshed = await getSyncState()
+      if (refreshed) setConnection(refreshed)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -68,7 +66,6 @@ export function SyncScreen({ licenseKey, findings }: Props) {
 
   async function handleDisconnect() {
     await disconnectSync()
-    localStorage.removeItem("syncConnection")
     setConnection(null)
     setResults([])
   }
@@ -81,7 +78,8 @@ export function SyncScreen({ licenseKey, findings }: Props) {
             <h1 className="text-2xl font-semibold text-foreground">Cloud Sync</h1>
             <p className="text-sm text-muted-foreground">
               Connect your LyraShield workspace to sync findings. Sync is off by default — only
-              explicitly selected findings leave your machine.
+              explicitly selected findings leave your machine. Raw license key stays in OS keychain,
+              never in browser storage.
             </p>
           </div>
           <div className="space-y-4">
@@ -115,7 +113,8 @@ export function SyncScreen({ licenseKey, findings }: Props) {
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold text-foreground">Cloud Sync</h1>
           <p className="text-sm text-muted-foreground">
-            Connected to workspace <code className="text-foreground">{connection.workspaceId}</code>
+            Connected to workspace <code className="text-foreground">{connection.workspaceId}</code>{" "}
+            seq={connection.seq}
           </p>
         </div>
         <div className="space-y-4">
@@ -124,7 +123,9 @@ export function SyncScreen({ licenseKey, findings }: Props) {
               Findings to sync:{" "}
               <span className="font-medium text-foreground">{findings.length}</span>
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Max 500 per batch.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Max 500 per batch. Seq monotonic CAS.
+            </p>
           </div>
 
           {results.length > 0 && (
@@ -135,11 +136,11 @@ export function SyncScreen({ licenseKey, findings }: Props) {
                   className={`text-sm ${r.status === "success" ? "text-success" : r.status === "error" ? "text-destructive" : "text-warning"}`}
                 >
                   {r.status === "success"
-                    ? `Synced ${r.syncedCount} findings`
+                    ? `Synced ${r.syncedCount} findings seq→${r.newSeq}`
                     : r.status === "entitlement_missing"
                       ? `Entitlement missing: ${r.message}`
                       : r.status === "cursor_rewind"
-                        ? `Cursor rewind: ${r.message}`
+                        ? `Cursor rewind: server seq ${r.serverSeq}`
                         : `Error: ${r.message}`}
                 </p>
               ))}

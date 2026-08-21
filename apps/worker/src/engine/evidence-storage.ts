@@ -2,10 +2,16 @@ import {
   EVIDENCE_KEY_REF,
   EvidenceStorageConfigurationError,
   assertEvidenceStorageConfigured,
+  deleteEncryptedArtifact,
   uploadEncryptedArtifact,
 } from "@lyrashield/evidence-storage"
 
-export { EVIDENCE_KEY_REF, EvidenceStorageConfigurationError, assertEvidenceStorageConfigured }
+export {
+  EVIDENCE_KEY_REF,
+  EvidenceStorageConfigurationError,
+  assertEvidenceStorageConfigured,
+  deleteEncryptedArtifact,
+}
 
 export interface UploadEvidenceParams {
   workspaceId: string
@@ -14,7 +20,6 @@ export interface UploadEvidenceParams {
   artifactId?: string
   content: string
   contentType?: string
-  encryptionKeyRef?: string
 }
 
 export interface UploadEvidenceResult {
@@ -36,7 +41,6 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
     content: params.content,
     artifactId: params.artifactId,
     contentType: params.contentType,
-    encryptionKeyRef: params.encryptionKeyRef,
   })
   return {
     storageUri: result.storageUri,

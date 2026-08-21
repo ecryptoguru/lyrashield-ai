@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import type { LicenseStatus } from "./lib/types"
-import { clearLicense, getLicenseStatus } from "./lib/tauri"
+import { clearLicense, startupRevalidateLicense } from "./lib/tauri"
 import { ActivationScreen } from "./screens/ActivationScreen"
 import { LicenseStatusScreen } from "./screens/LicenseStatusScreen"
 import { ScanScreen } from "./screens/ScanScreen"
@@ -31,14 +31,19 @@ export default function App() {
   useEffect(() => {
     async function checkLicense() {
       try {
-        const status = await getLicenseStatus()
+        // Rust-initiated identified revalidation gating operational state; all failures non-operational.
+        const status = await startupRevalidateLicense()
         setLicenseStatus(status)
         if (status.state === "none" || status.state === "revoked") {
           setRoute("activation")
+        } else if (status.state === "expired_eligibility") {
+          // Expired eligibility is non-operational for scan/updater per guard; gate to status screen.
+          setRoute("main")
         } else {
           setRoute("setup")
         }
       } catch {
+        // Any revalidation failure (unreachable, 5xx, malformed, unknown) is non-operational.
         setRoute("activation")
       }
     }
@@ -84,12 +89,7 @@ export default function App() {
   }
 
   if (route === "sync") {
-    return (
-      <SyncScreen
-        licenseKey={licenseStatus?.state === "active" ? "" : ""}
-        findings={lastFindings}
-      />
-    )
+    return <SyncScreen findings={lastFindings} />
   }
 
   // main
