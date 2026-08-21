@@ -8,6 +8,7 @@ sandbox_network="${LYRASHIELD_SANDBOX_NETWORK:-lyrashield-sandbox}"
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
 refresh_pins="${LYRASHIELD_REFRESH_PINNED_HOSTS:-0}"
 restart_worker_on_pin_change="${LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE:-0}"
+restart_pending_file="${LYRASHIELD_EGRESS_RESTART_PENDING_FILE:-/run/lyrashield-egress-restart-pending}"
 
 if [ ! -r "$environment_file" ]; then
   echo "Worker environment file is unavailable: $environment_file" >&2
@@ -176,5 +177,13 @@ if ! iptables -C DOCKER-USER -i "$worker_bridge" -s "$worker_subnet" -j "$chain_
   iptables -I DOCKER-USER 1 -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name"
 fi
 if [ "$pins_changed" = "1" ] && [ "$restart_worker_on_pin_change" = "1" ]; then
-  systemctl --no-block try-restart lyrashield-worker.service
+  : >"$restart_pending_file"
+fi
+if [ "$restart_worker_on_pin_change" = "1" ] && [ -e "$restart_pending_file" ]; then
+  if docker exec lyrashield-worker test -s /tmp/lyrashield-worker-active 2>/dev/null; then
+    echo "Worker egress pins changed; restart deferred until the active scan finishes"
+  else
+    rm -f "$restart_pending_file"
+    systemctl --no-block try-restart lyrashield-worker.service
+  fi
 fi

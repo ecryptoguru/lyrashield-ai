@@ -28,6 +28,7 @@ let billingJobsTimers: NodeJS.Timeout[] | null = null
 let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
+const activeJobPath = "/tmp/lyrashield-worker-active"
 export const RECONCILIATION_INTERVAL_MS = 300_000
 
 // Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
@@ -59,6 +60,16 @@ export async function refreshWorkerReadiness(): Promise<void> {
 
 export async function removeWorkerReadiness(): Promise<void> {
   await unlink(readinessPath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error
+  })
+}
+
+export async function markWorkerActive(jobId: string): Promise<void> {
+  await writeFile(activeJobPath, jobId, { mode: 0o600 })
+}
+
+export async function clearWorkerActive(): Promise<void> {
+  await unlink(activeJobPath).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error
   })
 }
@@ -152,7 +163,12 @@ async function main(): Promise<void> {
       // Record the claim at the top of the processor so the liveness guard can
       // tell "consumer is alive and claiming" apart from "wedged with work waiting".
       markScanJobClaimed()
-      return processScanJob(job)
+      await markWorkerActive(job.id ?? "unknown")
+      try {
+        return await processScanJob(job)
+      } finally {
+        await clearWorkerActive()
+      }
     },
     {
       connection: {

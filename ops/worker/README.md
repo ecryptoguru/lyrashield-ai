@@ -7,7 +7,7 @@ The worker container joins two Docker networks:
 - `bridge` supplies deny-by-default outbound connectivity enforced in `DOCKER-USER`;
 - `lyrashield-sandbox` is an internal Docker network used only for worker-to-sandbox control traffic.
 
-Sandbox containers join only the internal network and therefore have no default external route. The egress policy permits DNS-only access to Azure's virtual resolver and resolves and permits only Postgres, Redis, Azure AI, R2, the authenticated URL-scan egress proxy, GitHub, OSV, CISA KEV, FIRST EPSS, and `api.parallel.ai` (Parallel Search) endpoints. BullMQ uses the managed Upstash TLS TCP endpoint via `REDIS_URL`; `UPSTASH_REDIS_REST_URL` remains the HTTPS interface for distributed rate limiting and is never a BullMQ connection string. Worker startup stores the complete approved IPv4 answer set and injects it into the container's hosts file, closing the resolver-to-connect race for CDN and anycast endpoints. Metadata, private, loopback, benchmark, and multicast ranges are rejected before the final deny. Every five minutes the timer resolves a complete fresh pin set, applies its firewall rules atomically, and restarts the worker only when the set changed so its pinned hosts remain synchronized. A failed refresh leaves the prior policy and running worker in place.
+Sandbox containers join only the internal network and therefore have no default external route. The egress policy permits DNS-only access to Azure's virtual resolver and resolves and permits only Postgres, Redis, Azure AI, R2, the authenticated URL-scan egress proxy, GitHub, OSV, CISA KEV, FIRST EPSS, and `api.parallel.ai` (Parallel Search) endpoints. BullMQ uses the managed Upstash TLS TCP endpoint via `REDIS_URL`; `UPSTASH_REDIS_REST_URL` remains the HTTPS interface for distributed rate limiting and is never a BullMQ connection string. Worker startup stores the complete approved IPv4 answer set and injects it into the container's hosts file, closing the resolver-to-connect race for CDN and anycast endpoints. Metadata, private, loopback, benchmark, and multicast ranges are rejected before the final deny. Every five minutes the timer resolves a complete fresh pin set and applies its firewall rules atomically. When the set changes, the worker restart is deferred while a scan job is active and performed by the next timer tick after the worker becomes idle, so DNS refresh cannot interrupt provider-billable work. A failed refresh leaves the prior policy and running worker in place.
 
 ## Worker image contract
 
@@ -63,7 +63,7 @@ Before enabling scan admission:
 
 Inspect `/run/lyrashield-egress-hosts` only as root when diagnosing endpoint drift. Every line must contain an approved hostname, one public IPv4 address, and its TCP port. Never hand-edit the file or add an unreviewed destination.
 
-Run `sh ops/worker/refresh-egress.test.sh` on Linux to verify DNS rotation, atomic pin replacement, and change-only worker restarts.
+Run `sh ops/worker/refresh-egress.test.sh` on Linux to verify DNS rotation, atomic pin replacement, active-scan restart deferral, and the idle pending restart.
 
 ## URL-scan egress proxy
 
