@@ -55,7 +55,7 @@ export default defineConfig({
       "LICENSE_SIGNING_KEY_ID=e2e-license-key-v1; " +
       // Internal API key for license issue/renew routes — required in production
       // (fail-closed when absent). E2E is the internal caller in this test.
-      "LYRASHIELD_INTERNAL_API_KEY=e2e-internal-key; " +
+      "export LYRASHIELD_INTERNAL_API_KEY=e2e-internal-key; " +
       (process.env.CI ? "" : "pnpm --filter @lyrashield/web build && ") +
       "rm -rf apps/web/.next/standalone/apps/web/.next/static apps/web/.next/standalone/apps/web/public && " +
       "cp -R apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static && " +

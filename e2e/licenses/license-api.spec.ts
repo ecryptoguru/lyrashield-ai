@@ -210,7 +210,7 @@ test.describe("License verification API", () => {
     const licenseFile = activateJson.data.license as LicenseFile
 
     const res = await request.post("/api/licenses/verify", {
-      data: { licenseFile, publicKeyPem },
+      data: { licenseFile, licenseId: licenseId!, publicKeyPem },
     })
     expect(res.status()).toBe(200)
     const json = await res.json()
@@ -229,7 +229,7 @@ test.describe("License verification API", () => {
     const tampered: LicenseFile = { ...licenseFile, seatCount: 999 }
 
     const res = await request.post("/api/licenses/verify", {
-      data: { licenseFile: tampered, publicKeyPem },
+      data: { licenseFile: tampered, licenseId: licenseId!, publicKeyPem },
     })
     expect(res.status()).toBe(200)
     const json = await res.json()
