@@ -1,4 +1,4 @@
-use crate::license::types::LicenseFile;
+use crate::license::types::{LicenseFile, StoredLicense};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -15,14 +15,24 @@ fn license_path() -> Result<PathBuf, String> {
 }
 
 /// Save a license file to the local app data directory with restrictive
-/// permissions (0o600 on Unix).
-pub fn save_license(file: &LicenseFile) -> Result<(), String> {
+/// permissions (0o600 on Unix). Persists versioned envelope with immutable licenseId.
+pub fn save_license(file: &LicenseFile, license_id: &str, blob: &str) -> Result<(), String> {
+    let stored = StoredLicense {
+        version: 1,
+        license_id: license_id.to_string(),
+        license: file.clone(),
+        blob: blob.to_string(),
+    };
+    save_stored(&stored)
+}
+
+fn save_stored(stored: &StoredLicense) -> Result<(), String> {
     let path = license_path()?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("failed to create license dir: {}", e))?;
     }
 
-    let json = serde_json::to_string_pretty(file)
+    let json = serde_json::to_string_pretty(stored)
         .map_err(|e| format!("failed to serialize license: {}", e))?;
 
     // Write atomically via a temp file + rename.
@@ -46,17 +56,35 @@ pub fn save_license(file: &LicenseFile) -> Result<(), String> {
     Ok(())
 }
 
-/// Load the stored license file, if any.
-pub fn load_license() -> Result<Option<LicenseFile>, String> {
+/// Load the stored license file, if any. Handles both v1 StoredLicense and legacy plain LicenseFile for migration.
+pub fn load_license() -> Result<Option<StoredLicense>, String> {
     let path = license_path()?;
     if !path.exists() {
         return Ok(None);
     }
     let contents =
         fs::read_to_string(&path).map_err(|e| format!("failed to read license file: {}", e))?;
-    let file: LicenseFile =
-        serde_json::from_str(&contents).map_err(|e| format!("failed to parse license: {}", e))?;
-    Ok(Some(file))
+    // Try v1 envelope first.
+    if let Ok(stored) = serde_json::from_str::<StoredLicense>(&contents) {
+        if stored.version == 1 && !stored.license_id.is_empty() {
+            return Ok(Some(stored));
+        }
+    }
+    // Fallback: legacy plain LicenseFile — treat as non-identified (no licenseId) but still load for migration.
+    if let Ok(file) = serde_json::from_str::<LicenseFile>(&contents) {
+        return Ok(Some(StoredLicense {
+            version: 1,
+            license_id: String::new(),
+            license: file,
+            blob: String::new(),
+        }));
+    }
+    Err("failed to parse license: unknown format".into())
+}
+
+/// Load only the LicenseFile (legacy helper for simple checks).
+pub fn load_license_file() -> Result<Option<LicenseFile>, String> {
+    Ok(load_license()?.map(|s| s.license))
 }
 
 /// Clear the stored license file (on revoke hard-stop or user-initiated logout).
@@ -76,6 +104,7 @@ mod tests {
 
     // Serialize all store tests — they share the global HOME/XDG_DATA_HOME env.
     static STORE_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    // Shared with guard tests to avoid HOME race — guard tests use crate::license::TEST_ENV_LOCK which is same underlying OnceLock
 
     fn test_license() -> LicenseFile {
         LicenseFile {
@@ -92,8 +121,8 @@ mod tests {
 
     #[test]
     fn test_save_and_load_license() {
-        let _lock = STORE_TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
 
@@ -102,19 +131,22 @@ mod tests {
         std::env::set_var("XDG_DATA_HOME", tmp.path());
 
         let license = test_license();
-        save_license(&license).unwrap();
+        save_license(&license, "lic_test_123", "blob123").unwrap();
         let loaded = load_license().unwrap();
         assert!(loaded.is_some());
         let loaded = loaded.unwrap();
-        assert_eq!(loaded.sku, LicenseSku::IndividualLaunch);
-        assert_eq!(loaded.seat_count, 1);
-        assert_eq!(loaded.machine_ids, vec!["test-machine".to_string()]);
+        assert_eq!(loaded.license.sku, LicenseSku::IndividualLaunch);
+        assert_eq!(loaded.license.seat_count, 1);
+        assert_eq!(loaded.license.machine_ids, vec!["test-machine".to_string()]);
+        assert_eq!(loaded.license_id, "lic_test_123");
+        assert_eq!(loaded.version, 1);
+        assert_eq!(loaded.blob, "blob123");
     }
 
     #[test]
     fn test_clear_license() {
-        let _lock = STORE_TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
 
@@ -123,9 +155,33 @@ mod tests {
         std::env::set_var("XDG_DATA_HOME", tmp.path());
 
         let license = test_license();
-        save_license(&license).unwrap();
+        save_license(&license, "lic_test_123", "blob").unwrap();
         assert!(load_license().unwrap().is_some());
         clear_license().unwrap();
         assert!(load_license().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_legacy_plain_file_migrates() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+
+        // Write legacy plain LicenseFile JSON directly.
+        let license = test_license();
+        let path = license_path().unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let json = serde_json::to_string_pretty(&license).unwrap();
+        std::fs::write(&path, json).unwrap();
+
+        let loaded = load_license().unwrap().unwrap();
+        // Legacy migrates to stored with empty license_id (triggers re-activation requirement)
+        assert_eq!(loaded.license.seat_count, 1);
+        assert_eq!(loaded.license_id, "");
     }
 }

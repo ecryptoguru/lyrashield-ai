@@ -19,7 +19,7 @@ pub async fn activate_license(
     api_url: Option<String>,
 ) -> Result<LicenseStatus, String> {
     let machine_id = generate_machine_id();
-    let client = ApiClient::new(api_url)?;
+    let client = ApiClient::new(api_url.clone())?;
     let response = client.activate(&license_key, &machine_id).await?;
     let verification = verify_license(&response.license, BUNDLED_PUBLIC_KEY);
     if !verification.valid {
@@ -28,42 +28,80 @@ pub async fn activate_license(
             verification.reason
         ));
     }
-    store::save_license(&response.license)?;
+    // Machine must be bound in the issued license.
+    if !response.license.machine_ids.contains(&machine_id) {
+        return Err(format!(
+            "activated license does not contain this machine: {} not in {:?}",
+            machine_id, response.license.machine_ids
+        ));
+    }
+    store::save_license(&response.license, &response.license_id, &response.blob)?;
     Ok(license_status_from_file(&response.license))
 }
 
 #[tauri::command]
 pub async fn verify_stored_license(api_url: Option<String>) -> Result<LicenseStatus, String> {
-    let license_file = store::load_license()?.ok_or_else(|| "no stored license".to_string())?;
-    let result = verify_license(&license_file, BUNDLED_PUBLIC_KEY);
+    // Rust-initiated identified revalidation gating operational state; all failures non-operational.
+    let stored = store::load_license()?.ok_or_else(|| "no stored license".to_string())?;
+    if stored.license_id.is_empty() {
+        store::clear_license()?;
+        return Ok(LicenseStatus::Revoked);
+    }
+    let result = verify_license(&stored.license, BUNDLED_PUBLIC_KEY);
     if !result.valid {
         store::clear_license()?;
         return Ok(LicenseStatus::Revoked);
     }
-    if let Ok(client) = ApiClient::new(api_url) {
-        if let Ok(server_response) = client.verify(&license_file).await {
-            if server_response.revoked {
-                store::clear_license()?;
-                return Ok(LicenseStatus::Revoked);
-            }
-        }
+    // Machine binding check.
+    let machine_id = generate_machine_id();
+    if !stored.license.machine_ids.contains(&machine_id) {
+        store::clear_license()?;
+        return Ok(LicenseStatus::Revoked);
     }
-    Ok(license_status_from_file(&license_file))
+
+    // Identified server revocation check — must send licenseId. All transport/parse failures are non-operational.
+    let client = ApiClient::new(api_url).map_err(|e| format!("revalidation failed: {}", e))?;
+    let server_response = client
+        .verify(&stored.license, &stored.license_id)
+        .await
+        .map_err(|e| format!("revalidation failed: {}", e))?;
+    if server_response.revoked || !server_response.valid {
+        store::clear_license()?;
+        return Ok(LicenseStatus::Revoked);
+    }
+    // Eligibility — expired is non-operational per guard (single guard includes eligibility).
+    if !result.update_eligible {
+        // Do not clear file, but mark expired eligibility as non-operational for scan/updater gate.
+        // For startup, treat as Revoked/Expired per status helper.
+        return Ok(license_status_from_file(&stored.license));
+    }
+    Ok(license_status_from_file(&stored.license))
 }
 
 #[tauri::command]
 pub fn get_license_status() -> Result<LicenseStatus, String> {
-    let license_file = store::load_license()?;
-    match license_file {
-        Some(file) => {
-            let result = verify_license(&file, BUNDLED_PUBLIC_KEY);
+    let stored = store::load_license()?;
+    match stored {
+        Some(s) => {
+            let result = verify_license(&s.license, BUNDLED_PUBLIC_KEY);
             if !result.valid {
                 return Ok(LicenseStatus::Revoked);
             }
-            Ok(license_status_from_file(&file))
+            // Machine binding check for status as well.
+            let machine_id = generate_machine_id();
+            if !s.license.machine_ids.contains(&machine_id) {
+                return Ok(LicenseStatus::Revoked);
+            }
+            Ok(license_status_from_file(&s.license))
         }
         None => Ok(LicenseStatus::None),
     }
+}
+
+#[tauri::command]
+pub async fn startup_revalidate_license(api_url: Option<String>) -> Result<LicenseStatus, String> {
+    // Explicit Rust-initiated startup revalidation — all failures non-operational.
+    verify_stored_license(api_url).await
 }
 
 #[tauri::command]
@@ -119,6 +157,12 @@ pub async fn start_scan(
     mode: ScanMode,
     instruction: Option<String>,
 ) -> Result<String, String> {
+    // Single guard pre scan side effects validating signature, machine membership, status, revocation, eligibility.
+    // Must be before any subprocess spawn.
+    crate::license::ensure_license_operational(None, BUNDLED_PUBLIC_KEY)
+        .await
+        .map_err(|e| format!("license not operational: {}", e))?;
+
     let scan_id = format!("scan-{}", chrono::Utc::now().timestamp_millis());
     let config = ScanConfig {
         scan_id: scan_id.clone(),
@@ -137,8 +181,12 @@ pub fn export_sarif(findings: Vec<Finding>, scan_id: String) -> Result<String, S
 // --- Updater commands ---
 
 #[tauri::command]
-pub fn check_update_eligibility() -> Result<updater::UpdateCheckResult, String> {
-    Ok(updater::check_update_eligibility())
+pub async fn check_update_eligibility(
+    api_url: Option<String>,
+) -> Result<updater::UpdateCheckResult, String> {
+    // Guard before updater side effects.
+    let guard = crate::license::ensure_license_operational(api_url, BUNDLED_PUBLIC_KEY).await;
+    Ok(updater::check_update_eligibility_with_guard(guard))
 }
 
 // --- Sync commands ---

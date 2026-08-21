@@ -21,6 +21,9 @@ export async function activateLicense(licenseKey: string, apiUrl?: string): Prom
 export async function verifyStoredLicense(apiUrl?: string): Promise<LicenseStatus> {
   return invoke("verify_stored_license", { apiUrl: apiUrl ?? null })
 }
+export async function startupRevalidateLicense(apiUrl?: string): Promise<LicenseStatus> {
+  return invoke("startup_revalidate_license", { apiUrl: apiUrl ?? null })
+}
 export async function getLicenseStatus(): Promise<LicenseStatus> {
   return invoke("get_license_status")
 }
@@ -84,8 +87,8 @@ export async function onScanEvent(handler: (event: ScanEvent) => void): Promise<
 }
 
 // Updater
-export async function checkUpdateEligibility(): Promise<UpdateCheckResult> {
-  return invoke("check_update_eligibility")
+export async function checkUpdateEligibility(apiUrl?: string): Promise<UpdateCheckResult> {
+  return invoke("check_update_eligibility", { apiUrl: apiUrl ?? null })
 }
 
 // Sync

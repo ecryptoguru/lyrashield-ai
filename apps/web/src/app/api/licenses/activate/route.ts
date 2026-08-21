@@ -172,6 +172,7 @@ export async function POST(request: Request) {
 
     return apiSuccess(
       {
+        version: 1 as const,
         license: licenseFile,
         blob: encodeLicenseBlob(licenseFile),
         licenseId: license.id,
