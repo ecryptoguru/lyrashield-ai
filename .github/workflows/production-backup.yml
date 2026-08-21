@@ -393,7 +393,7 @@ jobs:
           BETTER_AUTH_URL='http://127.0.0.1:3100' \
           NEXT_PUBLIC_APP_URL='http://127.0.0.1:3100' \
           TRUSTED_PROXY_IP_HEADER='x-forwarded-for' \
-          pnpm --filter @lyrashield/web dev -- --port 3100 > "$RUNNER_TEMP/restore-web.log" 2>&1 &
+          pnpm --filter @lyrashield/web dev --port 3100 > "$RUNNER_TEMP/restore-web.log" 2>&1 &
           web_pid=$!
           trap 'kill "$web_pid" 2>/dev/null || true' EXIT
           for _ in $(seq 1 45); do
