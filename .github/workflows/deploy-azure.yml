@@ -282,6 +282,7 @@ jobs:
           echo "Shared rate-limiting credentials present."
 
       - name: Verify BullMQ Redis credential
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
         run: |
@@ -289,13 +290,15 @@ jobs:
             echo "::error::BULLMQ_REDIS_URL is not set. The app cannot enqueue production scans without the BullMQ TLS endpoint. This is separate from the Upstash HTTPS REST credentials used for rate limiting."
             exit 1
           fi
-          case "${BULLMQ_REDIS_URL}" in
-            rediss://*) ;;
-            *)
-              echo "::error::BULLMQ_REDIS_URL must use rediss:// TLS in production."
-              exit 1
-              ;;
-          esac
+          node -e '
+            const value = process.env.BULLMQ_REDIS_URL;
+            let url;
+            try { url = new URL(value); } catch { process.exit(1); }
+            if (url.protocol !== "rediss:" || !url.hostname || !url.username || !url.password) process.exit(1);
+          ' || {
+            echo "::error::BULLMQ_REDIS_URL must be a valid authenticated rediss:// URL in production."
+            exit 1
+          }
           echo "BullMQ TLS Redis credential present."
 
       - name: Verify evidence envelope key
