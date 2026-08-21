@@ -2,13 +2,18 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import type {
   AzureCredentials,
+  AzureMetadata,
+  ByokStatus,
   ChatGptAuthStatus,
   Finding,
   LicenseStatus,
   RuntimeStatus,
+  ScanDetail,
   ScanEvent,
   ScanMode,
+  ScanSummary,
   ScanTarget,
+  SequencedEvent,
   SyncConnection,
   SyncResult,
   UpdateCheckResult,
@@ -33,7 +38,7 @@ export async function getRuntimeStatus(): Promise<RuntimeStatus> {
   return invoke("get_runtime_status")
 }
 
-// BYOK
+// BYOK — typed wrappers, never expose raw secrets in logs
 export async function startChatGptLogin(): Promise<void> {
   return invoke("start_chatgpt_login")
 }
@@ -52,8 +57,21 @@ export async function loadAzureConfig(): Promise<AzureCredentials | null> {
 export async function clearAzureConfig(): Promise<void> {
   return invoke("clear_azure_config")
 }
+export async function getByokMetadata(): Promise<AzureMetadata> {
+  return invoke("get_byok_metadata")
+}
+export async function getByokStatus(): Promise<ByokStatus> {
+  return invoke("get_byok_status")
+}
 
-// Scan
+// Scan — durable lifecycle, typed wrappers only (no raw invoke elsewhere)
+export async function createScan(
+  target: ScanTarget,
+  mode: ScanMode,
+  instruction?: string
+): Promise<string> {
+  return invoke("create_scan", { target, mode, instruction: instruction ?? null })
+}
 export async function startScan(
   target: ScanTarget,
   mode: ScanMode,
@@ -61,11 +79,23 @@ export async function startScan(
 ): Promise<string> {
   return invoke("start_scan", { target, mode, instruction: instruction ?? null })
 }
+export async function cancelScan(scanId: string): Promise<void> {
+  return invoke("cancel_scan", { scanId })
+}
+export async function listScans(): Promise<ScanSummary[]> {
+  return invoke("list_scans")
+}
+export async function getScanDetail(scanId: string): Promise<ScanDetail> {
+  return invoke("get_scan_detail", { scanId })
+}
+export async function getScanEvents(scanId: string, fromSeq?: number): Promise<SequencedEvent[]> {
+  return invoke("get_scan_events", { scanId, fromSeq: fromSeq ?? 0 })
+}
 export async function exportSarif(findings: Finding[], scanId: string): Promise<string> {
   return invoke("export_sarif", { findings, scanId })
 }
 
-// Scan events
+// Scan events — replay-from-zero via getScanEvents + live listen
 export async function onScanEvent(handler: (event: ScanEvent) => void): Promise<() => void> {
   const unlisteners: (() => void)[] = []
   const events = [

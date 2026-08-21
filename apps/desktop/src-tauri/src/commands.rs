@@ -110,7 +110,35 @@ pub fn clear_azure_config() -> Result<(), String> {
     byok::clear_azure_credentials()
 }
 
+#[tauri::command]
+pub fn get_byok_metadata() -> Result<byok::AzureMetadata, String> {
+    byok::get_azure_metadata()
+}
+
+#[tauri::command]
+pub fn get_byok_status() -> Result<byok::ByokStatus, String> {
+    byok::get_byok_status()
+}
+
 // --- Scan commands ---
+
+#[tauri::command]
+pub async fn create_scan(
+    app: tauri::AppHandle,
+    target: ScanTarget,
+    mode: ScanMode,
+    instruction: Option<String>,
+) -> Result<String, String> {
+    let scan_id = format!("scan-{}", chrono::Utc::now().timestamp_millis());
+    let config = ScanConfig {
+        scan_id: scan_id.clone(),
+        target,
+        mode,
+        instruction,
+    };
+    crate::scan::runner::create_scan_record(app, &config).await?;
+    Ok(scan_id)
+}
 
 #[tauri::command]
 pub async fn start_scan(
@@ -127,6 +155,30 @@ pub async fn start_scan(
         instruction,
     };
     scan::start_scan(app, config).await
+}
+
+#[tauri::command]
+pub async fn cancel_scan(app: tauri::AppHandle, scan_id: String) -> Result<(), String> {
+    crate::scan::runner::cancel_scan(app, scan_id).await
+}
+
+#[tauri::command]
+pub async fn list_scans(app: tauri::AppHandle) -> Result<Vec<ScanSummary>, String> {
+    crate::scan::store::list_scans(&app).await
+}
+
+#[tauri::command]
+pub async fn get_scan_detail(app: tauri::AppHandle, scan_id: String) -> Result<ScanDetail, String> {
+    crate::scan::store::get_scan_detail(&app, &scan_id).await
+}
+
+#[tauri::command]
+pub async fn get_scan_events(
+    app: tauri::AppHandle,
+    scan_id: String,
+    from_seq: Option<u64>,
+) -> Result<Vec<SequencedEvent>, String> {
+    crate::scan::store::get_events(&app, &scan_id, from_seq.unwrap_or(0)).await
 }
 
 #[tauri::command]

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import type { ChatGptAuthStatus, RuntimeStatus } from "../lib/types"
+import type { AzureMetadata, ChatGptAuthStatus, RuntimeStatus } from "../lib/types"
 import {
   checkChatGptStatus,
+  getByokMetadata,
+  getByokStatus,
   getRuntimeStatus,
-  loadAzureConfig,
   logoutChatGpt,
   saveAzureConfig,
   startChatGptLogin,
@@ -23,9 +24,12 @@ export function SetupScreen({ onComplete, onBack }: Props) {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
   const [chatgptStatus, setChatgptStatus] = useState<ChatGptAuthStatus | null>(null)
   const [provider, setProvider] = useState<"chatgpt" | "azure" | null>(null)
-  const [azureKey, setAzureKey] = useState("")
   const [azureEndpoint, setAzureEndpoint] = useState("")
+  const [azureMeta, setAzureMeta] = useState<AzureMetadata | null>(null)
+  // Transient input — cleared after save, never retained in state long-term
+  const [azureKeyInput, setAzureKeyInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   useEffect(() => {
     getRuntimeStatus()
@@ -34,12 +38,11 @@ export function SetupScreen({ onComplete, onBack }: Props) {
     checkChatGptStatus()
       .then(setChatgptStatus)
       .catch(() => {})
-    loadAzureConfig()
-      .then((creds) => {
-        if (creds) {
-          setAzureKey(creds.apiKey)
-          setAzureEndpoint(creds.endpoint)
-        }
+    // Metadata only — never raw key in React state
+    getByokMetadata()
+      .then((meta) => {
+        setAzureMeta(meta)
+        if (meta.endpoint) setAzureEndpoint(meta.endpoint)
       })
       .catch(() => {})
   }, [])
@@ -48,19 +51,20 @@ export function SetupScreen({ onComplete, onBack }: Props) {
   const dockerOk = (runtime?.docker.found && runtime?.docker.running) ?? false
 
   function handleContinueFromRuntime() {
-    if (engineOk && dockerOk) {
-      setStep("byok")
-    }
+    if (engineOk && dockerOk) setStep("byok")
   }
 
   async function handleChatGptLogin() {
     setLoading(true)
+    setValidationError(null)
     try {
       await startChatGptLogin()
       const status = await checkChatGptStatus()
       setChatgptStatus(status)
       if (status.status === "signed_in") {
-        setStep("ready")
+        // native validation before ready
+        const byok = await getByokStatus()
+        if (byok.azure.configured || byok.chatgpt.status === "signed_in") setStep("ready")
       }
     } catch (e) {
       setChatgptStatus({ status: "error", message: String(e) })
@@ -71,11 +75,22 @@ export function SetupScreen({ onComplete, onBack }: Props) {
 
   async function handleAzureSave() {
     setLoading(true)
+    setValidationError(null)
     try {
-      await saveAzureConfig(azureKey, azureEndpoint)
+      await saveAzureConfig(azureKeyInput, azureEndpoint)
+      // clear raw key from React state immediately after save
+      setAzureKeyInput("")
+      const meta = await getByokMetadata()
+      setAzureMeta(meta)
+      // native validation before transitioning to ready
+      const byok = await getByokStatus()
+      if (!byok.azure.configured) {
+        setValidationError("Azure credentials failed native validation")
+        return
+      }
       setStep("ready")
     } catch (e) {
-      setChatgptStatus({ status: "error", message: String(e) })
+      setValidationError(String(e))
     } finally {
       setLoading(false)
     }
@@ -108,10 +123,7 @@ export function SetupScreen({ onComplete, onBack }: Props) {
             />
           </div>
           <div className="flex justify-between">
-            <button
-              onClick={onBack}
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
+            <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground">
               Back
             </button>
             <button
@@ -137,6 +149,11 @@ export function SetupScreen({ onComplete, onBack }: Props) {
               Choose your AI provider. Your credentials stay on this machine.
             </p>
           </div>
+          {azureMeta?.configured && (
+            <p className="text-xs text-muted-foreground">
+              Azure configured: {azureMeta.endpoint} ({azureMeta.keyMasked})
+            </p>
+          )}
           {provider === null ? (
             <ProviderPicker onSelect={setProvider} />
           ) : provider === "chatgpt" ? (
@@ -172,8 +189,8 @@ export function SetupScreen({ onComplete, onBack }: Props) {
               <p className="text-sm text-foreground">Configure Azure OpenAI.</p>
               <input
                 type="password"
-                value={azureKey}
-                onChange={(e) => setAzureKey(e.target.value)}
+                value={azureKeyInput}
+                onChange={(e) => setAzureKeyInput(e.target.value)}
                 placeholder="API Key"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
               />
@@ -184,9 +201,10 @@ export function SetupScreen({ onComplete, onBack }: Props) {
                 placeholder="https://your-resource.openai.azure.com"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
               />
+              {validationError && <p className="text-sm text-destructive">{validationError}</p>}
               <button
                 onClick={handleAzureSave}
-                disabled={loading || !azureKey || !azureEndpoint}
+                disabled={loading || !azureKeyInput || !azureEndpoint}
                 className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {loading ? "Saving…" : "Save & Continue"}
@@ -198,7 +216,6 @@ export function SetupScreen({ onComplete, onBack }: Props) {
     )
   }
 
-  // ready
   return (
     <div className="flex h-screen items-center justify-center bg-background">
       <div className="max-w-md space-y-6 text-center">

@@ -60,6 +60,22 @@ export interface AzureCredentials {
   endpoint: string
 }
 
+export interface AzureMetadata {
+  configured: boolean
+  endpoint: string | null
+  keyMasked: string | null
+}
+
+export interface ByokStatus {
+  chatgpt: ChatGptAuthStatus
+  azure: AzureMetadata
+}
+
+export interface SequencedEvent {
+  seq: number
+  event: ScanEvent
+}
+
 export type ScanMode = "safe" | "quick" | "standard" | "deep" | "custom" | "url"
 
 export type ScanTarget =
