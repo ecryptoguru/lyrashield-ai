@@ -74,3 +74,32 @@ export interface LicenseVerificationResult {
   /** Failure reason when `valid` is false. */
   reason?: string
 }
+
+/** Versioned activation envelope — v1 is the only version. */
+export interface ActivateEnvelopeV1 {
+  version: 1
+  license: LicenseFile
+  blob: LicenseBlob
+  licenseId: string
+}
+
+/** Versioned verify envelope — v1. */
+export interface VerifyEnvelopeV1 {
+  version: 1
+  valid: boolean
+  revoked: boolean
+  updateEligible: boolean
+  reason?: string
+  sku?: LicenseSku
+  updateEligibleUntil?: string
+}
+
+/** Generic API envelope {success,data} used by /api/licenses/* */
+export interface ApiSuccessEnvelope<T> {
+  success: true
+  data: T
+}
+export interface ApiErrorEnvelope {
+  success: false
+  error: { code: string; message: string; details?: unknown }
+}

@@ -15,12 +15,8 @@ pub enum LicenseSku {
 /// The payload that is canonically serialized and signed with ed25519.
 ///
 /// Mirrors `LicensePayload` in `packages/licenses/src/types.ts`.
-/// The desktop client must verify this signature before trusting any license
-/// state. After `updateEligibleUntil` the client refuses newer builds but never
-/// deactivates — `perpetualFallbackBuild` records the last build the user may
-/// run indefinitely.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
+#[serde(rename_all = "camelCase")]
 pub struct LicensePayload {
     pub sku: LicenseSku,
     pub seat_count: u32,
@@ -34,6 +30,7 @@ pub struct LicensePayload {
 ///
 /// Mirrors `LicenseFile` in `packages/licenses/src/types.ts`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LicenseFile {
     pub sku: LicenseSku,
     pub seat_count: u32,
@@ -49,6 +46,7 @@ pub struct LicenseFile {
 ///
 /// Mirrors `LicenseVerificationResult` in `packages/licenses/src/types.ts`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LicenseVerificationResult {
     pub valid: bool,
     pub update_eligible: bool,
@@ -56,21 +54,49 @@ pub struct LicenseVerificationResult {
     pub reason: Option<String>,
 }
 
-/// Response from `POST /api/licenses/activate`.
+/// Inner data for `POST /api/licenses/activate` — versioned v1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActivateResponse {
+#[serde(rename_all = "camelCase")]
+pub struct ActivateData {
+    pub version: u8,
     pub license: LicenseFile,
     pub blob: String,
     pub license_id: String,
 }
 
-/// Response from `POST /api/licenses/verify`.
+/// Legacy alias — keep for backwards compat in tests, now backed by ActivateData with camelCase.
+pub type ActivateResponse = ActivateData;
+
+/// Generic {success,data} envelope used by all license web routes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiSuccessEnvelope<T> {
+    pub success: bool,
+    pub data: T,
+}
+
+/// Inner data for `POST /api/licenses/verify` — versioned v1.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VerifyServerResponse {
+    pub version: u8,
     pub valid: bool,
     pub update_eligible: bool,
     pub revoked: bool,
     pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sku: Option<LicenseSku>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_eligible_until: Option<String>,
+}
+
+/// Persisted license on disk — includes immutable licenseId and version.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredLicense {
+    pub version: u8,
+    pub license_id: String,
+    pub license: LicenseFile,
+    pub blob: String,
 }
 
 /// Client-side license status summary.

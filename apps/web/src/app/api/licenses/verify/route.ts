@@ -70,28 +70,54 @@ export async function POST(request: Request) {
       return apiError("VALIDATION_ERROR", "licenseFile, licenseKey, or licenseId is required", 400)
     }
 
+    // Identified licenses MUST present licenseId for revocation check — licenseFile alone skips revocation (fixed).
+    if (licenseFile && !licenseKey && !licenseId) {
+      return apiError(
+        "VALIDATION_ERROR",
+        "licenseId or licenseKey is required for identified verification",
+        400
+      )
+    }
+
     // RISK-B1: revoke is not expiry. Perpetual-fallback never applies to a
     // revoked license. Look the row up by key hash (or id) via the system
     // client — NULL-workspaceId licenses are FORCE-RLS-scoped.
+    // Identified path requires licenseId; unknown id is treated as revoked/non-operational.
     if (licenseKey || licenseId) {
       const systemPrisma = getSystemPrisma()
       let revoked = false
+      let unknown = false
       if (licenseKey) {
         const keyRow = await systemPrisma.licenseKey.findUnique({
           where: { keyHash: hashLicenseKey(licenseKey) },
           include: { license: { select: { id: true, revoked: true } } },
         })
+        if (!keyRow) unknown = true
         revoked = keyRow?.license.revoked === true
       } else if (licenseId) {
         const licenseRow = await systemPrisma.license.findUnique({
           where: { id: licenseId },
           select: { id: true, revoked: true },
         })
+        if (!licenseRow) unknown = true
         revoked = licenseRow?.revoked === true
+      }
+      if (unknown) {
+        return apiSuccess(
+          {
+            version: 1 as const,
+            valid: false,
+            updateEligible: false,
+            revoked: true,
+            reason: "UNKNOWN_LICENSE",
+          },
+          200
+        )
       }
       if (revoked) {
         return apiSuccess(
           {
+            version: 1 as const,
             valid: false,
             updateEligible: false,
             revoked: true,
@@ -107,6 +133,7 @@ export async function POST(request: Request) {
     if (!licenseFile) {
       return apiSuccess(
         {
+          version: 1 as const,
           valid: true,
           revoked: false,
           updateEligible: false,
@@ -126,8 +153,10 @@ export async function POST(request: Request) {
     if (!result.valid) {
       return apiSuccess(
         {
+          version: 1 as const,
           valid: false,
           updateEligible: false,
+          revoked: false,
           reason: result.reason ?? "verification_failed",
         },
         200
@@ -138,6 +167,7 @@ export async function POST(request: Request) {
     // Return only the essential fields needed for client decisions.
     return apiSuccess(
       {
+        version: 1 as const,
         valid: true,
         revoked: false,
         updateEligible: result.updateEligible,

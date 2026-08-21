@@ -24,6 +24,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             activate_license,
             verify_stored_license,
+            startup_revalidate_license,
             get_license_status,
             clear_license,
             get_runtime_status,

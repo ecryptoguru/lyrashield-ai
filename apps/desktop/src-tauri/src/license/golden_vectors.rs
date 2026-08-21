@@ -220,3 +220,87 @@ fn test_is_build_installable_strips_prerelease() {
         "1.3.0-beta"
     ));
 }
+
+// === Versioned envelope v1 — shared TS fixture + Rust serde golden test ===
+
+const ACTIVATION_ENVELOPE_JSON: &str =
+    include_str!("../../../../../packages/licenses/src/fixtures/activate-envelope.json");
+const VERIFY_ENVELOPE_JSON: &str =
+    include_str!("../../../../../packages/licenses/src/fixtures/verify-envelope.json");
+
+#[test]
+fn test_activate_envelope_v1_deserializes() {
+    // Real envelope {success:true,data:{version:1,license,blob,licenseId}} must deserialize via camelCase serde.
+    let envelope: serde_json::Value =
+        serde_json::from_str(ACTIVATION_ENVELOPE_JSON).expect("activate envelope must parse");
+    assert_eq!(envelope["success"], true);
+    let data = &envelope["data"];
+    assert_eq!(data["version"], 1);
+    assert_eq!(data["licenseId"], "lic_test_123");
+    // Rust typed envelope
+    #[derive(serde::Deserialize)]
+    struct ApiEnvelope<T> {
+        success: bool,
+        data: T,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ActivateData {
+        version: u8,
+        license: crate::license::types::LicenseFile,
+        blob: String,
+        license_id: String,
+    }
+    let typed: ApiEnvelope<ActivateData> =
+        serde_json::from_str(ACTIVATION_ENVELOPE_JSON).expect("typed activate envelope must parse");
+    assert!(typed.success);
+    assert_eq!(typed.data.version, 1);
+    assert_eq!(typed.data.license_id, "lic_test_123");
+    assert_eq!(typed.data.license.machine_ids, vec!["machine-golden-1"]);
+}
+
+#[test]
+fn test_verify_envelope_v1_deserializes() {
+    #[derive(serde::Deserialize)]
+    struct ApiEnvelope<T> {
+        success: bool,
+        data: T,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct VerifyData {
+        version: u8,
+        valid: bool,
+        revoked: bool,
+        update_eligible: bool,
+    }
+    let typed: ApiEnvelope<VerifyData> =
+        serde_json::from_str(VERIFY_ENVELOPE_JSON).expect("verify envelope must parse");
+    assert!(typed.success);
+    assert_eq!(typed.data.version, 1);
+    assert!(typed.data.valid);
+    assert!(!typed.data.revoked);
+}
+
+#[test]
+fn test_license_file_camel_case_serde() {
+    // Ensure LicenseFile uses camelCase fields (seatCount, machineIds, etc.)
+    let json = serde_json::json!({
+        "sku": "individual_launch",
+        "seatCount": 1,
+        "machineIds": ["m1"],
+        "updateEligibleUntil": "2036-01-01T00:00:00.000Z",
+        "perpetualFallbackBuild": "1.2.0",
+        "signingKeyId": "k1",
+        "signature": "sig",
+        "issuedAt": "2026-01-01T00:00:00.000Z"
+    });
+    let file: crate::license::types::LicenseFile =
+        serde_json::from_value(json).expect("camelCase LicenseFile must deserialize");
+    assert_eq!(file.seat_count, 1);
+    assert_eq!(file.machine_ids, vec!["m1"]);
+    // Serialize must produce camelCase
+    let ser = serde_json::to_value(&file).unwrap();
+    assert!(ser.get("seatCount").is_some());
+    assert!(ser.get("seat_count").is_none());
+}

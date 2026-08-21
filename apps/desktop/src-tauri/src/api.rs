@@ -1,4 +1,4 @@
-use crate::license::types::{ActivateResponse, LicenseFile, VerifyServerResponse};
+use crate::license::types::{ActivateData, LicenseFile, VerifyServerResponse};
 
 const DEFAULT_API_URL: &str = "https://app.lyrashieldai.com";
 
@@ -12,6 +12,13 @@ pub struct HttpResponse {
 pub struct ApiClient {
     base_url: String,
     client: reqwest::Client,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ApiEnvelope<T> {
+    success: bool,
+    data: Option<T>,
+    error: Option<serde_json::Value>,
 }
 
 impl ApiClient {
@@ -52,7 +59,7 @@ impl ApiClient {
         &self,
         license_key: &str,
         machine_id: &str,
-    ) -> Result<ActivateResponse, String> {
+    ) -> Result<ActivateData, String> {
         let url = format!("{}/api/licenses/activate", self.base_url);
         let body = serde_json::json!({
             "licenseKey": license_key,
@@ -81,15 +88,33 @@ impl ApiClient {
             return Err(format!("activate failed ({}): {}", status, text));
         }
 
-        serde_json::from_str::<ActivateResponse>(&text)
-            .map_err(|e| format!("failed to parse activate response: {}", e))
+        let envelope: ApiEnvelope<ActivateData> = serde_json::from_str(&text)
+            .map_err(|e| format!("failed to parse activate response: {}", e))?;
+        if !envelope.success {
+            return Err(format!("activate failed envelope success=false: {}", text));
+        }
+        let data = envelope
+            .data
+            .ok_or_else(|| format!("activate response missing data: {}", text))?;
+        if data.version != 1 {
+            return Err(format!(
+                "unsupported activate envelope version: {}",
+                data.version
+            ));
+        }
+        Ok(data)
     }
 
-    /// `POST /api/licenses/verify` — server-side revocation check.
-    pub async fn verify(&self, license_file: &LicenseFile) -> Result<VerifyServerResponse, String> {
+    /// `POST /api/licenses/verify` — server-side revocation check (identified).
+    pub async fn verify(
+        &self,
+        license_file: &LicenseFile,
+        license_id: &str,
+    ) -> Result<VerifyServerResponse, String> {
         let url = format!("{}/api/licenses/verify", self.base_url);
         let body = serde_json::json!({
             "licenseFile": license_file,
+            "licenseId": license_id,
         });
 
         let resp = self
@@ -110,7 +135,58 @@ impl ApiClient {
             return Err(format!("verify failed ({}): {}", status, text));
         }
 
-        serde_json::from_str::<VerifyServerResponse>(&text)
-            .map_err(|e| format!("failed to parse verify response: {}", e))
+        let envelope: ApiEnvelope<VerifyServerResponse> = serde_json::from_str(&text)
+            .map_err(|e| format!("failed to parse verify response: {}", e))?;
+        if !envelope.success {
+            return Err(format!("verify envelope success=false: {}", text));
+        }
+        let data = envelope
+            .data
+            .ok_or_else(|| format!("verify response missing data: {}", text))?;
+        if data.version != 1 {
+            return Err(format!(
+                "unsupported verify envelope version: {}",
+                data.version
+            ));
+        }
+        Ok(data)
+    }
+
+    /// `POST /api/licenses/verify` — identity-only (licenseId) check for startup revalidation without full file.
+    pub async fn verify_identity(&self, license_id: &str) -> Result<VerifyServerResponse, String> {
+        let url = format!("{}/api/licenses/verify", self.base_url);
+        let body = serde_json::json!({
+            "licenseId": license_id,
+        });
+        let resp = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("verify request failed: {}", e))?;
+        let status = resp.status();
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("failed to read verify response: {}", e))?;
+        if !status.is_success() {
+            return Err(format!("verify failed ({}): {}", status, text));
+        }
+        let envelope: ApiEnvelope<VerifyServerResponse> = serde_json::from_str(&text)
+            .map_err(|e| format!("failed to parse verify response: {}", e))?;
+        if !envelope.success {
+            return Err(format!("verify envelope success=false: {}", text));
+        }
+        let data = envelope
+            .data
+            .ok_or_else(|| format!("verify response missing data: {}", text))?;
+        if data.version != 1 {
+            return Err(format!(
+                "unsupported verify envelope version: {}",
+                data.version
+            ));
+        }
+        Ok(data)
     }
 }
