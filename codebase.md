@@ -391,9 +391,9 @@ Current command output is authoritative; never copy historical test counts forwa
 
 ### Current worker proof
 
-- Product revision: `8f5257a96f5d8cbd299f5152215ac401ed16755c`.
+- Product revision: `8ee6fd50e55bfb6d3ca20c6b9209e8a9423c2056`.
 - Engine revision: `dd588c379ae6614e0914b8adb41d94f0c1e86c26`.
-- Worker digest: `sha256:03f7a6b2d14bda224b14a9641a9acaeafa54c400f1b13fae3f002cdbb59e4f44`.
+- Worker digest: `sha256:d7dd33c2823a6152cc5b99d27ce6ef9e1acccf7cb203fff9def4550789054b01`.
 - BullMQ Redis: TLS/authenticated `PONG`, live heartbeat, empty queue before acceptance.
 - Azure public `6379`: removed.
 - Legacy Redis: stopped, restart-disabled, rollback-only.
@@ -414,6 +414,15 @@ Current command output is authoritative; never copy historical test counts forwa
 - 12 agent-minutes debited.
 
 This is target/revision-scoped runtime and accounting proof, not a security guarantee.
+
+### AI App Security coverage remediation
+
+- `ai-app-security.ts` ranks production/config sources ahead of tests and fixtures, excludes generated artifacts, and applies explicit mode caps: Quick/Safe 200, Standard 500, Deep/Custom 1,000.
+- Discovery produces structured eligible/scanned/skipped/byte counts, skip reasons, limit codes, and a bounded representative skipped-path sample.
+- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v4, preventing bounded AI coverage from becoming a complete clean claim.
+- The scan-detail UI shows coverage counts and skipped-path samples instead of only the legacy one-line warning.
+- Regression coverage uses an exact 217-file repository: Quick scans 200 and reports 17 skipped while retaining vulnerable production code; Standard scans all 217. Generated directories are excluded.
+- PR #386 merged as `8ee6fd5`; app revision `lyrashield-app--0000155` and worker digest `sha256:d7dd33c2823a6152cc5b99d27ce6ef9e1acccf7cb203fff9def4550789054b01` are healthy in production. The prior acceptance scan remains historically bounded and unchanged.
 
 ## 12. Key files
 
@@ -474,6 +483,6 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 - **2026-07-24 to 08-03:** CLI/agent distribution, UX V2, migration-first Azure deploys, RLS reproduction, worker recovery and digest integrity.
 - **2026-08-04 to 08-13:** Parallel Search, OAuth/MCP marketplace, URL/API profiles, reproducible engine releases, claims map, AI App Security and eval harness.
 - **2026-08-18 to 08-20:** Sprint 10 billing/usage, Local/Desktop/licenses/sync, affiliates/payout ledger, plugin v0.1.17, operations runbooks.
-- **2026-08-21:** backup/restore proof, worker egress proxy, Upstash TLS BullMQ cutover, public `6379` removal, restart-safe DNS refresh, immutable worker promotion, and current Standard/Luna production acceptance.
+- **2026-08-21:** backup/restore proof, worker egress proxy, Upstash TLS BullMQ cutover, public `6379` removal, restart-safe DNS refresh, immutable worker promotion, current Standard/Luna production acceptance, and AI App Security coverage/evidence remediation.
 
 PR history remains in Git and GitHub. Use `git log`, PRs, migrations, and executable tests for forensic detail; this guide retains only current architecture and durable decisions.
