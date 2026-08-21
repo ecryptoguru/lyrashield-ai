@@ -15,6 +15,7 @@ env:
   REGISTRY: ghcr.io
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
+  EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
   ENGINE_REVISION: 1f911b6aa0ad5ea78db80dfaa1ec7cf1e56619f0
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
@@ -32,8 +33,10 @@ jobs:
     outputs:
       web_image: ${{ steps.meta.outputs.web_image }}
       worker_image: ${{ steps.meta.outputs.worker_image }}
+      egress_proxy_image: ${{ steps.meta.outputs.egress_proxy_image }}
       web_digest: ${{ steps.build-web.outputs.digest }}
       worker_digest: ${{ steps.build-worker.outputs.digest }}
+      egress_proxy_digest: ${{ steps.build-egress-proxy.outputs.digest }}
     steps:
       - name: Checkout app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,6 +95,7 @@ jobs:
         run: |
           echo "web_image=${{ env.WEB_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
           echo "worker_image=${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "egress_proxy_image=${{ env.EGRESS_PROXY_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push web image
         id: build-web
@@ -127,6 +131,19 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push egress-proxy image
+        id: build-egress-proxy
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          target: egress-proxy
+          push: true
+          tags: ${{ env.EGRESS_PROXY_IMAGE }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -186,6 +203,14 @@ jobs:
           # lag behind main deploys. Keep a much longer tail so a pinned digest is not garbage
           # collected while still in use.
           keep-n-tagged: 100
+          delete-untagged: true
+          dry-run: false
+
+      - name: Delete superseded egress-proxy image versions
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1
+        with:
+          packages: lyrashield-ai/lyrashield-egress-proxy
+          keep-n-tagged: 20
           delete-untagged: true
           dry-run: false
 
@@ -469,6 +494,19 @@ jobs:
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
               "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
               "${OAUTH_ENV[@]}"
+
+      - name: Deploy egress-proxy Container App
+        id: deploy-egress-proxy
+        if: vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME != ''
+        env:
+          IMAGE: ${{ needs.build.outputs.egress_proxy_image }}@${{ needs.build.outputs.egress_proxy_digest }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+        run: |
+          az containerapp update \
+            --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "$IMAGE"
 
       - name: Smoke app health
         id: smoke-app

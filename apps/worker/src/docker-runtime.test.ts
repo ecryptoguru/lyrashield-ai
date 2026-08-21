@@ -38,7 +38,7 @@ const pinnedNodeBase =
 describe("worker Docker runtime", () => {
   it("pins every Node base stage to one immutable digest", () => {
     expect(dockerfile).not.toMatch(/^FROM node:24-alpine AS/m)
-    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(5)
+    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(6)
     expect(new Set(dockerfile.match(/node:24-alpine@sha256:[0-9a-f]{64}/g))).toHaveLength(1)
   })
 
