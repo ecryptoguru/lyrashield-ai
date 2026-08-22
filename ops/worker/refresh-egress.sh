@@ -183,6 +183,10 @@ if [ "$restart_worker_on_pin_change" = "1" ] && [ -e "$restart_pending_file" ]; 
   if docker exec lyrashield-worker test -s /tmp/lyrashield-worker-active 2>/dev/null; then
     echo "Worker egress pins changed; restart deferred until the active scan finishes"
   else
+    # Preserve a short Redis registration while systemd replaces an idle worker.
+    # A crashed replacement still expires quickly and queue admission fails closed.
+    docker exec lyrashield-worker sh -c 'umask 077; : > /tmp/lyrashield-worker-planned-restart' \
+      >/dev/null 2>&1 || true
     rm -f "$restart_pending_file"
     systemctl --no-block try-restart lyrashield-worker.service
   fi

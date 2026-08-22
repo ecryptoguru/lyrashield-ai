@@ -35,6 +35,7 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Upstash authenticated TLS BullMQ Redis is live; public Azure `6379` rule is removed; legacy Redis is stopped/restart-disabled for rollback only.
 - Production egress proof passed: direct arbitrary public fetch denied, authenticated proxy fetch allowed, loopback denied `ssrf_blocked`. DNS refresh stayed active during the paid scan without restarting worker.
 - Encrypted backup and isolated restore verified schema, RLS, audit chain, and application startup.
+- Production runtime DB role `app_runtime_prod` was queried on 2026-08-22 and verified `rolsuper=false`, `rolbypassrls=false`.
 - Polar/Razorpay test credentials, product/price maps, webhook secrets, signed smoke, and non-charge objects are configured. Live paid activation remains founder-controlled.
 - CLI and GitHub Action classify added `eval()`/`exec()` as `HIGH`, so the default `--fail-on HIGH` gate blocks them.
 
@@ -51,7 +52,6 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 7. Verify public scorecard metadata, all card formats, badge, revocation/expiry, referrals, human-event deduplication, external unfurls, and webmaster submission.
 8. Triage current Standard findings and obtain independent verification where warranted.
 9. After founder authorization, run separate controlled Deep/Terra acceptance with exact image, routing, cost, receipts, and terminal proof.
-10. Verify production runtime DB role has `rolsuper=false` and `rolbypassrls=false` before traffic growth.
 
 ## Founder decisions
 

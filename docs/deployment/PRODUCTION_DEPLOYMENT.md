@@ -37,7 +37,9 @@ This section mixes completed controls, regression boundaries, and unresolved gat
 
 ### 2. Verify the runtime database role cannot bypass RLS
 
-**Status:** unverified. Needs one query against production before the next traffic increase.
+**Status:** verified on 2026-08-22. The worker VM queried the runtime connection as
+`app_runtime_prod`; both `rolsuper` and `rolbypassrls` were `false`. Re-run this
+check whenever the runtime credential or database role changes.
 
 **Why it matters.** All 30 tenant-scoped tables (21 workspace tables plus 9 child tables: `Evidence`, `FixProposal`, `PullRequest`, `ScanCoverageReceipt`, `ScanEvent`, `ScanResultManifest`, `ScorecardEvent`, `ScorecardShare`, `Ticket`) carry fail-closed RLS policies and
 `FORCE ROW LEVEL SECURITY`. `FORCE` subjects the table _owner_ to those policies — it does
@@ -82,6 +84,12 @@ This is deliberately a deploy gate rather than boot validation. Boot validation 
 every production-mode process — including the Playwright E2E server — and would fail a
 running app on restart, trading a rate-limiting weakness for an availability outage. The
 deploy check catches the same misconfiguration at the only moment it can be fixed safely.
+
+**2026-08-22 alerting update.** `app-any-5xx` is enabled on `lyrashield-app` with a
+one-minute evaluation window and routes to `lyrashield-operator-alerts`. It catches a
+scan-readiness `503` even when the request volume is below the broader `app-http-5xx`
+threshold. This is incident detection, not a substitute for worker heartbeat and queue
+recovery proof.
 
 **Regression cover.** `packages/db/src/rls-fail-closed.test.ts` asserts the deny-by-default
 behaviour against a real database, and refuses to run — rather than passing vacuously —
