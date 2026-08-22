@@ -765,7 +765,7 @@ jobs:
             for attempt in $(seq 1 120); do
               if [ "$attempt" = "61" ]; then
                 echo "::warning::${label} candidate missed its first readiness window; restarting the zero-traffic revision once."
-                az containerapp revision restart \
+                timeout --foreground 180s az containerapp revision restart \
                   --name "$name" \
                   --resource-group "$RG" \
                   --revision "$revision" \
@@ -786,7 +786,7 @@ jobs:
             for attempt in $(seq 1 120); do
               if [ "$attempt" = "61" ]; then
                 echo "::warning::egress-proxy candidate missed its first readiness window; restarting the zero-traffic revision once."
-                az containerapp revision restart \
+                timeout --foreground 180s az containerapp revision restart \
                   --name "$EGRESS_NAME" \
                   --resource-group "$RG" \
                   --revision "$EGRESS_REVISION" \
