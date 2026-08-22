@@ -1,0 +1,25 @@
+name: Production scan readiness
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-scan-readiness
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Probe the worker-backed readiness endpoint
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 --retry 2 --retry-all-errors --retry-delay 5 \
+            https://app.lyrashieldai.com/api/ready/scans \
+            | grep -Fqx '{"status":"ready","checks":{"worker":true}}'
