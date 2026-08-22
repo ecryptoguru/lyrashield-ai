@@ -743,9 +743,13 @@ jobs:
       - name: Smoke candidate revisions
         id: smoke-candidates
         env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           APP_FQDN: ${{ steps.deploy-app.outputs.fqdn }}
           SCANNER_FQDN: ${{ steps.deploy-scanner.outputs.fqdn }}
           EGRESS_FQDN: ${{ steps.deploy-egress-proxy.outputs.fqdn }}
+          EGRESS_REVISION: ${{ steps.deploy-egress-proxy.outputs.revision }}
         run: |
           smoke_candidate() {
             local label="$1"
@@ -763,9 +767,48 @@ jobs:
             echo "::error::${label} candidate health failed after 60 attempts. Production traffic was not changed."
             return 1
           }
+          smoke_egress_candidate() {
+            if [ -z "$EGRESS_NAME" ]; then return 0; fi
+            for attempt in $(seq 1 60); do
+              local health
+              local running
+              health=$(az containerapp revision show \
+                --name "$EGRESS_NAME" \
+                --resource-group "$RG" \
+                --revision "$EGRESS_REVISION" \
+                --query properties.healthState \
+                --output tsv)
+              running=$(az containerapp revision show \
+                --name "$EGRESS_NAME" \
+                --resource-group "$RG" \
+                --revision "$EGRESS_REVISION" \
+                --query properties.runningState \
+                --output tsv)
+              if [ "$health" = "Healthy" ] && [[ "$running" == Running* ]]; then
+                local result
+                result=$(az vm run-command invoke \
+                  --name "$WORKER_VM_NAME" \
+                  --resource-group "$RG" \
+                  --command-id RunShellScript \
+                  --scripts "curl --fail --silent --show-error --max-time 10 https://${EGRESS_FQDN}/health && echo EGRESS_HEALTH_OK" \
+                  --query 'value[0].message' \
+                  --output tsv)
+                if grep -q EGRESS_HEALTH_OK <<< "$result"; then
+                  echo "egress-proxy candidate health OK from worker VM"
+                  return 0
+                fi
+                echo "::error::Worker VM could not reach the healthy egress-proxy candidate."
+                return 1
+              fi
+              echo "egress-proxy candidate not ready (attempt ${attempt}), retrying in 5s..."
+              sleep 5
+            done
+            echo "::error::egress-proxy candidate health failed after 60 attempts. Production traffic was not changed."
+            return 1
+          }
           smoke_candidate app "$APP_FQDN" /api/ready & APP_SMOKE_PID=$!
           smoke_candidate scanner "$SCANNER_FQDN" /api/ready & SCANNER_SMOKE_PID=$!
-          smoke_candidate egress-proxy "$EGRESS_FQDN" /health & EGRESS_SMOKE_PID=$!
+          smoke_egress_candidate & EGRESS_SMOKE_PID=$!
           CANDIDATE_SMOKE_FAILED=0
           wait "$APP_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
           wait "$SCANNER_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
@@ -814,6 +857,7 @@ jobs:
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: |
           smoke_public() {
             local label="$1"
@@ -830,6 +874,19 @@ jobs:
             echo "::error::${label} production health failed after promotion."
             return 1
           }
+          smoke_egress_from_worker() {
+            local url="$1"
+            if [ -z "$url" ]; then return 0; fi
+            local result
+            result=$(az vm run-command invoke \
+              --name "$WORKER_VM_NAME" \
+              --resource-group "$RG" \
+              --command-id RunShellScript \
+              --scripts "curl --fail --silent --show-error --max-time 10 ${url} && echo EGRESS_HEALTH_OK" \
+              --query 'value[0].message' \
+              --output tsv)
+            grep -q EGRESS_HEALTH_OK <<< "$result"
+          }
           EGRESS_URL=""
           if [ -n "$EGRESS_NAME" ]; then
             EGRESS_FQDN=$(az containerapp show \
@@ -845,7 +902,7 @@ jobs:
           fi
           smoke_public app "${{ env.APP_URL }}/api/ready"
           smoke_public scanner "${{ env.SCANNER_URL }}/api/ready"
-          smoke_public egress-proxy "$EGRESS_URL"
+          smoke_egress_from_worker "$EGRESS_URL"
 
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.
@@ -858,6 +915,7 @@ jobs:
           SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
           EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
           EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_SMOKE_URL: ${{ env.APP_URL }}/api/ready
           SCANNER_SMOKE_URL: ${{ env.SCANNER_URL }}/api/ready
@@ -887,6 +945,31 @@ jobs:
             done
             return 1
           }
+          rollback_egress() {
+            local name="$1"
+            local revision="$2"
+            local smoke_url="$3"
+            if [ -z "$name" ]; then return 0; fi
+            az containerapp revision activate \
+              --name "$name" \
+              --resource-group "$RG" \
+              --revision "$revision" \
+              --output none
+            az containerapp ingress traffic set \
+              --name "$name" \
+              --resource-group "$RG" \
+              --revision-weight "$revision=100" \
+              --output none
+            local result
+            result=$(az vm run-command invoke \
+              --name "$WORKER_VM_NAME" \
+              --resource-group "$RG" \
+              --command-id RunShellScript \
+              --scripts "curl --fail --silent --show-error --max-time 10 ${smoke_url} && echo EGRESS_HEALTH_OK" \
+              --query 'value[0].message' \
+              --output tsv)
+            grep -q EGRESS_HEALTH_OK <<< "$result"
+          }
           EGRESS_SMOKE_URL=""
           if [ -n "$EGRESS_NAME" ]; then
             EGRESS_FQDN=$(az containerapp show \
@@ -899,7 +982,7 @@ jobs:
           ROLLBACK_FAILED=0
           rollback_app "$APP_NAME" "$APP_PREVIOUS" "$APP_SMOKE_URL" || ROLLBACK_FAILED=1
           rollback_app "$SCANNER_NAME" "$SCANNER_PREVIOUS" "$SCANNER_SMOKE_URL" || ROLLBACK_FAILED=1
-          rollback_app "$EGRESS_NAME" "$EGRESS_PREVIOUS" "$EGRESS_SMOKE_URL" || ROLLBACK_FAILED=1
+          rollback_egress "$EGRESS_NAME" "$EGRESS_PREVIOUS" "$EGRESS_SMOKE_URL" || ROLLBACK_FAILED=1
           if [ "$ROLLBACK_FAILED" -ne 0 ]; then
             echo "::error::One or more previous revisions did not recover. Manual recovery required."
             exit 1

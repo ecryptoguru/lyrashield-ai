@@ -122,11 +122,14 @@ and syncs the registry credential before creating a revision. Renew that `read:p
 classic PAT before its current 2026-11-20 expiry; the deploy identity has
 `Key Vault Secrets User` only on that secret. All three Container Apps use multiple-revision
 mode. Existing production revisions keep 100% traffic while app, scanner, and egress-proxy
-candidates pass their revision-specific readiness checks in parallel. Only then does one
-step promote all candidates. Failed promotion or public readiness restores every captured
-previous traffic target. The scanner keeps one warm replica so a scale-from-zero private
-image pull cannot turn `/api/ready` into a multi-minute timeout. Revision recovery never
-reverses database migrations or application-scope secrets and configuration.
+candidates pass their revision-specific readiness checks in parallel. The egress proxy
+allows only the worker VM IP, so CI verifies its candidate and promoted endpoint from that
+VM through Azure Run Command instead of weakening ingress or accepting the runner's expected
+`403`. Only then does one step promote all candidates. Failed promotion or public readiness
+restores every captured previous traffic target. The scanner keeps one warm replica so a
+scale-from-zero private image pull cannot turn `/api/ready` into a multi-minute timeout.
+Revision recovery never reverses database migrations or application-scope secrets and
+configuration.
 
 **What the review found.** Run `30496418272`'s dry-run pass reported "no tagged images found
 to delete" and "no untagged images found" for both packages — with `keep-n-tagged: 10` and
