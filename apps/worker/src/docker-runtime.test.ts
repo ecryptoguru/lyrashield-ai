@@ -130,6 +130,9 @@ describe("worker Docker runtime", () => {
     expect(deployWorkflow).toContain("Verify engine revision provenance")
     expect(deployWorkflow).toContain("packages: write")
     expect(deployWorkflow).not.toMatch(/^permissions:\n  contents: read\n  packages: write/m)
+    expect(deployWorkflow).toContain("missed its first readiness window")
+    expect(deployWorkflow).toContain("az containerapp revision restart")
+    expect(deployWorkflow).toContain("failed after one bounded revision restart")
   })
 
   it("audits private-key content without rejecting public certificate bundles", () => {
