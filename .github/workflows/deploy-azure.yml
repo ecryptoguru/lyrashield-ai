@@ -2,6 +2,10 @@ name: Deploy to Azure
 
 on:
   workflow_call:
+    inputs:
+      source_sha:
+        required: false
+        type: string
   workflow_dispatch:
 
 concurrency:
@@ -12,6 +16,7 @@ permissions:
   contents: read
 
 env:
+  DEPLOY_SHA: ${{ inputs.source_sha || github.sha }}
   REGISTRY: ghcr.io
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
@@ -41,6 +46,7 @@ jobs:
       - name: Checkout app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.DEPLOY_SHA }}
           persist-credentials: false
 
       # A production worker is reproducible only when its engine input is immutable.
@@ -94,9 +100,9 @@ jobs:
         id: meta
         run: |
           {
-            echo "web_image=${{ env.WEB_IMAGE }}:${{ github.sha }}"
-            echo "worker_image=${{ env.WORKER_IMAGE }}:${{ github.sha }}"
-            echo "egress_proxy_image=${{ env.EGRESS_PROXY_IMAGE }}:${{ github.sha }}"
+            echo "web_image=${{ env.WEB_IMAGE }}:${{ env.DEPLOY_SHA }}"
+            echo "worker_image=${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}"
+            echo "egress_proxy_image=${{ env.EGRESS_PROXY_IMAGE }}:${{ env.DEPLOY_SHA }}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and push web image
@@ -106,7 +112,7 @@ jobs:
           context: .
           target: runner
           push: true
-          tags: ${{ env.WEB_IMAGE }}:${{ github.sha }},${{ env.WEB_IMAGE }}:latest
+          tags: ${{ env.WEB_IMAGE }}:${{ env.DEPLOY_SHA }},${{ env.WEB_IMAGE }}:latest
           build-args: |
             BUILD_APP_URL=${{ env.APP_URL }}
             BUILD_PUBLIC_APP_URL=${{ env.SCANNER_URL }}
@@ -125,13 +131,13 @@ jobs:
           push: true
           # Worker candidates stay immutable. Deployment consumes the verified digest;
           # no mutable :latest tag may point at an image before policy verification.
-          tags: ${{ env.WORKER_IMAGE }}:${{ github.sha }}
+          tags: ${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}
           build-contexts: |
             engine=lyrashield-engine
           build-args: |
             BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
           labels: |
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.DEPLOY_SHA }}
             io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -143,9 +149,9 @@ jobs:
           context: .
           target: egress-proxy
           push: true
-          tags: ${{ env.EGRESS_PROXY_IMAGE }}:${{ github.sha }}
+          tags: ${{ env.EGRESS_PROXY_IMAGE }}:${{ env.DEPLOY_SHA }}
           labels: |
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.DEPLOY_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -154,12 +160,12 @@ jobs:
           worker_ref="${{ env.WORKER_IMAGE }}@${{ steps.build-worker.outputs.digest }}"
           docker pull "$worker_ref"
           bash apps/worker/scripts/verify-worker-image.sh \
-            "$worker_ref" "${{ github.sha }}" "${{ env.ENGINE_REVISION }}"
+            "$worker_ref" "${{ env.DEPLOY_SHA }}" "${{ env.ENGINE_REVISION }}"
 
       - name: Worker image digest
         if: steps.build-worker.outcome == 'success'
         run: |
-          echo "Pushed worker image: ${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pushed worker image: ${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Pinned digest: ${{ steps.build-worker.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
   # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
@@ -340,6 +346,8 @@ jobs:
 
       - name: Checkout for migrations
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
