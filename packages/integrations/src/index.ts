@@ -33,11 +33,13 @@ export {
   enqueueScan,
   getScanQueuePosition,
   registerScanWorker,
+  handoffScanWorker,
   unregisterScanWorker,
   isScanWorkerAvailable,
   assertScanWorkerAvailable,
   ScanWorkerUnavailableError,
   SCAN_WORKER_HEARTBEAT_MS,
+  SCAN_WORKER_RESTART_GRACE_MS,
   SCAN_WORKER_TTL_MS,
   type ScanQueuePosition,
 } from "./queue"

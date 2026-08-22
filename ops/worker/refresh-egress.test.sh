@@ -8,13 +8,18 @@ test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 fake_bin="$test_dir/bin"
 restart_pending_file="$test_dir/restart-pending"
+docker_capture="$test_dir/docker.log"
 mkdir -p "$fake_bin"
 
 cat >"$fake_bin/docker" <<'EOF'
 #!/bin/sh
 if [ "$1" = "exec" ]; then
-  [ "${DOCKER_WORKER_ACTIVE:-0}" = "1" ]
-  exit
+  if [ "$3" = "test" ]; then
+    [ "${DOCKER_WORKER_ACTIVE:-0}" = "1" ]
+    exit
+  fi
+  printf '%s\n' "$*" >>"$DOCKER_CAPTURE"
+  exit 0
 fi
 case "$5" in
   *Subnet*)
@@ -68,12 +73,14 @@ printf '%s\n' "proxy.test 9.9.9.9 443" >"$pin_file"
 systemctl_capture="$test_dir/systemctl.log"
 iptables_capture="$test_dir/iptables.rules"
 : >"$systemctl_capture"
+: >"$docker_capture"
 
 run_refresh() {
   worker_active="$1"
   PATH="$fake_bin:$PATH" \
   DOCKER_WORKER_ACTIVE="$worker_active" \
   SYSTEMCTL_CAPTURE="$systemctl_capture" \
+  DOCKER_CAPTURE="$docker_capture" \
   IPTABLES_CAPTURE="$iptables_capture" \
   LYRASHIELD_WORKER_ENV_FILE="$environment_file" \
   LYRASHIELD_EGRESS_PIN_FILE="$pin_file" \
@@ -91,6 +98,7 @@ grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT' "$iptables_capture"
 
 run_refresh 0
 grep -q '^--no-block try-restart lyrashield-worker.service$' "$systemctl_capture"
+grep -q 'sh -c umask 077; : > /tmp/lyrashield-worker-planned-restart' "$docker_capture"
 test ! -e "$restart_pending_file"
 
 restart_count=$(wc -l <"$systemctl_capture" | tr -d ' ')

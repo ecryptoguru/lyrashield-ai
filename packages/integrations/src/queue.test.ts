@@ -42,6 +42,10 @@ const mocks = vi.hoisted(() => {
     async zrem(_key: string, member: string) {
       return members.delete(member) ? 1 : 0
     },
+    async zadd(_key: string, score: number, member: string) {
+      members.set(member, Number(score))
+      return 1
+    },
   }
   return { redis, queueAdd: vi.fn(), queueWorkersCount: vi.fn() }
 })
@@ -56,9 +60,11 @@ vi.mock("bullmq", () => ({
 
 import {
   enqueueScan,
+  handoffScanWorker,
   isScanWorkerAvailable,
   registerScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
+  SCAN_WORKER_RESTART_GRACE_MS,
   SCAN_WORKER_TTL_MS,
   ScanWorkerUnavailableError,
   unregisterScanWorker,
@@ -104,6 +110,16 @@ describe("scan worker availability", () => {
 
     expect(await isScanWorkerAvailable(2_000)).toBe(true)
     expect(mocks.queueWorkersCount).not.toHaveBeenCalled()
+  })
+
+  it("keeps only a short lease during a planned worker handoff", async () => {
+    expect(SCAN_WORKER_RESTART_GRACE_MS).toBe(60_000)
+
+    await registerScanWorker("worker-1", 1_000)
+    await handoffScanWorker("worker-1", 2_000)
+
+    expect(await isScanWorkerAvailable(61_999)).toBe(true)
+    expect(await isScanWorkerAvailable(62_000)).toBe(false)
   })
 })
 

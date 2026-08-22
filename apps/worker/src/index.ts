@@ -6,8 +6,10 @@ import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import {
   registerScanWorker,
+  handoffScanWorker,
   unregisterScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
+  SCAN_WORKER_RESTART_GRACE_MS,
   WEBHOOK_TRACK_RETRY_QUEUE_NAME,
   type WebhookTrackRetryJobData,
 } from "@lyrashield/integrations"
@@ -40,6 +42,7 @@ let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
 const activeJobPath = "/tmp/lyrashield-worker-active"
+const plannedRestartPath = "/tmp/lyrashield-worker-planned-restart"
 export const RECONCILIATION_INTERVAL_MS = 300_000
 
 // Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
@@ -85,9 +88,23 @@ export async function clearWorkerActive(): Promise<void> {
   })
 }
 
+async function consumePlannedRestart(): Promise<boolean> {
+  try {
+    await unlink(plannedRestartPath)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
+    logger.warn("Could not consume planned worker restart marker", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
 async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (shuttingDown) return
   shuttingDown = true
+  const plannedRestart = await consumePlannedRestart()
 
   logger.info("Worker shutting down", { signal })
 
@@ -162,11 +179,22 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     logger.info("Terminating active engine processes", { count: terminatedEngineProcesses })
   }
 
-  await unregisterScanWorker(workerId).catch((error) => {
-    logger.warn("Could not unregister scan worker", {
-      error: error instanceof Error ? error.message : String(error),
+  if (plannedRestart) {
+    await handoffScanWorker(workerId).catch((error) => {
+      logger.warn("Could not retain scan-worker handoff lease", {
+        error: error instanceof Error ? error.message : String(error),
+      })
     })
-  })
+    logger.info("Retaining scan-worker handoff lease for planned restart", {
+      graceMs: SCAN_WORKER_RESTART_GRACE_MS,
+    })
+  } else {
+    await unregisterScanWorker(workerId).catch((error) => {
+      logger.warn("Could not unregister scan worker", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
   await removeWorkerReadiness().catch((error) => {
     logger.warn("Could not remove worker readiness marker", {
       error: error instanceof Error ? error.message : String(error),
