@@ -1,7 +1,10 @@
 import { createAuthClient } from "better-auth/client"
-import { deviceAuthorizationClient } from "better-auth/client/plugins"
+import { deviceAuthorizationClient, inferAdditionalFields } from "better-auth/client/plugins"
+import type { auth } from "./auth"
 
-export const authClient = createAuthClient({ plugins: [deviceAuthorizationClient()] })
+export const authClient = createAuthClient({
+  plugins: [inferAdditionalFields<typeof auth>(), deviceAuthorizationClient()],
+})
 
 export const {
   signIn,
