@@ -5,11 +5,10 @@ export default defineConfig({
   testMatch: "**/*.e2e.ts",
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
-  use: { baseURL: "http://127.0.0.1:4322" },
+  use: { baseURL: "http://127.0.0.1:8787" },
   webServer: {
-    command:
-      "ASTRO_DEV_BACKGROUND=0 pnpm exec astro dev --ignore-lock --host 127.0.0.1 --port 4322",
-    url: "http://127.0.0.1:4322/",
+    command: "pnpm preview",
+    url: "http://127.0.0.1:8787/",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
