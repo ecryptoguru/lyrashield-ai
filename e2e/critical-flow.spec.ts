@@ -22,6 +22,13 @@ async function signUp(
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Create account" }).click()
   await expect.poll(() => prisma.user.findUnique({ where: { email } })).not.toBeNull()
+  await expect
+    .poll(() =>
+      prisma.account.count({
+        where: { user: { email }, providerId: "credential", issuer: "local:credential" },
+      })
+    )
+    .toBe(1)
   await prisma.user.update({ where: { email }, data: { emailVerified: true } })
   // Pass the test's simulated client IP so the auth rate limiter buckets this
   // sign-out under the test's distinct IP, not the shared default — otherwise
