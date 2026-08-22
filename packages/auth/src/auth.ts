@@ -1,4 +1,4 @@
-import { betterAuth } from "better-auth"
+import { betterAuth, type Auth as BetterAuth } from "better-auth"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import {
   bearer,
@@ -364,7 +364,7 @@ export const auth = betterAuth({
       },
     },
   },
-})
+}) as unknown as BetterAuth
 
 export type Auth = typeof auth
 export type Session = typeof auth.$Infer.Session
