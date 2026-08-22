@@ -93,9 +93,11 @@ jobs:
       - name: Image tags
         id: meta
         run: |
-          echo "web_image=${{ env.WEB_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "worker_image=${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "egress_proxy_image=${{ env.EGRESS_PROXY_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          {
+            echo "web_image=${{ env.WEB_IMAGE }}:${{ github.sha }}"
+            echo "worker_image=${{ env.WORKER_IMAGE }}:${{ github.sha }}"
+            echo "egress_proxy_image=${{ env.EGRESS_PROXY_IMAGE }}:${{ github.sha }}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push web image
         id: build-web
@@ -218,9 +220,9 @@ jobs:
     name: Deploy Azure Container Apps
     needs: build
     runs-on: ubuntu-24.04
-    # This budget covers migrations, two sequential 10-minute health checks,
-    # and a bounded revision recovery. Individual Azure control-plane calls
-    # still have their own tighter limits below.
+    # This budget covers migrations, parallel bounded candidate health checks,
+    # production smoke, and bounded traffic recovery. Individual Azure
+    # control-plane calls still have their own tighter limits below.
     timeout-minutes: 90
     permissions:
       contents: read
@@ -238,6 +240,95 @@ jobs:
 
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Prepare private registry and zero-downtime rollout
+        id: rollout
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+          WEB_IMAGE: ${{ needs.build.outputs.web_image }}
+          WEB_DIGEST: ${{ needs.build.outputs.web_digest }}
+          EGRESS_PROXY_IMAGE: ${{ needs.build.outputs.egress_proxy_image }}
+          EGRESS_PROXY_DIGEST: ${{ needs.build.outputs.egress_proxy_digest }}
+        run: |
+          GHCR_TOKEN=$(az keyvault secret show \
+            --vault-name "$AZURE_KEY_VAULT_NAME" \
+            --name ghcr-token \
+            --query value \
+            --output tsv)
+          if [ -z "$GHCR_TOKEN" ]; then
+            echo "::error::Key Vault secret ghcr-token is empty. Refusing to create revisions that cannot pull their images."
+            exit 1
+          fi
+          echo "::add-mask::$GHCR_TOKEN"
+
+          verify_manifest() {
+            local image="$1"
+            local digest="$2"
+            local repository="${image#ghcr.io/}"
+            repository="${repository%:*}"
+            local registry_token
+            registry_token=$(curl --fail --silent --show-error \
+              --user "$GHCR_USERNAME:$GHCR_TOKEN" \
+              --get \
+              --data-urlencode 'service=ghcr.io' \
+              --data-urlencode "scope=repository:${repository}:pull" \
+              https://ghcr.io/token | jq -r '.token // empty')
+            if [ -z "$registry_token" ]; then
+              echo "::error::GHCR did not issue a pull token for ${repository}."
+              exit 1
+            fi
+            curl --fail --silent --show-error --output /dev/null \
+              --header "Authorization: Bearer ${registry_token}" \
+              --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/${repository}/manifests/${digest}"
+          }
+
+          prepare_container_app() {
+            local output_name="$1"
+            local container_app="$2"
+            if [ -z "$container_app" ]; then
+              echo "${output_name}_previous=" >> "$GITHUB_OUTPUT"
+              return 0
+            fi
+
+            az containerapp revision set-mode \
+              --name "$container_app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --mode multiple \
+              --output none
+
+            local previous_revision
+            previous_revision=$(az containerapp ingress traffic show \
+              --name "$container_app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "[?weight == \`100\`] | [0].revisionName" \
+              --output tsv)
+            if [ -z "$previous_revision" ] || [ "$previous_revision" = "null" ]; then
+              echo "::error::${container_app} must have exactly one 100% traffic revision to preserve."
+              exit 1
+            fi
+
+            az containerapp registry set \
+              --name "$container_app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --server ghcr.io \
+              --username "$GHCR_USERNAME" \
+              --password "$GHCR_TOKEN" \
+              --output none
+            echo "${output_name}_previous=${previous_revision}" >> "$GITHUB_OUTPUT"
+          }
+
+          verify_manifest "$WEB_IMAGE" "$WEB_DIGEST"
+          verify_manifest "$EGRESS_PROXY_IMAGE" "$EGRESS_PROXY_DIGEST"
+          prepare_container_app app "$AZURE_APP_CONTAINER_APP_NAME"
+          prepare_container_app scanner "$AZURE_SCANNER_CONTAINER_APP_NAME"
+          prepare_container_app egress "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME"
+          unset GHCR_TOKEN
 
       # Schema first, then code. Migrations previously ran only in CI against a throwaway
       # database and never against production, so a release needing a schema change served
@@ -541,7 +632,25 @@ jobs:
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
               "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
               "${EMAIL_ENV[@]}" \
-              "${OAUTH_ENV[@]}"
+              "${OAUTH_ENV[@]}" \
+            --output none
+          CANDIDATE_REVISION=$(az containerapp show \
+            --name "$AZURE_APP_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestRevisionName \
+            --output tsv)
+          CANDIDATE_FQDN=$(az containerapp revision show \
+            --name "$AZURE_APP_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$CANDIDATE_REVISION" \
+            --query properties.fqdn \
+            --output tsv)
+          if [ -z "$CANDIDATE_REVISION" ] || [ -z "$CANDIDATE_FQDN" ]; then
+            echo "::error::Azure did not return the app candidate revision and FQDN. Production traffic was not changed."
+            exit 1
+          fi
+          echo "revision=$CANDIDATE_REVISION" >> "$GITHUB_OUTPUT"
+          echo "fqdn=$CANDIDATE_FQDN" >> "$GITHUB_OUTPUT"
 
       - name: Deploy scanner Container App
         id: deploy-scanner
@@ -566,6 +675,7 @@ jobs:
             --name "$AZURE_SCANNER_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --image "${IMAGE}" \
+            --min-replicas 1 \
             --set-env-vars \
               "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
@@ -579,7 +689,25 @@ jobs:
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
               "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
               "${EMAIL_ENV[@]}" \
-              "${OAUTH_ENV[@]}"
+              "${OAUTH_ENV[@]}" \
+            --output none
+          CANDIDATE_REVISION=$(az containerapp show \
+            --name "$AZURE_SCANNER_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestRevisionName \
+            --output tsv)
+          CANDIDATE_FQDN=$(az containerapp revision show \
+            --name "$AZURE_SCANNER_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$CANDIDATE_REVISION" \
+            --query properties.fqdn \
+            --output tsv)
+          if [ -z "$CANDIDATE_REVISION" ] || [ -z "$CANDIDATE_FQDN" ]; then
+            echo "::error::Azure did not return the scanner candidate revision and FQDN. Production traffic was not changed."
+            exit 1
+          fi
+          echo "revision=$CANDIDATE_REVISION" >> "$GITHUB_OUTPUT"
+          echo "fqdn=$CANDIDATE_FQDN" >> "$GITHUB_OUTPUT"
 
       - name: Deploy egress-proxy Container App
         id: deploy-egress-proxy
@@ -592,125 +720,187 @@ jobs:
           az containerapp update \
             --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
-            --image "$IMAGE"
+            --image "$IMAGE" \
+            --output none
+          CANDIDATE_REVISION=$(az containerapp show \
+            --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestRevisionName \
+            --output tsv)
+          CANDIDATE_FQDN=$(az containerapp revision show \
+            --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$CANDIDATE_REVISION" \
+            --query properties.fqdn \
+            --output tsv)
+          if [ -z "$CANDIDATE_REVISION" ] || [ -z "$CANDIDATE_FQDN" ]; then
+            echo "::error::Azure did not return the egress-proxy candidate revision and FQDN. Production traffic was not changed."
+            exit 1
+          fi
+          echo "revision=$CANDIDATE_REVISION" >> "$GITHUB_OUTPUT"
+          echo "fqdn=$CANDIDATE_FQDN" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke app health
-        id: smoke-app
-        if: always() && steps.deploy-app.outcome == 'success'
+      - name: Smoke candidate revisions
+        id: smoke-candidates
         env:
-          SMOKE_URL: "${{ env.APP_URL }}/api/ready"
+          APP_FQDN: ${{ steps.deploy-app.outputs.fqdn }}
+          SCANNER_FQDN: ${{ steps.deploy-scanner.outputs.fqdn }}
+          EGRESS_FQDN: ${{ steps.deploy-egress-proxy.outputs.fqdn }}
         run: |
-          for i in $(seq 1 60); do
-            if curl --fail --silent --show-error --max-time 10 "$SMOKE_URL"; then
-              echo "App health OK"
-              exit 0
-            fi
-            echo "App health not ready (attempt $i), retrying in 10s..."
-            sleep 10
-          done
-          echo "App health smoke failed after 60 attempts"
-          exit 1
+          smoke_candidate() {
+            local label="$1"
+            local fqdn="$2"
+            local path="$3"
+            if [ -z "$fqdn" ]; then return 0; fi
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent --show-error --max-time 5 "https://${fqdn}${path}"; then
+                echo "${label} candidate health OK"
+                return 0
+              fi
+              echo "${label} candidate not ready (attempt ${attempt}), retrying in 5s..."
+              sleep 5
+            done
+            echo "::error::${label} candidate health failed after 60 attempts. Production traffic was not changed."
+            return 1
+          }
+          smoke_candidate app "$APP_FQDN" /api/ready & APP_SMOKE_PID=$!
+          smoke_candidate scanner "$SCANNER_FQDN" /api/ready & SCANNER_SMOKE_PID=$!
+          smoke_candidate egress-proxy "$EGRESS_FQDN" /health & EGRESS_SMOKE_PID=$!
+          CANDIDATE_SMOKE_FAILED=0
+          wait "$APP_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
+          wait "$SCANNER_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
+          wait "$EGRESS_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
+          exit "$CANDIDATE_SMOKE_FAILED"
 
-      - name: Smoke scanner health
-        id: smoke-scanner
-        if: always() && steps.deploy-scanner.outcome == 'success'
+      - name: Promote healthy candidate revisions
+        id: promote
         env:
-          SMOKE_URL: "${{ env.SCANNER_URL }}/api/ready"
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_CANDIDATE: ${{ steps.deploy-app.outputs.revision }}
+          APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_CANDIDATE: ${{ steps.deploy-scanner.outputs.revision }}
+          SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_CANDIDATE: ${{ steps.deploy-egress-proxy.outputs.revision }}
+          EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
         run: |
-          for i in $(seq 1 60); do
-            if curl --fail --silent --show-error --max-time 10 "$SMOKE_URL"; then
-              echo "Scanner health OK"
-              exit 0
-            fi
-            echo "Scanner health not ready (attempt $i), retrying in 10s..."
-            sleep 10
-          done
-          echo "Scanner health smoke failed after 60 attempts"
-          exit 1
+          set_traffic() {
+            local name="$1"
+            local revision="$2"
+            if [ -z "$name" ]; then return 0; fi
+            az containerapp ingress traffic set \
+              --name "$name" \
+              --resource-group "$RG" \
+              --revision-weight "$revision=100" \
+              --output none
+          }
+          restore_previous() {
+            set_traffic "$APP_NAME" "$APP_PREVIOUS" || true
+            set_traffic "$SCANNER_NAME" "$SCANNER_PREVIOUS" || true
+            set_traffic "$EGRESS_NAME" "$EGRESS_PREVIOUS" || true
+          }
+          if ! set_traffic "$APP_NAME" "$APP_CANDIDATE" || \
+             ! set_traffic "$SCANNER_NAME" "$SCANNER_CANDIDATE" || \
+             ! set_traffic "$EGRESS_NAME" "$EGRESS_CANDIDATE"; then
+            echo "::error::Candidate promotion failed. Restoring every previous traffic target."
+            restore_previous
+            exit 1
+          fi
 
-      # ── Best-effort revision recovery on health-check failure ─────────────
-      # Recovery is complete only after an older revision is activated, receives
-      # all traffic, and passes readiness. This never reverses migrations or
-      # application-scope configuration.
-      - name: Rollback on health check failure
-        if: failure() && (steps.smoke-app.outcome == 'failure' || steps.smoke-scanner.outcome == 'failure')
+      - name: Smoke production traffic
+        id: smoke-public
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+        run: |
+          smoke_public() {
+            local label="$1"
+            local url="$2"
+            if [ -z "$url" ]; then return 0; fi
+            for attempt in $(seq 1 12); do
+              if curl --fail --silent --show-error --max-time 10 "$url"; then
+                echo "${label} production health OK"
+                return 0
+              fi
+              echo "${label} production health not ready (attempt ${attempt}), retrying in 10s..."
+              sleep 10
+            done
+            echo "::error::${label} production health failed after promotion."
+            return 1
+          }
+          EGRESS_URL=""
+          if [ -n "$EGRESS_NAME" ]; then
+            EGRESS_FQDN=$(az containerapp show \
+              --name "$EGRESS_NAME" \
+              --resource-group "$RG" \
+              --query properties.configuration.ingress.fqdn \
+              --output tsv)
+            if [ -z "$EGRESS_FQDN" ]; then
+              echo "::error::Azure did not return the egress-proxy production FQDN."
+              exit 1
+            fi
+            EGRESS_URL="https://${EGRESS_FQDN}/health"
+          fi
+          smoke_public app "${{ env.APP_URL }}/api/ready"
+          smoke_public scanner "${{ env.SCANNER_URL }}/api/ready"
+          smoke_public egress-proxy "$EGRESS_URL"
+
+      # Migrations and app-scope configuration remain forward-only. This rollback
+      # changes traffic only, after every candidate had already passed readiness.
+      - name: Roll back production traffic on health failure
+        if: failure() && steps.smoke-public.outcome == 'failure'
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_SMOKE_URL: ${{ env.APP_URL }}/api/ready
           SCANNER_SMOKE_URL: ${{ env.SCANNER_URL }}/api/ready
         run: |
-          echo "::error::Post-deploy health check failed — attempting revision recovery."
-
-          ROLLBACK_FAILED=0
-
           rollback_app() {
             local name="$1"
-            local smoke_url="$2"
+            local revision="$2"
+            local smoke_url="$3"
             if [ -z "$name" ]; then return 0; fi
-            echo "Attempting rollback for Container App: $name"
-            local latest_revision
-            latest_revision=$(az containerapp show \
+            az containerapp revision activate \
               --name "$name" \
               --resource-group "$RG" \
-              --query "properties.latestRevisionName" \
-              -o tsv 2>/dev/null || echo "")
-            if [ -z "$latest_revision" ] || [ "$latest_revision" = "null" ]; then
-              echo "::error::Could not identify the failed latest revision for $name; manual recovery required."
-              ROLLBACK_FAILED=1
-              return 0
-            fi
-            local previous_revision
-            previous_revision=$(az containerapp revision list \
+              --revision "$revision" \
+              --output none
+            az containerapp ingress traffic set \
               --name "$name" \
               --resource-group "$RG" \
-              --all \
-              --query "sort_by([?name != '$latest_revision'], &properties.createdTime)[-1].name" \
-              -o tsv 2>/dev/null || echo "")
-            if [ -n "$previous_revision" ] && [ "$previous_revision" != "null" ]; then
-              echo "Reactivating previous revision and assigning traffic: $previous_revision"
-              if az containerapp revision activate \
-                --name "$name" \
-                --resource-group "$RG" \
-                --revision "$previous_revision" 2>/dev/null && \
-                az containerapp ingress traffic set \
-                  --name "$name" \
-                  --resource-group "$RG" \
-                  --revision-weight "$previous_revision=100" 2>/dev/null; then
-                for attempt in $(seq 1 12); do
-                  if curl --fail --silent --show-error --max-time 10 "$smoke_url"; then
-                    echo "Rollback readiness passed for $name (revision: $previous_revision)"
-                    return 0
-                  fi
-                  echo "Rollback readiness not restored for $name (attempt $attempt), retrying in 10s..."
-                  sleep 10
-                done
-                echo "::error::Previous revision did not restore readiness for $name"
-                ROLLBACK_FAILED=1
-              else
-                echo "::error::Failed to reactivate or route traffic to the previous revision for $name"
-                ROLLBACK_FAILED=1
+              --revision-weight "$revision=100" \
+              --output none
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent --show-error --max-time 5 "$smoke_url"; then
+                echo "Rollback readiness passed for ${name}"
+                return 0
               fi
-            else
-              echo "::error::No previous revision found for $name — manual rollback required."
-              ROLLBACK_FAILED=1
-            fi
+              echo "Rollback readiness not restored for ${name} (attempt ${attempt}), retrying in 5s..."
+              sleep 5
+            done
+            return 1
           }
-
-          if [ "${{ steps.smoke-app.outcome }}" == "failure" ]; then
-            rollback_app "$APP_NAME" "$APP_SMOKE_URL"
+          EGRESS_SMOKE_URL=""
+          if [ -n "$EGRESS_NAME" ]; then
+            EGRESS_FQDN=$(az containerapp show \
+              --name "$EGRESS_NAME" \
+              --resource-group "$RG" \
+              --query properties.configuration.ingress.fqdn \
+              --output tsv)
+            EGRESS_SMOKE_URL="https://${EGRESS_FQDN}/health"
           fi
-
-          if [ "${{ steps.smoke-scanner.outcome }}" == "failure" ]; then
-            rollback_app "$SCANNER_NAME" "$SCANNER_SMOKE_URL"
+          ROLLBACK_FAILED=0
+          rollback_app "$APP_NAME" "$APP_PREVIOUS" "$APP_SMOKE_URL" || ROLLBACK_FAILED=1
+          rollback_app "$SCANNER_NAME" "$SCANNER_PREVIOUS" "$SCANNER_SMOKE_URL" || ROLLBACK_FAILED=1
+          rollback_app "$EGRESS_NAME" "$EGRESS_PREVIOUS" "$EGRESS_SMOKE_URL" || ROLLBACK_FAILED=1
+          if [ "$ROLLBACK_FAILED" -ne 0 ]; then
+            echo "::error::One or more previous revisions did not recover. Manual recovery required."
+            exit 1
           fi
-
-          if [ "$ROLLBACK_FAILED" -eq 1 ]; then
-            echo "::error::Revision recovery could not complete for one or more apps."
-            echo "::error::Manual recovery must activate a retained revision, assign traffic to it, and verify /api/ready. Database migrations and app-scope configuration are not rolled back."
-          fi
-
-          # Always exit 0 here so the workflow records the original health-check
-          # failure as the job result, not the rollback step.
-          exit 0

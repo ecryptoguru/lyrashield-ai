@@ -116,7 +116,17 @@ valid. `dataaxiom/ghcr-cleanup-action` resolves manifest lists before deleting s
 avoid that, but a first run against accumulated history was reviewed before going live rather
 than trusted blind.
 
-**Rollback boundary.** Container Apps revision recovery is not complete merely because an older revision is activated. Production traffic must be assigned to that revision and `/api/ready` must pass afterward. Single-revision mode may retain no previous revision to reactivate. The workflow treats missing history, traffic reassignment failure, or failed readiness as manual-recovery conditions. Revision recovery never reverses database migrations or application-scope secrets and configuration.
+**Rollout and rollback boundary.** The deployment workflow reads the least-privilege
+`ghcr-token` from `lyrashieldprodsecrets`, proves both exact image manifests are pullable,
+and syncs the registry credential before creating a revision. Renew that `read:packages`
+classic PAT before its current 2026-11-20 expiry; the deploy identity has
+`Key Vault Secrets User` only on that secret. All three Container Apps use multiple-revision
+mode. Existing production revisions keep 100% traffic while app, scanner, and egress-proxy
+candidates pass their revision-specific readiness checks in parallel. Only then does one
+step promote all candidates. Failed promotion or public readiness restores every captured
+previous traffic target. The scanner keeps one warm replica so a scale-from-zero private
+image pull cannot turn `/api/ready` into a multi-minute timeout. Revision recovery never
+reverses database migrations or application-scope secrets and configuration.
 
 **What the review found.** Run `30496418272`'s dry-run pass reported "no tagged images found
 to delete" and "no untagged images found" for both packages — with `keep-n-tagged: 10` and
