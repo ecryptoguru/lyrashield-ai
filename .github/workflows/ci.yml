@@ -678,13 +678,3 @@ jobs:
 
       - name: Build
         run: pnpm --filter @lyrashield/desktop-frontend build
-
-  deploy-azure:
-    name: Deploy to Azure
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
-    needs: [security, lint-and-typecheck, changes, rls-child-write-repro]
-    uses: ./.github/workflows/deploy-azure.yml
-    secrets: inherit
-    permissions:
-      contents: read
-      packages: write

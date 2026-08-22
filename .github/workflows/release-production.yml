@@ -1,0 +1,26 @@
+name: Release production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-production-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-azure:
+    if: github.event.workflow_run.conclusion == 'success'
+    uses: ./.github/workflows/deploy-azure.yml
+    with:
+      source_sha: ${{ github.event.workflow_run.head_sha }}
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
