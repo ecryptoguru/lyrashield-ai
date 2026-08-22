@@ -744,6 +744,10 @@ jobs:
         id: smoke-candidates
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_REVISION: ${{ steps.deploy-app.outputs.revision }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_REVISION: ${{ steps.deploy-scanner.outputs.revision }}
           EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           APP_FQDN: ${{ steps.deploy-app.outputs.fqdn }}
@@ -753,10 +757,20 @@ jobs:
         run: |
           smoke_candidate() {
             local label="$1"
-            local fqdn="$2"
-            local path="$3"
+            local name="$2"
+            local revision="$3"
+            local fqdn="$4"
+            local path="$5"
             if [ -z "$fqdn" ]; then return 0; fi
-            for attempt in $(seq 1 60); do
+            for attempt in $(seq 1 120); do
+              if [ "$attempt" = "61" ]; then
+                echo "::warning::${label} candidate missed its first readiness window; restarting the zero-traffic revision once."
+                timeout --foreground 180s az containerapp revision restart \
+                  --name "$name" \
+                  --resource-group "$RG" \
+                  --revision "$revision" \
+                  --output none
+              fi
               if curl --fail --silent --show-error --max-time 5 "https://${fqdn}${path}"; then
                 echo "${label} candidate health OK"
                 return 0
@@ -764,12 +778,20 @@ jobs:
               echo "${label} candidate not ready (attempt ${attempt}), retrying in 5s..."
               sleep 5
             done
-            echo "::error::${label} candidate health failed after 60 attempts. Production traffic was not changed."
+            echo "::error::${label} candidate health failed after one bounded revision restart. Production traffic was not changed."
             return 1
           }
           smoke_egress_candidate() {
             if [ -z "$EGRESS_NAME" ]; then return 0; fi
-            for attempt in $(seq 1 60); do
+            for attempt in $(seq 1 120); do
+              if [ "$attempt" = "61" ]; then
+                echo "::warning::egress-proxy candidate missed its first readiness window; restarting the zero-traffic revision once."
+                timeout --foreground 180s az containerapp revision restart \
+                  --name "$EGRESS_NAME" \
+                  --resource-group "$RG" \
+                  --revision "$EGRESS_REVISION" \
+                  --output none
+              fi
               local health
               local running
               health=$(az containerapp revision show \
@@ -803,11 +825,11 @@ jobs:
               echo "egress-proxy candidate not ready (attempt ${attempt}), retrying in 5s..."
               sleep 5
             done
-            echo "::error::egress-proxy candidate health failed after 60 attempts. Production traffic was not changed."
+            echo "::error::egress-proxy candidate health failed after one bounded revision restart. Production traffic was not changed."
             return 1
           }
-          smoke_candidate app "$APP_FQDN" /api/ready & APP_SMOKE_PID=$!
-          smoke_candidate scanner "$SCANNER_FQDN" /api/ready & SCANNER_SMOKE_PID=$!
+          smoke_candidate app "$APP_NAME" "$APP_REVISION" "$APP_FQDN" /api/ready & APP_SMOKE_PID=$!
+          smoke_candidate scanner "$SCANNER_NAME" "$SCANNER_REVISION" "$SCANNER_FQDN" /api/ready & SCANNER_SMOKE_PID=$!
           smoke_egress_candidate & EGRESS_SMOKE_PID=$!
           CANDIDATE_SMOKE_FAILED=0
           wait "$APP_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1

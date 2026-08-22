@@ -130,6 +130,28 @@ describe("worker Docker runtime", () => {
     expect(deployWorkflow).toContain("Verify engine revision provenance")
     expect(deployWorkflow).toContain("packages: write")
     expect(deployWorkflow).not.toMatch(/^permissions:\n  contents: read\n  packages: write/m)
+    const appSmoke = deployWorkflow.slice(
+      deployWorkflow.indexOf("smoke_candidate()"),
+      deployWorkflow.indexOf("smoke_egress_candidate()")
+    )
+    const egressSmoke = deployWorkflow.slice(
+      deployWorkflow.indexOf("smoke_egress_candidate()"),
+      deployWorkflow.indexOf("smoke_candidate app")
+    )
+    for (const smoke of [appSmoke, egressSmoke]) {
+      expect(smoke).toContain("for attempt in $(seq 1 120)")
+      expect(smoke).toContain('if [ "$attempt" = "61" ]')
+      expect(
+        smoke.match(/timeout --foreground 180s az containerapp revision restart/g)
+      ).toHaveLength(1)
+    }
+    expect(deployWorkflow).toContain(
+      'smoke_candidate app "$APP_NAME" "$APP_REVISION" "$APP_FQDN" /api/ready'
+    )
+    expect(deployWorkflow).toContain(
+      'smoke_candidate scanner "$SCANNER_NAME" "$SCANNER_REVISION" "$SCANNER_FQDN" /api/ready'
+    )
+    expect(deployWorkflow).toContain("failed after one bounded revision restart")
   })
 
   it("audits private-key content without rejecting public certificate bundles", () => {
