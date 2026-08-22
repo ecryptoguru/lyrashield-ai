@@ -77,15 +77,32 @@ export async function releaseReserveForAffiliate(
     return { released: 0, totalAmount: new Prisma.Decimal(0), currency: null }
   }
 
-  const payoutId = `${affiliateId}:reserve-release:${now.toISOString()}`
   const finalCurrency = currency ?? "USD"
 
-  await prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx) => {
+    const claimed: { commissionId: string; amount: Prisma.Decimal }[] = []
+    for (const item of releaseItems) {
+      const result = await tx.commission.updateMany({
+        where: { id: item.commissionId, reserveReleasedAt: null },
+        data: { reserveReleasedAt: now, reserveReleasedAmount: item.amount },
+      })
+      if (result.count === 1) claimed.push(item)
+    }
+
+    if (claimed.length === 0) return null
+
+    const payable = claimed.filter((item) => item.amount.gt(0))
+    const claimedTotal = payable.reduce((sum, item) => sum.plus(item.amount), new Prisma.Decimal(0))
+    if (payable.length === 0) {
+      return { released: claimed.length, totalAmount: claimedTotal, payoutId: null }
+    }
+
+    const payoutId = `${affiliateId}:reserve-release:${now.toISOString()}`
     const payout = await tx.payout.create({
       data: {
         id: payoutId,
         affiliateId,
-        amount: totalAmount,
+        amount: claimedTotal,
         currency: finalCurrency,
         status: "PENDING",
         isReserveRelease: true,
@@ -93,8 +110,7 @@ export async function releaseReserveForAffiliate(
         provider: null,
       },
     })
-
-    for (const item of releaseItems) {
+    for (const item of payable) {
       await tx.payoutItem.create({
         data: {
           payoutId: payout.id,
@@ -103,50 +119,35 @@ export async function releaseReserveForAffiliate(
           isReserveRelease: true,
         },
       })
-      // CAS: only claim if still unreleased — capture-only invariant
-      const claimed = await tx.commission.updateMany({
-        where: { id: item.commissionId, reserveReleasedAt: null },
-        data: {
-          reserveReleasedAt: now,
-          reserveReleasedAmount: item.amount,
-        },
-      })
-      if (claimed.count === 0) {
-        // Concurrent winner already claimed — roll back this item to keep invariants
-        // Delete the orphan item and adjust payout total would be complex; instead
-        // we treat this as idempotent no-op by reverting via delete. Simpler: throw
-        // to abort whole tx and let caller retry; but for single affiliate the
-        // outer loop will see zero on next pass. For now, if claim fails we
-        // delete the item we just created (owned-only cleanup).
-        await tx.payoutItem.deleteMany({
-          where: { payoutId: payout.id, commissionId: item.commissionId },
-        })
-      }
     }
+    return { released: claimed.length, totalAmount: claimedTotal, payoutId: payout.id }
+  })
 
-    const affiliateRow = await tx.affiliate.findUnique({
+  if (!outcome) return { released: 0, totalAmount: new Prisma.Decimal(0), currency: null }
+
+  if (outcome.payoutId) {
+    const affiliateRow = await prisma.affiliate.findUnique({
       where: { id: affiliateId },
       select: { userId: true },
     })
     const membership = affiliateRow
-      ? await tx.workspaceMember.findFirst({
+      ? await prisma.workspaceMember.findFirst({
           where: { userId: affiliateRow.userId },
           select: { workspaceId: true },
         })
       : null
-
     if (membership) {
-      await tx.auditLog
+      await prisma.auditLog
         .create({
           data: {
             workspaceId: membership.workspaceId,
             action: "affiliate.reserve_released",
             resourceType: "payout",
-            resourceId: payout.id,
+            resourceId: outcome.payoutId,
             metadata: {
               affiliateId,
-              commissionsReleased: releaseItems.length,
-              totalAmount: totalAmount.toString(),
+              commissionsReleased: outcome.released,
+              totalAmount: outcome.totalAmount.toString(),
               currency: finalCurrency,
             },
           },
@@ -155,19 +156,19 @@ export async function releaseReserveForAffiliate(
     } else {
       logger.warn("Reserve released but no owning workspace found — audit log skipped", {
         affiliateId,
-        payoutId: payout.id,
+        payoutId: outcome.payoutId,
       })
     }
-  })
+  }
 
   logger.info("Reserve released for affiliate", {
     affiliateId,
-    commissionsReleased: releaseItems.length,
-    totalAmount: totalAmount.toString(),
+    commissionsReleased: outcome.released,
+    totalAmount: outcome.totalAmount.toString(),
     currency: finalCurrency,
   })
 
-  return { released: releaseItems.length, totalAmount, currency: finalCurrency }
+  return { released: outcome.released, totalAmount: outcome.totalAmount, currency: finalCurrency }
 }
 
 export async function releaseReserve(now: Date = new Date()): Promise<ReserveReleaseResult> {

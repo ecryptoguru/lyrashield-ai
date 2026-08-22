@@ -68,13 +68,6 @@ export async function getByokStatus(): Promise<ByokStatus> {
 }
 
 // Scan — durable lifecycle, typed wrappers only (no raw invoke elsewhere)
-export async function createScan(
-  target: ScanTarget,
-  mode: ScanMode,
-  instruction?: string
-): Promise<string> {
-  return invoke("create_scan", { target, mode, instruction: instruction ?? null })
-}
 export async function startScan(
   target: ScanTarget,
   mode: ScanMode,
@@ -127,6 +120,12 @@ export async function connectWorkspace(
   workspaceId: string
 ): Promise<SyncConnection> {
   return invoke("connect_workspace", { apiUrl: apiUrl ?? null, workspaceId })
+}
+export async function saveSyncApiKey(apiKey: string): Promise<void> {
+  return invoke("save_sync_api_key", { apiKey })
+}
+export async function hasSyncApiKey(): Promise<boolean> {
+  return invoke("has_sync_api_key")
 }
 export async function syncFindings(
   apiUrl: string | undefined,

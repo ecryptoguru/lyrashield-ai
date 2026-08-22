@@ -271,8 +271,45 @@ pub async fn mark_running(app: &AppHandle, scan_id: &str) -> Result<(), String> 
     let store = storage_for(app);
     store
         .execute(
-            "UPDATE scans SET status = ? WHERE scan_id = ?",
+            "UPDATE scans SET status = ? WHERE scan_id = ? AND status = 'pending'",
             vec!["running".into(), scan_id.into()],
+        )
+        .await
+}
+
+pub async fn persist_finding(
+    app: &AppHandle,
+    scan_id: &str,
+    finding: &Finding,
+) -> Result<(), String> {
+    storage_for(app)
+        .execute(
+            "INSERT INTO findings (id, scan_id, severity, title, description, file_path, line_number, status, verified, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            vec![
+                finding.id.clone().into(),
+                scan_id.into(),
+                finding.severity.clone().into(),
+                finding.title.clone().into(),
+                finding.description.clone().map(JsonValue::String).unwrap_or(JsonValue::Null),
+                finding.file_path.clone().map(JsonValue::String).unwrap_or(JsonValue::Null),
+                finding.line_number.map(|line| JsonValue::Number(line.into())).unwrap_or(JsonValue::Null),
+                finding.status.clone().into(),
+                finding.verified.into(),
+                finding.detected_at.clone().into(),
+            ],
+        )
+        .await
+}
+
+pub async fn set_finding_count(
+    app: &AppHandle,
+    scan_id: &str,
+    finding_count: usize,
+) -> Result<(), String> {
+    storage_for(app)
+        .execute(
+            "UPDATE scans SET finding_count = ? WHERE scan_id = ?",
+            vec![(finding_count as i64).into(), scan_id.into()],
         )
         .await
 }
@@ -353,7 +390,7 @@ pub async fn set_terminal(
     };
     store
         .execute(
-            "UPDATE scans SET status = ?, completed_at = ?, exit_code = ?, error = ? WHERE scan_id = ?",
+            "UPDATE scans SET status = ?, completed_at = ?, exit_code = ?, error = ? WHERE scan_id = ? AND status IN ('pending', 'running')",
             vec![
                 status_str.into(),
                 now.into(),

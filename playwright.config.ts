@@ -3,6 +3,11 @@ import { existsSync } from "node:fs"
 
 if (existsSync(".env")) process.loadEnvFile(".env")
 
+// Local Docker commonly uses one owner connection for both application and
+// privileged test setup. CI still supplies a separate restricted runtime URL.
+const e2eSystemDatabaseUrl =
+  process.env.DATABASE_SYSTEM_URL?.trim() || process.env.DATABASE_URL?.trim() || ""
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -33,7 +38,7 @@ export default defineConfig({
       // required for privileged system operations (e.g. license activation's
       // cross-workspace key-hash lookup via getSystemPrisma()). CI sets these
       // explicitly in the workflow; locally they come from .env loaded above.
-      `export DATABASE_URL="${process.env.DATABASE_URL ?? ""}" DATABASE_SYSTEM_URL="${process.env.DATABASE_SYSTEM_URL ?? ""}" ` +
+      `export DATABASE_URL="${process.env.DATABASE_URL ?? ""}" DATABASE_SYSTEM_URL="${e2eSystemDatabaseUrl}" ` +
       "BETTER_AUTH_URL=http://127.0.0.1:3100 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 " +
       "NEXT_PUBLIC_MARKETING_URL=https://lyrashieldai.com " +
       "ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3100 TRUSTED_PROXY_IP_HEADER=x-forwarded-for " +

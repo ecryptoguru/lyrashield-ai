@@ -13,6 +13,7 @@ vi.mock("./client", () => ({
 }))
 
 import { prisma } from "./client"
+import { Prisma } from "./generated/prisma"
 import {
   createNotification,
   getNotification,
@@ -52,6 +53,7 @@ const baseNotification = {
 describe("notification-service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPrisma.notification.updateMany.mockResolvedValue({ count: 1 })
   })
 
   it("marks all notifications read with workspace and recipient scoping", async () => {
@@ -298,8 +300,10 @@ describe("notification-service", () => {
 
       expect(mockPrisma.notification.create).toHaveBeenCalledTimes(3)
       expect(sendFn).toHaveBeenCalledTimes(3)
-      expect(mockPrisma.notification.update).toHaveBeenCalledTimes(3)
-      const updateCalls = mockPrisma.notification.update.mock.calls
+      expect(mockPrisma.notification.updateMany).toHaveBeenCalledTimes(6)
+      const updateCalls = mockPrisma.notification.updateMany.mock.calls.filter(
+        (call) => call[0].data.status === "sent"
+      )
       for (const call of updateCalls) {
         expect(call[0].data.status).toBe("sent")
         expect(call[0].data.sentAt).toBeInstanceOf(Date)
@@ -322,7 +326,9 @@ describe("notification-service", () => {
         sendFn,
       })
 
-      const updateCalls = mockPrisma.notification.update.mock.calls
+      const updateCalls = mockPrisma.notification.updateMany.mock.calls.filter(
+        (call) => call[0].data.status === "failed"
+      )
       for (const call of updateCalls) {
         expect(call[0].data.status).toBe("failed")
       }
@@ -347,6 +353,38 @@ describe("notification-service", () => {
 
       expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1)
       expect(sendFn).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not send when a concurrent worker holds an unexpired delivery lease", async () => {
+      mockPrisma.notification.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError("duplicate", {
+          code: "P2002",
+          clientVersion: "test",
+        })
+      )
+      mockPrisma.notification.findFirst.mockResolvedValue({
+        ...baseNotification,
+        status: "sending",
+        deliveryLeaseExpiresAt: new Date(Date.now() + 60_000),
+      })
+      mockPrisma.notification.updateMany.mockResolvedValue({ count: 0 })
+      const sendFn = vi.fn().mockResolvedValue(true)
+
+      await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.completed",
+        title: "Scan Done",
+        body: "All good",
+        channels: ["in_app"],
+        sendFn,
+      })
+
+      expect(sendFn).not.toHaveBeenCalled()
+      expect(mockPrisma.notification.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: "notif-1" }),
+        })
+      )
     })
   })
 })

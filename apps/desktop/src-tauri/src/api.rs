@@ -31,6 +31,25 @@ impl ApiClient {
         Ok(Self { base_url, client })
     }
 
+    /// Workspace API keys authenticate Cloud Sync. They remain in OS keychain
+    /// and are attached only to requests made by the native sync client.
+    pub fn new_authenticated(api_url: Option<String>, api_key: &str) -> Result<Self, String> {
+        if api_key.trim().is_empty() {
+            return Err("Cloud Sync API key is not configured".into());
+        }
+        let base_url = api_url.unwrap_or_else(|| DEFAULT_API_URL.to_string());
+        let mut headers = reqwest::header::HeaderMap::new();
+        let value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", api_key))
+            .map_err(|_| "Cloud Sync API key contains invalid HTTP characters".to_string())?;
+        headers.insert(reqwest::header::AUTHORIZATION, value);
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .default_headers(headers)
+            .build()
+            .map_err(|e| format!("failed to build HTTP client: {}", e))?;
+        Ok(Self { base_url, client })
+    }
+
     pub fn base_url(&self) -> &str {
         &self.base_url
     }
@@ -59,6 +78,23 @@ impl ApiClient {
         let resp = self
             .client
             .get(url)
+            .send()
+            .await
+            .map_err(|e| format!("request failed: {}", e))?;
+        let status = resp.status();
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("failed to read response: {}", e))?;
+        Ok(HttpResponse { status, body: text })
+    }
+
+    /// Generic PUT request.
+    pub async fn put(&self, url: &str, body: &serde_json::Value) -> Result<HttpResponse, String> {
+        let resp = self
+            .client
+            .put(url)
+            .json(body)
             .send()
             .await
             .map_err(|e| format!("request failed: {}", e))?;

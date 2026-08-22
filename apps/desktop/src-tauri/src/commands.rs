@@ -163,24 +163,6 @@ pub fn get_byok_status() -> Result<byok::ByokStatus, String> {
 // --- Scan commands ---
 
 #[tauri::command]
-pub async fn create_scan(
-    app: tauri::AppHandle,
-    target: ScanTarget,
-    mode: ScanMode,
-    instruction: Option<String>,
-) -> Result<String, String> {
-    let scan_id = format!("scan-{}", chrono::Utc::now().timestamp_millis());
-    let config = ScanConfig {
-        scan_id: scan_id.clone(),
-        target,
-        mode,
-        instruction,
-    };
-    crate::scan::runner::create_scan_record(app, &config).await?;
-    Ok(scan_id)
-}
-
-#[tauri::command]
 pub async fn start_scan(
     app: tauri::AppHandle,
     target: ScanTarget,
@@ -254,6 +236,16 @@ pub async fn connect_workspace(
 }
 
 #[tauri::command]
+pub fn save_sync_api_key(api_key: String) -> Result<(), String> {
+    sync::save_sync_api_key(&api_key)
+}
+
+#[tauri::command]
+pub fn has_sync_api_key() -> Result<bool, String> {
+    sync::has_sync_api_key()
+}
+
+#[tauri::command]
 pub async fn sync_findings(
     api_url: Option<String>,
     workspace_id: String,
@@ -277,7 +269,8 @@ pub async fn fetch_sync_cursor(
 
 #[tauri::command]
 pub fn disconnect_sync() -> Result<(), String> {
-    sync::disconnect()
+    sync::disconnect()?;
+    sync::clear_sync_api_key()
 }
 
 // --- Helpers ---

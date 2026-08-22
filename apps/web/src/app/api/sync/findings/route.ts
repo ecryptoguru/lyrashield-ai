@@ -7,6 +7,7 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { hashLicenseKey } from "../../../../lib/licenses/license-service"
+import { hasSyncWriteAccess } from "../../../../lib/sync-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -81,6 +82,10 @@ export async function POST(request: Request) {
       }
     }
     const { workspaceId, licenseKey, findings, reports } = raw
+
+    if (!hasSyncWriteAccess(session, workspaceId)) {
+      return apiError("FORBIDDEN", "A write-capable key for this workspace is required", 403)
+    }
 
     // Detection-state-only validation BEFORE any DB write
     for (const f of findings) {

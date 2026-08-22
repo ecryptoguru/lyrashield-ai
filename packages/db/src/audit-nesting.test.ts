@@ -16,7 +16,7 @@ function sourceFiles(directory: string): string[] {
 
 describe("audit nesting regression", () => {
   it("bans tx.auditLog.create outside the allowlist (post-commit best-effort required)", () => {
-    const pattern = /\btx\.auditLog\.create\b/
+    const pattern = /\btx\.auditLog\s*\.\s*create\b/
     const offenders = ["apps", "packages"].flatMap((root) =>
       sourceFiles(join(repoRoot, root, ""))
         .map((file) => relative(repoRoot, file))

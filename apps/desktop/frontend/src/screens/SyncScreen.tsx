@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react"
 import type { SyncConnection, SyncResult } from "../lib/types"
-import { connectWorkspace, disconnectSync, getSyncState, syncFindings } from "../lib/tauri"
+import {
+  connectWorkspace,
+  disconnectSync,
+  getSyncState,
+  hasSyncApiKey,
+  saveSyncApiKey,
+  syncFindings,
+} from "../lib/tauri"
 
 interface Props {
   findings: {
@@ -19,6 +26,8 @@ interface Props {
 export function SyncScreen({ findings }: Props) {
   const [workspaceId, setWorkspaceId] = useState("")
   const [connection, setConnection] = useState<SyncConnection | null>(null)
+  const [apiKey, setApiKey] = useState("")
+  const [hasApiKey, setHasApiKey] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [results, setResults] = useState<SyncResult[]>([])
@@ -31,12 +40,20 @@ export function SyncScreen({ findings }: Props) {
         if (saved) setConnection(saved)
       })
       .catch(() => {})
+    hasSyncApiKey()
+      .then(setHasApiKey)
+      .catch(() => {})
   }, [])
 
   async function handleConnect() {
     setConnecting(true)
     setError(null)
     try {
+      if (!hasApiKey) {
+        await saveSyncApiKey(apiKey)
+        setApiKey("")
+        setHasApiKey(true)
+      }
       const conn = await connectWorkspace(undefined, workspaceId)
       setConnection(conn)
     } catch (e) {
@@ -78,8 +95,8 @@ export function SyncScreen({ findings }: Props) {
             <h1 className="text-2xl font-semibold text-foreground">Cloud Sync</h1>
             <p className="text-sm text-muted-foreground">
               Connect your LyraShield workspace to sync findings. Sync is off by default — only
-              explicitly selected findings leave your machine. Raw license key stays in OS keychain,
-              never in browser storage.
+              explicitly selected findings leave your machine. License and workspace API keys stay
+              in OS keychain, never browser storage.
             </p>
           </div>
           <div className="space-y-4">
@@ -90,10 +107,30 @@ export function SyncScreen({ findings }: Props) {
               placeholder="Workspace ID"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
             />
+            {!hasApiKey && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground" htmlFor="sync-api-key">
+                  Write-capable workspace API key
+                </label>
+                <input
+                  id="sync-api-key"
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  autoComplete="off"
+                  placeholder="lsk_…"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Create this in Cloud Dashboard → API Keys. It is scoped to this workspace and
+                  saved only in your OS keychain.
+                </p>
+              </div>
+            )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <button
               onClick={handleConnect}
-              disabled={connecting || !workspaceId}
+              disabled={connecting || !workspaceId || (!hasApiKey && !apiKey)}
               className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {connecting ? "Connecting…" : "Connect Workspace"}
@@ -160,7 +197,7 @@ export function SyncScreen({ findings }: Props) {
             onClick={handleDisconnect}
             className="w-full text-sm text-muted-foreground hover:text-foreground"
           >
-            Disconnect
+            Disconnect and remove stored cloud key
           </button>
         </div>
       </div>

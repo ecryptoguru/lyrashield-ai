@@ -1,6 +1,6 @@
 use crate::scan::types::*;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -11,6 +11,15 @@ use tokio::process::{Child, Command};
 static CHILDREN: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<Child>>>>> = OnceLock::new();
 fn children() -> &'static Mutex<HashMap<String, Arc<tokio::sync::Mutex<Child>>>> {
     CHILDREN.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+static CANCELLED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+fn cancelled() -> &'static Mutex<HashSet<String>> {
+    CANCELLED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn take_cancelled(scan_id: &str) -> bool {
+    cancelled().lock().unwrap().remove(scan_id)
 }
 
 fn parse_finding_line(line: &str) -> Option<Finding> {
@@ -105,6 +114,24 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
         .await
         .map_err(|e| format!("create_scan failed: {}", e))?;
 
+    tauri::async_runtime::spawn(async move {
+        let runner_scan_id = config.scan_id.clone();
+        if let Err(error) = run_scan(app.clone(), config).await {
+            if !take_cancelled(&runner_scan_id) {
+                let _ = persist_terminal_failure(&app, &runner_scan_id, &error).await;
+            }
+        }
+    });
+
+    Ok(scan_id)
+}
+
+async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
+    let scan_id = config.scan_id.clone();
+    if take_cancelled(&scan_id) {
+        return Ok(());
+    }
+
     // Resolve BYOK env for child only
     let byok_env = resolve_byok_env().map_err(|e| format!("BYOK missing: {}", e))?;
 
@@ -112,6 +139,9 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
     crate::scan::store::mark_running(&app, &scan_id)
         .await
         .map_err(|e| format!("mark_running persistence failed: {}", e))?;
+    if take_cancelled(&scan_id) {
+        return Ok(());
+    }
 
     let seq: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
     // Persist Started event seq 0
@@ -123,6 +153,9 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
         .await
         .map_err(|e| format!("persist started failed: {}", e))?;
     let _ = app.emit("scan://started", &started);
+    if take_cancelled(&scan_id) {
+        return Ok(());
+    }
 
     // Spawn engine with BYOK env only in child
     let engine_cmd = if which::which("lyrashield").is_ok() {
@@ -131,7 +164,6 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
         "strix"
     } else {
         let err = "LyraShield engine not found on PATH".to_string();
-        let _ = persist_failure(&app, &scan_id, &seq, &err).await;
         return Err(err);
     };
 
@@ -181,6 +213,12 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
         let mut map = children().lock().unwrap();
         map.insert(scan_id.clone(), child_arc.clone());
     }
+    if take_cancelled(&scan_id) {
+        let _ = child_arc.lock().await.kill().await;
+        let mut map = children().lock().unwrap();
+        map.remove(&scan_id);
+        return Ok(());
+    }
 
     let app_clone = app.clone();
     let scan_id_clone = scan_id.clone();
@@ -189,6 +227,7 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
         let mut findings: Vec<Finding> = Vec::new();
+        let mut persistence_error: Option<String> = None;
         while let Ok(Some(line)) = lines.next_line().await {
             let cur = seq_clone.fetch_add(1, Ordering::SeqCst);
             let progress = ScanEvent::Progress {
@@ -199,15 +238,8 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
             // Persistence failure prevents success — log but continue? We persist and if it fails we mark failed after loop
             let persisted =
                 crate::scan::store::append_event(&app_clone, &scan_id_clone, cur, &progress).await;
-            if persisted.is_err() {
-                // persistence failure should eventually cause terminal Failed, not silent success
-                let _ = app_clone.emit(
-                    "scan://failed",
-                    ScanEvent::Failed {
-                        scan_id: scan_id_clone.clone(),
-                        error: "persistence failed".into(),
-                    },
-                );
+            if let Err(error) = persisted {
+                persistence_error.get_or_insert(error);
             } else {
                 let _ = app_clone.emit("scan://progress", &progress);
             }
@@ -217,19 +249,26 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
                     scan_id: scan_id_clone.clone(),
                     finding: finding.clone(),
                 };
-                let _ = crate::scan::store::append_event(
-                    &app_clone,
-                    &scan_id_clone,
-                    fseq,
-                    &finding_evt,
-                )
-                .await;
-                let _ = app_clone.emit("scan://finding", &finding_evt);
-                // Also persist finding row for detail view (best-effort but fail-closed overall)
+                if let Err(error) =
+                    crate::scan::store::append_event(&app_clone, &scan_id_clone, fseq, &finding_evt)
+                        .await
+                {
+                    persistence_error.get_or_insert(error);
+                } else {
+                    let _ = app_clone.emit("scan://finding", &finding_evt);
+                }
+                if let Err(error) = persist_finding_row(&app_clone, &scan_id_clone, &finding).await
+                {
+                    persistence_error.get_or_insert(error);
+                }
                 findings.push(finding);
             }
         }
-        findings
+        if let Some(error) = persistence_error {
+            Err(format!("scan persistence failed: {}", error))
+        } else {
+            Ok(findings)
+        }
     });
 
     let app_clone2 = app.clone();
@@ -245,10 +284,10 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
                 line,
                 stream: "stderr".into(),
             };
-            let _ = crate::scan::store::append_event(&app_clone2, &scan_id_clone2, cur, &progress)
-                .await;
+            crate::scan::store::append_event(&app_clone2, &scan_id_clone2, cur, &progress).await?;
             let _ = app_clone2.emit("scan://progress", &progress);
         }
+        Ok::<(), String>(())
     });
 
     // Wait for child with registered handle
@@ -265,19 +304,22 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
         map.remove(&scan_id);
     }
 
-    let findings = stdout_task.await.unwrap_or_default();
-    let _ = stderr_task.await;
+    let findings = stdout_task
+        .await
+        .map_err(|error| format!("stdout task failed: {}", error))??;
+    stderr_task
+        .await
+        .map_err(|error| format!("stderr task failed: {}", error))??;
+
+    if take_cancelled(&scan_id) {
+        return Ok(());
+    }
 
     let exit_code = exit_status.code().unwrap_or(-1);
     let finding_count = findings.len();
     let is_success = exit_status.success() || exit_code == 2;
 
-    // Persist findings rows (for get_scan_detail) — fail-closed
-    // We already have events; also insert into findings table for SARIF/export
-    for f in &findings {
-        // best-effort legacy table; if fails, terminal will be Failed
-        let _ = persist_finding_row(&app, &scan_id, f).await;
-    }
+    crate::scan::store::set_finding_count(&app, &scan_id, finding_count).await?;
 
     let terminal_event = if is_success {
         ScanEvent::Completed {
@@ -345,21 +387,16 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
     );
 
     // Final reporting — persistence already validated
-    Ok(scan_id)
-}
-
-async fn persist_finding_row(app: &AppHandle, scan_id: &str, f: &Finding) -> Result<(), String> {
-    let _ = (app, scan_id, f);
     Ok(())
 }
 
-async fn persist_failure(
-    app: &AppHandle,
-    scan_id: &str,
-    seq: &Arc<AtomicU64>,
-    err: &str,
-) -> Result<(), String> {
-    let s = seq.fetch_add(1, Ordering::SeqCst);
+async fn persist_finding_row(app: &AppHandle, scan_id: &str, f: &Finding) -> Result<(), String> {
+    crate::scan::store::persist_finding(app, scan_id, f).await
+}
+
+async fn persist_terminal_failure(app: &AppHandle, scan_id: &str, err: &str) -> Result<(), String> {
+    let existing = crate::scan::store::get_events(app, scan_id, 0).await?;
+    let s = existing.last().map(|event| event.seq + 1).unwrap_or(0);
     let ev = ScanEvent::Failed {
         scan_id: scan_id.to_string(),
         error: err.to_string(),
@@ -373,10 +410,12 @@ async fn persist_failure(
         Some(err.to_string()),
     )
     .await;
+    let _ = app.emit("scan://failed", ev);
     Ok(())
 }
 
 pub async fn cancel_scan(app: AppHandle, scan_id: String) -> Result<(), String> {
+    cancelled().lock().unwrap().insert(scan_id.clone());
     let child_opt = {
         let map = children().lock().unwrap();
         map.get(&scan_id).cloned()

@@ -7,6 +7,7 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { hashLicenseKey } from "../../../../lib/licenses/license-service"
+import { hasSyncWriteAccess } from "../../../../lib/sync-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -18,7 +19,7 @@ const ConnectSchema = z.object({
 /**
  * POST /api/sync/connect
  *
- * Device-bound authenticated sync connect. Requires an authenticated session
+ * Native-keychain-backed authenticated sync connect. Requires an authenticated session
  * (requireAuth) AND proof-of-possession of the raw license key (hashed and
  * resolved via narrow privileged adapter). The raw key is never logged nor
  * returned. All cursor writes are bound to the authenticated workspace via
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
     const { workspaceId, licenseKey } = parsed.data
+
+    if (!hasSyncWriteAccess(session, workspaceId)) {
+      return apiError("FORBIDDEN", "A write-capable key for this workspace is required", 403)
+    }
 
     const membership = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: session.userId } },
