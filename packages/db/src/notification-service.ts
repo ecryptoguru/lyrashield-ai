@@ -217,6 +217,7 @@ export async function updateNotificationStatus(
 }
 
 const DEFAULT_CHANNELS = ["in_app", "slack", "discord"] as const
+const DELIVERY_LEASE_MS = 5 * 60 * 1000
 
 export async function createAndSendNotification(params: {
   workspaceId: string
@@ -267,26 +268,8 @@ export async function createAndSendNotification(params: {
           where: { channel, dedupeKey },
         })
         if (!existing) throw error
-        // concurrent duplicate already sent -> suppress second send
-        if (existing.status === "sent") {
-          logger.info("Notification deduped (already sent, suppressing duplicate send)", {
-            workspaceId: params.workspaceId,
-            notificationId: existing.id,
-            type: params.type,
-            channel,
-          })
-          continue
-        }
-        // retry path: update existing with latest payload and reuse it
-        notification = await prisma.notification.update({
-          where: { id: existing.id },
-          data: {
-            title: params.title,
-            body: params.body,
-            status: "pending",
-          },
-        })
-        logger.info("Notification deduped (retry updating existing)", {
+        notification = existing
+        logger.info("Notification deduped (reusing delivery identity)", {
           workspaceId: params.workspaceId,
           notificationId: existing.id,
           type: params.type,
@@ -299,22 +282,57 @@ export async function createAndSendNotification(params: {
 
     if (!notification) continue
 
-    const sent = await params.sendFn(channel, {
-      type: params.type,
-      title: params.title,
-      body: params.body,
-      workspaceName: params.workspaceName,
+    const now = new Date()
+    const claimed = await prisma.notification.updateMany({
+      where: {
+        id: notification.id,
+        OR: [
+          { status: { in: ["pending", "failed"] } },
+          { status: "sending", deliveryLeaseExpiresAt: { lt: now } },
+        ],
+      },
+      data: {
+        status: "sending",
+        deliveryLeaseExpiresAt: new Date(now.getTime() + DELIVERY_LEASE_MS),
+        deliveryAttempts: { increment: 1 },
+      },
     })
+    if (claimed.count === 0) {
+      logger.info("Notification delivery already claimed or sent", {
+        workspaceId: params.workspaceId,
+        notificationId: notification.id,
+        type: params.type,
+        channel,
+      })
+      continue
+    }
+
+    let sent = false
+    try {
+      sent = await params.sendFn(channel, {
+        type: params.type,
+        title: params.title,
+        body: params.body,
+        workspaceName: params.workspaceName,
+      })
+    } catch (error) {
+      logger.error("Notification delivery threw", {
+        workspaceId: params.workspaceId,
+        notificationId: notification.id,
+        channel,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
 
     if (sent) {
-      await prisma.notification.update({
-        where: { id: notification.id },
-        data: { status: "sent", sentAt: new Date() },
+      await prisma.notification.updateMany({
+        where: { id: notification.id, status: "sending" },
+        data: { status: "sent", sentAt: new Date(), deliveryLeaseExpiresAt: null },
       })
     } else {
-      await prisma.notification.update({
-        where: { id: notification.id },
-        data: { status: "failed" },
+      await prisma.notification.updateMany({
+        where: { id: notification.id, status: "sending" },
+        data: { status: "failed", deliveryLeaseExpiresAt: null },
       })
     }
   }

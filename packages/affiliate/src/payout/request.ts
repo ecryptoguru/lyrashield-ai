@@ -146,16 +146,32 @@ export async function requestPayout(params: {
   }
 
   if (sendFn) {
+    let result: { success: boolean; providerPayoutId?: string; error?: string }
     try {
-      const result = await sendFn(
+      result = await sendFn(
         payout.id,
         payout.amount.toString(),
         payout.currency,
         affiliate.payoutMethod
       )
+    } catch (error) {
+      // A transport error is ambiguous: provider may have accepted a payment
+      // after timing out. Keep capture and payout intact for reconciliation.
+      await markPayoutForReconciliation(payout.id, "PROVIDER_AMBIGUOUS")
+      logger.error("Payout provider outcome is ambiguous", {
+        payoutId: payout.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return {
+        success: false,
+        payoutId: payout.id,
+        error: "Payout outcome pending reconciliation",
+      }
+    }
 
-      if (result.success) {
-        // One internal tx with CAS predicates, persist provider identity for convergent retry
+    if (result.success) {
+      try {
+        // One internal tx with CAS predicates, persist provider identity for convergent retry.
         await prisma.$transaction(async (tx) => {
           const updated = await tx.payout.updateMany({
             where: { id: payout.id, status: "PROCESSING" },
@@ -179,6 +195,8 @@ export async function requestPayout(params: {
                 })
               }
               logger.info("Payout already PAID — convergent retry", { payoutId: payout.id })
+            } else {
+              throw new Error("Payout is no longer eligible for finalization")
             }
           }
 
@@ -200,49 +218,48 @@ export async function requestPayout(params: {
           amount: payout.amount.toString(),
           itemCount: payout.itemCount,
         }
-      } else {
-        // Provider failed — release ONLY captured commissions (CAS), one tx
-        await prisma.$transaction(async (tx) => {
-          const updated = await tx.payout.updateMany({
-            where: { id: payout.id, status: "PROCESSING" },
-            data: { status: "FAILED", failureCode: "PROVIDER_ERROR" },
-          })
-          if (updated.count === 0) return
-          await tx.commission.updateMany({
-            where: { id: { in: payout.capturedIds }, status: "RESERVED", affiliateId },
-            data: { status: "AVAILABLE" },
-          })
-          await tx.payoutItem.deleteMany({ where: { payoutId: payout.id } })
-        })
-
-        logger.error("Payout provider failed", {
+      } catch (error) {
+        // Provider reported success. A local finalization failure must never
+        // release captured commissions or make this payout eligible again.
+        await markPayoutForReconciliation(
+          payout.id,
+          "FINALIZATION_REQUIRED",
+          result.providerPayoutId
+        )
+        logger.error("Payout finalization requires reconciliation", {
           payoutId: payout.id,
-          providerError: result.error ?? "unknown",
+          providerPayoutId: result.providerPayoutId,
+          error: error instanceof Error ? error.message : String(error),
         })
-
-        return { success: false, payoutId: payout.id, error: "Provider payout failed" }
+        return {
+          success: false,
+          payoutId: payout.id,
+          error: "Payout outcome pending reconciliation",
+        }
       }
-    } catch (error) {
-      await prisma.$transaction(async (tx) => {
-        const updated = await tx.payout.updateMany({
-          where: { id: payout.id, status: "PROCESSING" },
-          data: { status: "FAILED", failureCode: "PROVIDER_EXCEPTION" },
-        })
-        if (updated.count === 0) return
-        await tx.commission.updateMany({
-          where: { id: { in: payout.capturedIds }, status: "RESERVED", affiliateId },
-          data: { status: "AVAILABLE" },
-        })
-        await tx.payoutItem.deleteMany({ where: { payoutId: payout.id } })
-      })
-
-      logger.error("Payout provider exception", {
-        payoutId: payout.id,
-        error: error instanceof Error ? error.message : String(error),
-      })
-
-      return { success: false, payoutId: payout.id, error: "Provider exception" }
     }
+
+    // Provider explicitly rejected the payout. Only this known-negative result
+    // may release captured commissions.
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.payout.updateMany({
+        where: { id: payout.id, status: "PROCESSING" },
+        data: { status: "FAILED", failureCode: "PROVIDER_ERROR" },
+      })
+      if (updated.count === 0) return
+      await tx.commission.updateMany({
+        where: { id: { in: payout.capturedIds }, status: "RESERVED", affiliateId },
+        data: { status: "AVAILABLE" },
+      })
+      await tx.payoutItem.deleteMany({ where: { payoutId: payout.id } })
+    })
+
+    logger.error("Payout provider failed", {
+      payoutId: payout.id,
+      providerError: result.error ?? "unknown",
+    })
+
+    return { success: false, payoutId: payout.id, error: "Provider payout failed" }
   }
 
   logger.info("Payout created (pending provider confirmation)", {
@@ -255,5 +272,27 @@ export async function requestPayout(params: {
     payoutId: payout.id,
     amount: payout.amount.toString(),
     itemCount: payout.itemCount,
+  }
+}
+
+async function markPayoutForReconciliation(
+  payoutId: string,
+  failureCode: string,
+  providerPayoutId?: string
+): Promise<void> {
+  try {
+    await prisma.payout.updateMany({
+      where: { id: payoutId, status: "PROCESSING" },
+      data: { failureCode, ...(providerPayoutId ? { providerPayoutId } : {}) },
+    })
+  } catch (error) {
+    // Preserve the original PROCESSING record even when this diagnostic write
+    // is unavailable. Eligibility excludes PROCESSING payouts, so ambiguity
+    // remains fail-closed until an operator reconciles the provider reference.
+    logger.error("Failed to mark payout for reconciliation", {
+      payoutId,
+      failureCode,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 }

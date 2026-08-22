@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { Finding, ScanEvent } from "../lib/types"
 import { cancelScan, exportSarif, getScanEvents, onScanEvent } from "../lib/tauri"
 
@@ -12,56 +12,20 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
   const [findings, setFindings] = useState<Finding[]>([])
   const [status, setStatus] = useState<"running" | "completed" | "failed" | "cancelled">("running")
   const [error, setError] = useState<string | null>(null)
+  const seenFindings = useRef(new Set<string>())
 
-  // Replay-from-zero on mount to recover crashed scans
-  useEffect(() => {
-    getScanEvents(scanId, 0)
-      .then((events) => {
-        for (const se of events) {
-          const ev = se.event
-          if (ev.scanId !== scanId) continue
-          switch (ev.type) {
-            case "progress":
-              setProgressLines((prev) => [...prev.slice(-200), ev.line])
-              break
-            case "finding":
-              setFindings((prev) => [...prev, ev.finding])
-              break
-            case "completed":
-              setStatus("completed")
-              break
-            case "failed":
-              setStatus("failed")
-              setError(ev.error)
-              break
-            case "cancelled":
-              setStatus("cancelled")
-              break
-            default:
-              break
-          }
-        }
-        // If replay shows terminal state, don't stay running
-        const last = events[events.length - 1]?.event
-        if (
-          last &&
-          (last.type === "completed" || last.type === "failed" || last.type === "cancelled")
-        ) {
-          // status already set
-        }
-      })
-      .catch(() => {})
-  }, [scanId])
-
-  useEffect(() => {
-    const unlisten = onScanEvent((event: ScanEvent) => {
+  const applyEvent = useCallback(
+    (event: ScanEvent) => {
       if (event.scanId !== scanId) return
       switch (event.type) {
         case "progress":
           setProgressLines((prev) => [...prev.slice(-200), event.line])
           break
         case "finding":
-          setFindings((prev) => [...prev, event.finding])
+          if (!seenFindings.current.has(event.finding.id)) {
+            seenFindings.current.add(event.finding.id)
+            setFindings((prev) => [...prev, event.finding])
+          }
           break
         case "completed":
           setStatus("completed")
@@ -74,11 +38,20 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
           setStatus("cancelled")
           break
       }
-    })
+    },
+    [scanId]
+  )
+
+  // Subscribe before replay so a fast local scan cannot finish in the replay/listener gap.
+  useEffect(() => {
+    const unlisten = onScanEvent(applyEvent)
+    void getScanEvents(scanId, 0)
+      .then((events) => events.forEach((event) => applyEvent(event.event)))
+      .catch(() => {})
     return () => {
       unlisten.then((u) => u())
     }
-  }, [scanId])
+  }, [scanId, applyEvent])
 
   async function handleExportSarif() {
     try {

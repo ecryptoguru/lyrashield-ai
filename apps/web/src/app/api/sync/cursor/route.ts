@@ -6,13 +6,9 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { hashLicenseKey } from "../../../../lib/licenses/license-service"
+import { hasSyncWriteAccess } from "../../../../lib/sync-auth"
 
 export const dynamic = "force-dynamic"
-
-const CursorQuerySchema = z.object({
-  workspaceId: z.string().min(1),
-  licenseKey: z.string().min(1).max(200),
-})
 
 const CursorUpdateSchema = z.object({
   workspaceId: z.string().min(1),
@@ -27,65 +23,15 @@ const CursorUpdateSchema = z.object({
 /**
  * GET /api/sync/cursor
  *
- * Returns the authoritative numeric seq for resumable sync (single trusted store).
- * Desktop's native store must adopt this seq; local cursor is not trusted.
+ * Legacy URL cursor reads are intentionally rejected. License keys must never
+ * travel in query strings; use authenticated PUT with no requested advance.
  */
-export async function GET(request: Request) {
-  try {
-    const session = await requireAuth()
-    const { searchParams } = new URL(request.url)
-    const parsed = CursorQuerySchema.safeParse({
-      workspaceId: searchParams.get("workspaceId"),
-      licenseKey: searchParams.get("licenseKey"),
-    })
-    if (!parsed.success) {
-      return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
-    }
-    const { workspaceId, licenseKey } = parsed.data
-
-    const membership = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: session.userId } },
-    })
-    if (!membership || membership.status !== "active") {
-      return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
-    }
-
-    const keyHash = hashLicenseKey(licenseKey)
-    const row = await findLicenseForSyncByKeyHash(keyHash)
-    if (!row) {
-      return apiError("LICENSE_KEY_NOT_FOUND", "The provided license key is not recognized", 404)
-    }
-    const license = row.license
-    if (license.revoked) {
-      return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
-    }
-
-    const cursor = await withWorkspaceRLS(workspaceId, async (tx) =>
-      tx.syncCursor.findUnique({
-        where: { workspaceId_licenseId: { workspaceId, licenseId: license.id } },
-      })
-    )
-    if (!cursor) {
-      return apiError("SYNC_NOT_CONNECTED", "Sync has not been established", 409)
-    }
-
-    return apiSuccess(
-      {
-        cursorId: cursor.id,
-        seq: Number(cursor.seq),
-        // Canonical seq string alias for older desktop builds
-        cursor: String(cursor.seq),
-        lastSyncedAt: cursor.lastSyncedAt.toISOString(),
-        lastSyncedFindingId: cursor.lastSyncedFindingId,
-      },
-      200
-    )
-  } catch (error) {
-    const authErr = authErrorResponse(error)
-    if (authErr) return authErr
-    logger.error("Sync cursor GET failed", { error: String(error) })
-    return apiError("INTERNAL_ERROR", "Failed to get sync cursor", 500)
-  }
+export async function GET() {
+  return apiError(
+    "METHOD_NOT_SUPPORTED",
+    "Use authenticated PUT /api/sync/cursor; license keys are not accepted in URLs.",
+    405
+  )
 }
 
 /**
@@ -104,6 +50,9 @@ export async function PUT(request: Request) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
     const { workspaceId, licenseKey } = parsed.data
+    if (!hasSyncWriteAccess(session, workspaceId)) {
+      return apiError("FORBIDDEN", "A write-capable key for this workspace is required", 403)
+    }
     const requestedSeq = parsed.data.seq ?? parsed.data.expectedSeq
     const { lastSyncedFindingId } = parsed.data
 

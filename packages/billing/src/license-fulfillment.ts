@@ -10,7 +10,16 @@
  * instead. Retrieval route is one-time, hashed, expiring.
  */
 
-import { createHash, createPrivateKey, createPublicKey, randomUUID, randomBytes } from "node:crypto"
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  hkdfSync,
+  randomUUID,
+  randomBytes,
+} from "node:crypto"
 import { env } from "@lyrashield/config"
 import { getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
@@ -192,6 +201,39 @@ export function generateRetrievalToken(): string {
 
 export function hashRetrievalToken(token: string): string {
   return createHash("sha256").update(token).digest("hex")
+}
+
+const RETRIEVAL_KEY_PREFIX = "v1:"
+const RETRIEVAL_KEY_INFO = "lyrashield-license-retrieval/v1"
+
+/**
+ * Encrypt one-time license retrieval material at rest. This intentionally uses
+ * a purpose-derived key, so the Better Auth secret is never used directly for
+ * ciphertext and a compromise of another encrypted value cannot cross-decrypt
+ * this payload.
+ */
+export function encryptRetrievalKey(rawKey: string): string {
+  const key = Buffer.from(
+    hkdfSync("sha256", Buffer.from(env.BETTER_AUTH_SECRET), "", RETRIEVAL_KEY_INFO, 32)
+  )
+  const nonce = randomBytes(12)
+  const cipher = createCipheriv("aes-256-gcm", key, nonce)
+  const ciphertext = Buffer.concat([cipher.update(rawKey, "utf8"), cipher.final()])
+  return `${RETRIEVAL_KEY_PREFIX}${Buffer.concat([nonce, cipher.getAuthTag(), ciphertext]).toString("base64url")}`
+}
+
+export function decryptRetrievalKey(stored: string): string {
+  // Compatibility for retrieval links minted before encrypted storage. New
+  // writes always use v1; callers clear this material immediately after use.
+  if (!stored.startsWith(RETRIEVAL_KEY_PREFIX)) return stored
+  const encrypted = Buffer.from(stored.slice(RETRIEVAL_KEY_PREFIX.length), "base64url")
+  if (encrypted.length <= 28) throw new Error("retrieval key ciphertext is malformed")
+  const key = Buffer.from(
+    hkdfSync("sha256", Buffer.from(env.BETTER_AUTH_SECRET), "", RETRIEVAL_KEY_INFO, 32)
+  )
+  const decipher = createDecipheriv("aes-256-gcm", key, encrypted.subarray(0, 12))
+  decipher.setAuthTag(encrypted.subarray(12, 28))
+  return Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]).toString("utf8")
 }
 
 export function parseLocalProductIds(): Record<string, string> {
@@ -416,7 +458,7 @@ export async function issueLicenseForProviderOrder(params: {
           retrievalTokenHash,
           retrievalTokenExpiresAt: retrievalExpiresAt,
           retrievalTokenUsedAt: null,
-          retrievalRawKey: rawKey,
+          retrievalRawKey: encryptRetrievalKey(rawKey),
         },
       })
 
@@ -494,6 +536,13 @@ export async function issueLicenseForProviderOrder(params: {
           logger.info("License race resolved — returning existing delivered", { provider, orderId })
           return { licenseId: existing.licenseId, alreadyIssued: true }
         }
+
+        // A previous attempt may have persisted the license but failed while
+        // signing it. Never mark delivery successful until signing converges.
+        await issueSignedLicense(
+          existing.licenseId,
+          existing.license.perpetualFallbackBuild ?? resolvePublishedFallbackBuild()
+        )
 
         // If delivery failed / minted / delivering, retry delivery once before giving up
         // Generate a fresh token for the retry (old token plaintext not available)
@@ -587,17 +636,9 @@ export async function retrieveLicenseByToken(
   if (keyRow.retrievalTokenExpiresAt && new Date() > keyRow.retrievalTokenExpiresAt) return null
   if (!keyRow.retrievalRawKey) return null
 
-  const rawKey = keyRow.retrievalRawKey
-
-  // Mark used atomically — prevent concurrent double retrieval
-  const updated = await systemPrisma.licenseKey.updateMany({
-    where: { id: keyRow.id, retrievalTokenUsedAt: null },
-    data: { retrievalTokenUsedAt: new Date() },
-  })
-  if (updated.count === 0) return null // race lost
-
   const license = keyRow.license
-  // Reconstruct blob from stored license; ensure signature exists
+  // Build and sign before consuming the token. A transient signer/Key Vault
+  // failure must leave the customer able to retry their one-time link.
   let licenseFile: LicenseFile
   if (!license.signature || license.signature === "pending") {
     licenseFile = await issueSignedLicense(
@@ -620,14 +661,14 @@ export async function retrieveLicenseByToken(
 
   const blob = encodeLicenseBlob(licenseFile)
 
-  // Clear raw key after successful retrieval to reduce exposure (optional but reduces DB leak risk)
-  // Do not await failure — log minimally without key
-  await systemPrisma.licenseKey
-    .update({
-      where: { id: keyRow.id },
-      data: { retrievalRawKey: null },
-    })
-    .catch(() => {})
+  const rawKey = decryptRetrievalKey(keyRow.retrievalRawKey)
+  // Atomically consume token and remove encrypted key material. Only the
+  // winner, which already has the decrypted key in memory, receives it.
+  const updated = await systemPrisma.licenseKey.updateMany({
+    where: { id: keyRow.id, retrievalTokenUsedAt: null },
+    data: { retrievalTokenUsedAt: new Date(), retrievalRawKey: null },
+  })
+  if (updated.count === 0) return null
 
   return { licenseKey: rawKey, licenseBlob: blob, licenseId: license.id }
 }

@@ -1314,6 +1314,10 @@ model Notification {
   sentAt      DateTime?
   metadata    Json?
   dedupeKey   String?
+  // Short lease claims one external delivery attempt at a time. A crashed
+  // worker can be retried after lease expiry without concurrent sends.
+  deliveryLeaseExpiresAt DateTime?
+  deliveryAttempts      Int      @default(0)
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
 
@@ -1323,6 +1327,7 @@ model Notification {
   @@index([workspaceId])
   @@index([userId])
   @@index([status])
+  @@index([status, deliveryLeaseExpiresAt])
   @@index([workspaceId, createdAt])
 }
 
@@ -1723,7 +1728,7 @@ model LicenseKey {
   retrievalTokenHash      String?   @unique
   retrievalTokenExpiresAt DateTime?
   retrievalTokenUsedAt    DateTime?
-  // Encrypted raw key for one-time retrieval (cleared after use); stored only to allow retrieval via token
+  // AES-256-GCM encrypted raw key for one-time retrieval (cleared atomically after use).
   retrievalRawKey         String?
   createdAt         DateTime @default(now())
 

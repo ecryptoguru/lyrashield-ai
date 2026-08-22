@@ -6,6 +6,7 @@ use std::path::PathBuf;
 const MAX_FINDINGS_PER_BATCH: usize = 500;
 const KEYCHAIN_SERVICE: &str = "lyrashield";
 const LICENSE_KEY_ACCOUNT: &str = "license-key";
+const SYNC_API_KEY_ACCOUNT: &str = "sync-api-key";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,6 +112,45 @@ fn load_license_key_from_keychain() -> Result<String, String> {
         .map_err(|e| format!("license key not found in keychain: {}", e))
 }
 
+pub fn save_sync_api_key(api_key: &str) -> Result<(), String> {
+    if !api_key.starts_with("lsk_") || api_key.len() < 16 {
+        return Err("Enter a valid write-capable LyraShield workspace API key".into());
+    }
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, SYNC_API_KEY_ACCOUNT)
+        .map_err(|e| format!("keychain entry: {}", e))?;
+    entry
+        .set_password(api_key)
+        .map_err(|e| format!("save sync API key: {}", e))
+}
+
+pub fn has_sync_api_key() -> Result<bool, String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, SYNC_API_KEY_ACCOUNT)
+        .map_err(|e| format!("keychain entry: {}", e))?;
+    match entry.get_password() {
+        Ok(value) => Ok(!value.trim().is_empty()),
+        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(error) => Err(format!("read sync API key: {}", error)),
+    }
+}
+
+pub fn clear_sync_api_key() -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, SYNC_API_KEY_ACCOUNT)
+        .map_err(|e| format!("keychain entry: {}", e))?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(format!("clear sync API key: {}", error)),
+    }
+}
+
+fn authenticated_client(api_url: Option<String>) -> Result<ApiClient, String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, SYNC_API_KEY_ACCOUNT)
+        .map_err(|e| format!("keychain entry: {}", e))?;
+    let api_key = entry
+        .get_password()
+        .map_err(|_| "Cloud Sync API key is not configured".to_string())?;
+    ApiClient::new_authenticated(api_url, &api_key)
+}
+
 fn save_sync_state_blocking(
     workspace_id: &str,
     seq: u64,
@@ -188,7 +228,7 @@ pub async fn connect_workspace(
     workspace_id: &str,
 ) -> Result<SyncConnection, String> {
     let license_key = load_license_key_from_keychain()?;
-    let client = ApiClient::new(api_url)?;
+    let client = authenticated_client(api_url)?;
     let url = format!("{}/api/sync/connect", client.base_url());
     let body = serde_json::json!({
         "workspaceId": workspace_id,
@@ -268,7 +308,7 @@ pub async fn sync_findings(
             return results;
         }
     };
-    let client = match ApiClient::new(api_url) {
+    let client = match authenticated_client(api_url) {
         Ok(c) => c,
         Err(e) => {
             results.push(SyncResult::Error { message: e });
@@ -393,14 +433,16 @@ pub async fn fetch_and_adopt_cursor(
     workspace_id: &str,
 ) -> Result<SyncConnection, String> {
     let license_key = load_license_key_from_keychain()?;
-    let client = ApiClient::new(api_url)?;
-    let url = format!(
-        "{}/api/sync/cursor?workspaceId={}&licenseKey={}",
-        client.base_url(),
-        workspace_id,
-        license_key
-    );
-    let resp = client.get(&url).await?;
+    let client = authenticated_client(api_url)?;
+    let url = format!("{}/api/sync/cursor", client.base_url());
+    // PUT with no cursor advancement is the authenticated cursor read. Keep
+    // license proof in the JSON body, never in a URL or browser-visible store.
+    let resp = client
+        .put(
+            &url,
+            &serde_json::json!({ "workspaceId": workspace_id, "licenseKey": license_key }),
+        )
+        .await?;
     if !resp.status.is_success() {
         return Err(format!(
             "cursor fetch failed ({}): {}",
