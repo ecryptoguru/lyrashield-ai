@@ -1,18 +1,10 @@
-import { createAuthClient, type AuthClient as BetterAuthClient } from "better-auth/client"
-import { deviceAuthorizationClient } from "better-auth/client/plugins"
+import { createAuthClient } from "better-auth/client"
+import { deviceAuthorizationClient, inferAdditionalFields } from "better-auth/client/plugins"
+import type { auth } from "./auth"
 
-type DeviceAuthorizationClientPlugin = ReturnType<typeof deviceAuthorizationClient>
-type DeviceAuthorizationClientOptions = {
-  plugins: DeviceAuthorizationClientPlugin[]
-}
-
-const authClientOptions: DeviceAuthorizationClientOptions = {
-  plugins: [deviceAuthorizationClient()],
-}
-
-export const authClient = createAuthClient(authClientOptions) as BetterAuthClient<
-  typeof authClientOptions
->
+export const authClient = createAuthClient({
+  plugins: [inferAdditionalFields<typeof auth>(), deviceAuthorizationClient()],
+})
 
 export const {
   signIn,

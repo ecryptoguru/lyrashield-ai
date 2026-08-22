@@ -60,9 +60,10 @@ export async function verifyOAuthBearer(token: string): Promise<OAuthBearerConte
       const session = await auth.api.getSession({
         headers: new Headers({ authorization: `Bearer ${token}` }),
       })
-      const activeWorkspaceId = (session?.session as { activeWorkspaceId?: unknown } | undefined)
-        ?.activeWorkspaceId
-      const workspaceId = typeof activeWorkspaceId === "string" ? activeWorkspaceId : undefined
+      const workspaceId =
+        session && typeof session.session.activeWorkspaceId === "string"
+          ? session.session.activeWorkspaceId
+          : undefined
       if (!session || !workspaceId) return null
       return {
         userId: session.user.id,
