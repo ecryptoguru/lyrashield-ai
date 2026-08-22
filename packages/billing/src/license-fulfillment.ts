@@ -20,6 +20,8 @@ import {
   randomUUID,
   randomBytes,
 } from "node:crypto"
+import { DefaultAzureCredential } from "@azure/identity"
+import { SecretClient } from "@azure/keyvault-secrets"
 import { env } from "@lyrashield/config"
 import { getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
@@ -67,9 +69,9 @@ export function resolvePublishedFallbackBuild(): string | null {
   return published ? published : null
 }
 
-let keyVaultSecretsClient: import("@azure/keyvault-secrets").SecretClient | null = null
+let keyVaultSecretsClient: SecretClient | null = null
 
-function getKeyVaultSecretsClient(): import("@azure/keyvault-secrets").SecretClient {
+function getKeyVaultSecretsClient(): SecretClient {
   if (keyVaultSecretsClient) return keyVaultSecretsClient
   const vaultName = env.LYRASHIELD_KEY_VAULT_NAME
   if (!vaultName) {
@@ -77,9 +79,6 @@ function getKeyVaultSecretsClient(): import("@azure/keyvault-secrets").SecretCli
       "LYRASHIELD_KEY_VAULT_NAME is not set — cannot resolve the signing key from Key Vault"
     )
   }
-  const { SecretClient } =
-    require("@azure/keyvault-secrets") as typeof import("@azure/keyvault-secrets")
-  const { DefaultAzureCredential } = require("@azure/identity") as typeof import("@azure/identity")
   keyVaultSecretsClient = new SecretClient(
     `https://${vaultName}.vault.azure.net`,
     new DefaultAzureCredential()
