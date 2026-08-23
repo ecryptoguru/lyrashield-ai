@@ -239,9 +239,13 @@ test("keeps Free tools separate from the restored desktop Resources menu", async
 
   await toolsMenu.click()
   await expect(page.getByRole("link", { name: "All free tools", exact: true })).toBeVisible()
-  await expect(page.getByRole("link", { name: "AI App Security Scanner", exact: true })).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: "AI App Security Scanner", exact: true })
+  ).toBeVisible()
 
   await resourcesMenu.click()
-  await expect(resourcesDropdown.getByRole("link", { name: "Methodology", exact: true })).toBeVisible()
+  await expect(
+    resourcesDropdown.getByRole("link", { name: "Methodology", exact: true })
+  ).toBeVisible()
   await expect(resourcesDropdown.getByRole("link", { name: "Guides", exact: true })).toBeVisible()
 })
