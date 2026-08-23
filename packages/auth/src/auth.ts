@@ -1,18 +1,12 @@
 import { betterAuth } from "better-auth"
 import { prismaAdapter } from "better-auth/adapters/prisma"
-import {
-  bearer,
-  deviceAuthorization,
-  genericOAuth,
-  jwt,
-  microsoftEntraId,
-} from "better-auth/plugins"
+import { bearer, deviceAuthorization, jwt } from "better-auth/plugins"
 import { oauthProvider } from "@better-auth/oauth-provider"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
-import { isOAuthProviderConfigured } from "./oauth-providers"
+import { buildMicrosoftSocialProvider, isOAuthProviderConfigured } from "./oauth-providers"
 import { activeWorkspaceIdFromCookie } from "./oauth-workspace"
 import { resourcesMatch } from "./oauth-resource"
 import { hasPermission, PERMISSIONS } from "./permissions"
@@ -27,7 +21,6 @@ const AZURE_AD_TENANT_ID = env.AZURE_AD_TENANT_ID
 const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 const githubEnabled = isOAuthProviderConfigured(GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
 const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
-const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
 
 export const OAUTH_WORKSPACE_CLAIM = "https://lyrashieldai.com/workspace_id"
 export const OAUTH_SCOPE_READ = "lyrashield.read"
@@ -311,26 +304,17 @@ export const auth = betterAuth({
       enabled: googleEnabled,
       disableSignUp: false,
     },
+    microsoft: buildMicrosoftSocialProvider(
+      AZURE_AD_CLIENT_ID,
+      AZURE_AD_CLIENT_SECRET,
+      AZURE_AD_TENANT_ID
+    ),
   },
   plugins: [
     jwt(),
     bearer(),
     deviceAuthorization({ verificationUri: "/device" }),
     oauthProviderPlugin,
-    ...(microsoftEnabled
-      ? [
-          genericOAuth({
-            config: [
-              microsoftEntraId({
-                clientId: AZURE_AD_CLIENT_ID ?? "",
-                clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
-                tenantId: AZURE_AD_TENANT_ID || "common",
-                disableSignUp: false,
-              }),
-            ],
-          }),
-        ]
-      : []),
   ],
   session: {
     additionalFields: {
