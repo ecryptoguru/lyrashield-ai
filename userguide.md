@@ -466,8 +466,16 @@ LyraShield Local is a desktop app for macOS and Windows. It is a one-time 1-year
 - **Metering:** zero agent-minute metering; your AI pays, not LyraShield.
 - **Privacy:** scans run locally. No code, findings, or keys leave your machine.
 - **Optional cloud sync:** connect your LyraShield account to sync findings (see Cloud sync below — monotonic, device-bound).
-- **Perpetual fallback:** keep the last eligible build forever after the license expires.
-- **Offline grace:** the app runs without a network using a cached signed license.
+- **Perpetual fallback:** update eligibility controls only newer updates. Your
+  installed eligible build and local scans remain usable, and any build at or
+  below the signed perpetual fallback remains installable.
+- **Offline grace:** after a successful server verification, the app can scan
+  and sync offline for seven rolling days. It shows the remaining grace period;
+  after seven days, reconnect before scanning, syncing, or updating. Explicit
+  revocation or invalidation stops operation immediately.
+- **Updates:** the app checks quietly and also provides a manual check. It shows
+  version and release notes, asks before downloading, reports progress, and
+  restarts only after confirmation. Updates are never installed automatically.
 
 Pricing:
 

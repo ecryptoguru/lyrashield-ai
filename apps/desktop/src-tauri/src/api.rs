@@ -14,6 +14,27 @@ pub struct ApiClient {
     client: reqwest::Client,
 }
 
+#[derive(Debug)]
+pub enum VerifyError {
+    Offline(String),
+    InvalidResponse(String),
+}
+
+impl VerifyError {
+    pub fn allows_offline_grace(&self) -> bool {
+        matches!(self, Self::Offline(_))
+    }
+}
+
+impl std::fmt::Display for VerifyError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            Self::Offline(message) | Self::InvalidResponse(message) => message,
+        };
+        formatter.write_str(message)
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct ApiEnvelope<T> {
     success: bool,
@@ -23,7 +44,7 @@ struct ApiEnvelope<T> {
 
 impl ApiClient {
     pub fn new(api_url: Option<String>) -> Result<Self, String> {
-        let base_url = api_url.unwrap_or_else(|| DEFAULT_API_URL.to_string());
+        let base_url = resolve_base_url(api_url)?;
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
@@ -37,7 +58,7 @@ impl ApiClient {
         if api_key.trim().is_empty() {
             return Err("Cloud Sync API key is not configured".into());
         }
-        let base_url = api_url.unwrap_or_else(|| DEFAULT_API_URL.to_string());
+        let base_url = resolve_base_url(api_url)?;
         let mut headers = reqwest::header::HeaderMap::new();
         let value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", api_key))
             .map_err(|_| "Cloud Sync API key contains invalid HTTP characters".to_string())?;
@@ -162,7 +183,7 @@ impl ApiClient {
         &self,
         license_file: &LicenseFile,
         license_id: &str,
-    ) -> Result<VerifyServerResponse, String> {
+    ) -> Result<VerifyServerResponse, VerifyError> {
         let url = format!("{}/api/licenses/verify", self.base_url);
         let body = serde_json::json!({
             "licenseFile": license_file,
@@ -175,70 +196,84 @@ impl ApiClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("verify request failed: {}", e))?;
+            .map_err(|_| VerifyError::Offline("verify request unavailable".into()))?;
 
         let status = resp.status();
         let text = resp
             .text()
             .await
-            .map_err(|e| format!("failed to read verify response: {}", e))?;
+            .map_err(|_| VerifyError::Offline("verify response unavailable".into()))?;
 
         if !status.is_success() {
-            return Err(format!("verify failed ({}): {}", status, text));
+            return if status.is_server_error() {
+                Err(VerifyError::Offline(format!(
+                    "verify service unavailable ({})",
+                    status
+                )))
+            } else {
+                Err(VerifyError::InvalidResponse(format!(
+                    "verify rejected ({})",
+                    status
+                )))
+            };
         }
 
         let envelope: ApiEnvelope<VerifyServerResponse> = serde_json::from_str(&text)
-            .map_err(|e| format!("failed to parse verify response: {}", e))?;
+            .map_err(|_| VerifyError::InvalidResponse("invalid verify response".into()))?;
         if !envelope.success {
-            return Err(format!("verify envelope success=false: {}", text));
+            return Err(VerifyError::InvalidResponse(
+                "verify response reported failure".into(),
+            ));
         }
         let data = envelope
             .data
-            .ok_or_else(|| format!("verify response missing data: {}", text))?;
+            .ok_or_else(|| VerifyError::InvalidResponse("verify response missing data".into()))?;
         if data.version != 1 {
-            return Err(format!(
+            return Err(VerifyError::InvalidResponse(format!(
                 "unsupported verify envelope version: {}",
                 data.version
-            ));
+            )));
         }
         Ok(data)
     }
+}
 
-    /// `POST /api/licenses/verify` — identity-only (licenseId) check for startup revalidation without full file.
-    pub async fn verify_identity(&self, license_id: &str) -> Result<VerifyServerResponse, String> {
-        let url = format!("{}/api/licenses/verify", self.base_url);
-        let body = serde_json::json!({
-            "licenseId": license_id,
-        });
-        let resp = self
-            .client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("verify request failed: {}", e))?;
-        let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("failed to read verify response: {}", e))?;
-        if !status.is_success() {
-            return Err(format!("verify failed ({}): {}", status, text));
+fn resolve_base_url(api_url: Option<String>) -> Result<String, String> {
+    let Some(api_url) = api_url else {
+        return Ok(DEFAULT_API_URL.to_string());
+    };
+    if !cfg!(debug_assertions) {
+        return Err("custom API endpoints are disabled in release builds".into());
+    }
+    let parsed = reqwest::Url::parse(&api_url).map_err(|_| "invalid API endpoint".to_string())?;
+    let is_loopback = parsed.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    });
+    if !is_loopback || !matches!(parsed.scheme(), "http" | "https") {
+        return Err("custom API endpoints must use loopback in development".into());
+    }
+    Ok(api_url.trim_end_matches('/').to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_api_endpoint_is_limited_to_development_loopback() {
+        assert_eq!(
+            resolve_base_url(None).unwrap(),
+            "https://app.lyrashieldai.com"
+        );
+        assert!(resolve_base_url(Some("https://attacker.example".into())).is_err());
+        if cfg!(debug_assertions) {
+            assert_eq!(
+                resolve_base_url(Some("http://127.0.0.1:1234/".into())).unwrap(),
+                "http://127.0.0.1:1234"
+            );
         }
-        let envelope: ApiEnvelope<VerifyServerResponse> = serde_json::from_str(&text)
-            .map_err(|e| format!("failed to parse verify response: {}", e))?;
-        if !envelope.success {
-            return Err(format!("verify envelope success=false: {}", text));
-        }
-        let data = envelope
-            .data
-            .ok_or_else(|| format!("verify response missing data: {}", text))?;
-        if data.version != 1 {
-            return Err(format!(
-                "unsupported verify envelope version: {}",
-                data.version
-            ));
-        }
-        Ok(data)
     }
 }

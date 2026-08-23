@@ -97,11 +97,17 @@ pub struct StoredLicense {
     pub license_id: String,
     pub license: LicenseFile,
     pub blob: String,
+    #[serde(default)]
+    pub last_server_verified_at: Option<String>,
 }
 
 /// Client-side license status summary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "state")]
+#[serde(
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    tag = "state"
+)]
 pub enum LicenseStatus {
     Active {
         sku: LicenseSku,
@@ -110,11 +116,33 @@ pub enum LicenseStatus {
         update_eligible_until: String,
         update_eligible: bool,
         perpetual_fallback_build: Option<String>,
+        offline_grace_remaining_seconds: Option<u64>,
     },
     ExpiredEligibility {
         update_eligible_until: String,
         perpetual_fallback_build: Option<String>,
+        offline_grace_remaining_seconds: Option<u64>,
     },
+    OfflineGraceExpired,
     Revoked,
     None,
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    #[test]
+    fn license_status_fields_match_frontend_camel_case_contract() {
+        let status = LicenseStatus::ExpiredEligibility {
+            update_eligible_until: "2026-08-23T00:00:00Z".into(),
+            perpetual_fallback_build: Some("0.1.1".into()),
+            offline_grace_remaining_seconds: Some(60),
+        };
+        let json = serde_json::to_value(status).unwrap();
+        assert_eq!(json["state"], "expired_eligibility");
+        assert_eq!(json["updateEligibleUntil"], "2026-08-23T00:00:00Z");
+        assert_eq!(json["perpetualFallbackBuild"], "0.1.1");
+        assert_eq!(json["offlineGraceRemainingSeconds"], 60);
+    }
 }

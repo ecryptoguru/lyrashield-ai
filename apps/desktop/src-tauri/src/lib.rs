@@ -47,6 +47,7 @@ pub fn run() {
             get_scan_events,
             export_sarif,
             check_update_eligibility,
+            install_update,
             connect_workspace,
             save_sync_api_key,
             has_sync_api_key,

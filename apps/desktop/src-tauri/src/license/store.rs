@@ -18,15 +18,16 @@ fn license_path() -> Result<PathBuf, String> {
 /// permissions (0o600 on Unix). Persists versioned envelope with immutable licenseId.
 pub fn save_license(file: &LicenseFile, license_id: &str, blob: &str) -> Result<(), String> {
     let stored = StoredLicense {
-        version: 1,
+        version: 2,
         license_id: license_id.to_string(),
         license: file.clone(),
         blob: blob.to_string(),
+        last_server_verified_at: Some(chrono::Utc::now().to_rfc3339()),
     };
     save_stored(&stored)
 }
 
-fn save_stored(stored: &StoredLicense) -> Result<(), String> {
+pub(super) fn save_stored(stored: &StoredLicense) -> Result<(), String> {
     let path = license_path()?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("failed to create license dir: {}", e))?;
@@ -66,7 +67,7 @@ pub fn load_license() -> Result<Option<StoredLicense>, String> {
         fs::read_to_string(&path).map_err(|e| format!("failed to read license file: {}", e))?;
     // Try v1 envelope first.
     if let Ok(stored) = serde_json::from_str::<StoredLicense>(&contents) {
-        if stored.version == 1 && !stored.license_id.is_empty() {
+        if matches!(stored.version, 1 | 2) && !stored.license_id.is_empty() {
             return Ok(Some(stored));
         }
     }
@@ -77,6 +78,7 @@ pub fn load_license() -> Result<Option<StoredLicense>, String> {
             license_id: String::new(),
             license: file,
             blob: String::new(),
+            last_server_verified_at: None,
         }));
     }
     Err("failed to parse license: unknown format".into())
@@ -173,8 +175,11 @@ mod tests {
         assert_eq!(loaded.license.seat_count, 1);
         assert_eq!(loaded.license.machine_ids, vec!["test-machine".to_string()]);
         assert_eq!(loaded.license_id, "lic_test_123");
-        assert_eq!(loaded.version, 1);
+        assert_eq!(loaded.version, 2);
         assert_eq!(loaded.blob, "blob123");
+        let persisted = std::fs::read_to_string(license_path().unwrap()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&persisted).unwrap();
+        assert!(json["lastServerVerifiedAt"].as_str().is_some());
     }
 
     #[test]

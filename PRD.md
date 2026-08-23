@@ -87,8 +87,10 @@ Implemented in code:
 - OS-keychain BYOK storage; no LyraShield model keys embedded in the app.
 - ChatGPT/OpenAI sign-in through the engine and Azure OpenAI key/endpoint configuration.
 - local scan lifecycle and optional Cloud Sync.
-- offline signed-license operation, one-year update eligibility, and perpetual fallback to the last eligible build.
-- revocation hard-stop and signed updater pipeline.
+- seven rolling days of offline operation after successful server verification,
+  one-year update eligibility, and perpetual fallback to the last eligible build;
+  update expiry never disables the installed eligible build or local scans.
+- explicit revocation hard-stop and a user-confirmed signed updater pipeline.
 
 Local/self-hosted models are deferred because the engine currently requires GPT-5.6 Terra/Luna.
 

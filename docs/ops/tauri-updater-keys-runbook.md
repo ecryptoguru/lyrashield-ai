@@ -51,7 +51,7 @@ Copy `~/.tauri/lyrashield-updater.key` to a USB drive and store it in a physical
 
 ## 3. Add GitHub Actions secrets
 
-In the `ecryptoguru/lyrashield-ai` repository settings → Secrets and variables → Actions:
+In the `ecryptoguru/lyrashield-ai` protected `desktop-release` environment:
 
 | Secret name                  | Value                                                                           |
 | ---------------------------- | ------------------------------------------------------------------------------- |
@@ -87,7 +87,8 @@ The public key is committed in `apps/desktop/src-tauri/tauri.conf.json`; only th
 Separately from the Tauri updater key, macOS builds require:
 
 1. **Apple Developer ID Application certificate** — from the Apple Developer portal (https://developer.apple.com). Export as a `.p12` file.
-2. **Apple ID app-specific password** — for Tauri's automated notarization.
+2. **App Store Connect API key** with Developer access — for Tauri's automated
+   notarization. Do not use a founder Apple ID password in CI.
 
 Add these as GitHub Actions secrets:
 
@@ -96,20 +97,24 @@ Add these as GitHub Actions secrets:
 | `APPLE_CERTIFICATE_P12`      | Base64-encoded `.p12` file                       |
 | `APPLE_CERTIFICATE_PASSWORD` | `.p12` export password                           |
 | `APPLE_SIGNING_IDENTITY`     | `Developer ID Application: LyraShield (TEAM_ID)` |
-| `APPLE_ID`                   | Apple Developer account email                    |
-| `APPLE_PASSWORD`             | App-specific password                            |
-| `APPLE_TEAM_ID`              | Apple Developer team ID                          |
+| `APPLE_API_ISSUER`           | App Store Connect API issuer ID                  |
+| `APPLE_API_KEY_ID`           | App Store Connect key ID                         |
+| `APPLE_API_PRIVATE_KEY_P8`   | Raw CI-specific `.p8` private key                |
 
 ## 6. Windows code signing
 
-For Windows builds, provision a code signing certificate (EV or OV). Add as GitHub Actions secrets:
+For Windows builds, register `Microsoft.CodeSigning`, complete Artifact Signing
+identity validation, and create a public-trust certificate profile. Use a
+release-only Entra workload identity federated to the protected
+`desktop-release` environment. Assign only `Artifact Signing Certificate
+Profile Signer` at certificate-profile scope.
 
-| Secret name                    | Value                      |
-| ------------------------------ | -------------------------- |
-| `WINDOWS_CERTIFICATE_PFX`      | Base64-encoded `.pfx` file |
-| `WINDOWS_CERTIFICATE_PASSWORD` | `.pfx` export password     |
-
-> Alternative: Azure Trusted Signing can be used instead of a PFX file. If using Trusted Signing, the workflow uses the Azure signing action instead of the PFX-based approach.
+Environment secrets contain the client, tenant, and subscription IDs. Protected
+environment variables contain the signing endpoint, account, profile, and
+expected certificate subject. No PFX or client secret is stored. The workflow
+authenticates through GitHub OIDC, signs a disposable canary, and then invokes
+the pinned Artifact Signing CLI from Tauri's `signCommand` so Authenticode
+signing happens before updater signatures are created.
 
 ## 7. Key rotation procedure
 
