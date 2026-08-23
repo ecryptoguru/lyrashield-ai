@@ -115,7 +115,6 @@ export const GET: APIRoute = async (context) => {
     `${origin}/vibe-security-50`,
     `${origin}/evidence-vault`,
     `${origin}/ai-safety`,
-    `${origin}/sample-report`,
     `${origin}/support`,
     `${origin}/security-reporting`,
     `${origin}/privacy`,

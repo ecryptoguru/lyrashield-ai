@@ -216,7 +216,7 @@ Open with a 40 to 80 word answer: define the target and data boundary, test auth
 - Authority link: `/blog/vibe-coding-security-guide`
 - Free tool: `/tools/ai-app-security-checklist`
 - Related dependencies: `/blog/human-review-threat-model-vibe-coding` and `/blog/security-monitoring-ai-apps`
-- Contextual LyraShield links: `/methodology` and `/sample-report`, clearly labeling the sample as illustrative and the full product as in active development
+- Contextual LyraShield link: `/methodology`, keeping the full product boundary explicit
 
 ### FAQ decision
 
@@ -550,7 +550,7 @@ Open with a 40 to 80 word answer: rerun the original safe reproduction or origin
 - Authority link: `/blog/vibe-coding-security-guide`
 - Free tool: `/tools/ai-app-security-checklist`
 - Related dependencies: `/blog/placeholder-logic-silent-failures` and `/blog/ai-generated-tests-security`
-- Contextual LyraShield links: `/methodology` and `/sample-report`; state that the repository retest contract validates a clean deterministic retest only when originating coverage is complete, while engine-only absence remains inconclusive
+- Contextual LyraShield link: `/methodology`; state that the repository retest contract validates a clean deterministic retest only when originating coverage is complete, while engine-only absence remains inconclusive
 
 ### FAQ decision
 
@@ -742,7 +742,7 @@ Open with a 40 to 80 word answer: block release when required checks did not com
 - Authority link: `/blog/vibe-coding-security-guide`
 - Free tool: `/tools/ai-app-security-checklist`
 - Related dependencies: `/blog/ai-app-prelaunch-security-checklist` as a same-batch dependency and `/blog/security-monitoring-ai-apps` as a prior-release dependency
-- Contextual LyraShield links: `/methodology` and `/sample-report`; describe the repository launch-readiness implementation as code that returns NOT_EVALUATED, GO, GO_WITH_CONDITIONS, or NO_GO, not a security guarantee or a public hosted feature
+- Contextual LyraShield link: `/methodology`; describe the repository launch-readiness implementation as code that returns NOT_EVALUATED, GO, GO_WITH_CONDITIONS, or NO_GO, not a security guarantee or a public hosted feature
 
 ### FAQ decision
 
@@ -790,7 +790,7 @@ Open with a 40 to 80 word answer: identify the exact release and scope, summariz
 - Authority link: `/blog/vibe-coding-security-guide`
 - Free tool: `/tools/ai-app-security-checklist`
 - Related dependencies: `/blog/security-audit-log-design` and `/blog/security-fix-retest-workflow` as a same-batch dependency
-- Contextual LyraShield link: `/sample-report`, explicitly describing it as a sanitized mock in active development rather than a real customer assessment
+- Contextual LyraShield link: `/methodology`, describing the report evidence states and limitations without a synthetic customer example
 
 ### FAQ decision
 

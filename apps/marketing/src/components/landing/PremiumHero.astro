@@ -52,7 +52,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     >
       Using a coding agent? Set up LyraShield →
     </a>
-    <a class="premium-hero__sample" href="/sample-report" data-cta-id="premium-hero-sample-report">See a sample release record</a>
     <p class="premium-hero__boundary">
       Evidence is limited to the authorized scope and checks that ran. No security guarantee.
     </p>
@@ -227,21 +226,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     background: rgba(8, 17, 28, 0.62);
   }
 
-  .premium-hero__sample {
-    display: inline-flex;
-    margin-top: 0.85rem;
-    color: #b7cad8;
-    font-size: 0.85rem;
-    font-weight: 650;
-    text-decoration: underline;
-    text-decoration-color: rgba(84, 214, 223, 0.45);
-    text-underline-offset: 0.3rem;
-  }
-
-  .premium-hero__sample:hover {
-    color: #edf6fb;
-  }
-
   .premium-hero__agent-link {
     display: inline-flex;
     margin-top: 0.85rem;
@@ -293,7 +277,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     .premium-hero__lede,
     .premium-hero__proof,
     .premium-hero__actions,
-    .premium-hero__sample,
     .premium-hero__boundary,
     .premium-hero__artifact {
       animation: hero-rise 0.68s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -303,7 +286,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     .premium-hero__lede { animation-delay: 130ms; }
     .premium-hero__proof { animation-delay: 190ms; }
     .premium-hero__actions { animation-delay: 250ms; }
-    .premium-hero__sample,
     .premium-hero__artifact { animation-delay: 310ms; }
     .premium-hero__boundary { animation-delay: 370ms; }
 
@@ -363,12 +345,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       order: 5;
     }
 
-    .premium-hero__sample {
-      order: 6;
-    }
-
     .premium-hero__boundary {
-      order: 7;
+      order: 6;
     }
   }
 
@@ -504,13 +482,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 
   :global(:root[data-theme="light"]) .premium-hero__lede,
-  :global(:root[data-theme="light"]) .premium-hero__proof,
-  :global(:root[data-theme="light"]) .premium-hero__sample {
+  :global(:root[data-theme="light"]) .premium-hero__proof {
     color: #40596c;
-  }
-
-  :global(:root[data-theme="light"]) .premium-hero__sample:hover {
-    color: #102235;
   }
 
   :global(:root[data-theme="light"]) .premium-hero__agent-link {

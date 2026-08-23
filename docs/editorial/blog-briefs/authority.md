@@ -29,7 +29,6 @@ The guide should help a solo founder, startup engineering lead, agency developer
 This article is the map for the full 100-article library. It explains six layers of work and connects them through an evidence loop. It does not compete with these existing LyraShield pages:
 
 - `/methodology` explains LyraShield AI evidence states and product method. The guide links to it for the formal state definitions rather than repeating the full methodology.
-- `/sample-report` demonstrates an illustrative report shape. The guide explains what a release report should contain, then sends readers to the example.
 - `/tools` and its five tool pages perform narrow browser-local checks. The guide explains when each check is useful and why no single tool proves application security.
 - `/scan` is the detailed passive Lite Check route. The guide describes its public-surface boundary and does not present it as a full authenticated or repository assessment.
 - Supporting blog articles answer one specific implementation or decision query. The guide gives each topic a short orientation and links to the deeper article once that article is public.
@@ -103,7 +102,6 @@ Use the exact sequence `Target -> Scan -> Evidence State -> Fix Proposal -> Rete
 Links that are valid for the authority release:
 
 - `/methodology`
-- `/sample-report`
 - `/tools`
 - `/tools/ai-app-security-checklist`
 - `/tools/security-headers-checker`

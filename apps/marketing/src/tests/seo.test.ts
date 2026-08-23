@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { parseJsonc } from "../lib/jsonc"
 import { tools } from "../lib/tools"
@@ -9,6 +9,21 @@ function source(path: string): string {
 }
 
 describe("marketing SEO metadata", () => {
+  it("does not publish or link the retired sample report", () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    expect(existsSync(new URL("../pages/sample-report.astro", import.meta.url))).toBe(false)
+
+    const publicNavigation = [
+      source("../components/Footer.astro"),
+      source("../components/landing/PremiumHero.astro"),
+      source("../components/landing/FinalCta.astro"),
+      source("../lib/motion-manifest.ts"),
+      source("../pages/llms.txt.ts"),
+      source("../pages/scan.astro"),
+    ].join("\n")
+    expect(publicNavigation).not.toContain("/sample-report")
+  })
+
   it("gives every free tool unique, intent-specific search metadata", () => {
     const aiAppSecurityScanner = tools.find((tool) => tool.slug === "ai-app-security-scanner")
     expect(aiAppSecurityScanner, "AI App Security scanner must be registered").toBeDefined()
@@ -81,7 +96,7 @@ describe("marketing SEO metadata", () => {
     const post = source("../layouts/BlogPost.astro")
     const tag = source("../pages/blog/tags/[tag].astro")
     const card = source("../components/BlogCard.astro")
-    const header = source("../components/Header.astro")
+    const footer = source("../components/Footer.astro")
 
     expect(index).toContain('"@type": "CollectionPage"')
     expect(index).toContain('"@type": "ItemList"')
@@ -102,7 +117,7 @@ describe("marketing SEO metadata", () => {
     expect(card).toContain("<picture")
     expect(card).toContain('loading="lazy"')
     expect(card).toContain('aria-label="Topics"')
-    expect(header).toContain('href="/blog"')
+    expect(footer).toContain('href: "/blog"')
   })
 
   it("keeps Cloudflare asset URLs aligned with no-trailing-slash canonicals", () => {
@@ -156,7 +171,7 @@ describe("marketing SEO metadata", () => {
     expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
-    expect(source("../components/landing/FinalCta.astro")).toContain('href="/sample-report"')
+    expect(source("../components/landing/FinalCta.astro")).toContain('href="/methodology"')
     expect(scanner).toContain(
       'const title = "Free AI App Security Check — Passive URL Scan | LyraShield AI"'
     )
@@ -177,7 +192,6 @@ describe("marketing SEO metadata", () => {
       source("../pages/tools/index.astro"),
       source("../pages/scan.astro"),
       source("../pages/terms.astro"),
-      source("../pages/sample-report.astro"),
       source("../pages/blog/[...page].astro"),
       source("../layouts/BlogPost.astro"),
     ]

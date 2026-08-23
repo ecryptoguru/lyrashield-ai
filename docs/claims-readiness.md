@@ -385,7 +385,6 @@ These apply to **classifiers with continuous input spaces** (vision models). For
 To keep prohibited claims out of the codebase:
 
 - [ ] Add a CI check that greps `apps/marketing/src/pages` and `apps/marketing/src/content` for positive claim patterns: `is certified`, `is compliant`, `universal security`, `adversarial robustness`, `guarantees security`, `SOC 2 certified`, `ISO 27001 certified`, `AI safety tested` (without a following `against [framework]`).
-- [ ] Make sample-report and handoff copy explicitly state they are examples of what _not_ to claim.
 - [ ] Have a manual copy review before any indexable marketing deploy.
 - [ ] Review this document quarterly or before any claim-changing release.
 
