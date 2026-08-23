@@ -184,7 +184,8 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
 
   const menu = page.locator("#mobile-menu")
   await expect(menu).toBeVisible()
-  await expect(menu.getByText("Explore", { exact: true })).toBeVisible()
+  await expect(menu.getByText("Resources", { exact: true })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "Free tools", exact: true })).toBeVisible()
   await expect(menu.getByRole("link", { name: "Get started" })).toBeVisible()
   const bounds = await menu.boundingBox()
   expect(bounds).not.toBeNull()
@@ -199,4 +200,52 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
   await toggle.click()
   await page.getByRole("button", { name: "Close navigation menu" }).click()
   await expect(menu).toBeHidden()
+})
+
+test("keeps mobile menu rows content-sized when the browser expands dialogs", async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 })
+  await page.goto("/")
+  await page.addStyleTag({ content: "dialog { height: 38rem; }" })
+
+  await page.getByRole("button", { name: "Open navigation menu" }).click()
+
+  const menu = page.locator("#mobile-menu")
+  const firstLink = menu.getByRole("link", { name: "For agents" })
+  await expect(menu).toBeVisible()
+  expect((await menu.boundingBox())!.height).toBeLessThan(400)
+  expect((await firstLink.boundingBox())!.height).toBeLessThanOrEqual(48)
+})
+
+test("keeps Free tools separate from the restored desktop Resources menu", async ({ page }) => {
+  await page.setViewportSize({ width: 1159, height: 863 })
+  await page.goto("/")
+
+  const toolsMenu = page.locator("summary").filter({ hasText: "Free tools" })
+  const resourcesMenu = page.locator("summary").filter({ hasText: "Resources" })
+  const resourcesDropdown = resourcesMenu.locator("..")
+  const label = resourcesMenu.getByText("Resources", { exact: true })
+  const chevron = resourcesMenu.locator("[data-nav-chevron]")
+  await expect(toolsMenu).toBeVisible()
+  await expect(resourcesMenu).toBeVisible()
+
+  const labelBounds = await label.boundingBox()
+  const chevronBounds = await chevron.boundingBox()
+  expect(labelBounds).not.toBeNull()
+  expect(chevronBounds).not.toBeNull()
+  const labelCenter = labelBounds!.y + labelBounds!.height / 2
+  const chevronCenter = chevronBounds!.y + chevronBounds!.height / 2
+  expect(chevronCenter).toBeLessThan(labelCenter)
+  expect(labelCenter - chevronCenter).toBeLessThanOrEqual(2)
+
+  await toolsMenu.click()
+  await expect(page.getByRole("link", { name: "All free tools", exact: true })).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: "AI App Security Scanner", exact: true })
+  ).toBeVisible()
+
+  await resourcesMenu.click()
+  await expect(
+    resourcesDropdown.getByRole("link", { name: "Methodology", exact: true })
+  ).toBeVisible()
+  await expect(resourcesDropdown.getByRole("link", { name: "Guides", exact: true })).toBeVisible()
 })

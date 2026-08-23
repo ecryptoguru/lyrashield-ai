@@ -140,9 +140,9 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
         id: "story-report-create-account",
       },
       secondaryCta: {
-        label: "View sample report",
-        href: "/sample-report",
-        id: "story-report-sample",
+        label: "Read methodology",
+        href: "/methodology",
+        id: "story-report-methodology",
       },
     },
   },

@@ -145,11 +145,11 @@ describe("Lite Check marketing surface", () => {
     expect(toolLayout).toContain("Runs entirely in this browser.")
   })
 
-  it("keeps the control boundary and sample-report handoff inside the story", () => {
+  it("keeps the control boundary and methodology handoff inside the story", () => {
     expect(motionManifest).toContain("Vibe Security 50")
     expect(motionManifest).toContain("43 code or URL review controls")
     expect(motionManifest).toContain("7 evidence-required controls")
-    expect(motionManifest).toContain('href: "/sample-report"')
+    expect(motionManifest).toContain('href: "/methodology"')
   })
 
   it("starts the real Lite Check from the homepage without putting the target in the URL", () => {

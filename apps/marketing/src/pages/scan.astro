@@ -254,7 +254,7 @@ const jsonLd = [
       <form id="capture-form" class="mt-7 max-w-2xl">
         <label for="result-email" class="block text-sm font-semibold">Email for product updates and scorecards</label>
         <div class="mt-2 flex flex-col gap-3 sm:flex-row"><input id="result-email" type="email" required autocomplete="email" placeholder="you@example.com" class="min-h-12 flex-1 rounded-lg border border-(--terminal-panel) bg-(--terminal-raised) px-4 text-(--terminal-text) placeholder:text-(--terminal-muted)" /><button type="submit" data-capture-action="waitlist" class="min-h-12 rounded-lg bg-(--terminal-cyan) px-5 font-semibold text-(--terminal-void)">Get product updates</button></div>
-        <div class="mt-3 flex flex-col gap-3 sm:flex-row"><button type="submit" data-capture-action="scorecard" class="min-h-12 rounded-lg border border-(--terminal-cyan) px-5 font-semibold text-(--terminal-cyan)">Get my shareable scorecard</button><a href="/sample-report" data-upsell="sample_report" class="inline-flex min-h-12 items-center justify-center rounded-lg px-5 font-semibold text-(--terminal-dim) hover:text-white">See a sample full report</a></div>
+        <div class="mt-3 flex flex-col gap-3 sm:flex-row"><button type="submit" data-capture-action="scorecard" class="min-h-12 rounded-lg border border-(--terminal-cyan) px-5 font-semibold text-(--terminal-cyan)">Get my shareable scorecard</button></div>
         <p id="capture-status" class="mt-4 text-sm text-(--terminal-dim)" role="status"></p>
       </form>
       <div id="scorecard-actions" class="mt-5 hidden flex-wrap gap-3"><a id="scorecard-link" href="#" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center rounded-lg bg-(--terminal-cyan) px-4 font-semibold text-(--terminal-void)">Open scorecard</a><button id="share-scorecard" type="button" class="min-h-11 rounded-lg border border-(--terminal-panel) px-4 font-semibold">Share scorecard</button></div>
@@ -549,9 +549,6 @@ const jsonLd = [
           lastAction = button.dataset.captureAction || "waitlist"
           capture("upsell_clicked", { cta: lastAction })
         })
-      })
-      document.querySelector("[data-upsell='sample_report']")?.addEventListener("click", () => {
-        capture("upsell_clicked", { cta: "sample_report" })
       })
     }
 

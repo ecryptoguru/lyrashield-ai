@@ -1,4 +1,6 @@
 ---
+import { tools, toolUrl } from "../lib/tools"
+
 const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
 ---
 
@@ -12,7 +14,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       <span class="header-beta-badge rounded border border-accent/50 bg-accent-dim/40 px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-accent uppercase">Open beta</span>
     </a>
     <nav aria-label="Main" class="flex items-center gap-1 sm:gap-2">
-      <ul class="hidden items-center gap-1 md:flex md:gap-2">
+      <ul class="hidden items-center gap-1 lg:flex lg:gap-2">
         <li>
           <a href="/#how-it-works" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             How it works
@@ -35,15 +37,34 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         <li class="relative">
           <details class="group">
             <summary class="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-              Resources <span aria-hidden="true">⌄</span>
+              <span>Free tools</span>
+              <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path d="m4 6 4 4 4-4" />
+              </svg>
             </summary>
-            <div class="absolute right-0 grid w-56 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
+            <div class="absolute top-full right-0 mt-1 grid w-72 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
+              <a href="/tools" class="rounded-lg px-3 py-2 text-sm font-medium text-accent hover:bg-bg">All free tools</a>
+              {tools.map((tool) => (
+                <a href={toolUrl(tool.slug)} class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">
+                  {tool.title}
+                </a>
+              ))}
+            </div>
+          </details>
+        </li>
+        <li class="relative">
+          <details class="group">
+            <summary class="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              <span>Resources</span>
+              <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path d="m4 6 4 4 4-4" />
+              </svg>
+            </summary>
+            <div class="absolute top-full right-0 mt-1 grid w-56 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
               <a href="/methodology" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Methodology</a>
               <a href="/vibe-security-50" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Vibe Security 50</a>
               <a href="/evidence-vault" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Evidence Vault</a>
               <a href="/ai-safety" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">AI safety evaluation</a>
-              <a href="/sample-report" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Sample report</a>
-              <a href="/tools" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Browser-local tools</a>
               <a href="/blog" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Guides</a>
               <a href="/docs/integrations" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Integration docs</a>
             </div>
@@ -67,7 +88,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       <button
         id="menu-toggle"
         type="button"
-        class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent md:hidden"
+        class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
         aria-controls="mobile-menu"
         aria-expanded="false"
         aria-label="Open navigation menu"
@@ -79,7 +100,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       <dialog
         id="mobile-menu"
         aria-label="Mobile navigation"
-        class="fixed z-50 m-0 w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 md:hidden"
+        class="fixed z-50 m-0 w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 lg:hidden"
         style="top: max(4.5rem, calc(4rem + env(safe-area-inset-top))); right: max(1rem, env(safe-area-inset-right)); bottom: auto; left: auto;"
       >
         <div class="mobile-menu__primary">
@@ -94,17 +115,15 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
           <a href="/scan" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
         </div>
         <div class="mobile-menu__section">
-          <p>Explore</p>
-          {/* Deliberately fewer items than the desktop Resources dropdown below.
-              Vibe Security 50 / Evidence Vault / AI safety / Sample report are
-              one tap away via the Footer (unconstrained, scrolls with the page)
-              and the desktop dropdown. Adding them here regressed
+          <p>Resources</p>
+          {/* Deliberately fewer items than the desktop Resources menu. Adding every
+              resource here regressed
               tests-browser/theme.e2e.ts's "keeps the compact mobile menu inside
               the visible viewport" check at 390x400 — a real short-viewport
               phone case. Re-verify that test before growing this list again. */}
           <div class="mobile-menu__resources">
             <a href="/methodology" class="menu-link mobile-menu__resource">Methodology</a>
-            <a href="/tools" class="menu-link mobile-menu__resource">Tools</a>
+            <a href="/tools" class="menu-link mobile-menu__resource">Free tools</a>
             <a href="/blog" class="menu-link mobile-menu__resource">Guides</a>
             <a href="/docs/integrations" class="menu-link mobile-menu__resource">Docs</a>
           </div>
@@ -227,7 +246,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       // there. If the viewport crosses to desktop while the menu is open (e.g. the
       // window is widened, or a desktop browser restores a small-window state), close
       // it so the two navs never render at once.
-      const desktopMq = window.matchMedia("(min-width: 48rem)") // Tailwind md
+      const desktopMq = window.matchMedia("(min-width: 64rem)") // Tailwind lg
       const closeOnDesktop = () => {
         if (desktopMq.matches && menu.open) menu.close()
       }
@@ -250,9 +269,11 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 
   #mobile-menu {
     box-sizing: border-box;
+    height: fit-content;
     max-height: calc(
       100dvh - max(4.5rem, calc(4rem + env(safe-area-inset-top))) - max(1rem, env(safe-area-inset-bottom))
     );
+    align-content: start;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: none;
@@ -335,8 +356,8 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
     }
   }
 
-  /* The menu is mobile-only. When open (and only on small screens) lay it out as a
-     vertical grid; on md+ it is hidden entirely by the md:hidden utility above. */
+  /* The menu is mobile-only. When open (and only below lg) lay it out as a
+     vertical grid; on lg+ it is hidden entirely by the lg:hidden utility above. */
   #mobile-menu[open] {
     display: grid;
     animation: mobile-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1);

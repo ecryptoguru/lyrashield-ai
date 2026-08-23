@@ -15,7 +15,7 @@ const expectedOutcomes = owasp.cases?.filter((testCase) => testCase.expected).le
 const expectedOutcomeRate = ((expectedOutcomes / owasp.totals.total) * 100).toFixed(1)
 
 // Every sibling trust page (methodology, vibe-security-50, evidence-vault,
-// scan, sample-report) answers "what is/isn't this" as an FAQ; this page had
+// scan) answers "what is/isn't this" as an FAQ; this page had
 // the same content as prose in "What this is not" below but no FAQPage
 // schema, so it was invisible to the People-Also-Ask / snippet surfaces the
 // other pages compete for. Answers here are restatements of that existing
