@@ -210,10 +210,13 @@ const envSchema = z
     // JSON maps of app catalog keys to provider-assigned IDs.
     POLAR_PRODUCT_IDS: z.string().optional().or(z.literal("")),
     POLAR_WEBHOOK_TOLERANCE_MS: z.coerce.number().int().positive().max(3_600_000).default(300_000),
+    POLAR_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAY_PLAN_IDS: z.string().optional().or(z.literal("")),
+    RAZORPAY_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
+    BILLING_CANARY_WORKSPACE_IDS: z.string().optional().default(""),
     BILLING_GEO_IP_HEADER: z
       .string()
       .optional()

@@ -15,7 +15,7 @@ Use this index to find the owning document and avoid duplicating current truth.
 ## How-to guides and runbooks
 
 - [`deployment/`](deployment/) — local setup and production deployment gates.
-- [`ops/`](ops/) — desktop release/install, signing keys, RLS verification, and production smoke testing.
+- [`ops/`](ops/) — desktop release/install, billing launch, signing keys, RLS verification, and production smoke testing.
 - [`license-key-compromise-runbook.md`](license-key-compromise-runbook.md) — signing-key incident response.
 
 ## Reference and assurance records

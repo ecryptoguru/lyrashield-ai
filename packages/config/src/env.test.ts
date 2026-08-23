@@ -53,8 +53,11 @@ const envSchema = z
     NOTIFICATION_FROM_EMAIL: z.string().optional().or(z.literal("")),
     POLAR_ACCESS_TOKEN: z.string().optional().or(z.literal("")),
     POLAR_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
+    POLAR_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
+    RAZORPAY_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
+    BILLING_CANARY_WORKSPACE_IDS: z.string().optional().default(""),
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -114,6 +117,22 @@ describe("Env Validation Schema", () => {
       if (result.success) {
         expect(result.data.NODE_ENV).toBe("development")
       }
+    })
+
+    it("defaults both checkout providers to off", () => {
+      const result = envSchema.safeParse(validEnv)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.POLAR_BILLING_ADMISSION).toBe("off")
+        expect(result.data.RAZORPAY_BILLING_ADMISSION).toBe("off")
+        expect(result.data.BILLING_CANARY_WORKSPACE_IDS).toBe("")
+      }
+    })
+
+    it("rejects unknown billing admission modes", () => {
+      expect(envSchema.safeParse({ ...validEnv, POLAR_BILLING_ADMISSION: "enabled" }).success).toBe(
+        false
+      )
     })
 
     it("should accept NODE_ENV as production with a trusted proxy header", () => {

@@ -51,7 +51,12 @@ The desktop and `.github/workflows/release-tauri.yml` are on `main`. Provision:
 - GitHub secret `TAURI_UPDATER_KEY_PASSWORD`;
 - Apple Developer ID and App Store Connect credentials for macOS signing and notarization.
 
-The workflow maps the repository secrets to Tauri's `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables. The matching public key is committed in `apps/desktop/src-tauri/tauri.conf.json`. Follow `docs/ops/tauri-updater-keys-runbook.md` for generation, dual backup, and rotation.
+The workflow maps the protected `desktop-release` environment secrets to
+Tauri's `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables. Do not store these
+as repository-wide secrets. The matching public key is committed in
+`apps/desktop/src-tauri/tauri.conf.json`. Follow
+`docs/ops/tauri-updater-keys-runbook.md` for custody, backup, and rotation.
 
 ### 1c. Billing providers (Cloud)
 
@@ -228,7 +233,7 @@ python3 secrets_sync.py --repo ecryptoguru/lyrashield-ai \
 
 | Variable                  | Value                                                 |
 | ------------------------- | ----------------------------------------------------- |
-| `LICENSE_PUBLISHED_BUILD` | e.g. `0.1.0` — bump on each Local/Desktop release     |
+| `LICENSE_PUBLISHED_BUILD` | e.g. `0.1.1` — bump on each Local/Desktop release     |
 | `BILLING_USD_INR_RATE`    | `100` (default; only override on founder instruction) |
 
 ### 4c. E2E signing key in CI
@@ -267,9 +272,10 @@ the Key Vault secret and GitHub secret in the same change window.
    `LICENSE_SIGNING_PRIVATE_KEY` env var (dev/CI). Ensure the app's managed
    identity has `Get` on the vault secrets before relying on this in prod.
 2. **Desktop production signing.** The Tauri release workflow and committed
-   updater public key exist. Before publishing, verify the two updater
-   repository secrets, dual backup, production license public key, macOS
-   signing/notarization, Windows signing, signed updater manifest, and install.
+   updater public key exist. Before publishing, verify the two protected
+   updater environment secrets, dual backup, production license public key,
+   macOS signing/notarization, Windows signing, signed updater manifest, and
+   install.
 3. **License email delivery.** `sendLicenseIssuedEmail()` is wired through
    Brevo. Retain a production delivery smoke proving the buyer receives the
    raw key and signed file without logging or persisting the raw key.
@@ -292,7 +298,7 @@ the Key Vault secret and GitHub secret in the same change window.
   - `LYRASHIELD_KEY_VAULT_NAME=lyrashieldprodsecrets`
   - `LICENSE_SIGNING_KEY_ID=license-key-v1`
   - `LYRASHIELD_INTERNAL_API_KEY=secretref:lyrashield-internal-api-key`
-  - `LICENSE_PUBLISHED_BUILD=0.1.0`
+  - `LICENSE_PUBLISHED_BUILD=0.1.1`
   - `POLAR_LOCAL_PRODUCT_IDS={"individual_launch":"prod_smoke_test"}` (smoke-only map)
 - Smoke test: `POST /api/licenses/issue` + `POST /api/licenses/verify` returned
   `valid: true`, `signingKeyId: "license-key-v1"`; smoke license deleted.

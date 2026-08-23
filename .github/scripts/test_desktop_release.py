@@ -9,14 +9,14 @@ import desktop_release
 class DesktopReleaseTests(unittest.TestCase):
     def write_assets(self, root):
         fixtures = {
-            "lyrashield-desktop-macos-aarch64/LyraShield_0.1.1-rc.1_aarch64.dmg": b"dmg-arm",
-            "lyrashield-desktop-macos-aarch64/LyraShield_0.1.1-rc.1_aarch64.app.tar.gz": b"arm",
-            "lyrashield-desktop-macos-aarch64/LyraShield_0.1.1-rc.1_aarch64.app.tar.gz.sig": b"arm-signature",
-            "lyrashield-desktop-macos-x86_64/LyraShield_0.1.1-rc.1_x86_64.dmg": b"dmg-intel",
-            "lyrashield-desktop-macos-x86_64/LyraShield_0.1.1-rc.1_x86_64.app.tar.gz": b"intel",
-            "lyrashield-desktop-macos-x86_64/LyraShield_0.1.1-rc.1_x86_64.app.tar.gz.sig": b"intel-signature",
-            "lyrashield-desktop-windows-x86_64/LyraShield_0.1.1-rc.1_x64-setup.exe": b"windows",
-            "lyrashield-desktop-windows-x86_64/LyraShield_0.1.1-rc.1_x64-setup.exe.sig": b"windows-signature",
+            "lyrashield-desktop-macos-aarch64/LyraShield_0.1.1_aarch64.dmg": b"dmg-arm",
+            "lyrashield-desktop-macos-aarch64/LyraShield_0.1.1_aarch64.app.tar.gz": b"arm",
+            "lyrashield-desktop-macos-aarch64/LyraShield_0.1.1_aarch64.app.tar.gz.sig": b"arm-signature",
+            "lyrashield-desktop-macos-x86_64/LyraShield_0.1.1_x86_64.dmg": b"dmg-intel",
+            "lyrashield-desktop-macos-x86_64/LyraShield_0.1.1_x86_64.app.tar.gz": b"intel",
+            "lyrashield-desktop-macos-x86_64/LyraShield_0.1.1_x86_64.app.tar.gz.sig": b"intel-signature",
+            "lyrashield-desktop-windows-x86_64/LyraShield_0.1.1_x64-setup.exe": b"windows",
+            "lyrashield-desktop-windows-x86_64/LyraShield_0.1.1_x64-setup.exe.sig": b"windows-signature",
         }
         for relative, data in fixtures.items():
             path = root / relative
@@ -24,6 +24,7 @@ class DesktopReleaseTests(unittest.TestCase):
             path.write_bytes(data)
 
     def test_tag_must_match_desktop_version(self):
+        desktop_release.validate_tag_version("v0.1.1", "0.1.1")
         desktop_release.validate_tag_version("v0.1.1-rc.1", "0.1.1-rc.1")
         with self.assertRaisesRegex(ValueError, "does not match"):
             desktop_release.validate_tag_version("v0.1.1", "0.1.0")
@@ -35,12 +36,12 @@ class DesktopReleaseTests(unittest.TestCase):
 
             manifest = desktop_release.build_manifest(
                 root,
-                "v0.1.1-rc.1",
+                "v0.1.1",
                 "ecryptoguru/lyrashield-ai",
                 "2026-08-23T12:00:00Z",
             )
 
-            self.assertEqual(manifest["version"], "0.1.1-rc.1")
+            self.assertEqual(manifest["version"], "0.1.1")
             self.assertEqual(
                 set(manifest["platforms"]),
                 {"darwin-aarch64", "darwin-x86_64", "windows-x86_64"},
@@ -51,7 +52,7 @@ class DesktopReleaseTests(unittest.TestCase):
             )
             self.assertTrue(
                 manifest["platforms"]["darwin-aarch64"]["url"].startswith(
-                    "https://github.com/ecryptoguru/lyrashield-ai/releases/download/v0.1.1-rc.1/"
+                    "https://github.com/ecryptoguru/lyrashield-ai/releases/download/v0.1.1/"
                 )
             )
             json.dumps(manifest)
@@ -82,7 +83,7 @@ class DesktopReleaseTests(unittest.TestCase):
             root = pathlib.Path(directory)
             self.write_assets(root)
             artifact = root / "lyrashield-desktop-windows-x86_64" / (
-                "LyraShield_0.1.1-rc.1_x64-setup.exe"
+                "LyraShield_0.1.1_x64-setup.exe"
             )
             signature = pathlib.Path(str(artifact) + ".sig")
             artifact.rename(artifact.with_name("LyraShield_0.1.0_x64-setup.exe"))
@@ -90,7 +91,7 @@ class DesktopReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "version"):
                 desktop_release.build_manifest(
                     root,
-                    "v0.1.1-rc.1",
+                    "v0.1.1",
                     "ecryptoguru/lyrashield-ai",
                     "2026-08-23T12:00:00Z",
                 )

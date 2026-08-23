@@ -21,9 +21,11 @@ interface BillingActionsProps {
 export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingActionsProps) {
   const router = useRouter()
   const [loading, setLoading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleCheckout(targetPlan: string, interval: string) {
     setLoading(`checkout-${targetPlan}`)
+    setError(null)
     try {
       const res = await fetch("/billing/checkout", {
         method: "POST",
@@ -40,10 +42,10 @@ export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingAc
           onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
         })
       } else {
-        console.error("Checkout failed", data)
+        setError(data.error?.message ?? "Unable to start checkout. Please try again.")
       }
-    } catch (err) {
-      console.error("Checkout request failed", err)
+    } catch {
+      setError("Unable to start checkout. Check your connection and try again.")
     } finally {
       setLoading(null)
     }
@@ -51,7 +53,12 @@ export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingAc
 
   if (plan === "FREE" || plan === "STARTER") {
     return (
-      <div className="flex gap-2">
+      <div className="flex flex-col items-end gap-2">
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
         <button
           onClick={() => handleCheckout("PRO", "monthly")}
           disabled={loading === "checkout-PRO"}
@@ -65,24 +72,36 @@ export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingAc
 
   if (plan === "PRO") {
     return (
-      <div className="flex gap-2">
-        <button
-          onClick={() => handleCheckout("TEAM", "monthly")}
-          disabled={loading === "checkout-TEAM"}
-          className={buttonVariants({ variant: "default", size: "sm" })}
-        >
-          {loading === "checkout-TEAM" ? "Loading..." : "Upgrade to Team"}
-        </button>
-        <a href="/billing/portal" className={buttonVariants({ variant: "outline", size: "sm" })}>
-          Manage
-        </a>
+      <div className="flex flex-col items-end gap-2">
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleCheckout("TEAM", "monthly")}
+            disabled={loading === "checkout-TEAM"}
+            className={buttonVariants({ variant: "default", size: "sm" })}
+          >
+            {loading === "checkout-TEAM" ? "Loading..." : "Upgrade to Team"}
+          </button>
+          <a href="/billing/portal" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Manage
+          </a>
+        </div>
       </div>
     )
   }
 
   // Team plan
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-col items-end gap-2">
+      {error && (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
       <a href="/billing/portal" className={buttonVariants({ variant: "outline", size: "sm" })}>
         Manage Subscription
       </a>

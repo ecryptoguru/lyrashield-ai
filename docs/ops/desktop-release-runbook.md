@@ -39,6 +39,13 @@ must have a federated credential restricted to
 `Artifact Signing Certificate Profile Signer` role at profile scope. Do not
 create or store a client secret.
 
+Current provisioning status (2026-08-23): updater key pairing and Key Vault
+backup are verified; protected updater secrets and exact-environment OIDC
+federation exist; `Microsoft.CodeSigning` is registered. Apple credentials,
+the Artifact Signing account, completed public identity validation, certificate
+profile, protected signing variables, profile-scoped signer role, and OIDC
+canary signature do not exist. Do not create the RC tag until all are complete.
+
 Keep private keys and certificates out of Git, logs, workflow artifacts, and
 release assets. See [tauri-updater-keys-runbook.md](tauri-updater-keys-runbook.md)
 and [license-signing-keys-runbook.md](license-signing-keys-runbook.md) for key
@@ -88,6 +95,11 @@ The final job constructs `latest.json` from the exact uploaded artifacts and
 creates a **draft** GitHub Release. A failed platform job leaves no partial
 public release.
 
+Rehearse first with immutable tag `v0.1.1-rc.1`. Keep its signed release as a
+private draft and test RC-to-final updating through a compile-time trusted HTTPS
+test endpoint. Never accept an updater endpoint from React. Application-code
+changes after tagging require a new version; never move either tag.
+
 ## Draft verification
 
 Do not publish until all checks pass:
@@ -110,6 +122,12 @@ Do not publish until all checks pass:
 Record tag, app commit, engine commit, artifact checksums, signing identities,
 notarization result, test machines, and smoke results as release evidence.
 
+The final `v0.1.1` draft must contain exactly two DMGs, two macOS updater
+archives and signatures, one Windows NSIS installer and signature,
+`latest.json`, and workflow-generated checksums/evidence. Verify every URL is
+HTTPS and tag-bound, every signature is non-empty, and hashes match downloaded
+assets.
+
 The app never installs automatically. Verify the user confirmation, release
 notes, bounded progress, restart warning, preserved data, and retry/offline
 states during the RC-to-final updater rehearsal.
@@ -119,6 +137,10 @@ states during the RC-to-final updater rehearsal.
 Publishing the draft is a founder-controlled public action. After approval,
 edit the notes and publish the existing draft; do not rebuild or replace its
 assets.
+
+The same approval must authorize deleting the stale unsigned `v0.1.0` draft.
+Capture its metadata and hashes first, delete only the draft, and retain the
+immutable tag.
 
 For rollback, return the release to draft and remove `latest.json` from public
 availability. Never retag a released version. Fix forward with a new patch tag

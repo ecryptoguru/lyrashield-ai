@@ -1,6 +1,10 @@
 # Tauri Updater Signing Keys — Provisioning Runbook
 
-> Status: **Verify before the first production desktop release.** The release workflow exists; the founder must confirm the updater keypair, backups, and GitHub Actions secrets before publishing.
+> Status: **Updater key verified on 2026-08-23.** Its private/public pairing
+> matches the public key committed in `tauri.conf.json`. The private key and
+> password are protected `desktop-release` environment secrets with Key Vault
+> backups; repository-wide copies were removed. Apple credentials and the Azure
+> Artifact Signing account/profile remain unprovisioned.
 
 ## Why this matters
 
@@ -80,7 +84,11 @@ The public key string from step 1 goes into `apps/desktop/src-tauri/tauri.conf.j
 }
 ```
 
-The public key is committed in `apps/desktop/src-tauri/tauri.conf.json`; only the private key and password are secret. `release-tauri.yml` maps the two repository secrets above to Tauri's `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables.
+The public key is committed in `apps/desktop/src-tauri/tauri.conf.json`; only
+the private key and password are secret. `release-tauri.yml` maps the two
+protected environment secrets above to Tauri's
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+environment variables. Do not create repository-wide copies.
 
 ## 5. Apple Developer ID (macOS signing/notarization)
 
@@ -103,11 +111,19 @@ Add these as GitHub Actions secrets:
 
 ## 6. Windows code signing
 
-For Windows builds, register `Microsoft.CodeSigning`, complete Artifact Signing
-identity validation, and create a public-trust certificate profile. Use a
-release-only Entra workload identity federated to the protected
-`desktop-release` environment. Assign only `Artifact Signing Certificate
-Profile Signer` at certificate-profile scope.
+`Microsoft.CodeSigning` is registered. A release-only Entra workload identity
+is federated to the protected `desktop-release` environment with subject
+`repo:ecryptoguru/lyrashield-ai:environment:desktop-release`; it has no client
+secret or Azure role assignment yet.
+
+The founder/account holder must now create the Artifact Signing account and
+complete public organization identity validation in Azure Portal. Microsoft
+does not support completing identity validation through CLI, and Public Trust
+availability is country-restricted, so confirm the legal entity and Azure
+billing account are eligible before creating a paid account. After validation,
+create the public-trust certificate profile and assign only `Artifact Signing
+Certificate Profile Signer` at certificate-profile scope to the release
+identity.
 
 Environment secrets contain the client, tenant, and subscription IDs. Protected
 environment variables contain the signing endpoint, account, profile, and

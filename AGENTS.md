@@ -23,7 +23,7 @@ Repository ownership:
 
 Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not rename `@lyrashield/*` or `LYRASHIELD_*` without founder approval.
 
-## Current verified state — 2026-08-21
+## Current verified state — 2026-08-23
 
 - Open beta with open registration at `https://app.lyrashieldai.com/sign-up`; never call it pre-launch or a waitlist.
 - Marketing, passive Lite Scanner, authenticated app origin, Cloudflare bindings, TLS, sitemap/robots/`llms.txt`, security headers, and open-registration CTAs are live.
@@ -37,6 +37,18 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Encrypted backup and isolated restore verified schema, RLS, audit chain, and application startup.
 - Production runtime DB role `app_runtime_prod` was queried on 2026-08-22 and verified `rolsuper=false`, `rolbypassrls=false`.
 - Polar/Razorpay test credentials, product/price maps, webhook secrets, signed smoke, and non-charge objects are configured. Live paid activation remains founder-controlled.
+- Provider-specific checkout admission is implemented with production defaults
+  off, exact canary workspaces, and webhook settlement left enabled. No public
+  Local-license checkout route exists yet.
+- Desktop `0.1.1` is prepared in code with seven-day offline grace and a
+  user-confirmed signed updater, but it is not signed or published.
+- GitHub environment `desktop-release` has required-reviewer and `main`/`v*`
+  deployment policies. Its updater secrets match the committed public key and
+  are backed up in Key Vault; repository-wide copies were removed. A
+  release-only Entra application has exact-environment GitHub OIDC federation
+  and no client secret. Azure `Microsoft.CodeSigning` is registered, but no
+  Artifact Signing account, completed public identity validation, certificate
+  profile, profile-scoped signer role, or Apple signing credentials exist yet.
 - CLI and GitHub Action classify added `eval()`/`exec()` as `HIGH`, so the default `--fail-on HIGH` gate blocks them.
 
 Claims boundary: this is bounded runtime/accounting evidence for one target and revision, not proof of universal coverage, independently verified findings, or security.
@@ -46,7 +58,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 1. Prove private S3-compatible evidence upload, encryption, retrieval, isolation, and fail-closed behavior in production.
 2. Connect readiness, queue, provider, model-cost, and worker logs to actionable alerts; record capacity evidence and incident ownership.
 3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work.
-4. Verify live-provider entitlement and usage metering events; do not activate live charges without founder decision.
+4. Run founder-approved Polar and Razorpay canaries independently, then open each provider only after its 24-hour evidence gate.
 5. Complete and prove production Azure Key Vault license signing.
 6. Provision RazorpayX/Payoneer payout APIs and tax-form workflow.
 7. Verify public scorecard metadata, all card formats, badge, revocation/expiry, referrals, human-event deduplication, external unfurls, and webmaster submission.
@@ -58,6 +70,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Trademark clearance.
 - Public paid-launch timing and publishable pricing.
 - Live Polar/Razorpay activation.
+- Signed Desktop publication and stale `v0.1.0` draft deletion.
 - Provider/model and target for first Deep/Terra acceptance.
 
 ## Non-negotiable implementation rules
