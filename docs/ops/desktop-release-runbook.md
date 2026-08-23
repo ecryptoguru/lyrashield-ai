@@ -8,25 +8,36 @@ bundles that sidecar, and creates a draft GitHub Release containing:
 
 - signed and notarized macOS packages for Apple Silicon and Intel;
 - a signed Windows x86_64 NSIS installer;
-- Tauri updater signatures and one `latest.json` bound to those exact assets.
+- Tauri updater signatures, SHA-256 checksums, and one `latest.json` bound to
+  those exact assets.
 
 Engine CI may build an unsigned package for compatibility testing, but it does
 not publish a second Desktop release.
 
 ## One-time secret setup
 
-Provision these GitHub repository secrets before creating a release tag:
+Create the protected `desktop-release` GitHub environment before creating a
+release tag. Require a reviewer for deployments to it and provision these
+environment secrets:
 
 - `TAURI_UPDATER_PRIVATE_KEY`
 - `TAURI_UPDATER_KEY_PASSWORD`
 - `APPLE_CERTIFICATE_P12`
 - `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_SIGNING_IDENTITY`
-- `APPLE_ID`
-- `APPLE_PASSWORD`
-- `APPLE_TEAM_ID`
-- `WINDOWS_CERTIFICATE_PFX`
-- `WINDOWS_CERTIFICATE_PASSWORD`
+- `APPLE_API_ISSUER`
+- `APPLE_API_KEY_ID`
+- `APPLE_API_PRIVATE_KEY_P8`
+- `AZURE_SIGNING_CLIENT_ID`
+- `AZURE_SIGNING_TENANT_ID`
+- `AZURE_SIGNING_SUBSCRIPTION_ID`
+
+Add the Artifact Signing endpoint, account, certificate profile, and expected
+certificate subject as protected environment variables. The Entra application
+must have a federated credential restricted to
+`repo:ecryptoguru/lyrashield-ai:environment:desktop-release` and only the
+`Artifact Signing Certificate Profile Signer` role at profile scope. Do not
+create or store a client secret.
 
 Keep private keys and certificates out of Git, logs, workflow artifacts, and
 release assets. See [tauri-updater-keys-runbook.md](tauri-updater-keys-runbook.md)
@@ -46,7 +57,7 @@ Before tagging:
 - [ ] The committed license verification public key is the production public
       key; no private key is present in the app bundle.
 - [ ] Updater private/public key pair, Apple certificate/notarization account,
-      and Windows certificate are current and not revoked.
+      and Artifact Signing certificate profile are current and not revoked.
 
 The workflow preflight fails within five minutes when a required secret, tag,
 or version is missing. It does not start platform builds in that state.
@@ -56,8 +67,8 @@ or version is missing. It does not start platform builds in that state.
 Create an annotated semver tag from a green `main` commit:
 
 ```bash
-git tag -a v0.1.0 -m "LyraShield Desktop v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "LyraShield Desktop v0.1.1"
+git push origin v0.1.1
 ```
 
 The workflow can also be dispatched manually for an existing tag. It never
@@ -69,7 +80,8 @@ The platform jobs:
 2. build the native engine sidecar for the runner architecture;
 3. package it with the Desktop app;
 4. sign updater artifacts;
-5. sign and notarize/staple macOS apps, or Authenticode-sign Windows;
+5. sign and notarize/staple macOS apps with App Store Connect API credentials,
+   or Authenticode-sign Windows through OIDC-backed Azure Artifact Signing;
 6. verify signatures before uploading workflow artifacts.
 
 The final job constructs `latest.json` from the exact uploaded artifacts and
@@ -90,13 +102,17 @@ Do not publish until all checks pass:
    process arguments.
 6. Run, cancel, and complete a scan; reopen the app and confirm persisted
    findings, events, and SARIF export.
-7. Verify Local-to-Cloud sync, conflict recovery, offline behavior, revocation,
-   update eligibility, and perpetual fallback.
+7. Verify Local-to-Cloud sync, conflict recovery, explicit revocation, the
+   seven-day offline grace, expired update eligibility, and perpetual fallback.
 8. Install the prior release and verify the draft's `latest.json` and signed
    artifacts through a private test channel before public publication.
 
 Record tag, app commit, engine commit, artifact checksums, signing identities,
 notarization result, test machines, and smoke results as release evidence.
+
+The app never installs automatically. Verify the user confirmation, release
+notes, bounded progress, restart warning, preserved data, and retry/offline
+states during the RC-to-final updater rehearsal.
 
 ## Publish and rollback
 

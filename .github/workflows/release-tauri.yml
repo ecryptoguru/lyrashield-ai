@@ -2,12 +2,11 @@ name: Release Desktop (Tauri)
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing semver tag to build (for example v0.1.0)"
+        description: "Existing semver tag to build (for example v0.1.1-rc.1)"
         required: true
         type: string
 
@@ -24,54 +23,56 @@ env:
 
 jobs:
   preflight:
-    name: Verify release inputs
+    name: Verify protected release inputs
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    environment: desktop-release
     env:
       APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_PRIVATE_KEY_P8: ${{ secrets.APPLE_API_PRIVATE_KEY_P8 }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SIGNING_SUBSCRIPTION_ID }}
+      AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+      AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+      AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+      AZURE_ARTIFACT_SIGNING_SUBJECT: ${{ vars.AZURE_ARTIFACT_SIGNING_SUBJECT }}
       TAURI_UPDATER_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
       TAURI_UPDATER_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
     steps:
-      - name: Checkout release tag
+      - name: Checkout immutable release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify secrets, tag, and version
+      - name: Verify credentials, tag, and version
         run: |
           set -euo pipefail
           for name in \
             APPLE_CERTIFICATE_P12 APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
-            APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID \
-            WINDOWS_CERTIFICATE_PFX WINDOWS_CERTIFICATE_PASSWORD \
+            APPLE_API_ISSUER APPLE_API_KEY_ID APPLE_API_PRIVATE_KEY_P8 \
+            AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+            AZURE_ARTIFACT_SIGNING_ENDPOINT AZURE_ARTIFACT_SIGNING_ACCOUNT \
+            AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE AZURE_ARTIFACT_SIGNING_SUBJECT \
             TAURI_UPDATER_PRIVATE_KEY TAURI_UPDATER_KEY_PASSWORD; do
             if [ -z "${!name:-}" ]; then
-              echo "::error::Required Desktop release secret $name is missing"
+              echo "::error::Required Desktop release setting $name is missing"
               exit 1
             fi
           done
-          if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Release tag must be semver with a v prefix: $RELEASE_TAG"
-            exit 1
-          fi
+          version="$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")"
+          python3 .github/scripts/desktop_release.py validate --tag "$RELEASE_TAG" --version "$version"
           test -n "$(git tag --points-at HEAD --list "$RELEASE_TAG")" || {
             echo "::error::$RELEASE_TAG does not point at the checked-out commit"
             exit 1
           }
-          version="$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")"
-          test "v$version" = "$RELEASE_TAG" || {
-            echo "::error::Desktop version $version does not match $RELEASE_TAG"
-            exit 1
-          }
+          python3 .github/scripts/test_desktop_release.py
 
   macos:
     name: macOS ${{ matrix.arch }} signed package
@@ -88,6 +89,7 @@ jobs:
             target: x86_64-apple-darwin
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    environment: desktop-release
     steps:
       - name: Checkout app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -142,45 +144,101 @@ jobs:
       - name: Build Desktop frontend
         run: pnpm --filter @lyrashield/desktop-frontend build
 
-      - name: Import Apple signing certificate
+      - name: Import Developer ID and App Store Connect credentials
         env:
           APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           EXPECTED_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_PRIVATE_KEY_P8: ${{ secrets.APPLE_API_PRIVATE_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
         run: |
           set -euo pipefail
-          certificate_file="$(mktemp /tmp/lyrashield-certificate.XXXXXX.p12)"
-          keychain_file="$(mktemp /tmp/lyrashield-keychain.XXXXXX.keychain-db)"
+          certificate_file="$RUNNER_TEMP/lyrashield-certificate.p12"
+          keychain_file="$RUNNER_TEMP/lyrashield-release.keychain-db"
+          api_key_file="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
           keychain_password="$(uuidgen)"
+          rm -f "$certificate_file" "$keychain_file" "$api_key_file"
           printf '%s' "$APPLE_CERTIFICATE_P12" | base64 --decode > "$certificate_file"
+          printf '%s' "$APPLE_API_PRIVATE_KEY_P8" > "$api_key_file"
+          chmod 600 "$certificate_file" "$api_key_file"
           security create-keychain -p "$keychain_password" "$keychain_file"
           security set-keychain-settings -lut 21600 "$keychain_file"
           security unlock-keychain -p "$keychain_password" "$keychain_file"
-          security import "$certificate_file" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_file"
-          security set-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_file"
+          security import "$certificate_file" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security -k "$keychain_file"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain_file"
           security list-keychains -d user -s "$keychain_file"
-          security find-identity -v -p codesigning "$keychain_file" | grep -F "$EXPECTED_SIGNING_IDENTITY"
-          echo "APPLE_SIGNING_IDENTITY=$EXPECTED_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          security find-identity -v -p codesigning "$keychain_file" |
+            grep -F "Developer ID Application" | grep -F "$EXPECTED_SIGNING_IDENTITY"
+          {
+            echo "APPLE_SIGNING_IDENTITY=$EXPECTED_SIGNING_IDENTITY"
+            echo "APPLE_API_KEY_PATH=$api_key_file"
+            echo "APPLE_RELEASE_KEYCHAIN=$keychain_file"
+            echo "APPLE_RELEASE_CERTIFICATE=$certificate_file"
+          } >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize, and staple
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop/src-tauri
           args: --target ${{ matrix.target }} --bundles app,dmg --config tauri.release.conf.json
 
-      - name: Verify signed and stapled app
+      - name: Verify Developer ID, runtime, entitlements, notarization, and Gatekeeper
+        env:
+          BUNDLE_DIR: apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle
+          EXPECTED_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           set -euo pipefail
-          app="$(find "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle" -name '*.app' -print -quit)"
-          test -n "$app"
+          app="$(find "$BUNDLE_DIR" -name '*.app' -print -quit)"
+          dmg="$(find "$BUNDLE_DIR" -type f -name '*.dmg' -print -quit)"
+          test -n "$app" && test -n "$dmg"
           codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv --verbose=4 "$app" 2>&1 | grep -F "$EXPECTED_SIGNING_IDENTITY"
+          codesign -dv --verbose=4 "$app" 2>&1 | grep -F "runtime"
+          while IFS= read -r executable; do
+            if file "$executable" | grep -q 'Mach-O'; then
+              codesign --verify --strict --verbose=2 "$executable"
+              codesign -dv --verbose=4 "$executable" 2>&1 | grep -F "$EXPECTED_SIGNING_IDENTITY"
+            fi
+          done < <(find "$app/Contents" -type f -perm -111)
+          entitlements="$RUNNER_TEMP/lyrashield-entitlements.plist"
+          codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null || true
+          if plutil -extract com.apple.security.get-task-allow raw "$entitlements" 2>/dev/null | grep -qx true; then
+            echo "::error::get-task-allow must not be enabled in release artifacts"
+            exit 1
+          fi
+          python3 - "$entitlements" <<'PY'
+          import pathlib, plistlib, sys
+          path = pathlib.Path(sys.argv[1])
+          if path.stat().st_size:
+              values = plistlib.loads(path.read_bytes())
+              allowed = {
+                  "application-identifier",
+                  "com.apple.application-identifier",
+                  "com.apple.developer.team-identifier",
+                  "keychain-access-groups",
+              }
+              unexpected = sorted(set(values) - allowed)
+              if unexpected:
+                  raise SystemExit("unexpected release entitlements: " + ", ".join(unexpected))
+          PY
           xcrun stapler validate "$app"
+          xcrun stapler validate "$dmg"
+          spctl --assess --type execute --verbose=4 "$app"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+          mount_dir="$(mktemp -d "$RUNNER_TEMP/lyrashield-dmg.XXXXXX")"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_dir"
+          mounted_app="$(find "$mount_dir" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$mounted_app"
+          codesign --verify --deep --strict --verbose=2 "$mounted_app"
+          spctl --assess --type execute --verbose=4 "$mounted_app"
+          hdiutil detach "$mount_dir"
 
       - name: Give macOS assets architecture-specific names
         env:
@@ -193,10 +251,7 @@ jobs:
             suffix="$2"
             signed="$3"
             count="$(find "$BUNDLE_DIR" -type f -name "$pattern" | wc -l | tr -d ' ')"
-            test "$count" = 1 || {
-              echo "::error::Expected exactly one $pattern, found $count"
-              exit 1
-            }
+            test "$count" = 1 || { echo "::error::Expected exactly one $pattern, found $count"; exit 1; }
             source="$(find "$BUNDLE_DIR" -type f -name "$pattern" -print -quit)"
             destination="${source%"$suffix"}-${ARCH}${suffix}"
             mv "$source" "$destination"
@@ -218,11 +273,31 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz.sig
           if-no-files-found: error
 
+      - name: Remove temporary Apple credentials
+        if: always()
+        run: |
+          if [ -n "${APPLE_RELEASE_KEYCHAIN:-}" ]; then
+            security delete-keychain "$APPLE_RELEASE_KEYCHAIN" || true
+          fi
+          rm -f "${APPLE_RELEASE_CERTIFICATE:-}" "${APPLE_API_KEY_PATH:-}"
+
   windows:
     name: Windows x86_64 signed package
     needs: preflight
     runs-on: windows-latest
     timeout-minutes: 90
+    environment: desktop-release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SIGNING_SUBSCRIPTION_ID }}
+      AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+      AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+      AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+      AZURE_ARTIFACT_SIGNING_SUBJECT: ${{ vars.AZURE_ARTIFACT_SIGNING_SUBJECT }}
     steps:
       - name: Checkout app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -276,23 +351,34 @@ jobs:
       - name: Build Desktop frontend
         run: pnpm --filter @lyrashield/desktop-frontend build
 
-      - name: Import Windows signing certificate
-        env:
-          WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      - name: Authenticate to Azure with release-only OIDC
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install pinned Artifact Signing CLI
+        run: cargo install artifact-signing-cli --version 0.11.0 --locked
+
+      - name: Prove OIDC signing on a disposable canary
+        shell: pwsh
         run: |
-          $certificatePath = [System.IO.Path]::GetTempFileName() + ".pfx"
-          [System.IO.File]::WriteAllBytes($certificatePath, [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX))
-          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
-          $certificate = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password
-          if (-not $certificate.HasPrivateKey) { throw "Imported Windows signing certificate has no private key." }
+          Add-Type -TypeDefinition 'public static class Canary { public static void Main() {} }' `
+            -OutputAssembly "$env:RUNNER_TEMP\lyrashield-signing-canary.exe" `
+            -OutputType ConsoleApplication
+          & .github/scripts/sign-windows-artifact.ps1 "$env:RUNNER_TEMP\lyrashield-signing-canary.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Artifact Signing canary failed." }
+          & $env:SIGNTOOL_PATH verify /pa /all /v "$env:RUNNER_TEMP\lyrashield-signing-canary.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Artifact Signing canary verification failed." }
+
+      - name: Configure Tauri to sign during bundling
+        shell: pwsh
+        run: |
           $config = Get-Content apps/desktop/src-tauri/tauri.release.conf.json | ConvertFrom-Json -AsHashtable
-          $config.bundle.windows = @{
-            certificateThumbprint = $certificate.Thumbprint
-            digestAlgorithm = "sha256"
-            timestampUrl = "http://timestamp.digicert.com"
-          }
-          $config | ConvertTo-Json -Depth 4 | Set-Content apps/desktop/src-tauri/tauri.windows.conf.json
+          if (-not $config.bundle.ContainsKey("windows")) { $config.bundle.windows = @{} }
+          $config.bundle.windows.signCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$env:GITHUB_WORKSPACE\.github\scripts\sign-windows-artifact.ps1`" %1"
+          $config | ConvertTo-Json -Depth 8 | Set-Content apps/desktop/src-tauri/tauri.windows.conf.json
 
       - name: Build and sign Windows installer
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
@@ -303,20 +389,34 @@ jobs:
           projectPath: apps/desktop/src-tauri
           args: --bundles nsis --config tauri.windows.conf.json
 
-      - name: Verify Windows installer signature
+      - name: Verify Windows signer, chain, and timestamp
+        shell: pwsh
         run: |
-          $installer = Get-ChildItem apps/desktop/src-tauri/target -Recurse -Filter "*-setup.exe" | Select-Object -First 1
-          if (-not $installer) { throw "No Windows installer was built." }
-          signtool verify /pa /v $installer.FullName
-          if ($LASTEXITCODE -ne 0) { throw "Windows installer signature verification failed." }
+          $installer = Get-ChildItem apps/desktop/src-tauri/target -Recurse -Filter "*-setup.exe"
+          if ($installer.Count -ne 1) { throw "Expected exactly one Windows installer." }
+          $executables = @($installer) + @(Get-ChildItem apps/desktop/src-tauri/target/release -File -Filter "*.exe")
+          foreach ($file in $executables) {
+            & $env:SIGNTOOL_PATH verify /pa /all /v $file.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed." }
+            $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+            if ($signature.Status -ne "Valid") { throw "Authenticode status is not valid." }
+            if ($signature.SignerCertificate.Subject -notlike "*$env:AZURE_ARTIFACT_SIGNING_SUBJECT*") {
+              throw "Unexpected Artifact Signing certificate subject."
+            }
+            if (-not $signature.TimeStamperCertificate) { throw "RFC3161 timestamp is missing." }
+          }
+          $updaterSignature = "$($installer[0].FullName).sig"
+          if (-not (Test-Path $updaterSignature) -or (Get-Item $updaterSignature).Length -eq 0) {
+            throw "Windows updater signature is missing or empty."
+          }
 
       - name: Upload Windows package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: lyrashield-desktop-windows-x86_64
           path: |
-            apps/desktop/src-tauri/target/release/bundle/**/*.exe
-            apps/desktop/src-tauri/target/release/bundle/**/*.exe.sig
+            apps/desktop/src-tauri/target/release/bundle/**/*-setup.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*-setup.exe.sig
           if-no-files-found: error
 
   publish-draft:
@@ -327,59 +427,23 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout release assembly code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
       - name: Download signed packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
 
-      - name: Assemble updater manifest
+      - name: Validate assets and assemble manifest and checksums
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import datetime
-          import json
-          import os
-          import pathlib
-          import urllib.parse
-
-          root = pathlib.Path("artifacts")
-
-          def signed_pair(directory, suffix):
-              files = sorted((root / directory).rglob("*"))
-              artifacts = [path for path in files if path.is_file() and path.name.endswith(suffix)]
-              signatures = [path for path in files if path.is_file() and path.name.endswith(suffix + ".sig")]
-              if len(artifacts) != 1 or len(signatures) != 1:
-                  raise SystemExit(f"expected one signed {suffix} in {directory}")
-              signature = signatures[0].read_text(encoding="utf-8").strip()
-              if not signature:
-                  raise SystemExit(f"empty updater signature for {artifacts[0].name}")
-              return artifacts[0], signature
-
-          mac_arm = signed_pair("lyrashield-desktop-macos-aarch64", ".app.tar.gz")
-          mac_x64 = signed_pair("lyrashield-desktop-macos-x86_64", ".app.tar.gz")
-          windows = signed_pair("lyrashield-desktop-windows-x86_64", "-setup.exe")
-          tag = os.environ["RELEASE_TAG"]
-          base = f"https://github.com/ecryptoguru/lyrashield-ai/releases/download/{tag}"
-
-          def entry(pair):
-              artifact, signature = pair
-              return {
-                  "signature": signature,
-                  "url": f"{base}/{urllib.parse.quote(artifact.name)}",
-              }
-
-          manifest = {
-              "version": tag.removeprefix("v"),
-              "notes": f"LyraShield Local {tag}",
-              "pub_date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-              "platforms": {
-                  "darwin-aarch64": entry(mac_arm),
-                  "darwin-x86_64": entry(mac_x64),
-                  "windows-x86_64": entry(windows),
-              },
-          }
-          pathlib.Path("latest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-          PY
+          python3 .github/scripts/desktop_release.py manifest \
+            --artifacts artifacts --tag "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY" \
+            --output latest.json --checksums SHA256SUMS
 
       - name: Create signed draft release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
@@ -394,3 +458,4 @@ jobs:
             artifacts/**/*-setup.exe
             artifacts/**/*-setup.exe.sig
             latest.json
+            SHA256SUMS

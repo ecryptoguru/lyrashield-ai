@@ -289,62 +289,139 @@ pub fn is_build_installable(license_file: &LicenseFile, build_version: &str) -> 
     }
 }
 
-/// Single guard validating signature, machine membership, revocation, and eligibility pre scan/updater.
+/// Single guard validating signature, machine membership, and revocation before operation.
 /// All failures are non-operational. Must be called BEFORE any subprocess or updater install.
+#[derive(Debug)]
+pub struct OperationalLicense {
+    pub stored: types::StoredLicense,
+    pub offline_grace_remaining_seconds: Option<u64>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LicenseOperationalError {
+    #[error("no stored license")]
+    NoStoredLicense,
+    #[error("offline grace expired; reconnect to verify the license")]
+    OfflineGraceExpired,
+    #[error("{0}")]
+    Invalid(String),
+    #[error("{0}")]
+    Unavailable(String),
+}
+
+fn refresh_server_verified_license(
+    mut stored: types::StoredLicense,
+    persist: impl FnOnce(&types::StoredLicense) -> Result<(), String>,
+) -> OperationalLicense {
+    stored.version = 2;
+    stored.last_server_verified_at = Some(chrono::Utc::now().to_rfc3339());
+    if persist(&stored).is_err() {
+        eprintln!("failed to persist license verification timestamp");
+    }
+    OperationalLicense {
+        stored,
+        offline_grace_remaining_seconds: None,
+    }
+}
+
 pub async fn ensure_license_operational(
     api_url: Option<String>,
     public_key_pem: &str,
-) -> Result<types::StoredLicense, String> {
+) -> Result<OperationalLicense, LicenseOperationalError> {
     // Load persisted v1 StoredLicense with immutable licenseId.
     let stored = store::load_license()
-        .map_err(|e| format!("failed to load license: {}", e))?
-        .ok_or_else(|| "no stored license".to_string())?;
+        .map_err(|_| LicenseOperationalError::Unavailable("failed to load license".into()))?
+        .ok_or(LicenseOperationalError::NoStoredLicense)?;
 
-    if stored.version != 1 {
-        return Err(format!("unsupported license version: {}", stored.version));
+    if !matches!(stored.version, 1 | 2) {
+        return Err(LicenseOperationalError::Invalid(format!(
+            "unsupported license version: {}",
+            stored.version
+        )));
     }
     if stored.license_id.is_empty() {
-        return Err("missing licenseId — re-activate required".into());
+        return Err(LicenseOperationalError::Invalid(
+            "missing licenseId — re-activate required".into(),
+        ));
     }
 
     // Local signature verification.
     let verification = verify_license(&stored.license, public_key_pem);
     if !verification.valid {
-        return Err(format!(
+        return Err(LicenseOperationalError::Invalid(format!(
             "license signature invalid: {}",
             verification.reason.unwrap_or_else(|| "unknown".into())
-        ));
+        )));
     }
 
     // Machine binding — must be member.
     let machine_id = crate::machine_id::generate_machine_id();
     if !stored.license.machine_ids.contains(&machine_id) {
-        return Err(format!(
-            "machine not bound: {} not in {:?}",
-            machine_id, stored.license.machine_ids
+        return Err(LicenseOperationalError::Invalid(
+            "machine not bound to this license".into(),
         ));
     }
 
     // Identified server revocation check — requires licenseId. All transport/parse failures are non-operational.
     let client = crate::api::ApiClient::new(api_url)
-        .map_err(|e| format!("failed to build api client: {}", e))?;
-    let server = client
-        .verify(&stored.license, &stored.license_id)
-        .await
-        .map_err(|e| format!("license revalidation failed: {}", e))?;
-    if server.revoked || !server.valid {
-        return Err(format!(
-            "license revoked or invalid: {}",
-            server.reason.unwrap_or_else(|| "unknown".into())
-        ));
+        .map_err(|_| LicenseOperationalError::Unavailable("failed to build api client".into()))?;
+    match client.verify(&stored.license, &stored.license_id).await {
+        Ok(server) => {
+            if server.revoked || !server.valid {
+                let _ = store::clear_license();
+                return Err(LicenseOperationalError::Invalid(format!(
+                    "license revoked or invalid: {}",
+                    server.reason.unwrap_or_else(|| "unknown".into())
+                )));
+            }
+            Ok(refresh_server_verified_license(stored, store::save_stored))
+        }
+        Err(error) => {
+            if error.allows_offline_grace() {
+                if let Some(remaining) =
+                    offline_grace_remaining_seconds(&stored, chrono::Utc::now())
+                {
+                    Ok(OperationalLicense {
+                        stored,
+                        offline_grace_remaining_seconds: Some(remaining),
+                    })
+                } else {
+                    Err(LicenseOperationalError::OfflineGraceExpired)
+                }
+            } else {
+                Err(LicenseOperationalError::Unavailable(format!(
+                    "license revalidation failed: {}",
+                    error
+                )))
+            }
+        }
     }
+}
 
-    // Eligibility — updater and scan both gate on it per spec (all failures non-operational).
-    if !verification.update_eligible {
-        return Err("update eligibility expired".into());
+const OFFLINE_GRACE_DAYS: i64 = 7;
+const CLOCK_SKEW_MINUTES: i64 = 5;
+
+fn offline_grace_valid(stored: &types::StoredLicense, now: chrono::DateTime<chrono::Utc>) -> bool {
+    offline_grace_remaining_seconds(stored, now).is_some()
+}
+
+fn offline_grace_remaining_seconds(
+    stored: &types::StoredLicense,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<u64> {
+    let Some(value) = &stored.last_server_verified_at else {
+        return None;
+    };
+    let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) else {
+        return None;
+    };
+    let verified_at = parsed.with_timezone(&chrono::Utc);
+    if verified_at > now + chrono::Duration::minutes(CLOCK_SKEW_MINUTES) {
+        return None;
     }
-
-    Ok(stored)
+    let expires_at = verified_at + chrono::Duration::days(OFFLINE_GRACE_DAYS);
+    let remaining = expires_at.signed_duration_since(now).num_seconds();
+    (remaining > 0).then_some(remaining as u64)
 }
 
 /// Check eligibility for a specific build version under the operational license.
@@ -353,14 +430,13 @@ pub async fn ensure_update_installable(
     public_key_pem: &str,
     target_version: &str,
 ) -> Result<types::StoredLicense, String> {
-    let stored = ensure_license_operational(api_url, public_key_pem).await?;
-    if !is_build_installable(&stored.license, target_version) {
-        return Err(format!(
-            "build {} not installable under perpetual fallback {:?}",
-            target_version, stored.license.perpetual_fallback_build
-        ));
+    let operational = ensure_license_operational(api_url, public_key_pem)
+        .await
+        .map_err(|error| error.to_string())?;
+    if !is_build_installable(&operational.stored.license, target_version) {
+        return Err("target build is outside this license's update eligibility".into());
     }
-    Ok(stored)
+    Ok(operational.stored)
 }
 
 /// Simple semver comparison: returns -1, 0, or 1.
@@ -524,8 +600,57 @@ mod tests {
             license_id: "lic_test_123".into(),
             license: file,
             blob: "testblob".into(),
+            last_server_verified_at: None,
         };
         (stored, pubkey)
+    }
+
+    #[test]
+    fn test_offline_grace_expires_at_exact_seven_day_boundary() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-08-23T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let (mut stored, _) = make_valid_stored("machine");
+        stored.last_server_verified_at = Some("2026-08-16T12:00:00Z".into());
+        assert!(!offline_grace_valid(&stored, now));
+    }
+
+    #[test]
+    fn test_offline_grace_rejects_timestamp_older_than_seven_days() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-08-23T12:00:01Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let (mut stored, _) = make_valid_stored("machine");
+        stored.last_server_verified_at = Some("2026-08-16T12:00:00Z".into());
+        assert!(!offline_grace_valid(&stored, now));
+    }
+
+    #[test]
+    fn test_offline_grace_rejects_clock_rollback_beyond_five_minutes() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-08-23T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let (mut stored, _) = make_valid_stored("machine");
+        stored.last_server_verified_at = Some("2026-08-23T12:05:01Z".into());
+        assert!(!offline_grace_valid(&stored, now));
+    }
+
+    #[test]
+    fn test_offline_grace_rejects_missing_or_malformed_timestamp() {
+        let now = chrono::Utc::now();
+        let (mut stored, _) = make_valid_stored("machine");
+        assert!(!offline_grace_valid(&stored, now));
+        stored.last_server_verified_at = Some("not-a-date".into());
+        assert!(!offline_grace_valid(&stored, now));
+    }
+
+    #[test]
+    fn successful_server_verification_remains_operational_when_cache_write_fails() {
+        let (stored, _) = make_valid_stored("machine");
+        let operational = refresh_server_verified_license(stored, |_| Err("read only".into()));
+        assert_eq!(operational.stored.version, 2);
+        assert!(operational.stored.last_server_verified_at.is_some());
+        assert_eq!(operational.offline_grace_remaining_seconds, None);
     }
 
     fn test_pubkey_and_sign_alias(file: &mut types::LicenseFile) -> String {
@@ -558,8 +683,10 @@ mod tests {
             crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey2)
                 .await
         });
-        assert!(res.is_err());
-        assert!(res.unwrap_err().contains("machine not bound"));
+        assert!(matches!(
+            res,
+            Err(LicenseOperationalError::Invalid(message)) if message.contains("machine not bound")
+        ));
     }
 
     #[test]
@@ -581,13 +708,11 @@ mod tests {
             crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey)
                 .await
         });
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.contains("signature invalid") || err.contains("invalid"));
+        assert!(matches!(res, Err(LicenseOperationalError::Invalid(_))));
     }
 
     #[test]
-    fn test_guard_expired_eligibility_non_operational() {
+    fn test_guard_expired_eligibility_keeps_current_build_operational() {
         let _lock = crate::license::TEST_ENV_LOCK
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
@@ -629,14 +754,56 @@ mod tests {
             drop(server);
             result
         });
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.contains("eligibility expired") || err.contains("update_eligibility"));
+        assert!(res.is_ok());
     }
 
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
-    async fn test_guard_unreachable_non_operational() {
+    async fn test_v1_envelope_requires_online_verification_and_rewrites_v2() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        let machine_id = crate::machine_id::generate_machine_id();
+        let (mut stored, pubkey) = make_valid_stored(&machine_id);
+        stored.version = 1;
+        stored.last_server_verified_at = None;
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        crate::license::store::save_stored(&stored).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let body = r#"{"success":true,"data":{"version":1,"valid":true,"revoked":false,"updateEligible":true}}"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            }
+        });
+
+        let operational =
+            crate::license::ensure_license_operational(Some(format!("http://{}", addr)), &pubkey)
+                .await
+                .unwrap();
+        assert_eq!(operational.stored.version, 2);
+        assert!(operational.stored.last_server_verified_at.is_some());
+        let reloaded = crate::license::store::load_license().unwrap().unwrap();
+        assert_eq!(reloaded.version, 2);
+        assert!(reloaded.last_server_verified_at.is_some());
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn test_guard_unreachable_uses_fresh_offline_grace() {
         let _lock = crate::license::TEST_ENV_LOCK
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
@@ -652,14 +819,12 @@ mod tests {
         let res =
             crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey)
                 .await;
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.contains("revalidation failed") || err.contains("request failed"));
+        assert!(res.is_ok());
     }
 
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
-    async fn test_guard_5xx_non_operational() {
+    async fn test_guard_5xx_uses_fresh_offline_grace() {
         let _lock = crate::license::TEST_ENV_LOCK
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
@@ -691,7 +856,7 @@ mod tests {
         });
         let url = format!("http://{}", addr);
         let res = crate::license::ensure_license_operational(Some(url), &pubkey).await;
-        assert!(res.is_err());
+        assert!(res.is_ok());
     }
 
     #[tokio::test]
@@ -763,9 +928,7 @@ mod tests {
         });
         let url = format!("http://{}", addr);
         let res = crate::license::ensure_license_operational(Some(url), &pubkey).await;
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.contains("revoked") || err.contains("UNKNOWN"));
+        assert!(matches!(res, Err(LicenseOperationalError::Invalid(_))));
     }
 
     #[test]

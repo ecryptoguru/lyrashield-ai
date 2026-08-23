@@ -36,8 +36,10 @@ export default function App() {
         setLicenseStatus(status)
         if (status.state === "none" || status.state === "revoked") {
           setRoute("activation")
-        } else if (status.state === "expired_eligibility") {
-          // Expired eligibility is non-operational for scan/updater per guard; gate to status screen.
+        } else if (
+          status.state === "expired_eligibility" ||
+          status.state === "offline_grace_expired"
+        ) {
           setRoute("main")
         } else {
           setRoute("setup")
@@ -93,6 +95,7 @@ export default function App() {
   }
 
   // main
+  const licenseOperational = licenseStatus?.state !== "offline_grace_expired"
   return (
     <div className="flex h-screen flex-col bg-background">
       <div className="flex items-center justify-between border-b border-border p-4">
@@ -100,13 +103,15 @@ export default function App() {
         <div className="flex gap-2">
           <button
             onClick={() => setRoute("scan")}
-            className="rounded-md bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
+            disabled={!licenseOperational}
+            className="rounded-md bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             New Scan
           </button>
           <button
             onClick={() => setRoute("sync")}
-            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
+            disabled={!licenseOperational}
+            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             Sync
           </button>

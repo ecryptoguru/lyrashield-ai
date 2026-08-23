@@ -17,17 +17,18 @@ import type {
   SyncConnection,
   SyncResult,
   UpdateCheckResult,
+  UpdateProgress,
 } from "./types"
 
 // License
 export async function activateLicense(licenseKey: string, apiUrl?: string): Promise<LicenseStatus> {
   return invoke("activate_license", { licenseKey, apiUrl: apiUrl ?? null })
 }
-export async function verifyStoredLicense(apiUrl?: string): Promise<LicenseStatus> {
-  return invoke("verify_stored_license", { apiUrl: apiUrl ?? null })
+export async function verifyStoredLicense(): Promise<LicenseStatus> {
+  return invoke("verify_stored_license")
 }
-export async function startupRevalidateLicense(apiUrl?: string): Promise<LicenseStatus> {
-  return invoke("startup_revalidate_license", { apiUrl: apiUrl ?? null })
+export async function startupRevalidateLicense(): Promise<LicenseStatus> {
+  return invoke("startup_revalidate_license")
 }
 export async function getLicenseStatus(): Promise<LicenseStatus> {
   return invoke("get_license_status")
@@ -110,8 +111,16 @@ export async function onScanEvent(handler: (event: ScanEvent) => void): Promise<
 }
 
 // Updater
-export async function checkUpdateEligibility(apiUrl?: string): Promise<UpdateCheckResult> {
-  return invoke("check_update_eligibility", { apiUrl: apiUrl ?? null })
+export async function checkUpdateEligibility(): Promise<UpdateCheckResult> {
+  return invoke("check_update_eligibility")
+}
+export async function installUpdate(expectedVersion: string): Promise<void> {
+  return invoke("install_update", { expectedVersion })
+}
+export async function onUpdateProgress(
+  handler: (progress: UpdateProgress) => void
+): Promise<() => void> {
+  return listen<UpdateProgress>("updater://progress", (event) => handler(event.payload))
 }
 
 // Sync — raw key never in React; Rust keychain holds it

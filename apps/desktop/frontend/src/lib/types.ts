@@ -26,12 +26,15 @@ export type LicenseStatus =
       updateEligibleUntil: string
       updateEligible: boolean
       perpetualFallbackBuild: string | null
+      offlineGraceRemainingSeconds: number | null
     }
   | {
       state: "expired_eligibility"
       updateEligibleUntil: string
       perpetualFallbackBuild: string | null
+      offlineGraceRemainingSeconds: number | null
     }
+  | { state: "offline_grace_expired" }
   | { state: "revoked" }
   | { state: "none" }
 
@@ -132,6 +135,12 @@ export type UpdateCheckResult =
   | { state: "license_expired"; currentVersion: string; perpetualFallbackBuild: string | null }
   | { state: "no_license" }
   | { state: "error"; message: string }
+
+export interface UpdateProgress {
+  downloadedBytes: number
+  totalBytes: number | null
+  finished: boolean
+}
 
 export interface SyncConnection {
   workspaceId: string
