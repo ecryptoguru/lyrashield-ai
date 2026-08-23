@@ -483,6 +483,10 @@ Pricing:
 - **Team:** $99/seat + $59/seat/yr renewal, or $149/seat/yr subscription with sync.
 - **Refunds:** none on Local licenses.
 
+Public Local self-service checkout is not open yet. A temporarily unavailable
+payment state means no provider request was created and existing access is
+unchanged.
+
 ### License delivery and retrieval
 
 After a Local license purchase (Polar or Razorpay), you receive an email with a **one-time retrieval link** (expires in 7 days, single use). The email never contains the raw license key itself. Open the link or `POST {"token":"..."}` to `/api/licenses/retrieve` to retrieve your license key and signed license file **once**. The link expires after first retrieval or after 7 days and then returns a generic `404 Not Found` (no oracle). The retrieval token is stored only as a SHA-256 hash with an expiry and single-use marker, and is never logged. If email delivery fails, the system marks the fulfillment as `DELIVERY_FAILED` and retries automatically via the webhook-track queue before the webhook is considered complete; concurrent webhook deliveries mint only one license. If your link expired or was already used, contact support to re-issue.
@@ -589,7 +593,7 @@ The public marketing site, Lite Check, browser-local tools, methodology, and con
 
 The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires production proof for private evidence persistence, application-level readiness/queue/provider alerts, capacity evidence, failure recovery, and each additional review profile claimed. No recovery or RPO/RTO claim is made.
 
-Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. Polar/Razorpay test configuration and signed webhook smoke are complete, but live paid activation, production desktop distribution/signing proof, payout API provisioning, and the public affiliate opening remain controlled release gates.
+Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. New Polar and Razorpay checkout requests are independently admission-controlled and default off in production while webhook settlement remains enabled. Test configuration and signed webhook smoke are complete, but live paid canaries, production desktop distribution/signing proof, Local self-service checkout, payout API provisioning, and the public affiliate opening remain controlled release gates.
 
 Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 

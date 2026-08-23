@@ -57,31 +57,31 @@ Version rules:
 
 ### Shared packages
 
-| Package            | Responsibility                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| `auth`             | Better Auth server/client split, sessions, permissions, OAuth workspace binding           |
-| `db`               | Prisma schema/migrations/client, RLS/scoping, audit chain, domain services                |
-| `types`            | Zod schemas, DTOs, enums, queue/action/scan contracts, OpenAPI exports                    |
-| `ui`               | Accessible shared controls, cards, forms, dialogs, themes, loading/empty states           |
-| `config`           | Environment schemas and shared TypeScript/ESLint configuration                            |
-| `logger`           | Structured, circular-safe, truncating, secret/PII-redacting logs                          |
-| `integrations`     | GitHub, Redis, shared queue, notifications, external providers                            |
-| `security`         | SSRF-safe fetch, public-surface analysis, AI security scanner, prompt/input controls      |
-| `egress-proxy`     | Authenticated DNS-pinned SSRF-safe URL fetching                                           |
-| `score`            | Pure versioned LyraShield Score calculation and eligibility rules                         |
-| `billing`          | Polar/Razorpay gateways, entitlements, trial, usage, packs, grace, overage, sync          |
-| `pricing`          | Cloud plans, minute packs, Local SKUs                                                     |
-| `licenses`         | ed25519 license signing/verification and canonical JSON                                   |
-| `affiliate`        | Attribution, commissions, fraud checks, payouts, reserves, webhook dispatch               |
-| `evidence-storage` | AES-256-GCM envelope encryption and private storage abstraction                           |
-| `mcp`              | API-backed MCP server, stdio transport, tool schemas, prompt-injection guard              |
-| `sdk`              | Authenticated API client used by CLI and MCP                                              |
-| `credentials`      | Single source for `~/.lyrashield/credentials.json`, env precedence, API URL normalization |
-| `cli`              | Canonical unscoped `lyrashield` CLI                                                       |
-| `cli-alias`        | Deprecated `@lyrashield/cli` compatibility wrapper                                        |
-| `agent-registry`   | Install metadata for supported coding agents                                              |
-| `agent-rules`      | Agent policy/rule/skill rendering                                                         |
-| `agent-plugin`     | Portable plugin, MCP descriptor, skill, and client shims                                  |
+| Package            | Responsibility                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| `auth`             | Better Auth server/client split, sessions, permissions, OAuth workspace binding             |
+| `db`               | Prisma schema/migrations/client, RLS/scoping, audit chain, domain services                  |
+| `types`            | Zod schemas, DTOs, enums, queue/action/scan contracts, OpenAPI exports                      |
+| `ui`               | Accessible shared controls, cards, forms, dialogs, themes, loading/empty states             |
+| `config`           | Environment schemas and shared TypeScript/ESLint configuration                              |
+| `logger`           | Structured, circular-safe, truncating, secret/PII-redacting logs                            |
+| `integrations`     | GitHub, Redis, shared queue, notifications, external providers                              |
+| `security`         | SSRF-safe fetch, public-surface analysis, AI security scanner, prompt/input controls        |
+| `egress-proxy`     | Authenticated DNS-pinned SSRF-safe URL fetching                                             |
+| `score`            | Pure versioned LyraShield Score calculation and eligibility rules                           |
+| `billing`          | Polar/Razorpay gateways, admission, entitlements, trial, usage, packs, grace, overage, sync |
+| `pricing`          | Cloud plans, minute packs, Local SKUs                                                       |
+| `licenses`         | ed25519 license signing/verification and canonical JSON                                     |
+| `affiliate`        | Attribution, commissions, fraud checks, payouts, reserves, webhook dispatch                 |
+| `evidence-storage` | AES-256-GCM envelope encryption and private storage abstraction                             |
+| `mcp`              | API-backed MCP server, stdio transport, tool schemas, prompt-injection guard                |
+| `sdk`              | Authenticated API client used by CLI and MCP                                                |
+| `credentials`      | Single source for `~/.lyrashield/credentials.json`, env precedence, API URL normalization   |
+| `cli`              | Canonical unscoped `lyrashield` CLI                                                         |
+| `cli-alias`        | Deprecated `@lyrashield/cli` compatibility wrapper                                          |
+| `agent-registry`   | Install metadata for supported coding agents                                                |
+| `agent-rules`      | Agent policy/rule/skill rendering                                                           |
+| `agent-plugin`     | Portable plugin, MCP descriptor, skill, and client shims                                    |
 
 Generated output—`.next`, `dist`, `.turbo`, `.astro`, `.wrangler`, motion renders, media-local, Prisma generated client, `node_modules`, and `*.tsbuildinfo`—is not source.
 
@@ -246,6 +246,7 @@ Primary locations:
 
 - `packages/pricing`: plan and SKU truth.
 - `packages/billing/src/providers`: Polar/Razorpay adapters.
+- `packages/billing/src/admission.ts`: provider-specific off/canary/public checkout gate.
 - `packages/billing/src/usage`: balance, meter, grants, packs, expiry, overage, refund.
 - `packages/billing/src/entitlements.ts`: scan/target admission.
 - `apps/web/src/app/billing`: checkout, webhook, portal, UI.
@@ -331,7 +332,8 @@ Trust-boundary rules:
 - Evidence: `S3_*` plus encryption/key references.
 - Proxy: `LYRASHIELD_EGRESS_PROXY_URL`, `LYRASHIELD_EGRESS_PROXY_SECRET`.
 - Email: `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION`, `BREVO_API_KEY`, sender values.
-- Billing: Polar/Razorpay credentials, price maps, webhook secrets.
+- Billing: Polar/Razorpay credentials, price maps, webhook secrets,
+  provider-specific admission modes, and exact canary workspace IDs.
 - License: Key Vault and signing key identifiers.
 - Optional search: `LYRASHIELD_WEB_SEARCH_*`.
 

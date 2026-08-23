@@ -17,9 +17,11 @@ interface UpgradeNowButtonProps {
 export function UpgradeNowButton({ workspaceId }: UpgradeNowButtonProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleUpgrade() {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch("/billing/checkout", {
         method: "POST",
@@ -36,23 +38,30 @@ export function UpgradeNowButton({ workspaceId }: UpgradeNowButtonProps) {
           onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
         })
       } else {
-        console.error("Upgrade failed", data)
+        setError(data.error?.message ?? "Unable to start checkout. Please try again.")
       }
-    } catch (err) {
-      console.error("Upgrade request failed", err)
+    } catch {
+      setError("Unable to start checkout. Check your connection and try again.")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <button
-      onClick={handleUpgrade}
-      disabled={loading}
-      className={`${buttonVariants({ variant: "default" })} w-full`}
-    >
-      <TrendingUp className="mr-2 h-4 w-4" />
-      {loading ? "Loading..." : "Upgrade Now"}
-    </button>
+    <div className="space-y-2">
+      {error && (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+      <button
+        onClick={handleUpgrade}
+        disabled={loading}
+        className={`${buttonVariants({ variant: "default" })} w-full`}
+      >
+        <TrendingUp className="mr-2 h-4 w-4" />
+        {loading ? "Loading..." : "Upgrade Now"}
+      </button>
+    </div>
   )
 }

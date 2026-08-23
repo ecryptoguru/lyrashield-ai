@@ -71,6 +71,14 @@ export {
   type BillingProvider,
 } from "./geo"
 
+export {
+  evaluateBillingAdmission,
+  getBillingAdmission,
+  type BillingAdmissionMode,
+  type BillingAdmissionReason,
+  type BillingAdmissionDecision,
+} from "./admission"
+
 // Trial
 export {
   startTrial,

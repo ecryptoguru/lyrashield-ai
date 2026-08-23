@@ -250,11 +250,11 @@ mod tests {
     fn update_result_fields_match_frontend_camel_case_contract() {
         let value = serde_json::to_value(UpdateCheckResult::Available {
             version: "0.1.1".into(),
-            current_version: "0.1.1-rc.1".into(),
+            current_version: "0.1.1".into(),
             notes: None,
         })
         .unwrap();
         assert_eq!(value["state"], "available");
-        assert_eq!(value["currentVersion"], "0.1.1-rc.1");
+        assert_eq!(value["currentVersion"], "0.1.1");
     }
 }

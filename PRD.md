@@ -66,7 +66,7 @@ Implemented:
 - Findings, normalization, CWE/OWASP metadata, SCA, secrets, deterministic URL/API checks, AI App Security checks, evidence states, candidates, receipts, manifests, retests, reports, notifications, and launch readiness.
 - LyraShield Score, private snapshots, public scorecards, cards, badges, privacy-bounded analytics, referrals, and social sharing.
 - Agent actions, exact-input approvals, MCP over stdio and Streamable HTTP, hosted OAuth, CLI login/install/doctor flows, SDK, agent registry, and portable agent plugin.
-- Polar/Razorpay billing, plans, trials, entitlements, usage metering, minute packs, grace, overage logic, checkout, portal, and webhook processing.
+- Polar/Razorpay billing, plans, trials, entitlements, usage metering, minute packs, grace, overage logic, checkout admission, portal, and webhook processing. Production checkout admission defaults each provider to `off`; webhook settlement remains enabled.
 - Affiliate applications, attribution, commission ledger, fraud controls, payout ledger, dashboard, clawbacks, and reserves.
 - A fixed, non-destructive private-beta AI safety test catalog with exact host, credential, request, duration, response, and storage bounds. It is not arbitrary fuzzing or proof of adversarial robustness.
 
@@ -352,20 +352,27 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Dedicated worker compute, immutable worker promotion, readiness heartbeat, and rollback image.
 - Backup/restore drill.
 - Polar/Razorpay test credentials, product/price maps, webhook secrets, signed smoke, and non-charge objects.
-- Cloud billing, usage, Local/Desktop, and affiliate implementations merged.
+- Cloud billing, provider-specific admission controls, usage, Local/Desktop, and affiliate implementations merged.
 
 ### Remaining before broader paid/untrusted exposure
 
 1. Prove private S3-compatible evidence persistence, encryption, retrieval, and failure behavior in production.
 2. Connect readiness, queue, provider, cost, and worker logs to actionable monitoring, alerts, capacity evidence, and named incident ownership.
 3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work.
-4. Verify live-provider entitlement and usage metering events; keep live paid activation founder-controlled.
+4. Verify Polar and Razorpay live-provider entitlement and usage metering canaries independently; keep charges and public admission founder-controlled.
 5. Complete current production license-signing activation and proof through Azure Key Vault.
 6. Provision RazorpayX and Payoneer payout API access and tax-form workflow.
 7. Verify scorecard metadata/card formats/badge, revocation/expiry, referral continuity, human-event deduplication, and external unfurls on public domains.
 8. Triage the 24 Standard findings and obtain independent verification where warranted.
 9. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
 10. Verify production runtime DB role is neither superuser nor `BYPASSRLS` before traffic growth.
+
+Desktop `0.1.1` is prepared in code but is not a signed or published release.
+Production Desktop availability remains blocked on Apple/Azure signing
+provisioning, signed RC rehearsal, final draft verification, and founder
+approval. The protected GitHub environment and reviewer policies exist, but it
+contains no signing credentials; Azure Artifact Signing is not registered and
+has no account or certificate profile.
 
 ### Deferred
 

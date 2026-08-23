@@ -228,7 +228,7 @@ python3 secrets_sync.py --repo ecryptoguru/lyrashield-ai \
 
 | Variable                  | Value                                                 |
 | ------------------------- | ----------------------------------------------------- |
-| `LICENSE_PUBLISHED_BUILD` | e.g. `0.1.0` — bump on each Local/Desktop release     |
+| `LICENSE_PUBLISHED_BUILD` | e.g. `0.1.1` — bump on each Local/Desktop release     |
 | `BILLING_USD_INR_RATE`    | `100` (default; only override on founder instruction) |
 
 ### 4c. E2E signing key in CI
@@ -292,7 +292,7 @@ the Key Vault secret and GitHub secret in the same change window.
   - `LYRASHIELD_KEY_VAULT_NAME=lyrashieldprodsecrets`
   - `LICENSE_SIGNING_KEY_ID=license-key-v1`
   - `LYRASHIELD_INTERNAL_API_KEY=secretref:lyrashield-internal-api-key`
-  - `LICENSE_PUBLISHED_BUILD=0.1.0`
+  - `LICENSE_PUBLISHED_BUILD=0.1.1`
   - `POLAR_LOCAL_PRODUCT_IDS={"individual_launch":"prod_smoke_test"}` (smoke-only map)
 - Smoke test: `POST /api/licenses/issue` + `POST /api/licenses/verify` returned
   `valid: true`, `signingKeyId: "license-key-v1"`; smoke license deleted.
