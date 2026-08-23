@@ -82,23 +82,23 @@ The public key string from step 1 goes into `apps/desktop/src-tauri/tauri.conf.j
 
 The public key is committed in `apps/desktop/src-tauri/tauri.conf.json`; only the private key and password are secret. `release-tauri.yml` maps the two repository secrets above to Tauri's `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables.
 
-## 5. Apple Developer ID + App Store Connect (macOS signing/notarization)
+## 5. Apple Developer ID (macOS signing/notarization)
 
 Separately from the Tauri updater key, macOS builds require:
 
 1. **Apple Developer ID Application certificate** — from the Apple Developer portal (https://developer.apple.com). Export as a `.p12` file.
-2. **App Store Connect API key** — for `notarytool` automated notarization. Create at https://appstoreconnect.apple.com → Users and Access → Keys.
+2. **Apple ID app-specific password** — for Tauri's automated notarization.
 
 Add these as GitHub Actions secrets:
 
-| Secret name                  | Value                                                                     |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| `APPLE_CERTIFICATE`          | Base64-encoded `.p12` file                                                |
-| `APPLE_CERTIFICATE_PASSWORD` | `.p12` export password                                                    |
-| `APPLE_SIGNING_IDENTITY`     | "Developer ID Application: LyraShield (TEAM_ID)"                          |
-| `APPLE_API_KEY`              | Base64-encoded App Store Connect API key (.p8 file)                       |
-| `APPLE_API_ISSUER`           | App Store Connect issuer ID                                               |
-| `APPLE_API_KEY_PATH`         | Path where the workflow writes the API key (e.g. `/tmp/apple_api_key.p8`) |
+| Secret name                  | Value                                            |
+| ---------------------------- | ------------------------------------------------ |
+| `APPLE_CERTIFICATE_P12`      | Base64-encoded `.p12` file                       |
+| `APPLE_CERTIFICATE_PASSWORD` | `.p12` export password                           |
+| `APPLE_SIGNING_IDENTITY`     | `Developer ID Application: LyraShield (TEAM_ID)` |
+| `APPLE_ID`                   | Apple Developer account email                    |
+| `APPLE_PASSWORD`             | App-specific password                            |
+| `APPLE_TEAM_ID`              | Apple Developer team ID                          |
 
 ## 6. Windows code signing
 
@@ -106,7 +106,7 @@ For Windows builds, provision a code signing certificate (EV or OV). Add as GitH
 
 | Secret name                    | Value                      |
 | ------------------------------ | -------------------------- |
-| `WINDOWS_CERTIFICATE`          | Base64-encoded `.pfx` file |
+| `WINDOWS_CERTIFICATE_PFX`      | Base64-encoded `.pfx` file |
 | `WINDOWS_CERTIFICATE_PASSWORD` | `.pfx` export password     |
 
 > Alternative: Azure Trusted Signing can be used instead of a PFX file. If using Trusted Signing, the workflow uses the Azure signing action instead of the PFX-based approach.

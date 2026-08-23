@@ -15,13 +15,19 @@ pub struct CommandResult {
 ///
 /// Used for non-interactive commands like `auth status` and `--version`.
 pub fn run_engine_command(args: &[String], env: &HashMap<String, String>) -> CommandResult {
-    let cmd_name = if which::which("lyrashield").is_ok() {
-        "lyrashield"
-    } else {
-        "strix"
+    let engine = match super::resolve_engine_bin() {
+        Ok(engine) => engine,
+        Err(error) => {
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: error,
+                exit_code: None,
+            }
+        }
     };
 
-    let mut cmd = Command::new(cmd_name);
+    let mut cmd = Command::new(engine);
     cmd.args(args);
     for (k, v) in env {
         cmd.env(k, v);

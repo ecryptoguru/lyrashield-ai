@@ -2,6 +2,9 @@ node_modules/
 dist/
 src-tauri/target/
 src-tauri/gen/
+src-tauri/binaries/*
+!src-tauri/binaries/README.md
+src-tauri/tauri.windows.conf.json
 app-icon.png
 *.log
 .DS_Store
