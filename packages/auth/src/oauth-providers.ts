@@ -8,3 +8,17 @@ export function isOAuthProviderConfigured(
 ): boolean {
   return Boolean(clientId?.trim() && clientSecret?.trim())
 }
+
+export function buildMicrosoftSocialProvider(
+  clientId: string | undefined,
+  clientSecret: string | undefined,
+  tenantId: string | undefined
+) {
+  return {
+    clientId: clientId ?? "",
+    clientSecret: clientSecret ?? "",
+    tenantId: tenantId?.trim() || "common",
+    enabled: isOAuthProviderConfigured(clientId, clientSecret),
+    disableSignUp: false,
+  }
+}
