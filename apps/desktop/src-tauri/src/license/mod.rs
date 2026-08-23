@@ -297,57 +297,84 @@ pub struct OperationalLicense {
     pub offline_grace_remaining_seconds: Option<u64>,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum LicenseOperationalError {
+    #[error("no stored license")]
+    NoStoredLicense,
+    #[error("offline grace expired; reconnect to verify the license")]
+    OfflineGraceExpired,
+    #[error("{0}")]
+    Invalid(String),
+    #[error("{0}")]
+    Unavailable(String),
+}
+
+fn refresh_server_verified_license(
+    mut stored: types::StoredLicense,
+    persist: impl FnOnce(&types::StoredLicense) -> Result<(), String>,
+) -> OperationalLicense {
+    stored.version = 2;
+    stored.last_server_verified_at = Some(chrono::Utc::now().to_rfc3339());
+    if persist(&stored).is_err() {
+        eprintln!("failed to persist license verification timestamp");
+    }
+    OperationalLicense {
+        stored,
+        offline_grace_remaining_seconds: None,
+    }
+}
+
 pub async fn ensure_license_operational(
     api_url: Option<String>,
     public_key_pem: &str,
-) -> Result<OperationalLicense, String> {
+) -> Result<OperationalLicense, LicenseOperationalError> {
     // Load persisted v1 StoredLicense with immutable licenseId.
     let stored = store::load_license()
-        .map_err(|e| format!("failed to load license: {}", e))?
-        .ok_or_else(|| "no stored license".to_string())?;
+        .map_err(|_| LicenseOperationalError::Unavailable("failed to load license".into()))?
+        .ok_or(LicenseOperationalError::NoStoredLicense)?;
 
     if !matches!(stored.version, 1 | 2) {
-        return Err(format!("unsupported license version: {}", stored.version));
+        return Err(LicenseOperationalError::Invalid(format!(
+            "unsupported license version: {}",
+            stored.version
+        )));
     }
     if stored.license_id.is_empty() {
-        return Err("missing licenseId — re-activate required".into());
+        return Err(LicenseOperationalError::Invalid(
+            "missing licenseId — re-activate required".into(),
+        ));
     }
 
     // Local signature verification.
     let verification = verify_license(&stored.license, public_key_pem);
     if !verification.valid {
-        return Err(format!(
+        return Err(LicenseOperationalError::Invalid(format!(
             "license signature invalid: {}",
             verification.reason.unwrap_or_else(|| "unknown".into())
-        ));
+        )));
     }
 
     // Machine binding — must be member.
     let machine_id = crate::machine_id::generate_machine_id();
     if !stored.license.machine_ids.contains(&machine_id) {
-        return Err("machine not bound to this license".into());
+        return Err(LicenseOperationalError::Invalid(
+            "machine not bound to this license".into(),
+        ));
     }
 
     // Identified server revocation check — requires licenseId. All transport/parse failures are non-operational.
     let client = crate::api::ApiClient::new(api_url)
-        .map_err(|e| format!("failed to build api client: {}", e))?;
+        .map_err(|_| LicenseOperationalError::Unavailable("failed to build api client".into()))?;
     match client.verify(&stored.license, &stored.license_id).await {
         Ok(server) => {
             if server.revoked || !server.valid {
                 let _ = store::clear_license();
-                return Err(format!(
+                return Err(LicenseOperationalError::Invalid(format!(
                     "license revoked or invalid: {}",
                     server.reason.unwrap_or_else(|| "unknown".into())
-                ));
+                )));
             }
-            let mut refreshed = stored;
-            refreshed.version = 2;
-            refreshed.last_server_verified_at = Some(chrono::Utc::now().to_rfc3339());
-            store::save_stored(&refreshed)?;
-            Ok(OperationalLicense {
-                stored: refreshed,
-                offline_grace_remaining_seconds: None,
-            })
+            Ok(refresh_server_verified_license(stored, store::save_stored))
         }
         Err(error) => {
             if error.allows_offline_grace() {
@@ -359,10 +386,13 @@ pub async fn ensure_license_operational(
                         offline_grace_remaining_seconds: Some(remaining),
                     })
                 } else {
-                    Err("offline grace expired; reconnect to verify the license".into())
+                    Err(LicenseOperationalError::OfflineGraceExpired)
                 }
             } else {
-                Err(format!("license revalidation failed: {}", error))
+                Err(LicenseOperationalError::Unavailable(format!(
+                    "license revalidation failed: {}",
+                    error
+                )))
             }
         }
     }
@@ -400,7 +430,9 @@ pub async fn ensure_update_installable(
     public_key_pem: &str,
     target_version: &str,
 ) -> Result<types::StoredLicense, String> {
-    let operational = ensure_license_operational(api_url, public_key_pem).await?;
+    let operational = ensure_license_operational(api_url, public_key_pem)
+        .await
+        .map_err(|error| error.to_string())?;
     if !is_build_installable(&operational.stored.license, target_version) {
         return Err("target build is outside this license's update eligibility".into());
     }
@@ -612,6 +644,15 @@ mod tests {
         assert!(!offline_grace_valid(&stored, now));
     }
 
+    #[test]
+    fn successful_server_verification_remains_operational_when_cache_write_fails() {
+        let (stored, _) = make_valid_stored("machine");
+        let operational = refresh_server_verified_license(stored, |_| Err("read only".into()));
+        assert_eq!(operational.stored.version, 2);
+        assert!(operational.stored.last_server_verified_at.is_some());
+        assert_eq!(operational.offline_grace_remaining_seconds, None);
+    }
+
     fn test_pubkey_and_sign_alias(file: &mut types::LicenseFile) -> String {
         test_pubkey_and_sign(file)
     }
@@ -642,8 +683,10 @@ mod tests {
             crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey2)
                 .await
         });
-        assert!(res.is_err());
-        assert!(res.unwrap_err().contains("machine not bound"));
+        assert!(matches!(
+            res,
+            Err(LicenseOperationalError::Invalid(message)) if message.contains("machine not bound")
+        ));
     }
 
     #[test]
@@ -665,9 +708,7 @@ mod tests {
             crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey)
                 .await
         });
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.contains("signature invalid") || err.contains("invalid"));
+        assert!(matches!(res, Err(LicenseOperationalError::Invalid(_))));
     }
 
     #[test]
@@ -887,9 +928,7 @@ mod tests {
         });
         let url = format!("http://{}", addr);
         let res = crate::license::ensure_license_operational(Some(url), &pubkey).await;
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.contains("revoked") || err.contains("UNKNOWN"));
+        assert!(matches!(res, Err(LicenseOperationalError::Invalid(_))));
     }
 
     #[test]

@@ -51,15 +51,10 @@ pub async fn verify_stored_license() -> Result<LicenseStatus, String> {
             &operational.stored.license,
             operational.offline_grace_remaining_seconds,
         )),
-        Err(error) if error.contains("offline grace expired") => {
+        Err(crate::license::LicenseOperationalError::OfflineGraceExpired) => {
             Ok(LicenseStatus::OfflineGraceExpired)
         }
-        Err(error)
-            if error.contains("revoked")
-                || error.contains("signature invalid")
-                || error.contains("machine not bound")
-                || error.contains("missing licenseId") =>
-        {
+        Err(crate::license::LicenseOperationalError::Invalid(_)) => {
             let _ = store::clear_license();
             Ok(LicenseStatus::Revoked)
         }

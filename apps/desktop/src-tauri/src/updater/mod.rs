@@ -83,18 +83,19 @@ struct UpdateProgress {
 
 pub async fn check_for_update(app: &tauri::AppHandle) -> UpdateCheckResult {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
-    let operational = match crate::license::ensure_license_operational(None, BUNDLED_PUBLIC_KEY)
-        .await
-    {
-        Ok(operational) => operational.stored,
-        Err(error) if error.contains("no stored license") => return UpdateCheckResult::NoLicense,
-        Err(_) => {
-            return UpdateCheckResult::Error {
-                message: "Unable to verify the license. Connect to the internet and try again."
-                    .into(),
+    let operational =
+        match crate::license::ensure_license_operational(None, BUNDLED_PUBLIC_KEY).await {
+            Ok(operational) => operational.stored,
+            Err(crate::license::LicenseOperationalError::NoStoredLicense) => {
+                return UpdateCheckResult::NoLicense;
             }
-        }
-    };
+            Err(_) => {
+                return UpdateCheckResult::Error {
+                    message: "Unable to verify the license. Connect to the internet and try again."
+                        .into(),
+                }
+            }
+        };
     let updater = match app.updater() {
         Ok(updater) => updater,
         Err(_) => {

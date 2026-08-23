@@ -369,7 +369,7 @@ jobs:
             -OutputType ConsoleApplication
           & .github/scripts/sign-windows-artifact.ps1 "$env:RUNNER_TEMP\lyrashield-signing-canary.exe"
           if ($LASTEXITCODE -ne 0) { throw "Artifact Signing canary failed." }
-          signtool verify /pa /all /v "$env:RUNNER_TEMP\lyrashield-signing-canary.exe"
+          & $env:SIGNTOOL_PATH verify /pa /all /v "$env:RUNNER_TEMP\lyrashield-signing-canary.exe"
           if ($LASTEXITCODE -ne 0) { throw "Artifact Signing canary verification failed." }
 
       - name: Configure Tauri to sign during bundling
@@ -396,7 +396,7 @@ jobs:
           if ($installer.Count -ne 1) { throw "Expected exactly one Windows installer." }
           $executables = @($installer) + @(Get-ChildItem apps/desktop/src-tauri/target/release -File -Filter "*.exe")
           foreach ($file in $executables) {
-            signtool verify /pa /all /v $file.FullName
+            & $env:SIGNTOOL_PATH verify /pa /all /v $file.FullName
             if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed." }
             $signature = Get-AuthenticodeSignature -FilePath $file.FullName
             if ($signature.Status -ne "Valid") { throw "Authenticode status is not valid." }

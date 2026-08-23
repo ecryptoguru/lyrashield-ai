@@ -26,6 +26,12 @@ impl VerifyError {
     }
 }
 
+fn is_transient_verify_status(status: reqwest::StatusCode) -> bool {
+    status.is_server_error()
+        || status == reqwest::StatusCode::REQUEST_TIMEOUT
+        || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+}
+
 impl std::fmt::Display for VerifyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let message = match self {
@@ -205,7 +211,7 @@ impl ApiClient {
             .map_err(|_| VerifyError::Offline("verify response unavailable".into()))?;
 
         if !status.is_success() {
-            return if status.is_server_error() {
+            return if is_transient_verify_status(status) {
                 Err(VerifyError::Offline(format!(
                     "verify service unavailable ({})",
                     status
@@ -275,5 +281,19 @@ mod tests {
                 "http://127.0.0.1:1234"
             );
         }
+    }
+
+    #[test]
+    fn timeout_throttle_and_server_errors_preserve_offline_grace() {
+        for status in [
+            reqwest::StatusCode::REQUEST_TIMEOUT,
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+        ] {
+            assert!(is_transient_verify_status(status));
+        }
+        assert!(!is_transient_verify_status(
+            reqwest::StatusCode::UNAUTHORIZED
+        ));
     }
 }

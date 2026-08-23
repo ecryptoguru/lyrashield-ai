@@ -21,7 +21,8 @@ if (-not (Test-Path -LiteralPath $FilePath -PathType Leaf)) {
 
 $signTool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
   Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
-  Sort-Object { [version]$_.Directory.Parent.Name } -Descending |
+  Where-Object { $_.Directory.Parent.Name -as [version] } |
+  Sort-Object { $_.Directory.Parent.Name -as [version] } -Descending |
   Select-Object -First 1
 if (-not $signTool) {
   throw "Windows SDK signtool.exe was not found."
@@ -39,6 +40,9 @@ az account show --output none
 
 $env:AZURE_CLI_PATH = $azureAdapter
 $env:SIGNTOOL_PATH = $signTool.FullName
+if ($env:GITHUB_ENV) {
+  "SIGNTOOL_PATH=$($signTool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+}
 
 & artifact-signing-cli `
   --azure-client-secret "oidc-session-no-client-secret" `

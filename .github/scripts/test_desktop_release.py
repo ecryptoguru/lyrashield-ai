@@ -56,15 +56,25 @@ class DesktopReleaseTests(unittest.TestCase):
             )
             json.dumps(manifest)
 
-    def test_manifest_rejects_empty_or_duplicate_signed_assets(self):
+    def test_manifest_rejects_empty_signature(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             artifact_dir = root / "lyrashield-desktop-macos-aarch64"
             artifact_dir.mkdir(parents=True)
             (artifact_dir / "one.app.tar.gz").write_bytes(b"one")
-            (artifact_dir / "two.app.tar.gz").write_bytes(b"two")
             (artifact_dir / "one.app.tar.gz.sig").write_text("")
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "empty"):
+                desktop_release.find_signed_pair(root, artifact_dir.name, ".app.tar.gz")
+
+    def test_manifest_rejects_duplicate_signed_assets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            artifact_dir = root / "lyrashield-desktop-macos-aarch64"
+            artifact_dir.mkdir(parents=True)
+            for name in ("one", "two"):
+                (artifact_dir / f"{name}.app.tar.gz").write_bytes(name.encode())
+                (artifact_dir / f"{name}.app.tar.gz.sig").write_text(f"{name}-signature")
+            with self.assertRaisesRegex(ValueError, "exactly one"):
                 desktop_release.find_signed_pair(root, artifact_dir.name, ".app.tar.gz")
 
     def test_manifest_rejects_wrong_asset_version(self):
