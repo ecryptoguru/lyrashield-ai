@@ -1,135 +1,113 @@
-# LyraShield Desktop — Release Operations Runbook
+# LyraShield Desktop release runbook
 
-## Overview
+## Ownership and release shape
 
-This runbook covers the desktop release process: tagging, building, signing, publishing, and rollback. Releases produce signed macOS (universal DMG) and Windows (NSIS installer) artifacts plus a signed updater manifest on GitHub Releases.
+`lyrashield-ai` owns the customer Desktop app and its signed release. The
+workflow builds the app against one immutable `lyrashield-engine` revision,
+bundles that sidecar, and creates a draft GitHub Release containing:
 
-## Prerequisites (one-time setup)
+- signed and notarized macOS packages for Apple Silicon and Intel;
+- a signed Windows x86_64 NSIS installer;
+- Tauri updater signatures and one `latest.json` bound to those exact assets.
 
-### Tauri updater signing key
+Engine CI may build an unsigned package for compatibility testing, but it does
+not publish a second Desktop release.
 
-See `docs/ops/tauri-updater-keys-runbook.md` for the full keypair generation and custody procedure. Summary:
+## One-time secret setup
 
-1. Generate keypair on an offline workstation: `npx tauri signer generate -w ~/.tauri/lyrashield-updater.key`
-2. Store the private key as GitHub Actions secret `TAURI_UPDATER_PRIVATE_KEY`.
-3. Store the key password as `TAURI_UPDATER_KEY_PASSWORD`.
-4. Put the public key in `apps/desktop/src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
+Provision these GitHub repository secrets before creating a release tag:
 
-### Apple Developer ID + notarization
+- `TAURI_UPDATER_PRIVATE_KEY`
+- `TAURI_UPDATER_KEY_PASSWORD`
+- `APPLE_CERTIFICATE_P12`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_SIGNING_IDENTITY`
+- `APPLE_ID`
+- `APPLE_PASSWORD`
+- `APPLE_TEAM_ID`
+- `WINDOWS_CERTIFICATE_PFX`
+- `WINDOWS_CERTIFICATE_PASSWORD`
 
-1. Obtain an Apple Developer ID Application certificate.
-2. Export it as a P12 file.
-3. Base64-encode the P12 and store as `APPLE_CERTIFICATE_P12`.
-4. Store the P12 password as `APPLE_CERTIFICATE_PASSWORD`.
-5. Store the signing identity name as `APPLE_SIGNING_IDENTITY` (e.g., "Developer ID Application: Your Name (TEAM_ID)").
-6. Create an app-specific password for notarization and store as `APPLE_PASSWORD`.
-7. Store your Apple ID as `APPLE_ID` and team ID as `APPLE_TEAM_ID`.
+Keep private keys and certificates out of Git, logs, workflow artifacts, and
+release assets. See [tauri-updater-keys-runbook.md](tauri-updater-keys-runbook.md)
+and [license-signing-keys-runbook.md](license-signing-keys-runbook.md) for key
+custody and rotation.
 
-### Windows code signing
+## Pre-release gate
 
-Use Azure Trusted Signing or a code signing certificate. Store the certificate details as GitHub Actions secrets. If no signing is configured, the Windows build will be unsigned (SmartScreen warnings on first launch).
+Before tagging:
 
-### License signing public key
+- [ ] `.github/workflows/deploy-azure.yml` and
+      `.github/workflows/release-tauri.yml` pin the reviewed engine commit.
+- [ ] The pinned engine commit is reachable from engine `main`, and the
+      cross-repository worker contract passes.
+- [ ] `Cargo.toml` and `tauri.conf.json` contain the intended Desktop version.
+- [ ] Desktop frontend build/lint/typecheck and Rust fmt/clippy/tests pass.
+- [ ] The committed license verification public key is the production public
+      key; no private key is present in the app bundle.
+- [ ] Updater private/public key pair, Apple certificate/notarization account,
+      and Windows certificate are current and not revoked.
 
-Replace `apps/desktop/src-tauri/resources/license-signing-public-key.pem` with the production ed25519 public key from Azure Key Vault. The golden test key must NOT ship in production.
+The workflow preflight fails within five minutes when a required secret, tag,
+or version is missing. It does not start platform builds in that state.
 
-## Release process
+## Build a draft release
 
-### 1. Pre-release checklist
-
-- [ ] Production license signing public key is bundled (not the golden test key)
-- [ ] Tauri updater public key in `tauri.conf.json` matches the founder-generated keypair
-- [ ] `ENGINE_REVISION` in `release-tauri.yml` matches the current production engine pin
-- [ ] All CI gates pass on `main`
-- [ ] `cargo test`, `cargo clippy`, `cargo fmt --check` green
-- [ ] Frontend `typecheck`, `lint`, `build` green
-- [ ] No private keys in the repository or app bundle
-- [ ] Version in `Cargo.toml` and `tauri.conf.json` matches the intended tag
-
-### 2. Tag and push
+Create an annotated semver tag from a green `main` commit:
 
 ```bash
-git tag v0.1.0
+git tag -a v0.1.0 -m "LyraShield Desktop v0.1.0"
 git push origin v0.1.0
 ```
 
-This triggers the `release-tauri.yml` workflow.
+The workflow can also be dispatched manually for an existing tag. It never
+builds an arbitrary branch as a release.
 
-### 3. Monitor the workflow
+The platform jobs:
 
-The workflow has three jobs:
+1. verify the pinned engine commit is on engine `main`;
+2. build the native engine sidecar for the runner architecture;
+3. package it with the Desktop app;
+4. sign updater artifacts;
+5. sign and notarize/staple macOS apps, or Authenticode-sign Windows;
+6. verify signatures before uploading workflow artifacts.
 
-- `build-macos`: Builds universal DMG + app on macOS-14, signs with Apple Developer ID, notarizes.
-- `build-windows`: Builds NSIS installer on Windows, signs if credentials are present.
-- `publish-manifest`: Downloads the signed `latest.json` from the release, verifies no private key material, and publishes it as the canonical updater manifest.
+The final job constructs `latest.json` from the exact uploaded artifacts and
+creates a **draft** GitHub Release. A failed platform job leaves no partial
+public release.
 
-Monitor at: `https://github.com/ecryptoguru/lyrashield-ai/actions`
+## Draft verification
 
-### 4. Verify the release
+Do not publish until all checks pass:
 
-After the workflow completes:
+1. Download and install both macOS architecture packages on clean machines.
+2. Verify Gatekeeper accepts each package without an override.
+3. Install the Windows package on a clean Windows machine and verify its
+   Authenticode signer and timestamp.
+4. Activate a test license and confirm the bundled engine is detected even
+   when no global `lyrashield` or `strix` command exists.
+5. Test ChatGPT and Azure OpenAI setup without exposing keys in UI, logs, or
+   process arguments.
+6. Run, cancel, and complete a scan; reopen the app and confirm persisted
+   findings, events, and SARIF export.
+7. Verify Local-to-Cloud sync, conflict recovery, offline behavior, revocation,
+   update eligibility, and perpetual fallback.
+8. Install the prior release and verify the draft's `latest.json` and signed
+   artifacts through a private test channel before public publication.
 
-1. Check the GitHub Release page for the tag.
-2. Verify the following assets exist:
-   - `LyraShield_<version>_universal.dmg` (macOS)
-   - `LyraShield_<version>_x64-setup.exe` (Windows)
-   - `latest.json` (signed updater manifest)
-3. Download the DMG and verify it opens and the app launches.
-4. Download the setup.exe and verify it installs and the app launches.
-5. Verify `latest.json` contains the correct version and signature.
-6. Run a production smoke test (see below).
+Record tag, app commit, engine commit, artifact checksums, signing identities,
+notarization result, test machines, and smoke results as release evidence.
 
-### 5. Publish the release
+## Publish and rollback
 
-The release is created as a **draft**. After verification:
+Publishing the draft is a founder-controlled public action. After approval,
+edit the notes and publish the existing draft; do not rebuild or replace its
+assets.
 
-1. Go to the GitHub Release page.
-2. Edit the release notes.
-3. Click "Publish release".
+For rollback, return the release to draft and remove `latest.json` from public
+availability. Never retag a released version. Fix forward with a new patch tag
+so installed-client and audit history remain unambiguous.
 
-The updater manifest (`latest.json`) is now live at:
-`https://github.com/ecryptoguru/lyrashield-ai/releases/latest/download/latest.json`
-
-Existing desktop clients will detect the update on their next check.
-
-## Production smoke test
-
-After publishing:
-
-1. Install the new version on a clean macOS machine.
-2. Install the new version on a clean Windows machine.
-3. Activate with a test license key.
-4. Verify the engine and Docker are detected.
-5. Sign in with ChatGPT or configure Azure OpenAI.
-6. Run a scan against a test target.
-7. Verify findings are displayed and SARIF export works.
-8. Test the updater: install the previous version, verify it detects the new version and updates.
-9. Test offline grace: disconnect from the network, verify the app still works.
-10. Test sync (if applicable): connect a workspace, sync findings, verify they appear in the dashboard.
-
-## Rollback
-
-If a release is broken:
-
-1. **Unpublish the GitHub Release:** Go to the release page → Edit → "Set as draft" (or delete the release).
-2. **Remove `latest.json`:** Delete the `latest.json` asset from the release. This stops the updater from offering the broken version.
-3. **Re-tag (if needed):** If the tag itself is broken, delete it and re-tag a known-good commit:
-   ```bash
-   git tag -d v0.1.0
-   git push origin :refs/tags/v0.1.0
-   git tag v0.1.0 <known-good-commit>
-   git push origin v0.1.0
-   ```
-4. **Communicate:** Notify users via the support channel. Existing installations with perpetual fallback will continue working at their current version.
-
-## Signing key rotation
-
-If the Tauri updater signing key is compromised:
-
-1. Generate a new keypair per `tauri-updater-keys-runbook.md`.
-2. Update `tauri.conf.json` with the new public key.
-3. Update GitHub Actions secrets with the new private key.
-4. Ship a new release with the new key.
-5. The old key's updates will be rejected by clients that have the new key.
-
-If the license signing key is compromised, follow `docs/ops/license-signing-keys-runbook.md` for rotation.
+If an updater signing key is compromised, existing clients cannot trust a new
+key without a release signed by the old trusted key. Stop publication, preserve
+evidence, and follow the rotation procedure before issuing another release.

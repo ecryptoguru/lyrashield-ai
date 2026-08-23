@@ -324,6 +324,7 @@ jobs:
       - name: Checkout app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Read pinned engine revision
@@ -373,8 +374,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Verify pinned engine-worker contract
-        working-directory: lyrashield-engine
-        run: ./scripts/verify-worker-contract.sh "$GITHUB_WORKSPACE"
+        run: bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"
 
   rls-child-write-repro:
     # Deep Review v12 P0-1: reproduce the production 42501 that took down the

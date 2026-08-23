@@ -6,7 +6,8 @@ LyraShield Local — a BYOK desktop security scanner built with Tauri v2.
 
 - **Rust** (stable, 1.77+) — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 - **Node.js** 24+ and **pnpm** 11+
-- **LyraShield Engine** on PATH — `uv tool install lyrashield` (or `pip install lyrashield`)
+- A bundled LyraShield Engine sidecar in production. Debug builds may use
+  `LYRASHIELD_ENGINE_BIN` or a developer `lyrashield`/`strix` install on PATH.
 - **Docker Desktop** (macOS/Windows) or Docker Engine (Linux) — scans run in a hardened sandbox
 
 ## Development
@@ -49,7 +50,8 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
 - **Rust core** (`src-tauri/src/`) — license verification (ed25519), BYOK credential management (OS keychain), engine/Docker detection, process spawning, HTTP client for the license API
 - **React frontend** (`frontend/src/`) — Vite + React + TypeScript + Tailwind CSS v4, matching the web app's design tokens
-- **Engine** — the desktop shells out to `lyrashield`/`strix` on PATH; it does not bundle the engine
+- **Engine** — signed releases bundle the immutable engine revision selected by
+  the release workflow. Production never falls back to PATH.
 
 ## License verification
 

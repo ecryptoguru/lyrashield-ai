@@ -7,421 +7,390 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v0.1.0)"
+        description: "Existing semver tag to build (for example v0.1.0)"
         required: true
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-desktop-${{ github.ref }}
+  group: release-desktop-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
-  ENGINE_REVISION: "1f911b6aa0ad5ea78db80dfaa1ec7cf1e56619f0"
+  ENGINE_REVISION: bbc5e25008fd0a9c620f77ebff4979799a59e339
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  build-macos:
-    name: macOS Universal (DMG + app)
-    runs-on: macos-14
+  preflight:
+    name: Verify release inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      TAURI_UPDATER_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+      TAURI_UPDATER_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify secrets, tag, and version
+        run: |
+          set -euo pipefail
+          for name in \
+            APPLE_CERTIFICATE_P12 APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+            APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID \
+            WINDOWS_CERTIFICATE_PFX WINDOWS_CERTIFICATE_PASSWORD \
+            TAURI_UPDATER_PRIVATE_KEY TAURI_UPDATER_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required Desktop release secret $name is missing"
+              exit 1
+            fi
+          done
+          if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag must be semver with a v prefix: $RELEASE_TAG"
+            exit 1
+          fi
+          test -n "$(git tag --points-at HEAD --list "$RELEASE_TAG")" || {
+            echo "::error::$RELEASE_TAG does not point at the checked-out commit"
+            exit 1
+          }
+          version="$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")"
+          test "v$version" = "$RELEASE_TAG" || {
+            echo "::error::Desktop version $version does not match $RELEASE_TAG"
+            exit 1
+          }
+
+  macos:
+    name: macOS ${{ matrix.arch }} signed package
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: aarch64
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            arch: x86_64
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     steps:
       - name: Checkout app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
 
-      - name: Checkout engine (pinned revision)
+      - name: Checkout pinned engine
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ecryptoguru/lyrashield-engine
+          repository: ${{ github.repository_owner }}/lyrashield-engine
           ref: ${{ env.ENGINE_REVISION }}
+          fetch-depth: 0
           path: lyrashield-engine
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      - name: Verify engine revision immutability
+      - name: Verify engine revision provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd lyrashield-engine
-          ACTUAL=$(git rev-parse HEAD)
-          if [ "$ACTUAL" != "${{ env.ENGINE_REVISION }}" ]; then
-            echo "::error::Engine revision mismatch: expected ${{ env.ENGINE_REVISION }}, got $ACTUAL"
-            exit 1
-          fi
-          echo "Engine revision confirmed: $ACTUAL"
+          bash .github/scripts/verify-engine-revision.sh \
+            lyrashield-engine "$ENGINE_REVISION" \
+            "${{ github.repository_owner }}/lyrashield-engine"
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # v1 (stable)
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-          components: clippy,rustfmt
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+          enable-cache: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          workspaces: apps/desktop/src-tauri
+          node-version: "24"
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable 2026-08-22
+        with:
+          targets: ${{ matrix.target }}
 
-      - name: Install dependencies
+      - name: Install app dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build frontend
+      - name: Build version-matched engine sidecar
+        working-directory: lyrashield-engine
+        run: |
+          set -euo pipefail
+          bash scripts/build.sh
+          mkdir -p ../apps/desktop/src-tauri/binaries
+          cp dist/strix "../apps/desktop/src-tauri/binaries/lyrashield-engine-${{ matrix.target }}"
+          chmod +x "../apps/desktop/src-tauri/binaries/lyrashield-engine-${{ matrix.target }}"
+
+      - name: Build Desktop frontend
         run: pnpm --filter @lyrashield/desktop-frontend build
 
-      # Fail-closed: release builds must be signed. Unsigned builds are not acceptable
-      # for updater distribution — the updater requires valid signatures to prevent
-      # downgrade/drift attacks. Missing cert fails the job.
       - name: Import Apple signing certificate
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          EXPECTED_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          if [ -z "$APPLE_CERTIFICATE" ]; then
-            echo "::error::Apple certificate (APPLE_CERTIFICATE_P12) is required for signed release — refusing to publish unsigned macOS artifact"
-            exit 1
-          fi
-          if [ -z "$APPLE_CERTIFICATE_PASSWORD" ]; then
-            echo "::error::APPLE_CERTIFICATE_PASSWORD is required"
-            exit 1
-          fi
-          CERT_FILE=$(mktemp /tmp/certificate.XXXXXX.p12)
-          KEYCHAIN_FILE=$(mktemp /tmp/keychain.XXXXXX.keychain-db)
-          KEYCHAIN_PASSWORD=$(uuidgen)
-          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_FILE"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_FILE"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
-          security import "$CERT_FILE" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_FILE"
-          security list-keychains -d user -s "$KEYCHAIN_FILE" $(security list-keychains -d user | tr -d '"')
-          rm -f "$CERT_FILE"
+          set -euo pipefail
+          certificate_file="$(mktemp /tmp/lyrashield-certificate.XXXXXX.p12)"
+          keychain_file="$(mktemp /tmp/lyrashield-keychain.XXXXXX.keychain-db)"
+          keychain_password="$(uuidgen)"
+          printf '%s' "$APPLE_CERTIFICATE_P12" | base64 --decode > "$certificate_file"
+          security create-keychain -p "$keychain_password" "$keychain_file"
+          security set-keychain-settings -lut 21600 "$keychain_file"
+          security unlock-keychain -p "$keychain_password" "$keychain_file"
+          security import "$certificate_file" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_file"
+          security set-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_file"
+          security list-keychains -d user -s "$keychain_file"
+          security find-identity -v -p codesigning "$keychain_file" | grep -F "$EXPECTED_SIGNING_IDENTITY"
+          echo "APPLE_SIGNING_IDENTITY=$EXPECTED_SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
-      - name: Build Tauri app (universal macOS)
+      - name: Build, sign, notarize, and staple
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop/src-tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: "LyraShield Desktop ${{ github.ref_name }}"
-          releaseBody: "LyraShield Local/Desktop app release. See the assets below for macOS and Windows installers."
-          releaseDraft: true
-          prerelease: false
-          args: "--target universal-apple-darwin"
+          args: --target ${{ matrix.target }} --bundles app,dmg --config tauri.release.conf.json
 
-      # Notarization is required for Gatekeeper acceptance. Fail-closed: a signed
-      # but un-notarized build would show "cannot be opened" on first launch.
-      # Missing Apple API credentials now fail the release rather than warning.
-      - name: Notarize macOS app
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      - name: Verify signed and stapled app
         run: |
-          if [ -z "$APPLE_CERTIFICATE" ]; then
-            echo "::error::Apple certificate missing — cannot notarize (previous step should have failed)"
-            exit 1
-          fi
-          if [ -z "$APPLE_API_ISSUER" ] || [ -z "$APPLE_API_KEY_ID" ] || [ -z "$APPLE_API_KEY" ]; then
-            echo "::error::Apple signing cert present but App Store Connect API creds (APPLE_API_ISSUER / APPLE_API_KEY_ID / APPLE_API_KEY) are not set — refusing to publish un-notarized artifact"
-            exit 1
-          fi
-          KEY_FILE=$(mktemp /tmp/AuthKey.XXXXXX.p8)
-          echo "$APPLE_API_KEY" | base64 --decode > "$KEY_FILE" 2>/dev/null || printf '%s' "$APPLE_API_KEY" > "$KEY_FILE"
-          shopt -s nullglob
-          ARTIFACTS=( apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app )
-          if [ ${#ARTIFACTS[@]} -eq 0 ]; then
-            echo "::error::No macOS artifacts found for notarization (expected dmg/app)"
-            exit 1
-          fi
-          for ART in "${ARTIFACTS[@]}"; do
-            [ -e "$ART" ] || continue
-            echo "Notarizing: $ART"
-            xcrun notarytool submit "$ART" \
-              --key "$KEY_FILE" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" \
-              --wait --timeout 30m
-            case "$ART" in
-              *.dmg) xcrun stapler staple "$ART" ;;
-              *.app) xcrun stapler staple "$ART" ;;
-            esac
-          done
-          rm -f "$KEY_FILE"
+          set -euo pipefail
+          app="$(find "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle" -name '*.app' -print -quit)"
+          test -n "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          xcrun stapler validate "$app"
 
-  build-windows:
-    name: Windows x64 (NSIS installer)
+      - name: Give macOS assets architecture-specific names
+        env:
+          BUNDLE_DIR: apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          rename_one() {
+            pattern="$1"
+            suffix="$2"
+            signed="$3"
+            count="$(find "$BUNDLE_DIR" -type f -name "$pattern" | wc -l | tr -d ' ')"
+            test "$count" = 1 || {
+              echo "::error::Expected exactly one $pattern, found $count"
+              exit 1
+            }
+            source="$(find "$BUNDLE_DIR" -type f -name "$pattern" -print -quit)"
+            destination="${source%"$suffix"}-${ARCH}${suffix}"
+            mv "$source" "$destination"
+            if [ "$signed" = true ]; then
+              test -s "$source.sig"
+              mv "$source.sig" "$destination.sig"
+            fi
+          }
+          rename_one '*.dmg' '.dmg' false
+          rename_one '*.app.tar.gz' '.app.tar.gz' true
+
+      - name: Upload macOS packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lyrashield-desktop-macos-${{ matrix.arch }}
+          path: |
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz.sig
+          if-no-files-found: error
+
+  windows:
+    name: Windows x86_64 signed package
+    needs: preflight
     runs-on: windows-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
 
-      - name: Checkout engine (pinned revision)
+      - name: Checkout pinned engine
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ecryptoguru/lyrashield-engine
+          repository: ${{ github.repository_owner }}/lyrashield-engine
           ref: ${{ env.ENGINE_REVISION }}
+          fetch-depth: 0
           path: lyrashield-engine
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      - name: Verify engine revision immutability
+      - name: Verify engine revision provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd lyrashield-engine
-          $actual = git rev-parse HEAD
-          if ($actual -ne "${{ env.ENGINE_REVISION }}") {
-            Write-Error "Engine revision mismatch: expected ${{ env.ENGINE_REVISION }}, got $actual"
-            exit 1
-          }
-          Write-Host "Engine revision confirmed: $actual"
+          bash .github/scripts/verify-engine-revision.sh \
+            lyrashield-engine "$ENGINE_REVISION" \
+            "${{ github.repository_owner }}/lyrashield-engine"
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # v1 (stable)
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          components: clippy,rustfmt
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+          enable-cache: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          workspaces: apps/desktop/src-tauri
+          node-version: "24"
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable 2026-08-22
 
-      - name: Install dependencies
+      - name: Install app dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build frontend
+      - name: Build version-matched engine sidecar
+        shell: bash
+        working-directory: lyrashield-engine
+        run: |
+          set -euo pipefail
+          bash scripts/build.sh
+          mkdir -p ../apps/desktop/src-tauri/binaries
+          cp dist/strix.exe ../apps/desktop/src-tauri/binaries/lyrashield-engine-x86_64-pc-windows-msvc.exe
+
+      - name: Build Desktop frontend
         run: pnpm --filter @lyrashield/desktop-frontend build
 
-      - name: Build Tauri app (Windows x64)
+      - name: Import Windows signing certificate
+        env:
+          WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $certificatePath = [System.IO.Path]::GetTempFileName() + ".pfx"
+          [System.IO.File]::WriteAllBytes($certificatePath, [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX))
+          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $certificate = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          if (-not $certificate.HasPrivateKey) { throw "Imported Windows signing certificate has no private key." }
+          $config = Get-Content apps/desktop/src-tauri/tauri.release.conf.json | ConvertFrom-Json -AsHashtable
+          $config.bundle.windows = @{
+            certificateThumbprint = $certificate.Thumbprint
+            digestAlgorithm = "sha256"
+            timestampUrl = "http://timestamp.digicert.com"
+          }
+          $config | ConvertTo-Json -Depth 4 | Set-Content apps/desktop/src-tauri/tauri.windows.conf.json
+
+      - name: Build and sign Windows installer
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop/src-tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: "LyraShield Desktop ${{ github.ref_name }}"
-          releaseBody: "LyraShield Local/Desktop app release. See the assets below for macOS and Windows installers."
-          releaseDraft: true
-          prerelease: false
+          args: --bundles nsis --config tauri.windows.conf.json
 
-  publish-manifest:
-    name: Publish signed updater manifest
-    needs: [build-macos, build-windows]
-    runs-on: ubuntu-latest
+      - name: Verify Windows installer signature
+        run: |
+          $installer = Get-ChildItem apps/desktop/src-tauri/target -Recurse -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "No Windows installer was built." }
+          signtool verify /pa /v $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Windows installer signature verification failed." }
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lyrashield-desktop-windows-x86_64
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe.sig
+          if-no-files-found: error
+
+  publish-draft:
+    name: Assemble signed draft release
+    needs: [macos, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download signed packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          persist-credentials: false
+          path: artifacts
 
-      # Dependency: Node 24 + pnpm required for manifest validator (licensed: MIT).
-      # Version consistency source: tag (github.ref_name) is canonical.
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies (for validator)
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify version consistency (tag <-> tauri.conf.json)
+      - name: Assemble updater manifest
         run: |
           set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-.*)?$ ]]; then
-            echo "::error::Tag '$TAG' must be semver with v prefix (e.g. v0.1.0)"
-            exit 1
-          fi
-          VERSION="${TAG#v}"
-          TAURI_VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
-          if [ "$TAURI_VERSION" != "$VERSION" ]; then
-            echo "::error::Version mismatch: tag $TAG (version $VERSION) != tauri.conf.json version $TAURI_VERSION — bump tauri.conf.json to match tag"
-            exit 1
-          fi
-          echo "Version consistency ✓ tag $TAG == tauri.conf.json $TAURI_VERSION"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import pathlib
+          import urllib.parse
 
-      - name: Generate updater manifest (fail-closed)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
-          echo "Generating manifest for $TAG (version $VERSION)"
+          root = pathlib.Path("artifacts")
 
-          # Fail if updater private key not configured — signing is required
-          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-            echo "::error::TAURI_UPDATER_PRIVATE_KEY is not set — updater signing required"
-            exit 1
-          fi
+          def signed_pair(directory, suffix):
+              files = sorted((root / directory).rglob("*"))
+              artifacts = [path for path in files if path.is_file() and path.name.endswith(suffix)]
+              signatures = [path for path in files if path.is_file() and path.name.endswith(suffix + ".sig")]
+              if len(artifacts) != 1 or len(signatures) != 1:
+                  raise SystemExit(f"expected one signed {suffix} in {directory}")
+              signature = signatures[0].read_text(encoding="utf-8").strip()
+              if not signature:
+                  raise SystemExit(f"empty updater signature for {artifacts[0].name}")
+              return artifacts[0], signature
 
-          # Try to download an existing latest.json from the release (tauri-action may have uploaded one)
-          # If present, we still re-validate and re-generate to enforce version/asset consistency.
-          gh release download "$TAG" --pattern "latest.json" --output /tmp/latest-existing.json 2>/dev/null || true
-          if [ -f /tmp/latest-existing.json ] && [ -s /tmp/latest-existing.json ]; then
-            echo "Found existing latest.json from tauri-action — will validate downstream, but regenerating from assets for consistency"
-          fi
+          mac_arm = signed_pair("lyrashield-desktop-macos-aarch64", ".app.tar.gz")
+          mac_x64 = signed_pair("lyrashield-desktop-macos-x86_64", ".app.tar.gz")
+          windows = signed_pair("lyrashield-desktop-windows-x86_64", "-setup.exe")
+          tag = os.environ["RELEASE_TAG"]
+          base = f"https://github.com/ecryptoguru/lyrashield-ai/releases/download/{tag}"
 
-          mkdir -p /tmp/assets
-          echo "Downloading release assets for $TAG"
-          gh release download "$TAG" --pattern "*.tar.gz" --dir /tmp/assets/ || true
-          gh release download "$TAG" --pattern "*-setup.exe" --dir /tmp/assets/ --clobber || true
-
-          MAC_TARBALL=$(ls /tmp/assets/*.tar.gz 2>/dev/null | head -1 || true)
-          WIN_INSTALLER=$(ls /tmp/assets/*-setup.exe 2>/dev/null | head -1 || true)
-
-          # Fail-closed: missing platform asset aborts release
-          if [ -z "$MAC_TARBALL" ] || [ ! -f "$MAC_TARBALL" ]; then
-            echo "::error::Missing macOS tarball asset (*.tar.gz) for $TAG — failing closed. Assets in /tmp/assets:"
-            ls -la /tmp/assets/ || true
-            gh release view "$TAG" --json assets --jq '.assets[].name' || true
-            exit 1
-          fi
-          if [ -z "$WIN_INSTALLER" ] || [ ! -f "$WIN_INSTALLER" ]; then
-            echo "::error::Missing Windows installer asset (*-setup.exe) for $TAG — failing closed"
-            ls -la /tmp/assets/ || true
-            gh release view "$TAG" --json assets --jq '.assets[].name' || true
-            exit 1
-          fi
-
-          # Fail-closed: asset filename must contain version (asset <-> tag consistency)
-          if [[ "$(basename "$MAC_TARBALL")" != *"$VERSION"* ]]; then
-            echo "::error::macOS asset '$(basename "$MAC_TARBALL")' does not contain version $VERSION"
-            exit 1
-          fi
-          if [[ "$(basename "$WIN_INSTALLER")" != *"$VERSION"* ]]; then
-            echo "::error::Windows asset '$(basename "$WIN_INSTALLER")' does not contain version $VERSION"
-            exit 1
-          fi
-
-          # Install tauri CLI for signing (pinned major)
-          npm install -g @tauri-apps/cli@2
-
-          # Fail-closed signing — no || echo "" fallback. Empty signature aborts.
-          echo "Signing macOS artifact: $MAC_TARBALL"
-          MAC_SIGNATURE=$(npx tauri signer sign "$MAC_TARBALL" 2>&1 | grep -oP 'signature:\s*\K.*' || true)
-          if [ -z "$MAC_SIGNATURE" ]; then
-            echo "::error::Failed to sign macOS artifact or empty signature for $MAC_TARBALL"
-            echo "Signer output above should contain signature; check TAURI_SIGNING_PRIVATE_KEY validity"
-            exit 1
-          fi
-
-          echo "Signing Windows artifact: $WIN_INSTALLER"
-          WIN_SIGNATURE=$(npx tauri signer sign "$WIN_INSTALLER" 2>&1 | grep -oP 'signature:\s*\K.*' || true)
-          if [ -z "$WIN_SIGNATURE" ]; then
-            echo "::error::Failed to sign Windows artifact or empty signature for $WIN_INSTALLER"
-            exit 1
-          fi
-
-          # Fail-closed: empty URL/signature check before writing manifest
-          MAC_URL="https://github.com/ecryptoguru/lyrashield-ai/releases/download/${TAG}/$(basename "$MAC_TARBALL")"
-          WIN_URL="https://github.com/ecryptoguru/lyrashield-ai/releases/download/${TAG}/$(basename "$WIN_INSTALLER")"
-          if [ -z "$MAC_SIGNATURE" ] || [ -z "$WIN_SIGNATURE" ] || [ -z "$MAC_URL" ] || [ -z "$WIN_URL" ]; then
-            echo "::error::Empty signature or URL after signing — failing closed"
-            exit 1
-          fi
-
-          cat > latest.json <<EOFMANIFEST
-          {
-            "version": "${VERSION}",
-            "notes": "LyraShield Local/Desktop ${TAG}",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "${MAC_SIGNATURE}",
-                "url": "${MAC_URL}"
-              },
-              "darwin-x86_64": {
-                "signature": "${MAC_SIGNATURE}",
-                "url": "${MAC_URL}"
-              },
-              "windows-x86_64": {
-                "signature": "${WIN_SIGNATURE}",
-                "url": "${WIN_URL}"
+          def entry(pair):
+              artifact, signature = pair
+              return {
+                  "signature": signature,
+                  "url": f"{base}/{urllib.parse.quote(artifact.name)}",
               }
-            }
+
+          manifest = {
+              "version": tag.removeprefix("v"),
+              "notes": f"LyraShield Local {tag}",
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "platforms": {
+                  "darwin-aarch64": entry(mac_arm),
+                  "darwin-x86_64": entry(mac_x64),
+                  "windows-x86_64": entry(windows),
+              },
           }
-          EOFMANIFEST
+          pathlib.Path("latest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+          PY
 
-          echo "Manifest generated:"
-          cat latest.json
-
-          # Licensed guard: private key must never leak into manifest (MIT validator dependency)
-          if grep -qi "PRIVATE\|BEGIN.*PRIVATE" latest.json; then
-            echo "::error::Private key material found in manifest! Failing closed."
-            exit 1
-          fi
-          echo "Manifest private-key guard ✓"
-
-      - name: Validate updater manifest schema
-        run: |
-          set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
-          echo "Validating latest.json against schema (version $VERSION)"
-          node scripts/validate-updater-manifest.mjs latest.json --expected-version "$VERSION"
-          echo "Schema validation ✓"
-
-      # Atomic single-step upload post-validation: validation must pass before this step executes.
-      # No separate fallback upload; one clobber upload after all guards.
-      - name: Upload manifest as release asset (atomic)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
-          # Re-validate before upload to ensure atomicity (no TOCTOU between validate and upload)
-          node scripts/validate-updater-manifest.mjs latest.json --expected-version "$VERSION"
-          gh release upload "$TAG" latest.json --clobber
-          echo "Manifest published to GitHub Releases ✓ version $VERSION"
-
-      # LICENSE_PUBLISHED_BUILD pins the perpetual-fallback build on the server
-      # (apps/web/src/lib/licenses/license-service.ts resolvePublishedFallbackBuild).
-      # It is a Container App env var set by deploy-azure.yml and is NOT safe to
-      # auto-write from here: a partial `az containerapp update` would clobber the
-      # other env vars, and a full redeploy is too heavy a side effect for a
-      # desktop release. So we surface the exact value + the one command instead
-      # of letting it be forgotten on release day. (Founder deploy-gated.)
-      - name: Remind to bump LICENSE_PUBLISHED_BUILD
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          {
-            echo "### ⚠️ Post-release step — bump the fallback build"
-            echo ""
-            echo "Set the app Container App's \`LICENSE_PUBLISHED_BUILD\` to \`${VERSION}\` so new"
-            echo "licenses pin this build as their perpetual-fallback version:"
-            echo ""
-            echo "\`\`\`bash"
-            echo "az containerapp update --name \"\$AZURE_APP_CONTAINER_APP_NAME\" \\"
-            echo "  --resource-group \"\$AZURE_RESOURCE_GROUP\" \\"
-            echo "  --set-env-vars \"LICENSE_PUBLISHED_BUILD=${VERSION}\""
-            echo "\`\`\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice::LICENSE_PUBLISHED_BUILD should be set to ${VERSION} on the app Container App (see job summary)."
+      - name: Create signed draft release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          draft: true
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.app.tar.gz
+            artifacts/**/*.app.tar.gz.sig
+            artifacts/**/*-setup.exe
+            artifacts/**/*-setup.exe.sig
+            latest.json

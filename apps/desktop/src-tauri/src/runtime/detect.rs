@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Information about the installed LyraShield engine.
@@ -24,26 +25,81 @@ pub struct RuntimeStatus {
     pub docker: DockerInfo,
 }
 
-/// Detect the LyraShield engine on PATH.
-///
-/// Looks for `lyrashield` first, then `strix` (the upstream CLI name).
-/// Parses `--version` output to get the version string.
-pub fn detect_engine() -> EngineInfo {
-    for cmd in &["lyrashield", "strix"] {
-        if let Ok(path) = which::which(cmd) {
-            let version = Command::new(cmd)
-                .arg("--version")
-                .output()
-                .ok()
-                .and_then(|o| String::from_utf8(o.stdout).ok())
-                .map(|s| s.trim().to_string());
+fn bundled_engine_candidates(executable: &Path) -> Result<Vec<PathBuf>, String> {
+    let directory = executable
+        .parent()
+        .ok_or_else(|| "cannot locate app bundle directory".to_string())?;
+    let names: &[&str] = if cfg!(target_os = "windows") {
+        &[
+            "lyrashield-engine.exe",
+            "lyrashield-engine-x86_64-pc-windows-msvc.exe",
+            "lyrashield-engine-aarch64-pc-windows-msvc.exe",
+        ]
+    } else if cfg!(target_os = "macos") {
+        &[
+            "lyrashield-engine",
+            "lyrashield-engine-aarch64-apple-darwin",
+            "lyrashield-engine-x86_64-apple-darwin",
+        ]
+    } else {
+        &[
+            "lyrashield-engine",
+            "lyrashield-engine-x86_64-unknown-linux-gnu",
+            "lyrashield-engine-aarch64-unknown-linux-gnu",
+        ]
+    };
+    let roots = [
+        directory.to_path_buf(),
+        directory.join("binaries"),
+        directory.join("../Resources"),
+        directory.join("../Resources/binaries"),
+    ];
+    Ok(roots
+        .iter()
+        .flat_map(|root| names.iter().map(|name| root.join(name)))
+        .collect())
+}
 
-            return EngineInfo {
-                found: true,
-                path: Some(path.to_string_lossy().to_string()),
-                version,
-            };
+/// Resolve the engine executable. Release builds require the bundled sidecar;
+/// debug builds may use an explicit override or a developer PATH install.
+pub fn resolve_engine_bin() -> Result<PathBuf, String> {
+    if cfg!(debug_assertions) {
+        if let Some(path) = std::env::var_os("LYRASHIELD_ENGINE_BIN") {
+            if !path.is_empty() {
+                return Ok(PathBuf::from(path));
+            }
         }
+        for command in ["lyrashield", "strix"] {
+            if let Ok(path) = which::which(command) {
+                return Ok(path);
+            }
+        }
+    }
+
+    let executable =
+        std::env::current_exe().map_err(|error| format!("cannot locate app bundle: {error}"))?;
+    bundled_engine_candidates(&executable)?
+        .into_iter()
+        .find(|candidate| candidate.is_file())
+        .ok_or_else(|| {
+            "bundled LyraShield engine not found; reinstall LyraShield Local".to_string()
+        })
+}
+
+/// Detect the resolved LyraShield engine and parse its version output.
+pub fn detect_engine() -> EngineInfo {
+    if let Ok(path) = resolve_engine_bin() {
+        let version = Command::new(&path)
+            .arg("--version")
+            .output()
+            .ok()
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .map(|version| version.trim().to_string());
+        return EngineInfo {
+            found: true,
+            path: Some(path.to_string_lossy().to_string()),
+            version,
+        };
     }
 
     EngineInfo {
@@ -89,5 +145,21 @@ pub fn get_runtime_status() -> RuntimeStatus {
     RuntimeStatus {
         engine: detect_engine(),
         docker: detect_docker(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_candidates_never_include_global_commands() {
+        let candidates =
+            bundled_engine_candidates(Path::new("/Applications/LyraShield.app/MacOS/app")).unwrap();
+        assert!(!candidates.is_empty());
+        assert!(candidates.iter().all(|candidate| candidate.is_absolute()));
+        assert!(candidates
+            .iter()
+            .all(|candidate| candidate.to_string_lossy().contains("lyrashield-engine")));
     }
 }

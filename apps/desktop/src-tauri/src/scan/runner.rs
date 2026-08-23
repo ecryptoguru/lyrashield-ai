@@ -158,14 +158,7 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
     }
 
     // Spawn engine with BYOK env only in child
-    let engine_cmd = if which::which("lyrashield").is_ok() {
-        "lyrashield"
-    } else if which::which("strix").is_ok() {
-        "strix"
-    } else {
-        let err = "LyraShield engine not found on PATH".to_string();
-        return Err(err);
-    };
+    let engine_cmd = crate::runtime::resolve_engine_bin()?;
 
     let mut args: Vec<String> = vec![
         "--non-interactive".into(),

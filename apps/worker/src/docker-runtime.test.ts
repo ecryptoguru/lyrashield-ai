@@ -32,6 +32,14 @@ const ciWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/ci.yml", import.meta.url)),
   "utf8"
 )
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const engineContractVerifier = readFileSync(
+  fileURLToPath(
+    new URL("../../../.github/scripts/verify-engine-worker-contract.sh", import.meta.url)
+  ),
+  "utf8"
+)
 const pinnedNodeBase =
   "node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43"
 
@@ -112,8 +120,12 @@ describe("worker Docker runtime", () => {
     expect(deployWorkflow).toContain('node-version: "24"')
     expect(deployWorkflow).toContain('python-version: "3.12"')
     expect(deployWorkflow).toContain("Verify engine-worker contract")
-    expect(deployWorkflow).toContain("working-directory: lyrashield-engine")
-    expect(deployWorkflow).toContain('./scripts/verify-worker-contract.sh "$GITHUB_WORKSPACE"')
+    expect(deployWorkflow).toContain(
+      'bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"'
+    )
+    expect(engineContractVerifier).toContain('merge-base --is-ancestor "$reviewed_app_sha" HEAD')
+    expect(engineContractVerifier).toContain("uv run lyrashield --help")
+    expect(engineContractVerifier).toContain('corepack pnpm exec vitest run "${contract_tests[@]}"')
     expect(deployWorkflow).toContain("Verify pushed worker image")
     expect(deployWorkflow).toContain("@${{ steps.build-worker.outputs.digest }}")
     expect(deployWorkflow).toContain("tags: ${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}")
