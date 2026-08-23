@@ -51,7 +51,12 @@ The desktop and `.github/workflows/release-tauri.yml` are on `main`. Provision:
 - GitHub secret `TAURI_UPDATER_KEY_PASSWORD`;
 - Apple Developer ID and App Store Connect credentials for macOS signing and notarization.
 
-The workflow maps the repository secrets to Tauri's `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables. The matching public key is committed in `apps/desktop/src-tauri/tauri.conf.json`. Follow `docs/ops/tauri-updater-keys-runbook.md` for generation, dual backup, and rotation.
+The workflow maps the protected `desktop-release` environment secrets to
+Tauri's `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables. Do not store these
+as repository-wide secrets. The matching public key is committed in
+`apps/desktop/src-tauri/tauri.conf.json`. Follow
+`docs/ops/tauri-updater-keys-runbook.md` for custody, backup, and rotation.
 
 ### 1c. Billing providers (Cloud)
 
@@ -267,9 +272,10 @@ the Key Vault secret and GitHub secret in the same change window.
    `LICENSE_SIGNING_PRIVATE_KEY` env var (dev/CI). Ensure the app's managed
    identity has `Get` on the vault secrets before relying on this in prod.
 2. **Desktop production signing.** The Tauri release workflow and committed
-   updater public key exist. Before publishing, verify the two updater
-   repository secrets, dual backup, production license public key, macOS
-   signing/notarization, Windows signing, signed updater manifest, and install.
+   updater public key exist. Before publishing, verify the two protected
+   updater environment secrets, dual backup, production license public key,
+   macOS signing/notarization, Windows signing, signed updater manifest, and
+   install.
 3. **License email delivery.** `sendLicenseIssuedEmail()` is wired through
    Brevo. Retain a production delivery smoke proving the buyer receives the
    raw key and signed file without logging or persisting the raw key.

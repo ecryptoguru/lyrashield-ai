@@ -43,9 +43,12 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Desktop `0.1.1` is prepared in code with seven-day offline grace and a
   user-confirmed signed updater, but it is not signed or published.
 - GitHub environment `desktop-release` has required-reviewer and `main`/`v*`
-  deployment policies but no signing secrets or variables. Azure
-  `Microsoft.CodeSigning` remains `NotRegistered`, with no Artifact Signing
-  account or certificate profile.
+  deployment policies. Its updater secrets match the committed public key and
+  are backed up in Key Vault; repository-wide copies were removed. A
+  release-only Entra application has exact-environment GitHub OIDC federation
+  and no client secret. Azure `Microsoft.CodeSigning` is registered, but no
+  Artifact Signing account, completed public identity validation, certificate
+  profile, profile-scoped signer role, or Apple signing credentials exist yet.
 - CLI and GitHub Action classify added `eval()`/`exec()` as `HIGH`, so the default `--fail-on HIGH` gate blocks them.
 
 Claims boundary: this is bounded runtime/accounting evidence for one target and revision, not proof of universal coverage, independently verified findings, or security.

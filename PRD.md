@@ -370,9 +370,13 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 Desktop `0.1.1` is prepared in code but is not a signed or published release.
 Production Desktop availability remains blocked on Apple/Azure signing
 provisioning, signed RC rehearsal, final draft verification, and founder
-approval. The protected GitHub environment and reviewer policies exist, but it
-contains no signing credentials; Azure Artifact Signing is not registered and
-has no account or certificate profile.
+approval. The protected GitHub environment and reviewer policies exist. The
+verified updater key is available only through that environment and its Key
+Vault backup, and the release-only Entra identity has exact-environment OIDC
+federation without a client secret. `Microsoft.CodeSigning` is registered, but
+Artifact Signing still has no account, completed public identity validation,
+certificate profile, or profile-scoped signer role. Apple signing credentials
+are also absent.
 
 ### Deferred
 

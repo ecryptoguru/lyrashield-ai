@@ -39,6 +39,13 @@ must have a federated credential restricted to
 `Artifact Signing Certificate Profile Signer` role at profile scope. Do not
 create or store a client secret.
 
+Current provisioning status (2026-08-23): updater key pairing and Key Vault
+backup are verified; protected updater secrets and exact-environment OIDC
+federation exist; `Microsoft.CodeSigning` is registered. Apple credentials,
+the Artifact Signing account, completed public identity validation, certificate
+profile, protected signing variables, profile-scoped signer role, and OIDC
+canary signature do not exist. Do not create the RC tag until all are complete.
+
 Keep private keys and certificates out of Git, logs, workflow artifacts, and
 release assets. See [tauri-updater-keys-runbook.md](tauri-updater-keys-runbook.md)
 and [license-signing-keys-runbook.md](license-signing-keys-runbook.md) for key
