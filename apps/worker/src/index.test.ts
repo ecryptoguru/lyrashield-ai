@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { readFile, stat } from "node:fs/promises"
 import {
+  MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+  MANAGED_REDIS_STALLED_INTERVAL_MS,
   RECONCILIATION_INTERVAL_MS,
   clearWorkerActive,
   markWorkerActive,
@@ -33,6 +35,13 @@ describe("worker readiness lifecycle", () => {
 
   it("paces idle queue reconciliation for managed Redis command budgets", () => {
     expect(RECONCILIATION_INTERVAL_MS).toBe(300_000)
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1_000
+    const idleCommandsPerWorker =
+      thirtyDaysMs / (MANAGED_REDIS_DRAIN_DELAY_SECONDS * 1_000) +
+      thirtyDaysMs / MANAGED_REDIS_STALLED_INTERVAL_MS
+
+    expect(idleCommandsPerWorker).toBe(47_520)
+    expect(idleCommandsPerWorker * 2).toBeLessThan(100_000)
   })
 
   it("publishes a root-readable marker while a scan job is active", async () => {
