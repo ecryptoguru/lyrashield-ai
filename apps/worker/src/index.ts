@@ -28,6 +28,7 @@ import {
 import {
   reconcileFailedQueueJob,
   reconcileScanQueue,
+  reconcileScanQueueIfNeeded,
   type QueueReconciliationResult,
 } from "./queue-reconciliation"
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
@@ -360,17 +361,22 @@ async function main(): Promise<void> {
     })
   })
 
-  // Reconcile once on startup and then every five minutes. The distributed lease
-  // inside reconcileScanQueue() ensures only one worker acts per interval.
+  // Reconcile unconditionally on startup. Every five minutes thereafter, use the
+  // database to avoid Redis queue inspection while idle, with an hourly backstop.
+  // The distributed lease inside reconcileScanQueue() keeps replicas safe.
   const startupReconciliation = await reconcileScanQueue()
+  let lastReconciliationAtMs = Date.now()
   await emitOperationalHealthAlerts(startupReconciliation).catch((error) => {
     logger.warn("Operational health collection failed", {
       error: error instanceof Error ? error.message : String(error),
     })
   })
   reconciliationTimer = setInterval(() => {
-    void reconcileScanQueue()
+    const now = new Date()
+    void reconcileScanQueueIfNeeded(lastReconciliationAtMs, now)
       .then(async (reconciliation) => {
+        if (!reconciliation) return
+        lastReconciliationAtMs = now.getTime()
         await emitOperationalHealthAlerts(reconciliation).catch((error) => {
           logger.warn("Operational health collection failed", {
             error: error instanceof Error ? error.message : String(error),

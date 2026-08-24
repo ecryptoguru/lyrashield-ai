@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto"
 import type Redis from "ioredis"
-import { getSystemPrisma, type ScanStatus, updateScanStatus } from "@lyrashield/db"
+import {
+  getSystemPrisma,
+  type ScanStatus,
+  TERMINAL_SCAN_STATUSES,
+  updateScanStatus,
+} from "@lyrashield/db"
 import { getRedis } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 import { getScanQueue } from "./queue"
@@ -11,6 +16,7 @@ const RECONCILIATION_LOCK_RENEW_MS = 50_000
 const ORPHAN_GRACE_MS = 5 * 60_000
 const BATCH_SIZE = 500
 const ACTIVE_SCAN_STATUSES = new Set<ScanStatus>(["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"])
+export const RECONCILIATION_IDLE_BACKSTOP_MS = 3_600_000
 
 export interface QueueReconciliationResult {
   leaseAcquired: boolean
@@ -18,6 +24,36 @@ export interface QueueReconciliationResult {
   removedOrphanedJobs: number
   queueDepth: number
   oldestWaitingJobAgeMs: number
+}
+
+/**
+ * Avoid Redis queue inspection while the database proves there is no scan work.
+ * Database uncertainty fails safe by running the normal leased reconciliation.
+ */
+export async function reconcileScanQueueIfNeeded(
+  lastReconciliationAtMs: number,
+  now = new Date()
+): Promise<QueueReconciliationResult | null> {
+  try {
+    const nonterminalScanCount = await getSystemPrisma().scan.count({
+      where: {
+        deletedAt: null,
+        status: { notIn: [...TERMINAL_SCAN_STATUSES] },
+      },
+    })
+    if (
+      nonterminalScanCount === 0 &&
+      now.getTime() - lastReconciliationAtMs < RECONCILIATION_IDLE_BACKSTOP_MS
+    ) {
+      return null
+    }
+  } catch (error) {
+    logger.warn("Scan queue reconciliation preflight failed; reconciling fail-safe", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  return reconcileScanQueue(now)
 }
 
 class ReconciliationLease {

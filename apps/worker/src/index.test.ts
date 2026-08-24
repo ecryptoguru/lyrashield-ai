@@ -12,6 +12,7 @@ import {
   settleScanWorkerForShutdown,
 } from "./index"
 import { trackActiveEngineProcess } from "./engine/runner"
+import { RECONCILIATION_IDLE_BACKSTOP_MS } from "./queue-reconciliation"
 
 vi.mock("@lyrashield/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/config")>()
@@ -67,15 +68,18 @@ describe("worker readiness lifecycle", () => {
     await expect(removeWorkerReadiness()).resolves.toBeUndefined()
   })
 
-  it("paces idle queue reconciliation for managed Redis command budgets", () => {
+  it("paces deterministic idle worker polling and queue reconciliation", () => {
     expect(RECONCILIATION_INTERVAL_MS).toBe(300_000)
+    expect(RECONCILIATION_IDLE_BACKSTOP_MS).toBe(3_600_000)
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1_000
-    const idleCommandsPerWorker =
+    const baselineIdleCommandsPerWorker =
       thirtyDaysMs / (MANAGED_REDIS_DRAIN_DELAY_SECONDS * 1_000) +
       thirtyDaysMs / MANAGED_REDIS_STALLED_INTERVAL_MS
+    const idleReconciliationsPerWorker = thirtyDaysMs / RECONCILIATION_IDLE_BACKSTOP_MS
 
-    expect(idleCommandsPerWorker).toBe(47_520)
-    expect(idleCommandsPerWorker * 2).toBeLessThan(100_000)
+    expect(baselineIdleCommandsPerWorker).toBe(47_520)
+    expect(baselineIdleCommandsPerWorker * 2).toBeLessThan(100_000)
+    expect(idleReconciliationsPerWorker).toBe(720)
   })
 
   it("publishes a root-readable marker while a scan job is active", async () => {
