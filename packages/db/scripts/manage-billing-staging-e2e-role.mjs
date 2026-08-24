@@ -4,6 +4,7 @@ import pg from "pg"
 
 const { Client } = pg
 const E2E_ROLE = "billing_e2e_staging"
+const E2E_ROLE_TTL_MS = 2 * 60 * 60 * 1_000
 
 function required(name, trim = true) {
   const raw = process.env[name]
@@ -21,7 +22,7 @@ function roleUrl(adminUrl, password) {
 
 async function assertEvidenceRole(client) {
   const result = await client.query(
-    `SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole, rolinherit, rolreplication
+    `SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole, rolinherit, rolreplication, rolvaliduntil
        FROM pg_roles WHERE rolname = $1`,
     [E2E_ROLE]
   )
@@ -33,9 +34,14 @@ async function assertEvidenceRole(client) {
     row.rolcreatedb ||
     row.rolcreaterole ||
     row.rolinherit ||
-    row.rolreplication
+    row.rolreplication ||
+    !row.rolvaliduntil
   ) {
     throw new Error(`${E2E_ROLE} does not match the disposable evidence role contract`)
+  }
+  const remainingLifetime = new Date(row.rolvaliduntil).getTime() - Date.now()
+  if (remainingLifetime <= 0 || remainingLifetime > E2E_ROLE_TTL_MS + 60_000) {
+    throw new Error(`${E2E_ROLE} credential expiry exceeds the disposable evidence window`)
   }
 
   const memberships = await client.query(
@@ -55,9 +61,10 @@ async function provision(client, adminUrl) {
   const password = required("E2E_PASSWORD", false)
   const exists = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [E2E_ROLE])
   const action = exists.rowCount === 1 ? "ALTER" : "CREATE"
+  const validUntil = new Date(Date.now() + E2E_ROLE_TTL_MS).toISOString()
   const statement = await client.query(
-    `SELECT format('${action} ROLE ${E2E_ROLE} LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION BYPASSRLS', $1::text) AS sql`,
-    [password]
+    `SELECT format('${action} ROLE ${E2E_ROLE} LOGIN PASSWORD %L VALID UNTIL %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION BYPASSRLS', $1::text, $2::text) AS sql`,
+    [password, validUntil]
   )
   await client.query(statement.rows[0].sql)
   await client.query(`DO $grant$ BEGIN

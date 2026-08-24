@@ -20,6 +20,10 @@ case "$BILLING_STAGING_REGION" in
     ;;
 esac
 
+# Fail before opening a browser or contacting a provider when the one-shot job
+# does not satisfy the same validated runtime configuration as the staged app.
+/app/e2e/billing/verify-staging-config.sh
+
 exec pnpm exec playwright test \
   e2e/billing/checkout-flows.spec.ts \
   e2e/billing/razorpay-upi-cap-fallback.spec.ts \

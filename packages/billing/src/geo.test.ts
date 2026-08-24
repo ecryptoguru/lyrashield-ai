@@ -58,14 +58,14 @@ describe("billing provider region resolution", () => {
     })
   })
 
-  it("does not expose the staging override to an unauthenticated request", () => {
+  it("ignores spoofed forwarding and country headers without restricted access", () => {
     mocks.deploymentEnvironment = "billing-staging"
     mocks.stagingAdmission = "restricted"
     mocks.stagingRegion = "usd"
 
     expect(resolveProvider(spoofedIndiaRequest(), false)).toEqual({
-      provider: "razorpay",
-      region: "inr",
+      provider: "polar",
+      region: "usd",
     })
   })
 

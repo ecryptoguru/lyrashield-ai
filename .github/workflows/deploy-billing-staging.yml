@@ -84,7 +84,7 @@ jobs:
             REDIS_PASSWORD BETTER_AUTH_SECRET
             INTERNAL_API_KEY POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_ORG_ID
             POLAR_PRODUCT_IDS POLAR_LOCAL_PRODUCT_IDS RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET
-            RAZORPAY_WEBHOOK_SECRET RAZORPAY_PLAN_IDS BILLING_STAGING_REGION
+            RAZORPAY_WEBHOOK_SECRET RAZORPAY_PLAN_IDS BILLING_STAGING_REGION PLATFORM_ADMIN_EMAILS
           )
           for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then
@@ -290,6 +290,31 @@ jobs:
             -x /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs
           docker run --rm --entrypoint /usr/bin/test "$e2e_image" \
             -x /app/e2e/billing/run-staging-proof.sh
+          docker run --rm --entrypoint /usr/bin/test "$e2e_image" \
+            -x /app/e2e/billing/verify-staging-config.sh
+          docker run --rm \
+            --entrypoint /app/e2e/billing/verify-staging-config.sh \
+            -e NODE_ENV=production \
+            -e DATABASE_URL=postgresql://billing_e2e_staging:test@db.example.invalid:5432/staging \
+            -e DATABASE_SYSTEM_URL=postgresql://billing_e2e_staging:test@db.example.invalid:5432/staging \
+            -e BETTER_AUTH_SECRET=billing-staging-image-smoke-secret \
+            -e BETTER_AUTH_URL=https://lyrashield-billing-staging.test.centralindia.azurecontainerapps.io \
+            -e NEXT_PUBLIC_APP_URL=https://lyrashield-billing-staging.test.centralindia.azurecontainerapps.io \
+            -e NEXT_PUBLIC_MARKETING_URL=https://lyrashieldai.com \
+            -e TRUSTED_PROXY_IP_HEADER=x-forwarded-for \
+            -e LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 \
+            -e PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com \
+            -e LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging \
+            -e BILLING_STAGING_ADMISSION=restricted \
+            -e BILLING_STAGING_ACCESS_TOKEN=static-image-access-token-value-x \
+            -e BILLING_STAGING_REGION=usd \
+            -e POLAR_BILLING_ADMISSION=off \
+            -e POLAR_LOCAL_BILLING_ADMISSION=off \
+            -e RAZORPAY_BILLING_ADMISSION=off \
+            -e RAZORPAY_LOCAL_BILLING_ADMISSION=off \
+            -e POLAR_ENVIRONMENT=sandbox \
+            -e RAZORPAY_KEY_ID=rzp_test_image_smoke \
+            "$e2e_image"
 
           {
             echo "WEB_DIGEST=${WEB_DIGEST}"
@@ -331,9 +356,32 @@ jobs:
             return 1
           }
 
+          stop_job_executions() {
+            local job=$1 active
+            active=$(az containerapp job execution list \
+              --name "$job" --resource-group "$RESOURCE_GROUP" \
+              --query "[?properties.status!='Succeeded' && properties.status!='Failed' && properties.status!='Stopped'].name" \
+              --output tsv)
+            if [ -n "$active" ]; then
+              az containerapp job stop \
+                --name "$job" --resource-group "$RESOURCE_GROUP" --output none
+            fi
+            for _ in {1..60}; do
+              active=$(az containerapp job execution list \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --query "[?properties.status!='Succeeded' && properties.status!='Failed' && properties.status!='Stopped'].name" \
+                --output tsv)
+              [ -z "$active" ] && return 0
+              sleep 5
+            done
+            echo "::error::Timed out stopping active executions for ${job}."
+            return 1
+          }
+
           create_job() {
             local job=$1 executable=$2
             if az containerapp job show --name "$job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              stop_job_executions "$job"
               az containerapp job delete \
                 --name "$job" --resource-group "$RESOURCE_GROUP" --yes --output none
             fi
@@ -382,15 +430,46 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for job in lyrashield-stage-migrate lyrashield-stage-db-role; do
+          stop_job_executions() {
+            local job=$1 active
+            active=$(az containerapp job execution list \
+              --name "$job" --resource-group "$RESOURCE_GROUP" \
+              --query "[?properties.status!='Succeeded' && properties.status!='Failed' && properties.status!='Stopped'].name" \
+              --output tsv)
+            if [ -n "$active" ]; then
+              az containerapp job stop \
+                --name "$job" --resource-group "$RESOURCE_GROUP" --output none
+            fi
+            for _ in {1..60}; do
+              active=$(az containerapp job execution list \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --query "[?properties.status!='Succeeded' && properties.status!='Failed' && properties.status!='Stopped'].name" \
+                --output tsv)
+              [ -z "$active" ] && return 0
+              sleep 5
+            done
+            echo "::error::Timed out stopping active executions for ${job}."
+            return 1
+          }
+
+          purge_job() {
+            local job=$1
+            shift
             if az containerapp job show --name "$job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              stop_job_executions "$job"
+              az containerapp job secret remove \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --secret-names "$@" --yes --output none || true
               az containerapp job delete \
                 --name "$job" \
                 --resource-group "$RESOURCE_GROUP" \
                 --yes \
                 --output none
             fi
-          done
+          }
+
+          purge_job lyrashield-stage-migrate database-admin-url
+          purge_job lyrashield-stage-db-role database-admin-url runtime-password system-password
 
       - name: Create or update public disposable staging app
         shell: bash
@@ -561,6 +640,7 @@ jobs:
           e2e_image="${REGISTRY}/lyrashield-billing-e2e@${E2E_DIGEST}"
           role_job="lyrashield-stage-e2e-role"
           proof_job="lyrashield-stage-billing-proof"
+          recovery_job="lyrashield-stage-e2e-cleanup"
 
           wait_for_job() {
             local job=$1 execution status
@@ -582,31 +662,90 @@ jobs:
             return 1
           }
 
+          stop_job_executions() {
+            local job=$1 active
+            active=$(az containerapp job execution list \
+              --name "$job" --resource-group "$RESOURCE_GROUP" \
+              --query "[?properties.status!='Succeeded' && properties.status!='Failed' && properties.status!='Stopped'].name" \
+              --output tsv)
+            if [ -n "$active" ]; then
+              az containerapp job stop \
+                --name "$job" --resource-group "$RESOURCE_GROUP" --output none
+            fi
+            for _ in {1..60}; do
+              active=$(az containerapp job execution list \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --query "[?properties.status!='Succeeded' && properties.status!='Failed' && properties.status!='Stopped'].name" \
+                --output tsv)
+              [ -z "$active" ] && return 0
+              sleep 5
+            done
+            echo "::error::Timed out stopping active executions for ${job}."
+            return 1
+          }
+
           cleanup() {
             local outcome=$?
             set +e
             if az containerapp job show --name "$proof_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
-              az containerapp job delete --name "$proof_job" --resource-group "$RESOURCE_GROUP" --yes --output none
-            fi
-            if az containerapp job show --name "$role_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
-              az containerapp job update \
-                --name "$role_job" --resource-group "$RESOURCE_GROUP" \
-                --set-env-vars 'E2E_ROLE_ACTION=drop' --output none
-              if ! wait_for_job "$role_job"; then
+              if stop_job_executions "$proof_job"; then
+                az containerapp job delete --name "$proof_job" --resource-group "$RESOURCE_GROUP" --yes --output none
+              else
                 outcome=1
               fi
-              az containerapp job delete --name "$role_job" --resource-group "$RESOURCE_GROUP" --yes --output none
+            fi
+            if az containerapp job show --name "$role_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              if ! stop_job_executions "$role_job"; then
+                outcome=1
+              else
+                az containerapp job update \
+                  --name "$role_job" --resource-group "$RESOURCE_GROUP" \
+                  --set-env-vars 'E2E_ROLE_ACTION=drop' --output none
+                if ! wait_for_job "$role_job"; then
+                  outcome=1
+                elif stop_job_executions "$role_job"; then
+                  az containerapp job delete --name "$role_job" --resource-group "$RESOURCE_GROUP" --yes --output none
+                else
+                  outcome=1
+                fi
+              fi
             fi
             return "$outcome"
           }
           trap cleanup EXIT
 
-          for stale_job in "$proof_job" "$role_job"; do
+          for stale_job in "$proof_job" "$role_job" "$recovery_job"; do
             if az containerapp job show --name "$stale_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              stop_job_executions "$stale_job"
               az containerapp job delete \
                 --name "$stale_job" --resource-group "$RESOURCE_GROUP" --yes --output none
             fi
           done
+
+          # A previous runner may have disappeared after creating the database
+          # role. Drop that stale role before minting a new credential.
+          az containerapp job create \
+            --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
+            --environment "$CONTAINER_ENVIRONMENT" \
+            --trigger-type Manual --parallelism 1 --replica-completion-count 1 \
+            --replica-timeout 1200 --replica-retry-limit 0 \
+            --image "$migration_image" \
+            --mi-user-assigned "$PULL_IDENTITY_ID" \
+            --registry-server "$REGISTRY" --registry-identity "$PULL_IDENTITY_ID" \
+            --command /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs \
+            --secrets "database-admin-url=${DATABASE_ADMIN_URL}" \
+            --env-vars \
+              'DATABASE_ADMIN_URL=secretref:database-admin-url' \
+              'E2E_ROLE_ACTION=drop' \
+            --tags environment=billing-staging "source-sha=${IMAGE_SHA}" \
+            --output none
+          wait_for_job "$recovery_job"
+          stop_job_executions "$recovery_job"
+          az containerapp job secret remove \
+            --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
+            --secret-names database-admin-url --yes --output none
+          az containerapp job delete \
+            --name "$recovery_job" --resource-group "$RESOURCE_GROUP" --yes --output none
 
           e2e_password=$(openssl rand -hex 32)
           e2e_database_url=$(E2E_PASSWORD="$e2e_password" node -e '
@@ -674,6 +813,9 @@ jobs:
             "BETTER_AUTH_URL=${APP_URL}"
             "NEXT_PUBLIC_APP_URL=${APP_URL}"
             'NEXT_PUBLIC_MARKETING_URL=https://lyrashieldai.com'
+            'TRUSTED_PROXY_IP_HEADER=x-forwarded-for'
+            'LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0'
+            "PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS}"
             'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
             'BILLING_STAGING_ADMISSION=restricted'
             "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}"
@@ -702,3 +844,113 @@ jobs:
             --tags environment=billing-staging "source-sha=${IMAGE_SHA}" \
             --output none
           wait_for_job "$proof_job"
+
+      - name: Recover and remove disposable E2E database access
+        if: ${{ always() && steps.azure-login.outcome == 'success' }}
+        shell: bash
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
+        run: |
+          set -euo pipefail
+          [ -n "${MIGRATION_DIGEST:-}" ] || exit 0
+          migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
+          role_job="lyrashield-stage-e2e-role"
+          proof_job="lyrashield-stage-billing-proof"
+          recovery_job="lyrashield-stage-e2e-cleanup"
+
+          stop_job_executions() {
+            local job=$1 active
+            active=$(az containerapp job execution list \
+              --name "$job" --resource-group "$RESOURCE_GROUP" \
+              --query "[?properties.status!='Succeeded' && properties.status!='Failed' && properties.status!='Stopped'].name" \
+              --output tsv)
+            if [ -n "$active" ]; then
+              az containerapp job stop \
+                --name "$job" --resource-group "$RESOURCE_GROUP" --output none
+            fi
+            for _ in {1..60}; do
+              active=$(az containerapp job execution list \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --query "[?properties.status!='Succeeded' && properties.status!='Failed' && properties.status!='Stopped'].name" \
+                --output tsv)
+              [ -z "$active" ] && return 0
+              sleep 5
+            done
+            echo "::error::Timed out stopping active executions for ${job}."
+            return 1
+          }
+
+          purge_job() {
+            local job=$1
+            shift
+            if az containerapp job show --name "$job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              stop_job_executions "$job" || return 1
+              if [ "$#" -gt 0 ]; then
+                az containerapp job secret remove \
+                  --name "$job" --resource-group "$RESOURCE_GROUP" \
+                  --secret-names "$@" --yes --output none || true
+              fi
+              az containerapp job delete \
+                --name "$job" --resource-group "$RESOURCE_GROUP" --yes --output none
+            fi
+          }
+
+          purge_all_jobs() {
+            local outcome=0
+            purge_job "$proof_job" \
+              e2e-database-url staging-access better-auth-secret internal-api-key \
+              polar-access-token polar-webhook razorpay-key-id razorpay-key-secret razorpay-webhook || outcome=1
+            purge_job "$role_job" database-admin-url e2e-password || outcome=1
+            purge_job "$recovery_job" database-admin-url || outcome=1
+            return "$outcome"
+          }
+
+          cleanup_on_exit() {
+            local outcome=$?
+            set +e
+            purge_all_jobs || outcome=1
+            trap - EXIT
+            exit "$outcome"
+          }
+          trap cleanup_on_exit EXIT
+          purge_all_jobs
+
+          wait_for_job() {
+            local job=$1 execution status
+            execution=$(az containerapp job start \
+              --name "$job" --resource-group "$RESOURCE_GROUP" \
+              --query name --output tsv)
+            for _ in {1..150}; do
+              status=$(az containerapp job execution show \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --job-execution-name "$execution" \
+                --query properties.status --output tsv)
+              case "$status" in
+                Succeeded) return 0 ;;
+                Failed|Stopped) echo "::error::${job} ended with ${status}."; return 1 ;;
+              esac
+              sleep 10
+            done
+            echo "::error::Timed out waiting for ${job}."
+            return 1
+          }
+
+          # This fresh admin-only job is independent of the proof job and can
+          # recover after cancellation. The next run repeats it before provision.
+          az containerapp job create \
+            --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
+            --environment "$CONTAINER_ENVIRONMENT" \
+            --trigger-type Manual --parallelism 1 --replica-completion-count 1 \
+            --replica-timeout 1200 --replica-retry-limit 0 \
+            --image "$migration_image" \
+            --mi-user-assigned "$PULL_IDENTITY_ID" \
+            --registry-server "$REGISTRY" --registry-identity "$PULL_IDENTITY_ID" \
+            --command /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs \
+            --secrets "database-admin-url=${DATABASE_ADMIN_URL}" \
+            --env-vars \
+              'DATABASE_ADMIN_URL=secretref:database-admin-url' \
+              'E2E_ROLE_ACTION=drop' \
+            --tags environment=billing-staging "source-sha=${IMAGE_SHA}" \
+            --output none
+          wait_for_job "$recovery_job"
+          purge_job "$recovery_job" database-admin-url
