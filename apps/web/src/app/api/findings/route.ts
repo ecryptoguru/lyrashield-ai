@@ -10,6 +10,15 @@ import {
   parsePaginationParams,
 } from "../../../lib/api-response"
 import { z } from "zod"
+import { calculateFindingPriority } from "../../../lib/finding-priority"
+
+const SEVERITY_ORDER: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+}
 
 const FindingQuerySchema = z.object({
   workspaceId: z.string().min(1),
@@ -74,7 +83,37 @@ export async function GET(request: Request) {
       limit,
     })
 
-    return apiPaginated(items, nextCursor)
+    const prioritized = items.map((finding) => ({
+      ...finding,
+      priority: calculateFindingPriority({
+        severity: finding.severity,
+        status: finding.status,
+        verified: finding.verified,
+        confidence: finding.confidence,
+        environment: finding.target?.environment as
+          | "LOCAL"
+          | "PREVIEW"
+          | "STAGING"
+          | "PRODUCTION"
+          | null
+          | undefined,
+        businessImpact: finding.businessImpact,
+        exploitability: finding.exploitability,
+      }),
+    }))
+
+    // ponytail: page-local ranking only — bounded by the 100-item page
+    // ceiling; persist/index a score only if workspace scale proves it
+    // necessary. The database cursor below stays derived from the original
+    // severity/createdAt order so pagination never duplicates or drops rows.
+    prioritized.sort(
+      (left, right) =>
+        right.priority.score - left.priority.score ||
+        (SEVERITY_ORDER[right.severity] ?? 99) - (SEVERITY_ORDER[left.severity] ?? 99) ||
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+    )
+
+    return apiPaginated(prioritized, nextCursor)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

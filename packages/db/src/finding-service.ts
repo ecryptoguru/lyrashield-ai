@@ -25,7 +25,7 @@ export interface FindingStats {
 export async function listFindings(params: ListFindingsParams): Promise<{
   items: (Finding & {
     _count?: { evidence: number; fixProposals: number }
-    target?: { id: string; name: string; type: string } | null
+    target?: { id: string; name: string; type: string; environment: string | null } | null
   })[]
   nextCursor: string | null
 }> {
@@ -47,7 +47,7 @@ export async function listFindings(params: ListFindingsParams): Promise<{
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
     include: {
-      target: { select: { id: true, name: true, type: true } },
+      target: { select: { id: true, name: true, type: true, environment: true } },
       _count: {
         select: {
           evidence: { where: { redactionStatus: { not: "deleted" } } },

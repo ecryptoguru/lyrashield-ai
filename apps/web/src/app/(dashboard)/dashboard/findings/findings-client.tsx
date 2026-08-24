@@ -46,6 +46,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { severityLabel, humanizeToken } from "@/lib/labels"
+import {
+  calculateFindingPriority,
+  type FindingPriorityBand,
+  type FindingPriorityResult,
+} from "@/lib/finding-priority"
+import type { FindingStatus, TargetEnvironment } from "@lyrashield/types"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,17 +70,30 @@ export interface FindingListItem {
   confidence: string
   cwe?: string | null
   cvssScore?: number | null
-  target?: { id: string; name: string; type: string } | null
+  businessImpact?: string | null
+  exploitability?: string | null
+  target?: { id: string; name: string; type: string; environment?: string | null } | null
   _count?: { evidence: number; fixProposals: number }
   firstSeenAt: string
   lastSeenAt: string
+  priority?: FindingPriorityResult
 }
+
+const prioritySchema = z
+  .object({
+    score: z.number(),
+    band: z.enum(["urgent", "high", "normal", "low"]),
+    reasons: z.array(z.string()),
+    limitations: z.array(z.string()),
+  })
+  .passthrough()
 
 const findingTargetSchema = z
   .object({
     id: z.string(),
     name: z.string(),
     type: z.string(),
+    environment: z.string().nullable().optional(),
   })
   .passthrough()
 
@@ -92,6 +111,8 @@ const findingListItemSchema = z
     confidence: z.string(),
     cwe: z.string().nullable().optional(),
     cvssScore: z.number().nullable().optional(),
+    businessImpact: z.string().nullable().optional(),
+    exploitability: z.string().nullable().optional(),
     target: findingTargetSchema.nullable().optional(),
     _count: z
       .object({
@@ -100,6 +121,7 @@ const findingListItemSchema = z
       })
       .passthrough()
       .optional(),
+    priority: prioritySchema.optional(),
     firstSeenAt: z.string().datetime().or(z.string()),
     lastSeenAt: z.string().datetime().or(z.string()),
   })
@@ -126,6 +148,13 @@ const STATUS_BADGE: Record<string, BadgeVariant> = {
   ACCEPTED_RISK: "muted",
   FALSE_POSITIVE: "muted",
   DUPLICATE: "muted",
+}
+
+const PRIORITY_BADGE: Record<FindingPriorityBand, BadgeVariant> = {
+  urgent: "danger",
+  high: "warning",
+  normal: "info",
+  low: "muted",
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +206,7 @@ function extractEpssPercentage(technicalDetail?: string | null): string | undefi
 // FindingsClient
 // ---------------------------------------------------------------------------
 
-type SortMode = "severity" | "newest"
+type SortMode = "priority" | "severity" | "newest"
 
 export function FindingsClient({
   workspaceId,
@@ -200,7 +229,7 @@ export function FindingsClient({
       const params = readQueryParams()
       if (updates.filter && updates.filter !== "ALL") params.set("filter", updates.filter)
       else params.delete("filter")
-      if (updates.sort && updates.sort !== "severity") params.set("sort", updates.sort)
+      if (updates.sort && updates.sort !== "priority") params.set("sort", updates.sort)
       else params.delete("sort")
       const search = params.toString()
       window.history.replaceState(
@@ -217,7 +246,7 @@ export function FindingsClient({
   const [filter, setFilter] = useState<string>(() => readQueryParams().get("filter") ?? "ALL")
   const [sortMode, setSortMode] = useState<SortMode>(() => {
     const sort = readQueryParams().get("sort")
-    return sort === "severity" || sort === "newest" ? sort : "severity"
+    return sort === "severity" || sort === "newest" ? sort : "priority"
   })
   const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(() =>
     initialSelectedFindingId
@@ -263,8 +292,17 @@ export function FindingsClient({
     [workspaceId, initialData, initialNextCursor, sortMode, updateQueryParams]
   )
 
-  // Client-side sort — severity high-first or newest first
+  // Client-side sort — priority first (the API-ranked page default), then
+  // severity high-first, then newest. Each mode keeps its own tie-breakers so
+  // ordering stays deterministic across accumulated pages.
   const sortedFindings = [...findings].sort((a, b) => {
+    if (sortMode === "priority") {
+      return (
+        (b.priority?.score ?? -1) - (a.priority?.score ?? -1) ||
+        (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99) ||
+        new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+      )
+    }
     if (sortMode === "severity") {
       return (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99)
     }
@@ -318,6 +356,7 @@ export function FindingsClient({
             aria-label={`Sort ${ISSUE_PLURAL.toLowerCase()}`}
             className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
           >
+            <option value="priority">Priority (recommended)</option>
             <option value="severity">Severity (high first)</option>
             <option value="newest">Newest</option>
           </select>
@@ -410,6 +449,11 @@ export function FindingsClient({
                       <Badge variant={STATUS_BADGE[finding.status] ?? "muted"}>
                         {finding.status.replace(/_/g, " ")}
                       </Badge>
+                      {finding.priority && (
+                        <Badge variant={PRIORITY_BADGE[finding.priority.band] ?? "muted"}>
+                          Priority: {finding.priority.band}
+                        </Badge>
+                      )}
                       {finding.cwe && (
                         <span className="text-muted-foreground text-xs">{finding.cwe}</span>
                       )}
@@ -425,6 +469,21 @@ export function FindingsClient({
                     <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
                       {finding.summary}
                     </p>
+                    {finding.priority && finding.priority.reasons.length > 0 && (
+                      <details className="mt-2 text-xs">
+                        <summary className="text-muted-foreground cursor-pointer select-none">
+                          Why priority: {finding.priority.reasons[0]}
+                        </summary>
+                        <div className="text-muted-foreground mt-1 space-y-1 pl-1">
+                          {finding.priority.reasons.slice(1).map((reason) => (
+                            <p key={reason}>{reason}</p>
+                          ))}
+                          {finding.priority.limitations.map((limitation) => (
+                            <p key={limitation}>{limitation}</p>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                     <div className="text-muted-foreground mt-2 flex items-center gap-3 text-xs">
                       {finding.target && <span>Target: {finding.target.name}</span>}
                       {finding._count?.evidence ? (
@@ -479,8 +538,24 @@ export function FindingsClient({
           workspaceId={workspaceId}
           onClose={() => setSelectedFinding(null)}
           onStatusChange={(id, status) => {
-            setFindings((prev) => prev.map((f) => (f.id === id ? { ...f, status } : f)))
-            setSelectedFinding((prev) => (prev?.id === id ? { ...prev, status } : prev))
+            const reprioritize = (f: FindingListItem): FindingListItem =>
+              f.id === id
+                ? {
+                    ...f,
+                    status,
+                    priority: calculateFindingPriority({
+                      severity: f.severity,
+                      status: status as FindingStatus,
+                      verified: f.verified,
+                      confidence: f.confidence,
+                      environment: (f.target?.environment ?? null) as TargetEnvironment | null,
+                      businessImpact: f.businessImpact,
+                      exploitability: f.exploitability,
+                    }),
+                  }
+                : f
+            setFindings((prev) => prev.map(reprioritize))
+            setSelectedFinding((prev) => (prev?.id === id ? reprioritize(prev) : prev))
           }}
         />
       )}
