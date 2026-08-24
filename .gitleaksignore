@@ -1,0 +1,21 @@
+# Reviewed synthetic fixtures and documentation examples; exact findings only.
+c5abd52d92219ca486b219228aa16625c75d24ef:apps/desktop/src-tauri/src/byok/mod.rs:generic-api-key:187
+cc5033065cb9ab3ddc03d7a2e5fd75c6b4ae9ca2:packages/billing/src/providers/polar/webhooks.test.ts:generic-api-key:5
+103341c637e3e8e2fce8d239766122c3058f9251:playwright.config.ts:private-key:45
+d0967558c4833bd83153c5ac9fc747a22116a326:packages/cli/src/__tests__/cli.test.ts:generic-api-key:13
+4828342f34c30c3df2c433717279ce7c36dfef6d:apps/marketing/src/pages/docs/integrations/rest-api.astro:curl-auth-header:104
+0cfae944c832aeff811b26aa5a754becfe0cd854:packages/security/src/lite-scan.test.ts:gcp-api-key:30
+0cfae944c832aeff811b26aa5a754becfe0cd854:packages/security/src/lite-scan.test.ts:jwt:29
+0cfae944c832aeff811b26aa5a754becfe0cd854:packages/security/src/lite-scan.test.ts:jwt:57
+0cfae944c832aeff811b26aa5a754becfe0cd854:packages/security/src/lite-scan.test.ts:generic-api-key:48
+0cfae944c832aeff811b26aa5a754becfe0cd854:packages/security/src/lite-scan.test.ts:stripe-access-token:45
+3cefb3e3a606e5f616da43d567651964b1c1d8b5:apps/web/src/lib/github-install-state.test.ts:generic-api-key:4
+99cac555cbbbcce2ac65795e95132820c57ff084:apps/agent/src/service-token.test.ts:generic-api-key:4
+99cac555cbbbcce2ac65795e95132820c57ff084:apps/worker/src/engine/scanners/url-scanner.test.ts:jwt:30
+99cac555cbbbcce2ac65795e95132820c57ff084:apps/worker/src/engine/scanners/url-scanner.test.ts:stripe-access-token:144
+e02853f094dd61f5732b539b81143e6cc49f647d:.env.example:generic-api-key:8
+e02853f094dd61f5732b539b81143e6cc49f647d:codebase.md:generic-api-key:290
+
+# Additional reviewed synthetic security-test fixtures; exact findings only.
+804457fef8a4a6caf4f84afb7063ce8153a280e1:packages/eval-ai-safety/src/owasp/test-cases.ts:generic-api-key:217
+9dfb13b20ccb5197d51b4e3ed73215c656d716f3:packages/evidence-storage/src/index.test.ts:generic-api-key:16

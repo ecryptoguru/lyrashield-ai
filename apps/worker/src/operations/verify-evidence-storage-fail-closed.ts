@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url"
+
 export async function verifyEvidenceStorageFailsClosed(): Promise<void> {
   process.env.LYRASHIELD_EVIDENCE_KEK = ""
   const { assertEvidenceStorageConfigured, EvidenceEnvelopeError } =
@@ -26,4 +28,3 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       process.exitCode = 1
     })
 }
-import { pathToFileURL } from "node:url"

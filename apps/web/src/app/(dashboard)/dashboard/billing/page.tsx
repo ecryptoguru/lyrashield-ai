@@ -144,7 +144,7 @@ export default async function BillingPage() {
               <CardTitle>Trial Status</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                   <p className="text-sm text-muted-foreground">Days Left</p>
                   <p className="text-xl font-semibold">{trialState.daysLeft}</p>
@@ -186,7 +186,7 @@ export default async function BillingPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <p className="text-sm text-muted-foreground">Pool Minutes</p>
                 <p className="text-xl font-semibold">
