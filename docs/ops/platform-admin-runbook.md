@@ -34,7 +34,7 @@ The provisioning workflow checks `prisma migrate status`; it does not deploy mig
 
 ## Production preflight
 
-Use **Actions > Provision platform administrators** on the exact reviewed revision. The workflow uses the protected `azure-production` environment and `DATABASE_DIRECT_URL`.
+Use **Actions > Provision platform administrators** on the exact reviewed revision. The workflow uses the protected `azure-production` environment and `DATABASE_DIRECT_URL`. The environment accepts protected branches only and disables administrator bypass.
 
 Select:
 

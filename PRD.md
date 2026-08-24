@@ -373,9 +373,8 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 7. Verify scorecard metadata/card formats/badge, revocation/expiry, referral continuity, human-event deduplication, and external unfurls on public domains.
 8. Triage the 24 Standard findings and obtain independent verification where warranted.
 9. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
-10. Verify production runtime DB role is neither superuser nor `BYPASSRLS` before traffic growth.
-11. Apply the platform-admin migration in production, run read-only exact-two account preflight, provision only after both users complete email verification and TOTP enrollment, and retain fresh-session MFA browser proof. Until then, production admin access is unproven.
-12. Capture authenticated client-matrix receipts for current CLI/MCP/plugin installs and remote OAuth, plus webmaster indexing and answer-engine citation observations; code and crawl files alone do not prove external discovery.
+10. Rerun read-only exact-two platform-admin preflight after both users complete email verification and personal TOTP enrollment, provision only after both accounts pass, and retain fresh-session MFA browser proof. Until then, production admin access is unproven.
+11. Capture authenticated client-matrix receipts for current CLI/MCP/plugin installs and remote OAuth, plus webmaster indexing and answer-engine citation observations; code and crawl files alone do not prove external discovery.
 
 ### Deferred
 

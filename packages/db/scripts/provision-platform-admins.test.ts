@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import {
   validatePlatformAdminCandidates,
@@ -24,6 +25,20 @@ const valid: PlatformAdminCandidate[] = [
 ]
 
 describe("platform admin provisioning preflight", () => {
+  it("revalidates the exact admin set inside a serializable transaction", () => {
+    const source = readFileSync(new URL("./provision-platform-admins.ts", import.meta.url), "utf8")
+    const transaction = source.slice(source.indexOf("await prisma.$transaction("))
+
+    expect(transaction.indexOf("tx.user.findMany")).toBeGreaterThan(-1)
+    expect(transaction.indexOf("validatePlatformAdminCandidates")).toBeGreaterThan(
+      transaction.indexOf("tx.user.findMany")
+    )
+    expect(transaction.indexOf("tx.user.updateMany")).toBeGreaterThan(
+      transaction.indexOf("validatePlatformAdminCandidates")
+    )
+    expect(transaction).toContain('{ isolationLevel: "Serializable" }')
+  })
+
   it("accepts exactly the two verified MFA accounts", () => {
     expect(validatePlatformAdminCandidates(valid, [])).toHaveLength(2)
   })

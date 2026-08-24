@@ -58,7 +58,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 7. Verify public scorecard metadata, all card formats, badge, revocation/expiry, referrals, human-event deduplication, external unfurls, and webmaster submission.
 8. Triage current Standard findings and obtain independent verification where warranted.
 9. After founder authorization, run separate controlled Deep/Terra acceptance with exact image, routing, cost, receipts, and terminal proof.
-10. Merge the Prisma-generation fix in PR #413, rerun production platform-admin preflight, and only apply the exact-two role set after both named users personally verify email and enroll TOTP; then capture fresh-session MFA browser proof. Preflight run `32728732596` failed before account reads or mutations because the workflow had not generated the Prisma client.
+10. Complete personal TOTP enrollment for `ecryptoguru@gmail.com`, then rerun exact-two production platform-admin preflight. Read-only run `32730440129` proved the isolated client reached account validation and failed because that verified account has no TOTP; `ankit@lyrashieldai.com` was not evaluated after the first fail-closed result. Only apply roles after both accounts pass, then capture fresh-session MFA browser proof.
 
 ## Founder decisions
 

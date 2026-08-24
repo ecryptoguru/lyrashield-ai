@@ -109,11 +109,11 @@ Per-client config for OpenCode, Kilo Code, Cline, Zed, and the cloud platforms l
 
 ### Supported-client boundary
 
-The integration registry contains 30 install entries for 24 distinct coding agents. Entries are
-`COMPATIBLE`, `EXPERIMENTAL`, or `DEPRECATED` and record either documentation, package-conformance,
-or retained runtime evidence. Presence in the registry means LyraShield can render or guide that
-client's current config shape; it does not claim that every client release completed an
-authenticated runtime matrix.
+The integration registry contains 30 install entries resolving to 26 preferred client surfaces.
+Entries are `COMPATIBLE`, `EXPERIMENTAL`, or `DEPRECATED` and record either documentation,
+package-conformance, or retained runtime evidence. Presence in the registry means LyraShield can
+render or guide that client's current config shape; it does not claim that every client release
+completed an authenticated runtime matrix.
 
 - Agent Plugin package-conformance: Claude Code, Cursor, OpenAI Codex, and Kiro.
 - Experimental Agent Plugin paths: VS Code and GitHub Copilot; use their supported config/install

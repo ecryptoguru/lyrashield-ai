@@ -103,7 +103,7 @@ Measured focused benchmark: unchanged-artifact persistence decreased from 117.10
 
 - Production release `32726286951` applied the forward migration set and promoted app `lyrashield-app--0000169`, scanner `lyrashield-scanner--0000150`, and egress proxy `lyrashield-egress-proxy--0000019` at 100% traffic. Public app, scan, scanner, and egress health passed.
 - Worker digest `sha256:aeeffe89ec8a490671ca559ae6466a0622df79ba6ded2ffb8211b908e2404f36` runs product `19bc0b28` and engine `944a84f`; the VM launcher hash matches the reviewed repository script and `/api/ready/scans` passed after promotion.
-- Production admin preflight `32728732596` failed safely before account reads or mutations because its workflow omitted Prisma generation. PR #413 adds the missing generation step; production account state remains unproven until that fix merges and preflight is repeated.
+- Production admin preflight `32728732596` failed safely before account reads or mutations because its workflow omitted Prisma generation; PR #413 fixed that. Retries `32729923445` and `32730207675` exposed unrelated application-env loading, also before account reads. Read-only branch preflight `32730440129` then proved the isolated client reached account validation and failed because verified account `ecryptoguru@gmail.com` has not enrolled TOTP. It stopped at the first failure, so `ankit@lyrashieldai.com` remains unevaluated and no account was modified.
 
 - Fresh PostgreSQL 17: all migrations applied; privileged owner access passed; `app_runtime_prod` held no table privileges and direct access was denied.
 - Core test suite: 274 files passed, 1 skipped; 2,262 tests passed, 16 skipped.
