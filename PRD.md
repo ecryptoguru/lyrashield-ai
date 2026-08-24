@@ -334,13 +334,13 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - File selection now prioritizes production/config sources, excludes generated artifacts, and uses mode caps of 200 for Quick/Safe, 500 for Standard, and 1,000 for Deep/Custom while retaining byte, time, walk-depth, and entry bounds.
 - Discovery records eligible, scanned, skipped, and reason counts plus a bounded skipped-path sample. These limits flow into scoring, coverage issues, dashboard disclosure, and an immutable `ai_app_security` family receipt; incomplete AI coverage cannot support a clean claim.
 - A 217-file regression fixture proves Quick remains honestly bounded at 200 while still scanning vulnerable production code, and Standard evaluates all 217 files.
-- Current production deployment: app `lyrashield-app--0000169`, scanner `lyrashield-scanner--0000150`, and egress proxy `lyrashield-egress-proxy--0000019` run product `19bc0b28115efb3e524ef241b7541208f40e6890`. Worker digest `sha256:aeeffe89ec8a490671ca559ae6466a0622df79ba6ded2ffb8211b908e2404f36` runs the same product with engine `944a84f15f913909039c89146c25db650cd87137`; release run `32726286951`, worker health, and `/api/ready/scans` passed.
+- Current production deployment: app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020` run product `8347fda923032960661079491a0a17956aebefd9`. Worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413` runs the same product with engine `944a84f15f913909039c89146c25db650cd87137`; release run `32738811470`, worker health, and `/api/ready/scans` passed.
 
 ### Infrastructure evidence — 2026-08-21
 
-- Web revision: `lyrashield-app--0000169`, ready for scans.
-- Worker product revision: `19bc0b28115efb3e524ef241b7541208f40e6890`.
-- Worker digest: `sha256:aeeffe89ec8a490671ca559ae6466a0622df79ba6ded2ffb8211b908e2404f36`.
+- Web revision: `lyrashield-app--0000170`, ready for scans.
+- Worker product revision: `8347fda923032960661079491a0a17956aebefd9`.
+- Worker digest: `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413`.
 - Engine revision: `944a84f15f913909039c89146c25db650cd87137`; engine version 1.2.1.
 - Upstash BullMQ `rediss://` returned `PONG`; queue was empty before acceptance and heartbeat was live.
 - Azure public Redis `6379` rule is deleted.

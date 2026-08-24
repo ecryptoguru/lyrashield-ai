@@ -404,10 +404,10 @@ Current command output is authoritative; never copy historical test counts forwa
 
 ### Current worker proof
 
-- Product revision: `19bc0b28115efb3e524ef241b7541208f40e6890`.
+- Product revision: `8347fda923032960661079491a0a17956aebefd9`.
 - Engine revision: `944a84f15f913909039c89146c25db650cd87137`.
-- Worker digest: `sha256:aeeffe89ec8a490671ca559ae6466a0622df79ba6ded2ffb8211b908e2404f36`.
-- Container Apps: app `lyrashield-app--0000169`, scanner `lyrashield-scanner--0000150`, and egress proxy `lyrashield-egress-proxy--0000019` at 100% traffic; release run `32726286951` and public readiness passed.
+- Worker digest: `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413`.
+- Container Apps: app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020` at 100% traffic; release run `32738811470` and public readiness passed.
 - BullMQ Redis: TLS/authenticated `PONG`, live heartbeat, empty queue before acceptance.
 - Azure public `6379`: removed.
 - Legacy Redis: stopped, restart-disabled, rollback-only.
@@ -436,7 +436,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 - `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v4, preventing bounded AI coverage from becoming a complete clean claim.
 - The scan-detail UI shows coverage counts and skipped-path samples instead of only the legacy one-line warning.
 - Regression coverage uses an exact 217-file repository: Quick scans 200 and reports 17 skipped while retaining vulnerable production code; Standard scans all 217. Generated directories are excluded.
-- PR #386 merged as `8ee6fd5`; its coverage remediation remains in the current product. Production now runs product `19bc0b28` at app revision `lyrashield-app--0000169` and worker digest `sha256:aeeffe89ec8a490671ca559ae6466a0622df79ba6ded2ffb8211b908e2404f36`. The prior acceptance scan remains historically bounded and unchanged.
+- PR #386 merged as `8ee6fd5`; its coverage remediation remains in the current product. Production now runs product `8347fda9` at app revision `lyrashield-app--0000170` and worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413`. The prior acceptance scan remains historically bounded and unchanged.
 
 ## 12. Key files
 
