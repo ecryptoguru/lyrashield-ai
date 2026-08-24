@@ -165,12 +165,12 @@ describe("platform admin Better Auth TOTP hooks", () => {
 
   it("stamps only the exact session returned by successful TOTP verification", async () => {
     const hookContext = context()
-    hookContext.context.returned = { token: "session-token", user: { id: "admin-1" } }
+    hookContext.context.returned = { token: "s1", user: { id: "admin-1" } }
 
     await hooks().after(hookContext)
 
     expect(sessionUpdateMany).toHaveBeenCalledWith({
-      where: { token: "session-token", userId: "admin-1" },
+      where: { token: "s1", userId: "admin-1" },
       data: { twoFactorVerifiedAt: expect.any(Date) },
     })
   })
@@ -178,7 +178,7 @@ describe("platform admin Better Auth TOTP hooks", () => {
   it("rate-limits and atomically audits administrator backup-code recovery", async () => {
     const hookContext = context()
     hookContext.path = "/two-factor/verify-backup-code"
-    hookContext.context.returned = { token: "session-token", user: { id: "admin-1" } }
+    hookContext.context.returned = { token: "s1", user: { id: "admin-1" } }
 
     await hooks().before(hookContext)
     await hooks().after(hookContext)
@@ -188,7 +188,7 @@ describe("platform admin Better Auth TOTP hooks", () => {
       ipAddress: "203.0.113.10",
     })
     expect(systemSessionFindFirst).toHaveBeenCalledWith({
-      where: { token: "session-token", userId: "admin-1" },
+      where: { token: "s1", userId: "admin-1" },
       select: { id: true },
     })
     expect(systemSessionUpdateMany).toHaveBeenCalledWith({
