@@ -13,17 +13,46 @@ the customer or operator explicitly retries.
 
 ## Evidence storage
 
-Run inside the promoted worker container, with production secrets already loaded:
+Run from the worker VM in a disposable container using the promoted image. Do not
+use `docker exec` against the service container: an exec lifecycle can stop the
+attached systemd service and create an avoidable worker handoff.
 
 ```sh
-./apps/worker/node_modules/.bin/tsx apps/worker/src/operations/verify-evidence-storage.ts
-./apps/worker/node_modules/.bin/tsx apps/worker/src/operations/verify-evidence-storage-fail-closed.ts
+set -eu
+. /etc/lyrashield/worker-runtime.conf
+
+set --
+while read -r host address port extra; do
+  [ -n "$host" ] || continue
+  set -- "$@" --add-host "${host}:${address}"
+done </run/lyrashield-egress-hosts
+
+cleanup() { docker rm -f lyrashield-evidence-proof >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+
+common_env="--env NODE_ENV=production --env LYRASHIELD_LOCAL_EVIDENCE_STORAGE=0 --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com --env LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0"
+
+docker run --rm --name lyrashield-evidence-proof --network bridge "$@" \
+  --env-file /etc/lyrashield/worker.env $common_env \
+  --entrypoint ./apps/worker/node_modules/.bin/tsx \
+  "$LYRASHIELD_WORKER_IMAGE" \
+  apps/worker/src/operations/verify-evidence-storage.ts
+
+docker run --rm --name lyrashield-evidence-proof --network none \
+  --env-file /etc/lyrashield/worker.env $common_env \
+  --entrypoint ./apps/worker/node_modules/.bin/tsx \
+  "$LYRASHIELD_WORKER_IMAGE" \
+  apps/worker/src/operations/verify-evidence-storage-fail-closed.ts
 ```
 
 Both commands must print their respective `*_OK` marker. The first writes a unique
 non-sensitive artifact, verifies ciphertext, authenticated round-trip, unauthenticated
 denial, and cleanup. The second has no storage side effect and proves a missing KEK
 blocks configuration.
+
+Cloudflare R2 may express a missing authorization header as HTTP 400 with the
+exact S3 XML pair `InvalidArgument` / `Authorization`; the proof accepts only
+that explicit denial, HTTP 401, or HTTP 403. Other 400 responses remain failures.
 
 ## Worker and queue
 

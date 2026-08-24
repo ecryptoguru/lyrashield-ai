@@ -1,12 +1,11 @@
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Sign in | LyraShield AI",
-  description: "Sign in to your LyraShield account.",
+  title: "Authorize integration | LyraShield AI",
   robots: { index: false, follow: false, noarchive: true },
   referrer: "no-referrer",
 }
 
-export default function SignInLayout({ children }: { children: React.ReactNode }) {
+export default function OAuthLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }

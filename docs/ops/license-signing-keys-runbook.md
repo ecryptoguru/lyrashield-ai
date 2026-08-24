@@ -59,13 +59,14 @@ Consumed by `packages/billing` and `apps/web/src/app/api/billing/*`:
 
 | Variable                     | Provider | Notes                               |
 | ---------------------------- | -------- | ----------------------------------- |
+| `POLAR_ENVIRONMENT`          | Polar    | Explicit `sandbox` or `production`. |
 | `POLAR_ACCESS_TOKEN`         | Polar    | Merchant-of-record API token.       |
 | `POLAR_ORG_ID`               | Polar    | Organization ID.                    |
 | `POLAR_WEBHOOK_SECRET`       | Polar    | Standard-Webhooks HMAC secret.      |
 | `POLAR_WEBHOOK_TOLERANCE_MS` | Polar    | Optional, default `300000` (5 min). |
 | `RAZORPAY_KEY_ID`            | Razorpay | India INR gateway.                  |
-| `RAZORPAY_KEY_SECRET`        | Razorpay | Also fallback webhook secret.       |
-| `RAZORPAY_WEBHOOK_SECRET`    | Razorpay | Dedicated webhook secret preferred. |
+| `RAZORPAY_KEY_SECRET`        | Razorpay | API credential only.                |
+| `RAZORPAY_WEBHOOK_SECRET`    | Razorpay | Required dedicated webhook secret.  |
 | `BILLING_USD_INR_RATE`       | —        | Default `100`, bounded `[50, 150]`. |
 | `BILLING_GEO_IP_HEADER`      | —        | GeoIP header for provider routing.  |
 

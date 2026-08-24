@@ -220,6 +220,10 @@ const envSchema = z
 
     // Billing (Sprint 10)
     POLAR_ACCESS_TOKEN: z.string().optional().or(z.literal("")),
+    // Polar credentials are environment-specific. Never rely on the SDK's
+    // implicit production default: every configured credential must name its
+    // target environment explicitly.
+    POLAR_ENVIRONMENT: z.enum(["production", "sandbox"]).optional(),
     POLAR_ORG_ID: z.string().optional().or(z.literal("")),
     POLAR_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
     // JSON maps of app catalog keys to provider-assigned IDs.
@@ -316,6 +320,10 @@ const envSchema = z
     // Runtime
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional().default("info"),
+  })
+  .refine((val) => !val.POLAR_ACCESS_TOKEN || Boolean(val.POLAR_ENVIRONMENT), {
+    path: ["POLAR_ENVIRONMENT"],
+    message: "POLAR_ENVIRONMENT is required when POLAR_ACCESS_TOKEN is configured",
   })
   .refine(
     // If an Upstash REST URL is configured, a token must accompany it — a URL

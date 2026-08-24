@@ -1,105 +1,134 @@
-import { test, expect } from "@playwright/test"
+import { createHmac } from "node:crypto"
+import { expect, test } from "@playwright/test"
+import { prisma } from "@lyrashield/db"
 
 /**
- * Razorpay UPI AutoPay cap fallback test.
+ * Razorpay Test Mode checkout contract.
  *
- * Razorpay UPI AutoPay has a maximum mandate amount of ₹15,000.
- * Subscriptions above this cap must fall back to card/netbanking
- * instead of UPI AutoPay.
- *
- * Test cases:
- * - Team monthly (₹29,900) → card/netbanking (not UPI AutoPay)
- * - Team annual (₹2,69,000) → card/netbanking (not UPI AutoPay)
- * - Pro annual (₹95,000) → card/netbanking (not UPI AutoPay)
- * - Starter monthly (₹2,900) → UPI AutoPay (below cap)
- *
- * Note: These tests are skipped unless RAZORPAY_TEST_MODE=1 is set.
+ * Payment-method availability and mandate limits are provider-owned UI state.
+ * This suite proves LyraShield creates Test Mode subscriptions without a
+ * client region override. Brave receipts remain required for the exact methods
+ * Razorpay presents for each price.
  */
+const workspaceId = process.env.BILLING_E2E_WORKSPACE_ID?.trim() ?? ""
+const storageState = process.env.BILLING_E2E_STORAGE_STATE?.trim() ?? ""
+const keyId = process.env.RAZORPAY_KEY_ID?.trim() ?? ""
+const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? ""
+const enabled =
+  process.env.RAZORPAY_TEST_MODE === "1" &&
+  keyId.startsWith("rzp_test_") &&
+  Boolean(workspaceId && storageState && webhookSecret)
 
-const RAZORPAY_TEST_MODE = process.env.RAZORPAY_TEST_MODE === "1"
-const UPI_AUTOPAY_CAP_INR = 15_000
+if (storageState) test.use({ storageState })
 
-test.describe("Razorpay UPI AutoPay cap fallback", () => {
-  test.skip(!RAZORPAY_TEST_MODE, "Razorpay test mode not enabled")
+async function postRazorpayWebhook(
+  request: import("@playwright/test").APIRequestContext,
+  eventId: string,
+  event: Record<string, unknown>
+) {
+  const body = JSON.stringify(event)
+  const signature = createHmac("sha256", webhookSecret).update(body).digest("hex")
+  return request.post("/billing/webhook", {
+    data: body,
+    headers: {
+      "content-type": "application/json",
+      "x-razorpay-event-id": eventId,
+      "x-razorpay-signature": signature,
+    },
+  })
+}
 
-  test("Team monthly (₹29,900) routes to card/netbanking, not UPI AutoPay", async ({ request }) => {
-    // Team monthly is ₹29,900 — above the ₹15,000 UPI AutoPay cap
-    const response = await request.post("/billing/checkout", {
-      data: {
-        plan: "TEAM",
-        interval: "monthly",
-        region: "inr",
-      },
+test.describe("Razorpay Test Mode checkout contract", () => {
+  test.skip(
+    !enabled,
+    "requires rzp_test_ credentials plus BILLING_E2E_WORKSPACE_ID and BILLING_E2E_STORAGE_STATE"
+  )
+
+  for (const [plan, interval] of [
+    ["STARTER", "monthly"],
+    ["PRO", "annual"],
+    ["TEAM", "monthly"],
+    ["TEAM", "annual"],
+  ] as const) {
+    test(`${plan} ${interval} creates a Razorpay Test Mode subscription`, async ({ request }) => {
+      const response = await request.post("/billing/checkout", {
+        headers: { "x-forwarded-for": "192.0.2.44", "cf-ipcountry": "IN" },
+        data: { workspaceId, plan, interval },
+      })
+      await expect(response).toBeOK()
+      await expect(response.json()).resolves.toMatchObject({
+        success: true,
+        data: {
+          provider: "razorpay",
+          subscriptionId: expect.any(String),
+          keyId,
+        },
+      })
     })
-    expect(response.ok()).toBeTruthy()
-    const body = await response.json()
-    expect(body.data.provider).toBe("razorpay")
-    expect(body.data.subscriptionId).toBeDefined()
+  }
 
-    // The subscription should not offer UPI AutoPay as a payment method
-    // because the amount (₹29,900) exceeds the ₹15,000 cap.
-    // In a real test, we'd verify the Razorpay checkout page doesn't
-    // show UPI AutoPay as an option.
+  test("rejects the removed client region override", async ({ request }) => {
+    const response = await request.post("/billing/checkout", {
+      data: { workspaceId, plan: "STARTER", interval: "monthly", region: "inr" },
+    })
+    expect(response.status()).toBe(400)
   })
 
-  test("Team annual (₹2,69,000) routes to card/netbanking, not UPI AutoPay", async ({
-    request,
-  }) => {
-    const response = await request.post("/billing/checkout", {
-      data: {
-        plan: "TEAM",
-        interval: "annual",
-        region: "inr",
+  test("signed pack, 100 replays, and refund produce one durable effect", async ({ request }) => {
+    const paymentId = `pay_test_${Date.now()}`
+    const eventId = `razorpay-pack-${Date.now()}`
+    const captured = {
+      event: "payment.captured",
+      created_at: Math.floor(Date.now() / 1000),
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId,
+            amount: 1_500_00,
+            currency: "INR",
+            notes: { workspaceId, packId: "pack_100" },
+          },
+        },
       },
-    })
-    expect(response.ok()).toBeTruthy()
-    const body = await response.json()
-    expect(body.data.provider).toBe("razorpay")
+    }
+    await expect(await postRazorpayWebhook(request, eventId, captured)).toBeOK()
+    const replays = await Promise.all(
+      Array.from({ length: 100 }, () => postRazorpayWebhook(request, eventId, captured))
+    )
+    for (const replay of replays) await expect(replay).toBeOK()
 
-    // ₹2,69,000 is well above the ₹15,000 UPI AutoPay cap
-  })
+    expect(
+      await prisma.webhookEvent.count({
+        where: { provider: "razorpay", externalId: eventId, processed: true },
+      })
+    ).toBe(1)
+    expect(await prisma.minutePack.count({ where: { workspaceId, externalId: paymentId } })).toBe(1)
 
-  test("Pro annual (₹95,000) routes to card/netbanking, not UPI AutoPay", async ({ request }) => {
-    const response = await request.post("/billing/checkout", {
-      data: {
-        plan: "PRO",
-        interval: "annual",
-        region: "inr",
-      },
-    })
-    expect(response.ok()).toBeTruthy()
-    const body = await response.json()
-    expect(body.data.provider).toBe("razorpay")
-
-    // ₹95,000 is above the ₹15,000 UPI AutoPay cap
-  })
-
-  test("Starter monthly (₹2,900) gets UPI AutoPay", async ({ request }) => {
-    const response = await request.post("/billing/checkout", {
-      data: {
-        plan: "STARTER",
-        interval: "monthly",
-        region: "inr",
-      },
-    })
-    expect(response.ok()).toBeTruthy()
-    const body = await response.json()
-    expect(body.data.provider).toBe("razorpay")
-
-    // ₹2,900 is below the ₹15,000 UPI AutoPay cap, so UPI AutoPay
-    // should be available as a payment method.
-  })
-
-  test("UPI AutoPay cap boundary check", () => {
-    // Verify the cap logic
-    const teamMonthlyInr = 29_900
-    const teamAnnualInr = 269_000
-    const proAnnualInr = 95_000
-    const starterMonthlyInr = 2_900
-
-    expect(teamMonthlyInr).toBeGreaterThan(UPI_AUTOPAY_CAP_INR)
-    expect(teamAnnualInr).toBeGreaterThan(UPI_AUTOPAY_CAP_INR)
-    expect(proAnnualInr).toBeGreaterThan(UPI_AUTOPAY_CAP_INR)
-    expect(starterMonthlyInr).toBeLessThanOrEqual(UPI_AUTOPAY_CAP_INR)
+    const refundId = `razorpay-refund-${Date.now()}`
+    await expect(
+      await postRazorpayWebhook(request, refundId, {
+        event: "refund.created",
+        created_at: Math.floor(Date.now() / 1000),
+        payload: {
+          payment: {
+            entity: {
+              id: paymentId,
+              amount: 1_500_00,
+              currency: "INR",
+              notes: { workspaceId },
+            },
+          },
+          refund: { entity: { id: refundId, payment_id: paymentId } },
+        },
+      })
+    ).toBeOK()
+    await expect
+      .poll(() =>
+        prisma.minutePack.findFirst({
+          where: { workspaceId, externalId: paymentId },
+          select: { remainingMinutes: true },
+        })
+      )
+      .toMatchObject({ remainingMinutes: 0 })
   })
 })

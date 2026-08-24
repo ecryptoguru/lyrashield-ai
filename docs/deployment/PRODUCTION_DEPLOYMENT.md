@@ -317,7 +317,31 @@ GOOGLE_CLIENT_SECRET="..."
 AZURE_AD_CLIENT_ID="..."
 AZURE_AD_CLIENT_SECRET="..."
 AZURE_AD_TENANT_ID="common"
+
+# Billing provider configuration is app-only. The deploy workflow validates the
+# complete protected-environment set and still forces all purchase admissions off.
+POLAR_ENVIRONMENT="production" # use sandbox only in isolated billing staging
+POLAR_ACCESS_TOKEN="..."
+POLAR_ORG_ID="..."
+POLAR_WEBHOOK_SECRET="..."
+POLAR_PRODUCT_IDS='{"starter_monthly":"..."}'
+POLAR_LOCAL_PRODUCT_IDS='{"individual_launch":"..."}'
+POLAR_BILLING_ADMISSION="off"
+POLAR_LOCAL_BILLING_ADMISSION="off"
+RAZORPAY_KEY_ID="..."
+RAZORPAY_KEY_SECRET="..."
+RAZORPAY_WEBHOOK_SECRET="..."
+RAZORPAY_PLAN_IDS='{"starter_monthly":"..."}'
+RAZORPAY_BILLING_ADMISSION="off"
+RAZORPAY_LOCAL_BILLING_ADMISSION="off"
+BILLING_CANARY_WORKSPACE_IDS=""
 ```
+
+After candidate and public smoke checks pass, deployment deactivates every
+superseded active Container App revision while retaining exactly the promoted
+revision and its one previous rollback revision for app, scanner, and egress
+proxy. Cleanup refuses to touch any traffic-serving revision and fails if the
+expected current or rollback revision is missing.
 
 ### Worker-only configuration
 

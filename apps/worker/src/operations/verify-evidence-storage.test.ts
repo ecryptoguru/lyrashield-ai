@@ -89,4 +89,24 @@ describe("verifyEvidenceStorage", () => {
     )
     expect(objects.size).toBe(0)
   })
+
+  it("accepts Cloudflare R2's explicit missing-Authorization denial", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            "<Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error>",
+            { status: 400 }
+          )
+        )
+    )
+
+    await expect(verifyEvidenceStorage()).resolves.toMatchObject({
+      unauthenticatedDenied: true,
+      cleanupVerified: true,
+    })
+    expect(objects.size).toBe(0)
+  })
 })

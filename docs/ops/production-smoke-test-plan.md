@@ -16,16 +16,16 @@
 
 ## 0. Preconditions — do NOT run in production until all are true
 
-| #   | Precondition                                                                                                                                                                              | How to verify                                                                                                                                   |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Real license signing key provisioned in Azure Key Vault and `LICENSE_SIGNING_KEY_ID` set                                                                                                  | `az keyvault secret show --vault-name lyrashieldprodsecrets --name license-signing-private-key`; Container App env has `LICENSE_SIGNING_KEY_ID` |
-| 2   | Polar + Razorpay configured: `POLAR_ACCESS_TOKEN`, `POLAR_ORG_ID`, `POLAR_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `POLAR_LOCAL_PRODUCT_IDS` | `secrets_sync.py check-secrets …`; provider dashboards show webhooks registered                                                                 |
-| 3   | Brevo flipped in production: `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL` set and `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1`                                                   | `docs/deployment/PRODUCTION_DEPLOYMENT.md` blocker #1 resolved                                                                                  |
-| 4   | Runtime DB role cannot bypass RLS                                                                                                                                                         | run `packages/db/scripts/verify-license-rls-live.sh` (see `license-rls-live-verification.md`) — **must pass 6/6 first**                         |
-| 5   | `LYRASHIELD_INTERNAL_API_KEY` set on the app                                                                                                                                              | license issue/renew routes return 403 without the header                                                                                        |
-| 6   | Migrations applied through `20260819000000_sprint10_license_affiliate_indexes`                                                                                                            | `pnpm --filter @lyrashield/db migrate:deploy` reports up to date                                                                                |
-| 7   | Worker jobs scheduled: `billing-downgrade`, `billing-expire-packs`, `billing-reconciliation`, `affiliate-*`                                                                               | worker boot log lists the repeatable jobs                                                                                                       |
-| 8   | A dedicated test workspace + test founder account exist for smoke runs; never use a real customer workspace                                                                               | —                                                                                                                                               |
+| #   | Precondition                                                                                                                             | How to verify                                                                                                                                   |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Real license signing key provisioned in Azure Key Vault and `LICENSE_SIGNING_KEY_ID` set                                                 | `az keyvault secret show --vault-name lyrashieldprodsecrets --name license-signing-private-key`; Container App env has `LICENSE_SIGNING_KEY_ID` |
+| 2   | Polar + Razorpay configured: explicit `POLAR_ENVIRONMENT`, complete credentials, dedicated webhook secrets, and Cloud/Local catalog maps | Deploy configuration check passes; provider dashboards show matching environment and webhooks                                                   |
+| 3   | Brevo flipped in production: `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL` set and `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1`  | `docs/deployment/PRODUCTION_DEPLOYMENT.md` blocker #1 resolved                                                                                  |
+| 4   | Runtime DB role cannot bypass RLS                                                                                                        | run `packages/db/scripts/verify-license-rls-live.sh` (see `license-rls-live-verification.md`) — **must pass 6/6 first**                         |
+| 5   | `LYRASHIELD_INTERNAL_API_KEY` set on the app                                                                                             | license issue/renew routes return 403 without the header                                                                                        |
+| 6   | Migrations applied through `20260819000000_sprint10_license_affiliate_indexes`                                                           | `pnpm --filter @lyrashield/db migrate:deploy` reports up to date                                                                                |
+| 7   | Worker jobs scheduled: `billing-downgrade`, `billing-expire-packs`, `billing-reconciliation`, `affiliate-*`                              | worker boot log lists the repeatable jobs                                                                                                       |
+| 8   | A dedicated test workspace + test founder account exist for smoke runs; never use a real customer workspace                              | —                                                                                                                                               |
 
 **Rollback / abort (all flows).** If any step fails in a way that writes real
 billing state, do not retry blindly. Abort criteria and the escape hatch per
@@ -103,9 +103,10 @@ time-travel account) → attempt a scan.
 ### 1.4 Upgrade → checkout (monthly + annual, Polar USD + Razorpay INR)
 
 **Steps:** from the upgrade CTA, `POST /billing/checkout` for each
-combination: `{plan: STARTER|PRO|TEAM, interval: monthly|annual}` via Polar
-(USD region) and Razorpay (INR region). Complete a real checkout in each
-provider's **test/sandbox mode first**, then one live-mode micro-purchase.
+combination: `{workspaceId, plan: STARTER|PRO|TEAM, interval: monthly|annual}`
+via Polar (USD region) and Razorpay (INR region). Complete checkout in each
+provider's **test/sandbox mode**. Live mode is read-only readiness inspection;
+no real purchase is part of this gate.
 
 **Pass criteria:**
 
