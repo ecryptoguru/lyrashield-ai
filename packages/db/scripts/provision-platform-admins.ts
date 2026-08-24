@@ -67,77 +67,83 @@ async function main() {
     log: ["error"],
   })
   try {
-    const candidates = await prisma.user.findMany({
-      where: {
-        OR: APPROVED_PLATFORM_ADMIN_EMAILS.map((email) => ({
-          email: { equals: email, mode: "insensitive" as const },
-        })),
-      },
-      select: {
-        id: true,
-        email: true,
-        emailVerified: true,
-        twoFactorEnabled: true,
-        twoFactors: {
-          where: { verified: true },
-          select: { id: true },
-          take: 2,
-        },
-        platformRole: true,
-      },
-    })
-    const existingOperators = await prisma.user.findMany({
-      where: { platformRole: "PLATFORM_OPERATOR" },
-      select: {
-        id: true,
-        email: true,
-        emailVerified: true,
-        twoFactorEnabled: true,
-        twoFactors: {
-          where: { verified: true },
-          select: { id: true },
-          take: 2,
-        },
-        platformRole: true,
-      },
-    })
-    const targets = validatePlatformAdminCandidates(candidates, existingOperators)
-
-    if (!apply) {
-      console.log(
-        `Preflight passed for ${targets.length} accounts. Apply revokes all existing sessions and elevations, even when roles are already set. Re-run with --apply=${PLATFORM_ADMIN_APPLY_CONFIRMATION}.`
-      )
-      return
-    }
-
-    await prisma.$transaction(async (tx) => {
-      for (const target of targets) {
-        const updated = await tx.user.updateMany({
+    const provisioned = await prisma.$transaction(
+      async (tx) => {
+        const candidates = await tx.user.findMany({
           where: {
-            id: target.id,
-            email: target.email,
+            OR: APPROVED_PLATFORM_ADMIN_EMAILS.map((email) => ({
+              email: { equals: email, mode: "insensitive" as const },
+            })),
+          },
+          select: {
+            id: true,
+            email: true,
             emailVerified: true,
             twoFactorEnabled: true,
-            platformRole: target.platformRole,
-            twoFactors: { some: { verified: true } },
+            twoFactors: {
+              where: { verified: true },
+              select: { id: true },
+              take: 2,
+            },
+            platformRole: true,
           },
-          data: { platformRole: "PLATFORM_OPERATOR" },
         })
-        if (updated.count !== 1) throw new Error("Admin account changed during provisioning")
-        await tx.platformAdminElevation.deleteMany({ where: { userId: target.id } })
-        await tx.session.deleteMany({ where: { userId: target.id } })
-      }
-      await tx.platformAdminAudit.create({
-        data: {
-          actorUserId: "offline-bootstrap",
-          sessionId: "offline-bootstrap",
-          action: "platform_admin.bootstrap",
-          resourceType: "platform_admin_set",
-          metadata: { targetUserIds: targets.map((target) => target.id), count: targets.length },
-        },
-      })
-    })
-    console.log("Provisioned exactly two platform administrators with a bootstrap audit receipt.")
+        const existingOperators = await tx.user.findMany({
+          where: { platformRole: "PLATFORM_OPERATOR" },
+          select: {
+            id: true,
+            email: true,
+            emailVerified: true,
+            twoFactorEnabled: true,
+            twoFactors: {
+              where: { verified: true },
+              select: { id: true },
+              take: 2,
+            },
+            platformRole: true,
+          },
+        })
+        const targets = validatePlatformAdminCandidates(candidates, existingOperators)
+
+        if (!apply) {
+          console.log(
+            `Preflight passed for ${targets.length} accounts. Apply revokes all existing sessions and elevations, even when roles are already set. Re-run with --apply=${PLATFORM_ADMIN_APPLY_CONFIRMATION}.`
+          )
+          return false
+        }
+
+        for (const target of targets) {
+          const updated = await tx.user.updateMany({
+            where: {
+              id: target.id,
+              email: target.email,
+              emailVerified: true,
+              twoFactorEnabled: true,
+              platformRole: target.platformRole,
+              twoFactors: { some: { verified: true } },
+            },
+            data: { platformRole: "PLATFORM_OPERATOR" },
+          })
+          if (updated.count !== 1) throw new Error("Admin account changed during provisioning")
+          await tx.platformAdminElevation.deleteMany({ where: { userId: target.id } })
+          await tx.session.deleteMany({ where: { userId: target.id } })
+        }
+        await tx.platformAdminAudit.create({
+          data: {
+            actorUserId: "offline-bootstrap",
+            sessionId: "offline-bootstrap",
+            action: "platform_admin.bootstrap",
+            resourceType: "platform_admin_set",
+            metadata: { targetUserIds: targets.map((target) => target.id), count: targets.length },
+          },
+        })
+        return true
+      },
+      { isolationLevel: "Serializable" }
+    )
+    if (provisioned) {
+      console.log("Provisioned exactly two platform administrators with a bootstrap audit receipt.")
+    }
   } finally {
     await prisma.$disconnect()
   }

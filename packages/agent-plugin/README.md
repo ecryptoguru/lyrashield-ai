@@ -39,13 +39,14 @@ Each shim directory contains a copy of `plugin.json` pointing back at the canoni
 | OpenAI Codex   | `.codex-plugin/`       | Package-conformance tests                        | Agent Plugin                                  |
 | Kiro           | `.kiro-plugin/`        | Package-conformance tests                        | Agent Plugin after `lyrashield login --oauth` |
 | VS Code        | Portable root manifest | Experimental; no retained client-runtime receipt | `lyrashield install vscode`                   |
-| GitHub Copilot | Portable root manifest | Experimental; no retained client-runtime receipt | Wait for a verified install path              |
+| GitHub Copilot | Portable root manifest | Experimental; no retained client-runtime receipt | Agent Plugin via the CLI                      |
 
 Package-conformance means the generated manifest, schema, transport, version, and export
 boundary passed repository tests. It does not mean every client version has completed an
-authenticated runtime matrix. The wider registry contains compatible config or guided setup
-for 24 distinct coding agents; use `lyrashield init` or `lyrashield install <agent>` rather than
-copying another client's config shape.
+authenticated runtime matrix. The wider registry contains 30 install entries resolving to 26
+preferred client surfaces; use `lyrashield init` or `lyrashield install <agent>` rather than copying
+another client's config shape. GitHub Copilot's preferred CLI path uses the portable root manifest,
+but remains `EXPERIMENTAL` until a retained client-runtime receipt exists.
 
 ## API
 
