@@ -30,7 +30,6 @@ env:
   # Purchase admission stays closed during provider verification. Provider
   # credentials and catalog IDs are still bound so signed test/live webhooks,
   # reconciliation, and a later reviewed admission change use one revision.
-  POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
   POLAR_BILLING_ADMISSION: "off"
   POLAR_LOCAL_BILLING_ADMISSION: "off"
   RAZORPAY_BILLING_ADMISSION: "off"
@@ -91,6 +90,13 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Verify build environment isolation
+        run: |
+          if [ -n "${POLAR_ENVIRONMENT:-}" ]; then
+            echo "::error::Provider runtime configuration must not leak into build-time contract tests."
+            exit 1
+          fi
 
       - name: Verify engine-worker contract
         run: bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"
@@ -248,6 +254,55 @@ jobs:
       (vars.AZURE_RESOURCE_GROUP != '') &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
     steps:
+      - name: Verify billing provider deployment configuration
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
+          POLAR_ORG_ID: ${{ vars.POLAR_ORG_ID }}
+          POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
+          POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
+        run: |
+          if [ "${POLAR_ENVIRONMENT}" != "production" ]; then
+            echo "::error::azure-production requires POLAR_ENVIRONMENT=production; Sandbox belongs only in isolated staging."
+            exit 1
+          fi
+          required=(
+            POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_ORG_ID
+            POLAR_PRODUCT_IDS POLAR_LOCAL_PRODUCT_IDS
+            RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET
+            RAZORPAY_PLAN_IDS
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "::error::${name} is required for declarative billing configuration. Purchase admission remains off, but provider webhook and reconciliation configuration must be complete."
+              exit 1
+            fi
+          done
+          case "$RAZORPAY_KEY_ID" in
+            rzp_live_*) ;;
+            *)
+              echo "::error::azure-production requires a Razorpay live key ID; Test Mode belongs only in isolated staging."
+              exit 1
+              ;;
+          esac
+          # JavaScript template literal below is not shell expansion.
+          # shellcheck disable=SC2016
+          node -e '
+            for (const name of ["POLAR_PRODUCT_IDS", "POLAR_LOCAL_PRODUCT_IDS", "RAZORPAY_PLAN_IDS"]) {
+              const value = JSON.parse(process.env[name]);
+              if (!value || Array.isArray(value) || typeof value !== "object" || Object.keys(value).length === 0) {
+                throw new Error(`${name} must be a non-empty JSON object`);
+              }
+            }
+          '
+          echo "Billing provider configuration is complete; all purchase admissions remain off."
+
       - name: Log in to Azure
         uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
@@ -500,54 +555,6 @@ jobs:
             sync_bullmq_secret "$AZURE_SCANNER_CONTAINER_APP_NAME"
           fi
 
-      - name: Verify billing provider deployment configuration
-        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
-        env:
-          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
-          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
-          POLAR_ORG_ID: ${{ vars.POLAR_ORG_ID }}
-          POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
-          POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
-          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
-          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
-          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
-          RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
-        run: |
-          if [ "${POLAR_ENVIRONMENT}" != "production" ]; then
-            echo "::error::azure-production requires POLAR_ENVIRONMENT=production; Sandbox belongs only in isolated staging."
-            exit 1
-          fi
-          required=(
-            POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_ORG_ID
-            POLAR_PRODUCT_IDS POLAR_LOCAL_PRODUCT_IDS
-            RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET
-            RAZORPAY_PLAN_IDS
-          )
-          for name in "${required[@]}"; do
-            if [ -z "${!name}" ]; then
-              echo "::error::${name} is required for declarative billing configuration. Purchase admission remains off, but provider webhook and reconciliation configuration must be complete."
-              exit 1
-            fi
-          done
-          case "$RAZORPAY_KEY_ID" in
-            rzp_live_*) ;;
-            *)
-              echo "::error::azure-production requires a Razorpay live key ID; Test Mode belongs only in isolated staging."
-              exit 1
-              ;;
-          esac
-          # JavaScript template literal below is not shell expansion.
-          # shellcheck disable=SC2016
-          node -e '
-            for (const name of ["POLAR_PRODUCT_IDS", "POLAR_LOCAL_PRODUCT_IDS", "RAZORPAY_PLAN_IDS"]) {
-              const value = JSON.parse(process.env[name]);
-              if (!value || Array.isArray(value) || typeof value !== "object" || Object.keys(value).length === 0) {
-                throw new Error(`${name} must be a non-empty JSON object`);
-              }
-            }
-          '
-          echo "Billing provider configuration is complete; all purchase admissions remain off."
-
       - name: Sync billing provider secrets to app Container App
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -576,6 +583,7 @@ jobs:
       - name: Verify email verification credentials
         env:
           EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
+          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
@@ -718,7 +726,7 @@ jobs:
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
-              "POLAR_ENVIRONMENT=${{ env.POLAR_ENVIRONMENT }}" \
+              "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}" \
               "POLAR_ACCESS_TOKEN=secretref:polar-access-token" \
               "POLAR_ORG_ID=${POLAR_ORG_ID}" \
               "POLAR_WEBHOOK_SECRET=secretref:polar-webhook-secret" \
