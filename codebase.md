@@ -1,6 +1,6 @@
 # LyraShield AI — Codebase Guide
 
-> Current implementation map: 2026-08-21. Read [AGENTS.md](./AGENTS.md) first for the immediate handoff and rules; use [PRD.md](./PRD.md) for product scope and release gates. Running code, Prisma schema, migrations, CI, and live evidence override this guide.
+> Current implementation map: 2026-08-25. Read [AGENTS.md](./AGENTS.md) first for the immediate handoff and rules; use [PRD.md](./PRD.md) for product scope and release gates. Running code, Prisma schema, migrations, CI, and live evidence override this guide.
 
 ## 1. System overview
 
@@ -420,7 +420,7 @@ Current command output is authoritative; never copy historical test counts forwa
 - Egress: direct public denied, proxy public allowed, loopback denied `ssrf_blocked`.
 - DNS refresh timer: active during Standard scan; no worker restart.
 - Backup/restore: encrypted backup, isolated restore, schema/RLS/audit/app startup verified.
-- Code ahead of production: `main` is `80460f80d32f42e1a647eed180be6a3fa9f4bf51` with green CI. Release `32755678337` pushed images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Those images are not deployed. Production remains on the exact worker proof above with purchase admissions `off`.
+- Code ahead of production: `main` is `3966e24c` after PRs #421–#424 and the current assurance hardening PRs #428–#430, with green CI. Release `32755678337` pushed images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Those images are not deployed. Production remains on the exact worker proof above with purchase admissions `off`.
 
 ### Current Standard scan proof
 
@@ -440,38 +440,41 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 
 - `ai-app-security.ts` ranks production/config sources ahead of tests and fixtures, excludes generated artifacts, and applies explicit mode caps: Quick/Safe 200, Standard 500, Deep/Custom 1,000.
 - Discovery produces structured eligible/scanned/skipped/byte counts, skip reasons, limit codes, and a bounded representative skipped-path sample.
-- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v4, preventing bounded AI coverage from becoming a complete clean claim.
+- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v5, preventing bounded AI coverage from becoming a complete clean claim.
 - The scan-detail UI shows coverage counts and skipped-path samples instead of only the legacy one-line warning.
 - Regression coverage uses an exact 217-file repository: Quick scans 200 and reports 17 skipped while retaining vulnerable production code; Standard scans all 217. Generated directories are excluded.
 - PR #386 merged as `8ee6fd5`; its coverage remediation remains in the current product. Production now runs product `8347fda9` at app revision `lyrashield-app--0000170` and worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413`. The prior acceptance scan remains historically bounded and unchanged.
 
 ## 12. Key files
 
-| File                                             | Purpose                                                      |
-| ------------------------------------------------ | ------------------------------------------------------------ |
-| `apps/web/src/proxy.ts`                          | CSP, rate limit, trusted client IP                           |
-| `apps/web/src/lib/api-client.ts`                 | Typed client requests                                        |
-| `apps/web/src/lib/api-response.ts`               | Typed server responses                                       |
-| `apps/web/src/app/api/scans/route.ts`            | Scan admission and creation                                  |
-| `apps/web/src/app/billing/webhook/route.ts`      | Polar/Razorpay idempotent webhook boundary                   |
-| `apps/web/src/lib/licenses/license-service.ts`   | Production signing boundary                                  |
-| `apps/worker/src/jobs/run-scan.job.ts`           | End-to-end scan orchestration                                |
-| `apps/worker/src/engine/runner.ts`               | Bounded/cancellable engine subprocess                        |
-| `apps/worker/src/engine/command-builder.ts`      | Engine arguments and budget policy                           |
-| `apps/worker/src/engine/gpt56-pricing.ts`        | Versioned GPT-5.6 rate card                                  |
-| `apps/worker/src/engine/scanner-orchestrator.ts` | Deterministic and engine result merge                        |
-| `apps/worker/src/engine/result-integrity.ts`     | Manifest/candidate/receipt boundary                          |
-| `packages/integrations/src/queue.ts`             | Shared queue authority                                       |
-| `packages/db/prisma/schema.prisma`               | Executable data model                                        |
-| `packages/db/src/scoping.ts`                     | AsyncLocalStorage and scope policy                           |
-| `packages/db/src/rls.ts`                         | Transaction-local RLS context                                |
-| `packages/db/src/scan-transitions.ts`            | Lifecycle guards                                             |
-| `packages/db/src/score-service.ts`               | Score persistence/public payload boundary                    |
-| `packages/security/src/safe-fetch.ts`            | Redirect-safe pinned fetch                                   |
-| `packages/mcp/src/prompt-injection-guard.ts`     | Model-input guard                                            |
-| `ops/worker/*`                                   | Worker VM services, secrets, egress, promotion, verification |
-| `.github/workflows/ci.yml`                       | Main release gate                                            |
-| `.github/workflows/deploy-azure.yml`             | Migration-first Azure deployment                             |
+| File                                                    | Purpose                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------ |
+| `apps/web/src/proxy.ts`                                 | CSP, rate limit, trusted client IP                           |
+| `apps/web/src/lib/api-client.ts`                        | Typed client requests                                        |
+| `apps/web/src/lib/api-response.ts`                      | Typed server responses                                       |
+| `apps/web/src/app/api/scans/route.ts`                   | Scan admission and creation                                  |
+| `apps/web/src/app/billing/webhook/route.ts`             | Polar/Razorpay idempotent webhook boundary                   |
+| `apps/web/src/lib/licenses/license-service.ts`          | Production signing boundary                                  |
+| `apps/worker/src/jobs/run-scan.job.ts`                  | End-to-end scan orchestration                                |
+| `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                        |
+| `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                           |
+| `apps/worker/src/engine/gpt56-pricing.ts`               | Versioned GPT-5.6 rate card                                  |
+| `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                        |
+| `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                          |
+| `apps/worker/src/operations/verify-launch-assurance.ts` | Host-side dry-run-first launch-assurance orchestrator        |
+| `ops/monitoring/provision-alerts.sh`                    | Actionable Azure alert provisioning with readback            |
+| `ops/worker/run-worker.sh`                              | Worker VM launcher with provenance derivation                |
+| `packages/integrations/src/queue.ts`                    | Shared queue authority                                       |
+| `packages/db/prisma/schema.prisma`                      | Executable data model                                        |
+| `packages/db/src/scoping.ts`                            | AsyncLocalStorage and scope policy                           |
+| `packages/db/src/rls.ts`                                | Transaction-local RLS context                                |
+| `packages/db/src/scan-transitions.ts`                   | Lifecycle guards                                             |
+| `packages/db/src/score-service.ts`                      | Score persistence/public payload boundary                    |
+| `packages/security/src/safe-fetch.ts`                   | Redirect-safe pinned fetch                                   |
+| `packages/mcp/src/prompt-injection-guard.ts`            | Model-input guard                                            |
+| `ops/worker/*`                                          | Worker VM services, secrets, egress, promotion, verification |
+| `.github/workflows/ci.yml`                              | Main release gate                                            |
+| `.github/workflows/deploy-azure.yml`                    | Migration-first Azure deployment                             |
 
 ## 13. Landmines
 
@@ -505,5 +508,6 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 - **2026-08-04 to 08-13:** Parallel Search, OAuth/MCP marketplace, URL/API profiles, reproducible engine releases, claims map, AI App Security and eval harness.
 - **2026-08-18 to 08-20:** Sprint 10 billing/usage, Local/Desktop/licenses/sync, affiliates/payout ledger, plugin v0.1.17, operations runbooks.
 - **2026-08-21:** backup/restore proof, worker egress proxy, Upstash TLS BullMQ cutover, public `6379` removal, restart-safe DNS refresh, immutable worker promotion, current Standard/Luna production acceptance, and AI App Security coverage/evidence remediation.
+- **2026-08-24 to 08-25:** current assurance hardening (PRs #428–#430): nonnegative policy budget constraint, explainable finding priority, immutable retest validation bound to stored manifests, raw evidence-storage URI removal, worker execution provenance in manifest v5 with production fail-closed readiness, actionable Azure alert provisioning with readback, and a bounded host-side dry-run-first launch-assurance orchestrator.
 
 PR history remains in Git and GitHub. Use `git log`, PRs, migrations, and executable tests for forensic detail; this guide retains only current architecture and durable decisions.
