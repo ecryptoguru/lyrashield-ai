@@ -1,7 +1,7 @@
 import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { env } from "@lyrashield/config"
+import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { recordAgentMinutes, getUsageBalance, enterGrace, debitOverage } from "@lyrashield/billing"
 import {
   buildVibeSecurityInstruction,
@@ -483,6 +483,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   // auto-scoping safety net is active for all DB queries. Without this, a
   // missed manual workspaceId filter could leak cross-tenant data.
   return runWithWorkspaceContext(workspaceId, async () => {
+    // Exact product/image/engine identity for every result manifest. The
+    // worker startup gate already fails closed before readiness; this second
+    // call ensures each scan's manifests carry the identity even if a future
+    // caller skips startup validation. Null outside production.
+    const workerExecution = resolveWorkerExecutionProvenance()
     let globalScanTimeoutReached = false
     let scanRuntimeBudgetMs = MAX_SCAN_RUNTIME_MS
     let billablePhaseStarted = false
@@ -525,6 +530,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             errorMessage: "Protected run limit reached",
           }
         }
+        // The manifest is persisted before retest finalization in the normal
+        // path, so a crash between the two must resume pending retests from the
+        // stored receipt evidence before scoring; otherwise retest validation
+        // would be skipped silently. Nothing here invokes the engine or reruns
+        // scanners, so billable work is never replayed.
+        await completeRetestsForScan({ scanId, workspaceId })
         await completeScanWithScore(scanId, workspaceId, pendingFinalization.summary)
         try {
           await qualifyReferralForWorkspace(workspaceId)
@@ -986,6 +997,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             reconciled: costReconciled,
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
+          workerExecution,
         })
         await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
           errorCategory: "BUDGET_EXCEEDED",
@@ -1037,6 +1049,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             reconciled: costReconciled,
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
+          workerExecution,
         })
         await updateScanStatus(scanId, "FAILED" as ScanStatus, {
           errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
@@ -1386,15 +1399,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         }
 
-        await completeRetestsForScan({
-          scanId,
-          workspaceId,
-          persistedFindingIds: persistedFindings.map((finding) => finding.id),
-          coverageIssues: orchestratorResult.coverageIssues,
-        })
-
         // Persist the result manifest for every outcome, including a failed or
-        // incomplete engine, so coverage receipts are always available.
+        // incomplete engine, so coverage receipts are always available. The
+        // manifest must exist BEFORE retest finalization: completeRetestsForScan
+        // binds its verdict to the stored baseline/retest checksums, so a crash
+        // between manifest and retests resumes finalization from the receipt
+        // evidence instead of skipping it.
         await prisma.scan.update({
           where: { id: scanId },
           data: { summary: scanSummary },
@@ -1421,7 +1431,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             reconciled: costReconciled,
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
+          workerExecution,
         })
+
+        await completeRetestsForScan({ scanId, workspaceId })
 
         if (engineTerminalError) {
           await updateScanStatus(scanId, engineTerminalError.status, {

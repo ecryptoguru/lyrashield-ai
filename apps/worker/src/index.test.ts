@@ -1,7 +1,10 @@
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { readFile, stat } from "node:fs/promises"
 import {
+  MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+  MANAGED_REDIS_STALLED_INTERVAL_MS,
   RECONCILIATION_INTERVAL_MS,
+  assertWorkerStartupProvenance,
   clearWorkerActive,
   markWorkerActive,
   refreshWorkerReadiness,
@@ -9,6 +12,39 @@ import {
   settleScanWorkerForShutdown,
 } from "./index"
 import { trackActiveEngineProcess } from "./engine/runner"
+
+vi.mock("@lyrashield/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/config")>()
+  return {
+    ...actual,
+    resolveWorkerExecutionProvenance: vi.fn(() => null),
+  }
+})
+
+import { resolveWorkerExecutionProvenance } from "@lyrashield/config"
+
+describe("worker startup provenance gate", () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it("fails closed when production worker provenance cannot be resolved", () => {
+    vi.mocked(resolveWorkerExecutionProvenance).mockImplementation(() => {
+      throw new Error("Worker execution provenance is incomplete: LYRASHIELD_PRODUCT_REVISION")
+    })
+    expect(() => assertWorkerStartupProvenance()).toThrow(
+      /Worker execution provenance is incomplete/
+    )
+  })
+
+  it("returns the resolved provenance when configured", () => {
+    const provenance = {
+      productRevision: "a".repeat(40),
+      workerImageDigest: `sha256:${"b".repeat(64)}`,
+      engineRevision: "c".repeat(40),
+    }
+    vi.mocked(resolveWorkerExecutionProvenance).mockReturnValue(provenance as never)
+    expect(assertWorkerStartupProvenance()).toEqual(provenance)
+  })
+})
 
 describe("worker readiness lifecycle", () => {
   afterEach(async () => {
@@ -33,6 +69,13 @@ describe("worker readiness lifecycle", () => {
 
   it("paces idle queue reconciliation for managed Redis command budgets", () => {
     expect(RECONCILIATION_INTERVAL_MS).toBe(300_000)
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1_000
+    const idleCommandsPerWorker =
+      thirtyDaysMs / (MANAGED_REDIS_DRAIN_DELAY_SECONDS * 1_000) +
+      thirtyDaysMs / MANAGED_REDIS_STALLED_INTERVAL_MS
+
+    expect(idleCommandsPerWorker).toBe(47_520)
+    expect(idleCommandsPerWorker * 2).toBeLessThan(100_000)
   })
 
   it("publishes a root-readable marker while a scan job is active", async () => {

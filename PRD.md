@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current source of truth: 2026-08-21. This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current source of truth: 2026-08-25. This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -159,8 +159,11 @@ Result integrity requirements:
 - engine output is untrusted and byte/field/count bounded;
 - every new claim passes through manifest, coverage receipt, candidate, and verification receipt boundaries;
 - direct status updates cannot set terminal `FIXED`; use `FIXED_PENDING_RETEST` until a trusted retest receipt exists;
+- retest validation is bound to stored immutable evidence: both the finding's original source scan and the retest scan must have stored result manifests, exact repository revisions (which may differ after a fix) or matching URL checksums, and complete deterministic coverage; missing or malformed identity stays `INCONCLUSIVE`;
 - engine-only absence remains inconclusive;
 - evidence uploads fail closed and require checksum plus valid encryption key reference;
+- `Policy.maxBudgetUsd` is nullable but never negative (PostgreSQL check constraint);
+- every result manifest binds exact worker execution provenance (product revision, worker image digest, engine revision) into its checksum; production workers fail closed before readiness without it;
 - retries must not duplicate findings, evidence, usage, webhooks, payouts, or commissions.
 
 ## 4. Product workflows
@@ -335,7 +338,7 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Discovery records eligible, scanned, skipped, and reason counts plus a bounded skipped-path sample. These limits flow into scoring, coverage issues, dashboard disclosure, and an immutable `ai_app_security` family receipt; incomplete AI coverage cannot support a clean claim.
 - A 217-file regression fixture proves Quick remains honestly bounded at 200 while still scanning vulnerable production code, and Standard evaluates all 217 files.
 - Current production deployment: app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020` run product `8347fda923032960661079491a0a17956aebefd9`. Worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413` runs the same product with engine `944a84f15f913909039c89146c25db650cd87137`; release run `32738811470`, worker health, and `/api/ready/scans` passed.
-- Product `main` is `80460f80d32f42e1a647eed180be6a3fa9f4bf51` with green CI. Release run `32755678337` built and pushed images but failed the provider-mode guard before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode. Those images are not deployed; production remains on `8347fda9` with all Cloud and Local purchase admissions `off`.
+- Product `main` is `3966e24c` after PRs #421–#424 and the current assurance hardening PRs #428–#430, with green CI. Release run `32755678337` built and pushed images but failed the provider-mode guard before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode. Those images are not deployed; production remains on `8347fda9` with all Cloud and Local purchase admissions `off`.
 
 ### Infrastructure evidence — 2026-08-21
 
@@ -365,12 +368,13 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Cloud billing, usage, Local/Desktop, and affiliate implementations merged.
 - Guided/Pro dashboard experiences, exact-two platform-admin authorization, bounded read console, TOTP elevation primitives, additive schema migration, and fail-closed provisioning workflow are implemented in code.
 - SEO/AEO/GEO foundations include canonical/schema metadata, sitemap and robots controls, dated `llms.txt`, `agents.md`, answer-engine crawler stanzas, integration guides, comparison/research pages, and content validation.
+- Current assurance hardening (PRs #428–#430): nonnegative policy budgets enforced by PostgreSQL check constraint, explainable deterministic finding priority with limitation disclosure, immutable retest validation bound to stored manifests, removal of raw evidence-storage URIs from finding detail, worker execution provenance (product revision, worker image digest, engine revision) bound into manifest checksums with production fail-closed readiness, actionable Azure alert provisioning with readback and idempotent reruns, and a bounded host-side dry-run-first launch-assurance orchestrator composing existing evidence, cancellation, and queue-reconciliation paths. Production proof remains separate and founder-authorized.
 
 ### Remaining before broader paid/untrusted exposure
 
-1. Prove private S3-compatible evidence persistence, encryption, retrieval, and failure behavior in production.
-2. Connect readiness, queue, provider, cost, and worker logs to actionable monitoring, alerts, capacity evidence, and named incident ownership.
-3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work.
+1. Prove private S3-compatible evidence persistence, encryption, retrieval, and failure behavior in production. The launch-assurance orchestrator composes the fail-closed and round-trip proofs in code (PR #429); production execution remains the gate.
+2. Connect readiness, queue, provider, cost, and worker logs to actionable monitoring, alerts, capacity evidence, and named incident ownership. Alert provisioning code and the monitoring runbook are merged (PR #429); production provisioning and a test-alert acknowledgment remain the gate.
+3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work. The launch-assurance orchestrator composes authenticated cancellation, settle wait, queue recovery, and post-recovery readiness in code (PR #429); production failure injection remains the gate.
 4. Provision matching live provider credentials, catalogs, and webhooks; rerun the guarded deployment; then verify live-provider entitlement and usage events. Keep every purchase admission off until founder approval. Razorpay hosted-checkout payment methods above INR 15,000 remain transaction-unproven.
 5. Complete current production license-signing activation and proof through Azure Key Vault.
 6. Provision RazorpayX and Payoneer payout API access and tax-form workflow.
@@ -394,7 +398,6 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - User-facing API-key create/list/revoke lifecycle is not shipped.
 - GitHub installation ownership still needs provider-backed proof before binding a fresh installation; Fix PR execution still needs a server-generated immutable patch/evidence artifact bound to exact approval.
 - Replace provider-managed object-encryption key references with an explicit KMS/Vault design when the evidence-storage provider is finalized.
-- Add the `Policy.maxBudgetUsd >= 0` database constraint before exposing policy CRUD.
 - Complete AI-03 lockfile/advisory coverage, production triage provenance/accounting, private-score disposition carry-forward, report UX, and live calibration proof.
 - The stored Standard-scan manifest checksum was retained, but naive JSONB reserialization did not reproduce it because key order changed. Persist canonical hash input or verification bytes before claiming deterministic database-retrieved checksum reproduction.
 - Restore or replace the removed historical AI-safety evaluation runner before claiming the recorded benchmark can be rerun from a clean checkout.

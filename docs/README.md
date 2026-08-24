@@ -15,8 +15,10 @@ Use this index to find the owning document and avoid duplicating current truth.
 ## How-to guides and runbooks
 
 - [`deployment/`](deployment/) — local setup and production deployment gates.
-- [`ops/`](ops/) — platform-admin operations, desktop release/install, signing keys, RLS verification, and production smoke testing.
+- [`ops/`](ops/) — platform-admin operations, desktop release/install, signing keys, RLS verification, production smoke testing, monitoring, and launch assurance.
 - [`ops/platform-admin-runbook.md`](ops/platform-admin-runbook.md) — exact-two admin provisioning, personal TOTP, session effects, browser proof, and emergency revocation.
+- [`ops/monitoring-launch-runbook.md`](ops/monitoring-launch-runbook.md) — actionable Azure alert inventory, provisioning, readback, stop/resume admission, and release validation.
+- [`ops/launch-assurance-status-2026-08-24.md`](ops/launch-assurance-status-2026-08-24.md) — release-gate snapshot separating code/local evidence from production/external hard stops.
 - [`license-key-compromise-runbook.md`](license-key-compromise-runbook.md) — signing-key incident response.
 
 ## Reference and assurance records

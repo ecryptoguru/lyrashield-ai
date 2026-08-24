@@ -193,4 +193,24 @@ describe("worker Docker runtime", () => {
     expect(imageVerifier).toContain("/opt/lyrashield-engine")
     expect(imageVerifier).toContain("interface/viewer/frontend")
   })
+
+  it("records exact worker provenance without auto-promoting the VM", () => {
+    expect(deployWorkflow).toContain("Validate worker provenance record")
+    expect(deployWorkflow).toContain("LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}")
+    expect(deployWorkflow).toContain("LYRASHIELD_WORKER_IMAGE_DIGEST=$digest")
+    expect(deployWorkflow).toContain("LYRASHIELD_ENGINE_REVISION=${{ env.ENGINE_REVISION }}")
+    expect(deployWorkflow).toContain("Promotion of the worker VM is NOT performed by this workflow")
+    // The workflow must not restart or promote the worker itself.
+    expect(deployWorkflow).not.toContain("run-worker.sh")
+  })
+
+  it("injects immutable image-derived provenance into the worker runtime", () => {
+    expect(workerRunner).toContain('{{index .Config.Labels "org.opencontainers.image.revision"}}')
+    expect(workerRunner).toContain('{{index .Config.Labels "io.lyrashield.engine.revision"}}')
+    expect(workerRunner).toContain("--env LYRASHIELD_PRODUCT_REVISION=")
+    expect(workerRunner).toContain("--env LYRASHIELD_WORKER_IMAGE_DIGEST=")
+    expect(workerRunner).toContain("--env LYRASHIELD_ENGINE_REVISION=")
+    // No mutable tag or manually typed revision may supply provenance.
+    expect(workerRunner).toContain("${LYRASHIELD_WORKER_IMAGE##*@}")
+  })
 })

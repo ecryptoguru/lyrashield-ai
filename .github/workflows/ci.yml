@@ -209,6 +209,23 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
 
+      # Real-Postgres invariant proof, not an application-level mock: a
+      # negative Policy.maxBudgetUsd must be rejected by SQLSTATE 23514 on the
+      # named constraint, while NULL, zero, and a positive decimal remain valid.
+      # All rows are created inside one transaction and rolled back.
+      - name: Assert policy budgets are nonnegative
+        if: needs.changes.outputs.docs-only != 'true'
+        shell: bash
+        run: |
+          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
+            -c "BEGIN" \
+            -c "INSERT INTO \"Workspace\" (id, name, slug, \"updatedAt\") VALUES ('ws-budget-assert-ci', 'Budget Assert CI', 'budget-assert-ci', NOW())" \
+            -c "INSERT INTO \"Policy\" (id, \"workspaceId\", name, \"maxBudgetUsd\", \"updatedAt\") VALUES ('policy-null-ci', 'ws-budget-assert-ci', 'null budget', NULL, NOW())" \
+            -c "INSERT INTO \"Policy\" (id, \"workspaceId\", name, \"maxBudgetUsd\", \"updatedAt\") VALUES ('policy-zero-ci', 'ws-budget-assert-ci', 'zero budget', 0.00, NOW())" \
+            -c "INSERT INTO \"Policy\" (id, \"workspaceId\", name, \"maxBudgetUsd\", \"updatedAt\") VALUES ('policy-positive-ci', 'ws-budget-assert-ci', 'positive budget', 3.20, NOW())" \
+            -c "DO \$\$ BEGIN BEGIN INSERT INTO \"Policy\" (id, \"workspaceId\", name, \"maxBudgetUsd\", \"updatedAt\") VALUES ('policy-negative-ci', 'ws-budget-assert-ci', 'negative budget', -1.00, NOW()); RAISE EXCEPTION 'negative budget was accepted by the database'; EXCEPTION WHEN check_violation THEN IF SQLERRM NOT LIKE '%Policy_maxBudgetUsd_nonnegative%' THEN RAISE EXCEPTION 'unexpected check violation: %', SQLERRM; END IF; END; END \$\$;" \
+            -c "ROLLBACK"
+
       - name: Use a restricted RLS runtime role
         if: needs.changes.outputs.docs-only != 'true'
         shell: bash

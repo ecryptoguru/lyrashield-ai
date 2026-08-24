@@ -23,7 +23,7 @@ Repository ownership:
 
 Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not rename `@lyrashield/*` or `LYRASHIELD_*` without founder approval.
 
-## Current verified state — 2026-08-24
+## Current verified state — 2026-08-25
 
 - Open beta with open registration at `https://app.lyrashieldai.com/sign-up`; never call it pre-launch or a waitlist.
 - Marketing, passive Lite Scanner, authenticated app origin, Cloudflare bindings, TLS, sitemap/robots/`llms.txt`, security headers, and open-registration CTAs are live.
@@ -32,7 +32,7 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Current Standard acceptance: scan `cmt35aj1s000001hck9fmguzk`, `OnboardingAI2@1689f3607d68764e09769535df8e368c4d5ad2fe`, completed in 11m 42s. All 184 requests used Luna/medium; cost reconciled to $0.597148; 12 minutes debited; 24 findings retained; zero independently verified; AI App Security hit its 200-file bound.
 - AI App Security coverage remediation is live for future scans: deterministic production/config source prioritization; mode caps of 200/500/1,000 files for Quick/Standard/Deep; generated-artifact exclusions; structured scanned/skipped counts and path samples; and immutable AI-family coverage receipts. A bounded AI layer remains `INCONCLUSIVE`; the historical scan above remains bounded.
 - Release run `32738811470` deployed product `8347fda923032960661079491a0a17956aebefd9`: app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020` are healthy at 100% traffic. The separately promoted worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413` runs that product revision with engine `944a84f15f913909039c89146c25db650cd87137`; Docker health and `/api/ready/scans` passed after promotion, and the prior worker configuration remains as the rollback record.
-- Product `main` is `80460f80d32f42e1a647eed180be6a3fa9f4bf51` after PRs #421–#424. CI is green, but that code is not deployed. Release run `32755678337` built and pushed images, then failed closed before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode while production requires Live Mode. Production remains healthy on `8347fda9`; all Cloud and Local purchase admissions remain `off`.
+- Product `main` is `3966e24c` after PRs #421–#424 and the current assurance hardening PRs #428–#430 (nonnegative policy budgets, explainable finding priority, immutable retest receipts, raw evidence-storage URI removal, worker execution provenance, actionable Azure alert provisioning, and a bounded host-side launch-assurance orchestrator). CI is green, but that code is not deployed. Release run `32755678337` built and pushed images, then failed closed before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode while production requires Live Mode. Production remains healthy on `8347fda9`; all Cloud and Local purchase admissions remain `off`.
 - Upstash authenticated TLS BullMQ Redis is live; public Azure `6379` rule is removed; legacy Redis is stopped/restart-disabled for rollback only.
 - Production egress proof passed: direct arbitrary public fetch denied, authenticated proxy fetch allowed, loopback denied `ssrf_blocked`. DNS refresh stayed active during the paid scan without restarting worker.
 - Encrypted backup and isolated restore verified schema, RLS, audit chain, and application startup.
@@ -50,9 +50,9 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 
 ## Immediate execution queue
 
-1. Prove private S3-compatible evidence upload, encryption, retrieval, isolation, and fail-closed behavior in production.
-2. Connect readiness, queue, provider, model-cost, and worker logs to actionable alerts; record capacity evidence and incident ownership.
-3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work.
+1. Prove private S3-compatible evidence upload, encryption, retrieval, isolation, and fail-closed behavior in production. The `verify:launch-assurance` orchestrator (PR #429) composes the fail-closed and round-trip evidence-storage proofs in code; production execution with exact scan/workspace IDs and the confirmation phrase remains the gate.
+2. Connect readiness, queue, provider, model-cost, and worker logs to actionable alerts; record capacity evidence and incident ownership. `provision-alerts.sh` and the monitoring launch runbook (PR #429) define the rule inventory, action-group binding, readback, and idempotent provisioning; production provisioning and a test-alert acknowledgment remain the gate.
+3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work. The `verify:launch-assurance` orchestrator (PR #429) composes authenticated cancellation, settle wait, `reconcileScanQueue`, and post-recovery readiness in code; production failure injection with exact scan/workspace IDs and the confirmation phrase remains the gate.
 4. Complete provider live-mode setup: provision matching live credentials, product/plan catalogs, and webhooks; rerun the fail-closed deployment; then verify live-provider entitlement and usage events without enabling purchase admission until founder approval. Razorpay hosted-checkout payment methods above INR 15,000 remain transaction-unproven.
 5. Complete and prove production Azure Key Vault license signing.
 6. Provision RazorpayX/Payoneer payout APIs and tax-form workflow.
@@ -102,6 +102,14 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Engine output is untrusted and bounded. Confidence never means verification.
 - Persist claims through manifest, coverage receipt, candidate, and verification receipt.
 - Only complete deterministic retest may produce `VALIDATED`; engine-only absence is `INCONCLUSIVE`.
+- Retest validation binds to stored immutable evidence: the finding's original source scan and the retest scan must both have stored manifests, exact repository revisions (which may differ after a fix) or matching URL checksums, and complete deterministic coverage. Missing identity stays `INCONCLUSIVE` and never sets `FIXED`.
+- The result manifest is persisted before retest finalization; crash recovery resumes pending retests before scoring without replaying billable work.
+- Finding detail exposes no raw evidence storage URIs; retest receipts surface scan IDs, manifest checksums, revisions, method, and coverage state.
+- `Policy.maxBudgetUsd` is nullable but never negative; PostgreSQL enforces `Policy_maxBudgetUsd_nonnegative`.
+- Findings list pages carry a deterministic, page-local Priority heuristic (severity, status, verified, confidence, target environment, business-impact/exploitability context). It is triage context, never a claim of exploitability or reachability, and does not change cursor pagination.
+- Result manifests bind worker execution provenance (`LYRASHIELD_PRODUCT_REVISION`, `LYRASHIELD_WORKER_IMAGE_DIGEST`, `LYRASHIELD_ENGINE_REVISION`) into the checksum; the production worker fails closed before readiness without them, and `run-worker.sh` derives them only from the digest-pinned image and its OCI labels.
+- `provision-alerts.sh` readback-fails unless every rule is enabled, auto-mitigates, and binds the operator action group; `scan_worker_lease_expired` is never provisioned until a durable counter exists.
+- `verify:launch-assurance` is dry-run-first and read-only by default; mutation requires exact scan/workspace IDs, the production confirmation phrase, authenticated cancellation, and shared queue recovery only.
 - Direct updates must not set `FIXED`; retain `FIXED_PENDING_RETEST` until trusted retest receipt.
 
 ### Queue, worker, and network

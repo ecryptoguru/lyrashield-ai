@@ -267,7 +267,7 @@ The Vibe Security 50 ledger contains one receipt for each control. Read `NO_FIND
 
 ## 11. Findings
 
-Open **Issues → Issues** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed, and Verified.
+Open **Issues → Issues** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed, and Verified. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment, and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
 
 A finding may contain:
 
@@ -306,8 +306,10 @@ Retests create a new server-owned scan against the original target. They do not 
 - Deterministic findings receive a targeted deterministic profile when available.
 - Engine-only findings retain their originating review depth.
 - A clean deterministic retest with complete coverage can become validated/retest-confirmed.
+- Validation is bound to stored evidence: the retest and the finding's original scan must both have stored result manifests, an exact repository revision (which may differ after a fix) or matching URL checksum, and complete deterministic coverage. Missing or malformed identity stays inconclusive and never marks the finding fixed.
 - Engine-only absence remains inconclusive unless independent evidence exists.
 - A finding remains `FIXED_PENDING_RETEST` until the server-owned retest records its result.
+- The History tab shows the retest receipt: baseline and retest scan, manifest checksums, repository revisions or URL checksum, scanner source, and coverage state.
 
 Open the new scan from the finding drawer to follow progress and retained events.
 

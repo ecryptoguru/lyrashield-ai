@@ -37,6 +37,49 @@ case "$LYRASHIELD_SANDBOX_IMAGE" in
     ;;
 esac
 
+is_40_hex() {
+  value=$1
+  case "$value" in
+    ''|*[!0-9a-fA-F]*) return 1 ;;
+  esac
+  [ "${#value}" -eq 40 ]
+}
+
+is_64_hex() {
+  value=$1
+  case "$value" in
+    ''|*[!0-9a-fA-F]*) return 1 ;;
+  esac
+  [ "${#value}" -eq 64 ]
+}
+
+# Worker execution provenance comes ONLY from the immutable image reference and
+# its verified OCI labels. Never accept manually typed revisions: the worker
+# binds these values into every result manifest checksum, so they must be the
+# exact values the deploy workflow verified.
+worker_digest=${LYRASHIELD_WORKER_IMAGE##*@}
+case "$worker_digest" in
+  sha256:*) ;;
+  *)
+    echo "Worker image digest must start with sha256:" >&2
+    exit 1
+    ;;
+esac
+is_64_hex "${worker_digest#sha256:}" || {
+  echo "Worker image digest must be sha256:<64 hex>" >&2
+  exit 1
+}
+app_revision=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+engine_revision=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
+is_40_hex "$app_revision" || {
+  echo "Worker image app revision label must be a 40-character SHA" >&2
+  exit 1
+}
+is_40_hex "$engine_revision" || {
+  echo "Worker image engine revision label must be a 40-character SHA" >&2
+  exit 1
+}
+
 extract_env_value() {
   var="$1"
   file="$2"
@@ -168,6 +211,9 @@ docker create \
   --env LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL="${LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL:-4000}" \
   --env LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN="${LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN:-50}" \
   --env LYRASHIELD_WEB_SEARCH_BUDGET_USD="${LYRASHIELD_WEB_SEARCH_BUDGET_USD:-1.0}" \
+  --env LYRASHIELD_PRODUCT_REVISION="$app_revision" \
+  --env LYRASHIELD_WORKER_IMAGE_DIGEST="$worker_digest" \
+  --env LYRASHIELD_ENGINE_REVISION="$engine_revision" \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=volume,src=lyrashield-worker-runs,dst=/app/apps/worker/lyrashield_runs \

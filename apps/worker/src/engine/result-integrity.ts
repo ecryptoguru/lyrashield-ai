@@ -47,11 +47,16 @@ type ResultManifestInput = {
     reconciled: boolean
     reconciliationReason?: string
   }
+  workerExecution?: {
+    productRevision: string
+    workerImageDigest: string
+    engineRevision: string
+  } | null
 }
 
 type FindingInput = EngineVulnerability | NormalizedFinding
 
-const MANIFEST_VERSION = 4
+const MANIFEST_VERSION = 5
 const SCANNER_CONTRACT_VERSION = "2026-08-21"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
@@ -333,6 +338,9 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     urlExecution: input.urlExecution ?? null,
     engineExecution: input.engineExecution ?? null,
     accounting: input.accounting ?? null,
+    // Exact product/image/engine identity of the worker that produced this
+    // result. Bound into the checksum so a manifest cannot be re-attributed.
+    workerExecution: input.workerExecution ?? null,
     // Coverage limitations are part of the immutable result contract. Keep
     // their bounded subjects and reasons in the manifest, not only in the
     // mutable receipt table.
@@ -492,80 +500,327 @@ export async function markRetestsRunning(scanId: string): Promise<void> {
   })
 }
 
+const DETERMINISTIC_RETEST_SCANNERS = new Set(["sca", "secrets", "url", "agent_config"])
+const SOURCE_REVISION_PATTERN = /^[0-9a-f]{40}$/i
+const URL_CHECKSUM_PATTERN = /^[0-9a-f]{64}$/i
+
+type StoredManifestIdentity = {
+  scanId: string
+  manifestChecksum: string
+  sourceRevision: string | null
+  targetUrlChecksum: string | null
+}
+
+function baselineManifestTargetId(
+  manifest: { manifest: unknown } | null | undefined
+): string | null {
+  if (!manifest) return null
+  const raw = manifest.manifest as { target?: { id?: unknown } | null }
+  return typeof raw.target?.id === "string" ? raw.target.id : null
+}
+
+function baselineManifestTargetType(
+  manifest: { manifest: unknown } | null | undefined
+): string | null {
+  if (!manifest) return null
+  const raw = manifest.manifest as { target?: { type?: unknown } | null }
+  return typeof raw.target?.type === "string" ? raw.target.type : null
+}
+
+function storedManifestIdentity(
+  scanId: string,
+  manifest: { checksum: string; manifest: unknown } | null | undefined
+): StoredManifestIdentity | null {
+  if (!manifest) return null
+  const raw = manifest.manifest as {
+    engineExecution?: { sourceRevision?: unknown } | null
+    target?: { urlChecksum?: unknown } | null
+  }
+  const sourceRevision = raw.engineExecution?.sourceRevision
+  const targetUrlChecksum = raw.target?.urlChecksum
+  return {
+    scanId,
+    manifestChecksum: manifest.checksum,
+    sourceRevision:
+      typeof sourceRevision === "string" && SOURCE_REVISION_PATTERN.test(sourceRevision)
+        ? sourceRevision
+        : null,
+    targetUrlChecksum:
+      typeof targetUrlChecksum === "string" && URL_CHECKSUM_PATTERN.test(targetUrlChecksum)
+        ? targetUrlChecksum
+        : null,
+  }
+}
+
+function retestReceipt(params: {
+  retestId: string
+  scannerSource: string
+  baseline: StoredManifestIdentity | null
+  retest: StoredManifestIdentity | null
+  coverageReceiptIds: string[]
+}) {
+  const { retestId, scannerSource, baseline, retest, coverageReceiptIds } = params
+  return {
+    retestId,
+    scannerSource,
+    baseline: baseline
+      ? {
+          scanId: baseline.scanId,
+          manifestChecksum: baseline.manifestChecksum,
+          sourceRevision: baseline.sourceRevision,
+          targetUrlChecksum: baseline.targetUrlChecksum,
+        }
+      : null,
+    retest: retest
+      ? {
+          scanId: retest.scanId,
+          manifestChecksum: retest.manifestChecksum,
+          sourceRevision: retest.sourceRevision,
+          targetUrlChecksum: retest.targetUrlChecksum,
+        }
+      : null,
+    coverageReceiptIds,
+  }
+}
+
 export async function completeRetestsForScan(params: {
   scanId: string
   workspaceId: string
-  persistedFindingIds: string[]
-  coverageIssues: ScannerCoverageIssue[]
 }): Promise<void> {
-  const retests = await prisma.retest.findMany({
-    where: {
-      scanId: params.scanId,
-      workspaceId: params.workspaceId,
-      status: { in: ["pending", "running"] },
-    },
-    include: {
-      finding: {
-        select: {
-          id: true,
-          candidates: {
-            select: { scannerSource: true },
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
-        },
+  await withWorkspaceRLS(params.workspaceId, async (tx) => {
+    const retests = await tx.retest.findMany({
+      where: {
+        scanId: params.scanId,
+        workspaceId: params.workspaceId,
+        status: { in: ["pending", "running"] },
       },
-    },
-  })
-
-  for (const retest of retests) {
-    if (params.persistedFindingIds.includes(retest.findingId)) {
-      await prisma.retest.update({
-        where: { id: retest.id },
-        data: {
-          status: "failed",
-          resultAfter: "The finding was detected again during this retest.",
-        },
-      })
-      continue
-    }
-
-    const scannerSource = retest.finding.candidates[0]?.scannerSource
-    const coverageComplete =
-      Boolean(scannerSource) &&
-      scannerSource !== "engine" &&
-      !params.coverageIssues.some((issue) => issue.scanner === scannerSource)
-
-    if (!coverageComplete) {
-      await prisma.retest.update({
-        where: { id: retest.id },
-        data: {
-          status: "inconclusive",
-          resultAfter:
-            "The finding was not detected, but the originating scanner lacks independent or complete retest coverage.",
-        },
-      })
-      continue
-    }
-
-    const reason =
-      "The originating deterministic scanner did not detect the finding in the queued retest."
-    const idempotencyKey = checksum({
-      retestId: retest.id,
-      scanId: params.scanId,
-      status: "VALIDATED",
+      include: {
+        // The baseline is the finding's ORIGINAL source scan, which is what the
+        // retest proves against. The retest scan itself is params.scanId.
+        finding: { select: { id: true, scanId: true } },
+      },
     })
-    await prisma.$transaction(async (tx) => {
-      await tx.finding.update({
-        where: { id: retest.findingId },
-        data: {
-          status: "FIXED",
-          fixedAt: new Date(),
-          verified: false,
-          verificationStatus: "VALIDATED",
-          verificationMethod: "RETEST",
-          verificationReason: reason,
-        },
+    if (retests.length === 0) return
+
+    const baselineScanIds = [...new Set(retests.map((retest) => retest.finding.scanId))]
+    const [retestScan, baselineScans, candidateRows, retestFindings] = await Promise.all([
+      tx.scan.findUnique({
+        where: { id: params.scanId },
+        select: { id: true, targetId: true },
+      }),
+      tx.scan.findMany({
+        where: { id: { in: baselineScanIds } },
+        select: { id: true, targetId: true },
+      }),
+      tx.findingCandidate.findMany({
+        where: { scanId: { in: baselineScanIds } },
+        select: { findingId: true, scanId: true, scannerSource: true },
+      }),
+      tx.finding.findMany({
+        where: { scanId: params.scanId, workspaceId: params.workspaceId, deletedAt: null },
+        select: { id: true },
+      }),
+    ])
+    if (!retestScan?.targetId) {
+      throw new Error(`Retest scan has no target for retest finalization: ${params.scanId}`)
+    }
+    const persistedFindingIds = new Set(retestFindings.map((finding) => finding.id))
+    const scanById = new Map(baselineScans.map((scan) => [scan.id, scan]))
+
+    const candidateSourcesByFinding = new Map<string, string[]>()
+    for (const candidate of candidateRows) {
+      if (!candidate.findingId) continue
+      const sources = candidateSourcesByFinding.get(candidate.findingId) ?? []
+      sources.push(candidate.scannerSource)
+      candidateSourcesByFinding.set(candidate.findingId, sources)
+    }
+
+    const manifests = new Map<string, { checksum: string; manifest: unknown } | null>()
+    const coverageByScan = new Map<string, { id: string; controlId: string; status: string }[]>()
+    for (const scanId of new Set([params.scanId, ...baselineScanIds])) {
+      const [manifest, coverage] = await Promise.all([
+        tx.scanResultManifest.findUnique({ where: { scanId } }),
+        tx.scanCoverageReceipt.findMany({ where: { scanId } }),
+      ])
+      manifests.set(scanId, manifest)
+      coverageByScan.set(scanId, coverage)
+    }
+
+    for (const retest of retests) {
+      if (persistedFindingIds.has(retest.findingId)) {
+        await tx.retest.update({
+          where: { id: retest.id },
+          data: {
+            status: "failed",
+            resultAfter: "The finding was detected again during this retest.",
+          },
+        })
+        continue
+      }
+
+      const baselineScan = scanById.get(retest.finding.scanId)
+      if (!baselineScan) {
+        const reason =
+          "The finding was not detected, but its original source scan is unavailable; validation is inconclusive."
+        const idempotencyKey = checksum({
+          retestId: retest.id,
+          scanId: params.scanId,
+          findingId: retest.findingId,
+          status: "INCONCLUSIVE",
+        })
+        await tx.findingVerification.upsert({
+          where: { idempotencyKey },
+          create: {
+            workspaceId: params.workspaceId,
+            findingId: retest.findingId,
+            scanId: params.scanId,
+            status: "INCONCLUSIVE",
+            method: "RETEST",
+            reason,
+            verifierVersion: "result-integrity-v3",
+            idempotencyKey,
+          },
+          update: {},
+        })
+        await tx.retest.update({
+          where: { id: retest.id },
+          data: { status: "inconclusive", resultAfter: reason },
+        })
+        continue
+      }
+
+      const baselineManifest = manifests.get(baselineScan.id) ?? null
+      const retestManifest = manifests.get(params.scanId) ?? null
+      const baselineCoverage = coverageByScan.get(baselineScan.id) ?? []
+      const retestCoverage = coverageByScan.get(params.scanId) ?? []
+      const baselineIdentity = storedManifestIdentity(baselineScan.id, baselineManifest)
+      const retestIdentity = storedManifestIdentity(params.scanId, retestManifest)
+
+      const sources = [...new Set(candidateSourcesByFinding.get(retest.findingId) ?? [])].sort()
+      const deterministicSources = sources.filter((source) =>
+        DETERMINISTIC_RETEST_SCANNERS.has(source)
+      )
+      const hasEngineOrUnknownSource = sources.some(
+        (source) => !DETERMINISTIC_RETEST_SCANNERS.has(source)
+      )
+      const scannerSource = deterministicSources.join("+")
+
+      const baselineTargetMatches =
+        baselineIdentity?.scanId === baselineScan.id &&
+        baselineScan.targetId === baselineManifestTargetId(baselineManifest)
+      const retestTargetMatches =
+        retestIdentity?.scanId === retestScan.id &&
+        retestScan.targetId === baselineManifestTargetId(retestManifest)
+
+      // Repository scans prove identity by exact source revision: both
+      // revisions must be present and well-formed, and may legitimately differ
+      // after a fix. URL/API scans prove identity by a matching URL checksum.
+      const baselineType = baselineManifestTargetType(baselineManifest)
+      const isRepositoryTarget = baselineType === "REPO"
+      const revisionIdentityValid =
+        !isRepositoryTarget ||
+        (baselineIdentity !== null &&
+          retestIdentity !== null &&
+          baselineIdentity.sourceRevision !== null &&
+          retestIdentity.sourceRevision !== null)
+      const urlIdentityValid =
+        isRepositoryTarget ||
+        (baselineIdentity !== null &&
+          retestIdentity !== null &&
+          baselineIdentity.targetUrlChecksum !== null &&
+          retestIdentity.targetUrlChecksum !== null &&
+          baselineIdentity.targetUrlChecksum === retestIdentity.targetUrlChecksum)
+
+      const familyReceiptComplete = (receipts: { controlId: string; status: string }[]) =>
+        deterministicSources.every((source) =>
+          receipts.some((receipt) => receipt.controlId === source && receipt.status === "COMPLETED")
+        )
+      const coverageComplete =
+        familyReceiptComplete(baselineCoverage) && familyReceiptComplete(retestCoverage)
+
+      const identityValid =
+        scannerSource.length > 0 &&
+        !hasEngineOrUnknownSource &&
+        baselineTargetMatches &&
+        retestTargetMatches &&
+        baselineIdentity?.manifestChecksum !== undefined &&
+        retestIdentity?.manifestChecksum !== undefined
+
+      const canValidate =
+        identityValid && coverageComplete && revisionIdentityValid && urlIdentityValid
+
+      if (canValidate) {
+        const reason =
+          "The originating deterministic scanner did not detect the finding in the queued retest."
+        const idempotencyKey = checksum({
+          retestId: retest.id,
+          scanId: params.scanId,
+          findingId: retest.findingId,
+          status: "VALIDATED",
+        })
+        await tx.finding.update({
+          where: { id: retest.findingId },
+          data: {
+            status: "FIXED",
+            fixedAt: new Date(),
+            verified: false,
+            verificationStatus: "VALIDATED",
+            verificationMethod: "RETEST",
+            verificationReason: reason,
+          },
+        })
+        await tx.findingVerification.upsert({
+          where: { idempotencyKey },
+          create: {
+            workspaceId: params.workspaceId,
+            findingId: retest.findingId,
+            scanId: params.scanId,
+            status: "VALIDATED",
+            method: "RETEST",
+            reason,
+            verifierVersion: "result-integrity-v3",
+            sourceRevision: retestIdentity?.sourceRevision ?? undefined,
+            evidence: retestReceipt({
+              retestId: retest.id,
+              scannerSource,
+              baseline: baselineIdentity,
+              retest: retestIdentity,
+              coverageReceiptIds: [
+                ...baselineCoverage
+                  .filter((receipt) => deterministicSources.includes(receipt.controlId))
+                  .map((receipt) => receipt.id),
+                ...retestCoverage
+                  .filter((receipt) => deterministicSources.includes(receipt.controlId))
+                  .map((receipt) => receipt.id),
+              ].sort(),
+            }),
+            idempotencyKey,
+          },
+          update: {},
+        })
+        await tx.retest.update({
+          where: { id: retest.id },
+          data: {
+            status: "passed",
+            resultAfter: "Finding was not detected by the originating scanner.",
+          },
+        })
+        continue
+      }
+
+      const missingParts: string[] = []
+      if (sources.length === 0 || hasEngineOrUnknownSource)
+        missingParts.push("originating scanner is not deterministic")
+      if (!baselineIdentity || !retestIdentity) missingParts.push("stored result manifest identity")
+      if (!revisionIdentityValid) missingParts.push("exact repository revision identity")
+      if (!urlIdentityValid) missingParts.push("URL identity checksum")
+      if (!coverageComplete) missingParts.push("complete originating-scanner coverage")
+      const reason = `The finding was not detected, but validation evidence is incomplete: ${missingParts.join(", ")}.`
+      const idempotencyKey = checksum({
+        retestId: retest.id,
+        scanId: params.scanId,
+        findingId: retest.findingId,
+        status: "INCONCLUSIVE",
       })
       await tx.findingVerification.upsert({
         where: { idempotencyKey },
@@ -573,11 +828,24 @@ export async function completeRetestsForScan(params: {
           workspaceId: params.workspaceId,
           findingId: retest.findingId,
           scanId: params.scanId,
-          status: "VALIDATED",
+          status: "INCONCLUSIVE",
           method: "RETEST",
           reason,
-          verifierVersion: "result-integrity-v1",
-          evidence: { retestId: retest.id, scannerSource },
+          verifierVersion: "result-integrity-v3",
+          evidence: retestReceipt({
+            retestId: retest.id,
+            scannerSource,
+            baseline: baselineIdentity,
+            retest: retestIdentity,
+            coverageReceiptIds: [
+              ...baselineCoverage
+                .filter((receipt) => deterministicSources.includes(receipt.controlId))
+                .map((receipt) => receipt.id),
+              ...retestCoverage
+                .filter((receipt) => deterministicSources.includes(receipt.controlId))
+                .map((receipt) => receipt.id),
+            ].sort(),
+          }),
           idempotencyKey,
         },
         update: {},
@@ -585,12 +853,12 @@ export async function completeRetestsForScan(params: {
       await tx.retest.update({
         where: { id: retest.id },
         data: {
-          status: "passed",
-          resultAfter: "Finding was not detected by the originating scanner.",
+          status: "inconclusive",
+          resultAfter: reason,
         },
       })
-    })
-  }
+    }
+  })
 }
 
 export async function failTerminalRetestsForScan(scanId: string): Promise<void> {

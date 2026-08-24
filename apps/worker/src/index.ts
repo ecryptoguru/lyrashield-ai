@@ -3,7 +3,7 @@ import { hostname } from "node:os"
 import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
-import { env } from "@lyrashield/config"
+import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import {
   registerScanWorker,
   handoffScanWorker,
@@ -49,6 +49,8 @@ const readinessPath = "/tmp/lyrashield-worker-ready"
 const activeJobPath = "/tmp/lyrashield-worker-active"
 const plannedRestartPath = "/tmp/lyrashield-worker-planned-restart"
 export const RECONCILIATION_INTERVAL_MS = 300_000
+export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
+export const MANAGED_REDIS_STALLED_INTERVAL_MS = 60_000
 
 // Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
 // so the dependency is only loaded when configured.
@@ -241,8 +243,22 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
 process.on("SIGTERM", () => void shutdown("SIGTERM"))
 process.on("SIGINT", () => void shutdown("SIGINT"))
 
+/**
+ * Fail-closed worker startup provenance gate. main() calls this before any
+ * Worker construction, readiness marker write, or scan lease registration, so
+ * a production worker without exact product/image/engine identity never
+ * becomes ready and never accepts paid work.
+ */
+export function assertWorkerStartupProvenance() {
+  return resolveWorkerExecutionProvenance()
+}
+
 async function main(): Promise<void> {
   await initSentry()
+  // Gate readiness BEFORE the worker can claim anything: missing or malformed
+  // provenance throws, main() rejects, and the process exits without ever
+  // writing the readiness marker.
+  assertWorkerStartupProvenance()
   logger.info("LyraShield worker starting", { redisConfigured: Boolean(env.REDIS_URL) })
   assertEvidenceStorageConfigured()
   assertRepositoryScanRuntimeConfigured()
@@ -275,8 +291,8 @@ async function main(): Promise<void> {
       // consumer-liveness guard (below) covers the remaining failure mode: the
       // blocking client silently wedging (taskforcesh/bullmq#4479) so jobs sit
       // in `wait` while the worker reports ready.
-      drainDelay: 600,
-      stalledInterval: 60_000,
+      drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+      stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
     }
   )
 
@@ -320,6 +336,10 @@ async function main(): Promise<void> {
       },
       concurrency: 2,
       autorun: false,
+      // Keep instant job pickup while avoiding BullMQ's five-second idle poll,
+      // which alone exceeds a 500,000-command monthly managed Redis budget.
+      drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+      stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
     }
   )
   await webhookTrackRetryWorker.waitUntilReady()

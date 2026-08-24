@@ -17,6 +17,14 @@ const completeUsage = vi.hoisted(() => ({
   long_output_tokens: 0,
 }))
 
+vi.mock("@lyrashield/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/config")>()
+  return {
+    ...actual,
+    resolveWorkerExecutionProvenance: vi.fn(() => null),
+  }
+})
+
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     target: {
@@ -157,6 +165,7 @@ import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
 import { completeRetestsForScan, persistResultManifest } from "../engine/result-integrity"
+import { resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import {
   assertEvidenceStorageConfigured,
@@ -381,6 +390,12 @@ describe("processScanJob", () => {
     )
     expect(vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(completeScanWithScore).mock.invocationCallOrder[0]!
+    )
+    expect(vi.mocked(persistResultManifest).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]!
+    )
+    expect(vi.mocked(persistFindings).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(persistResultManifest).mock.invocationCallOrder[0]!
     )
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
@@ -1132,7 +1147,7 @@ describe("processScanJob", () => {
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
-  it("resumes final scoring from an immutable manifest without replaying the scan", async () => {
+  it("resumes retest finalization then scoring from an immutable manifest without replaying the scan", async () => {
     vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
       status: "VERIFYING",
       summary: "Recovered finalization",
@@ -1144,9 +1159,33 @@ describe("processScanJob", () => {
       summary: "Recovered finalization",
     })
 
+    expect(completeRetestsForScan).toHaveBeenCalledWith({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+    })
+    expect(vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(completeScanWithScore).mock.invocationCallOrder[0]!
+    )
     expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Recovered finalization")
     expect(runEngine).not.toHaveBeenCalled()
     expect(runScannerOrchestrator).not.toHaveBeenCalled()
+  })
+
+  it("binds worker execution provenance into every result manifest", async () => {
+    const mockProvenance = {
+      productRevision: "a".repeat(40),
+      workerImageDigest: `sha256:${"b".repeat(64)}`,
+      engineRevision: "c".repeat(40),
+    }
+    vi.mocked(resolveWorkerExecutionProvenance).mockReturnValue(mockProvenance as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("completed")
+    expect(resolveWorkerExecutionProvenance).toHaveBeenCalled()
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({ workerExecution: mockProvenance })
+    )
   })
 
   it("resumes a durable budget stop without completing the scan", async () => {

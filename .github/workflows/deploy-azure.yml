@@ -183,6 +183,43 @@ jobs:
           echo "Pushed worker image: ${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Pinned digest: ${{ steps.build-worker.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
+      # Validates the exact immutable values the worker VM must inject into its
+      # runtime environment (LYRASHIELD_PRODUCT_REVISION / _WORKER_IMAGE_DIGEST /
+      # _ENGINE_REVISION) and records them as the promotion record. This never
+      # promotes or restarts the worker VM; promotion remains the separate,
+      # reviewed runtime-config step on the VM.
+      - name: Validate worker provenance record
+        if: steps.build-worker.outcome == 'success'
+        shell: bash
+        run: |
+          is_40_hex() {
+            value=$1
+            case "$value" in
+              ''|*[!0-9a-fA-F]*) return 1 ;;
+            esac
+            [ "${#value}" -eq 40 ]
+          }
+          is_64_hex() {
+            value=$1
+            case "$value" in
+              ''|*[!0-9a-fA-F]*) return 1 ;;
+            esac
+            [ "${#value}" -eq 64 ]
+          }
+          digest="${{ steps.build-worker.outputs.digest }}"
+          case "$digest" in
+            sha256:*) ;;
+            *) echo "::error::Worker digest must be sha256:<64 hex>"; exit 1 ;;
+          esac
+          is_64_hex "${digest#sha256:}" || { echo "::error::Worker digest must be sha256:<64 hex>"; exit 1; }
+          is_40_hex "${{ env.DEPLOY_SHA }}" || { echo "::error::Product revision must be a 40-character SHA"; exit 1; }
+          is_40_hex "${{ env.ENGINE_REVISION }}" || { echo "::error::Engine revision must be a 40-character SHA"; exit 1; }
+          echo "Worker provenance record (worker VM runtime values):" >> "$GITHUB_STEP_SUMMARY"
+          echo "- LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- LYRASHIELD_WORKER_IMAGE_DIGEST=$digest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- LYRASHIELD_ENGINE_REVISION=${{ env.ENGINE_REVISION }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Promotion of the worker VM is NOT performed by this workflow." >> "$GITHUB_STEP_SUMMARY"
+
   # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
   # remain immutable and deploy by verified digest. Multi-arch buildx pushes leave untagged manifests
   # per build (per-platform layers under the tagged manifest list), so versions accumulate
