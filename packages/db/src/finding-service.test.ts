@@ -95,9 +95,7 @@ describe("listFindings", () => {
 
     const result = await listFindings({ workspaceId: "workspace-1", limit: 1000 })
 
-    expect(prisma.finding.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 101 })
-    )
+    expect(prisma.finding.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 101 }))
     expect(result.items).toHaveLength(100)
     expect(result.nextCursor).toBe("finding-99")
   })

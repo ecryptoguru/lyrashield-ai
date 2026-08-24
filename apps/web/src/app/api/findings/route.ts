@@ -91,12 +91,7 @@ export async function GET(request: Request) {
         verified: finding.verified,
         confidence: finding.confidence,
         environment: finding.target?.environment as
-          | "LOCAL"
-          | "PREVIEW"
-          | "STAGING"
-          | "PRODUCTION"
-          | null
-          | undefined,
+          "LOCAL" | "PREVIEW" | "STAGING" | "PRODUCTION" | null | undefined,
         businessImpact: finding.businessImpact,
         exploitability: finding.exploitability,
       }),

@@ -73,9 +73,12 @@ describe("GET /api/findings/[id]", () => {
       retests: [],
     } as never)
 
-    const response = await GET(new Request("http://localhost/api/findings/finding-1?workspaceId=ws-1"), {
-      params: Promise.resolve({ id: "finding-1" }),
-    })
+    const response = await GET(
+      new Request("http://localhost/api/findings/finding-1?workspaceId=ws-1"),
+      {
+        params: Promise.resolve({ id: "finding-1" }),
+      }
+    )
     const body = await response.json()
 
     const serialized = JSON.stringify(body)

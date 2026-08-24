@@ -112,7 +112,8 @@ export function calculateFindingPriority(input: {
   }
 
   score = Math.max(0, Math.min(100, score))
-  const band: FindingPriorityBand = score >= 80 ? "urgent" : score >= 60 ? "high" : score >= 30 ? "normal" : "low"
+  const band: FindingPriorityBand =
+    score >= 80 ? "urgent" : score >= 60 ? "high" : score >= 30 ? "normal" : "low"
 
   return { score, band, reasons, limitations }
 }

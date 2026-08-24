@@ -110,7 +110,9 @@ describe("GET /api/findings", () => {
     const body = await response.json()
 
     expect(body.data.items.map((item: { id: string }) => item.id)).toEqual(["b", "a", "c"])
-    const scores = body.data.items.map((item: { priority: { score: number } }) => item.priority.score)
+    const scores = body.data.items.map(
+      (item: { priority: { score: number } }) => item.priority.score
+    )
     expect(scores[0]).toBeGreaterThan(scores[1]!)
     expect(scores[1]).toBeGreaterThan(scores[2]!)
   })

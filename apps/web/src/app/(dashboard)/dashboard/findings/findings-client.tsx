@@ -1683,8 +1683,7 @@ function FindingDetailDrawer({
                                   <p>
                                     URL checksum: baseline{" "}
                                     <span className="font-mono">
-                                      {retestEvidence.baseline?.targetUrlChecksum ??
-                                        "unavailable"}
+                                      {retestEvidence.baseline?.targetUrlChecksum ?? "unavailable"}
                                     </span>{" "}
                                     · retest{" "}
                                     <span className="font-mono">

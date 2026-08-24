@@ -35,22 +35,94 @@ describe("calculateFindingPriority", () => {
   })
 
   it("applies band boundaries exactly", () => {
-    expect(calculateFindingPriority(input({ severity: "CRITICAL", verified: true, environment: "PRODUCTION", confidence: "high", businessImpact: "x", exploitability: "y" })).band).toBe("urgent")
+    expect(
+      calculateFindingPriority(
+        input({
+          severity: "CRITICAL",
+          verified: true,
+          environment: "PRODUCTION",
+          confidence: "high",
+          businessImpact: "x",
+          exploitability: "y",
+        })
+      ).band
+    ).toBe("urgent")
     // 80 is exactly the urgent boundary: CRITICAL 60 + verified 15 + production 5... 60+15+10+5+4+4 = 98
-    expect(calculateFindingPriority(input({ severity: "HIGH", verified: true, environment: "PRODUCTION", confidence: "high", businessImpact: "x", exploitability: "y" })).score).toBeGreaterThanOrEqual(80)
+    expect(
+      calculateFindingPriority(
+        input({
+          severity: "HIGH",
+          verified: true,
+          environment: "PRODUCTION",
+          confidence: "high",
+          businessImpact: "x",
+          exploitability: "y",
+        })
+      ).score
+    ).toBeGreaterThanOrEqual(80)
     // HIGH 45 + production 10 + high 5 + verified 15 + 4 + 4 = 83 -> urgent
-    expect(calculateFindingPriority(input({ severity: "HIGH", verified: true, environment: "PRODUCTION", confidence: "high", businessImpact: "x", exploitability: "y" })).band).toBe("urgent")
+    expect(
+      calculateFindingPriority(
+        input({
+          severity: "HIGH",
+          verified: true,
+          environment: "PRODUCTION",
+          confidence: "high",
+          businessImpact: "x",
+          exploitability: "y",
+        })
+      ).band
+    ).toBe("urgent")
     // MEDIUM 30 + production 10 + high 5 + verified 15 + 8 = 68 -> high
-    expect(calculateFindingPriority(input({ severity: "MEDIUM", verified: true, environment: "PRODUCTION", confidence: "high", businessImpact: "x", exploitability: "y" })).band).toBe("high")
+    expect(
+      calculateFindingPriority(
+        input({
+          severity: "MEDIUM",
+          verified: true,
+          environment: "PRODUCTION",
+          confidence: "high",
+          businessImpact: "x",
+          exploitability: "y",
+        })
+      ).band
+    ).toBe("high")
     // LOW 15 + production 10 + verified 15 + high 5 + 8 = 53 -> normal
-    expect(calculateFindingPriority(input({ severity: "LOW", verified: true, environment: "PRODUCTION", confidence: "high", businessImpact: "x", exploitability: "y" })).band).toBe("normal")
+    expect(
+      calculateFindingPriority(
+        input({
+          severity: "LOW",
+          verified: true,
+          environment: "PRODUCTION",
+          confidence: "high",
+          businessImpact: "x",
+          exploitability: "y",
+        })
+      ).band
+    ).toBe("normal")
     // INFO 5 + production 10 + high 5 + 8 = 28 -> low
-    expect(calculateFindingPriority(input({ severity: "INFO", environment: "PRODUCTION", confidence: "high", businessImpact: "x", exploitability: "y" })).band).toBe("low")
+    expect(
+      calculateFindingPriority(
+        input({
+          severity: "INFO",
+          environment: "PRODUCTION",
+          confidence: "high",
+          businessImpact: "x",
+          exploitability: "y",
+        })
+      ).band
+    ).toBe("low")
   })
 
   it("clamps the score to 0..100", () => {
     const maxed = calculateFindingPriority(
-      input({ severity: "CRITICAL", verified: true, environment: "PRODUCTION", confidence: "high", businessImpact: "x", exploitability: "y" })
+      input({
+        severity: "CRITICAL",
+        verified: true,
+        environment: "PRODUCTION",
+        confidence: "high",
+        businessImpact: "x",
+        exploitability: "y",
+      })
     )
     expect(maxed.score).toBeLessThanOrEqual(100)
     expect(maxed.score).toBeGreaterThanOrEqual(0)
@@ -58,10 +130,22 @@ describe("calculateFindingPriority", () => {
 
   it("ranks a verified critical production finding above an unverified critical staging finding", () => {
     const verifiedProduction = calculateFindingPriority(
-      input({ severity: "CRITICAL", status: "OPEN", verified: true, environment: "PRODUCTION", confidence: "high" })
+      input({
+        severity: "CRITICAL",
+        status: "OPEN",
+        verified: true,
+        environment: "PRODUCTION",
+        confidence: "high",
+      })
     )
     const unverifiedStaging = calculateFindingPriority(
-      input({ severity: "CRITICAL", status: "OPEN", verified: false, environment: "STAGING", confidence: "medium" })
+      input({
+        severity: "CRITICAL",
+        status: "OPEN",
+        verified: false,
+        environment: "STAGING",
+        confidence: "medium",
+      })
     )
     expect(verifiedProduction.score).toBeGreaterThan(unverifiedStaging.score)
     expect(verifiedProduction.band).toBe("urgent")
@@ -70,10 +154,24 @@ describe("calculateFindingPriority", () => {
 
   it("keeps text-presence changes within a bounded 8-point range", () => {
     const withoutText = calculateFindingPriority(
-      input({ severity: "HIGH", status: "OPEN", verified: false, environment: "STAGING", confidence: "medium" })
+      input({
+        severity: "HIGH",
+        status: "OPEN",
+        verified: false,
+        environment: "STAGING",
+        confidence: "medium",
+      })
     )
     const withText = calculateFindingPriority(
-      input({ severity: "HIGH", status: "OPEN", verified: false, environment: "STAGING", confidence: "medium", businessImpact: "Customer payments", exploitability: "Publicly reachable" })
+      input({
+        severity: "HIGH",
+        status: "OPEN",
+        verified: false,
+        environment: "STAGING",
+        confidence: "medium",
+        businessImpact: "Customer payments",
+        exploitability: "Publicly reachable",
+      })
     )
     expect(withText.score - withoutText.score).toBeLessThanOrEqual(8)
     expect(withText.reasons).toContain("Business impact context available")
@@ -98,12 +196,16 @@ describe("calculateFindingPriority", () => {
     expect(highUpper.score).toBe(highLower.score)
 
     const unknown = calculateFindingPriority(input({ severity: "MEDIUM", confidence: "unranked" }))
-    expect(unknown.limitations).toContain("Confidence signal is unknown; triage metadata is not proof.")
+    expect(unknown.limitations).toContain(
+      "Confidence signal is unknown; triage metadata is not proof."
+    )
   })
 
   it("adds a limitation when the target environment is missing", () => {
     const result = calculateFindingPriority(input({ severity: "MEDIUM" }))
-    expect(result.limitations).toContain("Target environment is unknown; production exposure was not considered.")
+    expect(result.limitations).toContain(
+      "Target environment is unknown; production exposure was not considered."
+    )
   })
 
   it("adds a limitation for unverified findings", () => {
@@ -127,7 +229,17 @@ describe("calculateFindingPriority", () => {
     ["DUPLICATE", "Duplicate"],
     ["FIXED", "Fixed after retest"],
   ] as const)("caps the resolved status %s at low priority", (status, reason) => {
-    const result = calculateFindingPriority(input({ severity: "CRITICAL", status, verified: true, environment: "PRODUCTION", confidence: "high", businessImpact: "x", exploitability: "y" }))
+    const result = calculateFindingPriority(
+      input({
+        severity: "CRITICAL",
+        status,
+        verified: true,
+        environment: "PRODUCTION",
+        confidence: "high",
+        businessImpact: "x",
+        exploitability: "y",
+      })
+    )
     expect(result.score).toBeLessThanOrEqual(20)
     expect(result.band).toBe("low")
     expect(result.reasons[0]).toBe(reason)
@@ -143,7 +255,11 @@ describe("calculateFindingPriority", () => {
 
   it("never claims reachability or exploitability was proven", () => {
     const result = calculateFindingPriority(
-      input({ severity: "CRITICAL", businessImpact: "Customer payments", exploitability: "Publicly reachable" })
+      input({
+        severity: "CRITICAL",
+        businessImpact: "Customer payments",
+        exploitability: "Publicly reachable",
+      })
     )
     expect(result.reasons.join(" ").toLowerCase()).not.toContain("reachable")
     expect(result.reasons.join(" ").toLowerCase()).not.toContain("exploitable")

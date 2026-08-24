@@ -503,13 +503,17 @@ type StoredManifestIdentity = {
   targetUrlChecksum: string | null
 }
 
-function baselineManifestTargetId(manifest: { manifest: unknown } | null | undefined): string | null {
+function baselineManifestTargetId(
+  manifest: { manifest: unknown } | null | undefined
+): string | null {
   if (!manifest) return null
   const raw = manifest.manifest as { target?: { id?: unknown } | null }
   return typeof raw.target?.id === "string" ? raw.target.id : null
 }
 
-function baselineManifestTargetType(manifest: { manifest: unknown } | null | undefined): string | null {
+function baselineManifestTargetType(
+  manifest: { manifest: unknown } | null | undefined
+): string | null {
   if (!manifest) return null
   const raw = manifest.manifest as { target?: { type?: unknown } | null }
   return typeof raw.target?.type === "string" ? raw.target.type : null
@@ -721,9 +725,7 @@ export async function completeRetestsForScan(params: {
 
       const familyReceiptComplete = (receipts: { controlId: string; status: string }[]) =>
         deterministicSources.every((source) =>
-          receipts.some(
-            (receipt) => receipt.controlId === source && receipt.status === "COMPLETED"
-          )
+          receipts.some((receipt) => receipt.controlId === source && receipt.status === "COMPLETED")
         )
       const coverageComplete =
         familyReceiptComplete(baselineCoverage) && familyReceiptComplete(retestCoverage)
@@ -736,7 +738,8 @@ export async function completeRetestsForScan(params: {
         baselineIdentity?.manifestChecksum !== undefined &&
         retestIdentity?.manifestChecksum !== undefined
 
-      const canValidate = identityValid && coverageComplete && revisionIdentityValid && urlIdentityValid
+      const canValidate =
+        identityValid && coverageComplete && revisionIdentityValid && urlIdentityValid
 
       if (canValidate) {
         const reason =
@@ -798,7 +801,8 @@ export async function completeRetestsForScan(params: {
       }
 
       const missingParts: string[] = []
-      if (sources.length === 0 || hasEngineOrUnknownSource) missingParts.push("originating scanner is not deterministic")
+      if (sources.length === 0 || hasEngineOrUnknownSource)
+        missingParts.push("originating scanner is not deterministic")
       if (!baselineIdentity || !retestIdentity) missingParts.push("stored result manifest identity")
       if (!revisionIdentityValid) missingParts.push("exact repository revision identity")
       if (!urlIdentityValid) missingParts.push("URL identity checksum")

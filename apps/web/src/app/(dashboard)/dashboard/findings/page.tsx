@@ -161,12 +161,7 @@ export default async function FindingsPage({
         verified: f.verified,
         confidence: f.confidence,
         environment: f.target?.environment as
-          | "LOCAL"
-          | "PREVIEW"
-          | "STAGING"
-          | "PRODUCTION"
-          | null
-          | undefined,
+          "LOCAL" | "PREVIEW" | "STAGING" | "PRODUCTION" | null | undefined,
         businessImpact: f.businessImpact,
         exploitability: f.exploitability,
       }),

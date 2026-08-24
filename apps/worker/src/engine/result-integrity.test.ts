@@ -61,16 +61,18 @@ function manifestRow(scanId: string, targetId: string, targetType: string, overr
  * both manifests exist with valid revisions, and both family coverage
  * receipts are COMPLETED.
  */
-function mockRepoRetestState(overrides: {
-  baselineRevision?: string | null
-  retestRevision?: string | null
-  baselineManifest?: ReturnType<typeof manifestRow> | null
-  retestManifest?: ReturnType<typeof manifestRow> | null
-  candidates?: Array<{ findingId: string; scanId: string; scannerSource: string }>
-  baselineReceipts?: Array<{ id: string; controlId: string; status: string }>
-  retestReceipts?: Array<{ id: string; controlId: string; status: string }>
-  retestFindingIds?: string[]
-} = {}) {
+function mockRepoRetestState(
+  overrides: {
+    baselineRevision?: string | null
+    retestRevision?: string | null
+    baselineManifest?: ReturnType<typeof manifestRow> | null
+    retestManifest?: ReturnType<typeof manifestRow> | null
+    candidates?: Array<{ findingId: string; scanId: string; scannerSource: string }>
+    baselineReceipts?: Array<{ id: string; controlId: string; status: string }>
+    retestReceipts?: Array<{ id: string; controlId: string; status: string }>
+    retestFindingIds?: string[]
+  } = {}
+) {
   const baselineManifest =
     "baselineManifest" in overrides
       ? overrides.baselineManifest
