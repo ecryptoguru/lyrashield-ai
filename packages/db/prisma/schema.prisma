@@ -791,6 +791,7 @@ model Scan {
   llmOutputTokens      Int?
   determinismMode      String?    @default("default")
   durationMs           Int?
+  finalizationStartedAt DateTime?
   sarifUri             String?
   createdById          String
   deletedAt            DateTime?
@@ -1922,6 +1923,7 @@ model Conversion {
   subscriptionId      String?
   affiliateId         String
   grossAmount         Decimal  @db.Decimal(19, 4)
+  taxAmount           Decimal  @default(0) @db.Decimal(19, 4)
   commissionableAmount Decimal @db.Decimal(19, 4)
   currency            String   @db.VarChar(3)
   method              String

@@ -25,10 +25,15 @@ import {
   assertRepositoryScanRuntimeConfigured,
   terminateActiveEngineProcesses,
 } from "./engine/runner"
-import { reconcileFailedQueueJob, reconcileScanQueue } from "./queue-reconciliation"
+import {
+  reconcileFailedQueueJob,
+  reconcileScanQueue,
+  type QueueReconciliationResult,
+} from "./queue-reconciliation"
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 import { reapStaleScanResources } from "./engine/stale-resource-reaper"
 import { observeWorkerRun } from "./worker-lifecycle"
+import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./operational-health"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
@@ -47,10 +52,6 @@ export const RECONCILIATION_INTERVAL_MS = 300_000
 
 // Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
 // so the dependency is only loaded when configured.
-//
-// FOLLOW-UP (observability): route queue-reconciliation drift and cleanup_failed
-// events to Sentry (e.g. captureMessage with a fingerprint) so silent divergence
-// between the BullMQ queue and the database is alerted on, not just logged.
 async function initSentry(): Promise<void> {
   if (!env.SENTRY_DSN) return
   try {
@@ -65,6 +66,24 @@ async function initSentry(): Promise<void> {
     logger.warn("Failed to initialise Sentry; continuing without it", {
       error: error instanceof Error ? error.message : String(error),
     })
+  }
+}
+
+export async function emitOperationalHealthAlerts(
+  reconciliation: QueueReconciliationResult,
+  now = new Date()
+): Promise<void> {
+  if (!reconciliation.leaseAcquired) return
+  const snapshot = await collectOperationalHealthSnapshot({
+    now,
+    queueDepth: reconciliation.queueDepth,
+    oldestWaitingJobAgeMs: reconciliation.oldestWaitingJobAgeMs,
+    workerConcurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
+    reconciliationDriftCount:
+      reconciliation.failedOrphanedScans + reconciliation.removedOrphanedJobs,
+  })
+  for (const alert of evaluateOperationalHealth(snapshot)) {
+    logger.warn("operator_alert", { ...alert })
   }
 }
 
@@ -86,6 +105,27 @@ export async function clearWorkerActive(): Promise<void> {
   await unlink(activeJobPath).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error
   })
+}
+
+export async function settleScanWorkerForShutdown(
+  closePromise: Promise<void> | null | undefined,
+  timeoutMs = 25_000
+): Promise<boolean> {
+  const terminatedEngineProcesses = terminateActiveEngineProcesses()
+  if (terminatedEngineProcesses > 0) {
+    logger.info("Terminating active engine processes", { count: terminatedEngineProcesses })
+  }
+  if (!closePromise) return false
+
+  return (
+    (await Promise.race([
+      closePromise.then(
+        () => "closed" as const,
+        () => "failed" as const
+      ),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), timeoutMs)),
+    ])) === "closed"
+  )
 }
 
 async function consumePlannedRestart(): Promise<boolean> {
@@ -141,25 +181,24 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     logger.info("Schedule runner stopped")
   }
 
-  // Close the BullMQ worker before terminating engine processes. Once closed,
-  // no new jobs are accepted; active jobs are allowed to finish or are timed
-  // out, and then any remaining engine child processes are killed.
+  let forcedExit = false
+
+  // Closing stops new claims. Terminate active engines immediately so paid work
+  // cannot outlive the worker while close waits for processors to settle.
   if (worker) {
     const closed = worker.close()
     const localWorker = worker
     worker = null
-    if (!closed) {
-      logger.warn("Worker.close() returned null, forcing shutdown")
-    } else {
-      const timeout = new Promise<"timeout">((resolve) =>
-        setTimeout(() => resolve("timeout"), 25_000)
-      )
-      if ((await Promise.race([closed.then(() => "closed" as const), timeout])) === "timeout") {
-        logger.warn("BullMQ worker close timed out; forcing shutdown")
-        process.exit(1)
+    if (!(await settleScanWorkerForShutdown(closed))) {
+      forcedExit = true
+      if (!closed) {
+        logger.warn("Worker.close() returned null, forcing shutdown")
+      } else {
+        logger.warn("BullMQ worker did not close cleanly; forcing shutdown")
       }
+    } else {
+      logger.info("BullMQ worker closed", { workerId: localWorker.id })
     }
-    logger.info("BullMQ worker closed", { workerId: localWorker.id })
   }
 
   // Close the webhook-track retry worker the same way — no new retry jobs are
@@ -172,11 +211,6 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
       new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 10_000)),
     ])
     logger.info("Webhook track retry worker closed")
-  }
-
-  const terminatedEngineProcesses = terminateActiveEngineProcesses()
-  if (terminatedEngineProcesses > 0) {
-    logger.info("Terminating active engine processes", { count: terminatedEngineProcesses })
   }
 
   if (plannedRestart) {
@@ -201,7 +235,7 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     })
   })
 
-  process.exit(exitCode)
+  process.exit(forcedExit ? 1 : exitCode)
 }
 
 process.on("SIGTERM", () => void shutdown("SIGTERM"))
@@ -255,7 +289,9 @@ async function main(): Promise<void> {
   })
   worker.on("failed", (job, error) => {
     logger.error("Job failed in queue", { jobId: job?.id, reason: error.message })
-    if (job?.id) void reconcileFailedQueueJob(job.id, error.message)
+    if (job?.id) {
+      void reconcileFailedQueueJob(job.id, error.message, job.attemptsMade, job.opts.attempts ?? 1)
+    }
   })
 
   worker.on("error", (error) => {
@@ -306,10 +342,20 @@ async function main(): Promise<void> {
 
   // Reconcile once on startup and then every five minutes. The distributed lease
   // inside reconcileScanQueue() ensures only one worker acts per interval.
-  await reconcileScanQueue()
+  const startupReconciliation = await reconcileScanQueue()
+  await emitOperationalHealthAlerts(startupReconciliation).catch((error) => {
+    logger.warn("Operational health collection failed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
   reconciliationTimer = setInterval(() => {
     void reconcileScanQueue()
-      .then(async () => {
+      .then(async (reconciliation) => {
+        await emitOperationalHealthAlerts(reconciliation).catch((error) => {
+          logger.warn("Operational health collection failed", {
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
         // Consumer-liveness guard: if jobs are waiting in the scan queue but
         // this consumer has not claimed one within the blocking window + grace,
         // the BullMQ blocking fetch loop is presumed wedged

@@ -8,6 +8,7 @@ import {
   scorecardCaption,
   scorecardChannelUrl,
   scorecardEmbed,
+  scorecardTrackingAllowed,
   scorecardUrlWithSource,
   type ScorecardFormat,
   type ScorecardVariant,
@@ -22,7 +23,7 @@ const FORMATS: { value: ScorecardFormat; label: string }[] = [
 
 function trackingAllowed() {
   const navigatorWithGpc = navigator as Navigator & { globalPrivacyControl?: boolean }
-  return navigator.doNotTrack !== "1" && navigatorWithGpc.globalPrivacyControl !== true
+  return scorecardTrackingAllowed(navigatorWithGpc)
 }
 
 function visitorId() {

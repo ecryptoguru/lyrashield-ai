@@ -13,8 +13,11 @@ const BATCH_SIZE = 500
 const ACTIVE_SCAN_STATUSES = new Set<ScanStatus>(["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"])
 
 export interface QueueReconciliationResult {
+  leaseAcquired: boolean
   failedOrphanedScans: number
   removedOrphanedJobs: number
+  queueDepth: number
+  oldestWaitingJobAgeMs: number
 }
 
 class ReconciliationLease {
@@ -117,12 +120,19 @@ class ReconciliationLease {
 }
 
 export async function reconcileScanQueue(now = new Date()): Promise<QueueReconciliationResult> {
-  const result = { failedOrphanedScans: 0, removedOrphanedJobs: 0 }
+  const result: QueueReconciliationResult = {
+    leaseAcquired: false,
+    failedOrphanedScans: 0,
+    removedOrphanedJobs: 0,
+    queueDepth: 0,
+    oldestWaitingJobAgeMs: 0,
+  }
   const redis = getRedis()
   if (!redis) return result
 
   const lease = await ReconciliationLease.acquire(redis)
   if (!lease) return result
+  result.leaseAcquired = true
 
   try {
     const queue = getScanQueue()
@@ -190,6 +200,14 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
         })
       : []
     const scanStatuses = new Map(scans.map((scan) => [scan.id, scan.status]))
+    const processableJobs = jobs.filter(
+      (job) => job.id && ACTIVE_SCAN_STATUSES.has(scanStatuses.get(job.id) as ScanStatus)
+    )
+    result.queueDepth = processableJobs.length
+    result.oldestWaitingJobAgeMs = processableJobs.reduce(
+      (oldest, job) => Math.max(oldest, Math.max(0, now.getTime() - job.timestamp)),
+      0
+    )
 
     for (const job of jobs) {
       lease.assertOwned()
@@ -211,7 +229,7 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
 
     lease.assertOwned()
     if (result.failedOrphanedScans || result.removedOrphanedJobs) {
-      logger.warn("Scan queue reconciliation repaired drift", result)
+      logger.warn("Scan queue reconciliation repaired drift", { ...result })
     }
     return result
   } finally {
@@ -219,7 +237,14 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
   }
 }
 
-export async function reconcileFailedQueueJob(jobId: string, failedReason: string): Promise<void> {
+export async function reconcileFailedQueueJob(
+  jobId: string,
+  failedReason: string,
+  attemptsMade: number,
+  maxAttempts: number
+): Promise<void> {
+  if (attemptsMade < maxAttempts) return
+
   try {
     const scan = await getSystemPrisma().scan.findUnique({
       where: { id: jobId },

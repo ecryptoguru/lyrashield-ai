@@ -142,7 +142,7 @@ async function persistEvidence(
     } catch (error) {
       await Promise.all(
         newEvidence.map(({ storageUri }) =>
-          deleteEncryptedArtifact(storageUri).catch((deleteError) => {
+          deleteEncryptedArtifact(storageUri, workspaceId).catch((deleteError) => {
             logger.error("Failed to compensate evidence artifact after metadata failure", {
               storageUri,
               error: deleteError instanceof Error ? deleteError.message : String(deleteError),

@@ -20,7 +20,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   return new Response(svg, {
     headers: {
       "Content-Type": "image/svg+xml; charset=utf-8",
-      "Cache-Control": "public, max-age=60, s-maxage=60",
+      "Cache-Control": "no-store",
       "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
     },
   })

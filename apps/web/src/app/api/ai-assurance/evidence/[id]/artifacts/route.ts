@@ -124,7 +124,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       )
     } catch (error) {
       if (stored) {
-        await Promise.resolve(deleteEncryptedArtifact(stored.storageUri)).catch(() => {
+        await Promise.resolve(deleteEncryptedArtifact(stored.storageUri, workspaceId)).catch(() => {
           logger.error("Failed to compensate evidence artifact upload", { artifactId })
         })
       }

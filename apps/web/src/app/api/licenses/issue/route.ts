@@ -8,6 +8,7 @@ import {
   hashLicenseKey,
   generateRetrievalToken,
   hashRetrievalToken,
+  encryptRetrievalKey,
   RETRIEVAL_TOKEN_EXPIRY_MS,
   FULFILLMENT_STATUS,
   computeUpdateEligibleUntil,
@@ -24,7 +25,7 @@ export const dynamic = "force-dynamic"
 const IssueSchema = z.object({
   /** The Polar product ID that was purchased. */
   productId: z.string().min(1),
-  /** Buyer email — the license key is emailed here. */
+  /** Buyer email — a one-time retrieval link is emailed here. */
   buyerEmail: z.string().email(),
   /** Number of seats (1 for individual, N for team). */
   seatCount: z.coerce.number().int().min(1).max(1000).default(1),
@@ -38,8 +39,8 @@ const IssueSchema = z.object({
  * POST /api/licenses/issue
  *
  * Internal endpoint called by the Polar `order.paid` webhook when a Local SKU
- * product is purchased. Creates a `License` + `LicenseKey` and emails the
- * license key to the buyer.
+ * product is purchased. Creates a `License` + `LicenseKey` and emails a
+ * one-time retrieval link to the buyer.
  *
  * This route is protected by an internal API key (`X-LyraShield-Internal-Key`)
  * so that external users cannot generate free licenses. The primary webhook
@@ -47,7 +48,8 @@ const IssueSchema = z.object({
  * fallback/internal API.
  *
  * Idempotency: the `orderId` is checked against existing licenses to avoid
- * duplicate issuance on webhook retries.
+ * duplicate issuance. A retry after delivery failure reuses the license and
+ * emails a fresh one-time retrieval token.
  *
  * perpetualFallbackBuild is resolved server-side from LICENSE_PUBLISHED_BUILD.
  * A client-supplied currentBuild is ignored.
@@ -130,7 +132,7 @@ export async function POST(request: Request) {
             deliveryAttempts: 0,
             retrievalTokenHash,
             retrievalTokenExpiresAt: retrievalExpiresAt,
-            retrievalRawKey: rawKey,
+            retrievalRawKey: encryptRetrievalKey(rawKey),
           },
         })
 
@@ -147,11 +149,79 @@ export async function POST(request: Request) {
           where: { issuedByProvider },
         })
         if (existingKey) {
-          logger.info("License already issued for order — returning existing", { orderId })
+          if (existingKey.fulfillmentStatus !== FULFILLMENT_STATUS.DELIVERY_FAILED) {
+            logger.info("License already issued for order — returning existing", { orderId })
+            return apiSuccess({ licenseId: existingKey.licenseId, alreadyIssued: true }, 200)
+          }
+
           const existingLicense = await systemPrisma.license.findUniqueOrThrow({
             where: { id: existingKey.licenseId },
           })
-          return apiSuccess({ licenseId: existingLicense.id, alreadyIssued: true }, 200)
+          if (existingLicense.ownerEmail.toLowerCase() !== buyerEmail.toLowerCase()) {
+            return apiError(
+              "LICENSE_BUYER_MISMATCH",
+              "The retry buyer does not match the original order.",
+              409
+            )
+          }
+
+          const claimed = await systemPrisma.licenseKey.updateMany({
+            where: {
+              id: existingKey.id,
+              fulfillmentStatus: FULFILLMENT_STATUS.DELIVERY_FAILED,
+            },
+            data: {
+              fulfillmentStatus: FULFILLMENT_STATUS.DELIVERING,
+              deliveryAttempts: { increment: 1 },
+              retrievalTokenHash,
+              retrievalTokenExpiresAt: retrievalExpiresAt,
+              retrievalTokenUsedAt: null,
+              lastDeliveryError: null,
+            },
+          })
+          if (claimed.count !== 1) {
+            return apiSuccess({ licenseId: existingLicense.id, alreadyIssued: true }, 200)
+          }
+
+          try {
+            await issueSignedLicense(existingLicense.id, existingLicense.perpetualFallbackBuild)
+            await sendLicenseRetrievalEmail({
+              buyerEmail: existingLicense.ownerEmail,
+              retrievalToken,
+              retrievalExpiresAt,
+              sku: existingLicense.sku,
+            })
+            await systemPrisma.licenseKey.updateMany({
+              where: {
+                id: existingKey.id,
+                fulfillmentStatus: FULFILLMENT_STATUS.DELIVERING,
+                retrievalTokenHash,
+              },
+              data: { fulfillmentStatus: FULFILLMENT_STATUS.DELIVERED },
+            })
+            return apiSuccess({ licenseId: existingLicense.id, alreadyIssued: true }, 200)
+          } catch (deliveryError) {
+            const msg =
+              deliveryError instanceof Error ? deliveryError.message : String(deliveryError)
+            await systemPrisma.licenseKey.updateMany({
+              where: {
+                id: existingKey.id,
+                fulfillmentStatus: FULFILLMENT_STATUS.DELIVERING,
+                retrievalTokenHash,
+              },
+              data: {
+                fulfillmentStatus: FULFILLMENT_STATUS.DELIVERY_FAILED,
+                lastDeliveryError: msg.slice(0, 500),
+              },
+            })
+            logger.error("License delivery retry failed for internal issue", { orderId })
+            return apiError(
+              "LICENSE_DELIVERY_RETRYABLE",
+              "License was issued, but delivery failed. Retry the same order.",
+              503,
+              { "Retry-After": "60" }
+            )
+          }
         }
       }
       throw error
@@ -188,7 +258,12 @@ export async function POST(request: Request) {
         },
       })
       logger.error("License delivery failed for internal issue", { orderId })
-      // Do not fail the HTTP request — license is minted and retrievable via token retry
+      return apiError(
+        "LICENSE_DELIVERY_RETRYABLE",
+        "License was issued, but delivery failed. Retry the same order.",
+        503,
+        { "Retry-After": "60" }
+      )
     }
 
     logger.info("License issued", {

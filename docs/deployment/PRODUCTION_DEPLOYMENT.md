@@ -475,7 +475,7 @@ Then, in the target environment:
 10. Confirm the worker image labels record the expected app and engine revisions, the configured and running worker references are the exact digest verified by CI, and `LYRASHIELD_IMAGE` is the exact LyraShield-owned sandbox digest qualified on both architectures. Retain the prior worker digest as the rollback record. A tag, upstream image, or digest built separately from the smoke-tested candidate fails the gate.
 11. Exercise the stale-resource reaper with one old stopped fixture and one active-scan fixture. Confirm only the owned stale resource is removed, cleanup results are logged, and a database ownership-read failure removes nothing.
 
-Queue recovery is deliberately fail-closed. Workers reconcile queue/database drift at startup and every 60 seconds under a renewable token-owned Redis lease. A scan left `QUEUED` for more than five minutes without a processable job becomes `FAILED` with `QUEUE_ORPHANED`; operators must not automatically requeue it because the original attempt may have crossed a paid-provider boundary.
+Queue recovery is deliberately fail-closed. Workers reconcile queue/database drift at startup and every five minutes under a renewable token-owned Redis lease. A scan left `QUEUED` for more than five minutes without a processable job becomes `FAILED` with `QUEUE_ORPHANED`; operators must not automatically requeue it because the original attempt may have crossed a paid-provider boundary.
 
 Operational queue rules:
 

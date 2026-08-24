@@ -134,6 +134,6 @@ describe("evidence artifact upload", () => {
 
     expect(await response.json()).toMatchObject({ error: { code: "EVIDENCE_ARTIFACT_COUNT_EXCEEDED" } })
     expect(response.status).toBe(400)
-    expect(deleteEncryptedArtifact).toHaveBeenCalledWith("s3://private/proof.txt")
+    expect(deleteEncryptedArtifact).toHaveBeenCalledWith("s3://private/proof.txt", "ws-1")
   })
 })

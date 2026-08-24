@@ -66,8 +66,7 @@ export async function storeLocalEvidence(
   }
 }
 
-/** Remove a local artifact when its immutable database version cannot be saved. */
-export async function deleteLocalEvidence(storageUri: string): Promise<void> {
+function resolveLocalEvidenceUri(storageUri: string, expectedWorkspaceId: string): string {
   const path = resolve(fileURLToPath(storageUri))
   const root = resolve(
     env.LYRASHIELD_LOCAL_EVIDENCE_DIR || join(process.cwd(), ".lyrashield", "evidence")
@@ -77,28 +76,29 @@ export async function deleteLocalEvidence(storageUri: string): Promise<void> {
     pathFromRoot === "" ||
     pathFromRoot === ".." ||
     pathFromRoot.startsWith(`..${sep}`) ||
-    !path.endsWith(".enc")
+    !path.endsWith(".enc") ||
+    !pathFromRoot.startsWith(`evidence${sep}${expectedWorkspaceId}${sep}`)
   ) {
-    throw new Error("Invalid local evidence path")
+    throw new Error("Evidence storage URI does not belong to workspace")
   }
+  return path
+}
+
+/** Remove a local artifact when its immutable database version cannot be saved. */
+export async function deleteLocalEvidence(
+  storageUri: string,
+  expectedWorkspaceId: string
+): Promise<void> {
+  const path = resolveLocalEvidenceUri(storageUri, expectedWorkspaceId)
   await rm(path, { force: true })
 }
 
 /** Read a local artifact back, decrypting the iv||tag||ciphertext envelope. */
-export async function readLocalEvidence(storageUri: string): Promise<Buffer> {
-  const path = resolve(fileURLToPath(storageUri))
-  const root = resolve(
-    env.LYRASHIELD_LOCAL_EVIDENCE_DIR || join(process.cwd(), ".lyrashield", "evidence")
-  )
-  const pathFromRoot = relative(root, path)
-  if (
-    pathFromRoot === "" ||
-    pathFromRoot === ".." ||
-    pathFromRoot.startsWith(`..${sep}`) ||
-    !path.endsWith(".enc")
-  ) {
-    throw new Error("Invalid local evidence path")
-  }
+export async function readLocalEvidence(
+  storageUri: string,
+  expectedWorkspaceId: string
+): Promise<Buffer> {
+  const path = resolveLocalEvidenceUri(storageUri, expectedWorkspaceId)
   const key = Buffer.from(
     hkdfSync("sha256", env.BETTER_AUTH_SECRET, "", LOCAL_EVIDENCE_KEY_INFO, 32)
   )

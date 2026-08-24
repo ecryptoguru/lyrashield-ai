@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${VISITOR_COOKIE}=`))
     ?.slice(VISITOR_COOKIE.length + 1)
-  const visitorId = verifyVisitorToken(existing, secret) ?? randomUUID()
+  const visitorId = verifyVisitorToken(existing, secret) ?? parsed.data.visitorId ?? randomUUID()
   const result = await recordScorecardEvent(parsed.data.slug, {
     eventType: parsed.data.eventType,
     channel: parsed.data.channel,

@@ -106,8 +106,11 @@ describe("scan queue reconciliation", () => {
     mocks.lockRedis.set.mockResolvedValue(null)
 
     await expect(reconcileScanQueue()).resolves.toEqual({
+      leaseAcquired: false,
       failedOrphanedScans: 0,
       removedOrphanedJobs: 0,
+      queueDepth: 0,
+      oldestWaitingJobAgeMs: 0,
     })
 
     expect(mocks.prisma.scan.findMany).not.toHaveBeenCalled()
@@ -137,18 +140,21 @@ describe("scan queue reconciliation", () => {
   })
 
   it("removes waiting jobs whose database scan is absent or terminal", async () => {
-    const missing = { id: "missing", remove: vi.fn().mockResolvedValue(undefined) }
-    const terminal = { id: "terminal", remove: vi.fn().mockResolvedValue(undefined) }
-    const active = { id: "active", remove: vi.fn().mockResolvedValue(undefined) }
+    const timestamp = new Date("2026-07-18T11:57:00Z").getTime()
+    const missing = { id: "missing", timestamp, remove: vi.fn().mockResolvedValue(undefined) }
+    const terminal = { id: "terminal", timestamp, remove: vi.fn().mockResolvedValue(undefined) }
+    const active = { id: "active", timestamp, remove: vi.fn().mockResolvedValue(undefined) }
     mocks.queue.getJobs.mockResolvedValue([missing, terminal, active])
     mocks.prisma.scan.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
       { id: "terminal", status: "COMPLETED" },
       { id: "active", status: "QUEUED" },
     ])
 
-    const result = await reconcileScanQueue()
+    const result = await reconcileScanQueue(new Date("2026-07-18T12:00:00Z"))
 
     expect(result.removedOrphanedJobs).toBe(2)
+    expect(result.queueDepth).toBe(1)
+    expect(result.oldestWaitingJobAgeMs).toBe(180_000)
     expect(missing.remove).toHaveBeenCalled()
     expect(terminal.remove).toHaveBeenCalled()
     expect(active.remove).not.toHaveBeenCalled()
@@ -157,7 +163,7 @@ describe("scan queue reconciliation", () => {
   it("marks an active scan failed when BullMQ reports final failure", async () => {
     mocks.prisma.scan.findUnique.mockResolvedValue({ status: "RUNNING", workspaceId: "ws-1" })
 
-    await reconcileFailedQueueJob("scan-1", "worker crashed")
+    await reconcileFailedQueueJob("scan-1", "worker crashed", 3, 3)
 
     expect(mocks.updateScanStatus).toHaveBeenCalledWith(
       "scan-1",
@@ -170,10 +176,19 @@ describe("scan queue reconciliation", () => {
     )
   })
 
+  it("keeps an active scan retryable while BullMQ has attempts remaining", async () => {
+    mocks.prisma.scan.findUnique.mockResolvedValue({ status: "QUEUED", workspaceId: "ws-1" })
+
+    await reconcileFailedQueueJob("scan-1", "temporary failure", 1, 3)
+
+    expect(mocks.prisma.scan.findUnique).not.toHaveBeenCalled()
+    expect(mocks.updateScanStatus).not.toHaveBeenCalled()
+  })
+
   it("contains database failures from the queue failure callback", async () => {
     mocks.prisma.scan.findUnique.mockRejectedValue(new Error("database unavailable"))
 
-    await expect(reconcileFailedQueueJob("scan-1", "worker crashed")).resolves.toBeUndefined()
+    await expect(reconcileFailedQueueJob("scan-1", "worker crashed", 3, 3)).resolves.toBeUndefined()
 
     expect(mocks.updateScanStatus).not.toHaveBeenCalled()
   })

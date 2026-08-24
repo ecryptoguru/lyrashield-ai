@@ -25,12 +25,14 @@ vi.mock("./extension", () => ({ getWorkspaceContext: () => mockGetWorkspaceConte
 import { prisma } from "./client"
 import {
   addScanEvent,
+  cancelScan,
   createScan,
   getScanResultManifestDetail,
   getScanWithEvents,
   listScans,
   removeScan,
   updateScanStatus,
+  withScanFinalizationClaim,
 } from "./scan-service"
 
 const mockPrisma = prisma as unknown as {
@@ -93,6 +95,67 @@ describe("updateScanStatus", () => {
         durationMs: expect.any(Number),
       }),
     })
+  })
+
+  it("cancels a scan during verification", async () => {
+    const startedAt = new Date(Date.now() - 1_000)
+    mockPrisma.scan.findUnique
+      .mockResolvedValueOnce({ id: "scan-1", status: "VERIFYING", startedAt })
+      .mockResolvedValueOnce({ id: "scan-1", status: "CANCELLED", startedAt })
+    mockPrisma.scan.updateMany.mockResolvedValue({ count: 1 })
+
+    await updateScanStatus("scan-1", "CANCELLED", undefined, "ws-1")
+
+    expect(mockPrisma.scan.updateMany).toHaveBeenCalledWith({
+      where: { id: "scan-1", status: "VERIFYING" },
+      data: expect.objectContaining({
+        status: "CANCELLED",
+        endedAt: expect.any(Date),
+        durationMs: expect.any(Number),
+      }),
+    })
+  })
+})
+
+describe("scan finalization lock", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    mockPrisma.$executeRaw.mockResolvedValue(0)
+  })
+
+  it("does not run result persistence when cancellation wins", async () => {
+    mockPrisma.scan.updateMany.mockResolvedValue({ count: 0 })
+    mockPrisma.scan.findFirst.mockResolvedValue({ status: "CANCELLED" })
+    const persist = vi.fn()
+
+    await expect(withScanFinalizationClaim("scan-1", "ws-1", persist)).resolves.toEqual({
+      status: "cancelled",
+    })
+
+    expect(persist).not.toHaveBeenCalled()
+    expect(mockPrisma.$executeRaw).toHaveBeenCalledOnce()
+  })
+
+  it("makes a later cancellation observe terminal finalization", async () => {
+    let status = "VERIFYING"
+    mockPrisma.scan.updateMany.mockResolvedValue({ count: 1 })
+    mockPrisma.scan.findFirst.mockImplementation(async () => ({ status }))
+    const persist = vi.fn(async () => {
+      status = "COMPLETED"
+      return "done"
+    })
+
+    await expect(withScanFinalizationClaim("scan-1", "ws-1", persist)).resolves.toEqual({
+      status: "finalized",
+      value: "done",
+    })
+    await expect(cancelScan("scan-1", "ws-1")).rejects.toThrow(
+      "Cannot cancel scan in terminal state: COMPLETED"
+    )
+
+    expect(persist).toHaveBeenCalledOnce()
+    expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(2)
   })
 })
 

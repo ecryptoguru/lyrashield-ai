@@ -1,12 +1,18 @@
 export async function verifyEvidenceStorageFailsClosed(): Promise<void> {
   process.env.LYRASHIELD_EVIDENCE_KEK = ""
-  const { assertEvidenceStorageConfigured, EvidenceStorageConfigurationError } =
+  const { assertEvidenceStorageConfigured, EvidenceEnvelopeError } =
     await import("@lyrashield/evidence-storage")
 
   try {
     assertEvidenceStorageConfigured()
   } catch (error) {
-    if (error instanceof EvidenceStorageConfigurationError || error instanceof Error) return
+    if (
+      error instanceof EvidenceEnvelopeError &&
+      error.message === "LYRASHIELD_EVIDENCE_KEK is not configured"
+    ) {
+      return
+    }
+    throw error
   }
 
   throw new Error("Evidence storage accepted a production configuration without its KEK")

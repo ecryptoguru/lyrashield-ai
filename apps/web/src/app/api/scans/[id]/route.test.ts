@@ -81,6 +81,52 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(cancelScan).toHaveBeenCalledWith("scan-1", "ws-1")
   })
 
+  it("allows cancellation while a scan is verifying", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "VERIFYING",
+    } as never)
+    vi.mocked(cancelScan).mockResolvedValue({
+      id: "scan-1",
+      status: "CANCELLED",
+      endedAt: new Date(),
+    } as never)
+
+    const response = await POST(
+      new Request("http://localhost/api/scans/scan-1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: "ws-1" }),
+      }),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      data: { id: "scan-1", status: "CANCELLED" },
+    })
+  })
+
+  it("returns a conflict when finalization already won", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+    vi.mocked(cancelScan).mockRejectedValue(new Error("Scan finalization already started"))
+
+    const response = await POST(
+      new Request("http://localhost/api/scans/scan-1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: "ws-1" }),
+      }),
+      routeParams
+    )
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "SCAN_FINALIZATION_STARTED" },
+    })
+  })
+
   it("removes a terminal scan from the authorized workspace", async () => {
     vi.mocked(removeScan).mockResolvedValue({ id: "scan-1" } as never)
 

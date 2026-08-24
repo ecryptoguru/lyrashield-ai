@@ -4,6 +4,7 @@ import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashie
 import { getRedis } from "./redis"
 
 const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
+export const SCAN_ADMISSION_STOP_KEY = "lyrashield:scan-admission:stopped"
 export const SCAN_WORKER_HEARTBEAT_MS = 120_000
 export const SCAN_WORKER_TTL_MS = 300_000
 export const SCAN_WORKER_RESTART_GRACE_MS = 60_000
@@ -68,6 +69,19 @@ export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> 
 }
 
 export async function assertScanWorkerAvailable(): Promise<void> {
+  const redis = getRedis()
+  if (!redis) throw new ScanWorkerUnavailableError()
+
+  try {
+    if ((await redis.exists(SCAN_ADMISSION_STOP_KEY)) > 0) {
+      throw new ScanWorkerUnavailableError()
+    }
+  } catch (error) {
+    if (error instanceof ScanWorkerUnavailableError) throw error
+    // Admission state is authoritative. Redis uncertainty must fail closed.
+    throw new ScanWorkerUnavailableError()
+  }
+
   if (!(await isScanWorkerAvailable())) throw new ScanWorkerUnavailableError()
 }
 

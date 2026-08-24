@@ -62,6 +62,10 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
     return
   }
 
+  if (status === "active" && cloudPlan.agentMinutes > 0 && !currentPeriodStart) {
+    throw new Error("active_subscription_missing_period_start")
+  }
+
   const workspacePlan = plan as unknown as WorkspacePlan
 
   // Determine the effective billing status
@@ -172,6 +176,7 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
         plan,
         error: grantError instanceof Error ? grantError.message : String(grantError),
       })
+      throw grantError
     }
   }
 

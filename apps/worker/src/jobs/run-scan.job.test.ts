@@ -45,6 +45,12 @@ vi.mock("@lyrashield/db", () => ({
   createAiSecurityScoreSnapshot: vi.fn().mockResolvedValue({}),
   qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),
   addScanEvent: vi.fn().mockResolvedValue(undefined),
+  withScanFinalizationClaim: vi.fn(
+    async (_scanId: string, _workspaceId: string, finalize: () => Promise<unknown>) => ({
+      status: "finalized",
+      value: await finalize(),
+    })
+  ),
   runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
 }))
 
@@ -162,6 +168,7 @@ import {
   qualifyReferralForWorkspace,
   updateScanStatus,
   addScanEvent,
+  withScanFinalizationClaim,
   prisma,
 } from "@lyrashield/db"
 
@@ -328,6 +335,12 @@ describe("processScanJob", () => {
     vi.mocked(completeScanWithScore).mockResolvedValue({} as never)
     vi.mocked(qualifyReferralForWorkspace).mockResolvedValue(null)
     vi.mocked(cleanupEngineWorkspace).mockResolvedValue(undefined)
+    vi.mocked(withScanFinalizationClaim).mockImplementation(
+      async (_scanId, _workspaceId, finalize) => ({
+        status: "finalized" as const,
+        value: await finalize(),
+      })
+    )
     vi.mocked(prisma.target.findFirst).mockResolvedValue(mockRepoTarget as never)
     vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
@@ -871,6 +884,30 @@ describe("processScanJob", () => {
     expect(result).toMatchObject({ status: "failed", errorCategory: "CANCELLED" })
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "VERIFYING")
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+  })
+
+  it("does not cross the billable boundary when cancellation already won", async () => {
+    vi.mocked(prisma.scan.findUnique).mockImplementation((async (args: unknown) => {
+      const query = args as { select?: Record<string, unknown> | null }
+      if (query?.select && Object.keys(query.select).length === 1 && query.select.status === true) {
+        return { status: "CANCELLED" } as never
+      }
+      return { status: "RUNNING", events: [] } as never
+    }) as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "CANCELLED",
+    })
+
+    expect(addScanEvent).not.toHaveBeenCalledWith(
+      "scan-1",
+      "billable_boundary",
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    )
+    expect(runEngine).not.toHaveBeenCalled()
   })
 
   it("reports a distinct TIMEOUT category when the engine times out", async () => {
@@ -1469,15 +1506,15 @@ describe("processScanJob", () => {
     )
   })
 
-  it("finalizes as CANCELLED when a cancel arrives after the engine returns", async () => {
+  it("does not persist results when cancellation wins finalization", async () => {
     vi.mocked(prisma.scan.findUnique).mockImplementation((async (args: unknown) => {
       const query = args as { select?: Record<string, unknown> | null }
-      // The isScanCancelled() check uses a status-only select; simulate a late cancel there.
       if (query?.select && Object.keys(query.select).length === 1 && query.select.status === true) {
-        return { status: "CANCELLED" } as never
+        return { status: "RUNNING" } as never
       }
       return { status: "RUNNING" } as never
     }) as never)
+    vi.mocked(withScanFinalizationClaim).mockResolvedValueOnce({ status: "cancelled" })
 
     const result = await processScanJob(mockJob)
 
@@ -1486,14 +1523,6 @@ describe("processScanJob", () => {
       errorCategory: "CANCELLED",
       errorMessage: "Scan cancelled by user",
     })
-    expect(updateScanStatus).toHaveBeenCalledWith(
-      "scan-1",
-      "CANCELLED",
-      expect.objectContaining({
-        errorCategory: "CANCELLED",
-        errorMessage: "Scan cancelled by user",
-      })
-    )
     expect(persistFindings).not.toHaveBeenCalled()
     expect(completeRetestsForScan).not.toHaveBeenCalled()
     expect(notifyScanCompleted).not.toHaveBeenCalled()

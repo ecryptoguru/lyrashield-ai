@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest"
+import { describe, it, expect, afterEach, vi } from "vitest"
 import { readFile, stat } from "node:fs/promises"
 import {
   RECONCILIATION_INTERVAL_MS,
@@ -6,7 +6,9 @@ import {
   markWorkerActive,
   refreshWorkerReadiness,
   removeWorkerReadiness,
+  settleScanWorkerForShutdown,
 } from "./index"
+import { trackActiveEngineProcess } from "./engine/runner"
 
 describe("worker readiness lifecycle", () => {
   afterEach(async () => {
@@ -42,5 +44,35 @@ describe("worker readiness lifecycle", () => {
 
     await clearWorkerActive()
     await expect(stat("/tmp/lyrashield-worker-active")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("terminates active engines before waiting for BullMQ close", async () => {
+    let resolveClose: (() => void) | undefined
+    const closePromise = new Promise<void>((resolve) => {
+      resolveClose = resolve
+    })
+    const terminate = vi.fn()
+    const stopTracking = trackActiveEngineProcess(terminate)
+
+    const settling = settleScanWorkerForShutdown(closePromise)
+    expect(terminate).toHaveBeenCalledOnce()
+
+    resolveClose?.()
+    await expect(settling).resolves.toBe(true)
+    stopTracking()
+  })
+
+  it("reports a forced exit only after terminating active engines", async () => {
+    vi.useFakeTimers()
+    const terminate = vi.fn()
+    const stopTracking = trackActiveEngineProcess(terminate)
+
+    const settling = settleScanWorkerForShutdown(new Promise<void>(() => {}), 25_000)
+    expect(terminate).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(25_000)
+    await expect(settling).resolves.toBe(false)
+
+    stopTracking()
+    vi.useRealTimers()
   })
 })

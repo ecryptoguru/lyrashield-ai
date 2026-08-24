@@ -14,14 +14,29 @@ export const SCORECARD_CHANNELS = [
 ] as const
 export const REFERRAL_SOURCES = ["scorecard", ...SCORECARD_CHANNELS] as const
 export type ScorecardChannel = (typeof SCORECARD_CHANNELS)[number]
+export type ReferralSource = (typeof REFERRAL_SOURCES)[number]
 export type ShareChannel = Exclude<ScorecardChannel, "native" | "copy" | "download" | "embed">
 
-export function scorecardUrlWithSource(url: string, source: string) {
+export function isReferralSource(value: string): value is ReferralSource {
+  return REFERRAL_SOURCES.includes(value as ReferralSource)
+}
+
+export function scorecardUrlWithSource(url: string, source: ReferralSource) {
   const tracked = new URL(url)
   tracked.searchParams.set("source", source)
   tracked.searchParams.set("utm_source", source)
   tracked.searchParams.set("utm_medium", source === "embed" ? "badge" : "social")
   return tracked.toString()
+}
+
+export function scorecardTrackingAllowed({
+  doNotTrack,
+  globalPrivacyControl,
+}: {
+  doNotTrack?: string | null
+  globalPrivacyControl?: boolean
+}) {
+  return !["1", "yes"].includes(doNotTrack?.toLowerCase() ?? "") && globalPrivacyControl !== true
 }
 
 export function scorecardCaption(

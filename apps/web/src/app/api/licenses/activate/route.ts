@@ -89,8 +89,8 @@ export async function POST(request: Request) {
         where: { licenseId_machineId: { licenseId: license.id, machineId } },
       })
 
-      if (!existing) {
-        // New activation — enforce machine cap.
+      if (!existing || existing.deactivatedAt) {
+        // New or previously deactivated machine — enforce machine cap.
         const activeCount = await tx.licenseActivation.count({
           where: { licenseId: license.id, deactivatedAt: null },
         })
@@ -99,14 +99,21 @@ export async function POST(request: Request) {
           return { capped: true as const, machineIds: [] as string[] }
         }
 
-        await tx.licenseActivation.create({
-          data: {
-            licenseId: license.id,
-            workspaceId: license.workspaceId,
-            machineId,
-            lastSeenAt: new Date(),
-          },
-        })
+        if (!existing) {
+          await tx.licenseActivation.create({
+            data: {
+              licenseId: license.id,
+              workspaceId: license.workspaceId,
+              machineId,
+              lastSeenAt: new Date(),
+            },
+          })
+        } else {
+          await tx.licenseActivation.update({
+            where: { id: existing.id },
+            data: { lastSeenAt: new Date(), deactivatedAt: null },
+          })
+        }
       } else {
         // Refresh lastSeenAt for the existing activation.
         await tx.licenseActivation.update({

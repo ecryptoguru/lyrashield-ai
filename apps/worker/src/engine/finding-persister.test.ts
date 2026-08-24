@@ -21,13 +21,14 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 vi.mock("./evidence-storage", () => ({
   uploadEvidence: vi.fn(),
+  deleteEncryptedArtifact: vi.fn(),
   EVIDENCE_KEY_REF: "vault://test",
 }))
 
 import { prisma } from "@lyrashield/db"
 import { persistFindings } from "./finding-persister"
 import type { NormalizedFinding } from "./normalizer"
-import { uploadEvidence } from "./evidence-storage"
+import { deleteEncryptedArtifact, uploadEvidence } from "./evidence-storage"
 import { generateDedupeKey } from "./output-parser"
 
 describe("persistFindings", () => {
@@ -142,6 +143,42 @@ describe("persistFindings", () => {
 
     expect(uploadEvidence).not.toHaveBeenCalled()
     expect(prisma.evidence.createMany).not.toHaveBeenCalled()
+  })
+
+  it("binds failed-metadata cleanup to the finding workspace", async () => {
+    const vulnerability = {
+      id: "vuln-1",
+      title: "Reflected XSS",
+      severity: "high",
+      timestamp: "2026-07-14T00:00:00Z",
+      poc_description: "safe proof",
+    }
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([
+      { id: "finding-1", dedupeKey: generateDedupeKey(vulnerability, "target-1"), status: "OPEN" },
+    ] as never)
+    vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    vi.mocked(uploadEvidence).mockResolvedValue({
+      storageUri: "s3://bucket/evidence/ws-1/finding-1/poc/proof",
+      checksum: "sha256-checksum",
+      encryptionKeyRef: "vault://test",
+    })
+    vi.mocked(deleteEncryptedArtifact).mockResolvedValue()
+    vi.mocked(prisma.evidence.createMany).mockRejectedValueOnce(new Error("metadata failed"))
+
+    await expect(
+      persistFindings({
+        scanId: "scan-2",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        vulnerabilities: [vulnerability],
+      })
+    ).rejects.toThrow("metadata failed")
+
+    expect(deleteEncryptedArtifact).toHaveBeenCalledWith(
+      "s3://bucket/evidence/ws-1/finding-1/poc/proof",
+      "ws-1"
+    )
   })
 
   it("clears stale optional fields when a finding is re-detected", async () => {

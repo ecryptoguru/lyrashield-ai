@@ -105,6 +105,7 @@ export {
   getScanForWorkspace,
   listScans,
   cancelScan,
+  withScanFinalizationClaim,
   removeScan,
   type CreateScanParams,
   type ScanWithEvents,

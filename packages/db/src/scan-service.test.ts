@@ -39,6 +39,9 @@ describe("Scan Lifecycle — State Machine Transitions", () => {
     it("VERIFYING → COMPLETED", () => {
       expect(isValidTransition("VERIFYING", "COMPLETED")).toBe(true)
     })
+    it("VERIFYING → CANCELLED", () => {
+      expect(isValidTransition("VERIFYING", "CANCELLED")).toBe(true)
+    })
     it("REQUIRES_APPROVAL → RUNNING", () => {
       expect(isValidTransition("REQUIRES_APPROVAL", "RUNNING")).toBe(true)
     })

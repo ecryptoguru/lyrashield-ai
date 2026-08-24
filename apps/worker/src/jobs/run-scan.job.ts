@@ -16,6 +16,7 @@ import {
   completeScanWithScore,
   createAiSecurityScoreSnapshot,
   qualifyReferralForWorkspace,
+  withScanFinalizationClaim,
   type ScanStatus,
 } from "@lyrashield/db"
 import { resolveScanProfile, resolveTargetScanMode, type UrlScanProfile } from "@lyrashield/types"
@@ -674,9 +675,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const CANCEL_CACHE_MS = 2000
       let cancelCacheAt = 0
       let cancelCacheValue = false
-      const isScanCancelled = async (): Promise<boolean> => {
+      const isScanCancelled = async (force = false): Promise<boolean> => {
         const now = Date.now()
-        if (now - cancelCacheAt < CANCEL_CACHE_MS) return cancelCacheValue
+        if (!force && now - cancelCacheAt < CANCEL_CACHE_MS) return cancelCacheValue
         const current = await prisma.scan.findUnique({
           where: { id: scanId },
           select: { status: true },
@@ -754,6 +755,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             scanId,
             error: eventErr instanceof Error ? eventErr.message : String(eventErr),
           })
+        }
+
+        if (await isScanCancelled(true)) {
+          return {
+            status: "failed",
+            errorCategory: "CANCELLED",
+            errorMessage: "Scan cancelled by user",
+          }
         }
 
         // Once the external engine begins, an automatic BullMQ replay could
@@ -1329,143 +1338,156 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
-      // A cancel may have arrived while the engine/scanners were finishing.
-      // Finalize as CANCELLED without persisting findings or retests.
-      if (await isScanCancelled()) {
-        await updateScanStatus(scanId, "CANCELLED" as ScanStatus, {
-          errorCategory: "CANCELLED",
-          errorMessage: "Scan cancelled by user",
-        })
-        return {
-          status: "failed",
-          errorCategory: "CANCELLED",
-          errorMessage: "Scan cancelled by user",
-        }
-      }
-
-      // 5. Persist normalized findings
-      const persistedFindings = await persistFindings({
-        scanId,
-        workspaceId,
-        targetId,
-        vulnerabilities: orchestratorResult.allFindings,
-      })
-
-      const newFindings = persistedFindings.filter((f) => f.isNew).length
-      const dupFindings = persistedFindings.length - newFindings
-
-      // engineResult.output.summary describes only the agentic engine's own
-      // vulnerabilities.json artifact (see parseEngineOutput). It never sees the
-      // SCA, secrets, agent-config, or URL scanner findings that the
-      // orchestrator merges in, nor the false-positive filtering and dedup that
-      // happen afterward — so on a run where the engine layer alone found
-      // nothing, it reads "0 finding(s) reported" next to a persisted finding
-      // count that can be dozens. That text becomes scan.summary, which the
-      // dashboard, the private assurance report, and completion notifications
-      // all display verbatim, so the mismatch is user-facing, not just internal.
-      // Leave the engine's own text untouched when it already matches what was
-      // persisted; only correct it when the two disagree, so this stays a
-      // targeted fix rather than a rewrite of copy that was already accurate.
-      const scanSummary =
-        persistedFindings.length !== engineResult.output.findingCount
-          ? `${engineResult.output.summary} ${persistedFindings.length} finding(s) retained after all scanner layers and deduplication.`
-          : engineResult.output.summary
-
-      try {
-        await addScanEvent(
+      const finalization = await withScanFinalizationClaim(scanId, workspaceId, async () => {
+        // 5. Persist normalized findings
+        const persistedFindings = await persistFindings({
           scanId,
-          "findings_persisted",
-          "info",
-          `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${dupFindings} duplicate`,
-          {
-            total: persistedFindings.length,
-            new: newFindings,
-            duplicate: dupFindings,
-          }
-        )
-      } catch (eventErr) {
-        log.warn("Failed to persist findings_persisted event", {
-          scanId,
-          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          workspaceId,
+          targetId,
+          vulnerabilities: orchestratorResult.allFindings,
         })
-      }
 
-      await completeRetestsForScan({
-        scanId,
-        workspaceId,
-        persistedFindingIds: persistedFindings.map((finding) => finding.id),
-        coverageIssues: orchestratorResult.coverageIssues,
-      })
+        const newFindings = persistedFindings.filter((f) => f.isNew).length
+        const dupFindings = persistedFindings.length - newFindings
 
-      // Persist the result manifest for every outcome, including a failed or
-      // incomplete engine, so coverage receipts are always available.
-      await prisma.scan.update({
-        where: { id: scanId },
-        data: { summary: scanSummary },
-      })
-      await persistResultManifest({
-        scanId,
-        target: {
-          id: target.id,
-          type: target.type,
-          repoFullName: target.repoFullName,
-          branch: target.branch,
-          url: target.url,
-        },
-        sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-        engineFindingCount: orchestratorResult.engineFindings.length,
-        coverageIssues: orchestratorResult.coverageIssues,
-        aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
-        matchedControlRanks: coverage.matchedControlRanks,
-        urlExecution: orchestratorResult.urlExecution,
-        engineExecution,
-        accounting: {
-          maxBudgetUsd,
-          billedCostUsd,
-          reconciled: costReconciled,
-          ...(reconciliationReason ? { reconciliationReason } : {}),
-        },
-      })
+        // engineResult.output.summary describes only the agentic engine's own
+        // vulnerabilities.json artifact (see parseEngineOutput). It never sees the
+        // SCA, secrets, agent-config, or URL scanner findings that the
+        // orchestrator merges in, nor the false-positive filtering and dedup that
+        // happen afterward — so on a run where the engine layer alone found
+        // nothing, it reads "0 finding(s) reported" next to a persisted finding
+        // count that can be dozens. That text becomes scan.summary, which the
+        // dashboard, the private assurance report, and completion notifications
+        // all display verbatim, so the mismatch is user-facing, not just internal.
+        // Leave the engine's own text untouched when it already matches what was
+        // persisted; only correct it when the two disagree, so this stays a
+        // targeted fix rather than a rewrite of copy that was already accurate.
+        const scanSummary =
+          persistedFindings.length !== engineResult.output.findingCount
+            ? `${engineResult.output.summary} ${persistedFindings.length} finding(s) retained after all scanner layers and deduplication.`
+            : engineResult.output.summary
 
-      if (engineTerminalError) {
-        await updateScanStatus(scanId, engineTerminalError.status, {
-          errorCategory: engineTerminalError.errorCategory,
-          errorMessage: engineTerminalError.errorMessage,
-          ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
-        })
         try {
-          await notifyScanFailed(workspaceId, scanId, engineTerminalError.errorMessage)
-        } catch (notificationError) {
-          log.warn("Failed to send scan failure notification", {
+          await addScanEvent(
             scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
+            "findings_persisted",
+            "info",
+            `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${dupFindings} duplicate`,
+            {
+              total: persistedFindings.length,
+              new: newFindings,
+              duplicate: dupFindings,
+            }
+          )
+        } catch (eventErr) {
+          log.warn("Failed to persist findings_persisted event", {
+            scanId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
           })
         }
-        return {
-          status: "failed",
-          errorCategory: engineTerminalError.errorCategory,
-          errorMessage: engineTerminalError.errorMessage,
-        }
-      }
 
-      if (budgetExceeded) {
-        await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: "Protected run limit reached",
-          actualCostCents: Math.round(billedCostUsd! * 100),
+        await completeRetestsForScan({
+          scanId,
+          workspaceId,
+          persistedFindingIds: persistedFindings.map((finding) => finding.id),
+          coverageIssues: orchestratorResult.coverageIssues,
         })
+
+        // Persist the result manifest for every outcome, including a failed or
+        // incomplete engine, so coverage receipts are always available.
+        await prisma.scan.update({
+          where: { id: scanId },
+          data: { summary: scanSummary },
+        })
+        await persistResultManifest({
+          scanId,
+          target: {
+            id: target.id,
+            type: target.type,
+            repoFullName: target.repoFullName,
+            branch: target.branch,
+            url: target.url,
+          },
+          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
+          engineFindingCount: orchestratorResult.engineFindings.length,
+          coverageIssues: orchestratorResult.coverageIssues,
+          aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
+          matchedControlRanks: coverage.matchedControlRanks,
+          urlExecution: orchestratorResult.urlExecution,
+          engineExecution,
+          accounting: {
+            maxBudgetUsd,
+            billedCostUsd,
+            reconciled: costReconciled,
+            ...(reconciliationReason ? { reconciliationReason } : {}),
+          },
+        })
+
+        if (engineTerminalError) {
+          await updateScanStatus(scanId, engineTerminalError.status, {
+            errorCategory: engineTerminalError.errorCategory,
+            errorMessage: engineTerminalError.errorMessage,
+            ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
+          })
+          return {
+            persistedFindings,
+            newFindings,
+            scanSummary,
+            terminalResult: {
+              status: "failed" as const,
+              errorCategory: engineTerminalError.errorCategory,
+              errorMessage: engineTerminalError.errorMessage,
+            },
+          }
+        }
+
+        if (budgetExceeded) {
+          await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+            errorCategory: "BUDGET_EXCEEDED",
+            errorMessage: "Protected run limit reached",
+            actualCostCents: Math.round(billedCostUsd! * 100),
+          })
+          return {
+            persistedFindings,
+            newFindings,
+            scanSummary,
+            terminalResult: {
+              status: "failed" as const,
+              errorCategory: "BUDGET_EXCEEDED",
+              errorMessage: "Protected run limit reached",
+            },
+          }
+        }
+        // Retests may validate a pending fix and change the target's scoreable
+        // state. Freeze the score only after those outcomes are persisted.
+        await completeScanWithScore(scanId, workspaceId, scanSummary)
+        return { persistedFindings, newFindings, scanSummary, terminalResult: null }
+      })
+
+      if (finalization.status === "cancelled") {
         return {
           status: "failed",
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: "Protected run limit reached",
+          errorCategory: "CANCELLED",
+          errorMessage: "Scan cancelled by user",
         }
       }
-      // Retests may validate a pending fix and change the target's scoreable
-      // state. Freeze the score only after those outcomes are persisted.
-      await completeScanWithScore(scanId, workspaceId, scanSummary)
+      const { persistedFindings, newFindings, scanSummary, terminalResult } = finalization.value
+      if (terminalResult) {
+        if (terminalResult.errorCategory !== "BUDGET_EXCEEDED") {
+          try {
+            await notifyScanFailed(workspaceId, scanId, terminalResult.errorMessage)
+          } catch (notificationError) {
+            log.warn("Failed to send scan failure notification", {
+              scanId,
+              error:
+                notificationError instanceof Error
+                  ? notificationError.message
+                  : String(notificationError),
+            })
+          }
+        }
+        return terminalResult
+      }
 
       if (orchestratorResult.aiAppSecurityCoverage) {
         try {
