@@ -382,6 +382,12 @@ describe("processScanJob", () => {
     expect(vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(completeScanWithScore).mock.invocationCallOrder[0]!
     )
+    expect(vi.mocked(persistResultManifest).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]!
+    )
+    expect(vi.mocked(persistFindings).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(persistResultManifest).mock.invocationCallOrder[0]!
+    )
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: { summary: "Scan completed with 0 findings" },
@@ -1132,7 +1138,7 @@ describe("processScanJob", () => {
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
-  it("resumes final scoring from an immutable manifest without replaying the scan", async () => {
+  it("resumes retest finalization then scoring from an immutable manifest without replaying the scan", async () => {
     vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
       status: "VERIFYING",
       summary: "Recovered finalization",
@@ -1144,6 +1150,13 @@ describe("processScanJob", () => {
       summary: "Recovered finalization",
     })
 
+    expect(completeRetestsForScan).toHaveBeenCalledWith({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+    })
+    expect(vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(completeScanWithScore).mock.invocationCallOrder[0]!
+    )
     expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Recovered finalization")
     expect(runEngine).not.toHaveBeenCalled()
     expect(runScannerOrchestrator).not.toHaveBeenCalled()

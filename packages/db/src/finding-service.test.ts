@@ -13,10 +13,60 @@ vi.mock("@lyrashield/logger", () => ({
 import { prisma } from "./client"
 import {
   acceptRisk,
+  getFinding,
   listFindings,
   markFalsePositive,
   updateFindingStatus,
 } from "./finding-service"
+
+describe("getFinding", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("returns retest receipt identity without exposing raw storage URIs", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({
+      id: "finding-1",
+      evidence: [{ id: "evidence-1", type: "finding", redactionStatus: "complete" }],
+      verificationReceipts: [
+        {
+          id: "receipt-1",
+          status: "VALIDATED",
+          method: "RETEST",
+          reason: "Deterministic clean retest",
+          scanId: "scan-2",
+          sourceRevision: "a".repeat(40),
+          verifierVersion: "result-integrity-v3",
+          evidence: { retestId: "retest-1" },
+          createdAt: new Date(),
+        },
+      ],
+      fixProposals: [],
+      retests: [],
+    } as never)
+
+    const finding = await getFinding("finding-1", "workspace-1")
+
+    expect(prisma.finding.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "finding-1", workspaceId: "workspace-1", deletedAt: null },
+        include: expect.objectContaining({
+          evidence: { select: { id: true, type: true, redactionStatus: true } },
+          verificationReceipts: expect.objectContaining({
+            select: expect.objectContaining({
+              scanId: true,
+              sourceRevision: true,
+              verifierVersion: true,
+              evidence: true,
+            }),
+          }),
+        }),
+      })
+    )
+    const serialized = JSON.stringify(finding)
+    expect(serialized).not.toContain("storageUri")
+    expect(serialized).not.toContain("s3://")
+    expect(serialized).toContain('"sourceRevision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"')
+  })
+})
 
 describe("listFindings", () => {
   beforeEach(() => vi.clearAllMocks())

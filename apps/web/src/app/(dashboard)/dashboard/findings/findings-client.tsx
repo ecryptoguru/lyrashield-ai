@@ -634,13 +634,49 @@ interface FindingDetail {
     status: string
     method: string
     reason: string
+    scanId: string
+    sourceRevision: string | null
+    verifierVersion: string | null
+    evidence: unknown
     createdAt: string
   }>
-  evidence?: Array<{ id: string; type: string; storageUri: string | null; redactionStatus: string }>
+  evidence?: Array<{ id: string; type: string; redactionStatus: string }>
   fixProposals?: Array<{ id: string; status: string; summary: string }>
   retests?: Array<{ id: string; scanId: string; status: string; createdAt: string }>
   scanId?: string | null
   plainLanguage?: PlainLanguage
+}
+
+// Strict client-side guard for the retest receipt evidence persisted by the
+// worker. Unknown or historical evidence shapes stay renderable as the generic
+// receipt below and are never trusted as this shape.
+const retestReceiptEvidenceSchema = z
+  .object({
+    retestId: z.string(),
+    scannerSource: z.string(),
+    baseline: z
+      .object({
+        scanId: z.string(),
+        manifestChecksum: z.string(),
+        sourceRevision: z.string().nullable(),
+        targetUrlChecksum: z.string().nullable(),
+      })
+      .nullable(),
+    retest: z
+      .object({
+        scanId: z.string(),
+        manifestChecksum: z.string(),
+        sourceRevision: z.string().nullable(),
+        targetUrlChecksum: z.string().nullable(),
+      })
+      .nullable(),
+    coverageReceiptIds: z.array(z.string()),
+  })
+  .passthrough()
+
+function parseRetestReceipt(evidence: unknown) {
+  const parsed = retestReceiptEvidenceSchema.safeParse(evidence)
+  return parsed.success ? parsed.data : null
 }
 
 const retestResultSchema = z
@@ -681,6 +717,10 @@ const findingDetailSchema = z
             status: z.string(),
             method: z.string(),
             reason: z.string(),
+            scanId: z.string(),
+            sourceRevision: z.string().nullable(),
+            verifierVersion: z.string().nullable(),
+            evidence: z.unknown(),
             createdAt: z.string().datetime().or(z.string()),
           })
           .passthrough()
@@ -692,7 +732,6 @@ const findingDetailSchema = z
           .object({
             id: z.string(),
             type: z.string(),
-            storageUri: z.string().nullable(),
             redactionStatus: z.string(),
           })
           .passthrough()
@@ -1469,11 +1508,6 @@ function FindingDetailDrawer({
                         >
                           <div className="flex items-center gap-2">
                             <Badge variant="muted">{ev.type}</Badge>
-                            {ev.storageUri && (
-                              <span className="text-muted-foreground font-mono text-xs">
-                                {ev.storageUri}
-                              </span>
-                            )}
                           </div>
                           <Badge
                             variant={ev.redactionStatus === "complete" ? "success" : "warning"}
@@ -1574,20 +1608,103 @@ function FindingDetailDrawer({
                       Verification Receipts ({detail.verificationReceipts.length})
                     </h3>
                     <div className="space-y-2">
-                      {detail.verificationReceipts.map((receipt) => (
-                        <div key={receipt.id} className="rounded-lg border p-3 text-sm">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant={receipt.status === "VERIFIED" ? "success" : "muted"}>
-                              {receipt.status.replaceAll("_", " ")}
-                            </Badge>
-                            <Badge variant="muted">{receipt.method.replaceAll("_", " ")}</Badge>
-                            <span className="text-muted-foreground text-xs">
-                              {formatDate(receipt.createdAt)}
-                            </span>
+                      {detail.verificationReceipts.map((receipt) => {
+                        const retestEvidence = parseRetestReceipt(receipt.evidence)
+                        const validated = receipt.status === "VALIDATED"
+                        return (
+                          <div key={receipt.id} className="rounded-lg border p-3 text-sm">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={validated ? "success" : "muted"}>
+                                {receipt.status.replaceAll("_", " ")}
+                              </Badge>
+                              <Badge variant="muted">{receipt.method.replaceAll("_", " ")}</Badge>
+                              <span className="text-muted-foreground text-xs">
+                                {formatDate(receipt.createdAt)}
+                              </span>
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-xs">{receipt.reason}</p>
+                            {retestEvidence && (
+                              <div className="text-muted-foreground mt-2 space-y-1 border-t pt-2 text-xs">
+                                <p>
+                                  Scanner source:{" "}
+                                  <span className="font-mono">{retestEvidence.scannerSource}</span>
+                                </p>
+                                <p>
+                                  Coverage:{" "}
+                                  <span className={validated ? "text-emerald-500" : ""}>
+                                    {validated ? "complete" : "insufficient"}
+                                  </span>
+                                </p>
+                                {retestEvidence.baseline && (
+                                  <p>
+                                    Baseline scan:{" "}
+                                    <Link
+                                      href={`/dashboard/scans/${encodeURIComponent(retestEvidence.baseline.scanId)}`}
+                                      className="text-primary hover:underline"
+                                    >
+                                      {retestEvidence.baseline.scanId}
+                                    </Link>{" "}
+                                    · manifest{" "}
+                                    <span className="font-mono">
+                                      {retestEvidence.baseline.manifestChecksum}
+                                    </span>
+                                  </p>
+                                )}
+                                {retestEvidence.retest && (
+                                  <p>
+                                    Retest scan:{" "}
+                                    <Link
+                                      href={`/dashboard/scans/${encodeURIComponent(retestEvidence.retest.scanId)}`}
+                                      className="text-primary hover:underline"
+                                    >
+                                      {retestEvidence.retest.scanId}
+                                    </Link>{" "}
+                                    · manifest{" "}
+                                    <span className="font-mono">
+                                      {retestEvidence.retest.manifestChecksum}
+                                    </span>
+                                  </p>
+                                )}
+                                {retestEvidence.baseline?.sourceRevision ||
+                                retestEvidence.retest?.sourceRevision ? (
+                                  <p>
+                                    Repository revisions: baseline{" "}
+                                    <span className="font-mono">
+                                      {retestEvidence.baseline?.sourceRevision ?? "unavailable"}
+                                    </span>{" "}
+                                    · retest{" "}
+                                    <span className="font-mono">
+                                      {retestEvidence.retest?.sourceRevision ?? "unavailable"}
+                                    </span>
+                                  </p>
+                                ) : null}
+                                {retestEvidence.baseline?.targetUrlChecksum ||
+                                retestEvidence.retest?.targetUrlChecksum ? (
+                                  <p>
+                                    URL checksum: baseline{" "}
+                                    <span className="font-mono">
+                                      {retestEvidence.baseline?.targetUrlChecksum ??
+                                        "unavailable"}
+                                    </span>{" "}
+                                    · retest{" "}
+                                    <span className="font-mono">
+                                      {retestEvidence.retest?.targetUrlChecksum ?? "unavailable"}
+                                    </span>
+                                  </p>
+                                ) : null}
+                                {retestEvidence.coverageReceiptIds.length > 0 && (
+                                  <p>
+                                    Coverage receipts:{" "}
+                                    <span className="font-mono">
+                                      {retestEvidence.coverageReceiptIds.join(", ")}
+                                    </span>
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <p className="text-muted-foreground mt-1 text-xs">{receipt.reason}</p>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )}

@@ -53,7 +53,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       recommendedFix: finding.recommendedFix,
     })
 
-    return apiSuccess({ ...finding, plainLanguage })
+    // Defense in depth: evidence rows must never leak their private storage
+    // URI to the dashboard, even if a future service layer returns one.
+    const safeEvidence = finding.evidence.map(({ id, type, redactionStatus }) => ({
+      id,
+      type,
+      redactionStatus,
+    }))
+
+    return apiSuccess({ ...finding, evidence: safeEvidence, plainLanguage })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

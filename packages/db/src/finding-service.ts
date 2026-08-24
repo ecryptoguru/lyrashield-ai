@@ -69,12 +69,16 @@ export async function getFinding(
   workspaceId: string
 ): Promise<
   | (Finding & {
-      evidence: { id: string; type: string; storageUri: string | null; redactionStatus: string }[]
+      evidence: { id: string; type: string; redactionStatus: string }[]
       verificationReceipts: {
         id: string
         status: string
         method: string
         reason: string
+        scanId: string
+        sourceRevision: string | null
+        verifierVersion: string | null
+        evidence: unknown
         createdAt: Date
       }[]
       fixProposals: { id: string; status: string; summary: string }[]
@@ -89,12 +93,21 @@ export async function getFinding(
         select: {
           id: true,
           type: true,
-          storageUri: true,
           redactionStatus: true,
         },
       },
       verificationReceipts: {
-        select: { id: true, status: true, method: true, reason: true, createdAt: true },
+        select: {
+          id: true,
+          status: true,
+          method: true,
+          reason: true,
+          scanId: true,
+          sourceRevision: true,
+          verifierVersion: true,
+          evidence: true,
+          createdAt: true,
+        },
         orderBy: { createdAt: "desc" },
       },
       fixProposals: {
