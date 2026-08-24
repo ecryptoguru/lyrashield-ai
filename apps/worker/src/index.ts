@@ -40,6 +40,7 @@ let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
+let workerHeartbeatController: WorkerHeartbeatController | null = null
 let egressDrainTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
 let staleResourceReaperTimer: NodeJS.Timeout | null = null
@@ -59,6 +60,38 @@ export const MANAGED_REDIS_STALLED_INTERVAL_MS = 60_000
 
 export function advanceReconciliationTimestamp(currentMs: number, completedTickMs: number): number {
   return Math.max(currentMs, completedTickMs)
+}
+
+interface WorkerHeartbeatController {
+  heartbeat(): Promise<void>
+  stop(): Promise<void>
+}
+
+export function createWorkerHeartbeatController(
+  register: () => Promise<void>,
+  markReady: () => Promise<void>
+): WorkerHeartbeatController {
+  let stopped = false
+  const inFlight = new Set<Promise<void>>()
+
+  return {
+    heartbeat() {
+      if (stopped) return Promise.resolve()
+      const operation = register().then(async () => {
+        if (!stopped) await markReady()
+      })
+      inFlight.add(operation)
+      void operation.then(
+        () => inFlight.delete(operation),
+        () => inFlight.delete(operation)
+      )
+      return operation
+    },
+    async stop() {
+      stopped = true
+      await Promise.allSettled([...inFlight])
+    },
+  }
 }
 
 // Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
@@ -131,23 +164,49 @@ async function readOptionalFile(path: string): Promise<string | null> {
 
 export async function acknowledgeEgressDrainRequest(
   scanWorker: Pick<Worker, "pause">,
-  beforePause: () => Promise<void> = async () => {}
+  deactivateScanWorker: () => Promise<void>
 ): Promise<boolean> {
   const token = await readOptionalFile(egressDrainRequestPath)
   if (token === null) return false
   if (!egressDrainTokenPattern.test(token)) throw new Error("Invalid egress drain request token")
   if ((await readOptionalFile(egressDrainReadyPath)) === token) return true
 
-  await beforePause()
   // BullMQ sets the local paused flag before waiting for all current jobs, so
   // no new scan claim can race the matching acknowledgement written below.
-  await scanWorker.pause()
+  let paused: Promise<void>
+  try {
+    paused = scanWorker.pause()
+  } catch (error) {
+    await deactivateScanWorker()
+    throw error
+  }
+  await deactivateScanWorker()
+  await paused
   if ((await readOptionalFile(egressDrainRequestPath)) !== token) {
     throw new Error("Egress drain request changed before acknowledgement")
   }
   await writeFile(egressDrainReadyPath, token, { mode: 0o600 })
   await chmod(egressDrainReadyPath, 0o600)
   return true
+}
+
+export async function deactivateScanWorkerForDrain(
+  heartbeatController: Pick<WorkerHeartbeatController, "stop">,
+  unregisterWorker: () => Promise<void>,
+  removeReadiness: () => Promise<void>
+): Promise<void> {
+  // stop() disables new completion/timer heartbeats synchronously, then waits
+  // for any registration already in flight before this worker is removed.
+  const heartbeatsStopped = heartbeatController.stop()
+  let readinessError: unknown
+  try {
+    await removeReadiness()
+  } catch (error) {
+    readinessError = error
+  }
+  await heartbeatsStopped
+  await unregisterWorker()
+  if (readinessError) throw readinessError
 }
 
 export async function failClosedAfterEgressDrainCancellation(
@@ -241,6 +300,8 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     scheduleRunner = null
     logger.info("Schedule runner stopped")
   }
+
+  await workerHeartbeatController?.stop()
 
   let forcedExit = false
 
@@ -356,11 +417,14 @@ async function main(): Promise<void> {
   )
 
   await worker.waitUntilReady()
+  const scanWorkerHeartbeat = createWorkerHeartbeatController(
+    () => registerScanWorker(workerId),
+    refreshWorkerReadiness
+  )
+  workerHeartbeatController = scanWorkerHeartbeat
   worker.on("completed", (job, result) => {
     logger.info("Job completed", { jobId: job.id, result })
-    void registerScanWorker(workerId)
-      .then(refreshWorkerReadiness)
-      .catch(() => {})
+    void scanWorkerHeartbeat.heartbeat().catch(() => {})
   })
   worker.on("failed", (job, error) => {
     logger.error("Job failed in queue", { jobId: job?.id, reason: error.message })
@@ -486,8 +550,7 @@ async function main(): Promise<void> {
       })
     }, env.LYRASHIELD_STALE_RESOURCE_REAPER_INTERVAL_MS)
   }
-  await registerScanWorker(workerId)
-  await refreshWorkerReadiness()
+  await scanWorkerHeartbeat.heartbeat()
   observeWorkerRun(worker.run(), (termination) => {
     if (worker?.isPaused()) {
       logger.info("BullMQ worker paused for egress refresh")
@@ -515,7 +578,17 @@ async function main(): Promise<void> {
   egressDrainTimer = setInterval(() => {
     if (!worker || egressDrainCheckInFlight) return
     egressDrainCheckInFlight = true
-    void acknowledgeEgressDrainRequest(worker, removeWorkerReadiness)
+    void acknowledgeEgressDrainRequest(worker, async () => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer)
+        heartbeatTimer = null
+      }
+      await deactivateScanWorkerForDrain(
+        scanWorkerHeartbeat,
+        () => unregisterScanWorker(workerId),
+        removeWorkerReadiness
+      )
+    })
       .then(async (acknowledged) => {
         if (acknowledged) {
           egressDrainAcknowledged = true
@@ -547,19 +620,16 @@ async function main(): Promise<void> {
       void removeWorkerReadiness().catch(() => {})
       return
     }
-    void registerScanWorker(workerId)
-      .then(refreshWorkerReadiness)
-      .catch(async (error) => {
-        logger.error("Scan worker heartbeat failed", {
-          error: error instanceof Error ? error.message : String(error),
-        })
-        await removeWorkerReadiness().catch((readinessError) => {
-          logger.warn("Could not clear worker readiness after heartbeat failure", {
-            error:
-              readinessError instanceof Error ? readinessError.message : String(readinessError),
-          })
+    void scanWorkerHeartbeat.heartbeat().catch(async (error) => {
+      logger.error("Scan worker heartbeat failed", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      await removeWorkerReadiness().catch((readinessError) => {
+        logger.warn("Could not clear worker readiness after heartbeat failure", {
+          error: readinessError instanceof Error ? readinessError.message : String(readinessError),
         })
       })
+    })
   }, SCAN_WORKER_HEARTBEAT_MS)
 
   scheduleRunner = startScheduleRunner()

@@ -8,6 +8,8 @@ import {
   advanceReconciliationTimestamp,
   assertWorkerStartupProvenance,
   clearWorkerActive,
+  createWorkerHeartbeatController,
+  deactivateScanWorkerForDrain,
   failClosedAfterEgressDrainCancellation,
   markWorkerActive,
   refreshWorkerReadiness,
@@ -106,21 +108,61 @@ describe("worker readiness lifecycle", () => {
     await expect(stat("/tmp/lyrashield-worker-active")).rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("stops new claims and waits for a job that becomes active before acknowledging a drain", async () => {
+  it("stops claims, settles heartbeats, unregisters, and waits for active work before acknowledging", async () => {
     const token = "a".repeat(64)
     await writeFile("/tmp/lyrashield-worker-egress-drain-request", token, { mode: 0o600 })
+    const events: string[] = []
     let finishActiveJob: (() => void) | undefined
     const pause = vi.fn(
       () =>
         new Promise<void>((resolve) => {
+          events.push("pause-started")
           finishActiveJob = resolve
         })
     )
-    const beforePause = vi.fn().mockResolvedValue(undefined)
+    let finishHeartbeat: (() => void) | undefined
+    const register = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          events.push("heartbeat-started")
+          finishHeartbeat = () => {
+            events.push("heartbeat-settled")
+            resolve()
+          }
+        })
+    )
+    const markReady = vi.fn().mockResolvedValue(undefined)
+    const heartbeatController = createWorkerHeartbeatController(register, markReady)
+    const inFlightHeartbeat = heartbeatController.heartbeat()
+    const unregister = vi.fn(async () => {
+      events.push("unregistered")
+    })
+    const removeReadiness = vi.fn(async () => {
+      events.push("readiness-removed")
+    })
 
-    const acknowledgement = acknowledgeEgressDrainRequest({ pause }, beforePause)
+    const acknowledgement = acknowledgeEgressDrainRequest({ pause }, () =>
+      deactivateScanWorkerForDrain(heartbeatController, unregister, removeReadiness)
+    )
     await vi.waitFor(() => expect(pause).toHaveBeenCalledOnce())
-    expect(beforePause).toHaveBeenCalledBefore(pause)
+    expect(events.slice(0, 3)).toEqual(["heartbeat-started", "pause-started", "readiness-removed"])
+    expect(unregister).not.toHaveBeenCalled()
+    await expect(stat("/tmp/lyrashield-worker-egress-drain-ready")).rejects.toMatchObject({
+      code: "ENOENT",
+    })
+
+    finishHeartbeat?.()
+    await inFlightHeartbeat
+    await vi.waitFor(() => expect(unregister).toHaveBeenCalledOnce())
+    expect(events).toEqual([
+      "heartbeat-started",
+      "pause-started",
+      "readiness-removed",
+      "heartbeat-settled",
+      "unregistered",
+    ])
+    await heartbeatController.heartbeat()
+    expect(register).toHaveBeenCalledOnce()
     await expect(stat("/tmp/lyrashield-worker-egress-drain-ready")).rejects.toMatchObject({
       code: "ENOENT",
     })
@@ -138,10 +180,35 @@ describe("worker readiness lifecycle", () => {
     })
     const pause = vi.fn().mockResolvedValue(undefined)
 
-    await expect(acknowledgeEgressDrainRequest({ pause })).rejects.toThrow(
+    await expect(acknowledgeEgressDrainRequest({ pause }, vi.fn())).rejects.toThrow(
       "Invalid egress drain request token"
     )
     expect(pause).not.toHaveBeenCalled()
+  })
+
+  it("does not acknowledge a drain when registry removal fails", async () => {
+    await writeFile("/tmp/lyrashield-worker-egress-drain-request", "c".repeat(64), {
+      mode: 0o600,
+    })
+    const pause = vi.fn().mockResolvedValue(undefined)
+    const heartbeatController = createWorkerHeartbeatController(
+      vi.fn().mockResolvedValue(undefined),
+      vi.fn().mockResolvedValue(undefined)
+    )
+
+    await expect(
+      acknowledgeEgressDrainRequest({ pause }, () =>
+        deactivateScanWorkerForDrain(
+          heartbeatController,
+          vi.fn().mockRejectedValue(new Error("Redis unavailable")),
+          vi.fn().mockResolvedValue(undefined)
+        )
+      )
+    ).rejects.toThrow("Redis unavailable")
+    expect(pause).toHaveBeenCalledOnce()
+    await expect(stat("/tmp/lyrashield-worker-egress-drain-ready")).rejects.toMatchObject({
+      code: "ENOENT",
+    })
   })
 
   it("fails closed after rollback instead of starting an unobserved resumed run loop", async () => {

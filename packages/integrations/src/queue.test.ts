@@ -147,6 +147,26 @@ describe("scan worker availability", () => {
     expect(await isScanWorkerAvailable(62_000)).toBe(false)
   })
 
+  it("keeps readiness and admission unavailable during drain until handoff registration", async () => {
+    await registerScanWorker("worker-1", 1_000)
+    await unregisterScanWorker("worker-1")
+
+    expect(await isScanWorkerAvailable(2_000)).toBe(false)
+    await expect(
+      enqueueScan({
+        scanId: "scan-during-drain",
+        workspaceId: "workspace-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    ).rejects.toBeInstanceOf(ScanWorkerUnavailableError)
+    expect(mocks.queueAdd).not.toHaveBeenCalled()
+
+    await handoffScanWorker("worker-1", 3_000)
+    expect(await isScanWorkerAvailable(3_000)).toBe(true)
+  })
+
   it("fails queue admission closed while the operator stop is present", async () => {
     await registerScanWorker("worker-1", Date.now())
     mocks.redis.values.set(SCAN_ADMISSION_STOP_KEY, '{"operator":"on-call"}')

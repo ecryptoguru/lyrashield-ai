@@ -74,8 +74,8 @@ export async function registerScanWorker(workerId: string, now = Date.now()): Pr
 }
 
 export async function unregisterScanWorker(workerId: string): Promise<void> {
-  const redis = getRedis()
-  if (redis) await redis.zrem(SCAN_WORKER_REGISTRY_KEY, workerId)
+  const redis = requireRedis()
+  await redis.zrem(SCAN_WORKER_REGISTRY_KEY, workerId)
 }
 
 /**

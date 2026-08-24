@@ -8,6 +8,7 @@ sandbox_network="${LYRASHIELD_SANDBOX_NETWORK:-lyrashield-sandbox}"
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
 refresh_pins="${LYRASHIELD_REFRESH_PINNED_HOSTS:-0}"
 restart_worker_on_pin_change="${LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE:-0}"
+clear_pending_restart="${LYRASHIELD_CLEAR_PENDING_RESTART:-0}"
 restart_pending_file="${LYRASHIELD_EGRESS_RESTART_PENDING_FILE:-/run/lyrashield-egress-restart-pending}"
 drain_request_path="/tmp/lyrashield-worker-egress-drain-request"
 drain_ready_path="/tmp/lyrashield-worker-egress-drain-ready"
@@ -20,6 +21,15 @@ case "$drain_wait_attempts" in
     exit 1
     ;;
 esac
+case "$clear_pending_restart" in
+  0 | 1) ;;
+  *) echo "LYRASHIELD_CLEAR_PENDING_RESTART must be 0 or 1" >&2; exit 1 ;;
+esac
+if [ "$clear_pending_restart" = "1" ] &&
+  { [ "$refresh_pins" != "1" ] || [ "$restart_worker_on_pin_change" = "1" ]; }; then
+  echo "LYRASHIELD_CLEAR_PENDING_RESTART requires a restart-disabled pin refresh" >&2
+  exit 1
+fi
 
 if [ ! -r "$environment_file" ]; then
   echo "Worker environment file is unavailable: $environment_file" >&2
@@ -387,4 +397,7 @@ if [ "$needs_restart" = "1" ]; then
     echo "Worker restart scheduling failed; retained old pins and pending retry" >&2
     exit 1
   fi
+fi
+if [ "$clear_pending_restart" = "1" ]; then
+  rm -f "$restart_pending_file"
 fi

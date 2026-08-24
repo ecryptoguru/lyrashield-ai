@@ -5,6 +5,7 @@ CDPATH=
 export CDPATH
 repo_root=$(cd -- "$(dirname "$0")/../.." && pwd)
 grep -Fqx 'Restart=always' "$repo_root/ops/worker/lyrashield-worker.service"
+grep -Fqx 'ExecStartPre=/usr/bin/env LYRASHIELD_REFRESH_PINNED_HOSTS=1 LYRASHIELD_CLEAR_PENDING_RESTART=1 /usr/local/libexec/lyrashield-refresh-egress' "$repo_root/ops/worker/lyrashield-worker.service"
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 fake_bin="$test_dir/bin"
@@ -96,6 +97,7 @@ EOF
 cat >"$fake_bin/iptables-restore" <<'EOF'
 #!/bin/sh
 cat >"$IPTABLES_CAPTURE"
+[ "${IPTABLES_RESTORE_FAIL:-0}" != "1" ]
 EOF
 
 cat >"$fake_bin/systemctl" <<'EOF'
@@ -135,10 +137,14 @@ run_refresh() {
   systemctl_fail="$3"
   output_capture="$4"
   error_capture="$5"
+  restart_on_change="${6:-1}"
+  clear_pending_restart="${7:-0}"
+  iptables_restore_fail="${8:-0}"
   PATH="$fake_bin:$PATH" \
   DOCKER_WORKER_ACTIVE="$worker_active" \
   DOCKER_DRAIN_READY="$drain_ready" \
   SYSTEMCTL_FAIL="$systemctl_fail" \
+  IPTABLES_RESTORE_FAIL="$iptables_restore_fail" \
   BECOME_ACTIVE_ON_DRAIN="${BECOME_ACTIVE_ON_DRAIN:-0}" \
   SYSTEMCTL_CAPTURE="$systemctl_capture" \
   DOCKER_CAPTURE="$docker_capture" \
@@ -152,7 +158,8 @@ run_refresh() {
   LYRASHIELD_EGRESS_PIN_FILE="$pin_file" \
   LYRASHIELD_EGRESS_RESTART_PENDING_FILE="$restart_pending_file" \
   LYRASHIELD_REFRESH_PINNED_HOSTS=1 \
-  LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE=1 \
+  LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE="$restart_on_change" \
+  LYRASHIELD_CLEAR_PENDING_RESTART="$clear_pending_restart" \
   LYRASHIELD_EGRESS_DRAIN_WAIT_ATTEMPTS=1 \
   sh "$repo_root/ops/worker/refresh-egress.sh" >"$output_capture" 2>"$error_capture"
 }
@@ -172,6 +179,7 @@ if run_refresh 1 0 0 "$first_output" "$error_output"; then
 fi
 grep -Fqx 'sentinel' "$iptables_capture"
 grep -Fq 'validated old pins are unavailable' "$error_output"
+test -e "$restart_pending_file"
 rm -f "$restart_pending_file"
 
 printf '%s\n' "unreviewed.test 8.8.8.8 443" >"$pin_file"
@@ -181,6 +189,17 @@ if run_refresh 0 0 0 "$first_output" "$error_output"; then
 fi
 grep -Fqx 'sentinel' "$iptables_capture"
 grep -Fq 'unapproved host or port' "$error_output"
+
+printf '%s\n' "proxy.test 9.9.9.9 443" >"$pin_file"
+: >"$restart_pending_file"
+if run_refresh 0 0 0 "$first_output" "$error_output" 0 1 1; then
+  echo "Startup refresh ignored an iptables apply failure" >&2
+  exit 1
+fi
+test -e "$restart_pending_file"
+run_refresh 0 0 0 "$first_output" "$error_output" 0 1 0
+test ! -e "$restart_pending_file"
+test ! -s "$systemctl_capture"
 
 printf '%s\n' "proxy.test 9.9.9.9 443" >"$pin_file"
 : >"$systemctl_capture"
