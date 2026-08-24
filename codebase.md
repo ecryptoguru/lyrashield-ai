@@ -188,8 +188,9 @@ Use `prisma.auditLog.create()` through the extended client. Its advisory-locked 
 - Queue authority: `packages/integrations/src/queue.ts`.
 - Use `getScanQueue()` and `enqueueScan()`; never instantiate one-off queues.
 - Admission checks worker readiness before Scan creation and again at enqueue.
-- Worker heartbeat lease refreshes every 10 seconds and expires after 30 seconds.
-- Queue/database orphans fail after five minutes and are never auto-replayed.
+- Worker heartbeat refreshes every two minutes and expires after five minutes. Heartbeat registration and readiness each use a single-key Lua operation; the separate admission-stop key is checked with `EXISTS` so Redis Cluster never receives a cross-slot script.
+- BullMQ workers use a 10-minute idle `drainDelay` and one-minute stalled check. The modeled 30-day idle command count is 324,019 before and 132,495 after this pacing change (59.11% reduction); it is not live telemetry.
+- Reconciliation runs unconditionally at startup. Its five-minute timer reconciles when the DB has nonterminal scans, backs off to an hourly Redis inspection when idle, and reconciles fail-safe when the DB preflight is uncertain. Queue/database orphans fail after five minutes and are never auto-replayed.
 - Status changes go through guarded transitions, not direct updates.
 - Worker cancellation terminates registered engine processes and preserves auditable state.
 
@@ -419,6 +420,7 @@ Current command output is authoritative; never copy historical test counts forwa
 - Legacy Redis: stopped, restart-disabled, rollback-only.
 - Egress: direct public denied, proxy public allowed, loopback denied `ssrf_blocked`.
 - DNS refresh timer: active during Standard scan; no worker restart.
+- The Redis/egress efficiency candidate described above is not part of this deployed-worker proof. Live command metrics and a staged worker-first rollout remain required.
 - Backup/restore: encrypted backup, isolated restore, schema/RLS/audit/app startup verified.
 - Code ahead of production: `main` is `3966e24c` after PRs #421–#424 and the current assurance hardening PRs #428–#430, with green CI. Release `32755678337` pushed images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Those images are not deployed. Production remains on the exact worker proof above with purchase admissions `off`.
 

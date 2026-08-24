@@ -35,6 +35,7 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Product `main` is `3966e24c` after PRs #421–#424 and the current assurance hardening PRs #428–#430 (nonnegative policy budgets, explainable finding priority, immutable retest receipts, raw evidence-storage URI removal, worker execution provenance, actionable Azure alert provisioning, and a bounded host-side launch-assurance orchestrator). CI is green, but that code is not deployed. Release run `32755678337` built and pushed images, then failed closed before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode while production requires Live Mode. Production remains healthy on `8347fda9`; all Cloud and Local purchase admissions remain `off`.
 - Upstash authenticated TLS BullMQ Redis is live; public Azure `6379` rule is removed; legacy Redis is stopped/restart-disabled for rollback only.
 - Production egress proof passed: direct arbitrary public fetch denied, authenticated proxy fetch allowed, loopback denied `ssrf_blocked`. DNS refresh stayed active during the paid scan without restarting worker.
+- The current worker Redis/egress efficiency candidate is not deployed. It adds slower idle BullMQ polling, single-key Lua heartbeat/readiness operations, DB-first reconciliation, proxy-only CISA enrichment, and drain-safe pin rotation; live Redis command metrics and staged rollout evidence remain required.
 - Encrypted backup and isolated restore verified schema, RLS, audit chain, and application startup.
 - Production runtime DB role `app_runtime_prod` was queried on 2026-08-22 and verified `rolsuper=false`, `rolbypassrls=false`.
 - Provider readiness remains bounded. A read-only Brave review on 2026-08-24 found six Razorpay Test Mode cloud plans; the live account is activated and its website is approved, but its live plan catalog and webhook configuration are empty. Polar Sandbox has no active products or organization token; Polar Live setup is 5/7 with identity verification and payouts pending and no active products. No charge, credential creation, new terms, admission change, or provider mutation was performed. Live paid activation remains founder-controlled.
@@ -51,7 +52,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 ## Immediate execution queue
 
 1. Prove private S3-compatible evidence upload, encryption, retrieval, isolation, and fail-closed behavior in production. The `verify:launch-assurance` orchestrator (PR #429) composes the fail-closed and round-trip evidence-storage proofs in code; production execution with exact scan/workspace IDs and the confirmation phrase remains the gate.
-2. Connect readiness, queue, provider, model-cost, and worker logs to actionable alerts; record capacity evidence and incident ownership. `provision-alerts.sh` and the monitoring launch runbook (PR #429) define the rule inventory, action-group binding, readback, and idempotent provisioning; production provisioning and a test-alert acknowledgment remain the gate.
+2. Connect readiness, queue, provider, model-cost, and worker logs to actionable alerts; record capacity evidence, Redis command metrics, incident ownership, and staged worker-rollout evidence. `provision-alerts.sh` and the monitoring launch runbook (PR #429) define the rule inventory, action-group binding, readback, and idempotent provisioning; production provisioning and a test-alert acknowledgment remain the gate.
 3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work. The `verify:launch-assurance` orchestrator (PR #429) composes authenticated cancellation, settle wait, `reconcileScanQueue`, and post-recovery readiness in code; production failure injection with exact scan/workspace IDs and the confirmation phrase remains the gate.
 4. Complete provider live-mode setup: provision matching live credentials, product/plan catalogs, and webhooks; rerun the fail-closed deployment; then verify live-provider entitlement and usage events without enabling purchase admission until founder approval. Razorpay hosted-checkout payment methods above INR 15,000 remain transaction-unproven.
 5. Complete and prove production Azure Key Vault license signing.
@@ -116,10 +117,12 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 
 - Queue authority is `packages/integrations/src/queue.ts`; use `enqueueScan()` and `getScanQueue()`.
 - Never create one-off queues, delete BullMQ keys directly, or auto-requeue ambiguous paid work.
+- Worker heartbeat and readiness use single-key Lua operations. Keep the admission-stop `EXISTS` check separate because its key is in a different Redis Cluster slot.
+- Reconcile unconditionally at worker start; on five-minute ticks, inspect BullMQ when the DB has nonterminal scans, at least hourly while idle, and whenever the DB preflight is uncertain. Never turn that uncertainty into a skipped reconciliation.
 - Invoke external engine only for `REPO`; URL/API use deterministic scanners.
 - `REDIS_URL` is BullMQ TCP; `UPSTASH_REDIS_REST_URL/TOKEN` are rate limiting. Never interchange them.
 - Set `TRUSTED_PROXY_IP_HEADER` only when ingress strips incoming copies and writes the authoritative value.
-- Keep authenticated egress proxy, DNS pinning, active-scan restart deferral, and negative egress tests intact.
+- Keep authenticated egress proxy, DNS pinning, drain-before-restart, union rollback/fail-close, and negative egress tests intact. CISA KEV uses the proxy; a direct CISA pin is allowed only as the staged legacy route while rolling out the proxy-capable worker first.
 
 ### Models and agents
 

@@ -93,6 +93,16 @@ output (plus `az monitor metrics alert list`, `az monitor scheduled-query list`,
 `az monitor action-group show`) with release evidence. Send one Azure test notification
 and retain the named acknowledgment before enabling paid admission.
 
+## Redis and egress candidate gate
+
+Before staging the worker Redis/egress candidate, retain a live Redis command-metric
+baseline. The 30-day idle estimate of 324,019 commands before and 132,495 after (a
+59.11% reduction) is a model only; it is not telemetry or production proof. Stage the
+worker image first, verify CISA KEV enrichment uses the authenticated proxy and the
+negative egress tests still pass, then deploy the host refresh script that removes the
+direct CISA pin. Do not delete BullMQ keys, replay ambiguous work, or claim rollout
+success until the staged runtime evidence and command metrics are retained.
+
 ## Stop admission
 
 Stop new scans immediately when readiness, lease authority, queue state, evidence
