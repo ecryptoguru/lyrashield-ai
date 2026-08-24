@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { parseArgs } from "node:util"
+import type { ScanStatus } from "@lyrashield/db"
 import {
   parseLaunchAssuranceOptions,
   verifyLaunchAssurance,
@@ -200,12 +201,16 @@ function makeDeps(overrides: Partial<LaunchAssuranceDeps> = {}): LaunchAssurance
       queueDepth: 1,
       oldestWaitingJobAgeMs: 0,
     })),
-    listActiveScans: vi.fn(async () => [{ id: "cmt0q9a28000501jnmn1t453t", status: "RUNNING" }]),
-    getScanState: vi.fn(async () => ({
-      id: "cmt0q9a28000501jnmn1t453t",
-      workspaceId: "cmt7np5uv000002s6pnr7c376",
-      status: "CANCELLED",
-    })),
+    listActiveScans: vi.fn(async (): Promise<Array<{ id: string; status: ScanStatus }>> => [
+      { id: "cmt0q9a28000501jnmn1t453t", status: "RUNNING" },
+    ]),
+    getScanState: vi.fn(
+      async (): Promise<{ id: string; workspaceId: string; status: ScanStatus }> => ({
+        id: "cmt0q9a28000501jnmn1t453t",
+        workspaceId: "cmt7np5uv000002s6pnr7c376",
+        status: "CANCELLED",
+      })
+    ),
     countEngineStartsSince: vi.fn(async () => 0),
     ...overrides,
   }
@@ -461,7 +466,7 @@ describe("verifyLaunchAssurance", () => {
 
   it("refuses failure injection when unrelated active work exists", async () => {
     const deps = makeDeps({
-      listActiveScans: vi.fn(async () => [
+      listActiveScans: vi.fn(async (): Promise<Array<{ id: string; status: ScanStatus }>> => [
         { id: "cmt0q9a28000501jnmn1t453t", status: "RUNNING" },
         { id: "cmt0q9a28000502jnmn1t453u", status: "QUEUED" },
       ]),
@@ -481,14 +486,16 @@ describe("verifyLaunchAssurance", () => {
         clock += 3_000
         return new Date(clock)
       }),
-      getScanState: vi.fn(async () => {
-        poll += 1
-        return {
-          id: "cmt0q9a28000501jnmn1t453t",
-          workspaceId: "cmt7np5uv000002s6pnr7c376",
-          status: poll < 3 ? "RUNNING" : "CANCELLED",
+      getScanState: vi.fn(
+        async (): Promise<{ id: string; workspaceId: string; status: ScanStatus }> => {
+          poll += 1
+          return {
+            id: "cmt0q9a28000501jnmn1t453t",
+            workspaceId: "cmt7np5uv000002s6pnr7c376",
+            status: poll < 3 ? "RUNNING" : "CANCELLED",
+          }
         }
-      }),
+      ),
     })
     const receipt = await verifyLaunchAssurance({ ...baseOptions(), stepTimeoutMs: 15_000 }, deps)
     expect(receipt.steps.find((step) => step.name === "settle_wait")?.status).toBe("passed")
