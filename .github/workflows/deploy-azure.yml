@@ -30,7 +30,6 @@ env:
   # Purchase admission stays closed during provider verification. Provider
   # credentials and catalog IDs are still bound so signed test/live webhooks,
   # reconciliation, and a later reviewed admission change use one revision.
-  POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
   POLAR_BILLING_ADMISSION: "off"
   POLAR_LOCAL_BILLING_ADMISSION: "off"
   RAZORPAY_BILLING_ADMISSION: "off"
@@ -91,6 +90,13 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Verify build environment isolation
+        run: |
+          if [ -n "${POLAR_ENVIRONMENT:-}" ]; then
+            echo "::error::Provider runtime configuration must not leak into build-time contract tests."
+            exit 1
+          fi
 
       - name: Verify engine-worker contract
         run: bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"
@@ -244,6 +250,8 @@ jobs:
     environment:
       name: azure-production
       url: ${{ env.APP_URL }}
+    env:
+      POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
     if: >
       (vars.AZURE_RESOURCE_GROUP != '') &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
