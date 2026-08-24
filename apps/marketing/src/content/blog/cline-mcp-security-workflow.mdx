@@ -112,11 +112,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - uses: ecryptoguru/lyrashield-ai@v1
+      - uses: ecryptoguru/lyrashield-ai@v2
         with:
           fail_on_severity: HIGH
 ```
@@ -147,7 +143,7 @@ Agent rules work because Cline reads `.clinerules` files at the start of every s
 | ------- | -------------------------------- | ---------------------------- | ------------------------------------------- |
 | Local   | cline_mcp_settings.json          | npx -y @lyrashield/mcp       | env LYRASHIELD_API_KEY                      |
 | Remote  | cline_mcp_settings.json          | streamableHttp               | Bearer https://app.lyrashieldai.com/api/mcp |
-| CI gate | .github/workflows/lyrashield.yml | ecryptoguru/lyrashield-ai@v1 | no LyraShield secret required               |
+| CI gate | .github/workflows/lyrashield.yml | ecryptoguru/lyrashield-ai@v2 | no LyraShield secret required               |
 
 ## 7. Why pair Cline with LyraShield
 

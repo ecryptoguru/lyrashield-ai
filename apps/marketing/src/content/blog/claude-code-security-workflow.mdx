@@ -1,7 +1,7 @@
 ---
 title: Claude Code security workflow for AI built apps
 description: Secure Claude Code workflows with MCP scope checks, permission hardening, dependency gating and SARIF evidence for trustworthy releases.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -17,6 +17,7 @@ faq:
   - q: Where does Claude Code store MCP server config?
     a: Claude Code stores MCP servers in .mcp.json at the project root for team scope or the user config for local scope. Use project scope for the LyraShield server so CI and local checks share one entry, and keep the lsk_ key in an env reference rather than a literal in the file.
 ---
+
 Claude Code reads your repo, edits many files, runs commands and calls MCP tools in one session, so you need scoped permissions and locked down config. This workflow shows how to harden .mcp.json across local, project and user scopes, limit tool permissions, gate secrets and dependencies and collect SARIF for every pull request. Pair it with LyraShield as release assurance for AI built apps. See our [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls before applying Claude Code specific checks.
 
 ## Understand Claude Code risk surface
@@ -63,11 +64,11 @@ Add servers via CLI instead of manual JSON when possible:
 
 Hardening details that matter for review:
 
-* Never store raw keys in .mcp.json. Use env var references and load from a secret manager at runtime. Check CI for literal sk or lsk patterns.
-* For project scope, require pull request review for any MCP addition. Treat new servers like new production dependencies with an owner and review date.
-* Limit filesystem server args to the smallest directory needed for the task. Over broad file access widens exfiltration risk.
-* For remote MCP at https://app.lyrashieldai.com/api/mcp use Bearer lsk key from env and restrict egress if possible. Protocol and transport options are described at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18).
-* Verify scope behavior with vendor docs at [Claude Code MCP](https://docs.claude.com/en/docs/claude-code/mcp) and overview at [Claude Code overview](https://docs.claude.com/en/docs/claude-code/overview).
+- Never store raw keys in .mcp.json. Use env var references and load from a secret manager at runtime. Check CI for literal sk or lsk patterns.
+- For project scope, require pull request review for any MCP addition. Treat new servers like new production dependencies with an owner and review date.
+- Limit filesystem server args to the smallest directory needed for the task. Over broad file access widens exfiltration risk.
+- For remote MCP at https://app.lyrashieldai.com/api/mcp use Bearer lsk key from env and restrict egress if possible. Protocol and transport options are described at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18).
+- Verify scope behavior with vendor docs at [Claude Code MCP](https://docs.claude.com/en/docs/claude-code/mcp) and overview at [Claude Code overview](https://docs.claude.com/en/docs/claude-code/overview).
 
 Log which servers were active for a feature in the pull request description. That one line helps reproduce permission issues later and keeps audits simple.
 
@@ -77,9 +78,9 @@ Use CLAUDE.md in repo root to state what the agent may and may not do. Version i
 
 Recommended policy blocks:
 
-* Edit scope: allow src, tests and docs. Protect env, secrets and infra unless security owner approves. Deny direct edits to production workflow files.
-* Command policy: allow read and limited test commands, require confirm for package installs and migrations, deny curl with secrets and git push to main.
-* Network policy: list allowed registries and APIs the agent may call during generation, and forbid arbitrary egress.
+- Edit scope: allow src, tests and docs. Protect env, secrets and infra unless security owner approves. Deny direct edits to production workflow files.
+- Command policy: allow read and limited test commands, require confirm for package installs and migrations, deny curl with secrets and git push to main.
+- Network policy: list allowed registries and APIs the agent may call during generation, and forbid arbitrary egress.
 
 Pair that with project owned settings for approval. Prefer asking before execution for auth, payment, file upload and infrastructure code. This slows only the riskiest paths while keeping routine refactors fast.
 
@@ -113,14 +114,14 @@ See GitHub guidance at [SARIF upload](https://docs.github.com/en/code-security/c
 
 If you use remote MCP, log server version used during generation. Small details like server url and timestamp help when debugging tool permission drift.
 
-| Control | File or setting | Review signal |
-| --- | --- | --- |
-| MCP scope | .mcp.json local project user scopes | No raw keys, project scope reviewed, least directory access configured |
-| Permission policy | CLAUDE.md plus approval settings | Plan mode for exploration, approval needed for edits outside src and for infra |
-| Secrets gate | CI secret scan with SARIF upload | No tokens in git, env via manager, findings block merge |
-| Dependency gate | OSV plus package audit in CI | High severity blocks, exceptions tracked with owner and expiry date |
-| Evidence | GitHub code scanning plus security evidence file | SARIF on PR and main, MCP list logged per release, release tag linked |
-| Release hygiene | Pull request template plus branch protection | Auth changes flagged, tests required, reviewers assigned and documented |
+| Control           | File or setting                                  | Review signal                                                                  |
+| ----------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| MCP scope         | .mcp.json local project user scopes              | No raw keys, project scope reviewed, least directory access configured         |
+| Permission policy | CLAUDE.md plus approval settings                 | Plan mode for exploration, approval needed for edits outside src and for infra |
+| Secrets gate      | CI secret scan with SARIF upload                 | No tokens in git, env via manager, findings block merge                        |
+| Dependency gate   | OSV plus package audit in CI                     | High severity blocks, exceptions tracked with owner and expiry date            |
+| Evidence          | GitHub code scanning plus security evidence file | SARIF on PR and main, MCP list logged per release, release tag linked          |
+| Release hygiene   | Pull request template plus branch protection     | Auth changes flagged, tests required, reviewers assigned and documented        |
 
 ## Why pair Claude Code with LyraShield
 
@@ -128,7 +129,7 @@ LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.c
 
 MCP integration fits Claude Code. Local stdio via npx -y @lyrashield/mcp uses env var keys for project scope, and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key with user or project scope. GitHub Action is diff aware and produces SARIF for code scanning so results appear in your pull request.
 
-Build honesty note: LyraShield is live in open beta with open registration. Scan engine MVP, automated fix execution and billing are on the roadmap. Current value is the hardened workflow, MCP config pattern and SARIF shape that lets teams prepare for upcoming automated verification. V1 targets agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
+Build honesty note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 This pairing keeps Claude Code speed while preserving a consistent verification narrative across editors.
 
@@ -136,10 +137,10 @@ This pairing keeps Claude Code speed while preserving a consistent verification 
 
 Before merge, confirm these controls.
 
-* .mcp.json scopes minimal, no raw secrets, reviewed in PR.
-* CLAUDE.md policy lists protected paths and required approvals.
-* Dependency and secret scans ran and SARIF uploaded to code scanning.
-* Auth and payment changes have tests and assigned reviewer.
-* Release evidence file updated with MCP servers and commit.
+- .mcp.json scopes minimal, no raw secrets, reviewed in PR.
+- CLAUDE.md policy lists protected paths and required approvals.
+- Dependency and secret scans ran and SARIF uploaded to code scanning.
+- Auth and payment changes have tests and assigned reviewer.
+- Release evidence file updated with MCP servers and commit.
 
 Apply the same evidence pattern using our [AI app security checklist tool](/tools/ai-app-security-checklist) and create an account at https://lyrashieldai.com to start building assurance records today. For related multi builder flows see [V0 app security checklist](/blog/v0-app-security-checklist) and [Base44 app security checklist](/blog/base44-app-security-checklist) to keep controls uniform across your fleet.

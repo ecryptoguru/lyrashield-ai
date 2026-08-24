@@ -598,7 +598,7 @@ Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CU
 
 ### GitHub Action
 
-For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai@v1` (the `action.yml` at the repository root) runs a diff-aware gate — secret detection plus risky-pattern checks, emitting SARIF — entirely in your own runner with your own `GITHUB_TOKEN`. It needs no LyraShield account or API key. See the [GitHub Action integration guide](https://lyrashieldai.com/docs/integrations/github-action) for the workflow file and inputs.
+For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai@v2` (the `action.yml` at the repository root) runs a diff-aware gate — secret detection plus risky-pattern checks, emitting SARIF — entirely in your own runner with your own `GITHUB_TOKEN`. It needs no LyraShield account or API key. The local Action accepts `SAFE` and `AGGRESSIVE`; use the hosted product for `DEEP`. See the [GitHub Action integration guide](https://lyrashieldai.com/docs/integrations/github-action) for the workflow file and inputs.
 
 ## 23. Current availability
 
@@ -606,7 +606,7 @@ The public marketing site, Lite Check, browser-local tools, methodology, and con
 
 The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires production proof for private evidence persistence, application-level readiness/queue/provider alerts, capacity evidence, failure recovery, and each additional review profile claimed. No recovery or RPO/RTO claim is made.
 
-Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. Polar/Razorpay test configuration and signed webhook smoke are complete, but live paid activation, production desktop distribution/signing proof, payout API provisioning, and the public affiliate opening remain controlled release gates.
+Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. Local signed-webhook and replay coverage exists, and isolated Polar Sandbox/Razorpay Test Mode deployment support is implemented; provider-hosted checkout, cancellation, refund, license, and 100-replay receipts still require the restricted staging run. Live paid activation, production desktop distribution/signing proof, payout API provisioning, and the public affiliate opening remain controlled release gates.
 
 Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 

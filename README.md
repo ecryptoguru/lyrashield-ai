@@ -35,7 +35,7 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 `lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs via three strategies, all driven by the same `packages/agent-registry` source of truth:
 
-- **Agent Plugin** — for the 4 launch clients with Agent Plugins v1.0.0 support today (Claude Code, Cursor, OpenAI Codex, Kiro), `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
+- **Agent Plugin** — for the 5 preferred clients with Agent Plugins v1.0.0 support today (Claude Code, Cursor, OpenAI Codex, GitHub Copilot, Kiro), `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
 - **Config-file** — for 16 clients whose settings can be safely written, the CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Guided manual** — for 7 clients whose tooling has no writable config file (Cline, JetBrains, PiCode, OpenClaw, Hermes, Goose, Aider), the CLI prints exact copy-paste command/argument/env values.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.

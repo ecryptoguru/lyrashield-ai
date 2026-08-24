@@ -1,21 +1,21 @@
 ---
 title: Pi Coding Agent App Security Checklist
-description: 'Harden Pi Coding Agent: standard MCP paths, host discovery controls, tool scoping, and diff-aware CI for AI-built apps.'
-pubDate: '2026-07-30'
+description: "Harden Pi Coding Agent: standard MCP paths, host discovery controls, tool scoping, and diff-aware CI for AI-built apps."
+pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-20
 faq:
-  - q: 'Where does Pi store MCP config?'
-    a: 'Shared: ~/.config/mcp/mcp.json and .mcp.json. Pi overrides: ~/.pi/agent/mcp.json global and .pi/mcp.json project. Precedence is project Pi override highest.'
-  - q: 'What is hostConfigDiscovery?'
-    a: 'Controls whether Pi loads Cursor/Claude Code/Codex host configs as fallback. Default off. Discovery never writes external host files.'
-  - q: 'How do I add LyraShield to Pi?'
-    a: 'In .mcp.json or .pi/mcp.json: mcpServers.lyrashield with command npx -y @lyrashield/mcp or url https://app.lyrashieldai.com/api/mcp with Authorization header.'
-  - q: 'How do I disable an MCP server in Pi?'
-    a: '/mcp disable <name> writes disabled:true to .pi/mcp.json project override. Manual equivalent is disabled:true in any MCP config.'
+  - q: "Where does Pi store MCP config?"
+    a: "Shared: ~/.config/mcp/mcp.json and .mcp.json. Pi overrides: ~/.pi/agent/mcp.json global and .pi/mcp.json project. Precedence is project Pi override highest."
+  - q: "What is hostConfigDiscovery?"
+    a: "Controls whether Pi loads Cursor/Claude Code/Codex host configs as fallback. Default off. Discovery never writes external host files."
+  - q: "How do I add LyraShield to Pi?"
+    a: "In .mcp.json or .pi/mcp.json: mcpServers.lyrashield with command npx -y @lyrashield/mcp or url https://app.lyrashieldai.com/api/mcp with Authorization header."
+  - q: "How do I disable an MCP server in Pi?"
+    a: "/mcp disable <name> writes disabled:true to .pi/mcp.json project override. Manual equivalent is disabled:true in any MCP config."
 ---
 
 Pi Coding Agent from pi.dev is a minimal, extensible agent harness with packages, skills, and a strict MCP adapter. This checklist turns those primitives into a shippable guardrail for AI-built apps. Start with the [vibe coding security guide](/blog/vibe-coding-security-guide) for the shared baseline, then apply the Pi controls below.
@@ -56,6 +56,7 @@ Fastest path: run `npx lyrashield init`, which detects Pi and writes its MCP con
 LyraShield config, canonical at [picode integration guide](/docs/integrations/picode):
 
 Project-shared `.mcp.json` (works across hosts):
+
 ```json
 {
   "mcpServers": {
@@ -71,6 +72,7 @@ Project-shared `.mcp.json` (works across hosts):
 ```
 
 Remote Streamable HTTP (centralized revocation):
+
 ```json
 {
   "mcpServers": {
@@ -86,6 +88,7 @@ Remote Streamable HTTP (centralized revocation):
 ```
 
 Pi-specific override with direct tools:
+
 ```json
 {
   "settings": {
@@ -104,6 +107,7 @@ Pi-specific override with direct tools:
 ```
 
 Hardening:
+
 - Use `${NAME}` env var interpolation, not literal keys. Pi resolves env vars in config values per spec.
 - Keep `directTools: false` globally, enable per-server only for vetted verifiers like LyraShield to reduce tool surface.
 - Set `requestTimeoutMs` low for networked verifiers to fail closed.
@@ -113,6 +117,7 @@ Hardening:
 Pi's extensibility via packages/extensions/skills is its USP, and a supply chain boundary. An extension that adds MCP support bridges tools into the LLM.
 
 Checklist:
+
 - Pin extension versions. `pi-mcp-extension` vs `pi-mcp-adapter` version drift changes resolution behavior (shared vs Pi-owned paths).
 - Inventory `settings.imports` if you use compatibility imports for OpenCode. The `opencode` import reads V1 `mcp` entries from `~/.config/opencode/opencode.json` and project `opencode.json`, explicit-import only.
 - Review any extension that registers filesystem MCP at `/`. Standard Pi filesystem example `npx -y @modelcontextprotocol/server-filesystem /workspace` scoped to `/workspace` is appropriate; `/` is not.
@@ -125,32 +130,37 @@ This aligns with OWASP LLM05 Insecure Output Handling and LLM06 Excessive Agency
 Pi's four modes (plan, act, etc. per architecture) benefit from mode-aware approval. Do not allow auto-transition from plan to execution that writes auth logic without human sign-off.
 
 Target CI:
+
 - Mode-based CODEOWNERS: changes to `src/auth/**` require human review regardless of Pi mode that generated them.
 - Diff-aware lockfile review: if Pi adds a dependency, require SCA and secrets scan on diff, not full scan.
 - SARIF upload: Pi-generated PRs should emit SARIF from any scanner, not just pretty logs. The LyraShield GitHub Action, SCA + secrets + agentic pentest with SARIF, is intended for this slot, enabling `retest` after fix rather than trusting first-pass generation.
 - `/mcp` status in CI logs. Running `/mcp tools` and capturing tool list in a build artifact gives auditors a snapshot of what verifiers were available when the PR was built.
 
-| # | Control | File/Command | If Skipped |
-|---|---------|--------------|------------|
-| 1 | Commit `.mcp.json` + `.pi/mcp.json` in git | `.mcp.json`, `.pi/mcp.json`, PR review | Global override silently changes verifier list |
-| 2 | Keep `hostConfigDiscovery: off` | `settings.hostConfigDiscovery` | Cursor/Codex server with broad FS access auto-loads |
-| 3 | Use `${VAR}` not literals | `env`, `headers` interpolation | `lsk_` key committed to repo |
-| 4 | `/mcp disable` writes only flag to `.pi/` override | `/mcp disable lyrashield`, `/reload` | Disabling in shared file breaks other hosts |
-| 5 | Pin extension versions, audit skills | `package.json`, `*.extension`, skills dir | Malicious extension bridges exfil tool |
-| 6 | Diff-aware SARIF gate | `.github/workflows/*`, SARIF upload | AI auth bypass merges because CI only linted |
+| #   | Control                                            | File/Command                              | If Skipped                                          |
+| --- | -------------------------------------------------- | ----------------------------------------- | --------------------------------------------------- |
+| 1   | Commit `.mcp.json` + `.pi/mcp.json` in git         | `.mcp.json`, `.pi/mcp.json`, PR review    | Global override silently changes verifier list      |
+| 2   | Keep `hostConfigDiscovery: off`                    | `settings.hostConfigDiscovery`            | Cursor/Codex server with broad FS access auto-loads |
+| 3   | Use `${VAR}` not literals                          | `env`, `headers` interpolation            | `lsk_` key committed to repo                        |
+| 4   | `/mcp disable` writes only flag to `.pi/` override | `/mcp disable lyrashield`, `/reload`      | Disabling in shared file breaks other hosts         |
+| 5   | Pin extension versions, audit skills               | `package.json`, `*.extension`, skills dir | Malicious extension bridges exfil tool              |
+| 6   | Diff-aware SARIF gate                              | `.github/workflows/*`, SARIF upload       | AI auth bypass merges because CI only linted        |
 
 ## FAQ
 
 ### Q: Where does Pi store MCP config and which file wins?
+
 Standard shared: `~/.config/mcp/mcp.json` global, `.mcp.json` project. Pi overrides: `~/.pi/agent/mcp.json` global, `.pi/mcp.json` project highest. Full precedence is `~/.config/mcp/mcp.json` < `~/.agents/mcp.json` < `~/.agents/mcp/mcp.json` < Pi global < `.mcp.json` < `.pi/mcp.json`. Commit project files.
 
 ### Q: Should I enable hostConfigDiscovery?
+
 No. Default `off` is the secure default. It prevents automatic loading of Cursor/Claude Code/Codex configs. Use `/mcp setup` to preview and explicitly adopt if needed, discovery never writes external host files.
 
 ### Q: How do I add LyraShield MCP to Pi?
+
 In `.mcp.json` or `.pi/mcp.json` under `mcpServers`: local `command: npx`, `args: ["-y","@lyrashield/mcp"]` with `${LYRASHIELD_API_KEY}` env, or remote `url: https://app.lyrashieldai.com/api/mcp` with `transport: streamable-http` and `Authorization: Bearer ${LYRASHIELD_API_KEY}`. See [picode integration guide](/docs/integrations/picode).
 
 ### Q: How do I disable a server without deleting config?
+
 Run `/mcp disable <name>` in Pi, it writes `disabled: true` only in `.pi/mcp.json` project override, which is highest precedence. Run `/reload` so tool surfaces refresh. Manual equivalent is `"disabled": true` in any MCP config. Re-enable with `/mcp enable <name>`.
 
 Primary references: [OWASP Top 10](https://owasp.org/www-project-top-ten/) for injection and misconfiguration, [CWE-20](https://cwe.mitre.org/data/definitions/20.html) for validation gaps when pi.dev extensions load untrusted context, [MCP spec](https://modelcontextprotocol.io/specification/2025-06-18) for the standard .mcp.json shape Pi adopts, [GitHub Actions security](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments) for diff-aware gates, and [OSV](https://osv.dev/) for lockfile scanning after Pi adds dependencies.
@@ -159,7 +169,7 @@ Primary references: [OWASP Top 10](https://owasp.org/www-project-top-ten/) for i
 
 Pi gives you a minimal, composable harness with explicit standard paths and safe defaults like `hostConfigDiscovery: off`. That minimalism maps well to verification: you add only what you need, and Pi shows provenance. LyraShield fits that slot as release assurance for AI-built apps, a narrow MCP surface for `target, review, evidence, fix, retest, report` plus SCA and secrets, emitting SARIF for existing code-scanning. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-You configure LyraShield once in `.mcp.json` (shared) or `.pi/mcp.json` (Pi-specific) using `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely with `lsk_` Bearer key per [picode integration guide](/docs/integrations/picode). The combination is about verifier isolation: Pi owns generation and orchestration, LyraShield owns verification evidence that survives mode transitions. The platform is live in open beta, with the scan engine and automated fix execution on the roadmap.
+Configure LyraShield once in `.mcp.json` or `.pi/mcp.json` using `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely per the [PiCode integration guide](/docs/integrations/picode). Pi owns generation and orchestration; LyraShield owns verification evidence that survives mode transitions. The platform is live in open beta, and scans, findings and evidence, approval-gated fix proposals, retests, and reports are implemented. Automatic server-generated Fix PR execution is not enabled.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 

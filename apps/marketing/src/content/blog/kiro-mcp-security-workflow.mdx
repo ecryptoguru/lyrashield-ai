@@ -1,7 +1,7 @@
 ---
 title: Kiro MCP Security Workflow With LyraShield AI
 description: Setup guide for the LyraShield MCP security workflow in Kiro using the Agent Plugin and CLI, with config, verification, and a GitHub Action diff gate.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -51,7 +51,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: ecryptoguru/lyrashield-ai@v1
+      - uses: ecryptoguru/lyrashield-ai@v2
         with:
           fail_on_severity: HIGH
 ```
@@ -66,12 +66,12 @@ Before finishing a feature, run a LyraShield security check and attach the findi
 
 A rule like attach the findings link gives the agent a concrete artifact to produce, while a vague rule like be secure leaves it guessing at what evidence counts.
 
-| Workflow step | Command or action | Purpose |
-| --- | --- | --- |
-| Authenticate | npx lyrashield login | Store credentials locally |
-| Install plugin | Agent Plugin one step | Bundle server and skill |
-| Verify | npx lyrashield doctor | Confirm server reachable |
-| CI gate | GitHub Action on diff | Block on new findings |
+| Workflow step  | Command or action     | Purpose                   |
+| -------------- | --------------------- | ------------------------- |
+| Authenticate   | npx lyrashield login  | Store credentials locally |
+| Install plugin | Agent Plugin one step | Bundle server and skill   |
+| Verify         | npx lyrashield doctor | Confirm server reachable  |
+| CI gate        | GitHub Action on diff | Block on new findings     |
 
 ## Why pair Kiro with LyraShield AI
 

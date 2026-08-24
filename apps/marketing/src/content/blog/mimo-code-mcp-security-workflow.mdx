@@ -1,7 +1,7 @@
 ---
 title: MiMo Code MCP security workflow
 description: "Set up LyraShield MCP in MiMo Code step by step: CLI setup, manual config, verification, inline scan, GitHub Action diff gate, and agent rules."
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, supply-chain]
 draft: false
@@ -16,6 +16,7 @@ faq:
   - q: Can I gate scans to changed files in CI?
     a: Yes. The LyraShield GitHub Action supports a diff aware mode that scans only changed files and emits SARIF output for code scanning alerts. See the integrations documentation for the exact ref.
 ---
+
 Set up LyraShield MCP in MiMo Code by authenticating with the CLI, running init to write the mcp entry, verifying the connection, running an inline scan on the changed scope, adding a GitHub Action diff gate that emits SARIF, and adding an agent rules snippet. MiMoCode uses the mcp root key with local and remote transports, so the CLI writes the correct structure. Per the [vibe coding security guide](/blog/vibe-coding-security-guide), treat scan output as evidence and keep outcomes distinct.
 
 ## 1. Install prerequisites and authenticate
@@ -39,11 +40,11 @@ If you must edit by hand, add an entry under the `mcp` root key in `.mimocode/mi
       "type": "remote",
       "url": "https://app.lyrashieldai.com/api/mcp",
       "headers": {
-        "Authorization": "Bearer lsk_REPLACE_WITH_YOUR_TOKEN"
+        "Authorization": "Bearer lsk_REPLACE_WITH_YOUR_TOKEN",
       },
-      "enabled": true
-    }
-  }
+      "enabled": true,
+    },
+  },
 }
 ```
 
@@ -71,21 +72,13 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: LyraShield diff scan
-        uses: lyrashield-ai/scan-action@v1
+        uses: ecryptoguru/lyrashield-ai@v2
         with:
-          mode: diff
-          sarif: lyrashield-results.sarif
-          token: ${{ secrets.LYRASHIELD_TOKEN }}
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: lyrashield-results.sarif
+          fail_on_severity: HIGH
 ```
 
-The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. Keep the token in [Actions secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions), never in the workflow file. A diff aware gate keeps CI fast and focuses review on what actually changed, but it is not a substitute for a full pre launch scan; run the complete check before a release, and retain both receipts in the assurance record. If a scan fails on a dependency advisory, treat the match as a signal and verify it against the resolved version before blocking a merge. The diff aware design matters: on a large monorepo, a full scan per pull request can surface findings in untouched files, training reviewers to ignore alerts. Scanning only the changed scope keeps the gate fast and signal to noise ratio high, so SARIF alerts in the pull request view are ones the author can act on.
+The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. The runner-local Action needs no LyraShield token. A diff aware gate keeps CI fast and focuses review on what actually changed, but it is not a substitute for a full recorded scan; run the complete check before a release and retain the separate receipt. If the Action flags a dependency advisory, verify it against the resolved version before blocking a merge.
 
 ## 6. Add an agent rules snippet
 
@@ -100,12 +93,12 @@ Keep detected, verified, retest-confirmed, and inconclusive outcomes distinct.
 
 A short rule prevents the agent from treating a clean scan as a release verdict or from applying a patch without review. Pair the rule with a repository convention that scan receipts land in your release record, so the evidence loop has a durable home. If your team uses a rules file that other tools also read, keep the LyraShield lines specific so a generic instruction does not dilute them. A good rule is explicit about what the agent must not do: it must not apply a fix without human approval bound to that exact patch, nor report a release as clean on a detected signal. The snippet encodes those limits in four lines, short enough to keep.
 
-| Step | Command or file | Purpose |
-|---|---|---|
-| Authenticate | `npx lyrashield login` | Write credentials to ~/.lyrashield |
-| Add server | `npx lyrashield init` | Write the mcp entry for MiMoCode |
-| Verify | `npx lyrashield doctor` | Confirm the server connects |
-| Diff gate | GitHub Action workflow | Block regressions in pull requests |
+| Step         | Command or file         | Purpose                            |
+| ------------ | ----------------------- | ---------------------------------- |
+| Authenticate | `npx lyrashield login`  | Write credentials to ~/.lyrashield |
+| Add server   | `npx lyrashield init`   | Write the mcp entry for MiMoCode   |
+| Verify       | `npx lyrashield doctor` | Confirm the server connects        |
+| Diff gate    | GitHub Action workflow  | Block regressions in pull requests |
 
 ## Why pair MiMo Code with LyraShield
 

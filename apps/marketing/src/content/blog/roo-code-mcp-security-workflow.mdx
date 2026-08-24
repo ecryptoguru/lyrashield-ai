@@ -1,7 +1,7 @@
 ---
 title: Roo Code MCP security workflow
 description: "Set up LyraShield MCP in Roo Code step by step: CLI install, manual config, verification, inline scan, GitHub Action diff gate, and agent rules."
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, supply-chain]
 draft: false
@@ -16,6 +16,7 @@ faq:
   - q: Can I gate scans to changed files in CI?
     a: Yes. The LyraShield GitHub Action supports a diff aware mode that scans only changed files and emits SARIF output. See the integrations documentation for the exact ref.
 ---
+
 Set up LyraShield MCP in Roo Code by authenticating with the CLI, running the roo-code installer to write .roo/mcp.json, verifying the connection, running an inline scan on the changed scope, adding a GitHub Action diff gate that emits SARIF, and adding an agent rules snippet. Roo Code requires the hyphenated streamable-http transport type, so the installer writes the correct value. Per the [vibe coding security guide](/blog/vibe-coding-security-guide), treat scan output as evidence and keep outcomes distinct.
 
 ## 1. Install prerequisites and authenticate
@@ -80,23 +81,15 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: LyraShield diff scan
-        uses: lyrashield-ai/scan-action@v1
+        uses: ecryptoguru/lyrashield-ai@v2
         with:
-          mode: diff
-          sarif: lyrashield-results.sarif
-          token: ${{ secrets.LYRASHIELD_TOKEN }}
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: lyrashield-results.sarif
+          fail_on_severity: HIGH
 ```
 
-The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. Keep the token in [Actions secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions), never in the workflow file. A diff aware gate keeps CI fast and focuses review on what actually changed, but it is not a substitute for a full pre launch scan; run the complete check before a release, and retain both receipts in the assurance record. If a scan fails on a dependency advisory, treat the match as a signal and verify it against the resolved version before blocking a merge.
+The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. The runner-local Action needs no LyraShield token. A diff aware gate keeps CI fast and focuses review on what changed, but it is not a substitute for a full recorded release scan. If the Action flags a dependency advisory, verify it against the resolved version before blocking a merge.
 
-Because the diff scan only reads changed files, it stays fast even on large repos. The SARIF output includes rule id, file path, and line range for each result, so the GitHub code scanning view can annotate the exact diff line. Fetch depth zero is required so the action can compute the diff base accurately.
+Because the diff scan only reads changed files, it stays fast even on large repos. The Action manages the required checkout depth and SARIF upload itself.
 
 ## 6. Add an agent rules snippet
 
@@ -113,12 +106,12 @@ A short rule prevents the agent from treating a clean scan as a release verdict 
 
 The rule works because it fixes agent behavior before any scan runs. Without it, an agent may summarize a clean scan as "safe to ship" or apply a patch the moment it appears. With it, the agent produces evidence, waits for review, and retests only after you approve.
 
-| Step | Command or file | Purpose |
-|---|---|---|
-| Authenticate | `npx lyrashield login` | Write credentials to ~/.lyrashield |
-| Add server | `npx lyrashield install roo-code` | Write the .roo/mcp.json entry |
-| Verify | `npx lyrashield doctor` | Confirm the server connects |
-| Diff gate | GitHub Action workflow | Block regressions in pull requests |
+| Step         | Command or file                   | Purpose                            |
+| ------------ | --------------------------------- | ---------------------------------- |
+| Authenticate | `npx lyrashield login`            | Write credentials to ~/.lyrashield |
+| Add server   | `npx lyrashield install roo-code` | Write the .roo/mcp.json entry      |
+| Verify       | `npx lyrashield doctor`           | Confirm the server connects        |
+| Diff gate    | GitHub Action workflow            | Block regressions in pull requests |
 
 ## Why pair Roo Code with LyraShield
 

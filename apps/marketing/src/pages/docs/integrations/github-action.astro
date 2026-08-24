@@ -29,7 +29,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 1,
         name: "Create the workflow file",
-        text: "Create .github/workflows/lyrashield.yml in your repository referencing ecryptoguru/lyrashield-ai@v1. No secrets or account setup are required for the diff gate itself.",
+        text: "Create .github/workflows/lyrashield.yml in your repository referencing ecryptoguru/lyrashield-ai@v2. No secrets or account setup are required for the diff gate itself.",
       },
       {
         "@type": "HowToStep",
@@ -113,7 +113,7 @@ jobs:
       security-events: write  # optional: only needed to publish SARIF to Code Scanning
     steps:
       - name: LyraShield check
-        uses: ecryptoguru/lyrashield-ai@v1
+        uses: ecryptoguru/lyrashield-ai@v2
         with:
           fail_on_severity: HIGH`}</code></pre>
 

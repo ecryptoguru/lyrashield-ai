@@ -1,7 +1,7 @@
 ---
 title: Oh My Pi MCP security workflow
 description: "Set up LyraShield MCP in Oh My Pi step by step: CLI setup, manual config, verification, inline scan, GitHub Action diff gate, and agent rules."
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, supply-chain]
 draft: false
@@ -16,6 +16,7 @@ faq:
   - q: Can I gate scans to changed files in CI?
     a: Yes. The LyraShield GitHub Action supports a diff aware mode that scans only changed files and emits SARIF output. See the integrations documentation for the exact ref.
 ---
+
 Set up LyraShield MCP in Oh My Pi by authenticating with the CLI, running init to write the mcpServers entry to the agent subdirectory, verifying the connection, running an inline scan on the changed scope, adding a GitHub Action diff gate that emits SARIF, and adding an agent rules snippet. Oh My Pi supports stdio, http, and sse transports, so the CLI writes the correct structure. Per the [vibe coding security guide](/blog/vibe-coding-security-guide), treat scan output as evidence, not proof.
 
 ## 1. Install prerequisites and authenticate
@@ -71,21 +72,15 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: LyraShield diff scan
-        uses: lyrashield-ai/scan-action@v1
+        uses: ecryptoguru/lyrashield-ai@v2
         with:
-          mode: diff
-          sarif: lyrashield-results.sarif
-          token: ${{ secrets.LYRASHIELD_TOKEN }}
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: lyrashield-results.sarif
+          fail_on_severity: HIGH
 ```
 
-The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. Keep the token in [Actions secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions), never in the workflow file. A diff aware gate keeps CI fast and focuses review on what actually changed, but it is not a substitute for a full pre launch scan; run the complete check before a release, and retain both receipts in the assurance record. The action derives the changed file set from the git diff between the pull request head and its merge base, so on large monorepos it scans only the touched packages rather than the whole tree, and the SARIF output carries file path and rule metadata for each finding. If a scan fails on a dependency advisory, treat the match as a signal and verify it against the resolved version before blocking a merge.
+The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. The runner-local Action needs no LyraShield token. It derives the changed files from the pull-request range and uploads SARIF; use a separate recorded scan for full release evidence. If the Action flags a dependency advisory, verify it against the resolved version before blocking a merge.
+
+Keep the distinction visible in pull-request templates: the local Action receipt covers the changed diff, while a hosted scan records its own target revision, coverage bounds, finding identities, and retest evidence.
 
 ## 6. Add an agent rules snippet
 
@@ -100,12 +95,12 @@ Keep detected, verified, retest-confirmed, and inconclusive outcomes distinct.
 
 A short rule prevents the agent from treating a clean scan as a release verdict or from applying a patch without review. Pair the rule with a repository convention that scan receipts land in your release record, so the evidence loop has a durable home. If your team uses named OMP profiles, keep the LyraShield rule in a profile independent location like the project `.omp` directory so it applies under every profile rather than only the one where you authored it.
 
-| Step | Command or file | Purpose |
-|---|---|---|
-| Authenticate | `npx lyrashield login` | Write credentials to ~/.lyrashield |
-| Add server | `npx lyrashield init` | Write the mcpServers entry for OMP |
-| Verify | `npx lyrashield doctor` | Confirm the server connects |
-| Diff gate | GitHub Action workflow | Block regressions in pull requests |
+| Step         | Command or file         | Purpose                            |
+| ------------ | ----------------------- | ---------------------------------- |
+| Authenticate | `npx lyrashield login`  | Write credentials to ~/.lyrashield |
+| Add server   | `npx lyrashield init`   | Write the mcpServers entry for OMP |
+| Verify       | `npx lyrashield doctor` | Confirm the server connects        |
+| Diff gate    | GitHub Action workflow  | Block regressions in pull requests |
 
 ## Why pair Oh My Pi with LyraShield
 
