@@ -4,6 +4,10 @@ The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) 
 
 Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
 
+Use hosted OAuth when the client supports remote MCP authorization. For local stdio clients,
+run `lyrashield login --oauth` once and reuse the user-only credential store. Workspace API keys
+are the explicit CI/headless fallback, not the default interactive setup.
+
 ## Protocol compatibility
 
 This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol is `2025-11-25`; it also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05`, and `2024-10-07` for older clients.
@@ -45,10 +49,17 @@ Every tool calls the LyraShield REST API with a workspace API key or OAuth beare
 
 ## Setup
 
-1. Create a workspace API key in LyraShield: **Settings → API keys** (read-only or read & write).
-2. Add the server to your tool. It needs two environment variables:
-   - `LYRASHIELD_API_KEY` — your `lsk_…` key
-   - `LYRASHIELD_API_URL` — your LyraShield app URL (defaults to `http://localhost:3000`)
+1. Run `npx lyrashield login --oauth` and select one workspace in the browser.
+2. Add `npx -y @lyrashield/mcp` to the client. No secret belongs in a project config file.
+
+For CI or another environment that cannot complete OAuth, create a workspace API key in
+LyraShield under **Settings → API keys** (prefer read-only), then inject these through the
+client's user-level secret or environment configuration:
+
+- `LYRASHIELD_API_KEY` — your `lsk_…` key
+- `LYRASHIELD_API_URL` — your LyraShield app URL (defaults to `http://localhost:3000`)
+
+The interactive examples below use the OAuth credential store and therefore contain no secret.
 
 ### Claude Code / Cursor / Windsurf / Gemini CLI (the `mcpServers` shape)
 
@@ -57,17 +68,13 @@ Every tool calls the LyraShield REST API with a workspace API key or OAuth beare
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": {
-        "LYRASHIELD_API_KEY": "lsk_your_key",
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
+      "args": ["-y", "@lyrashield/mcp"]
     }
   }
 }
 ```
 
-Claude Code one-liner: `claude mcp add lyrashield -e LYRASHIELD_API_KEY=lsk_… -e LYRASHIELD_API_URL=https://app.lyrashieldai.com -- npx -y @lyrashield/mcp`
+Claude Code one-liner: `claude mcp add lyrashield -- npx -y @lyrashield/mcp`
 
 ### VS Code (note: the root key is `servers`, not `mcpServers`)
 
@@ -79,11 +86,7 @@ Claude Code one-liner: `claude mcp add lyrashield -e LYRASHIELD_API_KEY=lsk_… 
     "lyrashield": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": {
-        "LYRASHIELD_API_KEY": "lsk_your_key",
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
+      "args": ["-y", "@lyrashield/mcp"]
     }
   }
 }
@@ -97,13 +100,31 @@ OpenAI Codex keeps MCP servers under the `[mcp_servers.<name>]` table, and the A
 [mcp_servers.lyrashield]
 command = "npx"
 args = ["-y", "@lyrashield/mcp"]
-
-[mcp_servers.lyrashield.env_vars]
-LYRASHIELD_API_KEY = "lsk_your_key"
-LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
 ```
 
+For the API-key fallback, add the dedicated `[mcp_servers.lyrashield.env_vars]` sub-table;
+a plain `env` key is silently ignored.
+
 Per-client config for OpenCode, Kilo Code, Cline, Zed, and the cloud platforms lives in the LyraShield docs.
+
+### Supported-client boundary
+
+The integration registry contains 30 install entries for 24 distinct coding agents. Entries are
+`COMPATIBLE`, `EXPERIMENTAL`, or `DEPRECATED` and record either documentation, package-conformance,
+or retained runtime evidence. Presence in the registry means LyraShield can render or guide that
+client's current config shape; it does not claim that every client release completed an
+authenticated runtime matrix.
+
+- Agent Plugin package-conformance: Claude Code, Cursor, OpenAI Codex, and Kiro.
+- Experimental Agent Plugin paths: VS Code and GitHub Copilot; use their supported config/install
+  paths until retained runtime receipts exist.
+- Config or guided setup: Windsurf, VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
+  Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity,
+  PiCode, OpenClaw, Hermes, and Devin, subject to each registry entry's support tier.
+
+Run `lyrashield init` for detected clients or `lyrashield install <agent>` for one explicit target.
+Do not reuse a nearby client's JSON/TOML shape: root keys, transport names, credential interpolation,
+and discovery locations differ.
 
 ### Credentials resolution
 
@@ -117,7 +138,26 @@ The server reads `LYRASHIELD_API_KEY` and `LYRASHIELD_API_URL` from the environm
 
 Point any remote-MCP-capable client at the hosted endpoint. Two authentication methods are supported:
 
-**API key (Bearer token):**
+**OAuth 2.0 (recommended):** remote clients that support OAuth 2.0 (per the MCP spec) can
+authenticate through the hosted OAuth flow at `/oauth/consent` with workspace selection and
+optional write scope. The discovery endpoints are `.well-known/oauth-authorization-server` and
+`.well-known/oauth-protected-resource`. Remote connections are read-only by default; write actions
+require explicit scope and approval.
+
+Register the endpoint without a static authorization header so the client can follow discovery:
+
+```json
+{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "http",
+      "url": "https://app.lyrashieldai.com/api/mcp"
+    }
+  }
+}
+```
+
+**API key fallback (Bearer token):**
 
 ```json
 {
@@ -130,8 +170,6 @@ Point any remote-MCP-capable client at the hosted endpoint. Two authentication m
   }
 }
 ```
-
-**OAuth 2.0 (hosted):** remote clients that support OAuth 2.0 (per the MCP spec) can authenticate through the hosted OAuth flow at `/oauth/consent` with workspace selection and optional write scope. The discovery endpoints are `.well-known/oauth-authorization-server` and `.well-known/oauth-protected-resource`. Remote connections are read-only by default; write actions require explicit scope and approval.
 
 The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. Because a stateless HTTP request has no way to prompt a human, **mutating tools are refused over remote by default** — run those from the local stdio server (which prompts you), or use a pre-authorized trusted automation. Read-only tools work everywhere.
 
@@ -146,6 +184,20 @@ The remote endpoint runs the same guard and tools as stdio. Hosted responses are
 Remote MCP has no normal-user or marketplace write bypass. OAuth writes always remain scope- and approval-gated; operator-only automation controls are intentionally documented outside this public setup guide.
 
 Read-only tools never prompt. A read-only key is additionally rejected server-side for any write action.
+
+## Compatibility receipts
+
+- Package: `@lyrashield/mcp` 0.2.2; runtime: Node.js 24 or newer.
+- SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
+  negotiated versions listed above.
+- `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,
+  credentials, prompt-injection guards, schemas, structured results, and approval policy.
+- [`docs/protocol-conformance.md`](./docs/protocol-conformance.md) maps protocol claims to focused
+  tests and lists intentionally unsupported draft features.
+
+These are repository compatibility receipts. Production OAuth callbacks, live provider state,
+client-specific authenticated browser flows, and marketplace publication require separate live
+evidence and are not implied by a green package suite.
 
 ## License
 

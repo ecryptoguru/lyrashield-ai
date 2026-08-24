@@ -111,6 +111,13 @@ Review the workspace, target, and goal, choose an available review depth, then s
 
 ## 5. Navigation and workspace switching
 
+Home offers two presentation modes in the header:
+
+- **Guided** is the default. It keeps the launch verdict, assurance steps, next action, security score, and open-finding count prominent while hiding secondary analytical panels.
+- **Pro** adds risk posture and trend, retained finding mix, remediation flow, and recent scan activity.
+
+The choice is saved per workspace in the current browser. If browser storage is unavailable, Guided remains fully functional. Switching modes changes presentation only; it does not change permissions, targets, scan depth, evidence state, or launch verdict.
+
 The primary navigation contains four lifecycle destinations:
 
 - **Home** — current launch verdict, assurance progress, risk posture, remediation flow, retained finding mix, recent scans, and monthly usage.
@@ -399,6 +406,12 @@ Available roles:
 
 The server checks permissions for every protected API action. A visible page does not override the role check.
 
+### Platform administrators
+
+Platform administration is not a workspace role. The hidden **Platform Admin** destination is server-rendered only for `ecryptoguru@gmail.com` and `ankit@lyrashieldai.com` after each account is email-verified, assigned `PLATFORM_OPERATOR`, enrolled in TOTP, and signed in through a recently TOTP-verified browser session. API keys, bearer tokens, and ordinary Owner/Admin membership cannot grant access; other users receive not found.
+
+The current console shows bounded platform health plus paginated users, workspaces, scans, platform-audit entries, and affiliate review. It does not show customer source, scan payloads, secrets, or model cost. Affiliate changes remain disabled until every write uses the one-time elevation and atomic platform-audit transaction. Operators should follow [`docs/ops/platform-admin-runbook.md`](docs/ops/platform-admin-runbook.md); code availability does not prove production provisioning or authenticated browser access.
+
 ## 20. Integrations
 
 The **Integrations** page has two tabs:
@@ -519,12 +532,12 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 `login` writes `~/.lyrashield/credentials.json` with `0o600` permissions. If the browser-based OAuth device flow is unavailable, it falls back to `LYRASHIELD_API_KEY` from the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com` and is resolved consistently by `packages/credentials`, which is the single source of truth for the credentials file.
 
-`init`/`install <agent>` choose an install strategy based on the agent. All 24 distinct agents are rendered from `packages/agent-registry`, which produces 30 registry entries. Four clients have confirmed Agent Plugins v1.0.0 manifests; the registry also retains reserved entries for VS Code and GitHub Copilot pending independent verification.
+`init`/`install <agent>` choose an install strategy based on the agent. `packages/agent-registry` contains 30 entries and resolves them into 26 preferred client surfaces. Package compatibility is explicit: CLI `0.2.0` supports Node 22–24; MCP `0.2.2` and Agent Plugin `0.1.17` require Node 24 or newer.
 
-- **Agent Plugin** — for Claude Code, Cursor, OpenAI Codex, and Kiro, the CLI prefers a portable plugin install from `@lyrashield/agent-plugin` (currently v0.1.17, which adds Cursor streamable-http transport support). Plugin files land in the client-specific plugin directory and never inline a raw API key. Pass `--strategy agent-plugin` or `--strategy config-file` to force a specific strategy when both are available. The `packages/agent-registry` covers all 24 distinct agents.
-- **Config-file** — 16 clients whose settings can be safely written; the CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Agent Plugin** — for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro, the CLI prefers a portable plugin install from `@lyrashield/agent-plugin` (currently v0.1.17). Generated client shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root manifest. Plugin files never inline a raw API key. VS Code stays on its verified config-file strategy.
+- **Config-file** — the registry provides 16 writable config variants; 13 are preferred client paths and three remain explicit legacy alternatives for plugin-preferred clients. The CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
-- **Guided manual** — for the 7 clients whose tooling has no writable config file — Cline, JetBrains AI & Junie, PiCode, OpenClaw, Hermes, Goose, and Aider — `install` prints exact copy-paste command/argument/environment values, generated from the same source of truth the writable installers use.
+- **Guided manual** — for the seven clients whose tooling has no writable config file — Devin, Cline, JetBrains AI & Junie, PiCode, OpenClaw, Goose, and Aider — `install` prints exact copy-paste command/argument/environment values, generated from the same source of truth the writable installers use.
 
 `uninstall <agent>` removes the LyraShield entry from the chosen agent's config or plugin directory.
 
@@ -576,6 +589,8 @@ The remote-HTTP transport supports two authentication methods:
 - **OAuth 2.0** — the hosted flow at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` (also under `/api/mcp/`) lets an MCP client authenticate through `/oauth/consent`, select a workspace, and request an optional write scope. Remote connections are **read-only by default**; write actions require the OAuth write scope plus explicit approval. OAuth clients cannot use the operator-only `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS` bypass.
 
 A pre-authorized trusted-automation opt-in remains available for CI that should never pause for approval. Model-facing inputs pass through the prompt-injection guard in every case.
+
+The local MCP package uses MCP SDK `1.30` and requires Node 24 or newer. Client-specific install guides remain the authority for whether a client uses stdio, Streamable HTTP, OAuth discovery, a plugin, a config file, or guided manual setup. A package test or generated fixture is not an authenticated receipt from every supported client.
 
 Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CUSTOM. Dashboard users should normally prefer the named presets rather than raw modes.
 

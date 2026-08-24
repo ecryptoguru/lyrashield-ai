@@ -1,9 +1,8 @@
 # @lyrashield/agent-plugin
 
 Portable **Agent Plugins 1.0.0** package for LyraShield AI. It bundles LyraShield's MCP
-server and skills into a single portable plugin that any client supporting the
-[vendor-neutral Agent Plugins v1.0.0](https://agent-plugins.org) standard can discover and
-load — no per-client config editing required.
+connection and skills into one portable plugin. Conforming clients can load the canonical
+manifest; generated client shims cover the launch clients listed below.
 
 ## What's in the box
 
@@ -31,6 +30,23 @@ launch client can find the plugin in the location it expects:
 Each shim directory contains a copy of `plugin.json` pointing back at the canonical
 `plugin/` contents.
 
+## Compatibility status
+
+| Client         | Package artifact       | Current evidence                                 | Recommended setup                             |
+| -------------- | ---------------------- | ------------------------------------------------ | --------------------------------------------- |
+| Claude Code    | `.claude-plugin/`      | Package-conformance tests                        | Agent Plugin                                  |
+| Cursor         | `.cursor-plugin/`      | Package-conformance tests                        | Agent Plugin                                  |
+| OpenAI Codex   | `.codex-plugin/`       | Package-conformance tests                        | Agent Plugin                                  |
+| Kiro           | `.kiro-plugin/`        | Package-conformance tests                        | Agent Plugin after `lyrashield login --oauth` |
+| VS Code        | Portable root manifest | Experimental; no retained client-runtime receipt | `lyrashield install vscode`                   |
+| GitHub Copilot | Portable root manifest | Experimental; no retained client-runtime receipt | Wait for a verified install path              |
+
+Package-conformance means the generated manifest, schema, transport, version, and export
+boundary passed repository tests. It does not mean every client version has completed an
+authenticated runtime matrix. The wider registry contains compatible config or guided setup
+for 24 distinct coding agents; use `lyrashield init` or `lyrashield install <agent>` rather than
+copying another client's config shape.
+
 ## API
 
 - `getPluginDir()` — returns the absolute path to the canonical `plugin/` directory.
@@ -47,17 +63,33 @@ pnpm --filter @lyrashield/agent-plugin build:plugin   # regenerate SKILL.md + cl
 pnpm --filter @lyrashield/agent-plugin test
 ```
 
-## Credentials resolution
+## Authentication and approvals
 
-The bundled MCP server (`npx -y @lyrashield/mcp`) resolves credentials the same way the
-standalone server does: it reads `LYRASHIELD_API_KEY` and `LYRASHIELD_API_URL` from the
-environment first, and if those are absent it falls back to
-`~/.lyrashield/credentials.json` (written by `lyrashield login`, `0o600` perms). This
-means a single `lyrashield login` is enough for the plugin to work — no env vars required.
+The canonical, Claude, Cursor, and Codex artifacts connect to the hosted Streamable HTTP
+endpoint without embedding a secret. The client follows hosted OAuth discovery, selects one
+workspace, and receives read scope by default. Write scope is optional, and every mutation
+still requires exact-argument approval.
+
+Kiro uses the local `npx -y @lyrashield/mcp` stdio adapter. Run `lyrashield login --oauth`
+first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
+variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
+Headless writes without an approval channel fail closed.
 
 > **Note:** per the Agent Plugins v1.0.0 spec, the `mcp.json` `env` block must **not**
 > contain `PLUGIN_ROOT` or `PLUGIN_DATA`. Those keys are reserved for the host and are
 > injected at load time.
+
+## Version and release receipts
+
+- Package: `@lyrashield/agent-plugin` 0.1.17; runtime: Node.js 24 or newer.
+- Standard schema: Agent Plugins 1.0.0.
+- `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
+  OAuth-first manifests, mutation exclusions, artifact versions, and the public export boundary.
+- `pnpm --filter @lyrashield/agent-plugin export:marketplace -- <directory>` creates the
+  reviewable marketplace payload and provenance manifest.
+
+An exported or validated artifact is not proof that a vendor marketplace accepted, published,
+or live-tested it. Public listings remain separate vendor-controlled submissions.
 
 ## See also
 

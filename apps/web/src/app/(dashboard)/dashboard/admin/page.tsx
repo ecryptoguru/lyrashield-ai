@@ -69,8 +69,8 @@ export default async function PlatformAdminPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-warning bg-warning/10 p-4 text-sm">
         <p>
-          Production mutations stay disabled until MFA elevation and mandatory global audit are
-          active.
+          Global health is live. Affiliate mutations remain read-only until operation-specific
+          elevation and atomic platform audit controls are connected.
         </p>
         <p className="text-muted-foreground text-xs">
           Refreshed {new Date(overview.generatedAt).toLocaleString()}
@@ -122,7 +122,7 @@ export default async function PlatformAdminPage() {
           href="/dashboard/admin/affiliates"
           className={buttonVariants({ variant: "secondary" })}
         >
-          Manage affiliates
+          Review affiliates
         </Link>
         <Link
           href="/dashboard/launch-readiness"

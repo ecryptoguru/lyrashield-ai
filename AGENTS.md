@@ -23,7 +23,7 @@ Repository ownership:
 
 Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not rename `@lyrashield/*` or `LYRASHIELD_*` without founder approval.
 
-## Current verified state — 2026-08-21
+## Current verified state — 2026-08-24
 
 - Open beta with open registration at `https://app.lyrashieldai.com/sign-up`; never call it pre-launch or a waitlist.
 - Marketing, passive Lite Scanner, authenticated app origin, Cloudflare bindings, TLS, sitemap/robots/`llms.txt`, security headers, and open-registration CTAs are live.
@@ -38,6 +38,12 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Production runtime DB role `app_runtime_prod` was queried on 2026-08-22 and verified `rolsuper=false`, `rolbypassrls=false`.
 - Polar/Razorpay test credentials, product/price maps, webhook secrets, signed smoke, and non-charge objects are configured. Live paid activation remains founder-controlled.
 - CLI and GitHub Action classify added `eval()`/`exec()` as `HIGH`, so the default `--fail-on HIGH` gate blocks them.
+- Dashboard now has workspace-scoped Guided and Pro experiences. Guided is the safe default and keeps launch-critical actions; Pro adds risk posture, retained-finding, remediation, and recent-scan detail without changing permissions or scan behavior.
+- Platform administration is implemented as a hidden, noindex, cross-workspace read console for overview, users, workspaces, scans, audit, and affiliates. Access requires an allowlisted, verified `PLATFORM_OPERATOR` browser session with recent TOTP; bearer credentials and workspace roles never grant access.
+- Production configuration accepts exactly `ecryptoguru@gmail.com,ankit@lyrashieldai.com` as platform administrators. Provisioning is fail-closed: read-only preflight first, then explicit apply; both accounts must already be unique, email-verified, and TOTP-enrolled. Apply revokes their sessions/elevations and writes a bootstrap audit receipt.
+- Platform-affiliate mutations remain disabled until each write is connected to the one-time action elevation and atomic platform-audit transaction. The current admin console is read-only.
+- Agent distribution now uses CLI `0.2.0`, MCP `0.2.2` on MCP SDK `1.30`, Agent Plugin `0.1.17`, Node 24 support, hosted OAuth/read-only-by-default remote MCP, and 30 registry entries representing 26 preferred client surfaces. Do not update Node 26 types, ESLint 10, ioredis 6, or TypeScript 7 until compatibility migrations are planned.
+- Marketing ships indexability-gated `robots.txt`, sitemap, dated `llms.txt`, `agents.md`, structured data, canonical integration guides, comparison/research pages, and explicit answer-engine crawler policy. These are SEO/AEO/GEO foundations, not proof of webmaster indexing or answer-engine citation.
 
 Claims boundary: this is bounded runtime/accounting evidence for one target and revision, not proof of universal coverage, independently verified findings, or security.
 
@@ -52,6 +58,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 7. Verify public scorecard metadata, all card formats, badge, revocation/expiry, referrals, human-event deduplication, external unfurls, and webmaster submission.
 8. Triage current Standard findings and obtain independent verification where warranted.
 9. After founder authorization, run separate controlled Deep/Terra acceptance with exact image, routing, cost, receipts, and terminal proof.
+10. Run production platform-admin preflight; only apply the exact-two role set after both named users personally verify email and enroll TOTP, then capture fresh-session MFA browser proof.
 
 ## Founder decisions
 
