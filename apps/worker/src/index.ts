@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { hostname } from "node:os"
-import { unlink, writeFile } from "node:fs/promises"
+import { chmod, readFile, unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
@@ -40,6 +40,7 @@ let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
+let egressDrainTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
 let staleResourceReaperTimer: NodeJS.Timeout | null = null
 let billingJobsTimers: NodeJS.Timeout[] | null = null
@@ -49,6 +50,9 @@ const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pi
 const readinessPath = "/tmp/lyrashield-worker-ready"
 const activeJobPath = "/tmp/lyrashield-worker-active"
 const plannedRestartPath = "/tmp/lyrashield-worker-planned-restart"
+const egressDrainRequestPath = "/tmp/lyrashield-worker-egress-drain-request"
+const egressDrainReadyPath = "/tmp/lyrashield-worker-egress-drain-ready"
+const egressDrainTokenPattern = /^[a-f0-9]{64}$/
 export const RECONCILIATION_INTERVAL_MS = 300_000
 export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
 export const MANAGED_REDIS_STALLED_INTERVAL_MS = 60_000
@@ -114,6 +118,51 @@ export async function clearWorkerActive(): Promise<void> {
   })
 }
 
+async function readOptionalFile(path: string): Promise<string | null> {
+  try {
+    // Caller passes only the fixed local handshake paths declared above.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    return (await readFile(path, "utf8")).trim()
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null
+    throw error
+  }
+}
+
+export async function acknowledgeEgressDrainRequest(
+  scanWorker: Pick<Worker, "pause">,
+  beforePause: () => Promise<void> = async () => {}
+): Promise<boolean> {
+  const token = await readOptionalFile(egressDrainRequestPath)
+  if (token === null) return false
+  if (!egressDrainTokenPattern.test(token)) throw new Error("Invalid egress drain request token")
+  if ((await readOptionalFile(egressDrainReadyPath)) === token) return true
+
+  await beforePause()
+  // BullMQ sets the local paused flag before waiting for all current jobs, so
+  // no new scan claim can race the matching acknowledgement written below.
+  await scanWorker.pause()
+  if ((await readOptionalFile(egressDrainRequestPath)) !== token) {
+    throw new Error("Egress drain request changed before acknowledgement")
+  }
+  await writeFile(egressDrainReadyPath, token, { mode: 0o600 })
+  await chmod(egressDrainReadyPath, 0o600)
+  return true
+}
+
+export async function resumeWorkerAfterEgressDrainCancellation(
+  scanWorker: Pick<Worker, "resume">,
+  restoreReadiness: () => Promise<void>
+): Promise<boolean> {
+  if ((await readOptionalFile(egressDrainRequestPath)) !== null) return false
+  await unlink(egressDrainReadyPath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error
+  })
+  await scanWorker.resume()
+  await restoreReadiness()
+  return true
+}
+
 export async function settleScanWorkerForShutdown(
   closePromise: Promise<void> | null | undefined,
   timeoutMs = 25_000
@@ -161,6 +210,10 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer)
     heartbeatTimer = null
+  }
+  if (egressDrainTimer) {
+    clearInterval(egressDrainTimer)
+    egressDrainTimer = null
   }
   if (reconciliationTimer) {
     clearInterval(reconciliationTimer)
@@ -435,6 +488,10 @@ async function main(): Promise<void> {
   await registerScanWorker(workerId)
   await refreshWorkerReadiness()
   observeWorkerRun(worker.run(), (termination) => {
+    if (worker?.isPaused()) {
+      logger.info("BullMQ worker paused for egress refresh")
+      return
+    }
     logger.error("BullMQ worker stopped unexpectedly", {
       reason: termination.reason,
       ...("error" in termination
@@ -452,9 +509,44 @@ async function main(): Promise<void> {
     queue: SCAN_QUEUE_NAME,
     concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
   })
+  let egressDrainCheckInFlight = false
+  let egressDrainAcknowledged = false
+  egressDrainTimer = setInterval(() => {
+    if (!worker || egressDrainCheckInFlight) return
+    egressDrainCheckInFlight = true
+    void acknowledgeEgressDrainRequest(worker, removeWorkerReadiness)
+      .then(async (acknowledged) => {
+        if (acknowledged) {
+          egressDrainAcknowledged = true
+          return
+        }
+        if (!egressDrainAcknowledged || !worker) return
+        if (
+          await resumeWorkerAfterEgressDrainCancellation(worker, async () => {
+            await registerScanWorker(workerId)
+            await refreshWorkerReadiness()
+          })
+        ) {
+          egressDrainAcknowledged = false
+          logger.info("Worker resumed after cancelled egress refresh")
+        }
+      })
+      .catch((error) => {
+        logger.warn("Worker egress drain handshake failed", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+      .finally(() => {
+        egressDrainCheckInFlight = false
+      })
+  }, 1_000)
   // Refresh every two minutes, leaving more than one missed interval before
   // the five-minute worker registration expires. Jobs also refresh it on completion.
   heartbeatTimer = setInterval(() => {
+    if (worker?.isPaused()) {
+      void removeWorkerReadiness().catch(() => {})
+      return
+    }
     void registerScanWorker(workerId)
       .then(refreshWorkerReadiness)
       .catch(async (error) => {

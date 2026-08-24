@@ -44,6 +44,8 @@ describe("fetchThreatSignals", () => {
 
     const signals = await fetchThreatSignals(["CVE-2021-44228", "not-a-cve", "CVE-2021-44228"], {
       fetchFn,
+      cisaFetchFn: fetchFn,
+      cisaResolver: publicResolver,
     })
 
     expect(signals.get("CVE-2021-44228")).toEqual({
@@ -56,8 +58,24 @@ describe("fetchThreatSignals", () => {
       epssDate: "2026-07-17",
     })
     expect(fetchFn).toHaveBeenCalledTimes(2)
-    expect(String(vi.mocked(fetchFn).mock.calls[1]?.[0])).toContain("CVE-2021-44228")
-    expect(String(vi.mocked(fetchFn).mock.calls[1]?.[0])).not.toContain("not-a-cve")
+    const epssUrl = vi
+      .mocked(fetchFn)
+      .mock.calls.map((call) => String(call[0]))
+      .find((url) => url.includes("api.first.org"))
+    expect(epssUrl).toContain("CVE-2021-44228")
+    expect(epssUrl).not.toContain("not-a-cve")
+  })
+
+  it("skips CISA without a proxy fetch and keeps FIRST direct", async () => {
+    const fetchFn = vi.fn(
+      async () => new Response(JSON.stringify({ data: [{ cve: "CVE-2024-12345", epss: "0.2" }] }))
+    ) as unknown as typeof fetch
+
+    await expect(fetchThreatSignals(["CVE-2024-12345"], { fetchFn })).resolves.toEqual(
+      new Map([["CVE-2024-12345", { epss: 0.2 }]])
+    )
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    expect(String(vi.mocked(fetchFn).mock.calls[0]?.[0])).toContain("api.first.org")
   })
 
   it("returns partial intelligence when one public source is unavailable", async () => {

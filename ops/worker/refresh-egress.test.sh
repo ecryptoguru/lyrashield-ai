@@ -10,17 +10,62 @@ fake_bin="$test_dir/bin"
 restart_pending_file="$test_dir/restart-pending"
 docker_capture="$test_dir/docker.log"
 getent_capture="$test_dir/getent.log"
+drain_request_capture="$test_dir/drain-request"
+planned_restart_capture="$test_dir/planned-restart"
+worker_ready_capture="$test_dir/worker-ready"
+activity_transition_capture="$test_dir/activity-transition"
 mkdir -p "$fake_bin"
 
 cat >"$fake_bin/docker" <<'EOF'
 #!/bin/sh
 if [ "$1" = "exec" ]; then
-  if [ "$3" = "test" ]; then
-    [ "${DOCKER_WORKER_ACTIVE:-0}" = "1" ]
-    exit
-  fi
-  printf '%s\n' "$*" >>"$DOCKER_CAPTURE"
-  exit 0
+  case "$3" in
+    true) exit 0 ;;
+    test)
+      case "$5" in
+        /tmp/lyrashield-worker-active) [ "${DOCKER_WORKER_ACTIVE:-0}" = "1" ] ;;
+        /tmp/lyrashield-worker-ready) [ -s "$WORKER_READY_CAPTURE" ] ;;
+        *) exit 1 ;;
+      esac
+      ;;
+    cat)
+      case "$4" in
+        /tmp/lyrashield-worker-egress-drain-request)
+          [ -s "$DRAIN_REQUEST_CAPTURE" ] && cat "$DRAIN_REQUEST_CAPTURE"
+          ;;
+        /tmp/lyrashield-worker-egress-drain-ready)
+          if [ "${DOCKER_DRAIN_READY:-0}" = "1" ] && [ -s "$DRAIN_REQUEST_CAPTURE" ]; then
+            cat "$DRAIN_REQUEST_CAPTURE"
+          else
+            exit 1
+          fi
+          ;;
+        *) exit 1 ;;
+      esac
+      ;;
+    sh)
+      case "$5" in
+        *egress-drain-request*)
+          printf '%s\n' "$7" >"$DRAIN_REQUEST_CAPTURE"
+          rm -f "$WORKER_READY_CAPTURE"
+          if [ "${BECOME_ACTIVE_ON_DRAIN:-0}" = "1" ]; then
+            : >"$ACTIVITY_TRANSITION_CAPTURE"
+          fi
+          ;;
+        *planned-restart*)
+          : >"$PLANNED_RESTART_CAPTURE"
+          printf '%s\n' "$*" >>"$DOCKER_CAPTURE"
+          ;;
+        *) exit 1 ;;
+      esac
+      ;;
+    rm)
+      rm -f "$DRAIN_REQUEST_CAPTURE" "$PLANNED_RESTART_CAPTURE"
+      printf '%s\n' "resumed" >"$WORKER_READY_CAPTURE"
+      ;;
+    *) exit 1 ;;
+  esac
+  exit
 fi
 case "$5" in
   *Subnet*)
@@ -57,6 +102,12 @@ EOF
 cat >"$fake_bin/systemctl" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$SYSTEMCTL_CAPTURE"
+[ "${SYSTEMCTL_FAIL:-0}" != "1" ]
+EOF
+
+cat >"$fake_bin/sleep" <<'EOF'
+#!/bin/sh
+exit 0
 EOF
 
 chmod +x "$fake_bin"/*
@@ -77,14 +128,25 @@ iptables_capture="$test_dir/iptables.rules"
 : >"$systemctl_capture"
 : >"$docker_capture"
 : >"$getent_capture"
+: >"$worker_ready_capture"
 
 run_refresh() {
   worker_active="$1"
-  output_capture="$2"
+  drain_ready="$2"
+  systemctl_fail="$3"
+  output_capture="$4"
+  error_capture="$5"
   PATH="$fake_bin:$PATH" \
   DOCKER_WORKER_ACTIVE="$worker_active" \
+  DOCKER_DRAIN_READY="$drain_ready" \
+  SYSTEMCTL_FAIL="$systemctl_fail" \
+  BECOME_ACTIVE_ON_DRAIN="${BECOME_ACTIVE_ON_DRAIN:-0}" \
   SYSTEMCTL_CAPTURE="$systemctl_capture" \
   DOCKER_CAPTURE="$docker_capture" \
+  DRAIN_REQUEST_CAPTURE="$drain_request_capture" \
+  PLANNED_RESTART_CAPTURE="$planned_restart_capture" \
+  WORKER_READY_CAPTURE="$worker_ready_capture" \
+  ACTIVITY_TRANSITION_CAPTURE="$activity_transition_capture" \
   GETENT_CAPTURE="$getent_capture" \
   IPTABLES_CAPTURE="$iptables_capture" \
   LYRASHIELD_WORKER_ENV_FILE="$environment_file" \
@@ -92,18 +154,45 @@ run_refresh() {
   LYRASHIELD_EGRESS_RESTART_PENDING_FILE="$restart_pending_file" \
   LYRASHIELD_REFRESH_PINNED_HOSTS=1 \
   LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE=1 \
-  sh "$repo_root/ops/worker/refresh-egress.sh" >"$output_capture"
+  LYRASHIELD_EGRESS_DRAIN_WAIT_ATTEMPTS=1 \
+  sh "$repo_root/ops/worker/refresh-egress.sh" >"$output_capture" 2>"$error_capture"
 }
 
 first_output="$test_dir/first.out"
 second_output="$test_dir/second.out"
 idle_output="$test_dir/idle.out"
 final_output="$test_dir/final.out"
+error_output="$test_dir/error.out"
 expected_diagnostic="Worker egress pins changed; hosts: ai.test,api.first.org,api.github.com,api.osv.dev,api.parallel.ai,db.test,github.com,proxy.test,redis.test,storage.test; IP addresses redacted"
 
-run_refresh 1 "$first_output"
+printf '%s\n' "sentinel" >"$iptables_capture"
+: >"$pin_file"
+if run_refresh 1 0 0 "$first_output" "$error_output"; then
+  echo "Active refresh accepted a missing old pin set" >&2
+  exit 1
+fi
+grep -Fqx 'sentinel' "$iptables_capture"
+grep -Fq 'validated old pins are unavailable' "$error_output"
+rm -f "$restart_pending_file"
+
+printf '%s\n' "unreviewed.test 8.8.8.8 443" >"$pin_file"
+if run_refresh 0 0 0 "$first_output" "$error_output"; then
+  echo "Refresh accepted an unreviewed retained endpoint" >&2
+  exit 1
+fi
+grep -Fqx 'sentinel' "$iptables_capture"
+grep -Fq 'unapproved host or port' "$error_output"
+
+printf '%s\n' "proxy.test 9.9.9.9 443" >"$pin_file"
+: >"$systemctl_capture"
+rm -f "$restart_pending_file" "$drain_request_capture" "$planned_restart_capture"
+export BECOME_ACTIVE_ON_DRAIN=1
+run_refresh 0 0 0 "$first_output" "$error_output"
+unset BECOME_ACTIVE_ON_DRAIN
 test ! -s "$systemctl_capture"
 test -e "$restart_pending_file"
+test -e "$activity_transition_capture"
+test -s "$drain_request_capture"
 grep -q '^proxy.test 9.9.9.9 443$' "$pin_file"
 grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT' "$iptables_capture"
 grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT' "$iptables_capture"
@@ -114,7 +203,7 @@ if printf '%s\n' "$diagnostic" | grep -Eq '9\.9\.9\.9|8\.8\.4\.4'; then
   exit 1
 fi
 
-run_refresh 1 "$second_output"
+run_refresh 1 0 0 "$second_output" "$error_output"
 test ! -s "$systemctl_capture"
 test -e "$restart_pending_file"
 grep -q '^proxy.test 9.9.9.9 443$' "$pin_file"
@@ -122,7 +211,21 @@ grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT' "$iptables_capture"
 grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT' "$iptables_capture"
 grep -Fqx "$expected_diagnostic" "$second_output"
 
-run_refresh 0 "$idle_output"
+if run_refresh 0 1 1 "$idle_output" "$error_output"; then
+  echo "Refresh ignored a restart scheduling failure" >&2
+  exit 1
+fi
+grep -q '^--no-block try-restart lyrashield-worker.service$' "$systemctl_capture"
+test -e "$restart_pending_file"
+test ! -e "$drain_request_capture"
+test -s "$worker_ready_capture"
+grep -q '^proxy.test 9.9.9.9 443$' "$pin_file"
+grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT' "$iptables_capture"
+grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT' "$iptables_capture"
+grep -Fq 'retained old pins and pending retry' "$error_output"
+
+: >"$systemctl_capture"
+run_refresh 0 1 0 "$idle_output" "$error_output"
 grep -q '^--no-block try-restart lyrashield-worker.service$' "$systemctl_capture"
 grep -q 'sh -c umask 077; : > /tmp/lyrashield-worker-planned-restart' "$docker_capture"
 test ! -e "$restart_pending_file"
@@ -144,7 +247,7 @@ for required_host in \
 done
 
 restart_count=$(wc -l <"$systemctl_capture" | tr -d ' ')
-run_refresh 0 "$final_output"
+run_refresh 0 0 0 "$final_output" "$error_output"
 test "$(wc -l <"$systemctl_capture" | tr -d ' ')" = "$restart_count"
 test ! -s "$final_output"
 

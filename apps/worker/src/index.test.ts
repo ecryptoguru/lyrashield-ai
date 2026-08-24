@@ -1,15 +1,17 @@
 import { describe, it, expect, afterEach, vi } from "vitest"
-import { readFile, stat } from "node:fs/promises"
+import { readFile, stat, unlink, writeFile } from "node:fs/promises"
 import {
   MANAGED_REDIS_DRAIN_DELAY_SECONDS,
   MANAGED_REDIS_STALLED_INTERVAL_MS,
   RECONCILIATION_INTERVAL_MS,
+  acknowledgeEgressDrainRequest,
   advanceReconciliationTimestamp,
   assertWorkerStartupProvenance,
   clearWorkerActive,
   markWorkerActive,
   refreshWorkerReadiness,
   removeWorkerReadiness,
+  resumeWorkerAfterEgressDrainCancellation,
   settleScanWorkerForShutdown,
 } from "./index"
 import { trackActiveEngineProcess } from "./engine/runner"
@@ -52,6 +54,8 @@ describe("worker readiness lifecycle", () => {
   afterEach(async () => {
     await removeWorkerReadiness()
     await clearWorkerActive()
+    await unlink("/tmp/lyrashield-worker-egress-drain-request").catch(() => {})
+    await unlink("/tmp/lyrashield-worker-egress-drain-ready").catch(() => {})
   })
 
   it("writes an ISO timestamp to the readiness marker with 0o600 permissions", async () => {
@@ -100,6 +104,59 @@ describe("worker readiness lifecycle", () => {
 
     await clearWorkerActive()
     await expect(stat("/tmp/lyrashield-worker-active")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("stops new claims and waits for a job that becomes active before acknowledging a drain", async () => {
+    const token = "a".repeat(64)
+    await writeFile("/tmp/lyrashield-worker-egress-drain-request", token, { mode: 0o600 })
+    let finishActiveJob: (() => void) | undefined
+    const pause = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishActiveJob = resolve
+        })
+    )
+    const beforePause = vi.fn().mockResolvedValue(undefined)
+
+    const acknowledgement = acknowledgeEgressDrainRequest({ pause }, beforePause)
+    await vi.waitFor(() => expect(pause).toHaveBeenCalledOnce())
+    expect(beforePause).toHaveBeenCalledBefore(pause)
+    await expect(stat("/tmp/lyrashield-worker-egress-drain-ready")).rejects.toMatchObject({
+      code: "ENOENT",
+    })
+
+    finishActiveJob?.()
+    await expect(acknowledgement).resolves.toBe(true)
+    expect(await readFile("/tmp/lyrashield-worker-egress-drain-ready", "utf8")).toBe(token)
+    const { mode } = await stat("/tmp/lyrashield-worker-egress-drain-ready")
+    expect(mode & 0o777).toBe(0o600)
+  })
+
+  it("rejects an invalid egress drain challenge without pausing claims", async () => {
+    await writeFile("/tmp/lyrashield-worker-egress-drain-request", "not-a-valid-token", {
+      mode: 0o600,
+    })
+    const pause = vi.fn().mockResolvedValue(undefined)
+
+    await expect(acknowledgeEgressDrainRequest({ pause })).rejects.toThrow(
+      "Invalid egress drain request token"
+    )
+    expect(pause).not.toHaveBeenCalled()
+  })
+
+  it("resumes claims when the host cancels a failed restart handshake", async () => {
+    await writeFile("/tmp/lyrashield-worker-egress-drain-ready", "b".repeat(64), { mode: 0o600 })
+    const resume = vi.fn().mockResolvedValue(undefined)
+    const restoreReadiness = vi.fn().mockResolvedValue(undefined)
+
+    await expect(
+      resumeWorkerAfterEgressDrainCancellation({ resume }, restoreReadiness)
+    ).resolves.toBe(true)
+    expect(resume).toHaveBeenCalledOnce()
+    expect(restoreReadiness).toHaveBeenCalledAfter(resume)
+    await expect(stat("/tmp/lyrashield-worker-egress-drain-ready")).rejects.toMatchObject({
+      code: "ENOENT",
+    })
   })
 
   it("terminates active engines before waiting for BullMQ close", async () => {

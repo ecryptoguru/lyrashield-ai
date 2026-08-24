@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mockEnv = vi.hoisted(() => ({
   NODE_ENV: "test",
@@ -187,6 +187,8 @@ describe("runScannerOrchestrator", () => {
     mockEnv.LYRASHIELD_EGRESS_PROXY_SECRET = ""
   })
 
+  afterEach(() => vi.unstubAllGlobals())
+
   it("runs all scanners and merges findings", async () => {
     const result = await runScannerOrchestrator({
       scanId: "scan-1",
@@ -320,6 +322,56 @@ describe("runScannerOrchestrator", () => {
     const urlFetchFn = vi.mocked(scanUrl).mock.calls.at(-1)?.[0].fetchFn
     expect(cisaFetchFn).toBeTypeOf("function")
     expect(cisaFetchFn).toBe(urlFetchFn)
+
+    const cisaUrl =
+      "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+    const proxyTransport = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            html: "{}",
+            status: 200,
+            headers: { "content-type": "application/json" },
+            finalUrl: cisaUrl,
+            urlHistory: [cisaUrl],
+            bodyBytes: 2,
+            bodyTruncated: false,
+          },
+        })
+      )
+    )
+    vi.stubGlobal("fetch", proxyTransport)
+
+    await cisaFetchFn!(cisaUrl, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer target-secret",
+        "User-Agent": "LyraShield-CISA-Test",
+      },
+      body: "target-body",
+      timeoutMs: 1_234,
+      maxBytes: 5_678,
+    } as RequestInit)
+
+    expect(proxyTransport).toHaveBeenCalledTimes(1)
+    const [proxyUrl, proxyInit] = proxyTransport.mock.calls[0]!
+    expect(proxyUrl).toBe("https://proxy.example.com/v1/fetch")
+    expect(proxyInit).toMatchObject({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-secret",
+      },
+    })
+    expect(JSON.parse(String(proxyInit.body))).toEqual({
+      url: cisaUrl,
+      userAgent: "LyraShield-CISA-Test",
+      timeoutMs: 1_234,
+      maxBytes: 5_678,
+    })
+    expect(String(proxyInit.body)).not.toContain("target-secret")
+    expect(String(proxyInit.body)).not.toContain("target-body")
   })
 
   it("fails closed before a production URL scan when the egress proxy is unavailable", async () => {

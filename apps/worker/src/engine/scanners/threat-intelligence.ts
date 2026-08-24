@@ -105,16 +105,19 @@ async function fetchCisaJson(
 }
 
 async function loadKev(
-  fetchFn: typeof fetch,
   cisaFetchFn?: typeof fetch,
   signal?: AbortSignal,
   cisaResolver?: HostResolver
 ) {
   if (kevCache && kevCache.expiresAt > Date.now()) return kevCache.entries
+  if (!cisaFetchFn) {
+    logger.warn("CISA KEV enrichment skipped", {
+      reason: "authenticated egress proxy unavailable",
+    })
+    return new Map<string, ThreatSignal>()
+  }
   try {
-    const payload = (await (cisaFetchFn
-      ? fetchCisaJson(cisaFetchFn, signal, cisaResolver)
-      : fetchJson(CISA_KEV_URL, fetchFn, signal))) as {
+    const payload = (await fetchCisaJson(cisaFetchFn, signal, cisaResolver)) as {
       vulnerabilities?: KevEntry[]
     }
     const entries = new Map<string, ThreatSignal>()
@@ -194,7 +197,7 @@ export async function fetchThreatSignals(
   if (cves.length === 0) return new Map()
 
   const [kev, epss] = await Promise.all([
-    loadKev(fetchFn, cisaFetchFn, signal, cisaResolver),
+    loadKev(cisaFetchFn, signal, cisaResolver),
     loadEpss(cves, fetchFn, signal),
   ])
   return new Map(
