@@ -296,7 +296,7 @@ export default async function BillingPage() {
             </CardHeader>
             <CardContent>
               <Link
-                href="/billing/portal"
+                href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
                 className={`${buttonVariants({ variant: "outline" })} w-full`}
               >
                 Open Customer Portal

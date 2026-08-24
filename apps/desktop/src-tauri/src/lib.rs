@@ -36,7 +36,6 @@ pub fn run() {
             check_chatgpt_status,
             logout_chatgpt,
             save_azure_config,
-            load_azure_config,
             clear_azure_config,
             get_byok_metadata,
             get_byok_status,

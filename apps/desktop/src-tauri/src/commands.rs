@@ -123,11 +123,6 @@ pub fn save_azure_config(api_key: String, endpoint: String) -> Result<(), String
 }
 
 #[tauri::command]
-pub fn load_azure_config() -> Result<Option<byok::AzureCredentials>, String> {
-    byok::load_azure_credentials()
-}
-
-#[tauri::command]
 pub fn clear_azure_config() -> Result<(), String> {
     byok::clear_azure_credentials()
 }
