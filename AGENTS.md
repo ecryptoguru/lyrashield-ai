@@ -102,6 +102,11 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Engine output is untrusted and bounded. Confidence never means verification.
 - Persist claims through manifest, coverage receipt, candidate, and verification receipt.
 - Only complete deterministic retest may produce `VALIDATED`; engine-only absence is `INCONCLUSIVE`.
+- Retest validation binds to stored immutable evidence: the finding's original source scan and the retest scan must both have stored manifests, exact repository revisions (which may differ after a fix) or matching URL checksums, and complete deterministic coverage. Missing identity stays `INCONCLUSIVE` and never sets `FIXED`.
+- The result manifest is persisted before retest finalization; crash recovery resumes pending retests before scoring without replaying billable work.
+- Finding detail exposes no raw evidence storage URIs; retest receipts surface scan IDs, manifest checksums, revisions, method, and coverage state.
+- `Policy.maxBudgetUsd` is nullable but never negative; PostgreSQL enforces `Policy_maxBudgetUsd_nonnegative`.
+- Findings list pages carry a deterministic, page-local Priority heuristic (severity, status, verified, confidence, target environment, business-impact/exploitability context). It is triage context, never a claim of exploitability or reachability, and does not change cursor pagination.
 - Direct updates must not set `FIXED`; retain `FIXED_PENDING_RETEST` until trusted retest receipt.
 
 ### Queue, worker, and network

@@ -159,8 +159,10 @@ Result integrity requirements:
 - engine output is untrusted and byte/field/count bounded;
 - every new claim passes through manifest, coverage receipt, candidate, and verification receipt boundaries;
 - direct status updates cannot set terminal `FIXED`; use `FIXED_PENDING_RETEST` until a trusted retest receipt exists;
+- retest validation is bound to stored immutable evidence: both the finding's original source scan and the retest scan must have stored result manifests, exact repository revisions (which may differ after a fix) or matching URL checksums, and complete deterministic coverage; missing or malformed identity stays `INCONCLUSIVE`;
 - engine-only absence remains inconclusive;
 - evidence uploads fail closed and require checksum plus valid encryption key reference;
+- `Policy.maxBudgetUsd` is nullable but never negative (PostgreSQL check constraint);
 - retries must not duplicate findings, evidence, usage, webhooks, payouts, or commissions.
 
 ## 4. Product workflows

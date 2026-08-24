@@ -8,6 +8,15 @@ import { PageHeader } from "@/components/page-header"
 import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
 import { EvidenceList } from "./evidence-list"
 import { ReportsClient } from "../reports/reports-client"
+import { calculateFindingPriority } from "@/lib/finding-priority"
+
+const SEVERITY_ORDER: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+}
 
 const FINDINGS_TABS: SectionTab[] = [
   { value: "issues", label: "Issues", href: "/dashboard/findings?tab=issues" },
@@ -103,9 +112,11 @@ export default async function FindingsPage({
             confidence: true,
             cwe: true,
             cvssScore: true,
+            businessImpact: true,
+            exploitability: true,
             firstSeenAt: true,
             lastSeenAt: true,
-            target: { select: { id: true, name: true, type: true } },
+            target: { select: { id: true, name: true, type: true, environment: true } },
             _count: {
               select: {
                 evidence: { where: { redactionStatus: { not: "deleted" } } },
@@ -121,24 +132,46 @@ export default async function FindingsPage({
       ? [requestedFinding, ...findings]
       : findings
 
-  const initialData: FindingListItem[] = visibleFindings.map((f) => ({
-    id: f.id,
-    title: f.title,
-    summary: f.summary,
-    severity: f.severity as FindingListItem["severity"],
-    status: f.status,
-    verified: f.verified,
-    verificationStatus: f.verificationStatus,
-    verificationMethod: f.verificationMethod,
-    verificationReason: f.verificationReason,
-    confidence: f.confidence,
-    cwe: f.cwe,
-    cvssScore: f.cvssScore,
-    target: f.target,
-    _count: f._count,
-    firstSeenAt: f.firstSeenAt.toISOString(),
-    lastSeenAt: f.lastSeenAt.toISOString(),
-  }))
+  // Page-local priority matches the API list contract: SSR initial data is
+  // ranked with the same pure helper so the client's default Priority sort is
+  // stable between server render and client hydration.
+  const initialData: FindingListItem[] = visibleFindings
+    .map((f) => ({
+      id: f.id,
+      title: f.title,
+      summary: f.summary,
+      severity: f.severity as FindingListItem["severity"],
+      status: f.status,
+      verified: f.verified,
+      verificationStatus: f.verificationStatus,
+      verificationMethod: f.verificationMethod,
+      verificationReason: f.verificationReason,
+      confidence: f.confidence,
+      cwe: f.cwe,
+      cvssScore: f.cvssScore,
+      businessImpact: f.businessImpact,
+      exploitability: f.exploitability,
+      target: f.target,
+      _count: f._count,
+      firstSeenAt: f.firstSeenAt.toISOString(),
+      lastSeenAt: f.lastSeenAt.toISOString(),
+      priority: calculateFindingPriority({
+        severity: f.severity,
+        status: f.status,
+        verified: f.verified,
+        confidence: f.confidence,
+        environment: f.target?.environment as
+          "LOCAL" | "PREVIEW" | "STAGING" | "PRODUCTION" | null | undefined,
+        businessImpact: f.businessImpact,
+        exploitability: f.exploitability,
+      }),
+    }))
+    .sort(
+      (left, right) =>
+        right.priority.score - left.priority.score ||
+        (SEVERITY_ORDER[left.severity] ?? 99) - (SEVERITY_ORDER[right.severity] ?? 99) ||
+        new Date(right.lastSeenAt).getTime() - new Date(left.lastSeenAt).getTime()
+    )
 
   return (
     <div>
