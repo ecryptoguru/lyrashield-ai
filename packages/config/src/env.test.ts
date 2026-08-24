@@ -52,6 +52,7 @@ const envSchema = z
     DISCORD_WEBHOOK_URL: z.string().optional().or(z.literal("")),
     NOTIFICATION_FROM_EMAIL: z.string().optional().or(z.literal("")),
     POLAR_ACCESS_TOKEN: z.string().optional().or(z.literal("")),
+    POLAR_ENVIRONMENT: z.enum(["production", "sandbox"]).optional(),
     POLAR_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
     POLAR_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
     POLAR_LOCAL_BILLING_ADMISSION: z.enum(["off", "public"]).default("off"),
@@ -65,6 +66,10 @@ const envSchema = z
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  })
+  .refine((val) => !val.POLAR_ACCESS_TOKEN || Boolean(val.POLAR_ENVIRONMENT), {
+    path: ["POLAR_ENVIRONMENT"],
+    message: "POLAR_ENVIRONMENT is required when POLAR_ACCESS_TOKEN is configured",
   })
   .refine((val) => val.NODE_ENV !== "production" || Boolean(val.TRUSTED_PROXY_IP_HEADER), {
     path: ["TRUSTED_PROXY_IP_HEADER"],
@@ -134,6 +139,33 @@ describe("Env Validation Schema", () => {
         expect(result.data.RAZORPAYX_PAYOUT_ADMISSION).toBe("off")
         expect(result.data.PAYONEER_PAYOUT_ADMISSION).toBe("off")
       }
+    })
+
+    it("requires an explicit validated Polar environment with a configured token", () => {
+      expect(
+        envSchema.safeParse({
+          ...validEnv,
+          POLAR_ACCESS_TOKEN: "polar-token",
+        }).success
+      ).toBe(false)
+
+      for (const POLAR_ENVIRONMENT of ["production", "sandbox"] as const) {
+        expect(
+          envSchema.safeParse({
+            ...validEnv,
+            POLAR_ACCESS_TOKEN: "polar-token",
+            POLAR_ENVIRONMENT,
+          }).success
+        ).toBe(true)
+      }
+
+      expect(
+        envSchema.safeParse({
+          ...validEnv,
+          POLAR_ACCESS_TOKEN: "polar-token",
+          POLAR_ENVIRONMENT: "staging",
+        }).success
+      ).toBe(false)
     })
 
     it("should accept NODE_ENV as production with a trusted proxy header", () => {

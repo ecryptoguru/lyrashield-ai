@@ -1,148 +1,145 @@
-import { test, expect } from "@playwright/test"
+import { createHmac } from "node:crypto"
+import { expect, test } from "@playwright/test"
+import { prisma } from "@lyrashield/db"
 
 /**
- * Checkout flow tests (Polar test mode).
+ * Polar Sandbox checkout and signed-webhook receipt proof.
  *
- * These tests verify the checkout → webhook → entitlement flow:
- * 1. Monthly checkout → order.paid → entitlement granted
- * 2. Annual checkout → monthly pool granted (not lump-sum)
- * 3. Minute-pack purchase → credited, 6-month expiry
- * 4. Refund webhook → refund_reversal + entitlement reversed
- * 5. Idempotency replay test (100× → 1 effect)
- *
- * Note: These tests require Polar test mode to be configured.
- * They are skipped in CI unless POLAR_TEST_MODE=1 is set.
+ * Requires a disposable verified OWNER session and workspace. It creates
+ * hosted Sandbox checkout objects but never submits payment details. Signed
+ * webhook fixtures prove application effects against the disposable database.
  */
+const workspaceId = process.env.BILLING_E2E_WORKSPACE_ID?.trim() ?? ""
+const storageState = process.env.BILLING_E2E_STORAGE_STATE?.trim() ?? ""
+const webhookSecret = process.env.POLAR_WEBHOOK_SECRET?.trim() ?? ""
+const enabled =
+  process.env.POLAR_TEST_MODE === "1" &&
+  process.env.POLAR_ENVIRONMENT === "sandbox" &&
+  Boolean(workspaceId && storageState && webhookSecret)
 
-const POLAR_TEST_MODE = process.env.POLAR_TEST_MODE === "1"
+if (storageState) test.use({ storageState })
 
-test.describe("Checkout flows (Polar test mode)", () => {
-  test.skip(!POLAR_TEST_MODE, "Polar test mode not enabled")
+function polarHeaders(id: string, body: string): Record<string, string> {
+  if (!webhookSecret.startsWith("whsec_")) {
+    throw new Error("POLAR_WEBHOOK_SECRET must use the whsec_ format")
+  }
+  const timestamp = String(Math.floor(Date.now() / 1000))
+  const key = Buffer.from(webhookSecret.slice("whsec_".length), "base64")
+  const signature = createHmac("sha256", key).update(`${id}.${timestamp}.${body}`).digest("base64")
+  return {
+    "content-type": "application/json",
+    "webhook-id": id,
+    "webhook-timestamp": timestamp,
+    "webhook-signature": `v1,${signature}`,
+  }
+}
 
-  test("monthly checkout → order.paid → entitlement granted", async ({ request }) => {
-    // 1. Create a checkout session
+async function postPolarWebhook(
+  request: import("@playwright/test").APIRequestContext,
+  id: string,
+  event: Record<string, unknown>
+) {
+  const body = JSON.stringify(event)
+  return request.post("/billing/webhook", { data: body, headers: polarHeaders(id, body) })
+}
+
+test.describe("Checkout flows (Polar Sandbox)", () => {
+  test.skip(
+    !enabled,
+    "requires Polar Sandbox plus BILLING_E2E_WORKSPACE_ID and BILLING_E2E_STORAGE_STATE"
+  )
+
+  test("monthly checkout and signed active event grant the monthly pool", async ({ request }) => {
     const checkoutResponse = await request.post("/billing/checkout", {
+      data: { workspaceId, plan: "STARTER", interval: "monthly" },
+    })
+    await expect(checkoutResponse).toBeOK()
+    await expect(checkoutResponse.json()).resolves.toMatchObject({
+      success: true,
+      data: { provider: "polar" },
+    })
+
+    const receipt = await postPolarWebhook(request, `polar-monthly-${Date.now()}`, {
+      type: "subscription.active",
       data: {
-        plan: "STARTER",
-        interval: "monthly",
+        id: `sub-monthly-${Date.now()}`,
+        status: "active",
+        current_period_start: new Date().toISOString(),
+        current_period_end: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        metadata: { workspaceId, plan: "STARTER", interval: "monthly" },
       },
     })
-    expect(checkoutResponse.ok()).toBeTruthy()
-    const checkout = await checkoutResponse.json()
-    expect(checkout.success).toBe(true)
-    expect(checkout.data.url).toBeDefined()
+    await expect(receipt).toBeOK()
 
-    // 2. In test mode, we'd simulate the webhook
-    // POST /billing/webhook with a polar order.paid event
-    // and verify the entitlement is granted
-
-    // 3. Verify usage balance reflects the new plan
-    const usageResponse = await request.get("/api/billing/usage?workspaceId=test-workspace")
-    expect(usageResponse.ok()).toBeTruthy()
-    const usage = await usageResponse.json()
-    expect(usage.data.plan).toBe("STARTER")
-    expect(usage.data.usage.poolMinutes).toBe(300) // Starter plan: 300 minutes
+    const usageResponse = await request.get(`/api/billing/usage?workspaceId=${workspaceId}`)
+    await expect(usageResponse).toBeOK()
+    await expect(usageResponse.json()).resolves.toMatchObject({
+      data: { plan: "STARTER", usage: { poolMinutes: 300 } },
+    })
   })
 
-  test("annual checkout → monthly pool granted (not lump-sum)", async ({ request }) => {
+  test("annual checkout grants one monthly PRO pool, not twelve", async ({ request }) => {
     const checkoutResponse = await request.post("/billing/checkout", {
+      data: { workspaceId, plan: "PRO", interval: "annual" },
+    })
+    await expect(checkoutResponse).toBeOK()
+
+    const receipt = await postPolarWebhook(request, `polar-annual-${Date.now()}`, {
+      type: "subscription.active",
       data: {
-        plan: "PRO",
-        interval: "annual",
+        id: `sub-annual-${Date.now()}`,
+        status: "active",
+        current_period_start: new Date(Date.now() + 1_000).toISOString(),
+        current_period_end: new Date(Date.now() + 365 * 86_400_000).toISOString(),
+        metadata: { workspaceId, plan: "PRO", interval: "annual" },
       },
     })
-    expect(checkoutResponse.ok()).toBeTruthy()
+    await expect(receipt).toBeOK()
 
-    // Annual subscriptions grant the monthly pool each month,
-    // not a lump-sum of 12 × 1200 = 14400 minutes.
-    // The first grant should be 1200 minutes (Pro monthly pool).
-    const usageResponse = await request.get("/api/billing/usage?workspaceId=test-workspace")
+    const usageResponse = await request.get(`/api/billing/usage?workspaceId=${workspaceId}`)
     const usage = await usageResponse.json()
-    expect(usage.data.usage.poolMinutes).toBe(1200) // Monthly pool, not annual lump-sum
+    expect(usage.data.usage.poolMinutes).toBe(1200)
   })
 
-  test("minute-pack purchase → credited, 6-month expiry", async ({ request }) => {
+  test("minute pack, refund, and 100 replays produce one durable effect", async ({ request }) => {
     const topupResponse = await request.post("/api/billing/topup", {
-      data: {
-        pack: "pack_100",
-      },
+      data: { workspaceId, pack: "pack_100" },
     })
-    expect(topupResponse.ok()).toBeTruthy()
+    await expect(topupResponse).toBeOK()
 
-    // Verify the pack appears in the usage balance
-    const usageResponse = await request.get("/api/billing/usage?workspaceId=test-workspace")
-    const usage = await usageResponse.json()
-    expect(usage.data.usage.packs.length).toBeGreaterThan(0)
-
-    const pack = usage.data.usage.packs[0]
-    expect(pack.remainingMinutes).toBe(100)
-
-    // Verify expiry is approximately 6 months from now
-    const expiryDate = new Date(pack.expiresAt)
-    const expectedExpiry = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000)
-    const daysDiff = Math.abs(
-      (expiryDate.getTime() - expectedExpiry.getTime()) / (24 * 60 * 60 * 1000)
-    )
-    expect(daysDiff).toBeLessThan(2) // within 2 days of expected
-  })
-
-  test("refund webhook → refund_reversal + entitlement reversed", async ({ request }) => {
-    // Simulate a refund webhook
-    const refundEvent = {
-      type: "refund.created",
-      data: {
-        id: "test-refund-001",
-        metadata: { workspaceId: "test-workspace" },
-      },
-    }
-
-    const webhookResponse = await request.post("/billing/webhook", {
-      headers: {
-        "webhooks-id": "test-refund-001",
-        "webhooks-timestamp": Date.now().toString(),
-        "webhooks-signature": "test-signature",
-      },
-      data: refundEvent,
-    })
-
-    // The webhook should be accepted (200) even if signature validation
-    // fails in test mode — or we need to generate a valid signature.
-    // In test mode, we'd use the test webhook secret.
-  })
-
-  test("idempotency replay test (100× → 1 effect)", async ({ request }) => {
-    // Send the same webhook event 100 times
-    const eventId = "test-idempotency-001"
-    const event = {
+    const orderId = `order-pack-${Date.now()}`
+    const eventId = `polar-pack-${Date.now()}`
+    const paidEvent = {
       type: "order.paid",
-      data: {
-        id: eventId,
-        metadata: {
-          workspaceId: "test-workspace",
-          packId: "pack_100",
-        },
-      },
+      data: { id: orderId, metadata: { workspaceId, packId: "pack_100" } },
     }
+    await expect(await postPolarWebhook(request, eventId, paidEvent)).toBeOK()
+    const replays = await Promise.all(
+      Array.from({ length: 100 }, () => postPolarWebhook(request, eventId, paidEvent))
+    )
+    for (const replay of replays) await expect(replay).toBeOK()
 
-    const results = await Promise.all(
-      Array.from({ length: 100 }, () =>
-        request.post("/billing/webhook", {
-          headers: {
-            "webhooks-id": eventId,
-            "webhooks-timestamp": Date.now().toString(),
-            "webhooks-signature": "test-signature",
-          },
-          data: event,
+    expect(
+      await prisma.webhookEvent.count({
+        where: { provider: "polar", externalId: eventId, processed: true },
+      })
+    ).toBe(1)
+    expect(await prisma.minutePack.count({ where: { workspaceId, externalId: orderId } })).toBe(1)
+
+    const refundId = `polar-refund-${Date.now()}`
+    await expect(
+      await postPolarWebhook(request, refundId, {
+        type: "refund.created",
+        data: { id: refundId, order_id: orderId, metadata: { workspaceId } },
+      })
+    ).toBeOK()
+    await expect
+      .poll(() =>
+        prisma.minutePack.findFirst({
+          where: { workspaceId, externalId: orderId },
+          select: { remainingMinutes: true },
         })
       )
-    )
-
-    // All requests should return 200 (idempotent)
-    for (const res of results) {
-      expect(res.status()).toBe(200)
-    }
-
-    // But only 1 WebhookEvent row should exist
-    // (verified via the database in a real test environment)
+      .toMatchObject({ remainingMinutes: 0 })
   })
 })

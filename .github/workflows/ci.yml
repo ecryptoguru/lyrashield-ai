@@ -599,6 +599,31 @@ jobs:
           echo "::error::Live homepage is missing '${missing}' after 8 attempts — the deploy did not land."
           exit 1
 
+      - name: Lighthouse production measurement
+        continue-on-error: true
+        shell: bash
+        run: |
+          # Exact CLI version keeps the live gate reproducible without adding a
+          # runtime dependency to the product workspace.
+          npx --yes lighthouse@13.0.1 https://lyrashieldai.com \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+            --only-categories=performance,accessibility,seo \
+            --output=json \
+            --output-path=/tmp/lyrashield-lighthouse.json \
+            --quiet
+          # shellcheck disable=SC2016
+          node -e '
+            const report = require("/tmp/lyrashield-lighthouse.json");
+            const minimum = { performance: 0.8, accessibility: 0.95, seo: 0.95 };
+            for (const [category, threshold] of Object.entries(minimum)) {
+              const score = report.categories?.[category]?.score;
+              if (typeof score !== "number" || score < threshold) {
+                throw new Error(`${category} score ${score ?? "missing"} is below ${threshold}`);
+              }
+              console.log(`${category}: ${score}`);
+            }
+          '
+
   desktop-rust:
     name: Desktop Rust (cargo)
     needs: [changes]

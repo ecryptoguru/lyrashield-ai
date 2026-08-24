@@ -68,7 +68,9 @@ function contentLastmod() {
         walkDocs(new URL(`${entry.name}/`, dir), basePath)
       } else if (entry.isFile() && entry.name.endsWith(".astro")) {
         const content = readFileSync(child, "utf8")
-        const match = content.match(/(?:const\s+updatedDate|dateModified)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/)
+        const match = content.match(
+          /(?:const\s+updatedDate|dateModified)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/
+        )
         if (!match) continue
         const date = new Date(match[1])
         if (Number.isNaN(date.valueOf())) continue
@@ -163,7 +165,12 @@ export default defineConfig({
     sitemap({
       filter: (page) => {
         const pathname = new URL(page).pathname
-        return pathname !== "/terms" && (Boolean(configuredScannerUrl) || pathname !== "/scan")
+        return (
+          pathname !== "/terms" &&
+          pathname !== "/terms-of-sale" &&
+          pathname !== "/docs" &&
+          (Boolean(configuredScannerUrl) || pathname !== "/scan")
+        )
       },
       serialize: (item) => {
         const pathname = new URL(item.url).pathname.replace(/\/$/, "")

@@ -170,12 +170,23 @@ describe("marketing SEO metadata", () => {
     const config = source("../../astro.config.mjs")
     const scanner = source("../pages/scan.astro")
     const terms = source("../pages/terms.astro")
+    const termsOfSale = source("../pages/terms-of-sale.astro")
 
     expect(config).toContain('pathname !== "/terms"')
+    expect(config).toContain('pathname !== "/terms-of-sale"')
+    expect(config).toContain('pathname !== "/docs"')
     expect(config).toContain('pathname !== "/scan"')
     expect(config).toContain("when the public scanner is enabled")
     expect(scanner).toContain("noindex={!scannerAvailable}")
     expect(terms).toMatch(/<Base[^>]+noindex/s)
+    expect(termsOfSale).toMatch(/<Base[^>]+noindex/s)
+  })
+
+  it("keeps dark product-shot utility text at accessible contrast", () => {
+    const productShot = source("../components/ProductShot.astro")
+    expect(productShot).toContain("background: #0e1a28")
+    expect(productShot).toContain("color: #a7bac9")
+    expect(productShot).not.toContain("color: #5f7081")
   })
 
   it("routes Free scan navigation to the canonical, answer-ready Lite Check page", () => {

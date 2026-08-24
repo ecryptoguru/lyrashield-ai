@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { execFile } from "node:child_process"
@@ -232,6 +232,18 @@ describe("exported validator", () => {
     await expect(runValidator(output)).rejects.toThrow(
       /manifest\.artifactVersions\.zed \(9\.9\.9\) must match/
     )
+  })
+
+  it("fails when a nested forbidden credential file enters the export", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    const nested = path.join(output, "reviewer-pack", "fixture")
+    await mkdir(nested, { recursive: true })
+    await writeFile(path.join(nested, ".env.production"), "TOKEN=placeholder\n", "utf8")
+
+    await expect(runValidator(output)).rejects.toThrow(/forbidden file present \(nested\)/)
   })
 
   it("fails when the exported gemini excludeTools drift from the manifest", async () => {

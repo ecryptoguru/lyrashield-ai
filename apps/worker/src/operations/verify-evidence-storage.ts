@@ -124,7 +124,16 @@ export async function verifyEvidenceStorage(): Promise<EvidenceStorageProofResul
       redirect: "manual",
       signal: AbortSignal.timeout(10_000),
     })
-    if (unauthenticated.status !== 401 && unauthenticated.status !== 403) {
+    const unauthenticatedBody = unauthenticated.status === 400 ? await unauthenticated.text() : ""
+    const r2AuthorizationDenial =
+      unauthenticated.status === 400 &&
+      unauthenticatedBody.includes("<Code>InvalidArgument</Code>") &&
+      unauthenticatedBody.includes("<Message>Authorization</Message>")
+    if (
+      unauthenticated.status !== 401 &&
+      unauthenticated.status !== 403 &&
+      !r2AuthorizationDenial
+    ) {
       throw new Error(
         `Evidence proof received ambiguous unauthenticated status ${unauthenticated.status}`
       )

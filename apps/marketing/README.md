@@ -133,7 +133,15 @@ PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
 ```
 
-3. Production uses `PUBLIC_INDEXABLE=true` on `lyrashieldai.com`. Marketing, methodology, resource, browser-local tool, and passive `/scan` routes are indexable because `PUBLIC_SCANNER_URL`, Turnstile, and the abuse contact are configured. `/terms` remains individually `noindex` and excluded from the sitemap. Cloudflare permanently redirects `www.lyrashieldai.com` to the apex with path and query preservation so canonical URLs have one origin. Preview builds may still use `PUBLIC_INDEXABLE=false`.
+3. Production uses `PUBLIC_INDEXABLE=true` on `lyrashieldai.com`. Marketing, methodology, resource, browser-local tool, and passive `/scan` routes are indexable because `PUBLIC_SCANNER_URL`, Turnstile, and the abuse contact are configured. `/terms` and `/terms-of-sale` remain individually `noindex` and excluded from the sitemap. `/docs` permanently redirects to the real `/docs/integrations` platform rather than appearing as an empty sitemap route. Cloudflare permanently redirects `www.lyrashieldai.com` to the apex with path and query preservation so canonical URLs have one origin. Preview builds may still use `PUBLIC_INDEXABLE=false`.
+
+Nonblocking SEO backlog: shorten the 122 currently overlong page titles without
+mass-rewriting established search copy. Offer schema remains deferred until live
+paid admission and publishable pricing are founder-approved.
+
+The post-deploy CI gate runs the exact `lighthouse@13.0.1` CLI against the live
+homepage and requires performance 0.80, accessibility 0.95, and SEO 0.95. The
+CLI stays deployment tooling rather than a product runtime dependency.
 
 ## Automatic production deploy (GitHub Actions)
 
