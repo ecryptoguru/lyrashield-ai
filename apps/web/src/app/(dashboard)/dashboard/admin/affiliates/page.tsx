@@ -64,7 +64,7 @@ export default async function AffiliateAdminPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <PageHeader
         title="Affiliate Admin"
-        description="Approve applications, manage affiliates, and review payouts."
+        description="Review applications, affiliates, and payouts. Changes remain disabled until one-time authorization and atomic audit controls are connected."
       />
 
       <section className="mt-6">

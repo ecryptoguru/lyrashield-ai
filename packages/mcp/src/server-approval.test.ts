@@ -78,4 +78,21 @@ describe("McpServer approval gate (S8)", () => {
     expect(res.isError).toBeFalsy()
     expect(fetchSpy).toHaveBeenCalledOnce()
   })
+
+  it("returns structured errors for protocol clients", async () => {
+    const { context } = makeCtx()
+    const server = new McpServer({ toolContext: context })
+
+    const unknown = await server.callTool("lyrashield_missing", {})
+    expect(unknown.structuredContent).toEqual({ error: "Unknown tool: lyrashield_missing" })
+
+    const denied = await server.callTool("lyrashield_scan_target", {
+      workspaceId: "w1",
+      targetId: "t1",
+    })
+    expect(denied.structuredContent).toMatchObject({
+      error: "Mutating tool requires human approval",
+      tool: "lyrashield_scan_target",
+    })
+  })
 })

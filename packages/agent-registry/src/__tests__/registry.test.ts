@@ -90,6 +90,38 @@ describe("agent registry", () => {
       )
     }
   })
+
+  it("publishes an evidence-backed support tier for every entry", () => {
+    for (const agent of AGENTS) {
+      expect(["NATIVE", "VERIFIED", "COMPATIBLE", "EXPERIMENTAL", "DEPRECATED"]).toContain(
+        agent.supportTier
+      )
+      const verification = agent.verification!
+      expect(Date.parse(verification.checkedOn)).not.toBeNaN()
+      expect(verification.reference).toBeTruthy()
+
+      if (agent.supportTier === "NATIVE" || agent.supportTier === "VERIFIED") {
+        expect(verification.evidence).toBe("CLIENT_RUNTIME")
+        expect(verification.clientVersion).toBeTruthy()
+        expect(verification.receipt).toBeTruthy()
+      }
+    }
+  })
+
+  it("does not promote reserved plugin entries without runtime receipts", () => {
+    expect(getAgent("vscode-agent-plugin")?.supportTier).toBe("EXPERIMENTAL")
+    expect(getAgent("github-copilot-agent-plugin")?.supportTier).toBe("EXPERIMENTAL")
+  })
+
+  it("rejects NATIVE and VERIFIED claims without client-runtime receipts", () => {
+    for (const supportTier of ["NATIVE", "VERIFIED"] as const) {
+      const result = agentEntrySchema.safeParse({
+        ...AGENTS[0],
+        supportTier,
+      })
+      expect(result.success).toBe(false)
+    }
+  })
 })
 
 describe("preferred agent integrations", () => {

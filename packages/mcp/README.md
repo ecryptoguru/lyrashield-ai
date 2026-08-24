@@ -4,6 +4,18 @@ The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) 
 
 Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
 
+## Protocol compatibility
+
+This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol is `2025-11-25`; it also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05`, and `2024-10-07` for older clients.
+
+- Server identity includes a title, description, website, version, and usage instructions.
+- Every tool publishes an input schema, output schema, title, safety annotations, and structured content.
+- Tool calls currently publish `execution.taskSupport: "forbidden"`. A returned LyraShield scan ID is a durable product job that clients poll with `lyrashield_get_scan_status`; it is not an MCP protocol task.
+- Hosted responses use `Cache-Control: no-store` and vary on authorization and MCP protocol version. The server does not advertise unsupported MCP list-cache metadata.
+- The hosted transport remains stateless and fail-closed. It does not advertise durable MCP Tasks because an in-memory task store would make serverless polling, cancellation, and replay unreliable.
+
+See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported draft gaps. Tool annotations are client hints only; the server always enforces prompt-injection and mutation approval independently.
+
 ## What it can do
 
 Every tool calls the LyraShield REST API with a workspace API key or OAuth bearer. **Mutating tools require human approval** — the server asks you in-editor (MCP elicitation) before starting a scan, recording a fix proposal, or queueing a retest.
@@ -121,7 +133,7 @@ Point any remote-MCP-capable client at the hosted endpoint. Two authentication m
 
 **OAuth 2.0 (hosted):** remote clients that support OAuth 2.0 (per the MCP spec) can authenticate through the hosted OAuth flow at `/oauth/consent` with workspace selection and optional write scope. The discovery endpoints are `.well-known/oauth-authorization-server` and `.well-known/oauth-protected-resource`. Remote connections are read-only by default; write actions require explicit scope and approval.
 
-The remote endpoint runs the same guard and tools as stdio. Because a stateless HTTP request has no way to prompt a human, **mutating tools are refused over remote by default** — run those from the local stdio server (which prompts you), or use a pre-authorized trusted automation. Read-only tools work everywhere.
+The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. Because a stateless HTTP request has no way to prompt a human, **mutating tools are refused over remote by default** — run those from the local stdio server (which prompts you), or use a pre-authorized trusted automation. Read-only tools work everywhere.
 
 ## Approval behavior
 

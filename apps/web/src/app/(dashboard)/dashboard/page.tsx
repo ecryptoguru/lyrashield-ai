@@ -34,6 +34,11 @@ import { getScanPresentation } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { dashboardPrimaryAction } from "@/components/trust-command-center.utils"
+import {
+  DashboardExperience,
+  DashboardExperienceControl,
+  ProDashboardSection,
+} from "@/components/dashboard-experience"
 
 export const metadata: Metadata = {
   title: "Dashboard | LyraShield AI",
@@ -197,254 +202,261 @@ export default async function DashboardPage() {
   const commandMode = latestScan?.mode ?? null
 
   return (
-    <div className="flex flex-col gap-6 lg:gap-8">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-primary text-xs font-semibold tracking-[0.15em] uppercase">
-            {activeWorkspace?.name ?? "Active workspace"}
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
-            What needs your attention?
-          </h1>
-          <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
-            Start with the next decision, then use the evidence below when you need detail.
-          </p>
-        </div>
-        <Link
-          href={primaryAction.href}
-          className={buttonVariants({ className: "self-start sm:self-auto" })}
-        >
-          {targetCount === 0 ? (
-            <Plus className="size-4" aria-hidden="true" />
-          ) : (
-            <Play className="size-4" aria-hidden="true" />
-          )}
-          {primaryAction.label}
-        </Link>
-      </header>
+    <DashboardExperience workspaceId={workspaceId}>
+      <div className="flex flex-col gap-6 lg:gap-8">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-primary text-xs font-semibold tracking-[0.15em] uppercase">
+              {activeWorkspace?.name ?? "Active workspace"}
+            </p>
+            <h1 className="mt-1 text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
+              What needs your attention?
+            </h1>
+            <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
+              Start with the next decision, then use the evidence below when you need detail.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <DashboardExperienceControl />
+            <Link href={primaryAction.href} className={buttonVariants()}>
+              {targetCount === 0 ? (
+                <Plus className="size-4" aria-hidden="true" />
+              ) : (
+                <Play className="size-4" aria-hidden="true" />
+              )}
+              {primaryAction.label}
+            </Link>
+          </div>
+        </header>
 
-      {/* First-run guide for brand-new workspaces (zero completed scans). The
+        {/* First-run guide for brand-new workspaces (zero completed scans). The
           full metric grid below is the returning-user view; this is what makes
           the first five minutes simple and engaging. Dismissible per workspace. */}
-      {completedScanCount === 0 && (
-        <GetStartedChecklist workspaceId={workspaceId} steps={assuranceSteps} />
-      )}
+        {completedScanCount === 0 && (
+          <GetStartedChecklist workspaceId={workspaceId} steps={assuranceSteps} />
+        )}
 
-      <TrustCommandCenter
-        productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
-        mode={commandMode}
-        assetCount={targetCount}
-        riskScore={latestScore?.score ?? project?.riskScore ?? 100}
-        trustPlanData={project?.trustPlan}
-        completedScanCount={completedScanCount}
-        latestScore={latestScore ? { score: latestScore.score, grade: latestScore.grade } : null}
-      />
-
-      <section
-        className={`border-l-2 p-5 sm:p-6 ${readinessConfig.className}`}
-        aria-labelledby="launch-verdict"
-      >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.14em] uppercase">Launch verdict</p>
-            <h2 id="launch-verdict" className="mt-1 text-2xl font-bold tracking-tight">
-              {readinessConfig.label}
-            </h2>
-            <p className="text-foreground/80 mt-2 max-w-2xl text-sm">
-              {readinessConfig.description}
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {assuranceSteps.map((step) => {
-                const Icon = step.complete ? CheckCircle2 : Circle
-                const content = (
-                  <>
-                    <Icon
-                      className={
-                        step.complete ? "text-success size-4" : "text-muted-foreground size-4"
-                      }
-                      aria-hidden="true"
-                    />
-                    {step.label}
-                  </>
-                )
-                return step.href ? (
-                  <Link
-                    key={step.label}
-                    href={step.href}
-                    className="flex items-center gap-1.5 text-xs font-medium hover:underline"
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <span
-                    key={step.label}
-                    className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium"
-                  >
-                    {content}
-                  </span>
-                )
-              })}
-            </div>
-          </div>
-          {targetCount > 0 && (
-            <Link href={readinessConfig.href} className={buttonVariants({ variant: "secondary" })}>
-              {readinessConfig.action}
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
-          )}
-        </div>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2" aria-label="Workspace metrics">
-        <MetricCard
-          label="Security score"
-          value={latestScore?.score ?? "—"}
-          detail={
-            latestScore
-              ? `Grade ${latestScore.grade.replace("_PLUS", "+")}`
-              : completedScanCount > 0
-                ? "Score snapshot unavailable"
-                : "Awaiting completed scan"
-          }
-          icon={ShieldCheck}
+        <TrustCommandCenter
+          productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
+          mode={commandMode}
+          assetCount={targetCount}
+          riskScore={latestScore?.score ?? project?.riskScore ?? 100}
+          trustPlanData={project?.trustPlan}
+          completedScanCount={completedScanCount}
+          latestScore={latestScore ? { score: latestScore.score, grade: latestScore.grade } : null}
         />
-        <MetricCard
-          label="Open findings"
-          value={openFindingCount}
-          detail={`${severity.CRITICAL ?? 0} critical · ${severity.HIGH ?? 0} high`}
-          icon={Bug}
-        />
-      </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5 flex items-start justify-between gap-4">
+        <section
+          className={`border-l-2 p-5 sm:p-6 ${readinessConfig.className}`}
+          aria-labelledby="launch-verdict"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="font-semibold">Risk posture</h2>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Latest score with the last ten completed scan snapshots.
+              <p className="text-xs font-semibold tracking-[0.14em] uppercase">Launch verdict</p>
+              <h2 id="launch-verdict" className="mt-1 text-2xl font-bold tracking-tight">
+                {readinessConfig.label}
+              </h2>
+              <p className="text-foreground/80 mt-2 max-w-2xl text-sm">
+                {readinessConfig.description}
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {assuranceSteps.map((step) => {
+                  const Icon = step.complete ? CheckCircle2 : Circle
+                  const content = (
+                    <>
+                      <Icon
+                        className={
+                          step.complete ? "text-success size-4" : "text-muted-foreground size-4"
+                        }
+                        aria-hidden="true"
+                      />
+                      {step.label}
+                    </>
+                  )
+                  return step.href ? (
+                    <Link
+                      key={step.label}
+                      href={step.href}
+                      className="flex items-center gap-1.5 text-xs font-medium hover:underline"
+                    >
+                      {content}
+                    </Link>
+                  ) : (
+                    <span
+                      key={step.label}
+                      className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium"
+                    >
+                      {content}
+                    </span>
+                  )
+                })}
+              </div>
             </div>
-            <Badge
-              variant={
-                latestScore && latestScore.score >= 80
-                  ? "success"
-                  : latestScore
-                    ? "warning"
-                    : "muted"
-              }
-            >
-              {latestScore ? "Evaluated" : "Not evaluated"}
-            </Badge>
+            {targetCount > 0 && (
+              <Link
+                href={readinessConfig.href}
+                className={buttonVariants({ variant: "secondary" })}
+              >
+                {readinessConfig.action}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            )}
           </div>
-          <div className="grid items-center gap-6 md:grid-cols-[auto_1fr]">
-            <ScoreGauge score={latestScore?.score ?? null} grade={latestScore?.grade ?? null} />
-            <ScoreTrend points={trend} />
-          </div>
-        </Card>
+        </section>
 
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5">
-            <h2 className="font-semibold">Retained finding mix</h2>
-            <p className="text-muted-foreground mt-1 text-xs">
-              All retained findings grouped by severity.
-            </p>
-          </div>
-          <SeverityDonut values={severity} />
-        </Card>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1fr_1.35fr]">
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-semibold">Remediation flow</h2>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Current finding movement from review through closure.
-              </p>
-            </div>
-            <Wrench className="text-primary size-5" aria-hidden="true" />
-          </div>
-          <RemediationBars
-            rows={[
-              {
-                label: "Open",
-                value: Math.max(0, openFindingCount - inProgress - riskAccepted),
-                tone: "warning",
-              },
-              { label: "In remediation", value: inProgress, tone: "primary" },
-              { label: "Fixed", value: fixed, tone: "success" },
-              { label: "Risk accepted", value: riskAccepted },
-            ]}
+        <section className="grid gap-4 sm:grid-cols-2" aria-label="Workspace metrics">
+          <MetricCard
+            label="Security score"
+            value={latestScore?.score ?? "—"}
+            detail={
+              latestScore
+                ? `Grade ${latestScore.grade.replace("_PLUS", "+")}`
+                : completedScanCount > 0
+                  ? "Score snapshot unavailable"
+                  : "Awaiting completed scan"
+            }
+            icon={ShieldCheck}
           />
-        </Card>
+          <MetricCard
+            label="Open findings"
+            value={openFindingCount}
+            detail={`${severity.CRITICAL ?? 0} critical · ${severity.HIGH ?? 0} high`}
+            icon={Bug}
+          />
+        </section>
 
-        <Card className="overflow-hidden">
-          <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
-            <div>
-              <h2 className="font-semibold">Recent scan activity</h2>
-              <p className="text-muted-foreground mt-1 text-xs">Your most recent reviews.</p>
-            </div>
-            <Link
-              href="/dashboard/scans"
-              className="text-primary flex min-h-11 items-center gap-1 text-sm font-medium"
-            >
-              View all <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
-          </div>
-          {recentScans.length > 0 ? (
-            <div className="divide-y">
-              {recentScans.map((scan) => (
-                <Link
-                  key={scan.id}
-                  href={`/dashboard/scans/${scan.id}`}
-                  className="hover:bg-accent/60 flex min-h-16 items-center gap-3 px-5 py-3 transition-colors sm:px-6"
+        <ProDashboardSection>
+          <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+            <Card className="p-5 sm:p-6">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">Risk posture</h2>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Latest score with the last ten completed scan snapshots.
+                  </p>
+                </div>
+                <Badge
+                  variant={
+                    latestScore && latestScore.score >= 80
+                      ? "success"
+                      : latestScore
+                        ? "warning"
+                        : "muted"
+                  }
                 >
-                  <span className="bg-primary/8 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
-                    <Activity className="size-4" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {scan.target?.name ?? "Workspace scan"}
-                    </span>
-                    <span className="text-muted-foreground block text-xs">
-                      {formatDate(scan.createdAt)} · {scan._count.findings} findings
-                    </span>
-                  </span>
-                  <Badge variant={getScanPresentation(scan.status).badgeVariant}>
-                    {getScanPresentation(scan.status).label}
-                  </Badge>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="px-5 py-6 sm:px-6">
-              <EmptyState
-                icon={Activity}
-                title="No scan activity yet"
-                description={
-                  targetCount === 0
-                    ? "Add a target to begin your first review."
-                    : "Run your first scan to see activity here."
-                }
-                action={
-                  <Link
-                    href={primaryAction.href}
-                    className={buttonVariants({ variant: "secondary", size: "sm" })}
-                  >
-                    {targetCount === 0 ? (
-                      <Plus className="size-4" aria-hidden="true" />
-                    ) : (
-                      <Play className="size-4" aria-hidden="true" />
-                    )}
-                    {primaryAction.label}
-                  </Link>
-                }
+                  {latestScore ? "Evaluated" : "Not evaluated"}
+                </Badge>
+              </div>
+              <div className="grid items-center gap-6 md:grid-cols-[auto_1fr]">
+                <ScoreGauge score={latestScore?.score ?? null} grade={latestScore?.grade ?? null} />
+                <ScoreTrend points={trend} />
+              </div>
+            </Card>
+
+            <Card className="p-5 sm:p-6">
+              <div className="mb-5">
+                <h2 className="font-semibold">Retained finding mix</h2>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  All retained findings grouped by severity.
+                </p>
+              </div>
+              <SeverityDonut values={severity} />
+            </Card>
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-[1fr_1.35fr]">
+            <Card className="p-5 sm:p-6">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">Remediation flow</h2>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Current finding movement from review through closure.
+                  </p>
+                </div>
+                <Wrench className="text-primary size-5" aria-hidden="true" />
+              </div>
+              <RemediationBars
+                rows={[
+                  {
+                    label: "Open",
+                    value: Math.max(0, openFindingCount - inProgress - riskAccepted),
+                    tone: "warning",
+                  },
+                  { label: "In remediation", value: inProgress, tone: "primary" },
+                  { label: "Fixed", value: fixed, tone: "success" },
+                  { label: "Risk accepted", value: riskAccepted },
+                ]}
               />
-            </div>
-          )}
-        </Card>
-      </section>
-    </div>
+            </Card>
+
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
+                <div>
+                  <h2 className="font-semibold">Recent scan activity</h2>
+                  <p className="text-muted-foreground mt-1 text-xs">Your most recent reviews.</p>
+                </div>
+                <Link
+                  href="/dashboard/scans"
+                  className="text-primary flex min-h-11 items-center gap-1 text-sm font-medium"
+                >
+                  View all <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </div>
+              {recentScans.length > 0 ? (
+                <div className="divide-y">
+                  {recentScans.map((scan) => (
+                    <Link
+                      key={scan.id}
+                      href={`/dashboard/scans/${scan.id}`}
+                      className="hover:bg-accent/60 flex min-h-16 items-center gap-3 px-5 py-3 transition-colors sm:px-6"
+                    >
+                      <span className="bg-primary/8 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                        <Activity className="size-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {scan.target?.name ?? "Workspace scan"}
+                        </span>
+                        <span className="text-muted-foreground block text-xs">
+                          {formatDate(scan.createdAt)} · {scan._count.findings} findings
+                        </span>
+                      </span>
+                      <Badge variant={getScanPresentation(scan.status).badgeVariant}>
+                        {getScanPresentation(scan.status).label}
+                      </Badge>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-5 py-6 sm:px-6">
+                  <EmptyState
+                    icon={Activity}
+                    title="No scan activity yet"
+                    description={
+                      targetCount === 0
+                        ? "Add a target to begin your first review."
+                        : "Run your first scan to see activity here."
+                    }
+                    action={
+                      <Link
+                        href={primaryAction.href}
+                        className={buttonVariants({ variant: "secondary", size: "sm" })}
+                      >
+                        {targetCount === 0 ? (
+                          <Plus className="size-4" aria-hidden="true" />
+                        ) : (
+                          <Play className="size-4" aria-hidden="true" />
+                        )}
+                        {primaryAction.label}
+                      </Link>
+                    }
+                  />
+                </div>
+              )}
+            </Card>
+          </section>
+        </ProDashboardSection>
+      </div>
+    </DashboardExperience>
   )
 }

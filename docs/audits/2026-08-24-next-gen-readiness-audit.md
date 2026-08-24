@@ -1,0 +1,101 @@
+# Next-generation product readiness audit
+
+Date: 2026-08-24  
+Scope: LyraShield AI product, agent integrations, public discovery surfaces, dashboard UX, platform administration, and `lyrashield-engine`.
+
+## Executive decision
+
+The two-mode dashboard is the right product shape and is implemented as **Guided** (vibe coders, new developers, and non-technical operators) plus **Pro** (experienced developers, security practitioners, and small teams). Both modes use the same launch-readiness computation; the mode changes density and guidance, not evidence or security semantics.
+
+The branch is suitable for review after its local gates pass. It is **not authorization to provision production administrators, activate billing, deploy, or publish**. Production administrator provisioning remains a separate controlled operation requiring the exact two verified accounts, enrolled TOTP, the production system database identity, migration deployment, and a fresh TOTP sign-in after all prior sessions are revoked.
+
+## Security and administration
+
+Implemented:
+
+- Exact platform-admin allowlist: `ecryptoguru@gmail.com` and `ankit@lyrashieldai.com`; no aliases, plus-addresses, or third operator.
+- Browser-cookie-only global access with verified email, explicit platform role, enrolled TOTP, and a current-session server stamp. Read access expires after 12 hours; writes require a stamp no older than 30 minutes.
+- Durable per-user and per-IP challenge limiting, trusted proxy address handling, no trusted-device bypass, and TOTP plus one-time recovery-code sign-in.
+- Recovery-code use alerts both administrators in production and creates a global audit receipt; a failed required alert or audit prevents privileged session stamping.
+- One-time, action-bound, short-lived mutation elevations. The database rechecks email, role, MFA, live session, expiry, and recent TOTP inside the nonce-consumption transaction.
+- Global elevation, limiter, and audit tables are RLS protected and explicitly inaccessible to `app_runtime_prod`.
+- Provisioning preflight requires exactly one verified TOTP enrollment record for each approved account. Explicit apply revokes every existing session and elevation for both administrators before creating the bootstrap audit receipt.
+- A manual `azure-production` workflow exposes separate preflight/apply modes, exact typed confirmation phrases, migration-state validation, locked dependencies, serialized execution, and the existing privileged database secret. The workflow cannot add a third administrator or bypass verified-email/TOTP prerequisites.
+- Read-only overview, user, workspace, scan, affiliate, and global audit views with bounded pagination and minimal fields. No impersonation and no customer secrets or payloads.
+
+Deliberately gated:
+
+- Affiliate mutations return a fail-closed unavailable response. Multi-step financial/payout effects are not enabled until each operation can be atomically receipted and rollback-tested.
+- Broad database editors, arbitrary SQL, shell access, secret viewing, impersonation, live billing activation, and deployment buttons are excluded. Those are unsafe substitutes for typed operational workflows.
+
+## Agent, MCP, CLI, plugin, and IDE integration audit
+
+- The canonical CLI is `lyrashield` 0.2.0; the deprecated scoped package is retained only for compatibility.
+- The registry records support tier and verification evidence instead of presenting every adapter as native. Native/verified claims require a runtime receipt, tested client/version, and review date.
+- All 30 named agent/IDE surfaces remain represented with honest `NATIVE`, `VERIFIED`, `COMPATIBLE`, `EXPERIMENTAL`, or `DEPRECATED` status.
+- GitHub Action v2 supports deterministic local `SAFE` and `AGGRESSIVE` gates. `DEEP` is rejected locally and routed to the hosted scan; v1 remains frozen for existing consumers.
+- MCP 0.2.2 uses SDK 1.30 metadata, tool titles, schemas, annotations, structured errors, transport cache controls, and compatibility tests for protocol versions `2025-11-25` and `2025-06-18`.
+- MCP features not implemented are documented rather than claimed: protocol `2026-07-28`, discovery, durable tasks, TTL/cache-scope metadata, and related experimental headers.
+
+## Dependency and runtime audit
+
+Upgraded and verified: Next.js 16.3.2, BullMQ 6.2.0, React Query 5.102.2, Wrangler 4.125, Vite 8.2.2, Vitest 4.1.11, MCP Zod 4, dotenv 17, eslint-plugin-security 4, and Undici 8.10 through the workspace override.
+
+Retained intentionally:
+
+- ESLint 9 because the current Next.js ecosystem peer range does not yet support ESLint 10 cleanly.
+- TypeScript 6.0.3 generally and 5.9.3 for desktop because the active TypeScript-ESLint range requires `<6.1`.
+- Node types 24 to match CI/runtime.
+- ioredis 5.11.1 until a separate live Upstash TLS and BullMQ acceptance proves the major upgrade.
+
+## SEO, AEO, and GEO audit
+
+- Canonical naming and domain are consistent: LyraShield AI and `lyrashieldai.com`.
+- Existing sitemap, robots, structured metadata, and public security/methodology surfaces remain intact.
+- `llms.txt` now contains Markdown links rather than bare URLs, a current content date, and a broad crawlable map of 388 product, integration, methodology, and editorial destinations.
+- Copy continues to avoid certification, guaranteed-security, universal-detection, and unsupported verification claims.
+
+Remaining live proof:
+
+- Re-crawl the deployed origin after release; confirm sitemap/indexation status, canonical tags, structured-data results, and external webmaster submissions.
+- Measure branded and non-branded answer-engine citations over time. Repository markup cannot prove that an external answer engine indexed or cited a page.
+- Keep claims bound to immutable scan coverage and verification receipts. A content page must not promote an AI candidate into a verified finding.
+
+## UI and accessibility audit
+
+- Guided mode defaults to the next decision, readiness state, and launch path; Pro mode exposes dense risk, remediation, and activity views.
+- Admin navigation is emitted only after server authorization and each privileged page repeats authorization before starting cross-workspace reads.
+- Sign-in and two-factor pages were rendered at desktop and 390x844 mobile sizes. The tested pages had no horizontal overflow, duplicate IDs, unlabeled inputs, console errors, or broken heading structure.
+- TOTP and recovery modes use explicit labels, input modes, autocomplete behavior, disabled/loading states, live error regions, and keyboard-operable buttons.
+- Authenticated browser proof now runs against disposable PostgreSQL only. It enrolls real TOTP through the UI, proves admin access is denied before role assignment, signs in through the MFA challenge, visits every admin destination, checks private/no-store API caching, verifies mobile overflow, and fails on browser console errors.
+
+Remaining UI proof:
+
+- Guided and Pro density should still receive periodic visual-regression review as their underlying dashboard content evolves.
+- Run external screen-reader and contrast checks on the deployed revision; the local semantic pass is not equivalent to assistive-technology certification.
+
+## Engine latency and cost audit
+
+`lyrashield-engine` now avoids rewriting unchanged vulnerability, SARIF, executive-summary, and resumable-state artifacts for every usage update. `run.json` and the billing receipt still persist on every relevant update. The artifact-state revision is monotonic and concurrency-safe.
+
+Measured focused benchmark: unchanged-artifact persistence decreased from 117.102 ms to 0.250 ms (about 99.8%). Model routing and scan-budget authority were not changed, so the established Luna/Terra policy remains the source of truth.
+
+## World-class product priorities
+
+1. Finish the current production evidence-storage, actionable-alerting, cancellation/recovery, license-signing, public-scorecard, and independent-finding-verification gates.
+2. Add typed admin runbooks one domain at a time. Each mutation needs preview, exact scope, reauthentication, idempotency, atomic audit, rollback, and a focused failure-injection test.
+3. Build an integration conformance matrix in CI using pinned client versions and publish only evidence-backed compatibility badges.
+4. Add release-policy templates by user outcome (safe demo, public beta, paid launch, regulated data) while preserving a single evidence model.
+5. Track time-to-first-evidence, inconclusive-coverage rate, retest completion, false-positive disposition, launch blockers resolved, model cost per completed scan, and queue/cancellation health. Do not expose internal model cost in customer payloads.
+
+## Release evidence recorded for this branch
+
+- Fresh PostgreSQL 17: all migrations applied; privileged owner access passed; `app_runtime_prod` held no table privileges and direct access was denied.
+- Core test suite: 274 files passed, 1 skipped; 2,262 tests passed, 16 skipped.
+- Focused combined admin/auth/security batch: 15 files and 85 tests passed; independent final review found no remaining Critical or High findings and approved the controls for conditional provisioning.
+- Authenticated Chromium admin flow: 1 passed against a freshly migrated disposable database, including TOTP enrollment and sign-in, authorization denial, all six admin destinations, API cache controls, mobile overflow, and console-error checks.
+- Disposable provisioning proof: a missing verified TOTP record failed closed; exact-two preflight and apply passed; the result contained two operators, zero prior sessions, zero prior elevations, and one bootstrap audit.
+- Codex Security working-tree review: complete changed-surface coverage and zero reportable findings. The immutable scan identifier and digest belong in the external release receipt so recording them does not alter the tree they identify.
+- Monorepo typecheck: 34 tasks passed.
+- Monorepo build (11 tasks), lint (32 tasks), typecheck (34 tasks), formatting, production dependency audit, Action lint, migration diff, and `git diff --check` passed.
+- Engine suite: 1,300 passed and 1 skipped; focused deduplication tests and Ruff passed. Repository-wide Pyright now reports 0 errors and 0 warnings without excluding pinned Strix modules.

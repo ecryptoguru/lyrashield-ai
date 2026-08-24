@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from "vitest"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js"
-import { createLyraShieldServer } from "./create-server"
+import {
+  createLyraShieldServer,
+  SERVER_DESCRIPTION,
+  SERVER_INSTRUCTIONS,
+  SERVER_TITLE,
+  SERVER_VERSION,
+  SERVER_WEBSITE_URL,
+} from "./create-server"
 import type { ToolHandlerContext } from "./tools"
 
 vi.mock("@lyrashield/logger", () => ({
@@ -67,8 +74,43 @@ describe("createLyraShieldServer (SDK integration)", () => {
         "lyrashield_create_pr_security_recap",
       ])
     )
-    // Every tool advertises an object input schema verbatim from the engine.
-    for (const t of tools) expect(t.inputSchema.type).toBe("object")
+    // Every tool advertises schemas and execution semantics supported by the
+    // current stable SDK. Calls are synchronous; queued scan IDs are domain
+    // results, not MCP protocol tasks.
+    for (const t of tools) {
+      expect(t.title).toBeTruthy()
+      expect(t.inputSchema.type).toBe("object")
+      expect(t.outputSchema?.type).toBe("object")
+      expect(t.execution).toEqual({ taskSupport: "forbidden" })
+      expect(t.annotations?.readOnlyHint).toBeTypeOf("boolean")
+      expect(t.annotations?.destructiveHint).toBeTypeOf("boolean")
+      expect(t.annotations?.openWorldHint).toBeTypeOf("boolean")
+    }
+    await client.close()
+  })
+
+  it("advertises accurate server metadata and the SDK stable protocol", async () => {
+    const context: ToolHandlerContext = {
+      apiBaseUrl: "http://localhost:3000",
+      apiKey: "lsk_test",
+      fetchFn: fetchStub(),
+    }
+    const { server } = createLyraShieldServer({ toolContext: context })
+    const client = new Client({ name: "test-client", version: "1.0.0" })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+
+    expect(client.getServerVersion()).toMatchObject({
+      name: "lyrashield-mcp",
+      title: SERVER_TITLE,
+      version: SERVER_VERSION,
+      description: SERVER_DESCRIPTION,
+      websiteUrl: SERVER_WEBSITE_URL,
+    })
+    expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS)
+    expect(client.getServerCapabilities()).toEqual({ tools: { listChanged: false } })
+    expect(client.getServerCapabilities()?.tasks).toBeUndefined()
     await client.close()
   })
 

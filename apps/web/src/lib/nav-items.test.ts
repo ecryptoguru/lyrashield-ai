@@ -97,6 +97,18 @@ describe("nav-items workspace destinations", () => {
       "/dashboard/ai-assurance"
     )
   })
+
+  it("surfaces Platform Admin only after the server authorizes the operator", () => {
+    expect(
+      resolveNav({ canViewPlatformAdmin: false }).secondary.map((item) => item.href)
+    ).not.toContain("/dashboard/admin")
+    expect(resolveNav({ canViewPlatformAdmin: true }).secondary.map((item) => item.href)).toContain(
+      "/dashboard/admin"
+    )
+    expect(resolveNav({ canViewPlatformAdmin: true }).more.map((item) => item.href)).toContain(
+      "/dashboard/admin"
+    )
+  })
 })
 
 describe("nav-items conditional Review Queue", () => {
@@ -140,6 +152,10 @@ describe("nav-items title lookup", () => {
   it("includes the Review Queue route for page-title resolution", () => {
     const hrefs = NAV_TITLE_ITEMS.map((i) => i.href)
     expect(hrefs).toContain("/dashboard/approvals")
+  })
+
+  it("includes the Platform Admin route for page-title resolution", () => {
+    expect(NAV_TITLE_ITEMS.map((item) => item.href)).toContain("/dashboard/admin")
   })
 
   it("has no duplicate hrefs in the title lookup list", () => {

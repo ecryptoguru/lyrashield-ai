@@ -7,7 +7,13 @@ import type { ApprovalDecision, ApprovalGate, McpServerOptions } from "./server"
 import { logger } from "@lyrashield/logger"
 
 export const SERVER_NAME = "lyrashield-mcp"
-export const SERVER_VERSION = "0.2.0"
+export const SERVER_TITLE = "LyraShield AI"
+export const SERVER_VERSION = "0.2.2"
+export const SERVER_DESCRIPTION =
+  "Bounded security scans, recorded evidence states, fix proposals, retests, and launch-readiness review."
+export const SERVER_WEBSITE_URL = "https://lyrashieldai.com"
+export const SERVER_INSTRUCTIONS =
+  "Start with lyrashield_list_workspaces and lyrashield_list_targets. Use read-only tools to inspect recorded evidence. Mutating tools require exact-argument human approval. A queued scan ID is a LyraShield domain result, not an MCP protocol task; poll it with lyrashield_get_scan_status."
 
 export interface RemoteApprovalContext {
   workspaceId: string
@@ -56,8 +62,17 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
   engine: McpServer
 } {
   const server = new Server(
-    { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } }
+    {
+      name: SERVER_NAME,
+      title: SERVER_TITLE,
+      version: SERVER_VERSION,
+      description: SERVER_DESCRIPTION,
+      websiteUrl: SERVER_WEBSITE_URL,
+    },
+    {
+      capabilities: { tools: { listChanged: false } },
+      instructions: SERVER_INSTRUCTIONS,
+    }
   )
 
   async function elicitApproval(

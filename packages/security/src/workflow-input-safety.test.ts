@@ -36,12 +36,13 @@ describe("reusable workflow input safety", () => {
   })
 
   it("validates caller-controlled modes and severities", () => {
-    expect(workflow).toContain("SAFE|DEEP|AGGRESSIVE")
+    expect(workflow).toContain("SAFE|AGGRESSIVE")
     expect(workflow).toContain("CRITICAL|HIGH|MEDIUM|LOW|INFO")
   })
 
-  it("warns callers that DEEP currently has SAFE-equivalent coverage", () => {
-    expect(workflow).toContain("scan_mode DEEP is not yet implemented")
+  it("rejects local DEEP rather than implying hosted coverage", () => {
+    expect(workflow).toContain('DEEP) echo "::error::scan_mode DEEP requires the hosted')
+    expect(workflow).not.toContain("SAFE-equivalent coverage")
   })
 
   it("scopes gitleaks to the resolved base and head range", () => {

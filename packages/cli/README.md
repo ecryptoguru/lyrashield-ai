@@ -1,4 +1,4 @@
-# LyraShield CLI
+# LyraShield CLI 0.2.0
 
 The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
 
@@ -31,6 +31,7 @@ lyrashield <command> [args] [--json]
 
 ### Agent installation
 
+- `agents` — list the complete registry with detection state, evidence-backed support tier, and verification metadata
 - `init` — detect and configure all installed agents. For agents that support the Agent Plugins v1.0.0 standard today (Claude Code, Cursor, OpenAI Codex, Kiro), `init` prefers an **Agent Plugin** install; for all others it falls back to config-file edits.
 - `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. For agents supporting the `agent-plugin` strategy, this installs the portable plugin (from `@lyrashield/agent-plugin`) to the agent's plugin directory; `--dry-run` still works and previews the install without writing.
 - `uninstall <agent>` — remove the LyraShield entry from a single agent's config. For `agent-plugin`-strategy agents, this removes the plugin from the agent's plugin directory.
@@ -87,6 +88,8 @@ Deeper modes consume more compute and take longer. Choose the least intensive mo
 
 - `check-diff [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — fast advisory diff check for obvious risky patterns; not a substitute for a full recorded scan
 - `gate [--fail-on HIGH|MEDIUM|LOW] [--staged] [--base <ref>] [--head <ref>] [--sarif <file>] [--target <targetId>]` — combine local diff patterns with that target's open findings and fail at the chosen severity threshold. Without `--target` (or a saved default project from `project use`), only the local diff checks gate the PR — never the whole workspace's findings.
+
+The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes only. It rejects `DEEP` with directions to the hosted app, MCP server, or REST API instead of silently reducing coverage.
 
 ### Reports and approvals
 

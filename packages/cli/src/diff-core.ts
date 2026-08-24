@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process"
 import process from "node:process"
+import { CLI_VERSION } from "./version.js"
 
 export interface DiffFinding {
   ruleId: string
@@ -150,7 +151,7 @@ export function buildSarif(results: SarifResult[]): unknown {
         tool: {
           driver: {
             name: "lyrashield",
-            version: "0.1.0",
+            version: CLI_VERSION,
             informationUri: "https://github.com/ecryptoguru/lyrashield-ai",
           },
         },

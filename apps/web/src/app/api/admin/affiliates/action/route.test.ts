@@ -1,241 +1,53 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@lyrashield/db", () => ({
-  prisma: {
-    affiliate: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
-    affiliateLink: { findFirst: vi.fn(), create: vi.fn() },
-    payout: { findUnique: vi.fn(), updateMany: vi.fn() },
-    payoutItem: { findMany: vi.fn() },
-    commission: { findMany: vi.fn(), updateMany: vi.fn() },
-    auditLog: { create: vi.fn() },
-  },
-}))
-const isPlatformOperatorMock = vi.fn()
+const requirePlatformAdminIdentity = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
-  isPlatformOperator: (...args: unknown[]) => isPlatformOperatorMock(...args),
+  requirePlatformAdminIdentity: (...args: unknown[]) => requirePlatformAdminIdentity(...args),
 }))
-const getCachedSessionMock = vi.fn()
-const getCachedWorkspaceIdMock = vi.fn()
-vi.mock("@/lib/cache", () => ({
-  getCachedSession: () => getCachedSessionMock(),
-  getCachedWorkspaceId: (...args: unknown[]) => getCachedWorkspaceIdMock(...args),
-}))
-vi.mock("@lyrashield/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}))
-vi.mock("@lyrashield/affiliate", () => ({
-  setupReserve: vi.fn().mockResolvedValue(undefined),
+vi.mock("@lyrashield/config", () => ({
+  env: { NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com" },
 }))
 
-import { prisma } from "@lyrashield/db"
 import { POST } from "./route"
 
-const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
-
-const ALL_TENANT_ROLES = [
-  "OWNER",
-  "ADMIN",
-  "SECURITY_ADMIN",
-  "APPSEC_MANAGER",
-  "BILLING_ADMIN",
-  "DEVELOPER",
-  "MEMBER",
-  "EXTERNAL_PENTESTER",
-  "AUDITOR",
-  "VIEWER",
-] as const
-
-function actionRequest(action: Record<string, unknown>) {
-  return new Request("http://localhost/api/admin/affiliates/action", {
+function request(headers: Record<string, string> = {}) {
+  return new Request("https://app.lyrashieldai.com/api/admin/affiliates/action", {
     method: "POST",
-    body: JSON.stringify(action),
+    headers: {
+      "content-type": "application/json",
+      origin: "https://app.lyrashieldai.com",
+      "sec-fetch-site": "same-origin",
+      "x-lyrashield-admin-elevation": "A".repeat(43),
+      ...headers,
+    },
+    body: JSON.stringify({ action: "reject", affiliateId: "affiliate-1" }),
   })
 }
 
-function stubSession(userId = "user-1") {
-  getCachedSessionMock.mockResolvedValue({
-    userId,
-    userEmail: `${userId}@example.com`,
-    userName: userId,
-    userImage: null,
-    sessionId: `sess-${userId}`,
-  })
-}
-
-describe("POST /api/admin/affiliates/action (platform-operator gate)", () => {
+describe("POST /api/admin/affiliates/action", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    stubSession()
-    getCachedWorkspaceIdMock.mockResolvedValue("ws-1")
-    mockPrisma.affiliate.findUnique.mockResolvedValue({
-      acceptedTermsAt: new Date(),
-      termsVersion: "v1",
-    })
-    mockPrisma.affiliate.update.mockImplementation(async ({ data }) => ({
-      id: "aff-1",
-      promoCode: "LYRA-EXISTING",
-      ...data,
-    }))
-    mockPrisma.affiliateLink.findFirst.mockResolvedValue({ id: "link-1" })
-    mockPrisma.auditLog.create.mockResolvedValue({})
+    requirePlatformAdminIdentity.mockResolvedValue({ userId: "admin-1" })
   })
 
-  it("rejects every tenant role with 403 and writes a denial audit row", async () => {
-    for (const role of ALL_TENANT_ROLES) {
-      vi.clearAllMocks()
-      stubSession()
-      getCachedWorkspaceIdMock.mockResolvedValue(`ws-${role}`)
-      isPlatformOperatorMock.mockResolvedValue(false)
+  it("keeps all affiliate mutations explicitly disabled", async () => {
+    const response = await POST(request())
 
-      const response = await POST(actionRequest({ action: "approve", affiliateId: "aff-1" }))
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: { code: "ADMIN_ACTION_DISABLED" },
+    })
+  })
 
-      expect(response.status, `${role} must not administer affiliates`).toBe(403)
-      expect(mockPrisma.affiliate.update).not.toHaveBeenCalled()
-      expect(mockPrisma.auditLog.create).toHaveBeenCalledTimes(1)
-      expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          workspaceId: `ws-${role}`,
-          action: "affiliate.admin_denied",
-          resourceType: "affiliate_admin_action",
-        }),
-      })
+  it("rejects cross-origin and missing-elevation requests before identity work", async () => {
+    for (const headers of [
+      { origin: "https://evil.example", "sec-fetch-site": "cross-site" },
+      { "x-lyrashield-admin-elevation": "" },
+    ]) {
+      const response = await POST(request(headers))
+      expect(response.status).toBe(403)
     }
-  })
-
-  it("lets a platform operator approve and audits the success", async () => {
-    isPlatformOperatorMock.mockResolvedValue(true)
-
-    const response = await POST(actionRequest({ action: "approve", affiliateId: "aff-1" }))
-
-    expect(response.status).toBe(200)
-    const body = await response.json()
-    expect(body.success).toBe(true)
-    expect(mockPrisma.affiliate.update).toHaveBeenCalled()
-    expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        workspaceId: "ws-1",
-        action: "affiliate.approved",
-        resourceType: "affiliate",
-        resourceId: "aff-1",
-      }),
-    })
-  })
-
-  it("records operator-reviewed payout and tax status in dedicated fields", async () => {
-    isPlatformOperatorMock.mockResolvedValue(true)
-    mockPrisma.affiliate.findUnique.mockResolvedValue({
-      payoutMethod: {
-        type: "razorpayx",
-        fundAccountId: "fa_1",
-        maskedDisplay: "•••• 4242",
-        valid: false,
-      },
-      taxFormType: "gstin",
-    })
-
-    const response = await POST(
-      actionRequest({
-        action: "verifyPayoutProfile",
-        affiliateId: "aff-1",
-        payoutMethodVerified: true,
-        taxStatus: "VERIFIED",
-      })
-    )
-
-    expect(response.status).toBe(200)
-    expect(mockPrisma.affiliate.update).toHaveBeenCalledWith({
-      where: { id: "aff-1" },
-      data: expect.objectContaining({
-        payoutMethodVerifiedBy: "user-1",
-        taxFormStatus: "VERIFIED",
-        taxReviewedBy: "user-1",
-      }),
-    })
-    expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ action: "affiliate.payout_profile_verified" }),
-    })
-  })
-
-  it("refuses to verify a payout profile without a provider method and tax form type", async () => {
-    isPlatformOperatorMock.mockResolvedValue(true)
-    mockPrisma.affiliate.findUnique.mockResolvedValue({ payoutMethod: null, taxFormType: null })
-
-    const response = await POST(
-      actionRequest({
-        action: "verifyPayoutProfile",
-        affiliateId: "aff-1",
-        payoutMethodVerified: true,
-        taxStatus: "VERIFIED",
-      })
-    )
-
-    expect(response.status).toBe(400)
-    expect(mockPrisma.affiliate.update).not.toHaveBeenCalled()
-  })
-
-  it("does not report reconciliation success for a terminal failed payout", async () => {
-    isPlatformOperatorMock.mockResolvedValue(true)
-    mockPrisma.payout.findUnique.mockResolvedValue({
-      id: "payout-1",
-      status: "FAILED",
-      isReserveRelease: false,
-      amount: "10.0000",
-      affiliateId: "aff-1",
-      providerPayoutId: "pout-1",
-    })
-
-    const response = await POST(
-      actionRequest({
-        action: "reconcilePayout",
-        payoutId: "payout-1",
-        providerPayoutId: "pout-1",
-        providerStatus: "processing",
-      })
-    )
-
-    expect(response.status).toBe(409)
-    expect(mockPrisma.payout.updateMany).not.toHaveBeenCalled()
-  })
-
-  it("outcome does not change with the operator's workspaceId (or lack of one)", async () => {
-    for (const workspaceId of ["ws-a", "ws-other-tenant", null]) {
-      vi.clearAllMocks()
-      stubSession()
-      getCachedWorkspaceIdMock.mockResolvedValue(workspaceId)
-      isPlatformOperatorMock.mockResolvedValue(true)
-
-      const response = await POST(actionRequest({ action: "reject", affiliateId: "aff-1" }))
-
-      expect(response.status).toBe(200)
-      const body = await response.json()
-      expect(body.success).toBe(true)
-      expect(mockPrisma.affiliate.update).toHaveBeenCalledWith({
-        where: { id: "aff-1" },
-        data: { status: "REJECTED" },
-      })
-    }
-  })
-
-  it("skips audit rows when the actor has no workspace (FK has no target)", async () => {
-    isPlatformOperatorMock.mockResolvedValue(false)
-    getCachedWorkspaceIdMock.mockRejectedValue(new Error("no workspace"))
-
-    const response = await POST(
-      actionRequest({ action: "tierOverride", affiliateId: "aff-1", baseRateBps: 1000 })
-    )
-
-    expect(response.status).toBe(403)
-    expect(mockPrisma.auditLog.create).not.toHaveBeenCalled()
-    expect(mockPrisma.affiliate.update).not.toHaveBeenCalled()
-  })
-
-  it("returns 401 without a session before any authorization work", async () => {
-    getCachedSessionMock.mockResolvedValue(null)
-
-    const response = await POST(actionRequest({ action: "reject", affiliateId: "aff-1" }))
-
-    expect(response.status).toBe(401)
-    expect(isPlatformOperatorMock).not.toHaveBeenCalled()
-    expect(mockPrisma.auditLog.create).not.toHaveBeenCalled()
+    expect(requirePlatformAdminIdentity).not.toHaveBeenCalled()
   })
 })

@@ -21,7 +21,7 @@
 //   intentionally action-specific and are not guarded here.
 //
 import { describe, expect, it } from "vitest"
-import { readFile } from "node:fs/promises"
+import { readFile, readdir } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { RISKY_PATTERNS } from "../diff-core.js"
 
@@ -129,5 +129,35 @@ describe("action.yml risky-pattern drift guard (source of truth: src/diff-core.t
         `message drift for rule "${check.ruleId}"`
       ).toBe(tsPattern?.message("FILE"))
     }
+  })
+})
+
+describe("action.yml v2 scan-mode contract", () => {
+  it("rejects reserved DEEP mode instead of running SAFE-equivalent coverage", async () => {
+    const actionPath = fileURLToPath(new URL("../../../../action.yml", import.meta.url))
+    const yml = await readFile(actionPath, "utf-8")
+
+    expect(yml).not.toContain("SAFE-equivalent")
+    expect(yml).toContain("SAFE|AGGRESSIVE) ;;")
+    expect(yml).toContain('DEEP) echo "::error::scan_mode DEEP requires the hosted LyraShield')
+  })
+
+  it("advances v2 after green main while leaving v1 frozen", async () => {
+    const workflowsDir = fileURLToPath(new URL("../../../../.github/workflows/", import.meta.url))
+    const workflowFiles = (await readdir(workflowsDir)).filter((file) => /\.ya?ml$/.test(file))
+    const workflows = await Promise.all(
+      workflowFiles.map(async (file) => readFile(`${workflowsDir}/${file}`, "utf-8"))
+    )
+    const releaseWorkflow = await readFile(`${workflowsDir}/update-action-version.yml`, "utf-8")
+
+    expect(workflows.some((workflow) => workflow.includes("git tag -fa v1"))).toBe(false)
+    expect(workflows.some((workflow) => workflow.includes("git push origin v1 --force"))).toBe(
+      false
+    )
+    expect(workflows.some((workflow) => workflow.includes("SAFE-equivalent"))).toBe(false)
+    expect(releaseWorkflow).toContain(
+      'git tag -fa v2 -m "Update v2 tag to ${HEAD_SHA}" "$HEAD_SHA"'
+    )
+    expect(releaseWorkflow).toContain("git push origin v2 --force")
   })
 })

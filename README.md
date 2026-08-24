@@ -61,12 +61,12 @@ Run `npx lyrashield doctor` any time to check what's configured and what's missi
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
 ```yaml
-- uses: ecryptoguru/lyrashield-ai@v1
+- uses: ecryptoguru/lyrashield-ai@v2
   with:
     fail_on_severity: HIGH
 ```
 
-It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF for GitHub Code Scanning, and every third-party action it uses is SHA-pinned.
+It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF for GitHub Code Scanning, and every third-party action it uses is SHA-pinned. v2 accepts local `SAFE` and `AGGRESSIVE` modes and rejects `DEEP` with directions to the hosted scan. The frozen v1 tag remains available for existing workflows while they migrate.
 
 ## What is here
 

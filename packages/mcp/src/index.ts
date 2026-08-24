@@ -29,9 +29,14 @@ export {
 export {
   createLyraShieldServer,
   SERVER_NAME,
+  SERVER_TITLE,
   SERVER_VERSION,
+  SERVER_DESCRIPTION,
+  SERVER_WEBSITE_URL,
+  SERVER_INSTRUCTIONS,
   type CreateServerOptions,
   type RemoteApprovalGate,
   type RemoteApprovalContext,
 } from "./create-server"
 export { handleRemoteMcpRequest, type RemoteMcpOptions } from "./http-transport"
+export { MCP_PROTOCOL_SUPPORT } from "./protocol"

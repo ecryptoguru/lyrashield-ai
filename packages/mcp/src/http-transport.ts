@@ -63,5 +63,11 @@ export async function handleRemoteMcpRequest(
     void server.close().catch(() => {})
   }
 
-  return transport.handleRequest(request)
+  const response = await transport.handleRequest(request)
+  // Responses contain workspace-scoped security data. Prevent browser/CDN
+  // caching and keep auth/protocol variants distinct even when an intermediary
+  // ignores endpoint configuration.
+  response.headers.set("Cache-Control", "no-store, no-transform")
+  response.headers.set("Vary", "Accept, Authorization, MCP-Protocol-Version")
+  return response
 }
