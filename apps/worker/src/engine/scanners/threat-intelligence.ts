@@ -1,4 +1,5 @@
 import { logger } from "@lyrashield/logger"
+import { safeFetchDetailed, type HostResolver } from "@lyrashield/security"
 
 const CISA_KEV_URL =
   "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
@@ -25,6 +26,14 @@ type KevEntry = {
   dateAdded?: unknown
   dueDate?: unknown
   knownRansomwareCampaignUse?: unknown
+}
+
+export interface ThreatIntelligenceFetchOptions {
+  fetchFn?: typeof fetch
+  cisaFetchFn?: typeof fetch
+  /** Injectable DNS resolver for safe-fetch tests. */
+  cisaResolver?: HostResolver
+  signal?: AbortSignal
 }
 
 let kevCache: { expiresAt: number; entries: Map<string, ThreatSignal> } | null = null
@@ -68,10 +77,44 @@ async function fetchJson(
   }
 }
 
-async function loadKev(fetchFn: typeof fetch, signal?: AbortSignal) {
+async function fetchCisaJson(
+  fetchFn: typeof fetch,
+  signal?: AbortSignal,
+  resolver?: HostResolver
+): Promise<unknown> {
+  const outcome = await safeFetchDetailed(CISA_KEV_URL, {
+    fetchFn,
+    resolver,
+    signal,
+    timeoutMs: REQUEST_TIMEOUT_MS,
+    maxBytes: MAX_RESPONSE_BYTES,
+    accept: "application/json",
+  })
+  if (!outcome.ok) throw new Error(`safe fetch failed: ${outcome.reason}`)
+  if (outcome.result.status < 200 || outcome.result.status >= 300) {
+    throw new Error(`HTTP ${outcome.result.status}`)
+  }
+  if (outcome.result.bodyTruncated) throw new Error("response exceeded size limit")
+  try {
+    return JSON.parse(outcome.result.html) as unknown
+  } catch (err) {
+    throw new Error(
+      `Invalid JSON response from CISA KEV: ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
+}
+
+async function loadKev(
+  fetchFn: typeof fetch,
+  cisaFetchFn?: typeof fetch,
+  signal?: AbortSignal,
+  cisaResolver?: HostResolver
+) {
   if (kevCache && kevCache.expiresAt > Date.now()) return kevCache.entries
   try {
-    const payload = (await fetchJson(CISA_KEV_URL, fetchFn, signal)) as {
+    const payload = (await (cisaFetchFn
+      ? fetchCisaJson(cisaFetchFn, signal, cisaResolver)
+      : fetchJson(CISA_KEV_URL, fetchFn, signal))) as {
       vulnerabilities?: KevEntry[]
     }
     const entries = new Map<string, ThreatSignal>()
@@ -142,15 +185,18 @@ async function loadEpss(cves: string[], fetchFn: typeof fetch, signal?: AbortSig
 
 export async function fetchThreatSignals(
   cveIds: readonly string[],
-  fetchFn: typeof fetch = fetch,
-  signal?: AbortSignal
+  options: ThreatIntelligenceFetchOptions = {}
 ): Promise<Map<string, ThreatSignal>> {
+  const { fetchFn = fetch, cisaFetchFn, cisaResolver, signal } = options
   const cves = [
     ...new Set(cveIds.map((cve) => cve.toUpperCase()).filter((cve) => CVE_PATTERN.test(cve))),
   ].slice(0, MAX_CVES)
   if (cves.length === 0) return new Map()
 
-  const [kev, epss] = await Promise.all([loadKev(fetchFn, signal), loadEpss(cves, fetchFn, signal)])
+  const [kev, epss] = await Promise.all([
+    loadKev(fetchFn, cisaFetchFn, signal, cisaResolver),
+    loadEpss(cves, fetchFn, signal),
+  ])
   return new Map(
     cves.flatMap((cve) => {
       const combined = { ...kev.get(cve), ...epss.get(cve) }

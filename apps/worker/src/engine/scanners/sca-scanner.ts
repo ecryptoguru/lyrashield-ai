@@ -3,6 +3,7 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { AdvisoryBatchResult } from "@lyrashield/db"
+import type { HostResolver } from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { fetchThreatSignals, type ThreatSignal } from "./threat-intelligence"
@@ -12,6 +13,9 @@ export interface ScaScanConfig {
   repoPath: string
   workspaceDir: string
   fetchFn?: typeof fetch
+  cisaFetchFn?: typeof fetch
+  /** Injectable DNS resolver for safe-fetch tests. */
+  cisaResolver?: HostResolver
   coverageIssues?: ScannerCoverageIssue[]
   signal?: AbortSignal
   resolvedDependencyInventory?: ResolvedDependencyInventory
@@ -671,8 +675,16 @@ function formatThreatPriority(signal: ThreatSignal | undefined): string | null {
 }
 
 export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerability[]> {
-  const { repoPath, fetchFn, coverageIssues, signal, resolvedDependencyInventory, advisoryBatch } =
-    config
+  const {
+    repoPath,
+    fetchFn,
+    cisaFetchFn,
+    cisaResolver,
+    coverageIssues,
+    signal,
+    resolvedDependencyInventory,
+    advisoryBatch,
+  } = config
   throwIfAborted(signal)
   logger.info("Starting SCA scan", { repoPath })
 
@@ -768,8 +780,7 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
 
   const threatSignals = await fetchThreatSignals(
     findings.flatMap((finding) => (finding.cve ? [finding.cve] : [])),
-    fetchFn ?? fetch,
-    signal
+    { fetchFn, cisaFetchFn, cisaResolver, signal }
   )
   const enrichedFindings = findings.map((finding) => {
     const priority = finding.cve ? formatThreatPriority(threatSignals.get(finding.cve)) : null

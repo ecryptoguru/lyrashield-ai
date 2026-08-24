@@ -277,6 +277,51 @@ describe("runScannerOrchestrator", () => {
     expect(result.urlFindings.length).toBe(1)
   })
 
+  it("builds one authenticated proxy fetch for URL scans and CISA enrichment", async () => {
+    mockEnv.LYRASHIELD_EGRESS_PROXY_URL = "https://proxy.example.com"
+    mockEnv.LYRASHIELD_EGRESS_PROXY_SECRET = "test-secret"
+
+    await runScannerOrchestrator({
+      scanId: "scan-shared-egress-proxy",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: {
+        id: "target-1",
+        type: "REPO",
+        url: "https://example.test",
+        name: "Repository with web surface",
+      },
+      goal: "LAUNCH_REVIEW",
+      mode: "SAFE",
+      engineFindings: [],
+      workspaceDir: sourceCheckout,
+      urlProfile: {
+        id: "WEB_APP_SAFE",
+        targetType: "WEB_APP",
+        mode: "SAFE",
+        label: "Surface Review",
+        description: "...",
+        maxDocuments: 1,
+        maxAssets: 6,
+        maxDepth: 0,
+        maxTotalBytes: 8 * 1024 * 1024,
+        maxResponseBytes: 3 * 1024 * 1024,
+        maxConcurrency: 3,
+        maxWallTimeMs: 60_000,
+        maxOperations: 0,
+        maxMethodProbes: 0,
+        maxOriginProbes: 0,
+        allowedMethods: ["GET"],
+        requiresApiSpec: false,
+      },
+    })
+
+    const cisaFetchFn = vi.mocked(scanSca).mock.calls.at(-1)?.[0].cisaFetchFn
+    const urlFetchFn = vi.mocked(scanUrl).mock.calls.at(-1)?.[0].fetchFn
+    expect(cisaFetchFn).toBeTypeOf("function")
+    expect(cisaFetchFn).toBe(urlFetchFn)
+  })
+
   it("fails closed before a production URL scan when the egress proxy is unavailable", async () => {
     mockEnv.NODE_ENV = "production"
 

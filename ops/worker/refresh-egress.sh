@@ -46,13 +46,14 @@ fi
 pin_dir=$(dirname "$pin_file")
 temporary_rules=$(mktemp "${pin_dir}/lyrashield-egress-rules.XXXXXX")
 temporary_pins=$(mktemp "${pin_file}.XXXXXX")
-trap 'rm -f "$temporary_rules" "$temporary_pins"' EXIT HUP INT TERM
+temporary_old_pins=$(mktemp "${pin_file}.old.XXXXXX")
+trap 'rm -f "$temporary_rules" "$temporary_pins" "$temporary_old_pins"' EXIT HUP INT TERM
 
 if [ ! -s "$pin_file" ]; then
   refresh_pins=1
 fi
 
-append_approved_ip_rule() {
+validate_approved_ip_tuple() {
   host="$1"
   address="$2"
   port="$3"
@@ -75,8 +76,33 @@ append_approved_ip_rule() {
       exit 1
       ;;
   esac
+}
+
+append_approved_ip_rule() {
+  host="$1"
+  address="$2"
+  port="$3"
+
+  validate_approved_ip_tuple "$host" "$address" "$port"
 
   printf '%s\n' "-A $chain_name -p tcp -d $address --dport $port -j ACCEPT" >>"$temporary_rules"
+}
+
+load_approved_pin_file() {
+  source_file="$1"
+  destination_file="$2"
+
+  if [ ! -e "$source_file" ]; then
+    return
+  fi
+  while read -r pinned_host pinned_address pinned_port extra; do
+    if [ -n "${extra:-}" ]; then
+      echo "Invalid worker egress pin entry" >&2
+      exit 1
+    fi
+    validate_approved_ip_tuple "$pinned_host" "$pinned_address" "$pinned_port"
+    printf '%s %s %s\n' "$pinned_host" "$pinned_address" "$pinned_port" >>"$destination_file"
+  done <"$source_file"
 }
 
 append_endpoint_rules() {
@@ -136,14 +162,13 @@ cat >"$temporary_rules" <<EOF
 -A ${chain_name} -d 240.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
 EOF
 
+load_approved_pin_file "$pin_file" "$temporary_old_pins"
+LC_ALL=C sort -u "$temporary_old_pins" -o "$temporary_old_pins"
+
 if [ "$refresh_pins" != "1" ]; then
-  while read -r pinned_host pinned_address pinned_port extra; do
-    if [ -n "${extra:-}" ]; then
-      echo "Invalid worker egress pin entry" >&2
-      exit 1
-    fi
+  while read -r pinned_host pinned_address pinned_port; do
     append_approved_ip_rule "$pinned_host" "$pinned_address" "$pinned_port"
-  done <"$pin_file"
+  done <"$temporary_old_pins"
 fi
 
 append_endpoint_rules "$DATABASE_URL" 5432
@@ -153,10 +178,53 @@ append_endpoint_rules "$S3_ENDPOINT" 443
 append_endpoint_rules "https://github.com" 443
 append_endpoint_rules "https://api.github.com" 443
 append_endpoint_rules "https://api.osv.dev" 443
-append_endpoint_rules "https://www.cisa.gov" 443
 append_endpoint_rules "https://api.first.org" 443
 append_endpoint_rules "$LYRASHIELD_EGRESS_PROXY_URL" 443
 append_endpoint_rules "https://api.parallel.ai" 443
+
+pins_changed=0
+worker_active=0
+defer_pin_change=0
+if [ "$refresh_pins" = "1" ]; then
+  LC_ALL=C sort -u "$temporary_pins" -o "$temporary_pins"
+  if ! cmp -s "$temporary_old_pins" "$temporary_pins"; then
+    pins_changed=1
+    changed_hosts=$(
+      awk '
+        FILENAME == ARGV[1] { old[$0] = 1; next }
+        { new[$0] = 1 }
+        END {
+          for (line in old) {
+            if (!(line in new)) {
+              split(line, fields, " ")
+              changed[fields[1]] = 1
+            }
+          }
+          for (line in new) {
+            if (!(line in old)) {
+              split(line, fields, " ")
+              changed[fields[1]] = 1
+            }
+          }
+          for (host in changed) print host
+        }
+      ' "$temporary_old_pins" "$temporary_pins" | LC_ALL=C sort | paste -sd, -
+    )
+  fi
+fi
+
+if [ "$restart_worker_on_pin_change" = "1" ] &&
+  { [ "$pins_changed" = "1" ] || [ -e "$restart_pending_file" ]; } &&
+  docker exec lyrashield-worker test -s /tmp/lyrashield-worker-active 2>/dev/null; then
+  worker_active=1
+fi
+
+if [ "$pins_changed" = "1" ] && [ "$worker_active" = "1" ]; then
+  defer_pin_change=1
+  while read -r pinned_host pinned_address pinned_port; do
+    append_approved_ip_rule "$pinned_host" "$pinned_address" "$pinned_port"
+  done <"$temporary_old_pins"
+fi
 
 cat >>"$temporary_rules" <<EOF
 -A ${chain_name} -j REJECT --reject-with icmp-admin-prohibited
@@ -165,22 +233,21 @@ EOF
 
 iptables -N "$chain_name" 2>/dev/null || true
 iptables-restore --noflush <"$temporary_rules"
-pins_changed=0
-if [ "$refresh_pins" = "1" ]; then
-  if ! cmp -s "$temporary_pins" "$pin_file"; then
-    chmod 600 "$temporary_pins"
-    mv -f "$temporary_pins" "$pin_file"
-    pins_changed=1
-  fi
-fi
 if ! iptables -C DOCKER-USER -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name" 2>/dev/null; then
   iptables -I DOCKER-USER 1 -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name"
+fi
+if [ "$pins_changed" = "1" ]; then
+  echo "Worker egress pins changed; hosts: $changed_hosts; IP addresses redacted"
+  if [ "$defer_pin_change" != "1" ]; then
+    chmod 600 "$temporary_pins"
+    mv -f "$temporary_pins" "$pin_file"
+  fi
 fi
 if [ "$pins_changed" = "1" ] && [ "$restart_worker_on_pin_change" = "1" ]; then
   : >"$restart_pending_file"
 fi
 if [ "$restart_worker_on_pin_change" = "1" ] && [ -e "$restart_pending_file" ]; then
-  if docker exec lyrashield-worker test -s /tmp/lyrashield-worker-active 2>/dev/null; then
+  if [ "$worker_active" = "1" ]; then
     echo "Worker egress pins changed; restart deferred until the active scan finishes"
   else
     # Preserve a short Redis registration while systemd replaces an idle worker.
