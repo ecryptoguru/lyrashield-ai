@@ -201,11 +201,9 @@ function makeDeps(overrides: Partial<LaunchAssuranceDeps> = {}): LaunchAssurance
       queueDepth: 1,
       oldestWaitingJobAgeMs: 0,
     })),
-    listActiveScans: vi.fn(
-      async (): Promise<Array<{ id: string; status: ScanStatus }>> => [
-        { id: "cmt0q9a28000501jnmn1t453t", status: "RUNNING" },
-      ]
-    ),
+    listActiveScans: vi.fn(async (): Promise<Array<{ id: string; status: ScanStatus }>> => [
+      { id: "cmt0q9a28000501jnmn1t453t", status: "RUNNING" },
+    ]),
     getScanState: vi.fn(
       async (): Promise<{ id: string; workspaceId: string; status: ScanStatus }> => ({
         id: "cmt0q9a28000501jnmn1t453t",
@@ -468,12 +466,10 @@ describe("verifyLaunchAssurance", () => {
 
   it("refuses failure injection when unrelated active work exists", async () => {
     const deps = makeDeps({
-      listActiveScans: vi.fn(
-        async (): Promise<Array<{ id: string; status: ScanStatus }>> => [
-          { id: "cmt0q9a28000501jnmn1t453t", status: "RUNNING" },
-          { id: "cmt0q9a28000502jnmn1t453u", status: "QUEUED" },
-        ]
-      ),
+      listActiveScans: vi.fn(async (): Promise<Array<{ id: string; status: ScanStatus }>> => [
+        { id: "cmt0q9a28000501jnmn1t453t", status: "RUNNING" },
+        { id: "cmt0q9a28000502jnmn1t453u", status: "QUEUED" },
+      ]),
     })
     const receipt = await verifyLaunchAssurance(baseOptions(), deps)
     const preflight = receipt.steps.find((step) => step.name === "failure_injection_preflight")
