@@ -1,6 +1,6 @@
 # Changelog
 
-## Next
+## 0.1.17
 
 - Removed the Zed extension's `process:exec` capability after it was found unnecessary; the
   extension now uses only Zed's `npm:install` capability to run the npm-installed MCP server.

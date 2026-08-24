@@ -1,5 +1,8 @@
 # LyraShield AI marketplace release source
 
+Current exported Agent Plugin version: `0.1.17`. Channel-specific listing versions and review
+states below may lag this repository release.
+
 ## Install from this repository
 
 This repository is an addressable plugin marketplace: `.claude-plugin/marketplace.json` catalogs the

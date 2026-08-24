@@ -5,7 +5,7 @@ Scope: LyraShield AI product, agent integrations, public discovery surfaces, das
 
 ## Executive decision
 
-The two-mode dashboard is the right product shape and is implemented as **Guided** (vibe coders, new developers, and non-technical operators) plus **Pro** (experienced developers, security practitioners, and small teams). Both modes use the same launch-readiness computation; the mode changes density and guidance, not evidence or security semantics.
+The two-mode dashboard is the right product shape. It is currently implemented on the **dashboard home** as **Guided** (vibe coders, new developers, and non-technical operators) plus **Pro** (experienced developers, security practitioners, and small teams). Both modes use the same launch-readiness computation; Pro reveals additional risk-posture, finding-mix, remediation-flow, and recent-activity sections. Other dashboard routes do not currently change presentation by mode.
 
 The branch is suitable for review after its local gates pass. It is **not authorization to provision production administrators, activate billing, deploy, or publish**. Production administrator provisioning remains a separate controlled operation requiring the exact two verified accounts, enrolled TOTP, the production system database identity, migration deployment, and a fresh TOTP sign-in after all prior sessions are revoked.
 
@@ -51,9 +51,15 @@ Retained intentionally:
 ## SEO, AEO, and GEO audit
 
 - Canonical naming and domain are consistent: LyraShield AI and `lyrashieldai.com`.
-- Existing sitemap, robots, structured metadata, and public security/methodology surfaces remain intact.
+- `SeoHead.astro` emits canonical, English and `x-default` alternates, indexability controls, Open Graph, X card metadata, RSS, `llms.txt`, and sitemap discovery. Preview builds fail closed with `noindex, nofollow`; page-level exclusions use `noindex, follow`.
+- `astro.config.mjs` requires a public HTTPS origin before enabling indexing, excludes the non-canonical terms route and unavailable scanner route from the sitemap, and emits real content dates rather than build-time freshness.
+- `Base.astro` supplies site-wide `Organization` and `WebSite` schema. The homepage adds `WebPage`, `SoftwareApplication`, and visible `FAQPage` entities; articles add `BlogPosting`, author, publisher, image, breadcrumb, publication, modification, word-count, and reading-time data.
+- `robots.txt` permits the public surface, publishes the sitemap, explicitly permits GPTBot, ClaudeBot, PerplexityBot, CCBot, and Google-Extended, and blocks every crawler when the build is not indexable.
 - `llms.txt` now contains Markdown links rather than bare URLs, a current content date, and a broad crawlable map of 388 product, integration, methodology, and editorial destinations.
+- `agents.md` exposes a cacheable machine-readable onboarding contract separately from human integration documentation.
 - Copy continues to avoid certification, guaranteed-security, universal-detection, and unsupported verification claims.
+
+Repository verdict: no Critical or High technical discovery blocker was found in the inspected source. This is a code/build verdict, not proof of production crawlability, indexing, rich-result eligibility, Core Web Vitals, or answer-engine citation.
 
 Remaining live proof:
 
@@ -63,14 +69,19 @@ Remaining live proof:
 
 ## UI and accessibility audit
 
-- Guided mode defaults to the next decision, readiness state, and launch path; Pro mode exposes dense risk, remediation, and activity views.
+- Guided mode defaults to the next decision, readiness state, launch path, first-run checklist, command center, launch verdict, and two primary metrics. Pro adds three dense sections without changing the underlying evidence state or launch verdict.
+- The preference accepts only `guided` or `pro`, defaults safely to Guided, and persists in browser storage under a workspace-specific key. It is not an account-level or cross-device preference.
+- The mode control is a labelled button group with `aria-pressed`; navigation, launch actions, and mode-independent evidence remain keyboard-reachable.
 - Admin navigation is emitted only after server authorization and each privileged page repeats authorization before starting cross-workspace reads.
+- The admin layout is explicitly `noindex`, `nofollow`, `noarchive`, and `noimageindex`; unauthorized access resolves as not found. Read views bound lists and omit customer payloads, source, errors, tokens, model costs, and secrets.
 - Sign-in and two-factor pages were rendered at desktop and 390x844 mobile sizes. The tested pages had no horizontal overflow, duplicate IDs, unlabeled inputs, console errors, or broken heading structure.
 - TOTP and recovery modes use explicit labels, input modes, autocomplete behavior, disabled/loading states, live error regions, and keyboard-operable buttons.
 - Authenticated browser proof now runs against disposable PostgreSQL only. It enrolls real TOTP through the UI, proves admin access is denied before role assignment, signs in through the MFA challenge, visits every admin destination, checks private/no-store API caching, verifies mobile overflow, and fails on browser console errors.
 
 Remaining UI proof:
 
+- Extend Guided/Pro only when research shows route-specific density is needed. The current home-only switch is the smallest coherent implementation and avoids duplicating evidence semantics across the product.
+- Replace the admin overview warning after deployment: it says MFA elevation and mandatory audit are not active, while those controls now exist and mutations remain disabled for a different reason. Also rename “Manage affiliates” to “Review affiliates” while actions remain fail closed.
 - Guided and Pro density should still receive periodic visual-regression review as their underlying dashboard content evolves.
 - Run external screen-reader and contrast checks on the deployed revision; the local semantic pass is not equivalent to assistive-technology certification.
 
@@ -99,3 +110,4 @@ Measured focused benchmark: unchanged-artifact persistence decreased from 117.10
 - Monorepo typecheck: 34 tasks passed.
 - Monorepo build (11 tasks), lint (32 tasks), typecheck (34 tasks), formatting, production dependency audit, Action lint, migration diff, and `git diff --check` passed.
 - Engine suite: 1,300 passed and 1 skipped; focused deduplication tests and Ruff passed. Repository-wide Pyright now reports 0 errors and 0 warnings without excluding pinned Strix modules.
+- Focused source-backed SEO/UI re-audit: 5 web test files and 30 tests passed for dashboard mode, navigation, and platform-admin views; all 18 marketing test files and 129 tests passed.

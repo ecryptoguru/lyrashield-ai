@@ -160,6 +160,15 @@ OWNER > ADMIN > SECURITY_ADMIN > APPSEC_MANAGER > BILLING_ADMIN
 
 Permission groups cover workspace, member, project, target, scan, finding, fix, retest, report, notification, schedule, policy, audit, billing, integration, and agent actions.
 
+Platform administration is intentionally outside this workspace role order:
+
+- `packages/config/src/platform-admin.ts` owns the exact-two email allowlist and rejects missing, duplicate, aliased, or expanded configuration.
+- `packages/auth/src/session.ts` accepts only a browser-cookie identity that is allowlisted, email-verified, `PLATFORM_OPERATOR`, TOTP-enabled, and recently TOTP-stamped. Bearer credentials are rejected.
+- `packages/db/src/platform-admin-security.ts` owns challenge rate limiting, action-specific single-use elevation nonces, transaction-time authority revalidation, and atomic `PlatformAdminAudit` creation.
+- `apps/web/src/app/(dashboard)/dashboard/admin` contains noindex overview/users/workspaces/scans/audit/affiliate read surfaces. Unauthorized access resolves to not found.
+- `packages/db/scripts/provision-platform-admins.ts` and `.github/workflows/provision-platform-admins.yml` provide read-only preflight and explicitly confirmed apply. Apply revokes existing sessions/elevations for both operators and writes the bootstrap audit receipt.
+- Affiliate admin writes currently return `ADMIN_ACTION_DISABLED`; do not document the console as a general mutation surface until the atomic write boundary is connected.
+
 ### Tenancy and RLS
 
 - Every workspace query explicitly carries `workspaceId`.
@@ -283,6 +292,8 @@ Annual Cloud commission is flat 25%; 30% tier applies only to monthly. No commis
 - `packages/agent-registry` owns client install metadata.
 - `packages/agent-plugin` generates marketplace/plugin artifacts and verified client shims.
 
+Current package/runtime contract: `lyrashield` CLI `0.2.0` supports Node 22–24; `@lyrashield/mcp` `0.2.2` and `@lyrashield/agent-plugin` `0.1.17` require Node 24+. MCP uses SDK `1.30` and Zod 4. Registry contains 30 entries and resolves 26 preferred client surfaces: 13 config-file installs, one vendor CLI, seven guided-manual clients, and five Agent Plugin installs for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Registry retains three legacy config-file alternatives for plugin-preferred clients. Four generated client-specific shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root plugin manifest. VS Code stays on its verified config-file path.
+
 Hosted OAuth is read-only by default. Write scope still requires permission and per-action approval.
 
 ### Marketing
@@ -293,6 +304,7 @@ Hosted OAuth is read-only by default. Write scope still requires permission and 
 - `apps/marketing/src/pages/tools`: browser-local tools.
 - `apps/marketing/wrangler.jsonc`: source bindings only.
 - Deploy generated `apps/marketing/dist/server/wrangler.json`.
+- `apps/marketing/src/pages/robots.txt.ts`, `llms.txt.ts`, `agents.md.ts`, sitemap configuration, canonical/schema helpers, comparison/research pages, and integration docs form the SEO/AEO/GEO surface. Production indexability gates crawler output; external indexing and citation still require separate receipts.
 
 ## 7. API surface
 
@@ -355,6 +367,7 @@ Environment validation fails closed in production where a capability is required
 - Dialogs trap focus, restore focus, and support Escape unless destructive confirmation requires otherwise.
 - Honor reduced motion and system/light/dark preference without hydration flash.
 - Server components supply initial data; client components own interaction and typed mutations.
+- `DashboardExperience` stores a per-workspace `guided` or `pro` preference in local storage; storage failure preserves Guided as the fully functional default. `ProDashboardSection` changes presentation density only, never authorization, data scope, or scan behavior.
 - Render and inspect real browser output for UI changes.
 
 ## 10. Commands and verification

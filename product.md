@@ -70,8 +70,8 @@ Two modes: **Cloud subscription** (we pay LLM costs) and **Local BYOK desktop** 
 - Audit hash chaining and S3-compatible evidence upload with checksum-first retry deduplication.
 - Hardened prompt-injection detection and shared queue/Redis helpers.
 - The `lyrashield` CLI (`login/use/doctor/install/uninstall/init` plus scan, finding, and report commands).
-- The `agent-registry` package that renders per-agent config for 24 distinct coding agents (30 registry entries, including 6 `agent-plugin` variants) in JSON/JSONC/TOML/YAML.
-- Agent Plugins v1.0.0 support: the portable `@lyrashield/agent-plugin` package with confirmed manifests for Claude Code, Cursor, OpenAI Codex, and Kiro. The registry retains VS Code and GitHub Copilot entries as reserved, not yet verified, plugin variants.
+- The `agent-registry` package that renders 30 entries into 26 preferred client surfaces in JSON/JSONC/TOML/YAML. Preferred paths comprise 13 config-file clients, Amp through its vendor CLI, seven guided-manual clients, and five Agent Plugin installs; three legacy config-file alternatives remain addressable for plugin-preferred clients.
+- Agent Plugins v1.0.0 support: the portable `@lyrashield/agent-plugin` package with generated client shims for Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root manifest. VS Code deliberately stays on its verified config-file path.
 - MCP: the stdio `@lyrashield/mcp` package and the remote Streamable HTTP endpoint at `/api/mcp`.
 - Hosted OAuth for MCP remote clients with workspace selection, optional write scope, and preserved query parameters (PRs #247, #255, #257, #258).
 - CLI OAuth device login writing `~/.lyrashield/credentials.json` with `0o600` (PR #247). The `@lyrashield/cli` scoped alias is deprecated in favor of `lyrashield`.
@@ -79,6 +79,8 @@ Two modes: **Cloud subscription** (we pay LLM costs) and **Local BYOK desktop** 
 - Email verification is implemented and load-bearing, but deliberately disabled in production pending a mail provider — an accepted, documented blocker; see `docs/deployment/PRODUCTION_DEPLOYMENT.md` "Known production blockers".
 - Split marketing/app origin routing and the public Lite Scanner.
 - LyraShield Score, cross-admin-idempotent public scorecards, referrals, and premium social sharing.
+- Two dashboard experiences: Guided for vibe coders, first-time developers, and non-technical operators; Pro for experienced developers and security teams. Both expose the same permissions and launch-critical actions, so mode choice never hides a blocker or changes evidence semantics.
+- A hidden, read-oriented platform admin console for exactly two allowlisted, verified, TOTP-enrolled operators. It exposes bounded health and operational lists without customer source, payloads, secrets, model cost, or cross-tenant mutation authority. Production provisioning and authenticated browser proof remain separate evidence gates.
 - Azure AI / GPT-5.6 mode routing (Safe/Quick/Standard → Luna/medium; Deep/Custom → Terra/medium with Luna/high specialists).
 - Evidence-backed marketing surface with a public methodology page (release verdict scale: Go, Go with conditions, No go, Not evaluated) and five browser-local no-upload tools.
 - Shared label module for consistent UI vocabulary with no raw database enums rendered.
@@ -131,6 +133,8 @@ URL/API targets skip the external engine. SAFE remains a compatibility alias for
 ## SEO and content themes
 
 Initial themes: secure AI-generated code, security review before SaaS launch, dependency and secret exposure, fix-and-retest workflows, SARIF/PR gates, and agent/MCP security. Build a page only when it has a distinct user question and evidence-backed answer; avoid thin keyword variants.
+
+Discovery foundation includes canonical URLs, structured data, sitemap/robots controls, dated `llms.txt`, machine-readable `agents.md`, explicit answer-engine crawler policy, integration guides, comparisons, research, and evidence-led editorial validation. Treat these as publishable inputs, not proof of Google indexing, answer-engine citation, rankings, traffic, or customer demand; retain external webmaster and citation receipts before making those claims.
 
 ## Founder decisions
 

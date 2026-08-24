@@ -66,6 +66,8 @@ Implemented:
 - Findings, normalization, CWE/OWASP metadata, SCA, secrets, deterministic URL/API checks, AI App Security checks, evidence states, candidates, receipts, manifests, retests, reports, notifications, and launch readiness.
 - LyraShield Score, private snapshots, public scorecards, cards, badges, privacy-bounded analytics, referrals, and social sharing.
 - Agent actions, exact-input approvals, MCP over stdio and Streamable HTTP, hosted OAuth, CLI login/install/doctor flows, SDK, agent registry, and portable agent plugin.
+- Workspace-scoped Guided and Pro dashboard experiences. Guided is the default and preserves every launch-critical action; Pro reveals denser risk, remediation, retained-finding, and activity analysis without changing permissions or scan behavior.
+- A hidden platform-operator console for bounded cross-workspace overview, user/workspace/scan lists, platform audit, and affiliate review. It is not a tenant-admin role and is not discoverable by ordinary users.
 - Polar/Razorpay billing, plans, trials, entitlements, usage metering, minute packs, grace, overage logic, checkout, portal, and webhook processing.
 - Affiliate applications, attribution, commission ledger, fraud controls, payout ledger, dashboard, clawbacks, and reserves.
 - A fixed, non-destructive private-beta AI safety test catalog with exact host, credential, request, duration, response, and storage bounds. It is not arbitrary fuzzing or proof of adversarial robustness.
@@ -247,6 +249,10 @@ Usage draw order: current monthly pool, oldest valid pack, then allowed overage.
 - AsyncLocalStorage carries request context; `withWorkspaceRLS()` applies transaction-local DB context.
 - Production `DATABASE_URL` role must have `rolsuper=false` and `rolbypassrls=false`.
 - Direct workspace tables and child tables use fail-closed RLS; code-level scoping remains defense in depth.
+- Platform administration is a separate global boundary: only the exact configured emails `ecryptoguru@gmail.com` and `ankit@lyrashieldai.com` may hold `PLATFORM_OPERATOR`; each account must be unique, email-verified, and TOTP-enrolled.
+- Admin reads require a server-confirmed browser-cookie session with recent server-stamped TOTP. Bearer/API-key credentials and workspace roles cannot cross the boundary; unauthorized routes return not found and carry noindex/noarchive metadata.
+- Critical admin mutations require a same-origin JSON request, fresh TOTP challenge, short-lived action-specific single-use nonce, authority revalidation inside the database transaction, and atomic platform audit. Affiliate mutations remain disabled until that full transaction boundary is connected.
+- Production role provisioning uses a dedicated workflow with an exact confirmation phrase and system database credential. Preflight is read-only; apply revokes prior sessions/elevations and creates the bootstrap audit receipt. Code presence does not prove production accounts were provisioned.
 
 ### Network and sandbox
 
@@ -353,6 +359,8 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Backup/restore drill.
 - Polar/Razorpay test credentials, product/price maps, webhook secrets, signed smoke, and non-charge objects.
 - Cloud billing, usage, Local/Desktop, and affiliate implementations merged.
+- Guided/Pro dashboard experiences, exact-two platform-admin authorization, bounded read console, TOTP elevation primitives, additive schema migration, and fail-closed provisioning workflow are implemented in code.
+- SEO/AEO/GEO foundations include canonical/schema metadata, sitemap and robots controls, dated `llms.txt`, `agents.md`, answer-engine crawler stanzas, integration guides, comparison/research pages, and content validation.
 
 ### Remaining before broader paid/untrusted exposure
 
@@ -366,6 +374,8 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 8. Triage the 24 Standard findings and obtain independent verification where warranted.
 9. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
 10. Verify production runtime DB role is neither superuser nor `BYPASSRLS` before traffic growth.
+11. Apply the platform-admin migration in production, run read-only exact-two account preflight, provision only after both users complete email verification and TOTP enrollment, and retain fresh-session MFA browser proof. Until then, production admin access is unproven.
+12. Capture authenticated client-matrix receipts for current CLI/MCP/plugin installs and remote OAuth, plus webmaster indexing and answer-engine citation observations; code and crawl files alone do not prove external discovery.
 
 ### Deferred
 
