@@ -49,6 +49,8 @@ const readinessPath = "/tmp/lyrashield-worker-ready"
 const activeJobPath = "/tmp/lyrashield-worker-active"
 const plannedRestartPath = "/tmp/lyrashield-worker-planned-restart"
 export const RECONCILIATION_INTERVAL_MS = 300_000
+export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
+export const MANAGED_REDIS_STALLED_INTERVAL_MS = 60_000
 
 // Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
 // so the dependency is only loaded when configured.
@@ -275,8 +277,8 @@ async function main(): Promise<void> {
       // consumer-liveness guard (below) covers the remaining failure mode: the
       // blocking client silently wedging (taskforcesh/bullmq#4479) so jobs sit
       // in `wait` while the worker reports ready.
-      drainDelay: 600,
-      stalledInterval: 60_000,
+      drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+      stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
     }
   )
 
@@ -320,6 +322,10 @@ async function main(): Promise<void> {
       },
       concurrency: 2,
       autorun: false,
+      // Keep instant job pickup while avoiding BullMQ's five-second idle poll,
+      // which alone exceeds a 500,000-command monthly managed Redis budget.
+      drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+      stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
     }
   )
   await webhookTrackRetryWorker.waitUntilReady()
