@@ -1,13 +1,7 @@
 import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
-import {
-  getUsageBalance,
-  getTrialState,
-  getGraceState,
-  CLOUD_PLAN_MAP,
-  resolveProvider,
-} from "@lyrashield/billing"
+import { getUsageBalance, getTrialState, getGraceState, CLOUD_PLAN_MAP } from "@lyrashield/billing"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
@@ -18,7 +12,7 @@ import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 import { headers } from "next/headers"
-import { getRequestBillingAdmission } from "@/lib/billing-admission"
+import { getRequestBillingAdmission, resolveRequestBillingProvider } from "@/lib/billing-admission"
 
 export default async function BillingPage() {
   const session = await getCachedSession()
@@ -48,7 +42,7 @@ export default async function BillingPage() {
   const billingRequest = new Request("https://app.lyrashieldai.com/dashboard/billing", {
     headers: requestHeaders,
   })
-  const { provider: checkoutProvider } = resolveProvider(billingRequest)
+  const { provider: checkoutProvider } = resolveRequestBillingProvider(billingRequest)
   const purchasesAvailable = getRequestBillingAdmission(
     checkoutProvider,
     workspaceId,

@@ -3,7 +3,6 @@ import { z } from "zod"
 import {
   createPolarOneTimeCheckout,
   createRazorpayPaymentLink,
-  resolveProvider,
   resolveProviderId,
   billingQuoteNotes,
 } from "@lyrashield/billing"
@@ -13,7 +12,7 @@ import { logger } from "@lyrashield/logger"
 import { LOCAL_SKU_MAP } from "@lyrashield/pricing"
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { checkBillingCheckoutRateLimit, clientIpFromRequest } from "@/lib/rate-limit"
-import { localBillingAdmissionError } from "@/lib/billing-admission"
+import { localBillingAdmissionError, resolveRequestBillingProvider } from "@/lib/billing-admission"
 
 const Body = z.object({}).strict()
 const LOCAL_SKU = "individual_launch"
@@ -22,7 +21,7 @@ export async function POST(request: Request) {
   const parsed = Body.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return apiError("VALIDATION_ERROR", "Request body must be empty", 400)
 
-  const { provider } = resolveProvider(request)
+  const { provider } = resolveRequestBillingProvider(request)
   const admissionError = localBillingAdmissionError(provider, request)
   if (admissionError) return admissionError
 

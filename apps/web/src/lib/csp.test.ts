@@ -7,6 +7,9 @@ const stagingAccess = vi.hoisted(() => ({ allowed: false }))
 vi.mock("@/lib/rate-limit", () => ({
   checkAuthRateLimit: vi.fn().mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
   checkApiRateLimit: vi.fn().mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
+  checkBillingWebhookRateLimit: vi
+    .fn()
+    .mockResolvedValue({ limited: false, remaining: 1_199, retryAfter: 0 }),
   checkLiteScanRateLimit: vi
     .fn()
     .mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
@@ -224,6 +227,26 @@ describe("CSP nonce proxy", () => {
     expect(res.status).toBe(200)
     expect(checkApiRateLimit).toHaveBeenCalledOnce()
     expect(checkAuthRateLimit).not.toHaveBeenCalled()
+  })
+
+  it("uses a dedicated burst-safe bound for signed billing webhook ingress", async () => {
+    const { checkApiRateLimit, checkBillingWebhookRateLimit } = await import("@/lib/rate-limit")
+    const response = await proxy(makeRequest("/billing/webhook"))
+    expect(response.status).toBe(200)
+    expect(checkBillingWebhookRateLimit).toHaveBeenCalledOnce()
+    expect(checkApiRateLimit).not.toHaveBeenCalled()
+  })
+
+  it("returns a bounded 429 from the billing webhook bucket", async () => {
+    const { checkBillingWebhookRateLimit } = await import("@/lib/rate-limit")
+    vi.mocked(checkBillingWebhookRateLimit).mockResolvedValueOnce({
+      limited: true,
+      remaining: 0,
+      retryAfter: 60,
+    })
+    const response = await proxy(makeRequest("/billing/webhook"))
+    expect(response.status).toBe(429)
+    expect(response.headers.get("Retry-After")).toBe("60")
   })
 
   it("protects every staging route except access, signed webhook, and readiness ingress", async () => {

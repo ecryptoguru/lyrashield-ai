@@ -12,9 +12,9 @@ const keyId = process.env.RAZORPAY_KEY_ID?.trim() ?? ""
 const prisma = getSystemPrisma()
 const enabled =
   process.env.RAZORPAY_TEST_MODE === "1" &&
+  process.env.BILLING_STAGING_REGION === "inr" &&
   keyId.startsWith("rzp_test_") &&
   Boolean(process.env.RAZORPAY_KEY_SECRET && process.env.RAZORPAY_WEBHOOK_SECRET)
-const indiaHeaders = { "x-forwarded-for": "192.0.2.44", "cf-ipcountry": "IN" }
 const plans = ["STARTER", "PRO", "TEAM"] as const
 const intervals = ["monthly", "annual"] as const
 const packs = [
@@ -76,7 +76,6 @@ test.describe("Razorpay Test Mode billing proof", () => {
     for (const interval of intervals) {
       test(`${plan} ${interval} creates a Test Mode subscription`, async () => {
         const response = await actors.ownerRequest.post("/billing/checkout", {
-          headers: indiaHeaders,
           data: { workspaceId: actors.workspaceId, plan, interval },
         })
         await expect(response).toBeOK()
@@ -92,7 +91,6 @@ test.describe("Razorpay Test Mode billing proof", () => {
 
   test("client region override remains rejected", async () => {
     const response = await actors.ownerRequest.post("/billing/checkout", {
-      headers: indiaHeaders,
       data: {
         workspaceId: actors.workspaceId,
         plan: "STARTER",
@@ -187,7 +185,6 @@ test.describe("Razorpay Test Mode billing proof", () => {
   for (const [packId, minutes, amountMinor] of packs) {
     test(`${packId} hosted link and signed capture create no commission`, async () => {
       const checkout = await actors.ownerRequest.post("/api/billing/topup", {
-        headers: indiaHeaders,
         data: { workspaceId: actors.workspaceId, pack: packId },
       })
       await expect(checkout).toBeOK()
@@ -315,7 +312,6 @@ test.describe("Razorpay Test Mode billing proof", () => {
       "requires public Local Test admission and test email delivery"
     )
     const checkout = await actors.ownerRequest.post("/api/billing/local-checkout", {
-      headers: indiaHeaders,
       data: {},
     })
     await expect(checkout).toBeOK()

@@ -13,6 +13,7 @@ interface BillingStagingConfig {
   RAZORPAY_LOCAL_BILLING_ADMISSION: string
   BILLING_STAGING_ADMISSION: string
   BILLING_STAGING_ACCESS_TOKEN?: string
+  BILLING_STAGING_REGION?: string
 }
 
 export function billingStagingConfigError(value: BillingStagingConfig): string | null {
@@ -45,6 +46,9 @@ export function billingStagingConfigError(value: BillingStagingConfig): string |
   }
   if (!value.BILLING_STAGING_ACCESS_TOKEN || value.BILLING_STAGING_ACCESS_TOKEN.length < 32) {
     return "restricted billing staging admission requires a 32-character access token"
+  }
+  if (value.BILLING_STAGING_REGION !== "usd" && value.BILLING_STAGING_REGION !== "inr") {
+    return "restricted billing staging admission requires an explicit server-side billing region"
   }
   return null
 }
@@ -292,6 +296,7 @@ const envSchema = z
     BILLING_CANARY_WORKSPACE_IDS: z.string().optional().default(""),
     BILLING_STAGING_ADMISSION: z.enum(["off", "restricted"]).default("off"),
     BILLING_STAGING_ACCESS_TOKEN: z.string().min(32).optional().or(z.literal("")),
+    BILLING_STAGING_REGION: z.enum(["usd", "inr"]).optional().or(z.literal("")),
     BILLING_GEO_IP_HEADER: z
       .string()
       .optional()

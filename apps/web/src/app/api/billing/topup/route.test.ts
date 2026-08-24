@@ -16,13 +16,13 @@ vi.mock("@/lib/rate-limit", () => ({
 }))
 vi.mock("@/lib/billing-admission", () => ({
   billingAdmissionError: () => null,
+  resolveRequestBillingProvider: () => ({ provider: "razorpay", region: "inr" }),
   paymentsUnavailableError: () => Response.json({ error: "unavailable" }, { status: 503 }),
 }))
 vi.mock("@lyrashield/config", () => ({
   env: { BILLING_USD_INR_RATE: 83.255, POLAR_PRODUCT_IDS: "" },
 }))
 vi.mock("@lyrashield/billing", () => ({
-  resolveProvider: () => ({ provider: "razorpay", region: "inr" }),
   createPolarOneTimeCheckout: vi.fn(),
   createRazorpayPaymentLink: mocks.createRazorpay,
   resolveProviderId: vi.fn(),

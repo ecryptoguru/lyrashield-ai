@@ -77,6 +77,17 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="$BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION" \
     pnpm exec turbo run build --filter=@lyrashield/web
 
+# Disposable remote billing proof runner. This target is built and invoked only
+# by the isolated staging workflow; its database credential is injected into a
+# one-shot Container Apps Job and is never present in the web runtime image.
+FROM workspace-builder AS billing-e2e
+
+RUN apk add --no-cache chromium
+
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+
+CMD ["/app/e2e/billing/run-staging-proof.sh"]
+
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
 FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runner
 RUN addgroup --system lyrashield && \

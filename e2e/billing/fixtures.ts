@@ -97,6 +97,10 @@ export async function provisionBillingActors(
   }
   const expectedDatabase = process.env.BILLING_E2E_EXPECTED_DATABASE?.trim()
   const expectedDatabaseHost = process.env.BILLING_E2E_EXPECTED_DATABASE_HOST?.trim()
+  const evidenceDatabaseUrl = process.env.BILLING_E2E_DATABASE_URL?.trim()
+  const fixtureBaseUrl = new URL(baseURL)
+  const isRemote =
+    fixtureBaseUrl.hostname !== "127.0.0.1" && fixtureBaseUrl.hostname !== "localhost"
   if (
     !process.env.DATABASE_URL ||
     !process.env.DATABASE_SYSTEM_URL ||
@@ -106,6 +110,14 @@ export async function provisionBillingActors(
     throw new Error(
       "Disposable billing fixtures require both database URLs and exact database name/host guards"
     )
+  }
+  if (
+    isRemote &&
+    (!evidenceDatabaseUrl ||
+      process.env.DATABASE_URL !== evidenceDatabaseUrl ||
+      process.env.DATABASE_SYSTEM_URL !== evidenceDatabaseUrl)
+  ) {
+    throw new Error("Remote billing fixtures require the dedicated disposable E2E database role")
   }
   for (const value of [process.env.DATABASE_URL, process.env.DATABASE_SYSTEM_URL]) {
     if (new URL(value).hostname !== expectedDatabaseHost) {

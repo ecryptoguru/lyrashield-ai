@@ -18,6 +18,14 @@ if (usesRemoteServer) {
   if (process.env.BILLING_E2E_ALLOW_REMOTE !== "1") {
     throw new Error("Set BILLING_E2E_ALLOW_REMOTE=1 to target an isolated remote staging origin")
   }
+  const evidenceDatabaseUrl = process.env.BILLING_E2E_DATABASE_URL?.trim()
+  if (!evidenceDatabaseUrl) {
+    throw new Error("Remote billing proof requires BILLING_E2E_DATABASE_URL")
+  }
+  // The browser targets the deployed app while direct fixture evidence uses a
+  // short-lived role that is never attached to the web application.
+  process.env.DATABASE_URL = evidenceDatabaseUrl
+  process.env.DATABASE_SYSTEM_URL = evidenceDatabaseUrl
 }
 
 export default defineConfig({

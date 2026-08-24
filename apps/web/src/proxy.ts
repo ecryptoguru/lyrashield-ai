@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { isDev } from "@lyrashield/config"
-import { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } from "@/lib/rate-limit"
+import {
+  checkAuthRateLimit,
+  checkApiRateLimit,
+  checkBillingWebhookRateLimit,
+  checkLiteScanRateLimit,
+} from "@/lib/rate-limit"
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
 import { hasBillingStagingAccess } from "@/lib/billing-staging-access"
 
@@ -221,6 +226,43 @@ export async function proxy(request: NextRequest) {
     const response = new NextResponse(null, { status: 404 })
     response.headers.set("Cache-Control", "private, no-store")
     response.headers.set("Content-Security-Policy", csp)
+    return response
+  }
+
+  if (pathname === "/billing/webhook") {
+    const result = await checkBillingWebhookRateLimit(getClientIP(request))
+    if (result.limited) {
+      const response = NextResponse.json(
+        {
+          success: false,
+          error: { code: "RATE_LIMITED", message: "Too many webhook requests." },
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(result.retryAfter),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
+      )
+      response.headers.set("Content-Security-Policy", csp)
+      if (!isLocalPreview) {
+        response.headers.set(
+          "Strict-Transport-Security",
+          "max-age=63072000; includeSubDomains; preload"
+        )
+      }
+      return response
+    }
+    const response = NextResponse.next({ request: { headers: requestHeaders } })
+    response.headers.set("Content-Security-Policy", csp)
+    response.headers.set("X-RateLimit-Remaining", String(result.remaining))
+    if (!isLocalPreview) {
+      response.headers.set(
+        "Strict-Transport-Security",
+        "max-age=63072000; includeSubDomains; preload"
+      )
+    }
     return response
   }
 

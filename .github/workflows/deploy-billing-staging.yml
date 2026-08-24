@@ -37,6 +37,7 @@ jobs:
       KEY_VAULT_NAME: ${{ vars.LYRASHIELD_KEY_VAULT_NAME }}
       LICENSE_SIGNING_KEY_ID: ${{ vars.LICENSE_SIGNING_KEY_ID }}
       DATABASE_HOST: ${{ vars.STAGING_DATABASE_HOST }}
+      DATABASE_SERVER: lyrashield-billing-staging-db
       DATABASE_NAME: ${{ vars.STAGING_DATABASE_NAME }}
       DATABASE_ADMIN_USER: ${{ vars.STAGING_DATABASE_ADMIN_USER }}
       PLATFORM_ADMIN_EMAILS: ${{ vars.PLATFORM_ADMIN_EMAILS }}
@@ -47,6 +48,7 @@ jobs:
       POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
       RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
       BILLING_USD_INR_RATE: ${{ vars.BILLING_USD_INR_RATE }}
+      BILLING_STAGING_REGION: ${{ vars.STAGING_BILLING_REGION }}
     steps:
       - name: Checkout exact main revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,12 +79,12 @@ jobs:
             RESOURCE_GROUP CONTAINER_ENVIRONMENT CONTAINER_APP REGISTRY IMAGE_SHA
             PULL_IDENTITY_ID APP_IDENTITY_ID APP_IDENTITY_CLIENT_ID
             DEPLOY_CLIENT_ID DEPLOY_TENANT_ID DEPLOY_SUBSCRIPTION_ID APP_URL REDIS_HOST
-            KEY_VAULT_NAME LICENSE_SIGNING_KEY_ID DATABASE_HOST DATABASE_NAME DATABASE_ADMIN_USER
+            KEY_VAULT_NAME LICENSE_SIGNING_KEY_ID DATABASE_HOST DATABASE_SERVER DATABASE_NAME DATABASE_ADMIN_USER
             DATABASE_ADMIN_URL DATABASE_URL RUNTIME_PASSWORD SYSTEM_PASSWORD STAGING_ACCESS_TOKEN
             REDIS_PASSWORD BETTER_AUTH_SECRET
             INTERNAL_API_KEY POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_ORG_ID
             POLAR_PRODUCT_IDS POLAR_LOCAL_PRODUCT_IDS RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET
-            RAZORPAY_WEBHOOK_SECRET RAZORPAY_PLAN_IDS
+            RAZORPAY_WEBHOOK_SECRET RAZORPAY_PLAN_IDS BILLING_STAGING_REGION
           )
           for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then
@@ -103,6 +105,9 @@ jobs:
           [[ "${PULL_IDENTITY_ID,,}" == *"/resourcegroups/lyrashieldai-billing-staging/"* ]]
           [[ "${APP_IDENTITY_ID,,}" == *"/resourcegroups/lyrashieldai-billing-staging/"* ]]
           [ "$KEY_VAULT_NAME" = "lyrashieldbillingstage" ]
+          [ "$DATABASE_SERVER" = "lyrashield-billing-staging-db" ]
+          [ "$DATABASE_HOST" = "${DATABASE_SERVER}.postgres.database.azure.com" ]
+          case "$BILLING_STAGING_REGION" in usd|inr) ;; *) exit 1 ;; esac
           [[ "$REDIS_HOST" =~ ^lyrashield-billing-redis\.internal\..+\.azurecontainerapps\.io$ ]]
           [ "${#STAGING_ACCESS_TOKEN}" -ge 32 ]
 
@@ -146,6 +151,11 @@ jobs:
           az extension add --name containerapp --yes --only-show-errors
 
           resource_group_id=$(az group show --name "$RESOURCE_GROUP" --query id --output tsv)
+          expected_resource_group_id="/subscriptions/${DEPLOY_SUBSCRIPTION_ID}/resourceGroups/LyraShieldAI-Billing-Staging"
+          [ "${resource_group_id,,}" = "${expected_resource_group_id,,}" ] || {
+            echo "::error::Azure login did not resolve the fixed isolated staging resource group."
+            exit 1
+          }
           assignments=$(az role assignment list \
             --assignee "$DEPLOY_CLIENT_ID" \
             --all \
@@ -164,6 +174,22 @@ jobs:
                 ;;
             esac
           done <<< "$assignments"
+
+          expected_database_id="${resource_group_id}/providers/Microsoft.DBforPostgreSQL/flexibleServers/${DATABASE_SERVER}"
+          actual_database_id=$(az postgres flexible-server show \
+            --name "$DATABASE_SERVER" --resource-group "$RESOURCE_GROUP" \
+            --query id --output tsv)
+          actual_database_host=$(az postgres flexible-server show \
+            --name "$DATABASE_SERVER" --resource-group "$RESOURCE_GROUP" \
+            --query fullyQualifiedDomainName --output tsv)
+          [ "${actual_database_id,,}" = "${expected_database_id,,}" ] || {
+            echo "::error::Database resource is outside the fixed isolated staging identity."
+            exit 1
+          }
+          [ "$actual_database_host" = "$DATABASE_HOST" ] || {
+            echo "::error::Database URL host does not match the isolated Azure PostgreSQL resource."
+            exit 1
+          }
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -206,15 +232,30 @@ jobs:
           cache-from: type=gha,scope=billing-staging-migrate
           cache-to: type=gha,mode=max,scope=billing-staging-migrate
 
+      - name: Build and push exact-SHA staging E2E image
+        id: build-e2e
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          target: billing-e2e
+          push: true
+          tags: ${{ env.REGISTRY }}/lyrashield-billing-e2e:${{ env.IMAGE_SHA }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.IMAGE_SHA }}
+          cache-from: type=gha,scope=billing-staging-e2e
+          cache-to: type=gha,mode=max,scope=billing-staging-e2e
+
       - name: Verify staging image provenance and owned job executables
         shell: bash
         env:
           WEB_DIGEST: ${{ steps.build-web.outputs.digest }}
           MIGRATION_DIGEST: ${{ steps.build-migration.outputs.digest }}
+          E2E_DIGEST: ${{ steps.build-e2e.outputs.digest }}
         run: |
           set -euo pipefail
           [[ "$WEB_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$MIGRATION_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$E2E_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           registry_name=${REGISTRY%%.*}
           web_tag_digest=$(az acr manifest show-metadata \
             --registry "$registry_name" \
@@ -224,23 +265,36 @@ jobs:
             --registry "$registry_name" \
             --name "lyrashield-migrate:${IMAGE_SHA}" \
             --query digest --output tsv)
+          e2e_tag_digest=$(az acr manifest show-metadata \
+            --registry "$registry_name" \
+            --name "lyrashield-billing-e2e:${IMAGE_SHA}" \
+            --query digest --output tsv)
           [ "$web_tag_digest" = "$WEB_DIGEST" ]
           [ "$migration_tag_digest" = "$MIGRATION_DIGEST" ]
+          [ "$e2e_tag_digest" = "$E2E_DIGEST" ]
 
           web_image="${REGISTRY}/lyrashield-web@${WEB_DIGEST}"
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
+          e2e_image="${REGISTRY}/lyrashield-billing-e2e@${E2E_DIGEST}"
           docker pull "$web_image"
           docker pull "$migration_image"
+          docker pull "$e2e_image"
           [ "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$web_image")" = "$IMAGE_SHA" ]
           [ "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$migration_image")" = "$IMAGE_SHA" ]
+          [ "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$e2e_image")" = "$IMAGE_SHA" ]
           docker run --rm --entrypoint /usr/bin/test "$migration_image" \
             -x /app/packages/db/scripts/run-billing-staging-migrations.sh
           docker run --rm --entrypoint /usr/bin/test "$migration_image" \
             -x /app/packages/db/scripts/provision-billing-staging-roles.mjs
+          docker run --rm --entrypoint /usr/bin/test "$migration_image" \
+            -x /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs
+          docker run --rm --entrypoint /usr/bin/test "$e2e_image" \
+            -x /app/e2e/billing/run-staging-proof.sh
 
           {
             echo "WEB_DIGEST=${WEB_DIGEST}"
             echo "MIGRATION_DIGEST=${MIGRATION_DIGEST}"
+            echo "E2E_DIGEST=${E2E_DIGEST}"
           } >> "$GITHUB_ENV"
 
       - name: Run migrations and provision restricted runtime role
@@ -387,6 +441,7 @@ jobs:
             'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
             'BILLING_STAGING_ADMISSION=restricted'
             'BILLING_STAGING_ACCESS_TOKEN=secretref:billing-staging-access'
+            "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}"
             'REDIS_URL=secretref:redis-url'
             "BETTER_AUTH_URL=${APP_URL}"
             "NEXT_PUBLIC_APP_URL=${APP_URL}"
@@ -487,3 +542,163 @@ jobs:
             echo "- Web system DB client: non-superuser, NOREPLICATION, NOBYPASSRLS \`app_system_staging\`, limited to license tables."
             echo "- Teardown after evidence capture: \`az group delete --name ${RESOURCE_GROUP}\` (founder approval required)."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run proof with disposable E2E evidence role
+        shell: bash
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
+          STAGING_ACCESS_TOKEN: ${{ secrets.STAGING_BILLING_ACCESS_TOKEN }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          INTERNAL_API_KEY: ${{ secrets.LYRASHIELD_INTERNAL_API_KEY }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
+          e2e_image="${REGISTRY}/lyrashield-billing-e2e@${E2E_DIGEST}"
+          role_job="lyrashield-stage-e2e-role"
+          proof_job="lyrashield-stage-billing-proof"
+
+          wait_for_job() {
+            local job=$1 execution status
+            execution=$(az containerapp job start \
+              --name "$job" --resource-group "$RESOURCE_GROUP" \
+              --query name --output tsv)
+            for _ in {1..150}; do
+              status=$(az containerapp job execution show \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --job-execution-name "$execution" \
+                --query properties.status --output tsv)
+              case "$status" in
+                Succeeded) return 0 ;;
+                Failed|Stopped) echo "::error::${job} ended with ${status}."; return 1 ;;
+              esac
+              sleep 10
+            done
+            echo "::error::Timed out waiting for ${job}."
+            return 1
+          }
+
+          cleanup() {
+            local outcome=$?
+            set +e
+            if az containerapp job show --name "$proof_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              az containerapp job delete --name "$proof_job" --resource-group "$RESOURCE_GROUP" --yes --output none
+            fi
+            if az containerapp job show --name "$role_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              az containerapp job update \
+                --name "$role_job" --resource-group "$RESOURCE_GROUP" \
+                --set-env-vars 'E2E_ROLE_ACTION=drop' --output none
+              if ! wait_for_job "$role_job"; then
+                outcome=1
+              fi
+              az containerapp job delete --name "$role_job" --resource-group "$RESOURCE_GROUP" --yes --output none
+            fi
+            return "$outcome"
+          }
+          trap cleanup EXIT
+
+          for stale_job in "$proof_job" "$role_job"; do
+            if az containerapp job show --name "$stale_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              az containerapp job delete \
+                --name "$stale_job" --resource-group "$RESOURCE_GROUP" --yes --output none
+            fi
+          done
+
+          e2e_password=$(openssl rand -hex 32)
+          e2e_database_url=$(E2E_PASSWORD="$e2e_password" node -e '
+            const url = new URL(process.env.DATABASE_ADMIN_URL);
+            url.username = "billing_e2e_staging";
+            url.password = process.env.E2E_PASSWORD;
+            process.stdout.write(url.toString());
+          ')
+          echo "::add-mask::${e2e_password}"
+          echo "::add-mask::${e2e_database_url}"
+
+          az containerapp job create \
+            --name "$role_job" --resource-group "$RESOURCE_GROUP" \
+            --environment "$CONTAINER_ENVIRONMENT" \
+            --trigger-type Manual --parallelism 1 --replica-completion-count 1 \
+            --replica-timeout 1200 --replica-retry-limit 0 \
+            --image "$migration_image" \
+            --mi-user-assigned "$PULL_IDENTITY_ID" \
+            --registry-server "$REGISTRY" --registry-identity "$PULL_IDENTITY_ID" \
+            --command /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs \
+            --secrets \
+              "database-admin-url=${DATABASE_ADMIN_URL}" \
+              "e2e-password=${e2e_password}" \
+            --env-vars \
+              'DATABASE_ADMIN_URL=secretref:database-admin-url' \
+              'E2E_PASSWORD=secretref:e2e-password' \
+              'E2E_ROLE_ACTION=provision' \
+            --tags environment=billing-staging "source-sha=${IMAGE_SHA}" \
+            --output none
+          wait_for_job "$role_job"
+
+          expected_base_host=${APP_URL#https://}
+          proof_secrets=(
+            "e2e-database-url=${e2e_database_url}"
+            "staging-access=${STAGING_ACCESS_TOKEN}"
+            "better-auth-secret=${BETTER_AUTH_SECRET}"
+            "internal-api-key=${INTERNAL_API_KEY}"
+            "polar-access-token=${POLAR_ACCESS_TOKEN}"
+            "polar-webhook=${POLAR_WEBHOOK_SECRET}"
+            "razorpay-key-id=${RAZORPAY_KEY_ID}"
+            "razorpay-key-secret=${RAZORPAY_KEY_SECRET}"
+            "razorpay-webhook=${RAZORPAY_WEBHOOK_SECRET}"
+          )
+          proof_env=(
+            'NODE_ENV=production'
+            'CI=1'
+            'DATABASE_URL=secretref:e2e-database-url'
+            'DATABASE_SYSTEM_URL=secretref:e2e-database-url'
+            'BILLING_E2E_DATABASE_URL=secretref:e2e-database-url'
+            'BETTER_AUTH_SECRET=secretref:better-auth-secret'
+            'LYRASHIELD_INTERNAL_API_KEY=secretref:internal-api-key'
+            'BILLING_E2E_STAGING_ACCESS_TOKEN=secretref:staging-access'
+            'BILLING_STAGING_ACCESS_TOKEN=secretref:staging-access'
+            'POLAR_ACCESS_TOKEN=secretref:polar-access-token'
+            'POLAR_WEBHOOK_SECRET=secretref:polar-webhook'
+            'RAZORPAY_KEY_ID=secretref:razorpay-key-id'
+            'RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret'
+            'RAZORPAY_WEBHOOK_SECRET=secretref:razorpay-webhook'
+            "LYRASHIELD_E2E_BASE_URL=${APP_URL}"
+            'BILLING_E2E_ALLOW_REMOTE=1'
+            "BILLING_E2E_EXPECTED_BASE_HOST=${expected_base_host}"
+            'BILLING_E2E_DISPOSABLE_CONFIRM=DELETE DISPOSABLE BILLING DATA'
+            "BILLING_E2E_EXPECTED_DATABASE_HOST=${DATABASE_HOST}"
+            "BILLING_E2E_EXPECTED_DATABASE=${DATABASE_NAME}"
+            "BETTER_AUTH_URL=${APP_URL}"
+            "NEXT_PUBLIC_APP_URL=${APP_URL}"
+            'NEXT_PUBLIC_MARKETING_URL=https://lyrashieldai.com'
+            'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
+            'BILLING_STAGING_ADMISSION=restricted'
+            "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}"
+            'POLAR_BILLING_ADMISSION=off'
+            'POLAR_LOCAL_BILLING_ADMISSION=off'
+            'RAZORPAY_BILLING_ADMISSION=off'
+            'RAZORPAY_LOCAL_BILLING_ADMISSION=off'
+            "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"
+            "POLAR_ORG_ID=${POLAR_ORG_ID}"
+            "POLAR_PRODUCT_IDS=${POLAR_PRODUCT_IDS}"
+            "POLAR_LOCAL_PRODUCT_IDS=${POLAR_LOCAL_PRODUCT_IDS}"
+            "RAZORPAY_PLAN_IDS=${RAZORPAY_PLAN_IDS}"
+            "BILLING_USD_INR_RATE=${BILLING_USD_INR_RATE}"
+          )
+          az containerapp job create \
+            --name "$proof_job" --resource-group "$RESOURCE_GROUP" \
+            --environment "$CONTAINER_ENVIRONMENT" \
+            --trigger-type Manual --parallelism 1 --replica-completion-count 1 \
+            --replica-timeout 3600 --replica-retry-limit 0 \
+            --image "$e2e_image" \
+            --mi-user-assigned "$PULL_IDENTITY_ID" \
+            --registry-server "$REGISTRY" --registry-identity "$PULL_IDENTITY_ID" \
+            --command /app/e2e/billing/run-staging-proof.sh \
+            --secrets "${proof_secrets[@]}" \
+            --env-vars "${proof_env[@]}" \
+            --tags environment=billing-staging "source-sha=${IMAGE_SHA}" \
+            --output none
+          wait_for_job "$proof_job"

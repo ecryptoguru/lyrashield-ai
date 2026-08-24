@@ -32,16 +32,16 @@ vi.mock("@/lib/rate-limit", () => ({
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: mocks.limited })),
 }))
 vi.mock("@/lib/billing-admission", () => ({
+  resolveRequestBillingProvider: () => ({
+    provider: mocks.provider,
+    region: mocks.provider === "polar" ? "usd" : "inr",
+  }),
   localBillingAdmissionError: () => {
     const admission = mocks.provider === "polar" ? mocks.polarAdmission : mocks.razorpayAdmission
     return admission === "public" ? null : new Response(null, { status: 503 })
   },
 }))
 vi.mock("@lyrashield/billing", () => ({
-  resolveProvider: () => ({
-    provider: mocks.provider,
-    region: mocks.provider === "polar" ? "usd" : "inr",
-  }),
   resolveProviderId: (raw: string, key: string) => JSON.parse(raw)[key] ?? null,
   createPolarOneTimeCheckout: mocks.createPolar,
   createRazorpayPaymentLink: mocks.createRazorpay,

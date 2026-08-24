@@ -2,6 +2,7 @@ import "server-only"
 import {
   getBillingAdmission,
   getLocalBillingAdmission,
+  resolveProvider,
   type BillingProvider,
 } from "@lyrashield/billing"
 import { apiError } from "./api-response"
@@ -17,6 +18,10 @@ export function getRequestBillingAdmission(
 
 export function getRequestLocalBillingAdmission(provider: BillingProvider, request: Request) {
   return getLocalBillingAdmission(provider, hasBillingStagingAccess(request))
+}
+
+export function resolveRequestBillingProvider(request: Request) {
+  return resolveProvider(request, hasBillingStagingAccess(request))
 }
 
 export function paymentsUnavailableError(): Response {

@@ -767,6 +767,7 @@ jobs:
               "LYRASHIELD_DEPLOYMENT_ENVIRONMENT=production" \
               "BILLING_STAGING_ADMISSION=off" \
               "BILLING_STAGING_ACCESS_TOKEN=" \
+              "BILLING_STAGING_REGION=" \
               "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}" \
               "POLAR_ACCESS_TOKEN=secretref:polar-access-token" \
               "POLAR_ORG_ID=${POLAR_ORG_ID}" \
@@ -844,6 +845,7 @@ jobs:
               "LYRASHIELD_DEPLOYMENT_ENVIRONMENT=production" \
               "BILLING_STAGING_ADMISSION=off" \
               "BILLING_STAGING_ACCESS_TOKEN=" \
+              "BILLING_STAGING_REGION=" \
               "POLAR_BILLING_ADMISSION=${{ env.POLAR_BILLING_ADMISSION }}" \
               "POLAR_LOCAL_BILLING_ADMISSION=${{ env.POLAR_LOCAL_BILLING_ADMISSION }}" \
               "RAZORPAY_BILLING_ADMISSION=${{ env.RAZORPAY_BILLING_ADMISSION }}" \

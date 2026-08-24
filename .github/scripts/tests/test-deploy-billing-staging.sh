@@ -7,6 +7,11 @@ workflow="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/workflows/deploy-b
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 migration_script="$repo/packages/db/scripts/run-billing-staging-migrations.sh"
 role_script="$repo/packages/db/scripts/provision-billing-staging-roles.mjs"
+e2e_role_script="$repo/packages/db/scripts/manage-billing-staging-e2e-role.mjs"
+e2e_runner="$repo/e2e/billing/run-staging-proof.sh"
+e2e_razorpay="$repo/e2e/billing/razorpay-upi-cap-fallback.spec.ts"
+playwright_config="$repo/playwright.config.ts"
+production_workflow="$repo/.github/workflows/deploy-azure.yml"
 proxy="$repo/apps/web/src/proxy.ts"
 access_route="$repo/apps/web/src/app/api/staging/access/route.ts"
 e2e_fixture="$repo/e2e/billing/fixtures.ts"
@@ -35,8 +40,14 @@ must_contain 'RAZORPAY_LOCAL_BILLING_ADMISSION=off'
 must_contain 'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
 must_contain 'BILLING_STAGING_ADMISSION=restricted'
 must_contain 'BILLING_STAGING_ACCESS_TOKEN=secretref:billing-staging-access'
+must_contain 'BILLING_STAGING_REGION=${BILLING_STAGING_REGION}'
+must_contain 'DATABASE_SERVER: lyrashield-billing-staging-db'
+must_contain 'az postgres flexible-server show'
+must_contain 'Microsoft.DBforPostgreSQL/flexibleServers/${DATABASE_SERVER}'
+must_contain 'actual_database_host'
 must_contain 'lyrashield-web@${WEB_DIGEST}'
 must_contain 'lyrashield-migrate@${MIGRATION_DIGEST}'
+must_contain 'lyrashield-billing-e2e@${E2E_DIGEST}'
 must_contain "app_runtime_staging"
 must_contain "app_system_staging"
 must_contain "access-restriction list"
@@ -45,11 +56,14 @@ must_contain "Checkout exact main revision"
 must_contain 'ref: ${{ github.sha }}'
 must_contain "Build and push exact-SHA staging web image"
 must_contain "Build and push exact-SHA staging migration image"
+must_contain "Build and push exact-SHA staging E2E image"
 must_contain "target: runner"
 must_contain "target: workspace-builder"
+must_contain "target: billing-e2e"
 must_contain 'org.opencontainers.image.revision=${{ env.IMAGE_SHA }}'
 must_contain 'WEB_DIGEST: ${{ steps.build-web.outputs.digest }}'
 must_contain 'MIGRATION_DIGEST: ${{ steps.build-migration.outputs.digest }}'
+must_contain 'E2E_DIGEST: ${{ steps.build-e2e.outputs.digest }}'
 must_contain "Verify staging image provenance and owned job executables"
 must_contain "Delete one-shot database jobs"
 must_contain "az containerapp job delete"
@@ -57,6 +71,10 @@ must_contain "lyrashield-stage-migrate"
 must_contain "lyrashield-stage-db-role"
 must_contain "/app/packages/db/scripts/run-billing-staging-migrations.sh"
 must_contain "/app/packages/db/scripts/provision-billing-staging-roles.mjs"
+must_contain "/app/packages/db/scripts/manage-billing-staging-e2e-role.mjs"
+must_contain "/app/e2e/billing/run-staging-proof.sh"
+must_contain 'BILLING_E2E_DATABASE_URL=secretref:e2e-database-url'
+must_contain 'E2E_ROLE_ACTION=drop'
 must_contain "DATABASE_SYSTEM_URL=secretref:database-system-url"
 must_contain 'database-system-url=${system_database_url}'
 must_contain 'DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}'
@@ -77,6 +95,8 @@ must_not_contain "RAZORPAY_BILLING_ADMISSION=public"
 
 test -x "$migration_script"
 test -x "$role_script"
+test -x "$e2e_role_script"
+test -x "$e2e_runner"
 grep -Fq 'exec pnpm --filter @lyrashield/db exec prisma migrate deploy' "$migration_script"
 grep -Fq 'const SYSTEM_ROLE = "app_system_staging"' "$role_script"
 grep -Fq 'NOSUPERUSER' "$role_script"
@@ -89,8 +109,30 @@ grep -Fq 'SYSTEM_TABLES = ["License", "LicenseKey", "LicenseActivation"]' "$role
 grep -Fq 'privileges do not match the exact license-table contract' "$role_script"
 grep -Fq '"License:DELETE"' "$role_script"
 grep -Fq '"LicenseKey:UPDATE"' "$role_script"
+grep -Fq 'const E2E_ROLE = "billing_e2e_staging"' "$e2e_role_script"
+grep -Fq 'NOINHERIT NOREPLICATION BYPASSRLS' "$e2e_role_script"
+grep -Fq 'must not have role memberships' "$e2e_role_script"
+grep -Fq 'REVOKE ALL PRIVILEGES ON ALL TABLES' "$e2e_role_script"
+grep -Fq 'DROP ROLE' "$e2e_role_script"
+grep -Fq 'BILLING_E2E_DATABASE_URL' "$playwright_config"
+grep -Fq 'process.env.DATABASE_SYSTEM_URL = evidenceDatabaseUrl' "$playwright_config"
+grep -Fq 'BILLING_STAGING_REGION === "inr"' "$e2e_razorpay"
+if grep -Fq 'cf-ipcountry' "$e2e_razorpay"; then
+  echo "FAIL: remote Razorpay proof must not spoof a client country header" >&2
+  exit 1
+fi
+grep -Fq '"BILLING_STAGING_REGION="' "$production_workflow"
+app_runtime_block=$(sed -n '/- name: Create or update public disposable staging app/,/- name: Run proof with disposable E2E evidence role/p' "$workflow")
+if grep -Fq 'BILLING_E2E_DATABASE_URL' <<< "$app_runtime_block"; then
+  echo "FAIL: disposable E2E database credential must not be bound to the web app" >&2
+  exit 1
+fi
 if grep -Eq 'console\.(log|error).*PASSWORD|console\.(log|error).*password' "$role_script"; then
   echo "FAIL: role script may log a password" >&2
+  exit 1
+fi
+if grep -Eq 'console\.(log|error).*PASSWORD|console\.(log|error).*password' "$e2e_role_script"; then
+  echo "FAIL: E2E role script may log a password" >&2
   exit 1
 fi
 

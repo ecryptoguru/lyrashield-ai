@@ -7,11 +7,11 @@
  * Uses the `cf-connecting-ip` header (set by Cloudflare) by default,
  * with a manual override via the `BILLING_GEO_IP_HEADER` env var.
  *
- * The routing decision can also be overridden by the client (e.g. a user
- * who wants to pay in USD despite being in India).
+ * Isolated billing staging may select an explicit server-side region only
+ * after the request proves its restricted staging session.
  */
 
-import { env } from "@lyrashield/config"
+import { billingStagingConfigError, env } from "@lyrashield/config"
 
 export type BillingRegion = "usd" | "inr"
 export type BillingProvider = "polar" | "razorpay"
@@ -33,7 +33,15 @@ const DEFAULT_GEO_IP_HEADER = "cf-connecting-ip"
  * TRUSTED_PROXY_IP_HEADER is not configured, fall back to USD to prevent
  * header spoofing from untrusted sources.
  */
-export function resolveRegion(request: Request): BillingRegion {
+export function resolveRegion(request: Request, restrictedStagingAccess = false): BillingRegion {
+  if (
+    restrictedStagingAccess &&
+    env.BILLING_STAGING_ADMISSION === "restricted" &&
+    billingStagingConfigError(env) === null &&
+    (env.BILLING_STAGING_REGION === "usd" || env.BILLING_STAGING_REGION === "inr")
+  ) {
+    return env.BILLING_STAGING_REGION
+  }
   // A-L08: Only trust the cf-ipcountry header if a trusted proxy is configured.
   // Without a trusted proxy, any client can set this header and spoof their
   // country to get INR pricing (which may be cheaper).
@@ -83,11 +91,14 @@ export function regionToProvider(region: BillingRegion): BillingProvider {
  *
  * @param request - The incoming HTTP request
  */
-export function resolveProvider(request: Request): {
+export function resolveProvider(
+  request: Request,
+  restrictedStagingAccess = false
+): {
   region: BillingRegion
   provider: BillingProvider
 } {
-  const region = resolveRegion(request)
+  const region = resolveRegion(request, restrictedStagingAccess)
   return { region, provider: regionToProvider(region) }
 }
 

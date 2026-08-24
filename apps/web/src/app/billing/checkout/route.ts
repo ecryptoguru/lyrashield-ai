@@ -3,7 +3,6 @@ import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import {
-  resolveProvider,
   createPolarCheckout,
   createRazorpaySubscription,
   getRazorpaySubscriptionCycleCount,
@@ -16,7 +15,11 @@ import { apiSuccess, apiError } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
 import { env } from "@lyrashield/config"
-import { billingAdmissionError, paymentsUnavailableError } from "@/lib/billing-admission"
+import {
+  billingAdmissionError,
+  paymentsUnavailableError,
+  resolveRequestBillingProvider,
+} from "@/lib/billing-admission"
 
 const CheckoutSchema = z
   .object({
@@ -63,7 +66,7 @@ export async function POST(request: Request) {
 
     // A-L04: Resolve provider — client-side region override removed to
     // prevent currency arbitrage. Region is determined server-side only.
-    const { region, provider } = resolveProvider(request)
+    const { region, provider } = resolveRequestBillingProvider(request)
     const admissionError = billingAdmissionError(provider, workspaceId, request)
     if (admissionError) return admissionError
 

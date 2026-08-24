@@ -2,7 +2,6 @@ import { z } from "zod"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
-  resolveProvider,
   createPolarOneTimeCheckout,
   createRazorpayPaymentLink,
   resolveProviderId,
@@ -15,7 +14,11 @@ import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
-import { billingAdmissionError, paymentsUnavailableError } from "@/lib/billing-admission"
+import {
+  billingAdmissionError,
+  paymentsUnavailableError,
+  resolveRequestBillingProvider,
+} from "@/lib/billing-admission"
 
 const TopUpSchema = z
   .object({
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     // A-L04: Client-side region override removed — server-side geo routing only
-    const { provider } = resolveProvider(request)
+    const { provider } = resolveRequestBillingProvider(request)
     const admissionError = billingAdmissionError(provider, workspaceId, request)
     if (admissionError) return admissionError
 

@@ -137,6 +137,7 @@ const validBillingStagingEnv = {
   RAZORPAY_LOCAL_BILLING_ADMISSION: "off",
   BILLING_STAGING_ADMISSION: "restricted",
   BILLING_STAGING_ACCESS_TOKEN: "s".repeat(32),
+  BILLING_STAGING_REGION: "usd",
 }
 
 describe("restricted billing staging configuration", () => {
@@ -151,6 +152,7 @@ describe("restricted billing staging configuration", () => {
     ["Razorpay Live Mode", { RAZORPAY_KEY_ID: "rzp_live_example" }],
     ["public production rail", { POLAR_LOCAL_BILLING_ADMISSION: "public" }],
     ["missing access token", { BILLING_STAGING_ACCESS_TOKEN: "" }],
+    ["missing server-side region", { BILLING_STAGING_REGION: "" }],
   ])("rejects %s", (_label, override) => {
     expect(billingStagingConfigError({ ...validBillingStagingEnv, ...override })).not.toBeNull()
   })
