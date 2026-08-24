@@ -97,7 +97,10 @@ export function BillingActions({
               {loading === "checkout-TEAM" ? "Loading..." : "Upgrade to Team"}
             </button>
           )}
-          <a href="/billing/portal" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <a
+            href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
             Manage
           </a>
         </div>
@@ -108,7 +111,10 @@ export function BillingActions({
   // Team plan
   return (
     <div className="flex gap-2">
-      <a href="/billing/portal" className={buttonVariants({ variant: "outline", size: "sm" })}>
+      <a
+        href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
+        className={buttonVariants({ variant: "outline", size: "sm" })}
+      >
         Manage Subscription
       </a>
     </div>

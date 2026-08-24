@@ -40,3 +40,13 @@ describe("affiliate authority is platform-only (no tenant role)", () => {
     expect(hasPermission("OWNER", "affiliate:manage")).toBe(true)
   })
 })
+
+describe("billing management authority", () => {
+  it("allows only owners and billing administrators", () => {
+    for (const role of ALL_ROLES) {
+      expect(hasPermission(role, PERMISSIONS.billing.manage)).toBe(
+        role === "OWNER" || role === "BILLING_ADMIN"
+      )
+    }
+  })
+})

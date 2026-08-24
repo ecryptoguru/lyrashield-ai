@@ -1,5 +1,7 @@
+import { z } from "zod"
 import { prisma } from "@lyrashield/db"
-import { requireAuth } from "@lyrashield/auth/server"
+import { PERMISSIONS } from "@lyrashield/auth"
+import { requirePermission } from "@lyrashield/auth/server"
 import { getPolarPortalUrl } from "@lyrashield/billing"
 import { env } from "@lyrashield/config"
 import { apiError } from "@/lib/api-response"
@@ -7,27 +9,29 @@ import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 
-/**
- * GET /billing/portal — redirects to subscription management for
- * subscription management (upgrade, downgrade, cancel, update payment method).
- *
- * A-M07: Fixed from requirePermission("", ...) which always returned 401.
- * Now uses requireAuth() + findFirst for the user's workspace.
- */
-export async function GET(_request: Request) {
-  try {
-    const session = await requireAuth()
+const WorkspaceIdSchema = z.string().trim().min(1).max(128)
 
-    const membership = await prisma.workspaceMember.findFirst({
-      where: { userId: session.userId, status: "active" },
-      select: { workspaceId: true },
-    })
-    if (!membership) {
-      return apiError("NO_WORKSPACE", "No workspace found for this user", 404)
-    }
+/**
+ * GET /billing/portal — redirects to subscription management
+ * (upgrade, downgrade, cancel, update payment method).
+ *
+ * Requires an explicit workspace and billing management permission. Never
+ * infer a workspace from membership order for this sensitive redirect.
+ */
+export async function GET(request: Request) {
+  const parsedWorkspaceId = WorkspaceIdSchema.safeParse(
+    new URL(request.url).searchParams.get("workspaceId")
+  )
+  if (!parsedWorkspaceId.success) {
+    return apiError("VALIDATION_ERROR", "A valid workspaceId is required", 400)
+  }
+  const workspaceId = parsedWorkspaceId.data
+
+  try {
+    await requirePermission(workspaceId, PERMISSIONS.billing.manage)
 
     const billingAccount = await prisma.billingAccount.findUnique({
-      where: { workspaceId: membership.workspaceId },
+      where: { workspaceId },
       select: { externalId: true, provider: true },
     })
 

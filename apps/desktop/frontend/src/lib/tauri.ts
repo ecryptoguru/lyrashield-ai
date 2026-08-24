@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import type {
-  AzureCredentials,
   AzureMetadata,
   ByokStatus,
   ChatGptAuthStatus,
@@ -54,9 +53,6 @@ export async function logoutChatGpt(): Promise<void> {
 }
 export async function saveAzureConfig(apiKey: string, endpoint: string): Promise<void> {
   return invoke("save_azure_config", { apiKey, endpoint })
-}
-export async function loadAzureConfig(): Promise<AzureCredentials | null> {
-  return invoke("load_azure_config")
 }
 export async function clearAzureConfig(): Promise<void> {
   return invoke("clear_azure_config")

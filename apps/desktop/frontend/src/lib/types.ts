@@ -58,11 +58,6 @@ export interface RuntimeStatus {
 export type ChatGptAuthStatus =
   { status: "signed_in" } | { status: "signed_out" } | { status: "error"; message: string }
 
-export interface AzureCredentials {
-  apiKey: string
-  endpoint: string
-}
-
 export interface AzureMetadata {
   configured: boolean
   endpoint: string | null
