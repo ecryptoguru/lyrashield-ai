@@ -210,10 +210,15 @@ const envSchema = z
     // JSON maps of app catalog keys to provider-assigned IDs.
     POLAR_PRODUCT_IDS: z.string().optional().or(z.literal("")),
     POLAR_WEBHOOK_TOLERANCE_MS: z.coerce.number().int().positive().max(3_600_000).default(300_000),
+    POLAR_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
+    POLAR_LOCAL_BILLING_ADMISSION: z.enum(["off", "public"]).default("off"),
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAY_PLAN_IDS: z.string().optional().or(z.literal("")),
+    RAZORPAY_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
+    RAZORPAY_LOCAL_BILLING_ADMISSION: z.enum(["off", "public"]).default("off"),
+    BILLING_CANARY_WORKSPACE_IDS: z.string().optional().default(""),
     BILLING_GEO_IP_HEADER: z
       .string()
       .optional()
@@ -279,9 +284,11 @@ const envSchema = z
     RAZORPAYX_API_KEY: z.string().optional().or(z.literal("")),
     RAZORPAYX_API_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAYX_ACCOUNT_NUMBER: z.string().optional().or(z.literal("")),
+    RAZORPAYX_PAYOUT_ADMISSION: z.enum(["off", "public"]).default("off"),
     PAYONEER_API_KEY: z.string().optional().or(z.literal("")),
     PAYONEER_API_SECRET: z.string().optional().or(z.literal("")),
     PAYONEER_PARTNER_ID: z.string().optional().or(z.literal("")),
+    PAYONEER_PAYOUT_ADMISSION: z.literal("off").default("off"),
     AFFILIATE_DEFAULT_PROGRAM_SLUG: z.string().optional().or(z.literal("")).default("default"),
     AFFILIATE_COOKIE_DOMAIN: z.string().optional().or(z.literal("")).default(".lyrashieldai.com"),
     AFFILIATE_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().positive().max(365).default(60),

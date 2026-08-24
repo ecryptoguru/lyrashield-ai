@@ -31,6 +31,8 @@ export interface RazorpayWebhookEvent {
         amount: number
         currency: string
         notes?: Record<string, string>
+        email?: string
+        order_id?: string
       }
     }
     refund?: {
@@ -52,6 +54,13 @@ export interface RazorpayWebhookEvent {
         current_start?: number
         current_end?: number
         ended_at?: number
+        notes?: Record<string, string>
+      }
+    }
+    payment_link?: {
+      entity: {
+        id: string
+        reference_id?: string
         notes?: Record<string, string>
       }
     }
@@ -167,6 +176,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 export function isHandledRazorpayEvent(event: string): boolean {
   const handled = [
     "payment.captured",
+    "payment_link.paid",
     "subscription.activated",
     "subscription.charged",
     "subscription.cancelled",

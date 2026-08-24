@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("@lyrashield/config", () => ({
+  env: { NODE_ENV: "test", POLAR_LOCAL_PRODUCT_IDS: "", POLAR_WEBHOOK_TOLERANCE_MS: 300_000 },
+  isDev: false,
+  isProd: false,
+}))
+
 /**
  * Ingress unit tests — the durable track state machine itself is covered in
  * packages/billing/src/webhook-tracks.test.ts and the retry job in
@@ -135,7 +141,7 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     expect(runTracksMock).toHaveBeenCalledTimes(3)
   })
 
-  it("replay of a processed event answers 200 without reprocessing (zero extra side effects)", async () => {
+  it("100 replays of a processed event answer 200 without reprocessing", async () => {
     const ev = rzEvent("subscription.charged", "sub_REPLAY", 1_755_000_000)
     validateRazorpayMock.mockReturnValue(ev)
     mockPrisma.webhookEvent.create.mockRejectedValue(
@@ -147,10 +153,11 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
       createdAt: new Date(Date.now() - 120_000),
     })
 
-    const res = await POST(razorpayRequest(ev))
-
-    expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toEqual({ success: true })
+    for (let replay = 0; replay < 100; replay += 1) {
+      const res = await POST(razorpayRequest(ev))
+      expect(res.status).toBe(200)
+      await expect(res.json()).resolves.toEqual({ success: true })
+    }
     expect(runTracksMock).not.toHaveBeenCalled()
     expect(enqueueRetryMock).not.toHaveBeenCalled()
   })

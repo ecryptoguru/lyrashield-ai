@@ -1,6 +1,9 @@
 import { useState } from "react"
 import type { LicenseStatus } from "../lib/types"
 import { activateLicense } from "../lib/tauri"
+import { open } from "@tauri-apps/plugin-shell"
+
+const LOCAL_PURCHASE_URL = "https://lyrashieldai.com/pricing?mode=local&source=desktop"
 
 interface Props {
   onActivated: (status: LicenseStatus) => void
@@ -25,6 +28,15 @@ export function ActivationScreen({ onActivated }: Props) {
       setError(String(e))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleBuyLicense() {
+    setError(null)
+    try {
+      await open(LOCAL_PURCHASE_URL)
+    } catch {
+      setError("Could not open your browser. Visit lyrashieldai.com/pricing to buy a license.")
     }
   }
 
@@ -56,12 +68,13 @@ export function ActivationScreen({ onActivated }: Props) {
             {loading ? "Activating…" : "Activate License"}
           </button>
         </div>
-        <p className="text-center text-xs text-muted-foreground">
-          Don&apos;t have a license? Visit{" "}
-          <a href="https://lyrashieldai.com" className="text-primary underline">
-            lyrashieldai.com
-          </a>
-        </p>
+        <button
+          type="button"
+          onClick={handleBuyLicense}
+          className="w-full text-center text-xs text-primary underline underline-offset-4"
+        >
+          Don&apos;t have a license? Buy license
+        </button>
       </div>
     </div>
   )

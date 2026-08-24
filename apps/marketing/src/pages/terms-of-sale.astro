@@ -3,9 +3,9 @@ import Base from "@layouts/Base.astro"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/terms-of-sale", origin).toString()
 const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
-const reviewed = "2026-08-19"
+const reviewed = "2026-08-24"
 const description =
-  "Terms of Sale for LyraShield AI Cloud subscriptions, prepaid minute packs, and Local licenses: billing, metering, renewal, cancellation, and the no-refunds policy."
+  "Terms of Sale for LyraShield AI Cloud subscriptions, prepaid minute packs, and Local licenses: billing, metering, renewal, cancellation, and refunds."
 const jsonLd = [
   {
     "@context": "https://schema.org",
@@ -30,16 +30,16 @@ const jsonLd = [
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
     <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Billing · Terms of Sale</p>
     <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Terms of Sale</h1>
-    <p class="mt-6 text-lg leading-8 text-text-muted">These terms govern purchases of LyraShield AI Cloud subscriptions, prepaid minute packs, and Local licenses. They are a product-commercial summary for founder review, not a substitute for finalized company legal terms.</p>
-    <p class="mt-4 text-sm text-text-muted">Last reviewed: <time datetime={reviewed}>August 19, 2026</time></p>
+    <p class="mt-6 text-lg leading-8 text-text-muted">These terms govern purchases of LyraShield AI Cloud subscriptions, prepaid minute packs, and Local licenses.</p>
+    <p class="mt-4 text-sm text-text-muted">Last reviewed: <time datetime={reviewed}>August 24, 2026</time></p>
     <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
       <h2>What you are buying</h2><p>LyraShield AI is sold as one product in two modes under a single account. Cloud mode is a hosted subscription billed monthly or annually. Local mode is a one-time license that includes one year of updates, with an optional paid renewal. The two are purchased separately; there is no bundle.</p>
       <h2>Free trial</h2><p>New Cloud accounts start with a 14-day full-feature free trial. No credit card is required to start. The trial includes a one-time allowance of 100 agent-minutes and up to 3 targets. When the trial ends or its allowance is exhausted, continued use requires a paid plan.</p>
-      <h2>Metering</h2><p>Cloud use is metered by protected targets and agent-minutes. An agent-minute is active agent-loop time, metered per second; queue and idle time are excluded where measurable. Deep and Custom scans consume minutes at three times the standard rate. Each plan includes a monthly agent-minute allowance and a protected-target cap shown on the pricing page.</p>
+      <h2>Metering</h2><p>Cloud use is metered by protected targets and agent-minutes. An agent-minute is wall-clock scan time, metered per second. Deep and Custom scans consume minutes at three times the standard rate. Each plan includes a monthly agent-minute allowance and a protected-target cap shown on the pricing page.</p>
       <h2>Minute packs and overage</h2><p>Prepaid minute packs are one-time purchases, valid for 180 days from purchase, and are drawn down only after the included monthly pool is exhausted, oldest unexpired pack first. The included monthly pool does not roll over. Team workspaces may also opt into metered overage, billed at the published per-minute rate up to a spend limit you set.</p>
       <h2>Billing and renewal</h2><p>Subscriptions renew automatically at the end of each billing period until canceled. We process payments through Polar (global merchant of record) and Razorpay (India). India pricing is in INR with GST invoicing; UPI AutoPay is subject to its own transaction cap, so some annual and higher-tier payments require a card or netbanking mandate.</p>
-      <h2>Cancellation</h2><p>You can cancel a Cloud subscription at any time in the dashboard. Cancellation stops future renewals; the plan stays active until the end of the current paid period. Canceling does not produce a refund or credit for the current or any prior period.</p>
-      <h2 id="no-refunds">No refunds</h2><p><strong>All sales are final.</strong> We do not offer refunds, partial refunds, prorated refunds, or credits on Cloud subscriptions, prepaid minute packs, or Local licenses, except where a refund is required by applicable law. Because a full-feature free trial is available with no card required, please evaluate the product before you buy. If a payment was taken in error or without authorization, contact us and we will review it.</p>
+      <h2>Cancellation</h2><p>You can cancel a Cloud subscription at any time in the dashboard. Cancellation stops future renewals; the plan stays active until the end of the current paid period unless a refund is approved under the policy below.</p>
+      <h2 id="refunds">Refunds</h2><p>Cloud subscription purchases are eligible for a money-back request within 14 days of the initial purchase. Local licenses and prepaid minute packs are non-refundable, except where required by law or for duplicate collection, unauthorized payment, or another confirmed payment error. Contact support from the account email with the transaction reference. Approved refunds return to the original payment method.</p>
       <h2>Failed and disputed payments</h2><p>If a renewal payment fails, we may retry it and may downgrade the workspace to the free surface until payment succeeds. Chargebacks and payment disputes are handled under the refund and fraud rules above; an unwarranted chargeback may result in suspension of the associated account and any affiliate commissions tied to it.</p>
       <h2>Price changes</h2><p>We may change prices or plan allowances. A change applies to your next renewal after reasonable advance notice; it does not retroactively alter a period you have already paid for. Annual plans keep their current price until the annual term renews.</p>
       <h2>Contact</h2><p>Questions about a charge, an invoice, or this policy: <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.</p>

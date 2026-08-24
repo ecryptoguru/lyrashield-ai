@@ -127,14 +127,11 @@ fails at boot.
 
 ## 3. Store the private key in Azure Key Vault
 
-The production intent (documented in `license-service.ts` and
-`packages/config/src/env.ts`) is that the app reads the signing key from
-**Azure Key Vault at runtime**, not from an environment variable. The Key
-Vault client wiring is currently a `TODO(production)` in
-`apps/web/src/lib/licenses/license-service.ts` — the code falls back to
-`LICENSE_SIGNING_PRIVATE_KEY` env today. Provisioning therefore has two
-halves: put the key in Key Vault now, and track the code change that makes
-the app actually read it.
+Production fulfillment in `packages/billing/src/license-fulfillment.ts` reads
+the signing key from **Azure Key Vault at runtime** through managed identity.
+When `NODE_ENV=production`, a missing vault name, unavailable secret, or
+malformed PEM fails closed. `LICENSE_SIGNING_PRIVATE_KEY` is a development and
+CI fallback only.
 
 ### 3a. Create / identify the Key Vault
 
@@ -170,25 +167,14 @@ az keyvault secret set \
 
 ### 3c. How the deploy reads it today
 
-Until the Key Vault client TODO is closed, the app reads
-`LICENSE_SIGNING_PRIVATE_KEY` from the Container App environment. Mirror the
-existing `secretref` pattern used for `LYRASHIELD_EVIDENCE_KEK`:
-
-1. Add a GitHub Actions secret `LICENSE_SIGNING_PRIVATE_KEY` (paste the PEM,
-   including `-----BEGIN/END-----` lines) and `LICENSE_SIGNING_KEY_ID`.
-2. In `deploy-azure.yml`, add an `az containerapp secret set` step that writes
-   `license-signing-private-key` and `license-signing-key-id` to the app
-   Container App, then inject them as
-   `LICENSE_SIGNING_PRIVATE_KEY=secretref:license-signing-private-key` and
-   `LICENSE_SIGNING_KEY_ID=secretref:license-signing-key-id`.
-3. Set `LICENSE_PUBLISHED_BUILD` as a plain env var (it is not secret).
-4. Set `POLAR_LOCAL_PRODUCT_IDS` as a secret or variable (it is not secret
-   but is environment-specific).
-
-> **Security note.** Keeping the private key in a Container App secret is
-> acceptable short-term but is **not** the documented end state. The founder
-> should treat "wire the Key Vault client in `license-service.ts`" as a
-> tracked follow-up; this runbook does not close that gap.
+1. Set `LYRASHIELD_KEY_VAULT_NAME` on the Container App.
+2. Grant its managed identity `Key Vault Secrets User` for the vault.
+3. Set `LICENSE_SIGNING_PRIVATE_KEY_SECRET_NAME` and
+   `LICENSE_SIGNING_PUBLIC_KEY_SECRET_NAME` only when names differ from the
+   defaults above.
+4. Set `LICENSE_SIGNING_KEY_ID`, `LICENSE_PUBLISHED_BUILD`, and the provider
+   Local product map as environment-specific configuration.
+5. Do not inject the private PEM into the production Container App environment.
 
 ---
 
@@ -260,7 +246,7 @@ the Key Vault secret and GitHub secret in the same change window.
 
 ## 6. Current release gates (do not paper over)
 
-1. **Key Vault client.** `license-service.ts` resolves the signing key from
+1. **Key Vault client.** `packages/billing/src/license-fulfillment.ts` resolves the signing key from
    Azure Key Vault when `NODE_ENV=production` AND `LYRASHIELD_KEY_VAULT_NAME`
    is set (managed identity via `DefaultAzureCredential`, cached per process,
    fail-closed if the vault is unreachable); otherwise it falls back to the
@@ -296,6 +282,6 @@ the Key Vault secret and GitHub secret in the same change window.
   - `POLAR_LOCAL_PRODUCT_IDS={"individual_launch":"prod_smoke_test"}` (smoke-only map)
 - Smoke test: `POST /api/licenses/issue` + `POST /api/licenses/verify` returned
   `valid: true`, `signingKeyId: "license-key-v1"`; smoke license deleted.
-- The Key Vault client in `apps/web/src/lib/licenses/license-service.ts` is now
+- The Key Vault client in `packages/billing/src/license-fulfillment.ts` is
   wired and verified in production; the temporary `LICENSE_SIGNING_PRIVATE_KEY`
   env-fallback path is not needed in prod.

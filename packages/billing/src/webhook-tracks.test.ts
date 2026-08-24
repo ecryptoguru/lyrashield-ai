@@ -97,8 +97,7 @@ describe("computeApplicableTracks — applicability matrix", () => {
         payload: { subscription: { entity: { id: "sub_X" } } },
       },
     })
-    // Razorpay recurring charges were never commission-bearing and stay so.
-    expect(computeApplicableTracks(subscription)).toEqual(["billing"])
+    expect(computeApplicableTracks(subscription)).toEqual(["billing", "affiliate"])
 
     // Polar cloud subscription paid IS commission-relevant.
     const polarSub = normalizeProviderEvent({

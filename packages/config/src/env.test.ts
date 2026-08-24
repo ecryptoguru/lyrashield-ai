@@ -53,8 +53,15 @@ const envSchema = z
     NOTIFICATION_FROM_EMAIL: z.string().optional().or(z.literal("")),
     POLAR_ACCESS_TOKEN: z.string().optional().or(z.literal("")),
     POLAR_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
+    POLAR_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
+    POLAR_LOCAL_BILLING_ADMISSION: z.enum(["off", "public"]).default("off"),
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
+    RAZORPAY_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
+    RAZORPAY_LOCAL_BILLING_ADMISSION: z.enum(["off", "public"]).default("off"),
+    BILLING_CANARY_WORKSPACE_IDS: z.string().optional().default(""),
+    RAZORPAYX_PAYOUT_ADMISSION: z.enum(["off", "public"]).default("off"),
+    PAYONEER_PAYOUT_ADMISSION: z.literal("off").default("off"),
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -113,6 +120,19 @@ describe("Env Validation Schema", () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.data.NODE_ENV).toBe("development")
+      }
+    })
+
+    it("defaults every purchase and payout rail to off", () => {
+      const result = envSchema.safeParse(validEnv)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.POLAR_BILLING_ADMISSION).toBe("off")
+        expect(result.data.RAZORPAY_BILLING_ADMISSION).toBe("off")
+        expect(result.data.POLAR_LOCAL_BILLING_ADMISSION).toBe("off")
+        expect(result.data.RAZORPAY_LOCAL_BILLING_ADMISSION).toBe("off")
+        expect(result.data.RAZORPAYX_PAYOUT_ADMISSION).toBe("off")
+        expect(result.data.PAYONEER_PAYOUT_ADMISSION).toBe("off")
       }
     })
 

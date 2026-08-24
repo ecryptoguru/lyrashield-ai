@@ -4,7 +4,7 @@ vi.mock("@lyrashield/db", () => ({
   prisma: {
     affiliate: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     affiliateLink: { findFirst: vi.fn(), create: vi.fn() },
-    payout: { findUnique: vi.fn() },
+    payout: { findUnique: vi.fn(), updateMany: vi.fn() },
     payoutItem: { findMany: vi.fn() },
     commission: { findMany: vi.fn(), updateMany: vi.fn() },
     auditLog: { create: vi.fn() },
@@ -119,6 +119,82 @@ describe("POST /api/admin/affiliates/action (platform-operator gate)", () => {
         resourceId: "aff-1",
       }),
     })
+  })
+
+  it("records operator-reviewed payout and tax status in dedicated fields", async () => {
+    isPlatformOperatorMock.mockResolvedValue(true)
+    mockPrisma.affiliate.findUnique.mockResolvedValue({
+      payoutMethod: {
+        type: "razorpayx",
+        fundAccountId: "fa_1",
+        maskedDisplay: "•••• 4242",
+        valid: false,
+      },
+      taxFormType: "gstin",
+    })
+
+    const response = await POST(
+      actionRequest({
+        action: "verifyPayoutProfile",
+        affiliateId: "aff-1",
+        payoutMethodVerified: true,
+        taxStatus: "VERIFIED",
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockPrisma.affiliate.update).toHaveBeenCalledWith({
+      where: { id: "aff-1" },
+      data: expect.objectContaining({
+        payoutMethodVerifiedBy: "user-1",
+        taxFormStatus: "VERIFIED",
+        taxReviewedBy: "user-1",
+      }),
+    })
+    expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: "affiliate.payout_profile_verified" }),
+    })
+  })
+
+  it("refuses to verify a payout profile without a provider method and tax form type", async () => {
+    isPlatformOperatorMock.mockResolvedValue(true)
+    mockPrisma.affiliate.findUnique.mockResolvedValue({ payoutMethod: null, taxFormType: null })
+
+    const response = await POST(
+      actionRequest({
+        action: "verifyPayoutProfile",
+        affiliateId: "aff-1",
+        payoutMethodVerified: true,
+        taxStatus: "VERIFIED",
+      })
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockPrisma.affiliate.update).not.toHaveBeenCalled()
+  })
+
+  it("does not report reconciliation success for a terminal failed payout", async () => {
+    isPlatformOperatorMock.mockResolvedValue(true)
+    mockPrisma.payout.findUnique.mockResolvedValue({
+      id: "payout-1",
+      status: "FAILED",
+      isReserveRelease: false,
+      amount: "10.0000",
+      affiliateId: "aff-1",
+      providerPayoutId: "pout-1",
+    })
+
+    const response = await POST(
+      actionRequest({
+        action: "reconcilePayout",
+        payoutId: "payout-1",
+        providerPayoutId: "pout-1",
+        providerStatus: "processing",
+      })
+    )
+
+    expect(response.status).toBe(409)
+    expect(mockPrisma.payout.updateMany).not.toHaveBeenCalled()
   })
 
   it("outcome does not change with the operator's workspaceId (or lack of one)", async () => {

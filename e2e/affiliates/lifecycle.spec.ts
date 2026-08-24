@@ -198,6 +198,7 @@ test.describe("Affiliate lifecycle", () => {
       grossAmount: "29.00",
       discountAmount: "0",
       taxAmount: "0",
+      commissionableAmount: "29.00",
       currency: "USD",
       isAnnual: false,
       planId: "STARTER",

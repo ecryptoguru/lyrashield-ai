@@ -16,14 +16,16 @@ import { apiSuccess, apiError } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
 import { env } from "@lyrashield/config"
+import { billingAdmissionError, paymentsUnavailableError } from "@/lib/billing-admission"
 
-const CheckoutSchema = z.object({
-  workspaceId: z.string().min(1),
-  plan: z.enum(["STARTER", "PRO", "TEAM"]),
-  interval: z.enum(["monthly", "annual"]),
-  region: z.enum(["usd", "inr"]).optional(),
-  promoCode: z.string().max(100).optional(),
-})
+const CheckoutSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    plan: z.enum(["STARTER", "PRO", "TEAM"]),
+    interval: z.enum(["monthly", "annual"]),
+    promoCode: z.string().max(100).optional(),
+  })
+  .strict()
 
 export async function POST(request: Request) {
   let body: unknown
@@ -62,6 +64,8 @@ export async function POST(request: Request) {
     // A-L04: Resolve provider — client-side region override removed to
     // prevent currency arbitrage. Region is determined server-side only.
     const { region, provider } = resolveProvider(request)
+    const admissionError = billingAdmissionError(provider, workspaceId)
+    if (admissionError) return admissionError
 
     // Track C integration: resolve affiliate promo code → attach affiliate metadata.
     // No commission created at checkout — only on the paid webhook (per affiliate brief).
@@ -106,11 +110,8 @@ export async function POST(request: Request) {
       const catalogKey = `${plan.toLowerCase()}_${interval}`
       const productId = resolveProviderId(env.POLAR_PRODUCT_IDS, catalogKey)
       if (!productId) {
-        return apiError(
-          "PROVIDER_NOT_CONFIGURED",
-          `Polar product ${catalogKey} is not configured.`,
-          503
-        )
+        logger.error("Billing provider catalog is not configured", { provider, catalogKey })
+        return paymentsUnavailableError()
       }
       const url = await createPolarCheckout({
         productId,
@@ -119,11 +120,8 @@ export async function POST(request: Request) {
       })
 
       if (!url) {
-        return apiError(
-          "PROVIDER_NOT_CONFIGURED",
-          "Polar is not configured. Set POLAR_ACCESS_TOKEN.",
-          503
-        )
+        logger.error("Billing provider checkout is unavailable", { provider, catalogKey })
+        return paymentsUnavailableError()
       }
 
       return apiSuccess({ provider: "polar", url }, 200)
@@ -132,11 +130,8 @@ export async function POST(request: Request) {
       const catalogKey = `${plan.toLowerCase()}_${interval}`
       const razorpayPlanId = resolveProviderId(env.RAZORPAY_PLAN_IDS, catalogKey)
       if (!razorpayPlanId) {
-        return apiError(
-          "PROVIDER_NOT_CONFIGURED",
-          `Razorpay plan ${catalogKey} is not configured.`,
-          503
-        )
+        logger.error("Billing provider catalog is not configured", { provider, catalogKey })
+        return paymentsUnavailableError()
       }
       const totalCount = getRazorpaySubscriptionCycleCount(interval)
       const subscriptionId = await createRazorpaySubscription({
@@ -146,11 +141,8 @@ export async function POST(request: Request) {
       })
 
       if (!subscriptionId) {
-        return apiError(
-          "PROVIDER_NOT_CONFIGURED",
-          "Razorpay is not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
-          503
-        )
+        logger.error("Billing provider checkout is unavailable", { provider, catalogKey })
+        return paymentsUnavailableError()
       }
 
       return apiSuccess(

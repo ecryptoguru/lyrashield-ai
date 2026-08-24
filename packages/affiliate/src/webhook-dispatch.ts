@@ -30,6 +30,17 @@ export interface NormalizedEventDispatchInput {
   rawType: string
   productKind: "subscription" | "local" | "minute_pack" | "unknown"
   refundId?: string | null
+  orderId?: string | null
+  paymentId?: string | null
+  subscriptionId?: string | null
+  money: {
+    currency: "USD" | "INR"
+    grossAmount: string
+    discountAmount: string
+    taxAmount: string
+    commissionableAmount: string
+  } | null
+  metadata: Record<string, unknown>
   /** Provider resource record (untrusted content — never log raw). */
   entity: Record<string, unknown>
 }
@@ -53,8 +64,9 @@ export async function dispatch(
   try {
     // Money reversal → clawback (both providers emit `refund.created`).
     if (kind === "refund_completed") {
+      if (!input.money) throw new Error("affiliate_money_evidence_unavailable")
       const reason: ClawbackReason = rawType === "chargeback.created" ? "CHARGEBACK" : "REFUND"
-      const refundPayload = mapRefundPayload(provider, entity, reason, input.refundId)
+      const refundPayload = mapRefundPayload(input, reason)
       if (refundPayload) {
         const result = await onRefund(refundPayload)
         return { handled: true, result }
@@ -82,8 +94,12 @@ export async function dispatch(
         return { handled: true, result: { skipped: "minute_pack_no_commission" } }
       }
 
+      if (productKind === "unknown") return { handled: false }
+
+      if (!input.money) throw new Error("affiliate_money_evidence_unavailable")
+
       if (productKind === "local" || isLocalSkuOrderPayload(entity)) {
-        const localPayload = mapLocalOrderPayload(provider, entity)
+        const localPayload = mapLocalOrderPayload(input)
         if (localPayload) {
           const result = await onLocalOrderPaid(localPayload)
           return { handled: true, result }
@@ -91,7 +107,7 @@ export async function dispatch(
         return { handled: false }
       }
 
-      const orderPayload = mapOrderPaidPayload(provider, entity)
+      const orderPayload = mapOrderPaidPayload(input)
       if (orderPayload) {
         const result = await onOrderPaid(orderPayload)
         return { handled: true, result }
@@ -118,44 +134,36 @@ function getProp(obj: Record<string, unknown>, key: string): unknown {
   return obj[key]
 }
 
-function getMetadata(payload: Record<string, unknown>): Record<string, unknown> | undefined {
-  const meta = payload.metadata ?? payload.notes
-  if (meta && typeof meta === "object" && !Array.isArray(meta)) {
-    return meta as Record<string, unknown>
-  }
-  return undefined
-}
-
 /**
  * Map a normalized paid event's entity to OrderPaidPayload for Cloud subscriptions.
  */
-function mapOrderPaidPayload(
-  provider: string,
-  payload: Record<string, unknown>
-): OrderPaidPayload | null {
-  const externalId = (getProp(payload, "id") ??
+function mapOrderPaidPayload(input: NormalizedEventDispatchInput): OrderPaidPayload | null {
+  const { provider, entity: payload, metadata: meta, money } = input
+  if (!money) return null
+  const externalId = (input.paymentId ??
+    input.orderId ??
+    getProp(payload, "id") ??
     getProp(payload, "orderId") ??
     getProp(payload, "chargeId")) as string | undefined
   if (!externalId) return null
 
-  const meta = getMetadata(payload)
-
   return {
     provider,
     externalId,
-    providerSubscriptionId: (getProp(payload, "subscriptionId") ??
+    providerSubscriptionId: (input.subscriptionId ??
+      getProp(payload, "subscriptionId") ??
       getProp(payload, "subscription_id") ??
       (meta ? getProp(meta, "subscriptionId") : undefined)) as string | null | undefined,
     customerId: (getProp(payload, "customerId") ?? getProp(payload, "customer") ?? "") as string,
     customerEmail: (getProp(payload, "customerEmail") ??
+      getProp(payload, "customer_email") ??
       getProp(payload, "email") ??
       (meta ? getProp(meta, "customerEmail") : undefined)) as string | undefined,
-    grossAmount: String(getProp(payload, "amount") ?? getProp(payload, "grossAmount") ?? "0"),
-    discountAmount: String(
-      getProp(payload, "discountAmount") ?? getProp(payload, "discount") ?? "0"
-    ),
-    taxAmount: String(getProp(payload, "taxAmount") ?? getProp(payload, "tax") ?? "0"),
-    currency: (getProp(payload, "currency") ?? "USD") as string,
+    grossAmount: money.grossAmount,
+    discountAmount: money.discountAmount,
+    taxAmount: money.taxAmount,
+    commissionableAmount: money.commissionableAmount,
+    currency: money.currency,
     isAnnual: Boolean(
       getProp(payload, "isAnnual") ?? (meta ? getProp(meta, "isAnnual") : undefined)
     ),
@@ -183,16 +191,15 @@ function mapOrderPaidPayload(
 /**
  * Map a normalized paid event's entity to LocalOrderPaidPayload for Local licenses.
  */
-function mapLocalOrderPayload(
-  provider: string,
-  payload: Record<string, unknown>
-): LocalOrderPaidPayload | null {
-  const externalId = (getProp(payload, "id") ??
+function mapLocalOrderPayload(input: NormalizedEventDispatchInput): LocalOrderPaidPayload | null {
+  const { provider, entity: payload, metadata: meta, money } = input
+  if (!money) return null
+  const externalId = (input.paymentId ??
+    input.orderId ??
+    getProp(payload, "id") ??
     getProp(payload, "orderId") ??
     getProp(payload, "chargeId")) as string | undefined
   if (!externalId) return null
-
-  const meta = getMetadata(payload)
   const skuId = (getProp(payload, "skuId") ??
     getProp(payload, "productId") ??
     (meta ? getProp(meta, "productId") : undefined)) as string
@@ -203,19 +210,22 @@ function mapLocalOrderPayload(
     externalId,
     customerId: (getProp(payload, "customerId") ?? getProp(payload, "customer") ?? "") as string,
     customerEmail: (getProp(payload, "customerEmail") ??
+      getProp(payload, "customer_email") ??
       getProp(payload, "email") ??
       (meta ? getProp(meta, "customerEmail") : undefined)) as string | undefined,
-    grossAmount: String(getProp(payload, "amount") ?? getProp(payload, "grossAmount") ?? "0"),
-    discountAmount: String(
-      getProp(payload, "discountAmount") ?? getProp(payload, "discount") ?? "0"
-    ),
-    taxAmount: String(getProp(payload, "taxAmount") ?? getProp(payload, "tax") ?? "0"),
-    currency: (getProp(payload, "currency") ?? "USD") as string,
+    grossAmount: money.grossAmount,
+    discountAmount: money.discountAmount,
+    taxAmount: money.taxAmount,
+    commissionableAmount: money.commissionableAmount,
+    currency: money.currency,
     skuId,
     promoCode: (getProp(payload, "promoCode") ??
       (meta ? getProp(meta, "promoCode") : undefined)) as string | null | undefined,
     cookieToken: (getProp(payload, "cookieToken") ??
       (meta ? getProp(meta, "affToken") : undefined)) as string | null | undefined,
+    affiliateId: (getProp(meta, "affiliate_id") ?? getProp(meta, "affiliateId")) as
+      string | null | undefined,
+    clickId: (getProp(meta, "click_id") ?? getProp(meta, "clickId")) as string | null | undefined,
     subid: (getProp(payload, "subid") ?? (meta ? getProp(meta, "subid") : undefined)) as
       string | null | undefined,
   }
@@ -229,12 +239,14 @@ function mapLocalOrderPayload(
  * the refund's own row id.
  */
 function mapRefundPayload(
-  provider: string,
-  payload: Record<string, unknown>,
-  reason: ClawbackReason,
-  refundId?: string | null
+  input: NormalizedEventDispatchInput,
+  reason: ClawbackReason
 ): RefundPayload | null {
-  const externalId = (getProp(payload, "order_id") ??
+  const { provider, entity: payload, money, refundId } = input
+  if (!money) return null
+  const externalId = (input.paymentId ??
+    input.orderId ??
+    getProp(payload, "order_id") ??
     getProp(payload, "orderId") ??
     getProp(payload, "originalId") ??
     getProp(payload, "chargeId") ??
@@ -248,7 +260,7 @@ function mapRefundPayload(
     provider,
     externalId,
     refundId: refundId ?? null,
-    refundAmount: String(getProp(payload, "refundAmount") ?? getProp(payload, "amount") ?? "0"),
+    refundAmount: money.grossAmount,
     reason,
     isChargeback: reason === "CHARGEBACK",
   }

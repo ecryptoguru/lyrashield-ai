@@ -1,7 +1,14 @@
 import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
-import { getUsageBalance, getTrialState, getGraceState, CLOUD_PLAN_MAP } from "@lyrashield/billing"
+import {
+  getUsageBalance,
+  getTrialState,
+  getGraceState,
+  CLOUD_PLAN_MAP,
+  resolveProvider,
+  getBillingAdmission,
+} from "@lyrashield/billing"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
@@ -11,6 +18,7 @@ import { UpgradeNowButton } from "./upgrade-now-button"
 import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
+import { headers } from "next/headers"
 
 export default async function BillingPage() {
   const session = await getCachedSession()
@@ -36,6 +44,11 @@ export default async function BillingPage() {
   })
 
   const canManageBilling = membership && hasPermission(membership.role, PERMISSIONS.billing.manage)
+  const requestHeaders = await headers()
+  const { provider: checkoutProvider } = resolveProvider(
+    new Request("https://app.lyrashieldai.com/dashboard/billing", { headers: requestHeaders })
+  )
+  const purchasesAvailable = getBillingAdmission(checkoutProvider, workspaceId).allowed
 
   const [billingAccount, balance, trialState, graceState] = await Promise.all([
     prisma.billingAccount.findUnique({
@@ -70,6 +83,18 @@ export default async function BillingPage() {
       />
 
       <div className="space-y-6">
+        {canManageBilling && !purchasesAvailable && (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-medium">New purchases are temporarily unavailable</p>
+              <p>Your current subscription and management access are unchanged.</p>
+            </div>
+          </div>
+        )}
         {/* Plan Overview */}
         <Card>
           <CardHeader>
@@ -90,7 +115,12 @@ export default async function BillingPage() {
                 )}
               </div>
               {canManageBilling && (
-                <BillingActions plan={plan} isTeam={isTeam} workspaceId={workspaceId} />
+                <BillingActions
+                  plan={plan}
+                  isTeam={isTeam}
+                  workspaceId={workspaceId}
+                  purchasesAvailable={purchasesAvailable}
+                />
               )}
             </div>
 
@@ -133,10 +163,16 @@ export default async function BillingPage() {
               {trialState.isExpired && (
                 <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <span>Your trial has expired. Upgrade to continue scanning.</span>
+                  <span>
+                    {purchasesAvailable
+                      ? "Your trial has expired. Upgrade to continue scanning."
+                      : "Your trial has expired. New purchases are temporarily unavailable."}
+                  </span>
                 </div>
               )}
-              {!trialState.isExpired && <UpgradeNowButton workspaceId={workspaceId} />}
+              {!trialState.isExpired && purchasesAvailable && (
+                <UpgradeNowButton workspaceId={workspaceId} />
+              )}
             </CardContent>
           </Card>
         )}
@@ -207,7 +243,9 @@ export default async function BillingPage() {
           <CardContent className="space-y-3">
             {balance.packs.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No active minute packs. Buy a pack to add agent-minutes to your account.
+                {purchasesAvailable
+                  ? "No active minute packs. Buy a pack to add agent-minutes to your account."
+                  : "No active minute packs."}
               </p>
             ) : (
               <div className="space-y-2">
@@ -227,7 +265,7 @@ export default async function BillingPage() {
                 ))}
               </div>
             )}
-            {canManageBilling && <BuyPackButton workspaceId={workspaceId} />}
+            {canManageBilling && purchasesAvailable && <BuyPackButton workspaceId={workspaceId} />}
           </CardContent>
         </Card>
 

@@ -56,6 +56,10 @@ describe("local pricing — team 10% volume discount at 10+ seats (FAIL-B1)", ()
     expect(teamOrderTotal("individual_regular", 10)).toBe(299)
   })
 
+  it("keeps the selected India launch price in the shared catalog", () => {
+    expect(LOCAL_SKU_MAP.individual_launch.priceInr).toBe(19_900)
+  })
+
   it("teamVolumeDiscountPct is 0 below threshold and 10 at/above", () => {
     expect(teamVolumeDiscountPct("team_perpetual", 5)).toBe(0)
     expect(teamVolumeDiscountPct("team_perpetual", TEAM_VOLUME_THRESHOLD)).toBe(

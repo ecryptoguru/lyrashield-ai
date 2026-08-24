@@ -5,9 +5,6 @@
  * Docs: https://developer.payoneer.com/
  */
 
-import { logger } from "@lyrashield/logger"
-import { Prisma } from "@lyrashield/db"
-
 export interface PayoneerProvider {
   send(
     payoutId: string,
@@ -42,53 +39,10 @@ export function createPayoneerProvider(): PayoneerProvider {
         return { success: false, error: "Invalid payout method for Payoneer" }
       }
 
-      // Q1: Use Prisma.Decimal for money — never parseFloat for monetary amounts
-      const amountDecimal = new Prisma.Decimal(amount)
-      if (amountDecimal.lte(0)) {
-        return { success: false, error: "Invalid payout amount" }
-      }
-
-      try {
-        // In production, this would call the Payoneer Mass Payouts API:
-        // POST /mass-payouts/v2/programs/{program_id}/payments
-        // with client_id/client_secret auth and idempotency key = payoutId
-        //
-        // const token = await getPayoneerToken()
-        // const response = await fetch(
-        //   `https://api.payoneer.com/mass-payouts/v2/programs/${partnerId}/payments`,
-        //   {
-        //     method: "POST",
-        //     headers: {
-        //       "Authorization": `Bearer ${token}`,
-        //       "Content-Type": "application/json",
-        //       "Idempotency-Key": payoutId,
-        //     },
-        //     body: JSON.stringify({
-        //       payments: [{
-        //         amount: { value: amount, currency },
-        //         payee: { id: method.payeeId, email: method.email },
-        //       }],
-        //     }),
-        //   }
-        // )
-
-        logger.info("Payoneer payout initiated (stub)", {
-          payoutId,
-          amount,
-          currency,
-          payeeId: method.payeeId,
-        })
-
-        return {
-          success: true,
-          providerPayoutId: `pyr_${payoutId}`,
-        }
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Payoneer payout failed",
-        }
-      }
+      void payoutId
+      void amount
+      void currency
+      return { success: false, error: "Payoneer partnership API access is not approved" }
     },
   }
 }

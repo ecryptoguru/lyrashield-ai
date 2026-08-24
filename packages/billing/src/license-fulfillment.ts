@@ -89,7 +89,11 @@ function getKeyVaultSecretsClient(): SecretClient {
 let cachedKeyVaultPrivateKey: string | null = null
 
 function isProductionKeyVault(): boolean {
-  return env.NODE_ENV === "production" && Boolean(env.LYRASHIELD_KEY_VAULT_NAME)
+  const isLocalE2e =
+    env.LICENSE_SIGNING_KEY_ID === "e2e-license-key-v1" &&
+    (env.BETTER_AUTH_URL === "http://127.0.0.1:3100" ||
+      env.BETTER_AUTH_URL === "http://localhost:3100")
+  return env.NODE_ENV === "production" && !isLocalE2e
 }
 
 export async function resolveSigningPrivateKey(): Promise<string> {

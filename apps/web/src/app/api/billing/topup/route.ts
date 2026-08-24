@@ -14,12 +14,14 @@ import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
+import { billingAdmissionError, paymentsUnavailableError } from "@/lib/billing-admission"
 
-const TopUpSchema = z.object({
-  workspaceId: z.string().min(1),
-  pack: z.enum(["pack_100", "pack_250", "pack_500"]),
-  region: z.enum(["usd", "inr"]).optional(),
-})
+const TopUpSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    pack: z.enum(["pack_100", "pack_250", "pack_500"]),
+  })
+  .strict()
 
 /**
  * POST /api/billing/topup — initiate a one-time minute pack purchase.
@@ -62,6 +64,8 @@ export async function POST(request: Request) {
 
     // A-L04: Client-side region override removed — server-side geo routing only
     const { provider } = resolveProvider(request)
+    const admissionError = billingAdmissionError(provider, workspaceId)
+    if (admissionError) return admissionError
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const successUrl = `${appUrl}/dashboard/billing?topup=success`
@@ -74,11 +78,8 @@ export async function POST(request: Request) {
       // Polar: one-time checkout
       const productId = resolveProviderId(env.POLAR_PRODUCT_IDS, packId)
       if (!productId) {
-        return apiError(
-          "PROVIDER_NOT_CONFIGURED",
-          `Polar product ${packId} is not configured.`,
-          503
-        )
+        logger.error("Billing provider catalog is not configured", { provider, packId })
+        return paymentsUnavailableError()
       }
       const url = await createPolarOneTimeCheckout({
         productId,
@@ -87,11 +88,8 @@ export async function POST(request: Request) {
       })
 
       if (!url) {
-        return apiError(
-          "PROVIDER_NOT_CONFIGURED",
-          "Polar is not configured. Set POLAR_ACCESS_TOKEN.",
-          503
-        )
+        logger.error("Billing provider checkout is unavailable", { provider, packId })
+        return paymentsUnavailableError()
       }
 
       return apiSuccess({ provider: "polar", url }, 200)
@@ -109,11 +107,8 @@ export async function POST(request: Request) {
       })
 
       if (!result) {
-        return apiError(
-          "PROVIDER_NOT_CONFIGURED",
-          "Razorpay is not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
-          503
-        )
+        logger.error("Billing provider checkout is unavailable", { provider, packId })
+        return paymentsUnavailableError()
       }
 
       return apiSuccess({ provider: "razorpay", url: result.url, id: result.id }, 200)

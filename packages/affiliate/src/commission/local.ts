@@ -28,6 +28,8 @@ export interface LocalOrderPaidPayload {
   discountAmount?: string
   /** Tax amount in major currency units. */
   taxAmount?: string
+  /** Validated pre-tax, post-discount commission base in major units. */
+  commissionableAmount: string
   /** Currency code. */
   currency: string
   /** The Local SKU id from @lyrashield/pricing. */
@@ -36,6 +38,10 @@ export interface LocalOrderPaidPayload {
   promoCode?: string | null
   /** Attribution cookie token (if available). */
   cookieToken?: string | null
+  /** Internal affiliate identity resolved before provider redirect. */
+  affiliateId?: string | null
+  /** Internal click identity retained for reconciliation. */
+  clickId?: string | null
   /** SubID for campaign tracking. */
   subid?: string | null
 }
@@ -59,13 +65,14 @@ export async function onLocalOrderPaid(
   const {
     provider,
     externalId,
+    customerEmail,
     grossAmount,
-    discountAmount = "0",
-    taxAmount = "0",
+    commissionableAmount,
     currency,
     skuId,
     promoCode,
     cookieToken,
+    affiliateId: directAffiliateId,
     subid,
   } = payload
 
@@ -90,9 +97,23 @@ export async function onLocalOrderPaid(
     }
   }
 
-  // Resolve attribution
-  const attribution = await resolveAttribution({ promoCode, cookieToken })
-  if (!attribution.affiliateId) {
+  let affiliateId: string | null = null
+  let attributionMethod = "unattributed"
+  if (directAffiliateId) {
+    const direct = await prisma.affiliate.findUnique({
+      where: { id: directAffiliateId },
+      select: { id: true, status: true },
+    })
+    if (direct?.status === "APPROVED") {
+      affiliateId = direct.id
+      attributionMethod = "direct_metadata"
+    }
+  } else {
+    const attribution = await resolveAttribution({ promoCode, cookieToken })
+    affiliateId = attribution.affiliateId
+    attributionMethod = attribution.method
+  }
+  if (!affiliateId) {
     logger.info("Local commission: no attribution for order", { externalId, skuId })
     return {
       conversionId: "",
@@ -104,7 +125,24 @@ export async function onLocalOrderPaid(
     }
   }
 
-  const affiliateId = attribution.affiliateId
+  const affiliateOwner = await prisma.affiliate.findUnique({
+    where: { id: affiliateId },
+    select: { user: { select: { email: true } } },
+  })
+  if (
+    customerEmail &&
+    affiliateOwner?.user?.email &&
+    customerEmail.toLowerCase() === affiliateOwner.user.email.toLowerCase()
+  ) {
+    return {
+      conversionId: "",
+      commissionId: "",
+      amount: "0",
+      rateBps: 0,
+      status: "SELF_REFERRAL_REJECTED",
+      duplicate: false,
+    }
+  }
 
   // Load program terms for hold days
   let holdDays = DEFAULT_HOLD_DAYS
@@ -117,9 +155,7 @@ export async function onLocalOrderPaid(
 
   // Compute commissionable base: net pre-tax after discounts
   const gross = new Prisma.Decimal(grossAmount)
-  const discount = new Prisma.Decimal(discountAmount)
-  const tax = new Prisma.Decimal(taxAmount)
-  const commissionableBase = gross.minus(discount).minus(tax)
+  const commissionableBase = new Prisma.Decimal(commissionableAmount)
 
   if (commissionableBase.lte(0)) {
     logger.warn("Local commission: commissionable base <= 0, skipping", {
@@ -156,7 +192,7 @@ export async function onLocalOrderPaid(
       grossAmount: gross,
       commissionableAmount: commissionableBase,
       currency,
-      method: attribution.method,
+      method: attributionMethod,
       promoCode: promoCode ?? null,
       subid: subid ?? null,
       occurredAt: now,

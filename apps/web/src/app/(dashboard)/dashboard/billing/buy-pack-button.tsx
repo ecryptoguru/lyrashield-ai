@@ -15,9 +15,11 @@ interface BuyPackButtonProps {
  */
 export function BuyPackButton({ workspaceId, packId = "pack_100" }: BuyPackButtonProps) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleBuy() {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch("/api/billing/topup", {
         method: "POST",
@@ -25,25 +27,32 @@ export function BuyPackButton({ workspaceId, packId = "pack_100" }: BuyPackButto
         body: JSON.stringify({ workspaceId, pack: packId }),
       })
       const data = await res.json()
-      if (data.success && data.data?.url) {
+      if (res.ok && data.success && data.data?.url) {
         window.location.href = data.data.url
       } else {
-        console.error("Top-up failed", data)
+        setError(data.error?.message ?? "Unable to start this purchase. Please try again.")
       }
-    } catch (err) {
-      console.error("Top-up request failed", err)
+    } catch {
+      setError("Unable to start this purchase. Check your connection and try again.")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <button
-      onClick={handleBuy}
-      disabled={loading}
-      className={`${buttonVariants({ variant: "outline" })} w-full`}
-    >
-      {loading ? "Loading..." : "Buy Minute Pack"}
-    </button>
+    <div className="space-y-2">
+      {error && (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+      <button
+        onClick={handleBuy}
+        disabled={loading}
+        className={`${buttonVariants({ variant: "outline" })} w-full`}
+      >
+        {loading ? "Loading..." : "Buy Minute Pack"}
+      </button>
+    </div>
   )
 }

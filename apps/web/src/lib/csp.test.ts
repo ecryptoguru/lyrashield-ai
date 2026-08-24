@@ -152,6 +152,13 @@ describe("CSP nonce proxy", () => {
     const res = await proxy(req)
     const csp = res.headers.get("Content-Security-Policy")!
     expect(csp).toContain("connect-src 'self'")
+    expect(csp).toContain("https://api.razorpay.com")
+  })
+
+  it("allows only Razorpay checkout frames needed by subscription management", async () => {
+    const res = await proxy(makeRequest("/dashboard/billing"))
+    const csp = res.headers.get("Content-Security-Policy")!
+    expect(csp).toContain("frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com")
   })
 
   it("includes base-uri 'self' in CSP", async () => {

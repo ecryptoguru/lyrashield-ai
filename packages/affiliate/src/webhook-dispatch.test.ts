@@ -33,6 +33,14 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
       rawType: "refund.created",
       productKind: "unknown",
       refundId: "rfnd_R_77",
+      money: {
+        currency: "INR",
+        grossAmount: "49.0000",
+        discountAmount: "0.0000",
+        taxAmount: "0.0000",
+        commissionableAmount: "49.0000",
+      },
+      metadata: {},
       entity: {
         id: "rfnd_R_77",
         payment_id: "pay_R_9",
@@ -61,6 +69,14 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
       rawType: "chargeback.created",
       productKind: "unknown",
       refundId: "ref_C_1",
+      money: {
+        currency: "USD",
+        grossAmount: "0.0000",
+        discountAmount: "0.0000",
+        taxAmount: "0.0000",
+        commissionableAmount: "0.0000",
+      },
+      metadata: {},
       entity: { id: "ref_C_1", order_id: "ord_C_1" },
     })
 
@@ -75,6 +91,8 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
       kind: "local_purchase_paid",
       rawType: "order.paid",
       productKind: "minute_pack",
+      money: null,
+      metadata: {},
       entity: { id: "ord_PACK", productId: "polar_pack_250" },
     })
 
@@ -94,6 +112,8 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
       kind: "subscription_paid",
       rawType: "payment.captured",
       productKind: "unknown",
+      money: null,
+      metadata: {},
       entity: { id: "pay_PACK", notes: { packId: "pack_100" } },
     })
 
@@ -107,6 +127,14 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
       kind: "local_purchase_paid",
       rawType: "order.paid",
       productKind: "local",
+      money: {
+        currency: "USD",
+        grossAmount: "299.0000",
+        discountAmount: "0.0000",
+        taxAmount: "0.0000",
+        commissionableAmount: "299.0000",
+      },
+      metadata: { affiliate_id: "aff_local", click_id: "click_local" },
       entity: {
         id: "ord_LOCAL",
         productId: "individual_regular",
@@ -116,6 +144,9 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
     })
 
     expect(onLocalOrderPaidMock).toHaveBeenCalledTimes(1)
+    expect(onLocalOrderPaidMock).toHaveBeenCalledWith(
+      expect.objectContaining({ affiliateId: "aff_local", clickId: "click_local" })
+    )
     expect(onOrderPaidMock).not.toHaveBeenCalled()
   })
 
@@ -125,6 +156,14 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
       kind: "subscription_paid",
       rawType: "order.paid",
       productKind: "subscription",
+      money: {
+        currency: "USD",
+        grossAmount: "49.0000",
+        discountAmount: "0.0000",
+        taxAmount: "0.0000",
+        commissionableAmount: "49.0000",
+      },
+      metadata: { affToken: "tok123" },
       entity: {
         id: "ord_SUB",
         subscriptionId: "sub_Z",
@@ -141,6 +180,7 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
         provider: "polar",
         externalId: "ord_SUB",
         cookieToken: "tok123",
+        grossAmount: "49.0000",
       })
     )
     expect(onLocalOrderPaidMock).not.toHaveBeenCalled()
@@ -152,6 +192,8 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
       kind: "entitlement_transitioned",
       rawType: "subscription.cancelled",
       productKind: "subscription",
+      money: null,
+      metadata: {},
       entity: { id: "sub_C" },
     })
 
@@ -169,8 +211,31 @@ describe("affiliate webhook-dispatch — normalized event fan-out", () => {
         rawType: "refund.created",
         productKind: "unknown",
         refundId: "r1",
+        money: {
+          currency: "USD",
+          grossAmount: "1.0000",
+          discountAmount: "0.0000",
+          taxAmount: "0.0000",
+          commissionableAmount: "1.0000",
+        },
+        metadata: {},
         entity: { id: "r1", order_id: "o1" },
       })
     ).rejects.toThrow("db down")
+  })
+
+  it("fails the affiliate track when paid money evidence is unavailable", async () => {
+    await expect(
+      dispatch({
+        provider: "razorpay",
+        kind: "subscription_renewed",
+        rawType: "subscription.charged",
+        productKind: "subscription",
+        money: null,
+        metadata: {},
+        entity: { id: "pay_missing_money" },
+      })
+    ).rejects.toThrow("affiliate_money_evidence_unavailable")
+    expect(onOrderPaidMock).not.toHaveBeenCalled()
   })
 })

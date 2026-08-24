@@ -9,6 +9,8 @@ import { logger } from "@lyrashield/logger"
 import { checkPayoutEligibility } from "./eligibility"
 import { requestPayout } from "./request"
 import { PAYOUT_DAY_OF_MONTH } from "../index"
+import { createRazorpayXProvider } from "./providers/razorpayx"
+import { env } from "@lyrashield/config"
 
 export interface PayoutBatch {
   affiliateId: string
@@ -84,6 +86,85 @@ export async function payoutScheduler(): Promise<PayoutBatch[]> {
       success: result.success,
       payoutId: result.payoutId,
     })
+  }
+
+  const reservePayouts = await prisma.payout.findMany({
+    where: { status: "PENDING", isReserveRelease: true },
+    select: {
+      id: true,
+      affiliateId: true,
+      amount: true,
+      currency: true,
+      affiliate: { select: { payoutMethod: true } },
+    },
+  })
+  for (const payout of reservePayouts) {
+    const method = payout.affiliate.payoutMethod as { type?: string } | null
+    if (method?.type !== "razorpayx" || env.RAZORPAYX_PAYOUT_ADMISSION !== "public") {
+      batches.push({
+        affiliateId: payout.affiliateId,
+        payoutId: payout.id,
+        success: false,
+        error: "Payout provider is disabled",
+      })
+      continue
+    }
+    const claimed = await prisma.payout.updateMany({
+      where: { id: payout.id, status: "PENDING" },
+      data: { status: "PROCESSING", provider: "razorpayx" },
+    })
+    if (claimed.count === 0) continue
+    try {
+      const result = await createRazorpayXProvider().send(
+        payout.id,
+        payout.amount.toString(),
+        payout.currency,
+        payout.affiliate.payoutMethod
+      )
+      if (result.success && result.providerPayoutId) {
+        await prisma.payout.updateMany({
+          where: { id: payout.id, status: "PROCESSING" },
+          data: {
+            status: "PAID",
+            providerPayoutId: result.providerPayoutId,
+            paidAt: new Date(),
+            failureCode: null,
+          },
+        })
+      } else if (result.pending) {
+        await prisma.payout.updateMany({
+          where: { id: payout.id, status: "PROCESSING" },
+          data: { providerPayoutId: result.providerPayoutId, failureCode: "PROVIDER_PENDING" },
+        })
+      } else if (result.rejected) {
+        await prisma.payout.updateMany({
+          where: { id: payout.id, status: "PROCESSING" },
+          data: { status: "FAILED", failureCode: "PROVIDER_REJECTED" },
+        })
+      } else {
+        await prisma.payout.updateMany({
+          where: { id: payout.id, status: "PROCESSING" },
+          data: { providerPayoutId: result.providerPayoutId, failureCode: "PROVIDER_UNCONFIRMED" },
+        })
+      }
+      batches.push({
+        affiliateId: payout.affiliateId,
+        payoutId: payout.id,
+        amount: payout.amount.toString(),
+        success: result.success,
+      })
+    } catch (error) {
+      await prisma.payout.updateMany({
+        where: { id: payout.id, status: "PROCESSING" },
+        data: { failureCode: "PROVIDER_AMBIGUOUS" },
+      })
+      batches.push({
+        affiliateId: payout.affiliateId,
+        payoutId: payout.id,
+        success: false,
+        error: error instanceof Error ? error.message : "Payout outcome pending reconciliation",
+      })
+    }
   }
 
   logger.info("Payout scheduler complete", {

@@ -47,6 +47,8 @@ export interface OrderPaidPayload {
   discountAmount?: string
   /** Tax amount in major currency units. */
   taxAmount?: string
+  /** Validated pre-tax, post-discount commission base in major units. */
+  commissionableAmount: string
   /** Currency code (USD, INR). */
   currency: string
   /** Whether this is an annual plan payment. */
@@ -98,8 +100,7 @@ export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidR
     customerId,
     customerEmail,
     grossAmount,
-    discountAmount = "0",
-    taxAmount = "0",
+    commissionableAmount,
     currency,
     isAnnual = false,
     promoCode,
@@ -360,16 +361,13 @@ export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidR
 
   // Compute commissionable base: net pre-tax after discounts
   const gross = new Prisma.Decimal(grossAmount)
-  const discount = new Prisma.Decimal(discountAmount)
-  const tax = new Prisma.Decimal(taxAmount)
-  const commissionableBase = gross.minus(discount).minus(tax)
+  const commissionableBase = new Prisma.Decimal(commissionableAmount)
 
   if (commissionableBase.lte(0)) {
     logger.warn("Commission: commissionable base <= 0, skipping", {
       externalId,
       grossAmount,
-      discountAmount,
-      taxAmount,
+      commissionableAmount,
     })
     return {
       conversionId: "",
