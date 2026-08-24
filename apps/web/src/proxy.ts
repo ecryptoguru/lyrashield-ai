@@ -173,9 +173,12 @@ async function handleAffiliateAttribution(
     if (
       pathname.startsWith("/score/") ||
       pathname.startsWith("/lite-check/") ||
-      pathname.startsWith("/reports/shared/")
+      pathname.startsWith("/reports/shared/") ||
+      pathname === "/licenses/retrieve"
     )
       response.headers.set("Referrer-Policy", "no-referrer")
+    if (pathname === "/licenses/retrieve")
+      response.headers.set("Cache-Control", "private, no-store")
     return response
   }
 
@@ -225,9 +228,12 @@ export async function proxy(request: NextRequest) {
     if (
       pathname.startsWith("/score/") ||
       pathname.startsWith("/lite-check/") ||
-      pathname.startsWith("/reports/shared/")
+      pathname.startsWith("/reports/shared/") ||
+      pathname === "/licenses/retrieve"
     )
       response.headers.set("Referrer-Policy", "no-referrer")
+    if (pathname === "/licenses/retrieve")
+      response.headers.set("Cache-Control", "private, no-store")
     return response
   }
 

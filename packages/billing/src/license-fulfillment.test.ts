@@ -18,6 +18,18 @@ describe("license fulfillment retrieval custody", () => {
     expect(source).not.toContain('require("@azure/keyvault-secrets")')
   })
 
+  it("puts retrieval tokens in URL fragments instead of request URLs", async () => {
+    // Fixed sibling source file; never test input.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const source = await readFile(
+      fileURLToPath(new URL("./license-fulfillment.ts", import.meta.url)),
+      "utf8"
+    )
+
+    expect(source).toContain("/licenses/retrieve#token=")
+    expect(source).not.toContain("/api/licenses/retrieve?token=")
+  })
+
   it("encrypts one-time raw keys at rest and round-trips only in process memory", () => {
     const rawKey = "LYRA-11111111-2222-3333-4444-555555555555"
     const encrypted = encryptRetrievalKey(rawKey)

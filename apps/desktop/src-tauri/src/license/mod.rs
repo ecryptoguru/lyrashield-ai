@@ -929,6 +929,10 @@ mod tests {
         let url = format!("http://{}", addr);
         let res = crate::license::ensure_license_operational(Some(url), &pubkey).await;
         assert!(matches!(res, Err(LicenseOperationalError::Invalid(_))));
+        assert!(
+            crate::license::store::load_license().unwrap().is_none(),
+            "server-revoked license must be removed from local storage"
+        );
     }
 
     #[test]

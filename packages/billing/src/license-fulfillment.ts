@@ -323,8 +323,8 @@ export async function sendLicenseRetrievalEmail(params: {
   }
   const apiKey = env.BREVO_API_KEY
   const appUrl = env.NEXT_PUBLIC_APP_URL || "https://app.lyrashieldai.com"
-  const retrievalUrl = `${appUrl.replace(/\/$/, "")}/api/licenses/retrieve?token=${encodeURIComponent(retrievalToken)}`
-  // Also provide direct retrieval endpoint hint
+  // URL fragments are never sent in HTTP requests, so proxies and access logs cannot capture the token.
+  const retrievalUrl = `${appUrl.replace(/\/$/, "")}/licenses/retrieve#token=${encodeURIComponent(retrievalToken)}`
   const expiryStr = retrievalExpiresAt.toISOString().slice(0, 10)
 
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -342,9 +342,9 @@ export async function sendLicenseRetrievalEmail(params: {
         `<p>Thanks for your purchase. Your LyraShield Local license (${escapeHtml(sku)}) is ready.</p>` +
         `<p><strong>One-time retrieval link</strong> (expires ${escapeHtml(expiryStr)}, single use):</p>` +
         `<p><a href="${escapeHtml(retrievalUrl)}">${escapeHtml(retrievalUrl)}</a></p>` +
-        `<p>This link will let you retrieve your license key and signed license file <strong>once</strong>. After first retrieval or expiry it becomes invalid. Keep your key safe.</p>` +
-        `<p>If you need help, contact support with your order email.</p>` +
-        `<p>Alternatively POST your token to <code>/api/licenses/retrieve</code> with <code>{"token":"..."}</code>.</p>`,
+        `<p>Open the link, then confirm retrieval. Your browser removes the token from the address before contacting the retrieval API.</p>` +
+        `<p>You can retrieve your license key and signed license file <strong>once</strong>. After first retrieval or expiry the link becomes invalid. Keep your key safe.</p>` +
+        `<p>If you need help, contact support with your order email.</p>`,
     }),
   })
   if (!res.ok) {
