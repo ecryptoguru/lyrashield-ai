@@ -316,6 +316,31 @@ const envSchema = z
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
+    // Azure resource group for read-only alert/action-group verification by
+    // the launch-assurance command (host-side `az`).
+    AZURE_RESOURCE_GROUP: z.string().optional().or(z.literal("")),
+
+    // Worker execution provenance. Optional in the shared schema so web and
+    // scanner processes never need them; the worker enforces presence in
+    // production before readiness (see resolveWorkerExecutionProvenance).
+    LYRASHIELD_PRODUCT_REVISION: z
+      .string()
+      .regex(/^[0-9a-fA-F]{40}$/, "LYRASHIELD_PRODUCT_REVISION must be a 40-character commit SHA")
+      .optional()
+      .or(z.literal("")),
+    LYRASHIELD_WORKER_IMAGE_DIGEST: z
+      .string()
+      .regex(
+        /^sha256:[0-9a-fA-F]{64}$/,
+        "LYRASHIELD_WORKER_IMAGE_DIGEST must be a sha256:<64 hex> digest"
+      )
+      .optional()
+      .or(z.literal("")),
+    LYRASHIELD_ENGINE_REVISION: z
+      .string()
+      .regex(/^[0-9a-fA-F]{40}$/, "LYRASHIELD_ENGINE_REVISION must be a 40-character commit SHA")
+      .optional()
+      .or(z.literal("")),
 
     // Runtime
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -435,3 +460,60 @@ export const env = loadEnv()
 export const isProd = env.NODE_ENV === "production"
 export const isDev = env.NODE_ENV === "development"
 export const isTest = env.NODE_ENV === "test"
+
+export interface WorkerExecutionProvenance {
+  productRevision: string
+  workerImageDigest: string
+  engineRevision: string
+}
+
+const SHA256_DIGEST_PATTERN = /^sha256:[0-9a-fA-F]{64}$/
+const COMMIT_SHA_PATTERN = /^[0-9a-fA-F]{40}$/
+
+/**
+ * Pure resolution of worker execution provenance. Non-production environments
+ * return null so local and unit scans do not invent production provenance.
+ * Production requires all three immutable values; malformed or missing values
+ * fail closed BEFORE readiness so no paid work can start without exact
+ * product/image/engine identity.
+ */
+export function resolveWorkerExecutionProvenanceFrom(input: {
+  NODE_ENV?: string
+  LYRASHIELD_PRODUCT_REVISION?: string
+  LYRASHIELD_WORKER_IMAGE_DIGEST?: string
+  LYRASHIELD_ENGINE_REVISION?: string
+}): WorkerExecutionProvenance | null {
+  if (input.NODE_ENV !== "production") return null
+
+  const productRevision = input.LYRASHIELD_PRODUCT_REVISION ?? ""
+  const workerImageDigest = input.LYRASHIELD_WORKER_IMAGE_DIGEST ?? ""
+  const engineRevision = input.LYRASHIELD_ENGINE_REVISION ?? ""
+
+  if (!COMMIT_SHA_PATTERN.test(productRevision)) {
+    throw new Error(
+      "Worker execution provenance is incomplete: LYRASHIELD_PRODUCT_REVISION must be a 40-character commit SHA"
+    )
+  }
+  if (!SHA256_DIGEST_PATTERN.test(workerImageDigest)) {
+    throw new Error(
+      "Worker execution provenance is incomplete: LYRASHIELD_WORKER_IMAGE_DIGEST must be sha256:<64 hex>"
+    )
+  }
+  if (!COMMIT_SHA_PATTERN.test(engineRevision)) {
+    throw new Error(
+      "Worker execution provenance is incomplete: LYRASHIELD_ENGINE_REVISION must be a 40-character commit SHA"
+    )
+  }
+
+  return { productRevision, workerImageDigest, engineRevision }
+}
+
+/** Worker-only fail-closed provenance resolver backed by the loaded env. */
+export function resolveWorkerExecutionProvenance(): WorkerExecutionProvenance | null {
+  return resolveWorkerExecutionProvenanceFrom({
+    NODE_ENV: env.NODE_ENV,
+    LYRASHIELD_PRODUCT_REVISION: env.LYRASHIELD_PRODUCT_REVISION,
+    LYRASHIELD_WORKER_IMAGE_DIGEST: env.LYRASHIELD_WORKER_IMAGE_DIGEST,
+    LYRASHIELD_ENGINE_REVISION: env.LYRASHIELD_ENGINE_REVISION,
+  })
+}

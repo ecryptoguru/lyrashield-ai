@@ -114,6 +114,11 @@ metric_alert app-replica-restart "$APP_RESOURCE_ID" "max RestartCount > 0" 5m 2
 metric_alert scanner-no-active-replica "$SCANNER_RESOURCE_ID" "min Replicas < 1" 5m 1
 metric_alert scanner-replica-restart "$SCANNER_RESOURCE_ID" "max RestartCount > 0" 5m 2
 
+# Documented exception: scan_worker_lease_expired is intentionally NOT
+# provisioned. Individual expired leases are INCONCLUSIVE because the worker
+# registry prunes expired members during heartbeat refresh; total lease loss is
+# covered by scan-readiness-unavailable. Provision it only after a durable
+# lease-expiry counter exists.
 worker_log_alert() {
   name=$1
   code=$2
@@ -158,4 +163,99 @@ worker_log_alert webhook-dead-letter webhook_dead_letter 1
 worker_log_alert evidence-persistence-failure evidence_persistence_failure 1
 worker_log_alert terminal-cost-unreconciled terminal_cost_unreconciled 1
 
-echo "LyraShield monitoring alerts provisioned and routed to lyrashield-operator-alerts"
+# ── Readback ────────────────────────────────────────────────────────────────
+# Provisioning is not proof: after every create/update, read each rule back and
+# fail unless it is enabled, auto-mitigates, and is bound to the exact operator
+# action group. Azure Monitor remains the delivery/retry/resolution authority;
+# these checks only prove the configuration we just wrote is live.
+
+readback_metric_alert() {
+  name=$1
+  enabled=$(az_run monitor metrics alert show \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --name "$name" \
+    --query enabled -o tsv)
+  case "$enabled" in
+    true) ;;
+    *)
+      echo "Metric alert $name is not enabled after provisioning" >&2
+      exit 1
+      ;;
+  esac
+  action=$(az_run monitor metrics alert show \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --name "$name" \
+    --query "actions[0].actionGroupId" -o tsv)
+  [ "$action" = "$action_group_id" ] || {
+    echo "Metric alert $name is not bound to lyrashield-operator-alerts" >&2
+    exit 1
+  }
+}
+
+readback_scheduled_query() {
+  name=$1
+  enabled=$(az_run monitor scheduled-query show \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --name "$name" \
+    --query enabled -o tsv)
+  case "$enabled" in
+    true) ;;
+    *)
+      echo "Scheduled query $name is not enabled after provisioning" >&2
+      exit 1
+      ;;
+  esac
+  auto=$(az_run monitor scheduled-query show \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --name "$name" \
+    --query autoMitigate -o tsv)
+  case "$auto" in
+    true) ;;
+    *)
+      echo "Scheduled query $name does not auto-mitigate after provisioning" >&2
+      exit 1
+      ;;
+  esac
+  group=$(az_run monitor scheduled-query show \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --name "$name" \
+    --query "actions.actionGroups[0]" -o tsv)
+  [ "$group" = "$action_group_id" ] || {
+    echo "Scheduled query $name is not bound to lyrashield-operator-alerts" >&2
+    exit 1
+  }
+}
+
+action_readback=$(az_run monitor action-group show \
+  --name lyrashield-operator-alerts \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --query name -o tsv)
+[ "$action_readback" = "lyrashield-operator-alerts" ] || {
+  echo "Action group readback failed after provisioning" >&2
+  exit 1
+}
+
+for rule in \
+  worker-vm-unavailable \
+  worker-cpu-high \
+  app-no-active-replica \
+  app-replica-restart \
+  scanner-no-active-replica \
+  scanner-replica-restart
+do
+  readback_metric_alert "$rule"
+done
+
+for rule in \
+  scan-readiness-unavailable \
+  scan-queue-depth-high \
+  scan-queue-oldest-wait-high \
+  reconciliation-drift \
+  webhook-dead-letter \
+  evidence-persistence-failure \
+  terminal-cost-unreconciled
+do
+  readback_scheduled_query "$rule"
+done
+
+echo "LyraShield monitoring alerts provisioned, read back, and routed to lyrashield-operator-alerts"

@@ -233,6 +233,9 @@ Safe/Quick/Standard use Luna/medium. Deep/Custom use Terra/medium root plus Luna
 - The result manifest is persisted before retest finalization; crash recovery resumes pending retests from stored receipt evidence before scoring, without replaying billable work.
 - Findings list responses carry a deterministic page-local priority heuristic (severity, status, verified, confidence, target environment, business impact/exploitability context). It is triage context, never proof of exploitability or reachability, and does not change cursor pagination.
 - Finding detail never exposes raw evidence storage URIs; retest receipts surface baseline/retest scan IDs, manifest checksums, revisions, method, and coverage state.
+- Result manifests bind worker execution provenance into their checksum: exact product revision, worker image digest, and engine revision. The production worker fails closed before readiness when any value is missing or malformed; the VM launcher derives all three from the digest-pinned image and its OCI labels.
+- `provision-alerts.sh` reads every rule back after provisioning and fails unless each metric alert and scheduled query is enabled, auto-mitigates, and is bound to the operator action group. `scan_worker_lease_expired` remains unprovisioned until a durable counter exists.
+- `verify:launch-assurance` (host-side, dry-run first) composes evidence proofs, readiness, Azure alert readback, authenticated cancellation, and `reconcileScanQueue` into one ordered command with a bounded JSON receipt. Dry run is read-only; full mode requires exact scan/workspace IDs and the production confirmation phrase.
 
 ### GitHub and approvals
 

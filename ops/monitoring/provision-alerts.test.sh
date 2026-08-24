@@ -15,7 +15,13 @@ case "$*" in
   *"data-collection rule show"*) printf '1\n' ;;
   *"log-analytics query"*"LyraShield worker starting"*) printf '%s\n' "${FAKE_WORKER_LOG_COUNT:-1}" ;;
   *"log-analytics query"*"ContainerAppConsoleLogs_CL"*) printf '%s\n' "${FAKE_APP_LOG_COUNT:-1}" ;;
-  *"action-group create"*) printf '/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts\n' ;;
+  *"action-group create"*) printf '%s\n' "${FAKE_ACTION_GROUP_ID:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}" ;;
+  *"action-group show"*) printf 'lyrashield-operator-alerts\n' ;;
+  *"metrics alert show"*"--query enabled"*) printf 'true\n' ;;
+  *"metrics alert show"*"actionGroupId"*) printf '%s\n' "${FAKE_ACTION_GROUP_ID:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}" ;;
+  *"scheduled-query show"*"--query enabled"*) printf 'true\n' ;;
+  *"scheduled-query show"*"autoMitigate"*) printf 'true\n' ;;
+  *"scheduled-query show"*"actionGroups[0]"*) printf '%s\n' "${FAKE_ACTION_GROUP_ID:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}" ;;
 esac
 EOF
 chmod +x "$test_dir/az"
@@ -106,3 +112,80 @@ if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
   exit 1
 fi
 test "$(grep -c 'action-group create' "$capture" || true)" = 0
+
+# ── Readback proof ──────────────────────────────────────────────────────────
+# A fresh successful run must read back every rule and the action group.
+: >"$capture"
+export FAKE_DCR_COUNT=1
+export FAKE_WORKER_LOG_COUNT=1
+export FAKE_APP_LOG_COUNT=1
+sh ops/monitoring/provision-alerts.sh >/dev/null
+test "$(grep -c 'metrics alert show.*--query enabled' "$capture")" = 6
+test "$(grep -c 'metrics alert show.*actionGroupId' "$capture")" = 6
+test "$(grep -c 'scheduled-query show.*--query enabled' "$capture")" = 7
+test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 7
+test "$(grep -c 'scheduled-query show.*actionGroups\[0\]' "$capture")" = 7
+test "$(grep -c 'action-group show' "$capture")" = 1
+for rule in \
+  worker-vm-unavailable worker-cpu-high app-no-active-replica \
+  app-replica-restart scanner-no-active-replica scanner-replica-restart
+do
+  grep -q "metrics alert show.*--name $rule" "$capture"
+done
+for rule in \
+  scan-readiness-unavailable scan-queue-depth-high scan-queue-oldest-wait-high \
+  reconciliation-drift webhook-dead-letter evidence-persistence-failure \
+  terminal-cost-unreconciled
+do
+  grep -q "scheduled-query show.*--name $rule" "$capture"
+done
+
+# ── Inventory: every application alert code maps exactly once ───────────────
+# Mirrors the OperationalAlertCode union in apps/worker/src/operational-health.ts:
+# each code maps to exactly one scheduled query or metric rule; the single
+# documented exception (scan_worker_lease_expired, no durable counter yet) is
+# never provisioned. The metric set also includes infrastructure-only rules
+# (VM availability, scanner replicas) that have no application code.
+expected_scheduled="evidence-persistence-failure reconciliation-drift scan-queue-depth-high scan-queue-oldest-wait-high scan-readiness-unavailable terminal-cost-unreconciled webhook-dead-letter"
+created_scheduled=$(grep 'scheduled-query create' "$capture" | sed -E 's/.*--name ([^ ]+) .*/\1/' | sort | tr '\n' ' ' | sed 's/ $//')
+test "$created_scheduled" = "$expected_scheduled"
+expected_metric="app-no-active-replica app-replica-restart scanner-no-active-replica scanner-replica-restart worker-cpu-high worker-vm-unavailable"
+created_metric=$(grep 'metrics alert create' "$capture" | sed -E 's/.*--name ([^ ]+) .*/\1/' | sort | tr '\n' ' ' | sed 's/ $//')
+test "$created_metric" = "$expected_metric"
+if grep -q 'scan_worker_lease_expired' "$capture"; then
+  echo "the documented lease-expiry exception must not be provisioned without a durable counter" >&2
+  exit 1
+fi
+grep -q 'scan_worker_lease_expired' ops/monitoring/provision-alerts.sh
+
+# ── Idempotent rerun ────────────────────────────────────────────────────────
+: >"$capture"
+sh ops/monitoring/provision-alerts.sh >/dev/null
+test "$(grep -c 'monitor scheduled-query create' "$capture")" = 7
+test "$(grep -c 'monitor metrics alert create' "$capture")" = 6
+test "$(grep -c 'metrics alert show.*--query enabled' "$capture")" = 6
+test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 7
+if grep -q 'delete' "$capture"; then
+  echo "provisioning rerun must not delete or recreate rules" >&2
+  exit 1
+fi
+
+# ── Empty delivery configuration fails before any mutation ──────────────────
+: >"$capture"
+export LYRASHIELD_OPERATOR_EMAIL=""
+if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
+  echo "provisioning must fail with an empty operator delivery address" >&2
+  exit 1
+fi
+test "$(grep -c 'action-group create' "$capture" || true)" = 0
+unset LYRASHIELD_OPERATOR_EMAIL
+
+# ── Query content stays code-only and bounded ───────────────────────────────
+# Application log queries match structured operator_alert codes only. They
+# must never match queue payloads, customer identifiers, raw errors, provider
+# payloads, tokens, or broad arbitrary prose beyond the readiness transition.
+if grep -nE 'job\.data|workspaceId=|Authorization|token=|error\.stack|provider payload|password=' \
+  ops/monitoring/provision-alerts.sh >/dev/null; then
+  echo "alert queries must not reference queue payloads, customer data, tokens, or provider payloads" >&2
+  exit 1
+fi

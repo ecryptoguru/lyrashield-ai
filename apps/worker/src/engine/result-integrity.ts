@@ -47,11 +47,16 @@ type ResultManifestInput = {
     reconciled: boolean
     reconciliationReason?: string
   }
+  workerExecution?: {
+    productRevision: string
+    workerImageDigest: string
+    engineRevision: string
+  } | null
 }
 
 type FindingInput = EngineVulnerability | NormalizedFinding
 
-const MANIFEST_VERSION = 4
+const MANIFEST_VERSION = 5
 const SCANNER_CONTRACT_VERSION = "2026-08-21"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
@@ -333,6 +338,9 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     urlExecution: input.urlExecution ?? null,
     engineExecution: input.engineExecution ?? null,
     accounting: input.accounting ?? null,
+    // Exact product/image/engine identity of the worker that produced this
+    // result. Bound into the checksum so a manifest cannot be re-attributed.
+    workerExecution: input.workerExecution ?? null,
     // Coverage limitations are part of the immutable result contract. Keep
     // their bounded subjects and reasons in the manifest, not only in the
     // mutable receipt table.

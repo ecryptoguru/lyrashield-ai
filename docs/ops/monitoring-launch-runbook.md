@@ -19,19 +19,24 @@ provisioning. Receiver rotation requires re-running provisioning and a test aler
 
 ## Rules
 
-| Rule                                                 | Fires when                                                                         | Severity |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------- | -------- |
-| `scan-readiness-unavailable`                         | Scan readiness has failed for more than 5 minutes                                  | 1        |
-| `scan-queue-depth-high`                              | Queue depth exceeds twice configured worker concurrency for 10 minutes             | 2        |
-| `scan-queue-oldest-wait-high`                        | Oldest waiting job exceeds 5 minutes                                               | 2        |
-| `reconciliation-drift`                               | Queue reconciliation repairs queue/database drift                                  | 1        |
-| `webhook-dead-letter`                                | At least one required webhook track is dead-lettered                               | 1        |
-| `evidence-persistence-failure`                       | A recent terminal scan records an evidence-storage failure                         | 1        |
-| `terminal-cost-unreconciled`                         | A terminal provider-backed scan remains cost-unreconciled for more than 15 minutes | 1        |
-| `worker-vm-unavailable`                              | Azure VM availability is below 1 for 5 minutes                                     | 1        |
-| `worker-cpu-high`                                    | Worker VM CPU is above 85% for 15 minutes                                          | 2        |
-| `app-no-active-replica`, `scanner-no-active-replica` | Active replica count is below 1 for 5 minutes                                      | 1        |
-| `app-replica-restart`, `scanner-replica-restart`     | Azure reports a replica restart                                                    | 2        |
+Every rule below routes to the single `lyrashield-operator-alerts` action group
+(Primary Production Operator), auto-mitigates when the firing condition clears
+(`autoMitigate=true`), and is read back after provisioning (`enabled`, action-group
+binding, auto-mitigation) before provisioning is considered successful.
+
+| Rule                                                 | Signal source                                 | Fires when (threshold / window)                            | Severity | Auto-resolution               | Readback             |
+| ---------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------- | -------- | ----------------------------- | -------------------- |
+| `scan-readiness-unavailable`                         | App log `Scan service readiness check failed` | Readiness failed more than 5 minutes (10m window, 5m eval) | 1        | Readiness returns 200         | Scheduled-query show |
+| `scan-queue-depth-high`                              | Worker `operator_alert` code                  | Queue depth > 2× concurrency for 10 minutes                | 2        | Depth returns below threshold | Scheduled-query show |
+| `scan-queue-oldest-wait-high`                        | Worker `operator_alert` code                  | Oldest waiting job > 5 minutes                             | 2        | Queue drains below threshold  | Scheduled-query show |
+| `reconciliation-drift`                               | Worker `operator_alert` code                  | Queue/database drift repaired                              | 1        | No drift on next cycle        | Scheduled-query show |
+| `webhook-dead-letter`                                | Worker `operator_alert` code                  | At least one required webhook track dead-lettered          | 1        | Track retried to success      | Scheduled-query show |
+| `evidence-persistence-failure`                       | Worker `operator_alert` code                  | Recent terminal scan records an evidence-storage failure   | 1        | No new failures in window     | Scheduled-query show |
+| `terminal-cost-unreconciled`                         | Worker `operator_alert` code                  | Terminal provider-backed scan unreconciled > 15 minutes    | 1        | Cost reconciled               | Scheduled-query show |
+| `worker-vm-unavailable`                              | Azure `VmAvailabilityMetric`                  | Availability below 1 for 5 minutes                         | 1        | VM available again            | Metrics-alert show   |
+| `worker-cpu-high`                                    | Azure `Percentage CPU`                        | CPU above 85% for 15 minutes                               | 2        | CPU returns below 85%         | Metrics-alert show   |
+| `app-no-active-replica`, `scanner-no-active-replica` | Azure `Replicas`                              | Active replica count below 1 for 5 minutes                 | 1        | Replica count ≥ 1             | Metrics-alert show   |
+| `app-replica-restart`, `scanner-replica-restart`     | Azure `RestartCount`                          | Azure reports a replica restart                            | 2        | No restart in window          | Metrics-alert show   |
 
 Application rules consume redacted structured `operator_alert` records. Azure metric
 rules use documented `VmAvailabilityMetric`, `Percentage CPU`, `Replicas`, and
@@ -46,6 +51,20 @@ Individual expired leases are **INCONCLUSIVE** because the current worker regist
 prunes expired members during heartbeat refresh. Loss of every live lease is covered by
 `scan-readiness-unavailable`; no separate expired-lease rule is provisioned until a
 durable lease-expiry counter exists.
+
+Provider (Polar/Razorpay) readiness is **INCONCLUSIVE**: current logs are
+request-scoped prose that can include provider/catalog context, so there is no stable,
+secret-free global readiness-transition signal to alert on. A provider-readiness rule
+will be added only when the worker or web app emits a structured, redacted
+`operator_alert`-style transition event; do not grep arbitrary prose or log provider
+payloads.
+
+Ownership: the **Primary Production Operator** acknowledges every firing rule within
+five minutes using their named incident identity and records the rule, UTC time, app
+revision, worker image digest, acknowledgment, and admission state. Without
+acknowledgment within five minutes, the **Founder Escalation Owner** takes incident
+command. Stop scan admission before any investigation that could leave readiness,
+queue state, evidence persistence, or cost accounting uncertain.
 
 ## Provision and verify
 
@@ -66,10 +85,12 @@ Then run:
 sh ops/monitoring/provision-alerts.sh
 ```
 
-The script is idempotent. Retain readback output from `az monitor metrics alert list`,
-`az monitor scheduled-query list`, and `az monitor action-group show` with release
-evidence. Confirm every enabled rule references the exact
-`lyrashield-operator-alerts` action-group resource ID. Send one Azure test notification
+The script is idempotent and performs its own readback: after create/update it runs
+`az monitor metrics alert show` and `az monitor scheduled-query show` for every rule and
+fails unless each is enabled, auto-mitigates, and is bound to the exact
+`lyrashield-operator-alerts` action-group resource ID. Retain the script's readback
+output (plus `az monitor metrics alert list`, `az monitor scheduled-query list`, and
+`az monitor action-group show`) with release evidence. Send one Azure test notification
 and retain the named acknowledgment before enabling paid admission.
 
 ## Stop admission

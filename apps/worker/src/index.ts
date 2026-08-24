@@ -3,7 +3,7 @@ import { hostname } from "node:os"
 import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
-import { env } from "@lyrashield/config"
+import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import {
   registerScanWorker,
   handoffScanWorker,
@@ -243,8 +243,22 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
 process.on("SIGTERM", () => void shutdown("SIGTERM"))
 process.on("SIGINT", () => void shutdown("SIGINT"))
 
+/**
+ * Fail-closed worker startup provenance gate. main() calls this before any
+ * Worker construction, readiness marker write, or scan lease registration, so
+ * a production worker without exact product/image/engine identity never
+ * becomes ready and never accepts paid work.
+ */
+export function assertWorkerStartupProvenance() {
+  return resolveWorkerExecutionProvenance()
+}
+
 async function main(): Promise<void> {
   await initSentry()
+  // Gate readiness BEFORE the worker can claim anything: missing or malformed
+  // provenance throws, main() rejects, and the process exits without ever
+  // writing the readiness marker.
+  assertWorkerStartupProvenance()
   logger.info("LyraShield worker starting", { redisConfigured: Boolean(env.REDIS_URL) })
   assertEvidenceStorageConfigured()
   assertRepositoryScanRuntimeConfigured()

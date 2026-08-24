@@ -73,6 +73,70 @@ continue while unexpected work exists. After recovery, require all of:
 Use the queue reconciliation code path and its normal `updateScanStatus` lifecycle.
 Do not delete BullMQ keys or alter a scan row directly to simulate this condition.
 
+## Unified launch-assurance proof
+
+`verify:launch-assurance` composes the evidence round-trip, fail-closed check,
+readiness, Azure alert readback, authenticated cancellation, and shared queue
+recovery into one ordered command that emits a single bounded JSON receipt.
+
+Host prerequisites: reviewed checkout of the promoted product revision, Docker
+with access to the promoted worker image, `az` authenticated for read-only
+Monitor access, the worker runtime environment file, the egress pin file, and
+(for full mode) an API credential and exact target scan/workspace IDs. Founder
+authorization is an external prerequisite for every mutation mode.
+
+Dry run (read-only, CI-safe):
+
+```sh
+pnpm --filter @lyrashield/worker verify:launch-assurance -- --dry-run \
+  --azure-resource-group <rg>
+```
+
+Exit 0 means the available preflight checks passed (`overall: preflight_passed`);
+mutation steps are `skipped` and are never summarized as proof.
+
+Storage proof from the exact promoted image (disposable containers only):
+
+```sh
+pnpm --filter @lyrashield/worker verify:launch-assurance -- \
+  --allow-storage-proof --worker-image "$LYRASHIELD_WORKER_IMAGE" \
+  --worker-env-file /etc/lyrashield/worker.env \
+  --egress-pin-file /run/lyrashield-egress-hosts \
+  --azure-resource-group <rg>
+```
+
+The command runs the existing `verify-evidence-storage.ts` and
+`verify-evidence-storage-fail-closed.ts` entrypoints inside uniquely named
+containers, preserves their `*_OK` markers, removes only the containers it
+created, and fails closed if either marker is absent.
+
+Controlled failure injection (founder-authorized only):
+
+```sh
+pnpm --filter @lyrashield/worker verify:launch-assurance -- \
+  --allow-storage-proof --worker-image "$LYRASHIELD_WORKER_IMAGE" \
+  --worker-env-file /etc/lyrashield/worker.env \
+  --egress-pin-file /run/lyrashield-egress-hosts \
+  --azure-resource-group <rg> \
+  --allow-failure-injection --scan-id <exact-scan-id> --workspace-id <exact-workspace-id> \
+  --environment production \
+  --confirm-production "I AUTHORIZE LYRASHIELD FAILURE INJECTION"
+```
+
+Full mode refuses to proceed when another active scan exists, the selected scan
+is terminal or ambiguous, or the confirmation phrase is not exact. Cancellation
+goes through the authenticated scan API; recovery goes through
+`reconcileScanQueue()` exactly once. The command never deletes BullMQ keys,
+calls `job.remove()`, auto-requeues, or synthesizes paid work.
+
+The receipt contains the mode, timestamp, product revision, worker digest,
+engine revision, selected scan/workspace, ordered step records
+(`passed | failed | skipped`) with bounded reasons, cleanup result, and total
+duration. It never includes secrets, evidence contents/URIs, raw queue jobs,
+customer payloads, or provider tokens. `overall: passed` is not a security
+certification and is always bounded to the exact revision and scan window
+recorded in the receipt.
+
 ## Capacity and incident record
 
 For each release, retain the Azure Monitor charts for worker CPU and app replicas/restarts,
