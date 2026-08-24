@@ -6,6 +6,7 @@ import {
   validateRazorpayWebhook,
   resolveRazorpayEventIdentity,
   normalizeProviderEvent,
+  assertProviderCatalogEvent,
   runApplicableTracks,
   WebhookAuthError,
   WebhookPayloadError,
@@ -166,6 +167,7 @@ export async function POST(request: Request) {
       eventType = event.event
       payload = event
     }
+    assertProviderCatalogEvent(provider, eventType, payload)
   } catch (error) {
     const classified = authErrorResponse(error)
     if (classified) {

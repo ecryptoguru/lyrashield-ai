@@ -39,6 +39,7 @@ vi.mock("@lyrashield/integrations", () => ({
 // validators overridden per-test below, the track executor always mocked.
 const validateRazorpayMock = vi.fn()
 const validatePolarMock = vi.fn()
+const assertCatalogMock = vi.fn()
 const runTracksMock = vi.fn()
 vi.mock("@lyrashield/billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/billing")>()
@@ -46,6 +47,7 @@ vi.mock("@lyrashield/billing", async (importOriginal) => {
     ...actual,
     validatePolarWebhook: (...args: unknown[]) => validatePolarMock(...args),
     validateRazorpayWebhook: (...args: unknown[]) => validateRazorpayMock(...args),
+    assertProviderCatalogEvent: (...args: unknown[]) => assertCatalogMock(...args),
     runApplicableTracks: (...args: unknown[]) => runTracksMock(...args),
   }
 })
@@ -104,6 +106,7 @@ beforeEach(() => {
   // earlier tests (e.g. a persisting mockRejectedValue) before re-priming.
   validateRazorpayMock.mockReset()
   validatePolarMock.mockReset()
+  assertCatalogMock.mockReset().mockReturnValue(null)
   runTracksMock.mockReset().mockResolvedValue(okSummary())
   dispatchAffiliateMock.mockReset().mockResolvedValue(undefined)
   enqueueRetryMock.mockReset().mockResolvedValue("job_1")
@@ -116,6 +119,34 @@ beforeEach(() => {
 })
 
 describe("POST /billing/webhook — event identity and idempotency", () => {
+  it("rejects signed catalog mismatches before claiming a webhook row", async () => {
+    const event = rzEvent("subscription.charged", "sub_UNDERPAID", 1_755_086_400)
+    validateRazorpayMock.mockReturnValue(event)
+    assertCatalogMock.mockImplementation(() => {
+      throw new WebhookPayloadError("Provider catalog evidence mismatch")
+    })
+
+    const response = await POST(razorpayRequest(event))
+
+    expect(response.status).toBe(400)
+    expect(mockPrisma.webhookEvent.create).not.toHaveBeenCalled()
+    expect(runTracksMock).not.toHaveBeenCalled()
+  })
+
+  it("returns 500 for retryable provider-catalog configuration failures", async () => {
+    const event = rzEvent("subscription.charged", "sub_CONFIG", 1_755_086_400)
+    validateRazorpayMock.mockReturnValue(event)
+    assertCatalogMock.mockImplementation(() => {
+      throw new Error("RAZORPAY_PLAN_IDS is missing or malformed")
+    })
+
+    const response = await POST(razorpayRequest(event))
+
+    expect(response.status).toBe(500)
+    expect(mockPrisma.webhookEvent.create).not.toHaveBeenCalled()
+    expect(runTracksMock).not.toHaveBeenCalled()
+  })
+
   it("a-pre) Razorpay lifecycle sharing one resource id yields three distinct identities, all processed", async () => {
     const events = [
       rzEvent("subscription.activated", "sub_LIFE", 1_755_000_000),

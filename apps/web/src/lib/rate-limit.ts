@@ -18,6 +18,10 @@ const AUTH_MAX = readIntEnv("RATE_LIMIT_AUTH_MAX", 5)
 const API_MAX = readIntEnv("RATE_LIMIT_API_MAX", 30)
 const LITE_SCAN_MAX = readIntEnv("RATE_LIMIT_LITE_SCAN_MAX", 5)
 const APPROVAL_CREATE_MAX = readIntEnv("RATE_LIMIT_APPROVAL_CREATE_MAX", 10)
+// Providers may deliver bursts and the idempotency proof intentionally replays
+// 100 signed events concurrently. Keep that proof viable while bounding spoofed
+// signature-shaped traffic before the route performs cryptographic validation.
+const BILLING_WEBHOOK_MAX = readIntEnv("RATE_LIMIT_BILLING_WEBHOOK_MAX", 1_200)
 
 function readIntEnv(name: string, fallback: number): number {
   const raw = process.env[name]
@@ -196,6 +200,12 @@ export async function checkApiRateLimit(ip: string) {
   const upstash = await checkUpstash(API_MAX, "60 s", `api:${ip}`)
   if (upstash) return upstash
   return checkInMemory(`api:${ip}`, API_MAX, WINDOW_MS)
+}
+
+export async function checkBillingWebhookRateLimit(ip: string) {
+  const upstash = await checkUpstash(BILLING_WEBHOOK_MAX, "60 s", `billing-webhook:${ip}`)
+  if (upstash) return upstash
+  return checkInMemory(`billing-webhook:${ip}`, BILLING_WEBHOOK_MAX, WINDOW_MS)
 }
 
 export async function checkLiteScanRateLimit(ipHash: string) {

@@ -101,16 +101,12 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - uses: ecryptoguru/lyrashield-ai@v1
+      - uses: ecryptoguru/lyrashield-ai@v2
         with:
           fail_on_severity: HIGH
 ```
 
-The `--diff` flag limits analysis to changed files, which is critical for Codex generated PRs that touch many files. SARIF upload lets you use GitHub code scanning rules to block merges on critical findings with recorded evidence states while still keeping low risk notes informational. The diff aware gate matters because a full repo scan on a large codebase can time out the job and drown reviewers in preexisting issues, whereas the diff scan returns only findings tied to the PR changes. Add a branch protection rule requiring the gate to pass before merge.
+The Action derives a pull-request diff and limits its advisory checks to changed files, which is useful for Codex-generated PRs that touch many files. Its SARIF results do not carry hosted finding IDs or evidence states. Add a branch-protection rule for the local gate, and run a separate recorded scan when you need retained coverage, evidence, or retest semantics.
 
 ## 6. Add agent rules snippet for Codex
 
@@ -138,6 +134,6 @@ This rule file codifies Target to Scan to Evidence State to Fix Proposal to Rete
 
 ## 7. Why pair Codex with LyraShield
 
-Codex accelerates code change, LyraShield adds the verification layer that is designed to be evidence driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains how fast scaffolding without verification leaves injection and auth gaps that show up late. By pairing, you get a single loop in both editor and CI, plus SARIF that integrates with existing GitHub policy. LyraShield v1 covers agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, so you can replace ad hoc scripts with one consistent flow. Sprints 0 to 2 are shipped, while scan engine MVP, automatic branch and pull-request execution, and billing are on the roadmap and described as designed to capabilities. The pairing works because Codex owns the change and LyraShield owns the evidence, so the same finding with a recorded evidence state flows from editor to CI without reformatting. When a Codex refactor touches auth middleware, the diff scan catches bypasses that unit tests miss.
+Codex accelerates code change; LyraShield adds an evidence-driven verification layer. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains how fast scaffolding without verification leaves injection and authorization gaps that appear late. The implemented product covers scans, SCA, secrets, findings and evidence, approval-gated fix proposals, retests, reports, MCP, and the runner-local GitHub Action. Codex owns the change and LyraShield owns the evidence, so a recorded finding can move from editor review to retest without changing semantics. Automatic server-generated Fix PR execution is not enabled, and the local Action remains an advisory diff gate rather than a recorded hosted scan.
 
 Adopt this by configuring Codex MCP, running one bounded scan on your next AI-generated change, recording a reviewed fix proposal, applying the code change yourself, and polling the queued retest. Expand with the [AI app security checklist](/tools/ai-app-security-checklist), then [create an account at LyraShield AI](https://lyrashieldai.com).

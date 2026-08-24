@@ -12,7 +12,7 @@ faq:
   - q: "Does OpenCode support remote MCP with Bearer?"
     a: "Yes. Use type remote with URL https://app.lyrashieldai.com/api/mcp and pass LYRASHIELD_API_KEY as Bearer via env. The same pattern is used in the GitHub Action."
   - q: "What matches LyraShield v1 scope?"
-    a: "Agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF is v1. Scan engine MVP, Fix Proposal, and billing are on the roadmap and described as designed to, not live automatic."
+    a: "Scans, SCA, secrets, findings and evidence, approval-gated fix proposals, retests, reports, billing, MCP, and the local GitHub Action are implemented. Automatic server-generated Fix PR execution and live paid activation are not enabled."
   - q: "Where does OpenCode read MCP config from?"
     a: "OpenCode reads MCP servers from opencode.json under mcp.servers. Each entry sets type local or remote, command and args for stdio, and url and headers for remote. Keep the LYRASHIELD_API_KEY in the env map so the server reads it from your environment rather than a literal in the file."
 ---
@@ -115,11 +115,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - uses: ecryptoguru/lyrashield-ai@v1
+      - uses: ecryptoguru/lyrashield-ai@v2
         with:
           fail_on_severity: HIGH
 ```
@@ -156,6 +152,6 @@ The agent rules snippet matters because OpenCode loads rules from your rules dir
 
 ## 7. Why pair OpenCode with LyraShield
 
-OpenCode organizes agent work through declarative config, LyraShield adds findings with recorded evidence states that travel from editor to CI without extra scripts. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification matters more as generation volume grows. Pairing gives you Target to Scan to Evidence State to Fix Proposal to Retest to Report in a single tool surface, with SARIF that GitHub understands per [docs.github.com on code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning). v1 scope is agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Sprints 0 to 2 are shipped, scan engine MVP, Fix Proposal, and billing remain on the roadmap and are described as designed to.
+OpenCode organizes agent work through declarative config; LyraShield adds findings with explicit evidence states. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification matters more as generation volume grows. The implemented product covers Target to Scan to Evidence State to approval-gated Fix Proposal to Retest to Report, plus SCA, secrets, MCP, billing, and a runner-local SARIF Action. The Action is an advisory diff gate rather than a recorded hosted scan, and automatic server-generated Fix PR execution is not enabled.
 
 To adopt this, add the MCP servers to `opencode.json`, verify the tool list, run a diff scan on your next feature branch, propose one Fix Proposal with a test, and track retest results via SARIF. Then deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://lyrashieldai.com) for engine execution updates.

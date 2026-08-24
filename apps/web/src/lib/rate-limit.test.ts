@@ -7,8 +7,12 @@ vi.mock("@lyrashield/config", () => ({
   isProd: false,
 }))
 
-const { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } =
-  await import("./rate-limit")
+const {
+  checkAuthRateLimit,
+  checkApiRateLimit,
+  checkBillingWebhookRateLimit,
+  checkLiteScanRateLimit,
+} = await import("./rate-limit")
 
 describe("Rate Limiter", () => {
   beforeEach(() => {
@@ -116,6 +120,19 @@ describe("Rate Limiter", () => {
       const result = await checkLiteScanRateLimit("hashed-client-b")
       expect(result.limited).toBe(false)
       expect(result.remaining).toBe(4)
+    })
+  })
+
+  describe("checkBillingWebhookRateLimit (in-memory, 1200/min)", () => {
+    it("admits the 100-request concurrent replay proof and remains bounded", async () => {
+      const replay = await Promise.all(
+        Array.from({ length: 100 }, () => checkBillingWebhookRateLimit("provider-proof"))
+      )
+      expect(replay.every((result) => !result.limited)).toBe(true)
+      for (let i = 100; i < 1_200; i++) {
+        expect((await checkBillingWebhookRateLimit("provider-proof")).limited).toBe(false)
+      }
+      expect((await checkBillingWebhookRateLimit("provider-proof")).limited).toBe(true)
     })
   })
 })

@@ -2,11 +2,11 @@ import { z } from "zod"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
-  resolveProvider,
   createPolarOneTimeCheckout,
   createRazorpayPaymentLink,
   resolveProviderId,
   MINUTE_PACK_MAP,
+  billingQuoteNotes,
   type PackId,
 } from "@lyrashield/billing"
 import { apiError, apiSuccess } from "@/lib/api-response"
@@ -14,7 +14,11 @@ import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
-import { billingAdmissionError, paymentsUnavailableError } from "@/lib/billing-admission"
+import {
+  billingAdmissionError,
+  paymentsUnavailableError,
+  resolveRequestBillingProvider,
+} from "@/lib/billing-admission"
 
 const TopUpSchema = z
   .object({
@@ -63,8 +67,8 @@ export async function POST(request: Request) {
     }
 
     // A-L04: Client-side region override removed — server-side geo routing only
-    const { provider } = resolveProvider(request)
-    const admissionError = billingAdmissionError(provider, workspaceId)
+    const { provider } = resolveRequestBillingProvider(request)
+    const admissionError = billingAdmissionError(provider, workspaceId, request)
     if (admissionError) return admissionError
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
@@ -98,11 +102,19 @@ export async function POST(request: Request) {
       // Amount in paise (1 INR = 100 paise)
       // A-L02: Use configurable USD→INR rate instead of hardcoded 83
       const usdInrRate = env.BILLING_USD_INR_RATE
-      const amountInr = pack.priceUsd * usdInrRate * 100
+      const amountInr = Math.round(pack.priceUsd * usdInrRate * 100)
+      const quoteNotes = billingQuoteNotes({
+        provider: "razorpay",
+        kind: "pack",
+        workspaceId,
+        catalogKey: packId,
+        amountMinor: amountInr,
+        currency: "INR",
+      })
       const result = await createRazorpayPaymentLink({
-        amount: Math.round(amountInr),
+        amount: amountInr,
         description: pack.name,
-        notes: metadata,
+        notes: { ...metadata, ...quoteNotes },
         callbackUrl: successUrl,
       })
 

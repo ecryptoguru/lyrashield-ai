@@ -165,23 +165,11 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: LyraShield diff scan
-        uses: lyrashieldai/action@v1
+        uses: ecryptoguru/lyrashield-ai@v2
         with:
-          api-key: ${{ secrets.LYRASHIELD_API_KEY }}
-          diff-mode: true
-          target: auto
-          sarif-output: results.sarif
-          fail-on: high
-      - name: Upload SARIF to code scanning
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: results.sarif
+          fail_on_severity: HIGH
 ```
 
 Require the security job in branch protection settings. The pairing of MCP for local dev plus the Action for CI mirrors the Model Context Protocol idea of keeping context close to the agent while enforcing policy in CI. See [GitHub Actions docs](https://docs.github.com/en/actions) for reusable workflows and [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for transport details. Once required, developers cannot merge when findings meet the configured severity gate; that policy does not turn a detected finding into an independently verified one.

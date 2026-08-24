@@ -1,7 +1,7 @@
 ---
 title: GitHub Copilot MCP Security Workflow Setup Guide
 description: Setup guide for the LyraShield MCP security workflow in GitHub Copilot using the Agent Plugin and CLI, with config, verification, and a GitHub Action diff gate.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -51,7 +51,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: ecryptoguru/lyrashield-ai@v1
+      - uses: ecryptoguru/lyrashield-ai@v2
         with:
           fail_on_severity: HIGH
 ```
@@ -64,12 +64,12 @@ The plugin writes a copilot instructions file, so keep your project rules focuse
 Before finishing a feature, run a LyraShield security check and attach the findings link to the pull request. Never commit secrets. If a high severity issue is found, stop and ask for review.
 ```
 
-| Workflow step | Command or action | Purpose |
-| --- | --- | --- |
-| Authenticate | npx lyrashield login | Store credentials locally |
-| Install plugin | Agent Plugin one step | Bundle server and skill |
-| Verify | npx lyrashield doctor | Confirm server reachable |
-| CI gate | GitHub Action on diff | Block on new findings |
+| Workflow step  | Command or action     | Purpose                   |
+| -------------- | --------------------- | ------------------------- |
+| Authenticate   | npx lyrashield login  | Store credentials locally |
+| Install plugin | Agent Plugin one step | Bundle server and skill   |
+| Verify         | npx lyrashield doctor | Confirm server reachable  |
+| CI gate        | GitHub Action on diff | Block on new findings     |
 
 ## Why pair GitHub Copilot with LyraShield AI
 

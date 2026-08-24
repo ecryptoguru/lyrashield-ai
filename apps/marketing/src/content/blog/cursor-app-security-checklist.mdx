@@ -1,7 +1,7 @@
 ---
 title: Cursor app security checklist for AI built code
 description: Harden Cursor built apps before release with MCP config checks, rules hardening, secret scanning, dependency review and verified evidence.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -17,6 +17,7 @@ faq:
   - q: Where does Cursor store MCP server config?
     a: Cursor stores MCP servers in .cursor/mcp.json at the project root under mcpServers. Use the project file for the LyraShield entry so the team shares one server definition, and keep real keys in environment variables referenced by the env block, never as literals.
 ---
+
 Cursor lets you ship fast but AI generated code can hide secrets, vulnerable packages and overly broad tool access. This checklist shows how to review Cursor rules, lock down .cursor/mcp.json with env var references, gate dependencies and secrets, and capture SARIF for release evidence. Pair it with LyraShield as release assurance for AI built apps. Start with our broader [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls then apply the Cursor specific steps below.
 
 ## Why cursor builds need a review
@@ -68,11 +69,11 @@ Secure pattern:
 
 Key hardening points:
 
-* Use `${env:VAR}` interpolation, not raw tokens. Env vars stay outside git.
-* Keep .cursor/mcp.json in git but validate it in CI that no literal sk keys appear. Use a secret scanner before merge.
-* Limit tool scope per server. Prefer servers that expose only needed methods, like read only database tools for code generation context.
-* Separate local and shared config. Local overrides should not be committed with personal paths.
-* For remote MCP, Cursor can call [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) with Bearer lsk key via env var. See [MCP spec overview](https://modelcontextprotocol.io/specification/2025-06-18) for transport and auth expectations.
+- Use `${env:VAR}` interpolation, not raw tokens. Env vars stay outside git.
+- Keep .cursor/mcp.json in git but validate it in CI that no literal sk keys appear. Use a secret scanner before merge.
+- Limit tool scope per server. Prefer servers that expose only needed methods, like read only database tools for code generation context.
+- Separate local and shared config. Local overrides should not be committed with personal paths.
+- For remote MCP, Cursor can call [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) with Bearer lsk key via env var. See [MCP spec overview](https://modelcontextprotocol.io/specification/2025-06-18) for transport and auth expectations.
 
 Review the MCP config on every pull request that changes tooling. Treat new MCP servers like dependencies, with an owner and review date.
 
@@ -113,14 +114,14 @@ See GitHub guidance at [GitHub SARIF upload](https://docs.github.com/en/code-sec
 
 Capture screenshots or logs for manual checks that cannot be automated. A simple markdown file in docs slash security evidence with dates, tools run and reviewers adds verification value.
 
-| Check | Where to configure | What good looks like |
-| --- | --- | --- |
-| Rules hardening | .cursor/rules, settings | No destructive commands, auth required on routes, allowed registries pinned |
-| MCP lockdown | .cursor/mcp.json mcpServers with env interpolation | No raw keys in git, least privilege servers, reviewed on PR |
-| Agent permissions | Cursor approval mode, command allow list | Shell requires confirm, no prod deploy from agent token |
-| Dependency gate | CI with OSV and npm audit | High severity blocks merge, exceptions documented |
-| Secret gate | gitleaks, env file policy | No secrets in repo, env vars from manager, SARIF uploaded |
-| Release evidence | GitHub Actions SARIF | SARIF on PR and main, evidence file per release |
+| Check             | Where to configure                                 | What good looks like                                                        |
+| ----------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
+| Rules hardening   | .cursor/rules, settings                            | No destructive commands, auth required on routes, allowed registries pinned |
+| MCP lockdown      | .cursor/mcp.json mcpServers with env interpolation | No raw keys in git, least privilege servers, reviewed on PR                 |
+| Agent permissions | Cursor approval mode, command allow list           | Shell requires confirm, no prod deploy from agent token                     |
+| Dependency gate   | CI with OSV and npm audit                          | High severity blocks merge, exceptions documented                           |
+| Secret gate       | gitleaks, env file policy                          | No secrets in repo, env vars from manager, SARIF uploaded                   |
+| Release evidence  | GitHub Actions SARIF                               | SARIF on PR and main, evidence file per release                             |
 
 ## Why pair cursor with LyraShield
 
@@ -128,7 +129,7 @@ LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.c
 
 MCP integration fits Cursor. Local stdio via npx -y @lyrashield/mcp keeps tokens in env vars, and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 
-Status note: LyraShield is live in open beta with open registration. Scan engine MVP, automated fix execution and billing are on the roadmap. Today LyraShield provides the checklist framework, MCP config and SARIF shape, with automated scans planned in upcoming milestones. V1 targets agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
+Status note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. MCP and the runner-local GitHub Action are available now; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 Pairing gives you a consistent loop across editors while Cursor handles fast iteration locally.
 

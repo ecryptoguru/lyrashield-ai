@@ -4,6 +4,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("../../usage/refund", () => ({
   reverseRefund: vi.fn().mockResolvedValue({ reversed: true, minutesReversed: 100 }),
 }))
+vi.mock("../../provider-catalog-validation", () => ({
+  resolvePolarCatalogEvent: () => null,
+}))
 
 vi.mock("@lyrashield/pricing", () => ({
   MINUTE_PACK_MAP: {

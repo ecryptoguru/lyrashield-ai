@@ -12,7 +12,7 @@ faq:
   - q: "What does the GitHub Action gate add beyond editor checks?"
     a: "The diff aware gate runs on pull requests, blocks risky code paths with SARIF results, and keeps retest and report steps consistent between local Zed runs and CI. It is designed to enforce the same policy for every contributor."
   - q: "Is LyraShield scanning live today?"
-    a: "Sprints 0 to 2 are shipped. The scan engine MVP, Fix Proposal generation, and billing are on the roadmap and described as designed to capabilities, not live automatic behavior. You can configure MCP now and adopt verification as it rolls out."
+    a: "Scans, findings and evidence, approval-gated fix proposals, retests, reports, billing, MCP, and the local GitHub Action are implemented. Automatic server-generated Fix PR execution and live paid activation are not enabled."
   - q: "How should I manage the Bearer lsk_ key across local and CI setups?"
     a: "Treat the lsk_ key like any secret. Load it from your shell env for local stdio, from a password manager for remote HTTP in Zed, and from GitHub Actions encrypted secrets for the diff gate. Never hardcode it in settings.json and never commit it, because context_servers files are often shared between machines and repos."
 ---
@@ -97,11 +97,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - uses: ecryptoguru/lyrashield-ai@v1
+      - uses: ecryptoguru/lyrashield-ai@v2
         with:
           fail_on_severity: HIGH
 ```

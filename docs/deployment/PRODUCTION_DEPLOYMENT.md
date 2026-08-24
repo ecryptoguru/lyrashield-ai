@@ -345,7 +345,7 @@ expected current or rollback revision is missing.
 
 ### Worker-only configuration
 
-The production worker also requires the restricted runtime database URL and the separate privileged ownership-check URL. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. It also requires the authenticated egress-proxy URL and secret so a worker cannot accept production URL jobs without the safe fetch boundary. Do not set `DATABASE_SYSTEM_URL` on web or Lite Scanner processes.
+The production worker also requires the restricted runtime database URL and the separate privileged ownership-check URL. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. It also requires the authenticated egress-proxy URL and secret so a worker cannot accept production URL jobs without the safe fetch boundary. Do not set `DATABASE_SYSTEM_URL` on production web or Lite Scanner processes. The only web exception is the isolated billing-staging workflow, which constructs `DATABASE_SYSTEM_URL` for the no-membership/NOREPLICATION `app_system_staging` role limited to exact license operations; it never binds the PostgreSQL admin URL, and it keeps ordinary staging app traffic on `app_runtime_staging` with RLS enforced.
 
 ```bash
 DATABASE_URL="postgresql://..." # worker-database-url; RLS-restricted runtime role
