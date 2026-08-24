@@ -36,7 +36,11 @@ export async function processRazorpayEvent(
       case "payment_link.paid":
         // Local license and affiliate effects run in their dedicated required
         // tracks. Billing records receipt without granting cloud entitlement.
-        resolveRazorpayCatalogEvent(event.event, event as unknown as Record<string, unknown>)
+        if (
+          !resolveRazorpayCatalogEvent(event.event, event as unknown as Record<string, unknown>)
+        ) {
+          return { handled: false, action: "payment_link.paid.unrelated", workspaceId: null }
+        }
         return { handled: true, action: "payment_link.paid.received", workspaceId: null }
 
       case "payment.captured": {

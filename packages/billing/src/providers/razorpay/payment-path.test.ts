@@ -66,20 +66,33 @@ describe("Razorpay captured non-pack payments", () => {
     expect(creditTopUpMock).not.toHaveBeenCalled()
   })
 
-  it.each([
-    [{ kind: "local", sku: "individual_launch" }, "plink_local"],
-    [null, "plink_unrelated"],
-  ])("records Local and unrelated Payment Links without cloud credit", async (catalog, id) => {
-    resolveCatalogMock.mockReturnValue(catalog)
+  it("records Local Payment Links without cloud credit", async () => {
+    resolveCatalogMock.mockReturnValue({ kind: "local", sku: "individual_launch" })
     await expect(
       processRazorpayEvent({
         event: "payment_link.paid",
         created_at: Math.floor(Date.now() / 1000),
-        payload: { payment_link: { entity: { id, notes: {} } } },
+        payload: { payment_link: { entity: { id: "plink_local", notes: {} } } },
       })
     ).resolves.toEqual({
       handled: true,
       action: "payment_link.paid.received",
+      workspaceId: null,
+    })
+    expect(creditTopUpMock).not.toHaveBeenCalled()
+  })
+
+  it("classifies unrelated Payment Links as no-effect", async () => {
+    resolveCatalogMock.mockReturnValue(null)
+    await expect(
+      processRazorpayEvent({
+        event: "payment_link.paid",
+        created_at: Math.floor(Date.now() / 1000),
+        payload: { payment_link: { entity: { id: "plink_unrelated", notes: {} } } },
+      })
+    ).resolves.toEqual({
+      handled: false,
+      action: "payment_link.paid.unrelated",
       workspaceId: null,
     })
     expect(creditTopUpMock).not.toHaveBeenCalled()
