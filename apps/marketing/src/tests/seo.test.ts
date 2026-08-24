@@ -143,6 +143,8 @@ describe("marketing SEO metadata", () => {
 
   it("keeps Cloudflare asset URLs aligned with no-trailing-slash canonicals", () => {
     const wranglerConfig = source("../../wrangler.jsonc")
+    const middleware = source("../middleware.ts")
+    const redirects = source("../../public/_redirects")
     const parsed = parseJsonc<{
       vars: { PUBLIC_SITE_URL: string; PUBLIC_APP_URL: string; PUBLIC_INDEXABLE: string }
     }>(wranglerConfig)
@@ -151,6 +153,15 @@ describe("marketing SEO metadata", () => {
     expect(parsed.vars.PUBLIC_SITE_URL).toBe("https://lyrashieldai.com")
     expect(parsed.vars.PUBLIC_APP_URL).toBe("https://app.lyrashieldai.com")
     expect(parsed.vars.PUBLIC_INDEXABLE).toBe("true")
+    for (const [pathname, target] of [
+      ["/docs", "/docs/integrations"],
+      ["/resources", "/blog"],
+      ["/how-it-works", "/#how-it-works"],
+      ["/docs/integrations/windsurf", "/docs/integrations/devin"],
+    ]) {
+      expect(redirects).toContain(`${pathname} ${target} 301`)
+      expect(middleware).toContain(`${JSON.stringify(pathname)}: ${JSON.stringify(target)}`)
+    }
   })
 
   it("captures privacy-bounded PostHog page lifecycle events without query or fragment data", () => {

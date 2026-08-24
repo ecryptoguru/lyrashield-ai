@@ -46,6 +46,13 @@ Do not mix Sandbox/Test values with production catalog IDs or webhook endpoints.
 Changing `POLAR_ENVIRONMENT` without rotating the whole Polar credential and
 catalog set fails review even when checkout admission is off.
 
+The isolated Azure billing-staging resources use a private database and are not
+deployed through the production workflow. Do not reuse production Azure
+credentials or resource variables for staging. A future declarative deployment
+must first have a protected staging-only Azure identity and must run migrations
+from inside the staging VNet (for example, as a one-shot Container Apps job);
+GitHub-hosted runners cannot directly migrate the private database.
+
 ## Local purchase contract
 
 `individual_launch` is the only purchasable Local SKU: USD 199 globally or INR
@@ -85,6 +92,41 @@ Razorpay requires an `rzp_test_` key ID. The suite supplies `workspaceId`, rejec
 client region overrides, signs raw webhook bodies, and checks durable replay
 effects. Hosted-checkout payment-method availability still needs a Brave receipt
 because Razorpay owns that UI.
+
+The current suite can provision its own unique verified OWNER and VIEWER,
+in-memory session states, workspace, and policy. It refuses the production
+LyraShield AI origins and will not mutate until all of the following agree:
+
+- `BILLING_E2E_DISPOSABLE_CONFIRM="DELETE DISPOSABLE BILLING DATA"`;
+- `BILLING_E2E_EXPECTED_DATABASE` equals PostgreSQL `current_database()`;
+- `BILLING_E2E_EXPECTED_DATABASE_HOST` equals the host in both database URLs;
+- remote origins additionally set `LYRASHIELD_E2E_BASE_URL` and
+  `BILLING_E2E_ALLOW_REMOTE=1`.
+
+Use `BILLING_E2E_ACCESS_HEADER_NAME` and `BILLING_E2E_ACCESS_HEADER_VALUE` only
+for the restricted staging access gateway. The header is applied in memory and
+is not persisted in browser storage state. The fixture deletes the VIEWER first
+and then uses the RLS-safe account-deletion path to remove the OWNER and its
+workspace. License tests separately delete their exact issued license because
+license workspace deletion intentionally uses `SET NULL`.
+
+Run Polar and Razorpay separately or together:
+
+```sh
+pnpm exec playwright test e2e/billing/checkout-flows.spec.ts --project=chromium
+pnpm exec playwright test e2e/billing/razorpay-upi-cap-fallback.spec.ts --project=chromium
+pnpm exec playwright test e2e/billing --project=chromium
+```
+
+Set `BILLING_E2E_LOCAL_MODE=1` only when Local admission is deliberately
+`public` in the isolated provider environment and test email delivery plus the
+Ed25519 signing configuration are working. The suite otherwise skips Local
+license fulfillment rather than weakening production delivery behavior.
+Razorpay Test subscriptions created by the matrix are canceled in teardown.
+Provider-hosted Sandbox checkout sessions and payment links are not charges and
+may remain visible until provider expiry; record and prune them under the
+provider's test-data retention procedure when the dashboard offers no supported
+cancel operation.
 
 Live-mode inspection may confirm KYC, settlement, catalog, webhooks, and payment
 methods. It must not submit payment details, accept new financial terms, change

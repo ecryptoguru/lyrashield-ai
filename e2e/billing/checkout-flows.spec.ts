@@ -1,145 +1,272 @@
-import { createHmac } from "node:crypto"
 import { expect, test } from "@playwright/test"
-import { prisma } from "@lyrashield/db"
+import { getSystemPrisma } from "@lyrashield/db"
+import { expectViewerBillingDenied, provisionBillingActors, type BillingActors } from "./fixtures"
+import { assertSingleProcessedEffect, postPolarWebhook, replayOneHundred } from "./webhook-helpers"
 
-/**
- * Polar Sandbox checkout and signed-webhook receipt proof.
- *
- * Requires a disposable verified OWNER session and workspace. It creates
- * hosted Sandbox checkout objects but never submits payment details. Signed
- * webhook fixtures prove application effects against the disposable database.
- */
-const workspaceId = process.env.BILLING_E2E_WORKSPACE_ID?.trim() ?? ""
-const storageState = process.env.BILLING_E2E_STORAGE_STATE?.trim() ?? ""
-const webhookSecret = process.env.POLAR_WEBHOOK_SECRET?.trim() ?? ""
 const enabled =
   process.env.POLAR_TEST_MODE === "1" &&
   process.env.POLAR_ENVIRONMENT === "sandbox" &&
-  Boolean(workspaceId && storageState && webhookSecret)
+  Boolean(process.env.POLAR_ACCESS_TOKEN && process.env.POLAR_WEBHOOK_SECRET)
+const prisma = getSystemPrisma()
+const plans = ["STARTER", "PRO", "TEAM"] as const
+const intervals = ["monthly", "annual"] as const
+const packs = [
+  ["pack_100", 100],
+  ["pack_250", 250],
+  ["pack_500", 500],
+] as const
 
-if (storageState) test.use({ storageState })
+test.describe("Polar Sandbox billing proof", () => {
+  test.skip(!enabled, "requires an isolated Polar Sandbox billing environment")
+  test.describe.configure({ mode: "serial" })
+  let actors: BillingActors
+  let affiliateProgramId: string | null = null
+  let affiliateId: string
 
-function polarHeaders(id: string, body: string): Record<string, string> {
-  if (!webhookSecret.startsWith("whsec_")) {
-    throw new Error("POLAR_WEBHOOK_SECRET must use the whsec_ format")
-  }
-  const timestamp = String(Math.floor(Date.now() / 1000))
-  const key = Buffer.from(webhookSecret.slice("whsec_".length), "base64")
-  const signature = createHmac("sha256", key).update(`${id}.${timestamp}.${body}`).digest("base64")
-  return {
-    "content-type": "application/json",
-    "webhook-id": id,
-    "webhook-timestamp": timestamp,
-    "webhook-signature": `v1,${signature}`,
-  }
-}
-
-async function postPolarWebhook(
-  request: import("@playwright/test").APIRequestContext,
-  id: string,
-  event: Record<string, unknown>
-) {
-  const body = JSON.stringify(event)
-  return request.post("/billing/webhook", { data: body, headers: polarHeaders(id, body) })
-}
-
-test.describe("Checkout flows (Polar Sandbox)", () => {
-  test.skip(
-    !enabled,
-    "requires Polar Sandbox plus BILLING_E2E_WORKSPACE_ID and BILLING_E2E_STORAGE_STATE"
-  )
-
-  test("monthly checkout and signed active event grant the monthly pool", async ({ request }) => {
-    const checkoutResponse = await request.post("/billing/checkout", {
-      data: { workspaceId, plan: "STARTER", interval: "monthly" },
-    })
-    await expect(checkoutResponse).toBeOK()
-    await expect(checkoutResponse.json()).resolves.toMatchObject({
-      success: true,
-      data: { provider: "polar" },
-    })
-
-    const receipt = await postPolarWebhook(request, `polar-monthly-${Date.now()}`, {
-      type: "subscription.active",
-      data: {
-        id: `sub-monthly-${Date.now()}`,
-        status: "active",
-        current_period_start: new Date().toISOString(),
-        current_period_end: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-        metadata: { workspaceId, plan: "STARTER", interval: "monthly" },
-      },
-    })
-    await expect(receipt).toBeOK()
-
-    const usageResponse = await request.get(`/api/billing/usage?workspaceId=${workspaceId}`)
-    await expect(usageResponse).toBeOK()
-    await expect(usageResponse.json()).resolves.toMatchObject({
-      data: { plan: "STARTER", usage: { poolMinutes: 300 } },
-    })
-  })
-
-  test("annual checkout grants one monthly PRO pool, not twelve", async ({ request }) => {
-    const checkoutResponse = await request.post("/billing/checkout", {
-      data: { workspaceId, plan: "PRO", interval: "annual" },
-    })
-    await expect(checkoutResponse).toBeOK()
-
-    const receipt = await postPolarWebhook(request, `polar-annual-${Date.now()}`, {
-      type: "subscription.active",
-      data: {
-        id: `sub-annual-${Date.now()}`,
-        status: "active",
-        current_period_start: new Date(Date.now() + 1_000).toISOString(),
-        current_period_end: new Date(Date.now() + 365 * 86_400_000).toISOString(),
-        metadata: { workspaceId, plan: "PRO", interval: "annual" },
-      },
-    })
-    await expect(receipt).toBeOK()
-
-    const usageResponse = await request.get(`/api/billing/usage?workspaceId=${workspaceId}`)
-    const usage = await usageResponse.json()
-    expect(usage.data.usage.poolMinutes).toBe(1200)
-  })
-
-  test("minute pack, refund, and 100 replays produce one durable effect", async ({ request }) => {
-    const topupResponse = await request.post("/api/billing/topup", {
-      data: { workspaceId, pack: "pack_100" },
-    })
-    await expect(topupResponse).toBeOK()
-
-    const orderId = `order-pack-${Date.now()}`
-    const eventId = `polar-pack-${Date.now()}`
-    const paidEvent = {
-      type: "order.paid",
-      data: { id: orderId, metadata: { workspaceId, packId: "pack_100" } },
+  test.beforeAll(async ({ browser }, testInfo) => {
+    actors = await provisionBillingActors(browser, String(testInfo.project.use.baseURL))
+    const activeProgram = await prisma.affiliateProgram.findFirst({ where: { active: true } })
+    if (!activeProgram) {
+      affiliateProgramId = (
+        await prisma.affiliateProgram.create({
+          data: { slug: `billing-e2e-${Date.now()}`, active: true },
+        })
+      ).id
     }
-    await expect(await postPolarWebhook(request, eventId, paidEvent)).toBeOK()
-    const replays = await Promise.all(
-      Array.from({ length: 100 }, () => postPolarWebhook(request, eventId, paidEvent))
-    )
-    for (const replay of replays) await expect(replay).toBeOK()
-
-    expect(
-      await prisma.webhookEvent.count({
-        where: { provider: "polar", externalId: eventId, processed: true },
+    affiliateId = (
+      await prisma.affiliate.create({
+        data: {
+          userId: actors.viewerUserId,
+          status: "APPROVED",
+          approvedAt: new Date(),
+          acceptedTermsAt: new Date(),
+          termsVersion: "billing-e2e",
+        },
       })
-    ).toBe(1)
-    expect(await prisma.minutePack.count({ where: { workspaceId, externalId: orderId } })).toBe(1)
+    ).id
+  })
 
-    const refundId = `polar-refund-${Date.now()}`
+  test.afterAll(async () => {
+    try {
+      await actors?.cleanup()
+    } finally {
+      if (affiliateProgramId) {
+        await prisma.affiliateProgram.delete({ where: { id: affiliateProgramId } })
+      }
+    }
+  })
+
+  test("VIEWER cannot use billing-management routes", async () => {
+    await expectViewerBillingDenied(actors.viewerRequest, actors.workspaceId)
+  })
+
+  for (const plan of plans) {
+    for (const interval of intervals) {
+      test(`${plan} ${interval} creates a hosted Sandbox checkout`, async () => {
+        const response = await actors.ownerRequest.post("/billing/checkout", {
+          data: { workspaceId: actors.workspaceId, plan, interval },
+        })
+        await expect(response).toBeOK()
+        const body = await response.json()
+        expect(body).toMatchObject({ success: true, data: { provider: "polar" } })
+        expect(new URL(body.data.url).protocol).toBe("https:")
+      })
+    }
+  }
+
+  test("signed activation, 100 replays, and cancellation persist exactly once", async () => {
+    const subscriptionId = `polar-sub-${Date.now()}`
+    const activeEventId = `polar-active-${Date.now()}`
+    const data = {
+      id: subscriptionId,
+      status: "active",
+      current_period_start: new Date().toISOString(),
+      current_period_end: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      metadata: { workspaceId: actors.workspaceId, plan: "PRO", interval: "monthly" },
+    }
+    const active = { type: "subscription.active", data }
+    await expect(await postPolarWebhook(actors.ownerRequest, activeEventId, active)).toBeOK()
+    await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, activeEventId, active))
+    await assertSingleProcessedEffect({
+      provider: "polar",
+      eventId: activeEventId,
+      tracks: ["billing"],
+    })
+    expect(
+      await prisma.billingAccount.findUnique({ where: { workspaceId: actors.workspaceId } })
+    ).toMatchObject({ externalId: subscriptionId, currentPlan: "PRO", status: "active" })
+    expect(
+      await prisma.auditLog.count({
+        where: { workspaceId: actors.workspaceId, action: "billing.subscription_synced" },
+      })
+    ).toBeGreaterThan(0)
+
+    const canceledEventId = `polar-canceled-${Date.now()}`
     await expect(
-      await postPolarWebhook(request, refundId, {
-        type: "refund.created",
-        data: { id: refundId, order_id: orderId, metadata: { workspaceId } },
+      await postPolarWebhook(actors.ownerRequest, canceledEventId, {
+        type: "subscription.canceled",
+        data: { ...data, status: "canceled", canceled_at: new Date().toISOString() },
       })
     ).toBeOK()
-    await expect
-      .poll(() =>
-        prisma.minutePack.findFirst({
-          where: { workspaceId, externalId: orderId },
-          select: { remainingMinutes: true },
+    await assertSingleProcessedEffect({
+      provider: "polar",
+      eventId: canceledEventId,
+      tracks: ["billing"],
+    })
+    expect(
+      await prisma.billingAccount.findUnique({ where: { workspaceId: actors.workspaceId } })
+    ).toMatchObject({ status: "canceled" })
+  })
+
+  for (const [packId, minutes] of packs) {
+    test(`${packId} checkout and signed credit create no commission`, async () => {
+      const checkout = await actors.ownerRequest.post("/api/billing/topup", {
+        data: { workspaceId: actors.workspaceId, pack: packId },
+      })
+      await expect(checkout).toBeOK()
+      const before = await prisma.commission.count()
+      const orderId = `polar-${packId}-${Date.now()}`
+      const eventId = `polar-${packId}-event-${Date.now()}`
+      const event = {
+        type: "order.paid",
+        data: {
+          id: orderId,
+          currency: "USD",
+          total_amount: 1500,
+          discount_amount: 0,
+          tax_amount: 0,
+          net_amount: 1500,
+          metadata: { workspaceId: actors.workspaceId, packId },
+        },
+      }
+      await expect(await postPolarWebhook(actors.ownerRequest, eventId, event)).toBeOK()
+      if (packId === "pack_100") {
+        await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, eventId, event))
+      }
+      await assertSingleProcessedEffect({ provider: "polar", eventId, tracks: ["billing"] })
+      expect(
+        await prisma.minutePack.findUnique({
+          where: {
+            workspaceId_externalId: { workspaceId: actors.workspaceId, externalId: orderId },
+          },
         })
-      )
-      .toMatchObject({ remainingMinutes: 0 })
+      ).toMatchObject({ workspaceId: actors.workspaceId, provider: "polar", minutes })
+      expect(await prisma.commission.count()).toBe(before)
+    })
+  }
+
+  test("affiliate-attributed Cloud payment is commissioned, then reversed by refund", async () => {
+    const orderId = `polar-affiliate-${Date.now()}`
+    const paidEventId = `polar-affiliate-paid-${Date.now()}`
+    const event = {
+      type: "order.paid",
+      data: {
+        id: orderId,
+        customer_id: `customer-${Date.now()}`,
+        customer_email: actors.ownerEmail,
+        currency: "USD",
+        total_amount: 4900,
+        discount_amount: 0,
+        tax_amount: 0,
+        net_amount: 4900,
+        metadata: {
+          workspaceId: actors.workspaceId,
+          plan: "PRO",
+          planId: "PRO",
+          subscriptionId: `polar-affiliate-sub-${Date.now()}`,
+          isFirstPayment: true,
+          affiliate_id: affiliateId,
+        },
+      },
+    }
+    await expect(await postPolarWebhook(actors.ownerRequest, paidEventId, event)).toBeOK()
+    await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, paidEventId, event))
+    await assertSingleProcessedEffect({
+      provider: "polar",
+      eventId: paidEventId,
+      tracks: ["billing", "affiliate"],
+    })
+    const commission = await prisma.commission.findFirstOrThrow({
+      where: { affiliateId, conversion: { externalId: orderId } },
+    })
+    expect(commission.status).toBe("PENDING")
+
+    const refundEventId = `polar-affiliate-refund-${Date.now()}`
+    await expect(
+      await postPolarWebhook(actors.ownerRequest, refundEventId, {
+        type: "refund.created",
+        data: {
+          id: refundEventId,
+          order_id: orderId,
+          amount: 4900,
+          currency: "USD",
+          metadata: { workspaceId: actors.workspaceId },
+        },
+      })
+    ).toBeOK()
+    await assertSingleProcessedEffect({
+      provider: "polar",
+      eventId: refundEventId,
+      tracks: ["billing", "affiliate"],
+    })
+    expect(await prisma.commission.findUnique({ where: { id: commission.id } })).toMatchObject({
+      status: "REVERSED",
+    })
+    expect(
+      await prisma.auditLog.count({
+        where: { workspaceId: actors.workspaceId, action: "billing.refund_reversed" },
+      })
+    ).toBeGreaterThan(0)
+  })
+
+  test("Local individual_launch fulfills one signed license", async () => {
+    test.skip(
+      process.env.BILLING_E2E_LOCAL_MODE !== "1",
+      "requires public Local Sandbox admission and test email delivery"
+    )
+    const localProducts = JSON.parse(process.env.POLAR_LOCAL_PRODUCT_IDS ?? "{}") as Record<
+      string,
+      string
+    >
+    const providerProductId = localProducts.individual_launch
+    expect(providerProductId).toBeTruthy()
+    const checkout = await actors.ownerRequest.post("/api/billing/local-checkout", { data: {} })
+    await expect(checkout).toBeOK()
+
+    const orderId = `polar-local-${Date.now()}`
+    const eventId = `polar-local-event-${Date.now()}`
+    await expect(
+      await postPolarWebhook(actors.ownerRequest, eventId, {
+        type: "order.paid",
+        data: {
+          id: orderId,
+          product_id: providerProductId,
+          customer_email: actors.ownerEmail,
+          currency: "USD",
+          total_amount: 19900,
+          discount_amount: 0,
+          tax_amount: 0,
+          net_amount: 19900,
+          metadata: { workspaceId: actors.workspaceId, productId: "individual_launch" },
+        },
+      })
+    ).toBeOK()
+    await assertSingleProcessedEffect({
+      provider: "polar",
+      eventId,
+      tracks: ["billing", "license", "affiliate"],
+    })
+    const key = await prisma.licenseKey.findFirstOrThrow({
+      where: { issuedByProvider: `polar:${orderId}` },
+      include: { license: true },
+    })
+    expect(key.fulfillmentStatus).toBe("DELIVERED")
+    expect(key.license).toMatchObject({
+      workspaceId: actors.workspaceId,
+      ownerEmail: actors.ownerEmail,
+      sku: "individual_launch",
+    })
+    expect(key.license.signature).not.toBe("pending")
+    await prisma.license.delete({ where: { id: key.licenseId } })
   })
 })
