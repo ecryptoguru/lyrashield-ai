@@ -323,7 +323,7 @@ Open **Overview** or the launch-readiness surface to see:
 
 From an eligible target detail page, authorized users can create a public scorecard. Publication is opt-in and audited. Lower grades require explicit confirmation.
 
-The public payload is deliberately limited to the approved scorecard fields, such as grade, scope line, scan date, methodology version, and resolved-findings count. It excludes target URLs, repository names, open findings, severity details, evidence, and vulnerability text.
+The public payload is deliberately limited to seven approved scorecard fields: grade, scope line, scan date, score methodology version, resolved-findings count, release verdict, and verdict methodology version. It excludes target URLs, repository names, open findings, severity details, evidence, and vulnerability text.
 
 Scorecard actions include:
 

@@ -148,10 +148,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       width,
       height,
       headers: {
-        // Scorecards can be revoked or superseded; keep the shared/CDN cache window
-        // short so a revoked card stops being served quickly. Browser cache stays at
-        // 5 minutes; CDN revalidates after 5 minutes rather than holding for a day.
-        "Cache-Control": "public, max-age=300, s-maxage=300, stale-while-revalidate=60",
+        "Cache-Control": "no-store",
         "Content-Disposition": `inline; filename="lyrashield-${variant}-${format}.png"`,
       },
     }

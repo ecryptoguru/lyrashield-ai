@@ -101,6 +101,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (error instanceof Error && error.message.includes("terminal state")) {
       return apiError("SCAN_ALREADY_FINISHED", error.message, 409)
     }
+    if (error instanceof Error && error.message.includes("finalization already started")) {
+      return apiError("SCAN_FINALIZATION_STARTED", "Scan finalization already started", 409)
+    }
     logger.error("Failed to cancel scan", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to cancel scan", 500)
   }

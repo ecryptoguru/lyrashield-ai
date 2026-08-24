@@ -6,6 +6,7 @@ import { getSession } from "@lyrashield/auth/server"
 import { env } from "@lyrashield/config"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { getClientIP } from "@/proxy"
+import { isReferralSource } from "../../../../lib/scorecard-sharing"
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -13,7 +14,8 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const code = cookieStore.get("ls_ref")?.value
   if (!code) return apiSuccess({ attributed: false })
-  const source = cookieStore.get("ls_ref_source")?.value ?? "scorecard"
+  const storedSource = cookieStore.get("ls_ref_source")?.value ?? "scorecard"
+  const source = isReferralSource(storedSource) ? storedSource : "scorecard"
   const ip = getClientIP(request)
   const attribution = await attributeReferral(
     code,

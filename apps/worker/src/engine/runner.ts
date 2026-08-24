@@ -952,6 +952,18 @@ export async function runEngine(
   shouldCancel?: () => Promise<boolean>,
   onAgentLoopTick?: (elapsedMs: number) => void
 ): Promise<EngineRunResult> {
+  if (shouldCancel && (await shouldCancel())) {
+    return {
+      exitCode: -1,
+      cancelled: true,
+      timedOut: false,
+      timeoutReason: null,
+      budgetKilled: false,
+      output: parseEngineOutput("", ""),
+      sourceCheckoutPath: null,
+    }
+  }
+
   const cmd = buildEngineCommand(config)
   const profile = resolveEngineProfile(config.mode)
 

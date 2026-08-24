@@ -104,11 +104,36 @@ describe("evidence-storage", () => {
     })
     const path = decodeURIComponent(result.storageUri.replace("file://", ""))
 
-    await evidenceStorageImport.deleteEncryptedArtifact(result.storageUri)
+    await evidenceStorageImport.deleteEncryptedArtifact(result.storageUri, "ws-1")
 
     // The path came from the storage result created above, never user input.
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     await expect(readFile(path)).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("rejects cross-workspace local reads and deletes", async () => {
+    const result = await uploadEncryptedArtifact({
+      workspaceId: "ws-1",
+      ownerId: "owner-1",
+      type: "proof",
+      content: "private",
+      artifactId: "artifact-workspace",
+    })
+
+    await expect(
+      evidenceStorageImport.readEncryptedArtifact(result.storageUri, "ws-2")
+    ).rejects.toThrow("Evidence storage URI does not belong to workspace")
+    await expect(
+      evidenceStorageImport.deleteEncryptedArtifact(result.storageUri, "ws-2")
+    ).rejects.toThrow("Evidence storage URI does not belong to workspace")
+
+    const nestedLookalike = result.storageUri.replace(
+      "/evidence/ws-1/",
+      "/untrusted/evidence/ws-1/"
+    )
+    await expect(
+      evidenceStorageImport.readEncryptedArtifact(nestedLookalike, "ws-1")
+    ).rejects.toThrow("Evidence storage URI does not belong to workspace")
   })
 
   it("produces deterministic checksums for string and Buffer content", async () => {
@@ -158,6 +183,26 @@ describe("evidence-storage", () => {
     expect(path).toMatch(
       /evidence\/ws-1\/control-evidence\/version-1\/proof\/artifact-5-[a-f0-9]{64}\.enc$/
     )
+  })
+
+  it.each([
+    ["workspaceId", { workspaceId: "ws-1/../ws-2" }],
+    ["namespace", { namespace: "control/evidence" }],
+    ["ownerId", { ownerId: "owner/other" }],
+    ["type", { type: "proof/other" }],
+    ["artifactId", { artifactId: "artifact/other" }],
+  ])("rejects path separators in %s", async (_field, override) => {
+    await expect(
+      uploadEncryptedArtifact({
+        workspaceId: "ws-1",
+        namespace: "control-evidence",
+        ownerId: "owner-1",
+        type: "proof",
+        artifactId: "artifact-1",
+        content: "x",
+        ...override,
+      })
+    ).rejects.toThrow("Invalid evidence storage key component")
   })
 })
 
@@ -230,7 +275,8 @@ describe("s3 envelope encryption", () => {
     const putBody = storedBody!
 
     const read = await mod.readEncryptedArtifact(
-      "s3://evidence-bucket/evidence/ws-1/owner-1/proof/x"
+      "s3://evidence-bucket/evidence/ws-1/owner-1/proof/x",
+      "ws-1"
     )
     expect(read.legacy).toBe(false)
     expect(read.content.equals(plaintext)).toBe(true)
@@ -238,13 +284,44 @@ describe("s3 envelope encryption", () => {
     expect(putBody.indexOf(plaintext)).toBe(-1)
   })
 
-  it("returns legacy SSE-only objects flagged, without decryption", async () => {
+  it("rejects legacy SSE-only objects", async () => {
     vi.resetModules()
     const mod = await import("./index")
     storedBody = Buffer.from("legacy provider-SSE plaintext")
-    const read = await mod.readEncryptedArtifact("s3://evidence-bucket/evidence/ws-1/legacy")
-    expect(read.legacy).toBe(true)
-    expect(read.content.toString("utf8")).toBe("legacy provider-SSE plaintext")
+    await expect(
+      mod.readEncryptedArtifact("s3://evidence-bucket/evidence/ws-1/legacy", "ws-1")
+    ).rejects.toThrow("Evidence object is not envelope-encrypted")
+  })
+
+  it("rejects an envelope whose key reference was tampered", async () => {
+    vi.resetModules()
+    const mod = await import("./index")
+    await mod.uploadEncryptedArtifact({
+      workspaceId: "ws-1",
+      ownerId: "owner-1",
+      type: "proof",
+      content: "proof",
+    })
+    const keyRefOffset = storedBody!.indexOf(Buffer.from(mod.EVIDENCE_KEY_REF))
+    expect(keyRefOffset).toBeGreaterThan(0)
+    storedBody![keyRefOffset] = storedBody![keyRefOffset] === 0x65 ? 0x66 : 0x65
+
+    await expect(
+      mod.readEncryptedArtifact("s3://evidence-bucket/evidence/ws-1/proof", "ws-1")
+    ).rejects.toThrow("Evidence envelope key reference is invalid")
+  })
+
+  it("rejects cross-workspace reads and deletes", async () => {
+    vi.resetModules()
+    const mod = await import("./index")
+    const uri = "s3://evidence-bucket/evidence/ws-1/owner-1/proof/x"
+
+    await expect(mod.readEncryptedArtifact(uri, "ws-2")).rejects.toThrow(
+      "Evidence storage URI does not belong to workspace"
+    )
+    await expect(mod.deleteEncryptedArtifact(uri, "ws-2")).rejects.toThrow(
+      "Evidence storage URI does not belong to workspace"
+    )
   })
 
   it("fails closed when the KEK is not configured", async () => {

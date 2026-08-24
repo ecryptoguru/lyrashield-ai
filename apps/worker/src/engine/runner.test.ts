@@ -46,7 +46,9 @@ import {
   OVERSHOOT_GRACE,
   terminateActiveEngineProcesses,
   trackActiveEngineProcess,
+  runEngine,
 } from "./runner"
+import { addScanEvent } from "@lyrashield/db"
 
 const cleanupPaths: string[] = []
 
@@ -704,6 +706,30 @@ it("terminates every tracked engine process during worker shutdown", () => {
   stopTrackingFirst()
   expect(terminateActiveEngineProcesses()).toBe(1)
   stopTrackingSecond()
+})
+
+it("does not emit engine_start when cancellation already won", async () => {
+  vi.mocked(addScanEvent).mockClear()
+
+  const result = await runEngine(
+    {
+      scanId: "scan-cancelled",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      target: {
+        id: "target-1",
+        type: "REPO",
+        repoFullName: "acme/repo",
+        name: "Repository",
+      },
+    },
+    "scan-cancelled",
+    60_000,
+    async () => true
+  )
+
+  expect(result).toMatchObject({ exitCode: -1, cancelled: true })
+  expect(addScanEvent).not.toHaveBeenCalled()
 })
 
 it("refuses to clean a workspace outside the worker-owned run root", async () => {

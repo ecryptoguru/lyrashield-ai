@@ -174,6 +174,7 @@ export {
   hashLicenseKey,
   generateRetrievalToken,
   hashRetrievalToken,
+  encryptRetrievalKey,
   sendLicenseIssuedEmail,
   sendLicenseRetrievalEmail,
   retrieveLicenseByToken,

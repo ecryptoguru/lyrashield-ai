@@ -51,6 +51,14 @@ const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
   "VERIFYING",
   "REQUIRES_APPROVAL",
 ]
+type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+type ScanStatusMetadata = {
+  errorCategory?: string
+  errorMessage?: string
+  summary?: string
+  riskScoreAfter?: number
+  actualCostCents?: number
+}
 
 export async function createScan(params: CreateScanParams): Promise<Scan> {
   const determinismMode = DeterminismModeSchema.parse(params.determinismMode ?? "default")
@@ -105,89 +113,112 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
   return scan
 }
 
+async function updateScanStatusInTransaction(
+  tx: ScanTransaction,
+  scanId: string,
+  newStatus: ScanStatus,
+  metadata?: ScanStatusMetadata,
+  guard?: { finalizationStartedAt: null }
+) {
+  const scan = await tx.scan.findUnique({ where: { id: scanId } })
+  if (!scan) throw new Error(`Scan not found: ${scanId}`)
+
+  const currentStatus = scan.status as ScanStatus
+  if (!isValidTransition(currentStatus, newStatus)) {
+    throw new Error(`Invalid scan status transition: ${currentStatus} → ${newStatus}`)
+  }
+
+  const now = new Date()
+  const updateData: Record<string, unknown> = {
+    status: newStatus,
+    ...(metadata?.errorCategory ? { errorCategory: metadata.errorCategory } : {}),
+    ...(metadata?.errorMessage ? { errorMessage: metadata.errorMessage } : {}),
+    ...(metadata?.summary ? { summary: metadata.summary } : {}),
+    ...(metadata?.riskScoreAfter !== undefined ? { riskScoreAfter: metadata.riskScoreAfter } : {}),
+    ...(metadata?.actualCostCents !== undefined
+      ? { actualCostCents: metadata.actualCostCents }
+      : {}),
+  }
+
+  if ((newStatus === "PREFLIGHT" || newStatus === "RUNNING") && !scan.startedAt) {
+    updateData.startedAt = now
+  }
+  if (isTerminalScanStatus(newStatus)) {
+    updateData.endedAt = now
+    const startTime = (updateData.startedAt as Date | undefined) ?? scan.startedAt
+    if (startTime) {
+      const durationMs = now.getTime() - new Date(startTime).getTime()
+      updateData.durationMs = Math.max(0, Math.round(durationMs))
+    }
+  }
+
+  const result = await tx.scan.updateMany({
+    where: { id: scanId, status: currentStatus, ...guard },
+    data: updateData,
+  })
+  if (result.count !== 1) {
+    const latest = await tx.scan.findUnique({ where: { id: scanId } })
+    if (guard && latest?.finalizationStartedAt) {
+      throw new Error("Scan finalization already started")
+    }
+    throw new Error(`Scan status changed concurrently to ${latest?.status ?? "unknown"}`)
+  }
+
+  const updated = await tx.scan.findUnique({ where: { id: scanId } })
+  if (!updated) throw new Error(`Scan not found after status update: ${scanId}`)
+  await tx.scanEvent.create({
+    data: {
+      scanId,
+      stage: newStatus.toLowerCase(),
+      level: "info",
+      message: `Scan status: ${newStatus}`,
+      metadata: metadata ?? undefined,
+    },
+  })
+  return { updated, currentStatus }
+}
+
 export async function updateScanStatus(
   scanId: string,
   newStatus: ScanStatus,
-  metadata?: {
-    errorCategory?: string
-    errorMessage?: string
-    summary?: string
-    riskScoreAfter?: number
-    actualCostCents?: number
-  },
+  metadata?: ScanStatusMetadata,
   workspaceId?: string
 ): Promise<Scan> {
-  const updateInTransaction = async (
-    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
-  ) => {
-    const scan = await tx.scan.findUnique({ where: { id: scanId } })
-    if (!scan) throw new Error(`Scan not found: ${scanId}`)
-
-    const currentStatus = scan.status as ScanStatus
-    if (!isValidTransition(currentStatus, newStatus)) {
-      throw new Error(`Invalid scan status transition: ${currentStatus} → ${newStatus}`)
-    }
-
-    const now = new Date()
-    const updateData: Record<string, unknown> = {
-      status: newStatus,
-      ...(metadata?.errorCategory ? { errorCategory: metadata.errorCategory } : {}),
-      ...(metadata?.errorMessage ? { errorMessage: metadata.errorMessage } : {}),
-      ...(metadata?.summary ? { summary: metadata.summary } : {}),
-      ...(metadata?.riskScoreAfter !== undefined
-        ? { riskScoreAfter: metadata.riskScoreAfter }
-        : {}),
-      ...(metadata?.actualCostCents !== undefined
-        ? { actualCostCents: metadata.actualCostCents }
-        : {}),
-    }
-
-    if ((newStatus === "PREFLIGHT" || newStatus === "RUNNING") && !scan.startedAt) {
-      updateData.startedAt = now
-    }
-    if (isTerminalScanStatus(newStatus)) {
-      updateData.endedAt = now
-      const startTime = (updateData.startedAt as Date | undefined) ?? scan.startedAt
-      if (startTime) {
-        const durationMs = now.getTime() - new Date(startTime).getTime()
-        updateData.durationMs = Math.max(0, Math.round(durationMs))
-      }
-    }
-
-    const result = await tx.scan.updateMany({
-      where: { id: scanId, status: currentStatus },
-      data: updateData,
-    })
-    if (result.count !== 1) {
-      const latest = await tx.scan.findUnique({ where: { id: scanId } })
-      throw new Error(`Scan status changed concurrently to ${latest?.status ?? "unknown"}`)
-    }
-
-    const updated = await tx.scan.findUnique({ where: { id: scanId } })
-    if (!updated) throw new Error(`Scan not found after status update: ${scanId}`)
-    await tx.scanEvent.create({
-      data: {
-        scanId,
-        stage: newStatus.toLowerCase(),
-        level: "info",
-        message: `Scan status: ${newStatus}`,
-        metadata: metadata ?? undefined,
-      },
-    })
-    return { updated, currentStatus }
-  }
   const resolvedWorkspaceId = workspaceId ?? getWorkspaceContext()
   if (!resolvedWorkspaceId) {
     throw new Error(`workspaceId or workspace context is required for updateScanStatus`)
   }
 
-  const { updated, currentStatus } = await withWorkspaceRLS(
-    resolvedWorkspaceId,
-    updateInTransaction
+  const { updated, currentStatus } = await withWorkspaceRLS(resolvedWorkspaceId, (tx) =>
+    updateScanStatusInTransaction(tx, scanId, newStatus, metadata)
   )
 
   logger.info("Scan status updated", { scanId, from: currentStatus, to: newStatus })
   return updated
+}
+
+export async function withScanFinalizationClaim<T>(
+  scanId: string,
+  workspaceId: string,
+  finalize: () => Promise<T>
+): Promise<{ status: "cancelled" } | { status: "finalized"; value: T }> {
+  const claimed = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const result = await tx.scan.updateMany({
+      where: { id: scanId, workspaceId, status: "VERIFYING", finalizationStartedAt: null },
+      data: { finalizationStartedAt: new Date() },
+    })
+    if (result.count === 1) return true
+
+    const scan = await tx.scan.findFirst({
+      where: { id: scanId, workspaceId, deletedAt: null },
+      select: { status: true, finalizationStartedAt: true },
+    })
+    if (!scan) throw new Error(`Scan not found: ${scanId}`)
+    if (scan.status === "CANCELLED") return false
+    if (scan.finalizationStartedAt) throw new Error("Scan finalization already started")
+    throw new Error(`Cannot finalize scan from ${scan.status}`)
+  })
+  return claimed ? { status: "finalized", value: await finalize() } : { status: "cancelled" }
 }
 
 export async function addScanEvent(
@@ -418,18 +449,23 @@ export async function listScans(params: ListScansParams): Promise<{
 }
 
 export async function cancelScan(scanId: string, workspaceId: string): Promise<Scan> {
-  const scan = await prisma.scan.findFirst({
-    where: { id: scanId, workspaceId, deletedAt: null },
-    select: { status: true },
+  const { updated, currentStatus } = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const scan = await tx.scan.findFirst({
+      where: { id: scanId, workspaceId, deletedAt: null },
+    })
+    if (!scan) throw new Error(`Scan not found: ${scanId}`)
+
+    const status = scan.status as ScanStatus
+    if (isTerminalScanStatus(status)) {
+      throw new Error(`Cannot cancel scan in terminal state: ${status}`)
+    }
+
+    return updateScanStatusInTransaction(tx, scanId, "CANCELLED", undefined, {
+      finalizationStartedAt: null,
+    })
   })
-  if (!scan) throw new Error(`Scan not found: ${scanId}`)
-
-  const status = scan.status as ScanStatus
-  if (isTerminalScanStatus(status)) {
-    throw new Error(`Cannot cancel scan in terminal state: ${status}`)
-  }
-
-  return updateScanStatus(scanId, "CANCELLED", undefined, workspaceId)
+  logger.info("Scan status updated", { scanId, from: currentStatus, to: "CANCELLED" })
+  return updated
 }
 
 export async function removeScan(scanId: string, workspaceId: string): Promise<Pick<Scan, "id">> {

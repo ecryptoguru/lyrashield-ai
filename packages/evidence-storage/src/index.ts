@@ -116,6 +116,12 @@ function isCloudflareR2Endpoint(endpoint: string | undefined): boolean {
   }
 }
 
+function assertValidKeyComponent(value: string): void {
+  if (!value || value === "." || value === ".." || /[\\/]/.test(value)) {
+    throw new Error("Invalid evidence storage key component")
+  }
+}
+
 function buildKey(
   workspaceId: string,
   namespace: string | undefined,
@@ -124,6 +130,9 @@ function buildKey(
   artifactId: string,
   checksum: string
 ): string {
+  for (const part of [workspaceId, namespace, ownerId, type, artifactId]) {
+    if (part !== undefined) assertValidKeyComponent(part)
+  }
   const parts = ["evidence", workspaceId]
   if (namespace) parts.push(namespace)
   parts.push(ownerId, type, `${artifactId}-${checksum}`)
@@ -229,28 +238,25 @@ export interface ReadEncryptedArtifactResult {
   content: Buffer
   /** sha256 of the decrypted plaintext. */
   checksum: string
-  /**
-   * True when the stored object predates envelope encryption (provider-SSE
-   * only). Returned for backward compatibility; flag callers so migration
-   * coverage is observable.
-   */
-  legacy: boolean
+  /** Always false; non-envelope S3 objects fail closed. */
+  legacy: false
 }
 
 /**
  * Read an evidence artifact back and decrypt it. Envelope-encrypted objects
  * are authenticated with both GCM tags; a tampered object fails closed.
- * Objects written before envelope encryption (provider-SSE only) are returned
- * as-is and flagged `legacy` — they decrypt trivially because they were never
- * client-side encrypted.
+ * Objects written before envelope encryption are rejected rather than returned
+ * as unauthenticated plaintext.
  */
 export async function readEncryptedArtifact(
-  storageUri: string
+  storageUri: string,
+  expectedWorkspaceId: string
 ): Promise<ReadEncryptedArtifactResult> {
+  assertValidKeyComponent(expectedWorkspaceId)
   if (storageUri.startsWith("file:")) {
     if (!isLocalEvidenceConfigured()) throw new EvidenceStorageConfigurationError()
     const { readLocalEvidence } = await import(/* turbopackIgnore: true */ "./local.js")
-    const content = await readLocalEvidence(storageUri)
+    const content = await readLocalEvidence(storageUri, expectedWorkspaceId)
     return { content, checksum: computeChecksum(content), legacy: false }
   }
 
@@ -259,9 +265,9 @@ export async function readEncryptedArtifact(
   if (
     parsed.protocol !== "s3:" ||
     parsed.hostname !== env.S3_BUCKET ||
-    !key.startsWith("evidence/")
+    !key.startsWith(`evidence/${expectedWorkspaceId}/`)
   ) {
-    throw new Error("Invalid evidence storage URI")
+    throw new Error("Evidence storage URI does not belong to workspace")
   }
   if (!isS3Configured()) throw new EvidenceStorageConfigurationError()
 
@@ -271,12 +277,14 @@ export async function readEncryptedArtifact(
   const body = Buffer.from(await response.Body!.transformToByteArray())
 
   if (!isEnvelope(body)) {
-    logger.warn("Read legacy non-envelope evidence object", { key })
-    return { content: body, checksum: computeChecksum(body), legacy: true }
+    throw new EvidenceEnvelopeError("Evidence object is not envelope-encrypted")
   }
 
   const kek = resolveEnvelopeKek(env.LYRASHIELD_EVIDENCE_KEK || undefined)
-  const { plaintext } = openEnvelope(body, kek)
+  const { plaintext, keyRef } = openEnvelope(body, kek)
+  if (keyRef !== EVIDENCE_KEY_REF) {
+    throw new EvidenceEnvelopeError("Evidence envelope key reference is invalid")
+  }
   return { content: plaintext, checksum: computeChecksum(plaintext), legacy: false }
 }
 
@@ -284,11 +292,15 @@ export async function readEncryptedArtifact(
  * Best-effort compensation used only after immutable metadata persistence fails.
  * Callers must never expose the private storage URI.
  */
-export async function deleteEncryptedArtifact(storageUri: string): Promise<void> {
+export async function deleteEncryptedArtifact(
+  storageUri: string,
+  expectedWorkspaceId: string
+): Promise<void> {
+  assertValidKeyComponent(expectedWorkspaceId)
   if (storageUri.startsWith("file:")) {
     if (!isLocalEvidenceConfigured()) throw new EvidenceStorageConfigurationError()
     const { deleteLocalEvidence } = await import(/* turbopackIgnore: true */ "./local.js")
-    await deleteLocalEvidence(storageUri)
+    await deleteLocalEvidence(storageUri, expectedWorkspaceId)
     return
   }
 
@@ -297,9 +309,9 @@ export async function deleteEncryptedArtifact(storageUri: string): Promise<void>
   if (
     parsed.protocol !== "s3:" ||
     parsed.hostname !== env.S3_BUCKET ||
-    !key.startsWith("evidence/")
+    !key.startsWith(`evidence/${expectedWorkspaceId}/`)
   ) {
-    throw new Error("Invalid evidence storage URI")
+    throw new Error("Evidence storage URI does not belong to workspace")
   }
   if (!isS3Configured()) throw new EvidenceStorageConfigurationError()
   await getS3Client().send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }))

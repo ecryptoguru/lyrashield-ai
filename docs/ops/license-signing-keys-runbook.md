@@ -19,7 +19,7 @@
 The web app signs offline license files with an **ed25519** private key.
 Relevant code:
 
-- `apps/web/src/lib/licenses/license-service.ts` — resolves the key.
+- `packages/billing/src/license-fulfillment.ts` — resolves the key.
 - `packages/licenses/src/sign.ts` — `signLicense()` uses `node:crypto`
   `sign(null, canonicalJSON(payload), privateKey)`; `encodeLicenseBlob()`
   emits `<base64(canonicalJSON(payload))>.<base64(signature)>`.
@@ -28,17 +28,17 @@ Relevant code:
 Env vars consumed today (from `packages/config/src/env.ts` and
 `.env.example`):
 
-| Variable                      | Required in prod                                                                   | What it is                                                                                                                    |
-| ----------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `LICENSE_SIGNING_PRIVATE_KEY` | **Yes, but read from Azure Key Vault at runtime — the `env` fallback is dev-only** | ed25519 PKCS#8 PEM private key. Must start with `-----BEGIN`.                                                                 |
-| `LICENSE_SIGNING_KEY_ID`      | **Yes** (throws in production if unset)                                            | Identifier for rotation / revocation lists, e.g. `license-key-v1`.                                                            |
-| `LICENSE_SIGNING_PUBLIC_KEY`  | Optional                                                                           | SPKI PEM public key. If unset, derived from the private key at runtime.                                                       |
-| `LICENSE_PUBLISHED_BUILD`     | Yes for Local                                                                      | Latest published Local/Desktop semver; used as `perpetualFallbackBuild` at issue/renew. Never accept a client-supplied value. |
-| `POLAR_LOCAL_PRODUCT_IDS`     | Yes for Local checkout                                                             | JSON map of Local SKU → Polar product ID, e.g. `{"individual_launch":"prod_abc",...}`.                                        |
-| `LYRASHIELD_INTERNAL_API_KEY` | Yes in prod                                                                        | Internal API key for server-to-server license issue/renew routes. Sent as `X-LyraShield-Internal-Key`.                        |
+| Variable                      | Required in prod                        | What it is                                                                                                                    |
+| ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `LICENSE_SIGNING_PRIVATE_KEY` | No in production; dev/CI only           | ed25519 PKCS#8 PEM private key. Must start with `-----BEGIN`.                                                                 |
+| `LICENSE_SIGNING_KEY_ID`      | **Yes** (throws in production if unset) | Identifier for rotation / revocation lists, e.g. `license-key-v1`.                                                            |
+| `LICENSE_SIGNING_PUBLIC_KEY`  | Optional                                | SPKI PEM public key. If unset, derived from the private key at runtime.                                                       |
+| `LICENSE_PUBLISHED_BUILD`     | Yes for Local                           | Latest published Local/Desktop semver; used as `perpetualFallbackBuild` at issue/renew. Never accept a client-supplied value. |
+| `POLAR_LOCAL_PRODUCT_IDS`     | Yes for Local checkout                  | JSON map of Local SKU → Polar product ID, e.g. `{"individual_launch":"prod_abc",...}`.                                        |
+| `LYRASHIELD_INTERNAL_API_KEY` | Yes in prod                             | Internal API key for server-to-server license issue/renew routes. Sent as `X-LyraShield-Internal-Key`.                        |
 
 > **Fail-closed note.** `resolveSigningKeyId()` in
-> `apps/web/src/lib/licenses/license-service.ts` throws
+> `packages/billing/src/license-fulfillment.ts` throws
 > `LICENSE_SIGNING_KEY_ID is required in production` when `NODE_ENV=production`
 > and the var is unset. The private key is likewise required — the app refuses
 > to sign rather than issuing an unsigned license.
@@ -132,6 +132,12 @@ the signing key from **Azure Key Vault at runtime** through managed identity.
 When `NODE_ENV=production`, a missing vault name, unavailable secret, or
 malformed PEM fails closed. `LICENSE_SIGNING_PRIVATE_KEY` is a development and
 CI fallback only.
+
+This uses a Key Vault **secret**, not a non-exportable Key Vault cryptographic
+key. `SecretClient.getSecret()` exports the PEM into application process memory,
+where it is cached and passed to Node's ed25519 signer. The production path does
+not write that PEM to disk or inject it into the Container App environment, but
+process compromise can still expose it.
 
 ### 3a. Create / identify the Key Vault
 
@@ -234,6 +240,12 @@ that trusts the new key plus a bundled revocation list, dual-sign during a
 review. Increment `LICENSE_SIGNING_KEY_ID` (e.g. `license-key-v2`) and update
 the Key Vault secret and GitHub secret in the same change window.
 
+Revocation is a hard stop after a successful server revalidation: the desktop
+clears the cached license when the server reports it revoked. It is not instant
+for an offline machine. Network failures may use the last successful server
+verification for up to the seven-day offline grace period; expiry fallback never
+overrides a revocation once the client receives it.
+
 > **Warning — updater key loss.** The Tauri desktop release pipeline's
 > updater private key (stored as GitHub secret `TAURI_UPDATER_PRIVATE_KEY`) is a
 > **single point of permanent failure**: losing it means you can no longer
@@ -246,19 +258,21 @@ the Key Vault secret and GitHub secret in the same change window.
 
 ## 6. Current release gates (do not paper over)
 
-1. **Key Vault client.** `packages/billing/src/license-fulfillment.ts` resolves the signing key from
-   Azure Key Vault when `NODE_ENV=production` AND `LYRASHIELD_KEY_VAULT_NAME`
-   is set (managed identity via `DefaultAzureCredential`, cached per process,
-   fail-closed if the vault is unreachable); otherwise it falls back to the
-   `LICENSE_SIGNING_PRIVATE_KEY` env var (dev/CI). Ensure the app's managed
-   identity has `Get` on the vault secrets before relying on this in prod.
+1. **Key Vault client.** `packages/billing/src/license-fulfillment.ts` resolves
+   the signing PEM from Azure Key Vault in production using managed identity,
+   caches it in process memory, and fails closed if the vault name, identity
+   access, secret, or PEM is unavailable. `LICENSE_SIGNING_PRIVATE_KEY` is only
+   the dev/CI fallback. This is secret retrieval, not non-exportable remote
+   signing.
 2. **Desktop production signing.** The Tauri release workflow and committed
    updater public key exist. Before publishing, verify the two updater
-   repository secrets, dual backup, production license public key, macOS
+   repository secrets, dual backup, an exact match between the production
+   license signer and bundled desktop public key, macOS
    signing/notarization, Windows signing, signed updater manifest, and install.
-3. **License email delivery.** `sendLicenseIssuedEmail()` is wired through
-   Brevo. Retain a production delivery smoke proving the buyer receives the
-   raw key and signed file without logging or persisting the raw key.
+3. **License email delivery.** Brevo sends a one-time retrieval link, not the
+   raw key. The raw key is encrypted while awaiting retrieval and deleted after
+   successful use. Retain a production smoke proving initial delivery, retry,
+   single use, expiry, and cleanup without logging key or token material.
 4. **Commercial operations.** Live paid-provider activation, RazorpayX/
    Payoneer payout API access, tax-form handling, and clawback operations are
    separate release gates.
@@ -282,6 +296,7 @@ the Key Vault secret and GitHub secret in the same change window.
   - `POLAR_LOCAL_PRODUCT_IDS={"individual_launch":"prod_smoke_test"}` (smoke-only map)
 - Smoke test: `POST /api/licenses/issue` + `POST /api/licenses/verify` returned
   `valid: true`, `signingKeyId: "license-key-v1"`; smoke license deleted.
-- The Key Vault client in `packages/billing/src/license-fulfillment.ts` is
-  wired and verified in production; the temporary `LICENSE_SIGNING_PRIVATE_KEY`
-  env-fallback path is not needed in prod.
+- The Key Vault client in `packages/billing/src/license-fulfillment.ts` was
+  wired and observed in this dated smoke. Reverify managed-identity access,
+  sign/verify, and the desktop bundled-public-key match for the release revision;
+  this historical entry is not current production proof.

@@ -1,0 +1,2 @@
+ALTER TABLE "Conversion"
+ADD COLUMN "taxAmount" DECIMAL(19,4) NOT NULL DEFAULT 0;

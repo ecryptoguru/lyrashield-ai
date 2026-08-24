@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { createHmac } from "node:crypto"
 
 const recordScorecardEvent = vi.fn()
 vi.mock("@lyrashield/db", () => ({ recordScorecardEvent }))
 
 const { POST } = await import("./route")
 
-function request(body: unknown) {
+function request(body: unknown, cookie?: string) {
   return new Request("http://localhost/api/scorecards/events", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
     body: JSON.stringify(body),
   })
 }
@@ -40,8 +41,24 @@ describe("POST /api/scorecards/events", () => {
         visitorId: expect.any(String),
       })
     )
-    expect(recordScorecardEvent.mock.calls[0]?.[1].visitorId).not.toBe(valid.visitorId)
+    expect(recordScorecardEvent.mock.calls[0]?.[1].visitorId).toBe(valid.visitorId)
     expect(response.headers.getSetCookie().join(";")).toContain("ls_scorecard_visitor=")
+  })
+
+  it("uses the client UUID for concurrent first-page events", async () => {
+    await Promise.all([POST(request(valid)), POST(request(valid))])
+    expect(recordScorecardEvent.mock.calls.map((call) => call[1].visitorId)).toEqual([
+      valid.visitorId,
+      valid.visitorId,
+    ])
+  })
+
+  it("prefers a valid signed cookie over a submitted UUID", async () => {
+    const secret = process.env.BETTER_AUTH_SECRET!
+    const cookieId = "019f5bb9-ac8b-7d33-b722-e441080b4c5b"
+    const signature = createHmac("sha256", secret).update(cookieId).digest("hex")
+    await POST(request(valid, `ls_scorecard_visitor=${cookieId}.${signature}`))
+    expect(recordScorecardEvent.mock.calls[0]?.[1].visitorId).toBe(cookieId)
   })
 
   it("requires a channel for share handoffs and rejects sensitive extra properties", async () => {

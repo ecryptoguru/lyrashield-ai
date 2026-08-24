@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => {
   const members = new Map<string, number>()
+  const values = new Map<string, string>()
+  let existsError: Error | null = null
   const redis = {
     members,
+    values,
     multi() {
       const commands: Array<() => number> = []
       const chain = {
@@ -46,8 +49,19 @@ const mocks = vi.hoisted(() => {
       members.set(member, Number(score))
       return 1
     },
+    async exists(key: string) {
+      if (existsError) throw existsError
+      return values.has(key) ? 1 : 0
+    },
   }
-  return { redis, queueAdd: vi.fn(), queueWorkersCount: vi.fn() }
+  return {
+    redis,
+    queueAdd: vi.fn(),
+    queueWorkersCount: vi.fn(),
+    setExistsError(error: Error | null) {
+      existsError = error
+    },
+  }
 })
 
 vi.mock("./redis", () => ({ getRedis: () => mocks.redis }))
@@ -67,12 +81,15 @@ import {
   SCAN_WORKER_RESTART_GRACE_MS,
   SCAN_WORKER_TTL_MS,
   ScanWorkerUnavailableError,
+  SCAN_ADMISSION_STOP_KEY,
   unregisterScanWorker,
 } from "./queue"
 
 describe("scan worker availability", () => {
   beforeEach(() => {
     mocks.redis.members.clear()
+    mocks.redis.values.clear()
+    mocks.setExistsError(null)
     mocks.queueAdd.mockReset()
     mocks.queueWorkersCount.mockReset()
     mocks.queueWorkersCount.mockResolvedValue(1)
@@ -120,6 +137,38 @@ describe("scan worker availability", () => {
 
     expect(await isScanWorkerAvailable(61_999)).toBe(true)
     expect(await isScanWorkerAvailable(62_000)).toBe(false)
+  })
+
+  it("fails queue admission closed while the operator stop is present", async () => {
+    await registerScanWorker("worker-1", Date.now())
+    mocks.redis.values.set(SCAN_ADMISSION_STOP_KEY, '{"operator":"on-call"}')
+
+    await expect(
+      enqueueScan({
+        scanId: "scan-stopped",
+        workspaceId: "workspace-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    ).rejects.toBeInstanceOf(ScanWorkerUnavailableError)
+    expect(mocks.queueAdd).not.toHaveBeenCalled()
+  })
+
+  it("fails queue admission closed when the stop state cannot be read", async () => {
+    await registerScanWorker("worker-1", Date.now())
+    mocks.setExistsError(new Error("Redis unavailable"))
+
+    await expect(
+      enqueueScan({
+        scanId: "scan-uncertain",
+        workspaceId: "workspace-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    ).rejects.toBeInstanceOf(ScanWorkerUnavailableError)
+    expect(mocks.queueAdd).not.toHaveBeenCalled()
   })
 })
 

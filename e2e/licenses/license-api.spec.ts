@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test"
-import { generateKeyPairSync, createHash, randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
-import { signLicense, verifyLicense, type LicenseFile } from "@lyrashield/licenses"
+import { type LicenseFile } from "@lyrashield/licenses"
 
 /**
  * License API endpoint tests.
@@ -14,15 +14,6 @@ import { signLicense, verifyLicense, type LicenseFile } from "@lyrashield/licens
  * The LICENSE_SIGNING_PRIVATE_KEY env var must be set to a valid ed25519
  * PKCS#8 PEM for the server to sign license files.
  */
-
-const { privateKey } = generateKeyPairSync("ed25519")
-const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" })
-const publicKeyPem = privateKey.export
-  ? (() => {
-      const { publicKey } = generateKeyPairSync("ed25519")
-      return publicKey.export({ type: "spki", format: "pem" })
-    })()
-  : ""
 
 const testSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const ownerEmail = `e2e-license-${testSuffix}@example.com`
@@ -145,6 +136,38 @@ test.describe("License activation API", () => {
     const json = await res.json()
     expect(json.success).toBe(false)
     expect(json.error.code).toBe("MACHINE_CAP_REACHED")
+
+    // A previously deactivated row must pass through the same cap check. Without
+    // this guard, reactivating machine 1 after filling its slot with machine 4
+    // would leave four active machines.
+    await withWorkspaceRLS(testWorkspaceId!, async (tx) =>
+      tx.licenseActivation.update({
+        where: { licenseId_machineId: { licenseId: licenseId!, machineId: "machine-001" } },
+        data: { deactivatedAt: new Date() },
+      })
+    )
+    const replacement = await request.post("/api/licenses/activate", {
+      data: { licenseKey: rawLicenseKey, machineId: "machine-004" },
+    })
+    expect(replacement.status()).toBe(200)
+
+    const reactivation = await request.post("/api/licenses/activate", {
+      data: { licenseKey: rawLicenseKey, machineId: "machine-001" },
+    })
+    expect(reactivation.status()).toBe(409)
+    expect((await reactivation.json()).error.code).toBe("MACHINE_CAP_REACHED")
+
+    // Restore the shared fixture for later renewal/verification tests.
+    await withWorkspaceRLS(testWorkspaceId!, async (tx) =>
+      tx.licenseActivation.update({
+        where: { licenseId_machineId: { licenseId: licenseId!, machineId: "machine-004" } },
+        data: { deactivatedAt: new Date() },
+      })
+    )
+    const restored = await request.post("/api/licenses/activate", {
+      data: { licenseKey: rawLicenseKey, machineId: "machine-001" },
+    })
+    expect(restored.status()).toBe(200)
   })
 
   test("activation with an invalid license key returns 404", async ({ request }) => {
@@ -210,7 +233,7 @@ test.describe("License verification API", () => {
     const licenseFile = activateJson.data.license as LicenseFile
 
     const res = await request.post("/api/licenses/verify", {
-      data: { licenseFile, licenseId: licenseId!, publicKeyPem },
+      data: { licenseFile, licenseId: licenseId! },
     })
     expect(res.status()).toBe(200)
     const json = await res.json()
@@ -229,7 +252,7 @@ test.describe("License verification API", () => {
     const tampered: LicenseFile = { ...licenseFile, seatCount: 999 }
 
     const res = await request.post("/api/licenses/verify", {
-      data: { licenseFile: tampered, licenseId: licenseId!, publicKeyPem },
+      data: { licenseFile: tampered, licenseId: licenseId! },
     })
     expect(res.status()).toBe(200)
     const json = await res.json()

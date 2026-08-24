@@ -13,6 +13,9 @@ const BASE32 = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 const REFERRAL_BONUS_MINUTES = 30
 /** Attribution applies to newly created accounts only — never retroactively (spec §4). */
 const NEW_ACCOUNT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+const SCORE_GRADES = new Set<ScoreGrade>(["A_PLUS", "A", "B", "C", "D", "F"])
+const MAX_PUBLIC_VERSION_LENGTH = 128
+const MAX_PUBLIC_RESOLVED_FINDINGS = 1_000_000
 
 export type ReleaseVerdict = "GO" | "GO_WITH_CONDITIONS" | "NO_GO" | "NOT_EVALUATED"
 
@@ -41,6 +44,18 @@ function resolveReleaseVerdict(score: number): ReleaseVerdict {
 
 function isReleaseVerdict(value: unknown): value is ReleaseVerdict {
   return typeof value === "string" && RELEASE_VERDICTS.includes(value)
+}
+
+function isBoundedPublicText(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_PUBLIC_VERSION_LENGTH &&
+    !Array.from(value).some((character) => {
+      const code = character.charCodeAt(0)
+      return code < 32 || code === 127
+    })
+  )
 }
 
 /**
@@ -86,27 +101,28 @@ export function normalizeScorecardPayload(raw: unknown): ScorecardPayload | null
   const stored = raw as Record<string, unknown>
 
   // Core fields present in every payload version. Absent means the row is unusable.
-  if (typeof stored.grade !== "string" || stored.grade.length === 0) return null
-  if (typeof stored.scannedAt !== "string" || Number.isNaN(Date.parse(stored.scannedAt))) {
+  if (typeof stored.grade !== "string" || !SCORE_GRADES.has(stored.grade as ScoreGrade)) return null
+  if (!isBoundedPublicText(stored.scannedAt) || Number.isNaN(Date.parse(stored.scannedAt))) {
     return null
   }
+  const scannedAt = new Date(stored.scannedAt).toISOString()
 
-  const modelVersion =
-    typeof stored.modelVersion === "string" && stored.modelVersion.length > 0
-      ? stored.modelVersion
-      : "unversioned"
+  const modelVersion = isBoundedPublicText(stored.modelVersion)
+    ? stored.modelVersion
+    : "unversioned"
 
   const resolvedFindings =
     typeof stored.resolvedFindings === "number" &&
     Number.isFinite(stored.resolvedFindings) &&
     stored.resolvedFindings >= 0
-      ? Math.floor(stored.resolvedFindings)
+      ? Math.min(Math.floor(stored.resolvedFindings), MAX_PUBLIC_RESOLVED_FINDINGS)
       : 0
 
   return {
     grade: stored.grade as ScoreGrade,
-    scope: typeof stored.scope === "string" && stored.scope.length > 0 ? stored.scope : SHARE_SCOPE,
-    scannedAt: stored.scannedAt,
+    // Scope is a fixed disclosure label, never arbitrary frozen JSON text.
+    scope: SHARE_SCOPE,
+    scannedAt,
     modelVersion,
     resolvedFindings,
     // Pre-verdict shares carry no verdict. NOT_EVALUATED is the honest reading — it must
@@ -114,10 +130,9 @@ export function normalizeScorecardPayload(raw: unknown): ScorecardPayload | null
     releaseVerdict: isReleaseVerdict(stored.releaseVerdict)
       ? stored.releaseVerdict
       : "NOT_EVALUATED",
-    verdictVersion:
-      typeof stored.verdictVersion === "string" && stored.verdictVersion.length > 0
-        ? stored.verdictVersion
-        : modelVersion,
+    verdictVersion: isBoundedPublicText(stored.verdictVersion)
+      ? stored.verdictVersion
+      : modelVersion,
   }
 }
 

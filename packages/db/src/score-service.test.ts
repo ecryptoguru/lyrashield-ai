@@ -183,6 +183,23 @@ describe("score-service", () => {
       expect(normalizeScorecardPayload({ scannedAt: "2026-07-01T00:00:00.000Z" })).toBeNull()
       expect(normalizeScorecardPayload({ grade: "B" })).toBeNull()
       expect(normalizeScorecardPayload({ grade: "B", scannedAt: "not-a-date" })).toBeNull()
+      expect(
+        normalizeScorecardPayload({ ...LEGACY_FIVE_KEY_PAYLOAD, grade: "A<script>" })
+      ).toBeNull()
+    })
+
+    it("bounds public text fields and keeps scope fixed", () => {
+      const payload = normalizeScorecardPayload({
+        ...CURRENT_PAYLOAD,
+        scope: "private target: secret.example",
+        modelVersion: "x".repeat(129),
+        verdictVersion: "unsafe\nvalue",
+      })
+      expect(payload).toMatchObject({
+        scope: "agentic pentest + SCA + secrets",
+        modelVersion: "unversioned",
+        verdictVersion: "unversioned",
+      })
     })
 
     it("coerces a malformed resolved-findings count to zero rather than rendering NaN", () => {
@@ -198,6 +215,12 @@ describe("score-service", () => {
         normalizeScorecardPayload({ ...LEGACY_FIVE_KEY_PAYLOAD, resolvedFindings: 2.7 })
           ?.resolvedFindings
       ).toBe(2)
+      expect(
+        normalizeScorecardPayload({
+          ...LEGACY_FIVE_KEY_PAYLOAD,
+          resolvedFindings: Number.MAX_SAFE_INTEGER,
+        })?.resolvedFindings
+      ).toBe(1_000_000)
     })
   })
 
