@@ -22,6 +22,210 @@ fn take_cancelled(scan_id: &str) -> bool {
     cancelled().lock().unwrap().remove(scan_id)
 }
 
+const REDACTED: &str = "[REDACTED]";
+
+fn ascii_matches_at(bytes: &[u8], start: usize, needle: &[u8]) -> bool {
+    bytes
+        .get(start..start + needle.len())
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(needle))
+}
+
+fn secret_end(bytes: &[u8], mut index: usize) -> usize {
+    while index < bytes.len()
+        && !bytes[index].is_ascii_whitespace()
+        && !matches!(
+            bytes[index],
+            b'"' | b'\'' | b',' | b';' | b'}' | b']' | b'&'
+        )
+    {
+        index += 1;
+    }
+    index
+}
+
+fn push_labeled_secret_ranges(bytes: &[u8], ranges: &mut Vec<(usize, usize)>) {
+    const LABELS: &[&[u8]] = &[
+        b"azure_openai_api_key",
+        b"openai_api_key",
+        b"anthropic_api_key",
+        b"accessToken",
+        b"refreshToken",
+        b"clientSecret",
+        b"api_key",
+        b"api-key",
+        b"api key",
+        b"apikey",
+        b"access_token",
+        b"access-token",
+        b"refresh_token",
+        b"client_secret",
+        b"authorization",
+        b"password",
+        b"secret",
+        b"token",
+    ];
+
+    for start in 0..bytes.len() {
+        for label in LABELS {
+            if !ascii_matches_at(bytes, start, label) {
+                continue;
+            }
+            if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+                continue;
+            }
+
+            let mut value_start = start + label.len();
+            while value_start < bytes.len()
+                && (bytes[value_start].is_ascii_whitespace()
+                    || matches!(bytes[value_start], b'"' | b'\''))
+            {
+                value_start += 1;
+            }
+            if value_start >= bytes.len() || !matches!(bytes[value_start], b':' | b'=') {
+                continue;
+            }
+            value_start += 1;
+            while value_start < bytes.len()
+                && (bytes[value_start].is_ascii_whitespace()
+                    || matches!(bytes[value_start], b'"' | b'\''))
+            {
+                value_start += 1;
+            }
+            if ascii_matches_at(bytes, value_start, b"bearer") {
+                value_start += b"bearer".len();
+                while value_start < bytes.len() && bytes[value_start].is_ascii_whitespace() {
+                    value_start += 1;
+                }
+            }
+            let value_end = secret_end(bytes, value_start);
+            if value_end > value_start {
+                ranges.push((value_start, value_end));
+            }
+        }
+    }
+}
+
+fn push_bearer_ranges(bytes: &[u8], ranges: &mut Vec<(usize, usize)>) {
+    for start in 0..bytes.len() {
+        if !ascii_matches_at(bytes, start, b"bearer") {
+            continue;
+        }
+        if start > 0 && bytes[start - 1].is_ascii_alphanumeric() {
+            continue;
+        }
+        let mut value_start = start + b"bearer".len();
+        if value_start >= bytes.len() || !bytes[value_start].is_ascii_whitespace() {
+            continue;
+        }
+        while value_start < bytes.len() && bytes[value_start].is_ascii_whitespace() {
+            value_start += 1;
+        }
+        let value_end = secret_end(bytes, value_start);
+        if value_end > value_start {
+            ranges.push((value_start, value_end));
+        }
+    }
+}
+
+fn push_prefixed_secret_ranges(bytes: &[u8], ranges: &mut Vec<(usize, usize)>) {
+    const PREFIXES: &[&[u8]] = &[
+        b"sk-ant-",
+        b"github_pat_",
+        b"polar_oat_",
+        b"polar_pat_",
+        b"lsk_",
+        b"rzp_live_",
+        b"rzp_test_",
+        b"sk_live_",
+        b"sk_test_",
+        b"xoxb-",
+        b"xoxp-",
+        b"ghp_",
+        b"AIza",
+        b"AKIA",
+        b"sk-",
+    ];
+
+    for start in 0..bytes.len() {
+        for prefix in PREFIXES {
+            if !bytes
+                .get(start..start + prefix.len())
+                .is_some_and(|candidate| candidate == *prefix)
+            {
+                continue;
+            }
+            let mut end = start + prefix.len();
+            while end < bytes.len()
+                && (bytes[end].is_ascii_alphanumeric() || matches!(bytes[end], b'_' | b'-'))
+            {
+                end += 1;
+            }
+            if end - start >= 16 {
+                ranges.push((start, end));
+            }
+        }
+    }
+}
+
+fn push_jwt_ranges(bytes: &[u8], ranges: &mut Vec<(usize, usize)>) {
+    for start in 0..bytes.len().saturating_sub(3) {
+        if bytes.get(start..start + 3) != Some(b"eyJ") {
+            continue;
+        }
+        let mut end = start + 3;
+        while end < bytes.len()
+            && (bytes[end].is_ascii_alphanumeric() || matches!(bytes[end], b'_' | b'-' | b'.'))
+        {
+            end += 1;
+        }
+        let candidate = &bytes[start..end];
+        if candidate
+            .split(|byte| *byte == b'.')
+            .filter(|part| part.len() >= 4)
+            .count()
+            == 3
+            && candidate.iter().filter(|byte| **byte == b'.').count() == 2
+        {
+            ranges.push((start, end));
+        }
+    }
+}
+
+/// Redact credentials before engine output reaches parsing, persistence, or webview events.
+fn redact_credentials(line: &str) -> String {
+    let bytes = line.as_bytes();
+    let mut ranges = Vec::new();
+    push_labeled_secret_ranges(bytes, &mut ranges);
+    push_bearer_ranges(bytes, &mut ranges);
+    push_prefixed_secret_ranges(bytes, &mut ranges);
+    push_jwt_ranges(bytes, &mut ranges);
+    if ranges.is_empty() {
+        return line.to_owned();
+    }
+
+    ranges.sort_unstable();
+    let mut merged: Vec<(usize, usize)> = Vec::with_capacity(ranges.len());
+    for (start, end) in ranges {
+        if let Some(last) = merged.last_mut() {
+            if start <= last.1 {
+                last.1 = last.1.max(end);
+                continue;
+            }
+        }
+        merged.push((start, end));
+    }
+
+    let mut redacted = String::with_capacity(line.len());
+    let mut cursor = 0;
+    for (start, end) in merged {
+        redacted.push_str(&line[cursor..start]);
+        redacted.push_str(REDACTED);
+        cursor = end;
+    }
+    redacted.push_str(&line[cursor..]);
+    redacted
+}
+
 fn parse_finding_line(line: &str) -> Option<Finding> {
     let trimmed = line.trim();
     if !trimmed.starts_with('{') {
@@ -222,6 +426,7 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
         let mut findings: Vec<Finding> = Vec::new();
         let mut persistence_error: Option<String> = None;
         while let Ok(Some(line)) = lines.next_line().await {
+            let line = redact_credentials(&line);
             let cur = seq_clone.fetch_add(1, Ordering::SeqCst);
             let progress = ScanEvent::Progress {
                 scan_id: scan_id_clone.clone(),
@@ -271,6 +476,7 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
         let reader = BufReader::new(stderr);
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
+            let line = redact_credentials(&line);
             let cur = seq_clone2.fetch_add(1, Ordering::SeqCst);
             let progress = ScanEvent::Progress {
                 scan_id: scan_id_clone2.clone(),
@@ -477,25 +683,48 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn secrets_not_in_event_payload() {
-        let probe = "sk-azure-secret-123";
-        let line = "progress line";
+    fn credentials_are_redacted_before_event_payloads() {
+        let line = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.signature api_key=azure-key-abc rzp_test_1234567890abcdef lsk_example_secret_value";
+        let redacted = redact_credentials(line);
         let ev = ScanEvent::Progress {
             scan_id: "s1".into(),
-            line: line.into(),
+            line: redacted,
             stream: "stdout".into(),
         };
         let payload = serde_json::to_string(&ev).unwrap();
-        assert!(!payload.contains(probe));
-        // ensure resolve_byok_env never logs sensitive material — we just check that env contains probe but not in event
-        let _ = ev;
+        assert!(!payload.contains("eyJhbGci"));
+        assert!(!payload.contains("azure-key-abc"));
+        assert!(!payload.contains("rzp_test_1234567890abcdef"));
+        assert!(!payload.contains("lsk_example_secret_value"));
+        assert_eq!(payload.matches(REDACTED).count(), 4);
     }
+
     #[test]
-    fn secrets_not_in_error_strings() {
-        let probe = "azure-key-abc";
-        // Simulate error message that might be constructed — ensure we don't interpolate sensitive material
-        let err = "BYOK missing".to_string();
-        assert!(!err.contains(probe));
+    fn credentials_are_redacted_before_finding_parse() {
+        let line = r#"{"severity":"HIGH","title":"Leaked key","description":"client_secret: abc123secret","file_path":"src/config.ts"}"#;
+        let redacted = redact_credentials(line);
+        let finding = parse_finding_line(&redacted).unwrap();
+        assert_eq!(
+            finding.description.as_deref(),
+            Some("client_secret: [REDACTED]")
+        );
+        assert!(!redacted.contains("abc123secret"));
+    }
+
+    #[test]
+    fn injected_env_and_camel_case_credentials_are_redacted() {
+        let line = "AZURE_OPENAI_API_KEY=azure-key-abc accessToken: browser-token";
+        let redacted = redact_credentials(line);
+        assert_eq!(redacted.matches(REDACTED).count(), 2);
+        assert!(!redacted.contains("azure-key-abc"));
+        assert!(!redacted.contains("browser-token"));
+    }
+
+    #[test]
+    fn ordinary_progress_text_is_unchanged() {
+        let line = "Scanned 200 files; no credential-shaped output";
+        assert_eq!(redact_credentials(line), line);
     }
 }

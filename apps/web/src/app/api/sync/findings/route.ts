@@ -1,13 +1,13 @@
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
-import { withWorkspaceRLS, findLicenseForSyncByKeyHash } from "@lyrashield/db"
+import { withWorkspaceRLS } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
 import { requireAuth } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { hashLicenseKey } from "../../../../lib/licenses/license-service"
 import { hasSyncWriteAccess } from "../../../../lib/sync-auth"
+import { markLegacySyncResponse, resolveSyncCredential } from "../../../../lib/sync-license-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -20,7 +20,9 @@ const STATUS_FIX_MAPPING: Record<string, string> = {
 
 const FindingSyncSchema = z.object({
   workspaceId: z.string().min(1),
-  licenseKey: z.string().min(1).max(200),
+  syncSessionToken: z.string().min(1).max(4096).optional(),
+  // One-release compatibility fallback. New clients send only syncSessionToken.
+  licenseKey: z.string().min(1).max(200).optional(),
   // Monotonic CAS: client sends seq it believes is current. Server atomically increments.
   // Accept either `expectedSeq` or legacy `expectedPreviousCursor` (numeric string) for compat.
   expectedSeq: z.number().int().min(0).optional(),
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
         if (Number.isFinite(n) && Number.isInteger(n) && n >= 0) expectedSeq = n
       }
     }
-    const { workspaceId, licenseKey, findings, reports } = raw
+    const { workspaceId, syncSessionToken, licenseKey, findings, reports } = raw
 
     if (!hasSyncWriteAccess(session, workspaceId)) {
       return apiError("FORBIDDEN", "A write-capable key for this workspace is required", 403)
@@ -118,15 +120,16 @@ export async function POST(request: Request) {
       return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
     }
 
-    const keyHash = hashLicenseKey(licenseKey)
-    const row = await findLicenseForSyncByKeyHash(keyHash)
-    if (!row) {
-      return apiError("LICENSE_KEY_NOT_FOUND", "The provided license key is not recognized", 404)
+    const credential = await resolveSyncCredential({
+      workspaceId,
+      session,
+      syncSessionToken,
+      licenseKey,
+    })
+    if (!credential.ok) {
+      return apiError(credential.code, credential.message, credential.status)
     }
-    const license = row.license
-    if (license.revoked) {
-      return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
-    }
+    const { license, legacyLicenseKey } = credential
 
     // Need cursor existence check — must be bound to workspace via RLS
     // Fetch cursor inside withWorkspaceRLS to respect NOBYPASSRLS, but we need seq for CAS, so do a preliminary fetch via withWorkspaceRLS read
@@ -179,34 +182,40 @@ export async function POST(request: Request) {
       const isExactReplay = existingCount === findings.length && findings.length > 0
       // For exact replay, return idempotent success without advancing
       if (isExactReplay && expectedSeq === currentSeq - 1) {
-        return apiSuccess(
-          {
-            synced: true,
-            duplicate: true,
-            findingsPersisted: 0,
-            reportsPersisted: 0,
-            reportsReceived: reports.length,
-            seq: currentSeq,
-            lastSyncedAt: cursorPre.lastSyncedAt.toISOString(),
-            lastSyncedFindingId: cursorPre.lastSyncedFindingId ?? null,
-          },
-          200
+        return markLegacySyncResponse(
+          apiSuccess(
+            {
+              synced: true,
+              duplicate: true,
+              findingsPersisted: 0,
+              reportsPersisted: 0,
+              reportsReceived: reports.length,
+              seq: currentSeq,
+              lastSyncedAt: cursorPre.lastSyncedAt.toISOString(),
+              lastSyncedFindingId: cursorPre.lastSyncedFindingId ?? null,
+            },
+            200
+          ),
+          legacyLicenseKey
         )
       }
       // Check if same seq but different content already applied (duplicate idempotency at same seq)
       if (isExactReplay && expectedSeq === currentSeq) {
-        return apiSuccess(
-          {
-            synced: true,
-            duplicate: true,
-            findingsPersisted: 0,
-            reportsPersisted: 0,
-            reportsReceived: reports.length,
-            seq: currentSeq,
-            lastSyncedAt: cursorPre.lastSyncedAt.toISOString(),
-            lastSyncedFindingId: cursorPre.lastSyncedFindingId ?? null,
-          },
-          200
+        return markLegacySyncResponse(
+          apiSuccess(
+            {
+              synced: true,
+              duplicate: true,
+              findingsPersisted: 0,
+              reportsPersisted: 0,
+              reportsReceived: reports.length,
+              seq: currentSeq,
+              lastSyncedAt: cursorPre.lastSyncedAt.toISOString(),
+              lastSyncedFindingId: cursorPre.lastSyncedFindingId ?? null,
+            },
+            200
+          ),
+          legacyLicenseKey
         )
       }
       return apiError(
@@ -368,19 +377,22 @@ export async function POST(request: Request) {
       seq: result.seq,
     })
 
-    return apiSuccess(
-      {
-        synced: true,
-        findingsPersisted: result.persistedFindings,
-        reportsPersisted: result.reportsPersisted,
-        reportsReceived: result.reportsReceived,
-        seq: result.seq,
-        lastSyncedAt: result.lastSyncedAt.toISOString(),
-        lastSyncedFindingId: result.lastSyncedFindingId ?? null,
-        // Provide legacy cursor alias for desktop compat
-        cursor: String(result.seq),
-      },
-      200
+    return markLegacySyncResponse(
+      apiSuccess(
+        {
+          synced: true,
+          findingsPersisted: result.persistedFindings,
+          reportsPersisted: result.reportsPersisted,
+          reportsReceived: result.reportsReceived,
+          seq: result.seq,
+          lastSyncedAt: result.lastSyncedAt.toISOString(),
+          lastSyncedFindingId: result.lastSyncedFindingId ?? null,
+          // Provide legacy cursor alias for desktop compat
+          cursor: String(result.seq),
+        },
+        200
+      ),
+      legacyLicenseKey
     )
   } catch (error: unknown) {
     const authErr = authErrorResponse(error)

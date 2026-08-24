@@ -1,18 +1,20 @@
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
-import { withWorkspaceRLS, findLicenseForSyncByKeyHash } from "@lyrashield/db"
+import { withWorkspaceRLS } from "@lyrashield/db"
 import { requireAuth } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { hashLicenseKey } from "../../../../lib/licenses/license-service"
 import { hasSyncWriteAccess } from "../../../../lib/sync-auth"
+import { markLegacySyncResponse, resolveSyncCredential } from "../../../../lib/sync-license-auth"
 
 export const dynamic = "force-dynamic"
 
 const CursorUpdateSchema = z.object({
   workspaceId: z.string().min(1),
-  licenseKey: z.string().min(1).max(200),
+  syncSessionToken: z.string().min(1).max(4096).optional(),
+  // One-release compatibility fallback. New clients send only syncSessionToken.
+  licenseKey: z.string().min(1).max(200).optional(),
   // Monotonic numeric cursor
   seq: z.number().int().min(0).optional(),
   // Legacy alias (string numeric) — accept but coerce
@@ -49,7 +51,7 @@ export async function PUT(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
-    const { workspaceId, licenseKey } = parsed.data
+    const { workspaceId, syncSessionToken, licenseKey } = parsed.data
     if (!hasSyncWriteAccess(session, workspaceId)) {
       return apiError("FORBIDDEN", "A write-capable key for this workspace is required", 403)
     }
@@ -63,15 +65,16 @@ export async function PUT(request: Request) {
       return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
     }
 
-    const keyHash = hashLicenseKey(licenseKey)
-    const row = await findLicenseForSyncByKeyHash(keyHash)
-    if (!row) {
-      return apiError("LICENSE_KEY_NOT_FOUND", "The provided license key is not recognized", 404)
+    const credential = await resolveSyncCredential({
+      workspaceId,
+      session,
+      syncSessionToken,
+      licenseKey,
+    })
+    if (!credential.ok) {
+      return apiError(credential.code, credential.message, credential.status)
     }
-    const license = row.license
-    if (license.revoked) {
-      return apiError("LICENSE_REVOKED", "This license has been revoked", 403)
-    }
+    const { license, legacyLicenseKey } = credential
 
     const cursor = await withWorkspaceRLS(workspaceId, async (tx) =>
       tx.syncCursor.findUnique({
@@ -103,15 +106,18 @@ export async function PUT(request: Request) {
         const updated = await withWorkspaceRLS(workspaceId, async (tx) =>
           tx.syncCursor.update({ where: { id: cursor.id }, data: { lastSyncedAt: new Date() } })
         )
-        return apiSuccess(
-          {
-            cursorId: updated.id,
-            seq: Number(updated.seq),
-            cursor: String(updated.seq),
-            lastSyncedAt: updated.lastSyncedAt.toISOString(),
-            lastSyncedFindingId: updated.lastSyncedFindingId,
-          },
-          200
+        return markLegacySyncResponse(
+          apiSuccess(
+            {
+              cursorId: updated.id,
+              seq: Number(updated.seq),
+              cursor: String(updated.seq),
+              lastSyncedAt: updated.lastSyncedAt.toISOString(),
+              lastSyncedFindingId: updated.lastSyncedFindingId,
+            },
+            200
+          ),
+          legacyLicenseKey
         )
       }
       // Forward jump without findings is not allowed — findings CAS is the only valid advance
@@ -133,15 +139,18 @@ export async function PUT(request: Request) {
         const updated = await withWorkspaceRLS(workspaceId, async (tx) =>
           tx.syncCursor.update({ where: { id: cursor.id }, data: { lastSyncedAt: new Date() } })
         )
-        return apiSuccess(
-          {
-            cursorId: updated.id,
-            seq: Number(updated.seq),
-            cursor: String(updated.seq),
-            lastSyncedAt: updated.lastSyncedAt.toISOString(),
-            lastSyncedFindingId: updated.lastSyncedFindingId,
-          },
-          200
+        return markLegacySyncResponse(
+          apiSuccess(
+            {
+              cursorId: updated.id,
+              seq: Number(updated.seq),
+              cursor: String(updated.seq),
+              lastSyncedAt: updated.lastSyncedAt.toISOString(),
+              lastSyncedFindingId: updated.lastSyncedFindingId,
+            },
+            200
+          ),
+          legacyLicenseKey
         )
       }
       return apiError(
@@ -152,15 +161,18 @@ export async function PUT(request: Request) {
     }
 
     // No fields to update — return current
-    return apiSuccess(
-      {
-        cursorId: cursor.id,
-        seq: currentSeq,
-        cursor: String(currentSeq),
-        lastSyncedAt: cursor.lastSyncedAt.toISOString(),
-        lastSyncedFindingId: cursor.lastSyncedFindingId,
-      },
-      200
+    return markLegacySyncResponse(
+      apiSuccess(
+        {
+          cursorId: cursor.id,
+          seq: currentSeq,
+          cursor: String(currentSeq),
+          lastSyncedAt: cursor.lastSyncedAt.toISOString(),
+          lastSyncedFindingId: cursor.lastSyncedFindingId,
+        },
+        200
+      ),
+      legacyLicenseKey
     )
   } catch (error) {
     const authErr = authErrorResponse(error)

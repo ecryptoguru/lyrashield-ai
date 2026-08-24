@@ -12,14 +12,10 @@ export default async function PlatformAdminAuditPage({
 }: {
   searchParams: Promise<{ cursor?: string }>
 }) {
-  try {
-    await requirePlatformAdminIdentity()
-  } catch {
-    notFound()
-  }
+  const identity = await requirePlatformAdminIdentity().catch(() => notFound())
 
   const cursor = parseAdminCursor((await searchParams).cursor)
-  const page = await getPlatformAdminAudit(cursor)
+  const page = await getPlatformAdminAudit(identity, cursor)
 
   return (
     <div className="flex flex-col gap-5">
@@ -33,7 +29,7 @@ export default async function PlatformAdminAuditPage({
             <tr>
               <th className="px-4 py-3 font-medium">Action</th>
               <th className="px-4 py-3 font-medium">Resource</th>
-              <th className="px-4 py-3 font-medium">Actor</th>
+              <th className="px-4 py-3 font-medium">Actor (current email)</th>
               <th className="px-4 py-3 font-medium">Time</th>
             </tr>
           </thead>
@@ -45,7 +41,15 @@ export default async function PlatformAdminAuditPage({
                   {entry.resourceType}
                   {entry.resourceId ? ` · ${entry.resourceId}` : ""}
                 </td>
-                <td className="px-4 py-3">{entry.actorUserId}</td>
+                <td className="max-w-72 px-4 py-3">
+                  <span
+                    className="block truncate"
+                    aria-label={entry.actorEmail}
+                    title={entry.actorEmail}
+                  >
+                    {entry.actorEmail}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <time dateTime={entry.createdAt.toISOString()}>
                     {entry.createdAt.toLocaleString()}

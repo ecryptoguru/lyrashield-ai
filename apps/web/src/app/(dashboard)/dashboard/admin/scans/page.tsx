@@ -12,14 +12,10 @@ export default async function PlatformAdminScansPage({
 }: {
   searchParams: Promise<{ cursor?: string }>
 }) {
-  try {
-    await requirePlatformAdminIdentity()
-  } catch {
-    notFound()
-  }
+  const identity = await requirePlatformAdminIdentity().catch(() => notFound())
 
   const cursor = parseAdminCursor((await searchParams).cursor)
-  const page = await getPlatformAdminScans(cursor)
+  const page = await getPlatformAdminScans(identity, cursor)
 
   return (
     <div className="flex flex-col gap-5">

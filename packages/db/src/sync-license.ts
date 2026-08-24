@@ -29,3 +29,17 @@ export async function findLicenseForSyncByKeyHash(keyHash: string) {
     },
   })
 }
+
+/** Revalidate an already-linked license named by a signed sync-session token. */
+export async function findLicenseForSyncById(licenseId: string) {
+  const systemPrisma = getSystemPrisma()
+  return systemPrisma.license.findUnique({
+    where: { id: licenseId },
+    select: {
+      id: true,
+      workspaceId: true,
+      sku: true,
+      revoked: true,
+    },
+  })
+}
