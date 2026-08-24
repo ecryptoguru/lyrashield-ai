@@ -33,6 +33,13 @@ export interface AuthSession {
   oauth?: OAuthAuthContext
 }
 
+declare const platformAdminIdentityBrand: unique symbol
+
+/** Browser identity that passed the platform-admin allowlist, role, and recent-TOTP gates. */
+export type PlatformAdminIdentity = AuthSession & {
+  readonly [platformAdminIdentityBrand]: true
+}
+
 /**
  * Permissions a read-only ("read" scope) API key may exercise. Everything not
  * listed requires the "write" scope — fail-closed for any newly added
@@ -189,10 +196,10 @@ export async function requirePlatformAdminCandidateIdentity(): Promise<AuthSessi
 }
 
 /** Require a TOTP-stamped current browser session before any global read. */
-export async function requirePlatformAdminIdentity(): Promise<AuthSession> {
+export async function requirePlatformAdminIdentity(): Promise<PlatformAdminIdentity> {
   const identity = await requirePlatformAdminCandidateIdentity()
   await requireRecentPlatformAdminTotp(identity, MAX_PLATFORM_ADMIN_READ_AGE_MS)
-  return identity
+  return identity as PlatformAdminIdentity
 }
 
 async function requireRecentPlatformAdminTotp(

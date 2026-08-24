@@ -2,11 +2,64 @@ use crate::api::ApiClient;
 use crate::scan::types::Finding;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 const MAX_FINDINGS_PER_BATCH: usize = 500;
 const KEYCHAIN_SERVICE: &str = "lyrashield";
 const LICENSE_KEY_ACCOUNT: &str = "license-key";
 const SYNC_API_KEY_ACCOUNT: &str = "sync-api-key";
+const SYNC_SESSION_RENEWAL_WINDOW_SECONDS: i64 = 60;
+
+#[derive(Debug, Clone)]
+struct SyncSessionCredential {
+    token: String,
+    workspace_id: String,
+    expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+static SYNC_SESSION: OnceLock<Mutex<Option<SyncSessionCredential>>> = OnceLock::new();
+
+fn sync_session_store() -> &'static Mutex<Option<SyncSessionCredential>> {
+    SYNC_SESSION.get_or_init(|| Mutex::new(None))
+}
+
+fn session_is_usable(
+    session: &SyncSessionCredential,
+    workspace_id: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    session.workspace_id == workspace_id
+        && session.expires_at > now + chrono::Duration::seconds(SYNC_SESSION_RENEWAL_WINDOW_SECONDS)
+}
+
+fn active_sync_session_token(workspace_id: &str) -> Result<Option<String>, String> {
+    let mut session = sync_session_store()
+        .lock()
+        .map_err(|_| "sync session store unavailable".to_string())?;
+    match session.as_ref() {
+        Some(value) if session_is_usable(value, workspace_id, chrono::Utc::now()) => {
+            Ok(Some(value.token.clone()))
+        }
+        Some(_) => {
+            *session = None;
+            Ok(None)
+        }
+        None => Ok(None),
+    }
+}
+
+fn set_sync_session(session: SyncSessionCredential) -> Result<(), String> {
+    *sync_session_store()
+        .lock()
+        .map_err(|_| "sync session store unavailable".to_string())? = Some(session);
+    Ok(())
+}
+
+fn clear_sync_session() {
+    if let Ok(mut session) = sync_session_store().lock() {
+        *session = None;
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,6 +106,10 @@ struct ConnectData {
     seq: Option<u64>,
     #[serde(rename = "lastSyncedFindingId")]
     last_synced_finding_id: Option<String>,
+    #[serde(rename = "syncSessionToken")]
+    sync_session_token: String,
+    #[serde(rename = "syncSessionExpiresAt")]
+    sync_session_expires_at: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -239,22 +296,29 @@ pub async fn connect_workspace(
         return Err("ENTITLEMENT_MISSING: Sync addon or Cloud subscription required".into());
     }
     if resp.status.as_u16() == 404 {
-        return Err(format!("license not found: {}", resp.body));
+        return Err("license not found".into());
     }
     if !resp.status.is_success() {
-        return Err(format!(
-            "sync connect failed ({}): {}",
-            resp.status, resp.body
-        ));
+        return Err(format!("sync connect failed ({})", resp.status));
     }
-    let envelope: ApiEnvelope<ConnectData> = serde_json::from_str(&resp.body)
-        .map_err(|e| format!("parse connect envelope: {} body:{}", e, resp.body))?;
+    let envelope: ApiEnvelope<ConnectData> =
+        serde_json::from_str(&resp.body).map_err(|e| format!("parse connect envelope: {}", e))?;
     if !envelope.success {
-        return Err(format!("connect envelope success=false: {}", resp.body));
+        return Err("connect envelope success=false".into());
     }
     let data = envelope
         .data
-        .ok_or_else(|| format!("connect missing data: {}", resp.body))?;
+        .ok_or_else(|| "connect missing data".to_string())?;
+    if data.sync_session_token.trim().is_empty() {
+        return Err("connect response missing sync session token".into());
+    }
+    let sync_session_expires_at =
+        chrono::DateTime::parse_from_rfc3339(&data.sync_session_expires_at)
+            .map_err(|_| "connect response has invalid sync session expiry".to_string())?
+            .with_timezone(&chrono::Utc);
+    if sync_session_expires_at <= chrono::Utc::now() {
+        return Err("connect response sync session is already expired".into());
+    }
     let seq = data.seq.unwrap_or(0);
     let last_synced_finding_id = data.last_synced_finding_id;
     let now = chrono::Utc::now().to_rfc3339();
@@ -274,7 +338,24 @@ pub async fn connect_workspace(
     .await
     .map_err(|e| format!("join: {}", e))?
     .map_err(|e| format!("save state: {}", e))?;
+    set_sync_session(SyncSessionCredential {
+        token: data.sync_session_token,
+        workspace_id: workspace_id.to_string(),
+        expires_at: sync_session_expires_at,
+    })?;
     Ok(conn)
+}
+
+async fn ensure_sync_session(
+    api_url: Option<String>,
+    workspace_id: &str,
+) -> Result<String, String> {
+    if let Some(token) = active_sync_session_token(workspace_id)? {
+        return Ok(token);
+    }
+    connect_workspace(api_url, workspace_id).await?;
+    active_sync_session_token(workspace_id)?
+        .ok_or_else(|| "sync connect did not establish a usable session".to_string())
 }
 
 pub async fn load_trusted_cursor() -> Result<Option<SyncConnection>, String> {
@@ -293,8 +374,8 @@ pub async fn sync_findings(
     findings: &[Finding],
 ) -> Vec<SyncResult> {
     let mut results = Vec::new();
-    let license_key = match load_license_key_from_keychain() {
-        Ok(k) => k,
+    let sync_session_token = match ensure_sync_session(api_url.clone(), workspace_id).await {
+        Ok(token) => token,
         Err(e) => {
             results.push(SyncResult::Error { message: e });
             return results;
@@ -322,7 +403,7 @@ pub async fn sync_findings(
         let url = format!("{}/api/sync/findings", client.base_url());
         let body = serde_json::json!({
             "workspaceId": workspace_id,
-            "licenseKey": license_key,
+            "syncSessionToken": &sync_session_token,
             "expectedSeq": current_seq,
             "findings": chunk.iter().map(|f| {
                 serde_json::json!({
@@ -396,6 +477,13 @@ pub async fn sync_findings(
                 });
                 break;
             }
+            Ok(resp) if resp.status.as_u16() == 401 => {
+                clear_sync_session();
+                results.push(SyncResult::Error {
+                    message: "Sync session expired; reconnect and retry".into(),
+                });
+                break;
+            }
             Ok(resp) => {
                 results.push(SyncResult::Error {
                     message: format!("sync failed ({}): {}", resp.status, resp.body),
@@ -432,17 +520,22 @@ pub async fn fetch_and_adopt_cursor(
     api_url: Option<String>,
     workspace_id: &str,
 ) -> Result<SyncConnection, String> {
-    let license_key = load_license_key_from_keychain()?;
+    let sync_session_token = ensure_sync_session(api_url.clone(), workspace_id).await?;
     let client = authenticated_client(api_url)?;
     let url = format!("{}/api/sync/cursor", client.base_url());
-    // PUT with no cursor advancement is the authenticated cursor read. Keep
-    // license proof in the JSON body, never in a URL or browser-visible store.
+    // PUT with no cursor advancement is the authenticated cursor read.
     let resp = client
         .put(
             &url,
-            &serde_json::json!({ "workspaceId": workspace_id, "licenseKey": license_key }),
+            &serde_json::json!({
+                "workspaceId": workspace_id,
+                "syncSessionToken": sync_session_token,
+            }),
         )
         .await?;
+    if resp.status.as_u16() == 401 {
+        clear_sync_session();
+    }
     if !resp.status.is_success() {
         return Err(format!(
             "cursor fetch failed ({}): {}",
@@ -480,6 +573,7 @@ pub async fn fetch_and_adopt_cursor(
 }
 
 pub fn disconnect() -> Result<(), String> {
+    clear_sync_session();
     clear_sync_state_blocking()
 }
 
@@ -490,14 +584,35 @@ mod tests {
 
     #[test]
     fn envelope_parsing_uses_data_seq_not_top_level_cursor() {
-        let body = r#"{"success":true,"data":{"seq":5,"lastSyncedFindingId":"abc"}}"#;
-        let env: ApiEnvelope<CursorData> = serde_json::from_str(body).unwrap();
+        let body = r#"{"success":true,"data":{"seq":5,"lastSyncedFindingId":"abc","syncSessionToken":"token","syncSessionExpiresAt":"2026-08-24T12:15:00Z"}}"#;
+        let env: ApiEnvelope<ConnectData> = serde_json::from_str(body).unwrap();
         assert!(env.success);
         let d = env.data.unwrap();
         assert_eq!(d.seq, Some(5));
+        assert_eq!(d.sync_session_token, "token");
+        assert_eq!(d.sync_session_expires_at, "2026-08-24T12:15:00Z");
         let body2 = r#"{"success":true,"data":{"cursor":"7"}}"#;
         let env2: ApiEnvelope<FindingsData> = serde_json::from_str(body2).unwrap();
         assert_eq!(env2.data.unwrap().cursor.unwrap(), "7");
+    }
+
+    #[test]
+    fn sync_session_renews_before_expiry_and_stays_workspace_bound() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-08-24T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let session = SyncSessionCredential {
+            token: "token".into(),
+            workspace_id: "workspace_1".into(),
+            expires_at: now + chrono::Duration::seconds(61),
+        };
+        assert!(session_is_usable(&session, "workspace_1", now));
+        assert!(!session_is_usable(
+            &session,
+            "workspace_1",
+            now + chrono::Duration::seconds(1)
+        ));
+        assert!(!session_is_usable(&session, "workspace_2", now));
     }
 
     #[test]

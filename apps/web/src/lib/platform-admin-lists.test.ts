@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { PlatformAdminIdentity } from "@lyrashield/auth/server"
 
 const prisma = {
   user: { findMany: vi.fn() },
@@ -16,6 +17,8 @@ import {
   getPlatformAdminWorkspaces,
   parseAdminCursor,
 } from "./platform-admin-lists"
+
+const identity = {} as PlatformAdminIdentity
 
 describe("platform admin lists", () => {
   beforeEach(() => vi.clearAllMocks())
@@ -38,7 +41,7 @@ describe("platform admin lists", () => {
       }))
     )
 
-    const result = await getPlatformAdminUsers("user-cursor")
+    const result = await getPlatformAdminUsers(identity, "user-cursor")
 
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -63,7 +66,7 @@ describe("platform admin lists", () => {
       },
     ])
 
-    await expect(getPlatformAdminWorkspaces()).resolves.toEqual({
+    await expect(getPlatformAdminWorkspaces(identity)).resolves.toEqual({
       items: [
         {
           id: "ws-1",
@@ -81,7 +84,7 @@ describe("platform admin lists", () => {
   it("does not select scan findings, errors, summaries, tokens, or costs", async () => {
     prisma.scan.findMany.mockResolvedValue([])
 
-    await getPlatformAdminScans()
+    await getPlatformAdminScans(identity)
 
     const query = prisma.scan.findMany.mock.calls[0]?.[0]
     expect(query.select).toEqual({
@@ -106,10 +109,26 @@ describe("platform admin lists", () => {
         resourceId: "affiliate-1",
         createdAt: new Date("2026-08-24T00:00:00Z"),
       },
+      {
+        id: "audit-2",
+        actorUserId: "deleted-user",
+        action: "affiliate.reject",
+        resourceType: "affiliate",
+        resourceId: "affiliate-2",
+        createdAt: new Date("2026-08-24T00:01:00Z"),
+      },
     ])
+    prisma.user.findMany.mockResolvedValue([{ id: "user-1", email: "admin@example.com" }])
 
-    await expect(getPlatformAdminAudit()).resolves.toMatchObject({
-      items: [{ action: "affiliate.suspend", resourceType: "affiliate" }],
+    await expect(getPlatformAdminAudit(identity)).resolves.toMatchObject({
+      items: [
+        {
+          action: "affiliate.suspend",
+          resourceType: "affiliate",
+          actorEmail: "admin@example.com",
+        },
+        { action: "affiliate.reject", actorEmail: "Deleted user" },
+      ],
       nextCursor: null,
     })
     expect(prisma.platformAdminAudit.findMany).toHaveBeenCalledWith({
@@ -123,6 +142,11 @@ describe("platform admin lists", () => {
         resourceId: true,
         createdAt: true,
       },
+    })
+    expect(prisma.user.findMany).toHaveBeenCalledOnce()
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["user-1", "deleted-user"] } },
+      select: { id: true, email: true },
     })
   })
 })

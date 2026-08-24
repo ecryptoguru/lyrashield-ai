@@ -1,4 +1,5 @@
 import { getSystemPrisma } from "@lyrashield/db"
+import type { PlatformAdminIdentity } from "@lyrashield/auth/server"
 
 export const PLATFORM_ADMIN_PAGE_SIZE = 25
 
@@ -12,7 +13,7 @@ function page<T extends { id: string }>(rows: T[]) {
   return { items, nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null }
 }
 
-export async function getPlatformAdminUsers(cursor?: string) {
+export async function getPlatformAdminUsers(_identity: PlatformAdminIdentity, cursor?: string) {
   const rows = await getSystemPrisma().user.findMany({
     orderBy: { id: "desc" },
     take: PLATFORM_ADMIN_PAGE_SIZE + 1,
@@ -29,7 +30,10 @@ export async function getPlatformAdminUsers(cursor?: string) {
   return page(rows)
 }
 
-export async function getPlatformAdminWorkspaces(cursor?: string) {
+export async function getPlatformAdminWorkspaces(
+  _identity: PlatformAdminIdentity,
+  cursor?: string
+) {
   const rows = await getSystemPrisma().workspace.findMany({
     where: { deletedAt: null },
     orderBy: { id: "desc" },
@@ -52,7 +56,7 @@ export async function getPlatformAdminWorkspaces(cursor?: string) {
   )
 }
 
-export async function getPlatformAdminScans(cursor?: string) {
+export async function getPlatformAdminScans(_identity: PlatformAdminIdentity, cursor?: string) {
   const rows = await getSystemPrisma().scan.findMany({
     where: { deletedAt: null },
     orderBy: { id: "desc" },
@@ -72,8 +76,9 @@ export async function getPlatformAdminScans(cursor?: string) {
   return page(rows)
 }
 
-export async function getPlatformAdminAudit(cursor?: string) {
-  const rows = await getSystemPrisma().platformAdminAudit.findMany({
+export async function getPlatformAdminAudit(_identity: PlatformAdminIdentity, cursor?: string) {
+  const prisma = getSystemPrisma()
+  const rows = await prisma.platformAdminAudit.findMany({
     orderBy: { id: "desc" },
     take: PLATFORM_ADMIN_PAGE_SIZE + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -86,5 +91,19 @@ export async function getPlatformAdminAudit(cursor?: string) {
       createdAt: true,
     },
   })
-  return page(rows)
+  const actorUserIds = [...new Set(rows.map((row) => row.actorUserId))]
+  const actors = actorUserIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: actorUserIds } },
+        select: { id: true, email: true },
+      })
+    : []
+  const actorEmails = new Map(actors.map((actor) => [actor.id, actor.email]))
+
+  return page(
+    rows.map(({ actorUserId, ...row }) => ({
+      ...row,
+      actorEmail: actorEmails.get(actorUserId) ?? "Deleted user",
+    }))
+  )
 }

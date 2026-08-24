@@ -12,14 +12,10 @@ export default async function PlatformAdminWorkspacesPage({
 }: {
   searchParams: Promise<{ cursor?: string }>
 }) {
-  try {
-    await requirePlatformAdminIdentity()
-  } catch {
-    notFound()
-  }
+  const identity = await requirePlatformAdminIdentity().catch(() => notFound())
 
   const cursor = parseAdminCursor((await searchParams).cursor)
-  const page = await getPlatformAdminWorkspaces(cursor)
+  const page = await getPlatformAdminWorkspaces(identity, cursor)
 
   return (
     <div className="flex flex-col gap-5">

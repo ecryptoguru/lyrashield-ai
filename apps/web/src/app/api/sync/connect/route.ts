@@ -8,6 +8,8 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { hashLicenseKey } from "../../../../lib/licenses/license-service"
 import { hasSyncWriteAccess } from "../../../../lib/sync-auth"
+import { createSyncSessionToken } from "../../../../lib/sync-session"
+import { checkSyncEntitlement } from "../../../../lib/sync-license-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
     }
 
     const sku = license.sku as LocalSkuId
-    const hasSyncEntitlement = await checkSyncEntitlement(sku, license.workspaceId, workspaceId)
+    const hasSyncEntitlement = await checkSyncEntitlement(sku, workspaceId)
     if (!hasSyncEntitlement) {
       return apiError(
         "SYNC_NOT_ENTITLED",
@@ -122,6 +124,12 @@ export async function POST(request: Request) {
       userId: session.userId,
     })
 
+    const syncSession = createSyncSessionToken({
+      workspaceId,
+      licenseId: license.id,
+      session,
+    })
+
     return apiSuccess(
       {
         connected: true,
@@ -130,6 +138,8 @@ export async function POST(request: Request) {
         seq: Number(cursor.seq),
         lastSyncedAt: cursor.lastSyncedAt.toISOString(),
         lastSyncedFindingId: cursor.lastSyncedFindingId ?? null,
+        syncSessionToken: syncSession.token,
+        syncSessionExpiresAt: syncSession.expiresAt.toISOString(),
       },
       200
     )
@@ -139,20 +149,4 @@ export async function POST(request: Request) {
     logger.error("Sync connect failed", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to connect sync", 500)
   }
-}
-
-async function checkSyncEntitlement(
-  sku: LocalSkuId,
-  licenseWorkspaceId: string | null,
-  targetWorkspaceId: string
-): Promise<boolean> {
-  if (sku === "sync_addon") return true
-  if (sku === "team_subscription") return true
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: targetWorkspaceId },
-    select: { plan: true },
-  })
-  if (workspace && workspace.plan !== "FREE") return true
-  if (licenseWorkspaceId && licenseWorkspaceId !== targetWorkspaceId) return false
-  return false
 }

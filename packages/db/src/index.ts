@@ -240,7 +240,7 @@ export {
   type ThreatModelInput,
   type ThreatModelThreat,
 } from "./threat-model-service"
-export { findLicenseForSyncByKeyHash } from "./sync-license"
+export { findLicenseForSyncById, findLicenseForSyncByKeyHash } from "./sync-license"
 
 export {
   createApproval,
