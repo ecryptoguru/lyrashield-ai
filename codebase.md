@@ -298,7 +298,7 @@ Annual Cloud commission is flat 25%; 30% tier applies only to monthly. No commis
 - `packages/agent-registry` owns client install metadata.
 - `packages/agent-plugin` generates marketplace/plugin artifacts and verified client shims.
 
-Current package/runtime contract: `lyrashield` CLI `0.2.0` supports Node 22–24; `@lyrashield/mcp` `0.2.2` and `@lyrashield/agent-plugin` `0.1.17` require Node 24+. MCP uses SDK `1.30` and Zod 4. Registry contains 30 entries and resolves 26 preferred client surfaces: 13 config-file installs, one vendor CLI, seven guided-manual clients, and five Agent Plugin installs for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Registry retains three legacy config-file alternatives for plugin-preferred clients. Four generated client-specific shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root plugin manifest. VS Code stays on its verified config-file path.
+Current package/runtime contract: `lyrashield` CLI `0.2.0` supports Node 22–24; `@lyrashield/mcp` `0.2.2` and `@lyrashield/agent-plugin` `0.1.18` require Node 24+. MCP uses SDK `1.30` and Zod 4. Registry contains 30 entries and resolves 26 preferred client surfaces: 13 config-file installs, one vendor CLI, seven guided-manual clients, and five Agent Plugin installs for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Registry retains three legacy config-file alternatives for plugin-preferred clients. Four generated client-specific shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root plugin manifest. VS Code stays on its verified config-file path.
 
 Hosted OAuth is read-only by default. Write scope still requires permission and per-action approval.
 
@@ -342,14 +342,14 @@ Trust-boundary rules:
 ### Web and worker
 
 - Auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, OAuth provider values, trusted origins.
-- Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, worker-only `DATABASE_SYSTEM_URL` where required.
+- Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, and a separately scoped `DATABASE_SYSTEM_URL` where a verified cross-workspace path requires it. Production web does not receive the system URL; isolated billing staging receives `app_system_staging`, limited to license tables, while ordinary app traffic stays on the RLS-bound `app_runtime_staging` URL.
 - Queue: `REDIS_URL`; production BullMQ requires authenticated `rediss://`.
 - Rate limit: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` only.
 - Engine: `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LYRASHIELD_LLM`, Azure API values.
 - Evidence: `S3_*` plus encryption/key references.
 - Proxy: `LYRASHIELD_EGRESS_PROXY_URL`, `LYRASHIELD_EGRESS_PROXY_SECRET`.
 - Email: `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION`, `BREVO_API_KEY`, sender values.
-- Billing: Polar/Razorpay credentials, price maps, webhook secrets.
+- Billing: Polar/Razorpay credentials, price maps, webhook secrets; isolated billing staging additionally requires `LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging`, `BILLING_STAGING_ADMISSION=restricted`, and the protected access-session secret while every normal purchase admission remains `off`.
 - License: Key Vault and signing key identifiers.
 - Optional search: `LYRASHIELD_WEB_SEARCH_*`.
 
@@ -420,7 +420,8 @@ Current command output is authoritative; never copy historical test counts forwa
 - Egress: direct public denied, proxy public allowed, loopback denied `ssrf_blocked`.
 - DNS refresh timer: active during Standard scan; no worker restart.
 - Backup/restore: encrypted backup, isolated restore, schema/RLS/audit/app startup verified.
-- Code ahead of production: `main` is `3966e24c` after PRs #421–#424 and the current assurance hardening PRs #428–#430, with green CI. Release `32755678337` pushed images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Those images are not deployed. Production remains on the exact worker proof above with purchase admissions `off`.
+- Code ahead of production: the current billing-staging candidate is based on `main` at `d7f38001` after PR #431. Release `32755678337` pushed earlier images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Those images and the billing-staging candidate are not deployed. Production remains on the exact worker proof above with purchase admissions `off`.
+- Billing staging is a distinct code-only deployment surface: `.github/workflows/deploy-billing-staging.yml` builds `runner` and `workspace-builder` from the dispatched main SHA into the isolated ACR, deploys only immutable digests, invokes image-owned migration/role scripts as exact Container Apps Job commands, and cleans up the jobs. The web proxy gates ordinary staging routes with an opaque HttpOnly same-origin access session while leaving exact health/readiness and signature-validating billing webhook ingress reachable. `BILLING_STAGING_ADMISSION=restricted` requires staging marker/origin plus Sandbox/Test modes and all production admissions off; no execution or live billing proof is implied.
 
 ### Current Standard scan proof
 

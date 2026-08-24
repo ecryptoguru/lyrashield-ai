@@ -534,9 +534,9 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 `login` writes `~/.lyrashield/credentials.json` with `0o600` permissions. If the browser-based OAuth device flow is unavailable, it falls back to `LYRASHIELD_API_KEY` from the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com` and is resolved consistently by `packages/credentials`, which is the single source of truth for the credentials file.
 
-`init`/`install <agent>` choose an install strategy based on the agent. `packages/agent-registry` contains 30 entries and resolves them into 26 preferred client surfaces. Package compatibility is explicit: CLI `0.2.0` supports Node 22–24; MCP `0.2.2` and Agent Plugin `0.1.17` require Node 24 or newer.
+`init`/`install <agent>` choose an install strategy based on the agent. `packages/agent-registry` contains 30 entries and resolves them into 26 preferred client surfaces. Package compatibility is explicit: CLI `0.2.0` supports Node 22–24; MCP `0.2.2` and Agent Plugin `0.1.18` require Node 24 or newer.
 
-- **Agent Plugin** — for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro, the CLI prefers a portable plugin install from `@lyrashield/agent-plugin` (currently v0.1.17). Generated client shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root manifest. Plugin files never inline a raw API key. VS Code stays on its verified config-file strategy.
+- **Agent Plugin** — for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro, the CLI prefers a portable plugin install from `@lyrashield/agent-plugin` (currently v0.1.18). Generated client shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root manifest. Plugin files never inline a raw API key. VS Code stays on its verified config-file strategy.
 - **Config-file** — the registry provides 16 writable config variants; 13 are preferred client paths and three remain explicit legacy alternatives for plugin-preferred clients. The CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
 - **Guided manual** — for the seven clients whose tooling has no writable config file — Devin, Cline, JetBrains AI & Junie, PiCode, OpenClaw, Goose, and Aider — `install` prints exact copy-paste command/argument/environment values, generated from the same source of truth the writable installers use.
@@ -598,7 +598,7 @@ Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CU
 
 ### GitHub Action
 
-For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai@v1` (the `action.yml` at the repository root) runs a diff-aware gate — secret detection plus risky-pattern checks, emitting SARIF — entirely in your own runner with your own `GITHUB_TOKEN`. It needs no LyraShield account or API key. See the [GitHub Action integration guide](https://lyrashieldai.com/docs/integrations/github-action) for the workflow file and inputs.
+For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai@v2` (the `action.yml` at the repository root) runs a diff-aware gate — secret detection plus risky-pattern checks, emitting SARIF — entirely in your own runner with your own `GITHUB_TOKEN`. It needs no LyraShield account or API key. The local Action accepts `SAFE` and `AGGRESSIVE`; use the hosted product for `DEEP`. See the [GitHub Action integration guide](https://lyrashieldai.com/docs/integrations/github-action) for the workflow file and inputs.
 
 ## 23. Current availability
 
@@ -606,7 +606,7 @@ The public marketing site, Lite Check, browser-local tools, methodology, and con
 
 The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires production proof for private evidence persistence, application-level readiness/queue/provider alerts, capacity evidence, failure recovery, and each additional review profile claimed. No recovery or RPO/RTO claim is made.
 
-Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. Polar/Razorpay test configuration and signed webhook smoke are complete, but live paid activation, production desktop distribution/signing proof, payout API provisioning, and the public affiliate opening remain controlled release gates.
+Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. Local signed-webhook and replay coverage exists, and isolated Polar Sandbox/Razorpay Test Mode deployment support is implemented; provider-hosted checkout, cancellation, refund, license, and 100-replay receipts still require the restricted staging run. Live paid activation, production desktop distribution/signing proof, payout API provisioning, and the public affiliate opening remain controlled release gates.
 
 Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 

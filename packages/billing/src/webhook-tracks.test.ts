@@ -36,6 +36,9 @@ vi.mock("./providers/razorpay/adapter", () => ({
 }))
 vi.mock("./providers/polar/webhooks", () => ({ isHandledPolarEvent: () => true }))
 vi.mock("./providers/razorpay/webhooks", () => ({ isHandledRazorpayEvent: () => true }))
+vi.mock("./provider-catalog-validation", () => ({
+  assertProviderCatalogEvent: vi.fn(),
+}))
 
 import {
   computeApplicableTracks,

@@ -24,6 +24,7 @@ import { isHandledRazorpayEvent } from "./providers/razorpay/webhooks"
 import { processRazorpayEvent } from "./providers/razorpay/adapter"
 import { issueLicenseForProviderOrder } from "./license-fulfillment"
 import { normalizeProviderEvent, type NormalizedBillingEvent } from "./domain-events"
+import { assertProviderCatalogEvent } from "./provider-catalog-validation"
 
 export const WEBHOOK_TRACK_IDS = ["billing", "license", "affiliate"] as const
 export type WebhookTrackId = (typeof WEBHOOK_TRACK_IDS)[number]
@@ -204,6 +205,7 @@ export async function executeWebhookTrack(
   rawPayload: unknown,
   handlers: WebhookTrackHandlers
 ): Promise<void> {
+  assertProviderCatalogEvent(event.provider, event.rawType, rawPayload)
   switch (track) {
     case "billing": {
       if (event.provider === "polar") {

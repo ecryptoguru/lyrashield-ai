@@ -1,7 +1,7 @@
 ---
 title: Windsurf security workflow for AI generated apps
 description: Harden Windsurf MCP config, rules, dependencies and secrets with SARIF evidence for secure AI assisted releases of your app.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -17,6 +17,7 @@ faq:
   - q: Where does Windsurf store MCP server config?
     a: Windsurf stores MCP servers in mcp_config.json under mcpServers at the project or user level. Use project scope for the LyraShield entry so the team shares one definition, and keep the lsk_ key in an env reference rather than a literal in the committed file.
 ---
+
 Windsurf with Cascade can edit many files and call external MCP tools quickly, so you must lock down MCP config, tighten project rules, gate dependencies and secrets and keep SARIF for every release. This workflow covers mcp_config.json with serverUrl, Cascade memories hardening and verifiable evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) with Windsurf specific checks below.
 
 ## Understand Windsurf and Cascade risk
@@ -31,7 +32,7 @@ Map issues to common references. OWASP Top Ten at [OWASP Top Ten](https://owasp.
 
 Windsurf loads MCP servers from global ~/.codeium/windsurf/mcp_config.json for personal tools and local .codeium/windsurf/mcp_config.json for team shared servers. Both files use a mcpServers object. Remote servers use serverUrl field for HTTPS endpoints.
 
-Fastest path: run `npx lyrashield init`, which detects Windsurf and writes the config for you. Verify with `npx lyrashield doctor`. Log in with `npx lyrashield login` so credentials land in ~/.lyrashield/credentials.json and nothing gets committed. For a one-step install, use the [Agent Plugin](https://agent-plugins.org) (Agent Plugins v1.0.0), the preferred route for launch clients like Windsurf. The manual config below is what the CLI writes, kept for reference.
+Fastest path: run `npx lyrashield init`, which detects Windsurf and writes its supported config-file integration. Verify with `npx lyrashield doctor`, then use `npx lyrashield login --oauth` so credentials remain outside the repository. Windsurf is not an Agent Plugin-preferred client in the current registry. The manual config below is what the CLI writes.
 
 Secure example with zero raw secrets committed:
 
@@ -57,11 +58,11 @@ Secure example with zero raw secrets committed:
 
 Hardening for review checklists:
 
-* Prefer env var interpolation in env and never raw tokens in committed files. Validate in CI that no literal sk or lsk token appears in mcp_config.json.
-* Keep global file for personal helpers and local file for team shared servers. Require explicit review for either file when a new MCP server appears. Treat new servers like new production dependencies with owner and review date.
-* Limit server count per workspace. Each MCP server adds tool surface that Cascade can call, so only keep servers needed for current milestone.
-* For remote MCP, confirm transport is HTTPS and auth uses Bearer from env. Short startup timeouts reduce hang risk and improve CI stability.
-* For protocol reference, see [MCP spec overview](https://modelcontextprotocol.io). Supply chain context on packages loaded by MCP servers is at [OSV database](https://osv.dev). SARIF integration is at [GitHub SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning).
+- Prefer env var interpolation in env and never raw tokens in committed files. Validate in CI that no literal sk or lsk token appears in mcp_config.json.
+- Keep global file for personal helpers and local file for team shared servers. Require explicit review for either file when a new MCP server appears. Treat new servers like new production dependencies with owner and review date.
+- Limit server count per workspace. Each MCP server adds tool surface that Cascade can call, so only keep servers needed for current milestone.
+- For remote MCP, confirm transport is HTTPS and auth uses Bearer from env. Short startup timeouts reduce hang risk and improve CI stability.
+- For protocol reference, see [MCP spec overview](https://modelcontextprotocol.io). Supply chain context on packages loaded by MCP servers is at [OSV database](https://osv.dev). SARIF integration is at [GitHub SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning).
 
 Log which MCP servers were active for a feature branch in your pull request description. That single line helps reproduce permission problems and supports audit questions about external tools used during generation.
 
@@ -111,13 +112,13 @@ See overview at [GitHub code scanning](https://docs.github.com/en/code-security/
 
 Keep evidence for several releases so you can show trend, exception closure and repeatability of controls. If you use remote MCP, record serverUrl and version used during generation so tool output drift can be reproduced.
 
-| Control | Where configured | Verification signal |
-| --- | --- | --- |
-| MCP config | mcp_config.json with serverUrl and env refs | No raw keys in git, least servers enabled, changes reviewed in pull request |
-| Rules | .codeium/windsurf/memories plus muserules | Auth and validation required, destructive commands denied, tests added |
-| Dependencies | OSV plus audit in CI | High severity blocks merge, lockfile diff reviewed, exceptions tracked |
-| Secrets | Secret scan plus SARIF upload | No tokens in repo or logs, env via manager, example files placeholder only |
-| Evidence | GitHub code scanning plus evidence file | SARIF on PR and main, MCP list logged, release tag linked |
+| Control      | Where configured                            | Verification signal                                                         |
+| ------------ | ------------------------------------------- | --------------------------------------------------------------------------- |
+| MCP config   | mcp_config.json with serverUrl and env refs | No raw keys in git, least servers enabled, changes reviewed in pull request |
+| Rules        | .codeium/windsurf/memories plus muserules   | Auth and validation required, destructive commands denied, tests added      |
+| Dependencies | OSV plus audit in CI                        | High severity blocks merge, lockfile diff reviewed, exceptions tracked      |
+| Secrets      | Secret scan plus SARIF upload               | No tokens in repo or logs, env via manager, example files placeholder only  |
+| Evidence     | GitHub code scanning plus evidence file     | SARIF on PR and main, MCP list logged, release tag linked                   |
 
 ## Why pair Windsurf with LyraShield
 
@@ -125,7 +126,7 @@ LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps
 
 MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp runs with env var keys, and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. Diff aware GitHub Action and SARIF output surface verified findings in pull requests so review stays in context.
 
-Build transparency: LyraShield is live in open beta with open registration. Scan engine MVP, automated fix execution and billing are on the roadmap. Today LyraShield provides hardened workflow and SARIF shape so teams can prepare before automated scans are enabled. V1 targets agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
+Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Windsurf uses the supported config-file integration, and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 This pairing keeps Windsurf velocity while adding consistent verification across visual builders and IDE tools.
 
@@ -133,10 +134,10 @@ This pairing keeps Windsurf velocity while adding consistent verification across
 
 Before you ship a Windsurf built release, confirm gates.
 
-* mcp_config.json files contain no raw tokens and only needed servers are enabled.
-* Rules require auth and validation and forbid risky exec with untrusted input.
-* Dependency and secret scans passed and SARIF uploaded on pull request and main.
-* Auth, payment or file upload changes include tests and reviewer.
-* Security evidence file updated per release tag with MCP list and date.
+- mcp_config.json files contain no raw tokens and only needed servers are enabled.
+- Rules require auth and validation and forbid risky exec with untrusted input.
+- Dependency and secret scans passed and SARIF uploaded on pull request and main.
+- Auth, payment or file upload changes include tests and reviewer.
+- Security evidence file updated per release tag with MCP list and date.
 
 Reuse the same evidence loop on every release with our [AI app security checklist tool](/tools/ai-app-security-checklist) and create an account at https://lyrashieldai.com to start building assurance records today. For related builder patterns see [V0 app security checklist](/blog/v0-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist) to keep controls uniform.

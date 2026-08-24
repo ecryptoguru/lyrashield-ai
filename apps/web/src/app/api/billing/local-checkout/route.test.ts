@@ -31,14 +31,21 @@ vi.mock("@/lib/rate-limit", () => ({
   clientIpFromRequest: () => "203.0.113.4",
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: mocks.limited })),
 }))
-vi.mock("@lyrashield/billing", () => ({
-  resolveProvider: () => ({
+vi.mock("@/lib/billing-admission", () => ({
+  resolveRequestBillingProvider: () => ({
     provider: mocks.provider,
     region: mocks.provider === "polar" ? "usd" : "inr",
   }),
+  localBillingAdmissionError: () => {
+    const admission = mocks.provider === "polar" ? mocks.polarAdmission : mocks.razorpayAdmission
+    return admission === "public" ? null : new Response(null, { status: 503 })
+  },
+}))
+vi.mock("@lyrashield/billing", () => ({
   resolveProviderId: (raw: string, key: string) => JSON.parse(raw)[key] ?? null,
   createPolarOneTimeCheckout: mocks.createPolar,
   createRazorpayPaymentLink: mocks.createRazorpay,
+  billingQuoteNotes: () => ({ quotedAmountMinor: "1990000", quoteSignature: "signed-quote" }),
 }))
 
 import { POST } from "./route"
@@ -105,6 +112,11 @@ describe("POST /api/billing/local-checkout", () => {
         amount: 1_990_000,
         partialPayment: false,
         referenceId: expect.stringMatching(/^local_/),
+        notes: expect.objectContaining({
+          quoteWorkspaceId: expect.stringMatching(/^local_/),
+          quotedAmountMinor: "1990000",
+          quoteSignature: "signed-quote",
+        }),
       })
     )
   })

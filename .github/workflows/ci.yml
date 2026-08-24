@@ -193,6 +193,11 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm db:generate
 
+      - name: Validate billing staging workflow contract
+        if: needs.changes.outputs.docs-only != 'true'
+        shell: bash
+        run: bash .github/scripts/tests/test-deploy-billing-staging.sh
+
       - name: Create shadow database
         if: needs.changes.outputs.docs-only != 'true'
         run: docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'

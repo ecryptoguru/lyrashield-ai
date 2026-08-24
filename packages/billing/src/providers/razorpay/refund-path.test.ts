@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/config", () => ({ env: {} }))
+vi.mock("../../provider-catalog-validation", () => ({
+  resolveRazorpayCatalogEvent: () => ({ kind: "local", sku: "individual_launch" }),
+}))
 
 vi.mock("../../usage/refund", () => ({
   reverseRefund: vi.fn().mockResolvedValue({ reversed: true, minutesReversed: 100 }),

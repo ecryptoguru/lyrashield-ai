@@ -12,15 +12,11 @@
 
 import { logger } from "@lyrashield/logger"
 import type { PolarWebhookEvent } from "./webhooks"
-import {
-  syncSubscription,
-  downgradeToFree,
-  type SubscriptionStatus,
-  type BillingInterval,
-} from "../../sync"
+import { syncSubscription, downgradeToFree, type SubscriptionStatus } from "../../sync"
 import { creditTopUp } from "../../usage/packs"
 import { reverseRefund } from "../../usage/refund"
-import { MINUTE_PACK_MAP, type CloudPlanId, type PackId } from "@lyrashield/pricing"
+import { MINUTE_PACK_MAP } from "@lyrashield/pricing"
+import { resolvePolarCatalogEvent } from "../../provider-catalog-validation"
 
 export interface PolarAdapterResult {
   handled: boolean
@@ -45,13 +41,12 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
           return { handled: false, action: "order.paid.no_workspace", workspaceId: null }
         }
 
-        const packId = metadata.packId as PackId | undefined
-        if (!packId || !MINUTE_PACK_MAP[packId]) {
-          logger.warn("Polar order.paid with unknown packId", { packId })
-          return { handled: false, action: "order.paid.unknown_pack", workspaceId }
+        const catalog = resolvePolarCatalogEvent(event.type, data)
+        if (catalog?.kind !== "pack") {
+          return { handled: true, action: "order.paid.received", workspaceId }
         }
 
-        const pack = MINUTE_PACK_MAP[packId]
+        const pack = MINUTE_PACK_MAP[catalog.packId]
         const externalId = String(data.id ?? "")
 
         await creditTopUp(
@@ -81,9 +76,9 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
           return { handled: false, action: "subscription.no_workspace", workspaceId: null }
         }
 
-        const planId = (metadata.plan ?? "STARTER") as CloudPlanId
+        const catalog = resolvePolarCatalogEvent(event.type, data)
+        if (catalog?.kind !== "plan") throw new Error("polar_subscription_catalog_mismatch")
         const status = mapPolarSubscriptionStatus(event.type, data)
-        const interval = (metadata.interval ?? "monthly") as BillingInterval
 
         const currentPeriodStart = data.current_period_start ?? data.currentPeriodStart
         const currentPeriodEnd = data.current_period_end ?? data.currentPeriodEnd
@@ -96,9 +91,9 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
           workspaceId,
           provider: "polar",
           externalId: String(data.id ?? ""),
-          plan: planId,
+          plan: catalog.plan,
           status,
-          interval,
+          interval: catalog.interval,
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           canceledAt,

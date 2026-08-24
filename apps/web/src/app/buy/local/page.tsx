@@ -3,9 +3,11 @@ import { headers } from "next/headers"
 import { Check, ShieldCheck } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
 import { LOCAL_SKU_MAP, formatINR, formatUSD } from "@lyrashield/pricing"
-import { resolveProvider } from "@lyrashield/billing"
-import { env } from "@lyrashield/config"
 import { LocalCheckoutButton } from "./local-checkout-button"
+import {
+  getRequestLocalBillingAdmission,
+  resolveRequestBillingProvider,
+} from "@/lib/billing-admission"
 
 export default async function BuyLocalPage({
   searchParams,
@@ -14,13 +16,11 @@ export default async function BuyLocalPage({
 }) {
   const sku = LOCAL_SKU_MAP.individual_launch
   const requestHeaders = await headers()
-  const { provider } = resolveProvider(
-    new Request("https://app.lyrashieldai.com/buy/local", { headers: requestHeaders })
-  )
-  const available =
-    provider === "polar"
-      ? env.POLAR_LOCAL_BILLING_ADMISSION === "public"
-      : env.RAZORPAY_LOCAL_BILLING_ADMISSION === "public"
+  const billingRequest = new Request("https://app.lyrashieldai.com/buy/local", {
+    headers: requestHeaders,
+  })
+  const { provider } = resolveRequestBillingProvider(billingRequest)
+  const available = getRequestLocalBillingAdmission(provider, billingRequest).allowed
   const received = (await searchParams).status === "received"
 
   return (

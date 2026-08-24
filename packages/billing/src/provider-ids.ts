@@ -4,7 +4,15 @@ export function resolveProviderId(raw: string | undefined, key: string): string 
 
   try {
     const value = (JSON.parse(raw) as Record<string, unknown>)[key]
-    return typeof value === "string" && value.trim() ? value.trim() : null
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (
+      Array.isArray(value) &&
+      value.length > 0 &&
+      value.every((entry) => typeof entry === "string" && entry.trim())
+    ) {
+      return value[0].trim()
+    }
+    return null
   } catch {
     return null
   }
@@ -20,6 +28,14 @@ export function resolveProviderKey(raw: string | undefined, providerId: string):
 
     for (const [key, value] of Object.entries(parsed)) {
       if (value === providerId) return key
+      if (
+        Array.isArray(value) &&
+        value.length > 0 &&
+        value.every((entry) => typeof entry === "string" && entry.trim()) &&
+        value.some((entry) => entry.trim() === providerId)
+      ) {
+        return key
+      }
     }
   } catch {
     return null

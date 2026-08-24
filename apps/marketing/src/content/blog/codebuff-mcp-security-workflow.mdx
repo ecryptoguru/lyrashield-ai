@@ -1,7 +1,7 @@
 ---
 title: Connect Codebuff to LyraShield via MCP
 description: A step by step workflow to configure LyraShield MCP in the Codebuff terminal agent using the CLI, verify the connection, run a scan, and gate pull requests.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -21,14 +21,14 @@ To connect Codebuff to LyraShield, run npx lyrashield install codebuff so the CL
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. Wiring LyraShield into Codebuff puts release assurance inside the terminal session, so a scan runs before a change reaches a pull request rather than only after. The steps below assume you have Node installed and an active LyraShield account.
 
-| Step | Command or file | Purpose |
-| --- | --- | --- |
-| Prerequisites | Node 20 plus, git, LyraShield account | Prepare the environment |
-| Install | npx lyrashield install codebuff | Write the MCP server entry |
-| Manual path | .agents/mcp.json | Fallback if CLI is unavailable |
-| Verify | npx lyrashield doctor | Check config and credentials |
-| Inline check | npx lyrashield scan | Run a scan from the session |
-| CI gate | .github/workflows/lyrashield.yml | Diff aware gate on pull requests |
+| Step          | Command or file                       | Purpose                          |
+| ------------- | ------------------------------------- | -------------------------------- |
+| Prerequisites | Node 20 plus, git, LyraShield account | Prepare the environment          |
+| Install       | npx lyrashield install codebuff       | Write the MCP server entry       |
+| Manual path   | .agents/mcp.json                      | Fallback if CLI is unavailable   |
+| Verify        | npx lyrashield doctor                 | Check config and credentials     |
+| Inline check  | npx lyrashield scan                   | Run a scan from the session      |
+| CI gate       | .github/workflows/lyrashield.yml      | Diff aware gate on pull requests |
 
 ## 1. Meet the prerequisites
 
@@ -83,14 +83,9 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: lyrashield/scan-action@v1
+      - uses: ecryptoguru/lyrashield-ai@v2
         with:
-          diff-aware: true
-          sarif: true
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: lyrashield.sarif
+          fail_on_severity: HIGH
 ```
 
 ## 6. Add a rules snippet to AGENTS.md

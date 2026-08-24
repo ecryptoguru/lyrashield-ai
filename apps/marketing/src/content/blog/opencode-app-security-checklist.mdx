@@ -1,7 +1,7 @@
 ---
 title: OpenCode App Security Checklist for AI Built Apps
 description: Secure OpenCode workflows with opencode.json MCP hardening, codemode controls, and verified SCA plus secrets scanning.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -38,7 +38,7 @@ First, never inline secrets in JSON. Use `{env:VAR}` interpolation and load valu
 
 Second, set allow lists explicitly. Prefer empty auto approve and then include only read only tools you need. If the tool supports trust or codemode flags, disable code execution unless required and require explicit user approval for file writes.
 
-Third, pin versions and audit local servers. For stdio, use `npx -y @lyrashield/mcp` only after you pin a version and check publish provenance. For remote, require TLS and Bearer auth with lsk_ keys stored outside the repo and bound to least privilege scopes.
+Third, pin versions and audit local servers. For stdio, use `npx -y @lyrashield/mcp` only after you pin a version and check publish provenance. For remote, require TLS and Bearer auth with lsk\_ keys stored outside the repo and bound to least privilege scopes.
 
 Fourth, commit project scoped configs and add a CI check that validates JSON schema and rejects new servers that request file write or network access without review. That keeps OpenCode aligned with your security policy and makes malicious config changes visible in pull requests.
 
@@ -85,13 +85,13 @@ Add these to your Definition of Done: secrets scan passes with no new findings, 
 
 Vibe coding is fast, but velocity without verification creates security debt. Use a diff aware pipeline that only flags AI changed files. Keep human and AI commits separated where possible with a trailer or label, and map findings to OWASP Top 10 for consistent triage. Use one security gate table in your PR template to make checks explicit and auditable.
 
-| Check | Where it runs | Owner | Fail action |
-| --- | --- | --- | --- |
-| MCP config schema validation | Pre commit hook | Developer | Block commit and explain fix |
-| Secret scanning with gitleaks | CI diff scan | Security | Block merge until rotation confirmed |
-| SCA via OSV and GitHub review | CI pull request | Developer | Block merge on high severity |
-| SAST for OWASP Top 10 patterns | CI pull request | Developer | Require fix or documented exception |
-| Prompt injection test cases | Manual QA checklist | QA | Request rewrite of prompt or context |
+| Check                          | Where it runs       | Owner     | Fail action                          |
+| ------------------------------ | ------------------- | --------- | ------------------------------------ |
+| MCP config schema validation   | Pre commit hook     | Developer | Block commit and explain fix         |
+| Secret scanning with gitleaks  | CI diff scan        | Security  | Block merge until rotation confirmed |
+| SCA via OSV and GitHub review  | CI pull request     | Developer | Block merge on high severity         |
+| SAST for OWASP Top 10 patterns | CI pull request     | Developer | Require fix or documented exception  |
+| Prompt injection test cases    | Manual QA checklist | QA        | Request rewrite of prompt or context |
 
 Export SARIF from each scanner and upload to GitHub code scanning so findings show inline on the PR [SARIF support in GitHub code scanning](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning). Keep reports for audit and always retest after fixes. Retest must run the same scanners on the fix commit to confirm remediation.
 
@@ -109,7 +109,7 @@ Supply chain hygiene matters because AI generated code often pulls transitive de
 
 LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with OpenCode and other AI coding tools. We separate detection from proof: findings come with evidence you can verify, and every result is an immutable assurance record tied to the exact commit and scan.
 
-The platform is live in open beta with open registration. The full scan engine MVP, automated fix execution, and billing are on the roadmap. What works today includes a single MCP server you can add via stdio `npx -y @lyrashield/mcp` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer lsk_ key, diff aware gating that posts SARIF to GitHub code scanning, and v1 coverage spanning agentic pentest, SCA, secrets, GitHub Action, and SARIF, with findings mapped to CWE and OWASP for faster remediation.
+The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 LyraShield sits after your OpenCode drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval, and retest runs the same scanners on the fix commit to confirm remediation.
 

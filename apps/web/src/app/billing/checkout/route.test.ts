@@ -15,6 +15,10 @@ vi.mock("@/lib/rate-limit", () => ({
 }))
 vi.mock("@/lib/billing-admission", () => ({
   billingAdmissionError: () => mocks.admissionResponse,
+  resolveRequestBillingProvider: () => ({
+    provider: mocks.provider,
+    region: mocks.provider === "polar" ? "usd" : "inr",
+  }),
   paymentsUnavailableError: () =>
     Response.json({ success: false, error: { code: "PAYMENTS_UNAVAILABLE" } }, { status: 503 }),
 }))
@@ -26,10 +30,6 @@ vi.mock("@lyrashield/config", () => ({
   },
 }))
 vi.mock("@lyrashield/billing", () => ({
-  resolveProvider: () => ({
-    provider: mocks.provider,
-    region: mocks.provider === "polar" ? "usd" : "inr",
-  }),
   createPolarCheckout: mocks.createPolar,
   createRazorpaySubscription: mocks.createRazorpay,
   getRazorpaySubscriptionCycleCount: () => 1200,

@@ -3,8 +3,8 @@ import { z } from "zod"
 import {
   createPolarOneTimeCheckout,
   createRazorpayPaymentLink,
-  resolveProvider,
   resolveProviderId,
+  billingQuoteNotes,
 } from "@lyrashield/billing"
 import { parseAffiliateCookie, resolveAttribution } from "@lyrashield/affiliate"
 import { env } from "@lyrashield/config"
@@ -12,6 +12,7 @@ import { logger } from "@lyrashield/logger"
 import { LOCAL_SKU_MAP } from "@lyrashield/pricing"
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { checkBillingCheckoutRateLimit, clientIpFromRequest } from "@/lib/rate-limit"
+import { localBillingAdmissionError, resolveRequestBillingProvider } from "@/lib/billing-admission"
 
 const Body = z.object({}).strict()
 const LOCAL_SKU = "individual_launch"
@@ -20,12 +21,9 @@ export async function POST(request: Request) {
   const parsed = Body.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return apiError("VALIDATION_ERROR", "Request body must be empty", 400)
 
-  const { provider } = resolveProvider(request)
-  const admission =
-    provider === "polar" ? env.POLAR_LOCAL_BILLING_ADMISSION : env.RAZORPAY_LOCAL_BILLING_ADMISSION
-  if (admission !== "public") {
-    return apiError("PAYMENTS_UNAVAILABLE", "Local purchases are temporarily unavailable.", 503)
-  }
+  const { provider } = resolveRequestBillingProvider(request)
+  const admissionError = localBillingAdmissionError(provider, request)
+  if (admissionError) return admissionError
 
   const rateLimit = await checkBillingCheckoutRateLimit(`local:${clientIpFromRequest(request)}`)
   if (rateLimit.limited) {
@@ -54,10 +52,19 @@ export async function POST(request: Request) {
       return apiSuccess({ provider, url }, 200)
     }
 
+    const amountMinor = Math.round(LOCAL_SKU_MAP[LOCAL_SKU].priceInr! * 100)
+    const quoteNotes = billingQuoteNotes({
+      provider: "razorpay",
+      kind: "local",
+      workspaceId: referenceId,
+      catalogKey: LOCAL_SKU,
+      amountMinor,
+      currency: "INR",
+    })
     const result = await createRazorpayPaymentLink({
-      amount: LOCAL_SKU_MAP[LOCAL_SKU].priceInr! * 100,
+      amount: amountMinor,
       description: "LyraShield AI Local — Individual Launch",
-      notes: metadata,
+      notes: { ...metadata, quoteWorkspaceId: referenceId, ...quoteNotes },
       callbackUrl: successUrl,
       referenceId,
       partialPayment: false,

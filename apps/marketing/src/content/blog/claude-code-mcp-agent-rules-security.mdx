@@ -104,19 +104,13 @@ jobs:
       security-events: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
       - name: Run LyraShield diff scan
-        uses: lyrashieldai/scan-action@v1
+        uses: ecryptoguru/lyrashield-ai@v2
         with:
-          api_key: ${{ secrets.LYRASHIELD_API_KEY }}
-          target: .
-          diff_base: ${{ github.base_ref }}
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: lyrashield-results.sarif
+          fail_on_severity: HIGH
 ```
 
-Store `LYRASHIELD_API_KEY` in repository secrets, never in the workflow file. Action output preserves finding severity and evidence state; it does not edit code, record a fix proposal, or create a branch. SARIF upload lets findings appear in GitHub code scanning alerts.
+The runner-local Action needs no LyraShield API key. It emits and uploads SARIF, but it does not edit code, record a fix proposal, or create a branch.
 
 ## 6. Add agent rules for continuous guardrails
 
@@ -142,7 +136,7 @@ Test rule by scaffolding endpoint accepting query param and confirming scan trig
 
 Claude-Code speeds AI development but can repeat patterns [OWASP Top 10](https://owasp.org/www-project-top-ten/) warns about such as trusting generated SQL or leaving debug endpoints enabled. LyraShield adds verification without changing UX, exposing scan and findings as native tools agent knows how to call.
 
-Sprints 0 to 2 shipped MCP contract and SARIF wiring, so teams adopt today with config change while engine depth expands on roadmap. Unlike generic linters flagging style, LyraShield focuses on findings with recorded evidence states that the agent can retest, reducing noise and preserving flow. It also covers supply chain via [OSV database](https://osv.dev/).
+The current product ships MCP, bounded scans, findings and evidence, approval-gated fix proposals, retests, reports, SCA, secrets, and the runner-local SARIF gate. The local Action is advisory and does not create hosted evidence states; use a recorded scan and retest when assurance evidence is required. Advisory dependency matches use [OSV](https://osv.dev/) data and still require resolved-version review.
 
 Local feedback plus CI gate creates defense in depth matching how AI apps evolve. For policy framing revisit [vibe coding security guide](/blog/vibe-coding-security-guide) and [NIST SSDF](https://csrc.nist.gov/projects/ssdf).
 

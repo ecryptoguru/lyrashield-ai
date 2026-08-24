@@ -1,7 +1,7 @@
 ---
 title: VS Code AI app security checklist for MCP hardened builds
 description: Secure VS Code with GitHub Copilot and MCP, covering mcp dot json hardening, agent permissions, secret gating and SARIF evidence.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -17,6 +17,7 @@ faq:
   - q: Where does VS Code store MCP server config?
     a: VS Code stores MCP servers in the user or workspace settings json under mcp.servers. Workspace scope shares the entry with the team via the repo, user scope stays local. Use the pinned npx command and reference the key through env so the literal never lands in the committed file.
 ---
+
 VS Code with GitHub Copilot Chat and MCP can edit across your workspace and call external tools quickly, so you must harden .vscode/mcp.json with servers and inputs, scope Copilot permissions and capture SARIF before release. This checklist covers secure inputs for tokens, least privilege agent settings and repeatable release evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) plus VS Code specific steps below.
 
 ## How VS Code AI expands risk
@@ -31,7 +32,7 @@ Frame findings with standard references. OWASP Top Ten at [OWASP Top Ten](https:
 
 VS Code uses .vscode/mcp.json with top level servers key for workspace servers. Secrets should be referenced via inputs array with password true, not hardcoded in env.
 
-Fastest path: run `npx lyrashield init`, which detects VS Code and writes the config for you. Verify with `npx lyrashield doctor`. Log in with `npx lyrashield login` so credentials land in ~/.lyrashield/credentials.json and nothing gets committed. For a one-step install, use the [Agent Plugin](https://agent-plugins.org) (Agent Plugins v1.0.0), the preferred route for launch clients like VS Code. The manual config below is what the CLI writes, kept for reference.
+Fastest path: run `npx lyrashield init`, which detects VS Code and writes its supported config-file integration. Verify with `npx lyrashield doctor`, then use `npx lyrashield login --oauth` so credentials remain outside the repository. VS Code's Agent Plugin entry is experimental until a retained runtime receipt exists; use the config-file path today. The manual config below is what the CLI writes.
 
 Secure example with no raw secrets committed:
 
@@ -67,11 +68,11 @@ Secure example with no raw secrets committed:
 
 Hardening for review:
 
-* Use inputs with password true for tokens and fill from env or secret manager at runtime. Never commit raw keys in workspace file or user settings.
-* Keep workspace file minimal. Global servers with personal paths belong in user settings, not in git.
-* For remote MCP use https and Bearer from input. Validate that interpolation does not echo into logs. See auth expectations at [MCP auth](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
-* Validate in CI that mcp dot json files contain no raw sk or lsk literals and that input ids match expected env. Run secret scanning on every pull request.
-* Require pull request review for any server addition. Treat new MCP servers like new production dependencies with owner and review date.
+- Use inputs with password true for tokens and fill from env or secret manager at runtime. Never commit raw keys in workspace file or user settings.
+- Keep workspace file minimal. Global servers with personal paths belong in user settings, not in git.
+- For remote MCP use https and Bearer from input. Validate that interpolation does not echo into logs. See auth expectations at [MCP auth](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
+- Validate in CI that mcp dot json files contain no raw sk or lsk literals and that input ids match expected env. Run secret scanning on every pull request.
+- Require pull request review for any server addition. Treat new MCP servers like new production dependencies with owner and review date.
 
 Discovery of servers from mcp dot json is covered at [VS Code MCP discovery](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
@@ -119,13 +120,13 @@ SARIF upload pattern is at [SARIF artifact upload](https://docs.github.com/en/co
 
 Keep a short changelog for MCP additions and dependency exceptions to speed future reviews and show when temporary risks closed.
 
-| Check | VS Code location | Good signal |
-| --- | --- | --- |
-| MCP servers | .vscode/mcp.json servers plus inputs with password true | No raw keys in git, inputs used, https only, reviewed in pull request |
-| Agent scope | Copilot custom instructions and approval settings | Edits limited to src and tests, shell needs confirm, protected paths enforced |
-| Dependencies | CI with OSV and audit | High severity blocks merge, lockfile diff reviewed, exceptions tracked |
-| Secrets | Secret scan SARIF upload | No tokens in repo or logs, env via manager, example files placeholder only |
-| Evidence | GitHub code scanning plus evidence file | SARIF on PR and main, MCP list per release, tag linked |
+| Check        | VS Code location                                        | Good signal                                                                   |
+| ------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| MCP servers  | .vscode/mcp.json servers plus inputs with password true | No raw keys in git, inputs used, https only, reviewed in pull request         |
+| Agent scope  | Copilot custom instructions and approval settings       | Edits limited to src and tests, shell needs confirm, protected paths enforced |
+| Dependencies | CI with OSV and audit                                   | High severity blocks merge, lockfile diff reviewed, exceptions tracked        |
+| Secrets      | Secret scan SARIF upload                                | No tokens in repo or logs, env via manager, example files placeholder only    |
+| Evidence     | GitHub code scanning plus evidence file                 | SARIF on PR and main, MCP list per release, tag linked                        |
 
 ## Why pair VS Code AI with LyraShield
 
@@ -133,16 +134,16 @@ LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps
 
 MCP fits VS Code design. Local stdio via npx -y @lyrashield/mcp with inputs avoids raw keys, remote https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key via inputs. GitHub Action diff aware scan and SARIF output target pull request review.
 
-Build transparency: LyraShield is live in open beta with open registration. Scan engine MVP, automated fix execution and billing are on the roadmap. Current contribution is hardened mcp dot json shape using servers and inputs, permission guidance and SARIF pattern. V1 targets agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, matching VS Code AI stacks.
+Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. VS Code uses the supported config-file integration, and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 ## Final gates before release
 
 Confirm before shipping:
 
-* .vscode/mcp.json uses servers and inputs with no raw secrets in repo.
-* Copilot instructions require auth and validation for sensitive routes.
-* Agent approval is on for terminal and package installs with protected paths.
-* Dependency and secret scans passed and SARIF uploaded on pull request and main.
-* Docs slash security evidence updated per tag.
+- .vscode/mcp.json uses servers and inputs with no raw secrets in repo.
+- Copilot instructions require auth and validation for sensitive routes.
+- Agent approval is on for terminal and package installs with protected paths.
+- Dependency and secret scans passed and SARIF uploaded on pull request and main.
+- Docs slash security evidence updated per tag.
 
 Reuse the loop with our [AI app security checklist tool](/tools/ai-app-security-checklist) and create an account at https://lyrashieldai.com to start building assurance records today. For alignment across builders see [V0 app security checklist](/blog/v0-app-security-checklist) and [Base44 app security checklist](/blog/base44-app-security-checklist).

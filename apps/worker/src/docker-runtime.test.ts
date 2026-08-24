@@ -133,6 +133,15 @@ describe("worker Docker runtime", () => {
     expect(engineContractVerifier).toContain("uv run lyrashield --help")
     expect(engineContractVerifier).toContain('corepack pnpm exec vitest run "${contract_tests[@]}"')
     expect(deployWorkflow).toContain("Verify pushed worker image")
+    const deployAppStep = deployWorkflow.slice(
+      deployWorkflow.indexOf("- name: Deploy app Container App"),
+      deployWorkflow.indexOf("- name: Deploy scanner Container App")
+    )
+    expect(deployAppStep).toContain("POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}")
+    expect(deployAppStep).toContain('"POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"')
+    expect(deployAppStep).toContain('"LYRASHIELD_DEPLOYMENT_ENVIRONMENT=production"')
+    expect(deployAppStep).toContain('"BILLING_STAGING_ADMISSION=off"')
+    expect(deployAppStep).toContain('"BILLING_STAGING_ACCESS_TOKEN="')
     expect(
       deployWorkflow.match(/"PLATFORM_ADMIN_EMAILS=\$\{\{ env\.PLATFORM_ADMIN_EMAILS \}\}"/g) ?? []
     ).toHaveLength(2)

@@ -732,6 +732,7 @@ jobs:
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
+          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
           EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
@@ -763,6 +764,10 @@ jobs:
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
+              "LYRASHIELD_DEPLOYMENT_ENVIRONMENT=production" \
+              "BILLING_STAGING_ADMISSION=off" \
+              "BILLING_STAGING_ACCESS_TOKEN=" \
+              "BILLING_STAGING_REGION=" \
               "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}" \
               "POLAR_ACCESS_TOKEN=secretref:polar-access-token" \
               "POLAR_ORG_ID=${POLAR_ORG_ID}" \
@@ -837,6 +842,10 @@ jobs:
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
+              "LYRASHIELD_DEPLOYMENT_ENVIRONMENT=production" \
+              "BILLING_STAGING_ADMISSION=off" \
+              "BILLING_STAGING_ACCESS_TOKEN=" \
+              "BILLING_STAGING_REGION=" \
               "POLAR_BILLING_ADMISSION=${{ env.POLAR_BILLING_ADMISSION }}" \
               "POLAR_LOCAL_BILLING_ADMISSION=${{ env.POLAR_LOCAL_BILLING_ADMISSION }}" \
               "RAZORPAY_BILLING_ADMISSION=${{ env.RAZORPAY_BILLING_ADMISSION }}" \

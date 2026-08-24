@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { z } from "zod"
-import { resolveWorkerExecutionProvenanceFrom } from "./env"
+import { billingStagingConfigError, resolveWorkerExecutionProvenanceFrom } from "./env"
 
 // Test the Zod schema directly without importing the module
 // (which calls loadEnv() at import time and would throw)
@@ -123,6 +123,40 @@ const validEnv = {
   BETTER_AUTH_URL: "http://localhost:3000",
   NEXT_PUBLIC_APP_URL: "http://localhost:3000",
 }
+
+const validBillingStagingEnv = {
+  NODE_ENV: "production",
+  LYRASHIELD_DEPLOYMENT_ENVIRONMENT: "billing-staging",
+  NEXT_PUBLIC_APP_URL:
+    "https://lyrashield-billing-staging.examplehash.centralindia.azurecontainerapps.io",
+  POLAR_ENVIRONMENT: "sandbox",
+  RAZORPAY_KEY_ID: "rzp_test_example",
+  POLAR_BILLING_ADMISSION: "off",
+  POLAR_LOCAL_BILLING_ADMISSION: "off",
+  RAZORPAY_BILLING_ADMISSION: "off",
+  RAZORPAY_LOCAL_BILLING_ADMISSION: "off",
+  BILLING_STAGING_ADMISSION: "restricted",
+  BILLING_STAGING_ACCESS_TOKEN: "s".repeat(32),
+  BILLING_STAGING_REGION: "usd",
+}
+
+describe("restricted billing staging configuration", () => {
+  it("accepts only the isolated staging origin with sandbox/test providers", () => {
+    expect(billingStagingConfigError(validBillingStagingEnv)).toBeNull()
+  })
+
+  it.each([
+    ["production deployment", { LYRASHIELD_DEPLOYMENT_ENVIRONMENT: "production" }],
+    ["production origin", { NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com" }],
+    ["Polar production", { POLAR_ENVIRONMENT: "production" }],
+    ["Razorpay Live Mode", { RAZORPAY_KEY_ID: "rzp_live_example" }],
+    ["public production rail", { POLAR_LOCAL_BILLING_ADMISSION: "public" }],
+    ["missing access token", { BILLING_STAGING_ACCESS_TOKEN: "" }],
+    ["missing server-side region", { BILLING_STAGING_REGION: "" }],
+  ])("rejects %s", (_label, override) => {
+    expect(billingStagingConfigError({ ...validBillingStagingEnv, ...override })).not.toBeNull()
+  })
+})
 
 describe("Env Validation Schema", () => {
   describe("valid env", () => {

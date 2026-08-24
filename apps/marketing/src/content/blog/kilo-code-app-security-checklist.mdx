@@ -1,21 +1,21 @@
 ---
 title: Kilo Code App Security Checklist
-description: 'Practical checklist for Kilo Code: lock agent rules, MCP authority, dependencies, and CI evidence before you ship AI-built code.'
-pubDate: '2026-07-30'
+description: "Practical checklist for Kilo Code: lock agent rules, MCP authority, dependencies, and CI evidence before you ship AI-built code."
+pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-17
 faq:
-  - q: 'Where does Kilo Code store MCP config?'
-    a: 'Global at ~/.config/kilo/kilo.jsonc and project-level at kilo.jsonc or .kilo/kilo.jsonc. Project takes precedence.'
-  - q: 'How do Kilo Code permissions work?'
-    a: 'Via the permission key in kilo.jsonc using exact tool names or glob patterns. Use it to restrict file writes and MCP tool calls.'
-  - q: 'How do I add LyraShield MCP to Kilo Code?'
-    a: 'Add an mcp entry under the mcp key with type local for stdio npx -y @lyrashield/mcp or type remote for https://app.lyrashieldai.com/api/mcp with Bearer token.'
-  - q: 'Do parallel agents increase risk?'
-    a: 'Parallel agents increase TOCTOU and secret-sprawl risk if they share working directories and credentials. Scope each agent and audit cross-agent writes.'
+  - q: "Where does Kilo Code store MCP config?"
+    a: "Global at ~/.config/kilo/kilo.jsonc and project-level at kilo.jsonc or .kilo/kilo.jsonc. Project takes precedence."
+  - q: "How do Kilo Code permissions work?"
+    a: "Via the permission key in kilo.jsonc using exact tool names or glob patterns. Use it to restrict file writes and MCP tool calls."
+  - q: "How do I add LyraShield MCP to Kilo Code?"
+    a: "Add an mcp entry under the mcp key with type local for stdio npx -y @lyrashield/mcp or type remote for https://app.lyrashieldai.com/api/mcp with Bearer token."
+  - q: "Do parallel agents increase risk?"
+    a: "Parallel agents increase TOCTOU and secret-sprawl risk if they share working directories and credentials. Scope each agent and audit cross-agent writes."
 ---
 
 If you ship code with Kilo Code, you ship the agent's permissions, its MCP tooling, and its dependency tree along with your application logic. This checklist locks down Kilo Code's open-source VS Code agent setup so AI-built features enter review with verifiable guardrails. Start with the [vibe coding security guide](/blog/vibe-coding-security-guide) for the shared baseline, then apply the Kilo Code controls below.
@@ -43,6 +43,7 @@ Review diffs to agent definitions like any other IaC change. A one-line change t
 Kilo Code supports parallel agents and multi-model selection across 500+ models. Parallel execution is powerful for velocity and risky for stateful resources: two agents writing to `src/auth.ts`, sharing `/tmp`, or using the same OAuth tokens can create race conditions and secret sprawl.
 
 Checklist actions:
+
 - Run agents with least-privilege working directories. Avoid granting broad `filesystem_write` to `/`.
 - Disable network-enabled tools in agents that only need local refactors.
 - Separate agents that handle secrets. If an agent needs `LYRASHIELD_API_KEY`, that agent should not also need to publish packages.
@@ -89,6 +90,7 @@ For the remote endpoint:
 ```
 
 Hardening:
+
 - Prefer project-local MCP config via `.kilo/kilo.jsonc` checked into git over UI-only config. UI edits still write to the same JSONC, but file-based review is auditable.
 - For secrets, use `{env:VAR}` interpolation rather than inline tokens. Keep `.env` out of git.
 - Set explicit `timeout` (10s default for local, 15s for remote) and use `enabled: false` to retain but disable unused servers.
@@ -115,27 +117,31 @@ Shipping from an agent IDE without a deterministic gate reproduces manual securi
 - Keep human review for auth, payment, and token handling. Agents are good at generating CRUD, weak at threat-modeling trust boundaries.
 - Freeze evidence: commit SARIF and retain logs for 90 days. If a finding is marked false-positive, record who and why in code owners, not in chat.
 
-| # | Control | Where to Check | If Skipped |
-|---|---------|----------------|------------|
-| 1 | Pin `.kilo/agents/*.md` + `kilo.jsonc` | PR diff, `.kilo/` dir | Silent permission creep, unreviewed prompt changes |
-| 2 | Permission globs deny secrets | `kilo.jsonc` `permission` key | Agents overwrite `.env`, leak keys |
-| 3 | MCP `type` + `timeout` + `{env:}` | `mcp` block in config | Inline tokens in git, hanging remote calls |
-| 4 | Lockfiles + pinned MCP versions | `package-lock.json`, `npx -y pkg@x.y.z` | Supply chain drift, unreproducible builds |
-| 5 | Diff-aware CI gate with SARIF | `.github/workflows/*`, SARIF upload | Vulnerable routes ship because generic CI passed |
-| 6 | Parallel agent isolation | Agent Manager logs, working dir config | TOCTOU in authz code, cross-agent secret reuse |
+| #   | Control                                | Where to Check                          | If Skipped                                         |
+| --- | -------------------------------------- | --------------------------------------- | -------------------------------------------------- |
+| 1   | Pin `.kilo/agents/*.md` + `kilo.jsonc` | PR diff, `.kilo/` dir                   | Silent permission creep, unreviewed prompt changes |
+| 2   | Permission globs deny secrets          | `kilo.jsonc` `permission` key           | Agents overwrite `.env`, leak keys                 |
+| 3   | MCP `type` + `timeout` + `{env:}`      | `mcp` block in config                   | Inline tokens in git, hanging remote calls         |
+| 4   | Lockfiles + pinned MCP versions        | `package-lock.json`, `npx -y pkg@x.y.z` | Supply chain drift, unreproducible builds          |
+| 5   | Diff-aware CI gate with SARIF          | `.github/workflows/*`, SARIF upload     | Vulnerable routes ship because generic CI passed   |
+| 6   | Parallel agent isolation               | Agent Manager logs, working dir config  | TOCTOU in authz code, cross-agent secret reuse     |
 
 ## FAQ
 
 ### Q: Where does Kilo Code store MCP config and what takes precedence?
+
 Global `~/.config/kilo/kilo.jsonc` applies to all projects. Project `kilo.jsonc` or `.kilo/kilo.jsonc` overrides it. Commit the project file. The legacy `.kilocode/mcp.json` path seen in older docs maps to the new `mcp` key, migrate to `kilo.jsonc` for consistency.
 
 ### Q: How does Kilo's permission globbing work?
+
 In `kilo.jsonc`, `permission` keys are tool names. Values are `allow`/`deny`/`ask`. You can use globs like `filesystem_*` or `lyrashield_*` to batch. Evaluated top-down; deny should be explicit for `**/.env*`, `**/*.pem`, and CI secrets.
 
 ### Q: How do I add LyraShield MCP to Kilo Code?
+
 Local (stdio): `type: local`, `command: ["npx","-y","@lyrashield/mcp"]`, env references `LYRASHIELD_API_KEY`. Remote (Streamable HTTP): `type: remote`, `url: https://app.lyrashieldai.com/api/mcp`, header `Authorization: Bearer {env:LYRASHIELD_API_KEY}`. See [kilo code integration guide](/docs/integrations/kilo-code) for the canonical snippet.
 
 ### Q: Do parallel agents increase security risk?
+
 Yes if they share state. Treat each parallel agent as an untrusted writer to the same repo. Require serialized merges through PRs, not direct pushes from agents to `main`.
 
 For supply chain context, review the [OWASP Top 10](https://owasp.org/www-project-top-ten/) for A01 and A03 patterns that show up when agents edit auth code, the [CWE-20 definition](https://cwe.mitre.org/data/definitions/20.html) for input validation gaps, and the [Model Context Protocol spec](https://modelcontextprotocol.io/specification/2025-06-18) for transport and tool filtering expectations. For CI hardening, use [GitHub Actions security hardening](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments) and track advisories via [OSV](https://osv.dev/).
@@ -144,7 +150,7 @@ For supply chain context, review the [OWASP Top 10](https://owasp.org/www-projec
 
 Kilo Code gives you velocity: open-source agent, parallel execution, 500+ models, MCP marketplace. LyraShield adds release assurance for AI-built apps on top of that velocity. The loop, `target, review, evidence, fix, retest, report`, is built for AI-built code where issues cluster around CWE-20 (improper input validation), CWE-287 (improper authentication), CWE-798 (hardcoded credentials), and OWASP A03 Injection / A07 Identification & Authentication Failures. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, meaning PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-Integration is via MCP (`stdio npx -y @lyrashield/mcp` and remote Streamable-HTTP at `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer key per [integrations hub](/docs/integrations)) and a GitHub Action that is diff-aware and emits SARIF so findings enter your existing code-scanning graph without new infrastructure. The fastest setup path is the LyraShield CLI: run `npx lyrashield init` to auto-detect Kilo Code and write its MCP config, verify with `npx lyrashield doctor`, then `npx lyrashield login` to store credentials in `~/.lyrashield/credentials.json` (nothing committed). The manual config snippets above are what the CLI writes, kept for reference. The platform is live in open beta with open registration, with the scan engine and automated fix execution on the roadmap. If you are evaluating Kilo Code alongside [Pi Coding Agent](/blog/pi-coding-agent-app-security-checklist) or [Hermes](/blog/hermes-app-security-checklist), the pairing model is the same: keep Kilo for generation, keep LyraShield's surface minimal and auditable for verification.
+Integration is via MCP (`stdio npx -y @lyrashield/mcp` and remote Streamable HTTP at `https://app.lyrashieldai.com/api/mcp` per the [integrations hub](/docs/integrations)) and a runner-local GitHub Action that emits advisory SARIF. Run `npx lyrashield init` to configure Kilo Code, verify with `npx lyrashield doctor`, then use `npx lyrashield login --oauth` so credentials remain outside the repository. The platform is live in open beta; scans, findings and evidence, approval-gated fix proposals, retests, reports, and billing are implemented. Production availability remains bounded by release gates, and automatic server-generated Fix PR execution is not enabled.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 

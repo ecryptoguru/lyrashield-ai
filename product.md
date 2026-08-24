@@ -75,8 +75,8 @@ Two modes: **Cloud subscription** (we pay LLM costs) and **Local BYOK desktop** 
 - MCP: the stdio `@lyrashield/mcp` package and the remote Streamable HTTP endpoint at `/api/mcp`.
 - Hosted OAuth for MCP remote clients with workspace selection, optional write scope, and preserved query parameters (PRs #247, #255, #257, #258).
 - CLI OAuth device login writing `~/.lyrashield/credentials.json` with `0o600` (PR #247). The `@lyrashield/cli` scoped alias is deprecated in favor of `lyrashield`.
-- Marketplace v0.1.8 export, client schema alignment, Zed Node capability, and ClawHub skill under MIT-0 (PRs #247, #263, #264).
-- Email verification is implemented and load-bearing, but deliberately disabled in production pending a mail provider — an accepted, documented blocker; see `docs/deployment/PRODUCTION_DEPLOYMENT.md` "Known production blockers".
+- Immutable Marketplace v0.1.18 export with OAuth-first client artifacts, schema alignment, Zed's minimal npm capability, and the ClawHub skill under MIT-0.
+- Email verification is enabled in production through the Brevo binding on both application surfaces. Deployment fails closed when verification is required but the provider binding is absent.
 - Split marketing/app origin routing and the public Lite Scanner.
 - LyraShield Score, cross-admin-idempotent public scorecards, referrals, and premium social sharing.
 - Two dashboard experiences: Guided for vibe coders, first-time developers, and non-technical operators; Pro for experienced developers and security teams. Both expose the same permissions and launch-critical actions, so mode choice never hides a blocker or changes evidence semantics.

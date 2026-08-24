@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { isDev } from "@lyrashield/config"
-import { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } from "@/lib/rate-limit"
+import {
+  checkAuthRateLimit,
+  checkApiRateLimit,
+  checkBillingWebhookRateLimit,
+  checkLiteScanRateLimit,
+} from "@/lib/rate-limit"
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
+import { hasBillingStagingAccess } from "@/lib/billing-staging-access"
 
 // This is the Next.js 16 middleware entry. Next.js detects `proxy.ts` as the
 // proxy/middleware file; do not create a separate `middleware.ts` or the build
@@ -15,6 +21,13 @@ import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
 
 let warnedUnknownIp = false
 const READ_ONLY_AUTH_PATHS = new Set(["/api/auth/providers", "/api/auth/get-session"])
+const BILLING_STAGING_PUBLIC_PATHS = new Set([
+  "/staging/access",
+  "/api/staging/access",
+  "/billing/webhook",
+  "/api/health",
+  "/api/ready",
+])
 
 function generateNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
@@ -200,6 +213,58 @@ export async function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)
+
+  // The disposable billing-staging app keeps external ingress only because
+  // sandbox/test providers must deliver signed webhooks. Protect every other
+  // application route with a short-lived, HttpOnly same-origin session.
+  if (
+    process.env.LYRASHIELD_DEPLOYMENT_ENVIRONMENT === "billing-staging" &&
+    !BILLING_STAGING_PUBLIC_PATHS.has(pathname) &&
+    !pathname.startsWith("/_next/static/") &&
+    !hasBillingStagingAccess(request)
+  ) {
+    const response = new NextResponse(null, { status: 404 })
+    response.headers.set("Cache-Control", "private, no-store")
+    response.headers.set("Content-Security-Policy", csp)
+    return response
+  }
+
+  if (pathname === "/billing/webhook") {
+    const result = await checkBillingWebhookRateLimit(getClientIP(request))
+    if (result.limited) {
+      const response = NextResponse.json(
+        {
+          success: false,
+          error: { code: "RATE_LIMITED", message: "Too many webhook requests." },
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(result.retryAfter),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
+      )
+      response.headers.set("Content-Security-Policy", csp)
+      if (!isLocalPreview) {
+        response.headers.set(
+          "Strict-Transport-Security",
+          "max-age=63072000; includeSubDomains; preload"
+        )
+      }
+      return response
+    }
+    const response = NextResponse.next({ request: { headers: requestHeaders } })
+    response.headers.set("Content-Security-Policy", csp)
+    response.headers.set("X-RateLimit-Remaining", String(result.remaining))
+    if (!isLocalPreview) {
+      response.headers.set(
+        "Strict-Transport-Security",
+        "max-age=63072000; includeSubDomains; preload"
+      )
+    }
+    return response
+  }
 
   if (!pathname.startsWith("/api/")) {
     // Affiliate attribution: detect ?ref= or /r/:code, record click, set cookie.
