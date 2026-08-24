@@ -31,7 +31,7 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Engine version 1.2.1 over pinned Strix v1.5.3. Safe/Quick/Standard use Luna/medium; Deep/Custom use Terra/medium root plus Luna/high specialists. Caps: $1.20/$1.20/$3.20/$5/$5.
 - Current Standard acceptance: scan `cmt35aj1s000001hck9fmguzk`, `OnboardingAI2@1689f3607d68764e09769535df8e368c4d5ad2fe`, completed in 11m 42s. All 184 requests used Luna/medium; cost reconciled to $0.597148; 12 minutes debited; 24 findings retained; zero independently verified; AI App Security hit its 200-file bound.
 - AI App Security coverage remediation is live for future scans: deterministic production/config source prioritization; mode caps of 200/500/1,000 files for Quick/Standard/Deep; generated-artifact exclusions; structured scanned/skipped counts and path samples; and immutable AI-family coverage receipts. A bounded AI layer remains `INCONCLUSIVE`; the historical scan above remains bounded.
-- Worker digest `sha256:d7dd33c2823a6152cc5b99d27ce6ef9e1acccf7cb203fff9def4550789054b01` runs product `8ee6fd50e55bfb6d3ca20c6b9209e8a9423c2056` and engine `dd588c379ae6614e0914b8adb41d94f0c1e86c26`. App revision `lyrashield-app--0000155` and the worker are healthy.
+- Release run `32726286951` deployed product `19bc0b28115efb3e524ef241b7541208f40e6890`: app `lyrashield-app--0000169`, scanner `lyrashield-scanner--0000150`, and egress proxy `lyrashield-egress-proxy--0000019` are healthy at 100% traffic. Worker digest `sha256:aeeffe89ec8a490671ca559ae6466a0622df79ba6ded2ffb8211b908e2404f36` runs that product revision with engine `944a84f15f913909039c89146c25db650cd87137`; `/api/ready/scans` passed after promotion.
 - Upstash authenticated TLS BullMQ Redis is live; public Azure `6379` rule is removed; legacy Redis is stopped/restart-disabled for rollback only.
 - Production egress proof passed: direct arbitrary public fetch denied, authenticated proxy fetch allowed, loopback denied `ssrf_blocked`. DNS refresh stayed active during the paid scan without restarting worker.
 - Encrypted backup and isolated restore verified schema, RLS, audit chain, and application startup.
@@ -58,7 +58,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 7. Verify public scorecard metadata, all card formats, badge, revocation/expiry, referrals, human-event deduplication, external unfurls, and webmaster submission.
 8. Triage current Standard findings and obtain independent verification where warranted.
 9. After founder authorization, run separate controlled Deep/Terra acceptance with exact image, routing, cost, receipts, and terminal proof.
-10. Run production platform-admin preflight; only apply the exact-two role set after both named users personally verify email and enroll TOTP, then capture fresh-session MFA browser proof.
+10. Merge the Prisma-generation fix in PR #413, rerun production platform-admin preflight, and only apply the exact-two role set after both named users personally verify email and enroll TOTP; then capture fresh-session MFA browser proof. Preflight run `32728732596` failed before account reads or mutations because the workflow had not generated the Prisma client.
 
 ## Founder decisions
 
