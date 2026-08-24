@@ -150,6 +150,7 @@ docker create \
   "$@" \
   --env-file "$environment_file" \
   --env NODE_ENV=production \
+  --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com \
   --env LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 \
   --env LYRASHIELD_WORKER_CONCURRENCY=1 \
   --env PLATFORM_MAX_SCAN_BUDGET_USD=50 \

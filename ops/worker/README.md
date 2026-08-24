@@ -25,7 +25,7 @@ LYRASHIELD_SANDBOX_NETWORK=lyrashield-sandbox
 GHCR_USERNAME=<github-username-or-bot>
 ```
 
-`/etc/lyrashield/worker.env` supplies the remaining runtime variables. Defaults in `run-worker.sh` set `NODE_ENV=production`, `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`, and `LYRASHIELD_WORKER_CONCURRENCY=1`; override these there if the deployment requires email verification or a different concurrency.
+`/etc/lyrashield/worker.env` supplies the remaining runtime variables. Defaults in `run-worker.sh` set `NODE_ENV=production`, the exact two-account platform-admin allowlist, `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`, and `LYRASHIELD_WORKER_CONCURRENCY=1`; override email verification or concurrency there when needed. The platform-admin allowlist is code-owned and must not drift.
 
 ## Promote a verified worker release
 

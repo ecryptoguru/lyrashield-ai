@@ -34,6 +34,12 @@ const ciWorkflow = readFileSync(
 )
 // The path is anchored to this test module rather than derived from external input.
 // eslint-disable-next-line security/detect-non-literal-fs-filename
+const workerRunner = readFileSync(
+  fileURLToPath(new URL("../../../ops/worker/run-worker.sh", import.meta.url)),
+  "utf8"
+)
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 const engineContractVerifier = readFileSync(
   fileURLToPath(
     new URL("../../../.github/scripts/verify-engine-worker-contract.sh", import.meta.url)
@@ -132,6 +138,9 @@ describe("worker Docker runtime", () => {
     ).toHaveLength(2)
     expect(ciWorkflow).toContain(
       'PLATFORM_ADMIN_EMAILS: "ecryptoguru@gmail.com,ankit@lyrashieldai.com"'
+    )
+    expect(workerRunner).toContain(
+      "--env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com"
     )
     expect(deployWorkflow).toContain("@${{ steps.build-worker.outputs.digest }}")
     expect(deployWorkflow).toContain("tags: ${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}")
