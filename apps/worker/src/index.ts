@@ -244,6 +244,44 @@ export async function settleScanWorkerForShutdown(
   )
 }
 
+export async function settleScanWorkerLifecycleForShutdown(
+  heartbeatController: Pick<WorkerHeartbeatController, "stop"> | null,
+  closeWorker: (() => Promise<void> | null | undefined) | null,
+  timeoutMs = 25_000
+): Promise<{ workerClosed: boolean; heartbeatsStopped: boolean }> {
+  // stop() synchronously disables future heartbeats before close() stops new
+  // claims. Both settlements then share the same bounded shutdown window.
+  const heartbeatsStopped = heartbeatController
+    ? Promise.race([
+        heartbeatController.stop().then(
+          () => true,
+          () => false
+        ),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+      ])
+    : Promise.resolve(true)
+  const workerClosed = settleScanWorkerForShutdown(closeWorker?.(), timeoutMs)
+  const [closed, stopped] = await Promise.all([workerClosed, heartbeatsStopped])
+  return { workerClosed: closeWorker ? closed : true, heartbeatsStopped: stopped }
+}
+
+export async function finalizeScanWorkerRegistrationForShutdown(
+  plannedRestart: boolean,
+  heartbeatsStopped: boolean,
+  retainHandoff: () => Promise<void>,
+  unregisterWorker: () => Promise<void>
+): Promise<"handoff" | "unregistered" | "skipped"> {
+  // An unsettled heartbeat can still re-register this exact member. Do not
+  // race it with a handoff or unregister mutation; let its bounded TTL expire.
+  if (!heartbeatsStopped) return "skipped"
+  if (plannedRestart) {
+    await retainHandoff()
+    return "handoff"
+  }
+  await unregisterWorker()
+  return "unregistered"
+}
+
 async function consumePlannedRestart(): Promise<boolean> {
   try {
     await unlink(plannedRestartPath)
@@ -301,23 +339,28 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     logger.info("Schedule runner stopped")
   }
 
-  await workerHeartbeatController?.stop()
-
   let forcedExit = false
 
   // Closing stops new claims. Terminate active engines immediately so paid work
   // cannot outlive the worker while close waits for processors to settle.
-  if (worker) {
-    const closed = worker.close()
-    const localWorker = worker
+  const localWorker = worker
+  const scanWorkerSettlement = settleScanWorkerLifecycleForShutdown(
+    workerHeartbeatController,
+    localWorker ? () => localWorker.close() : null
+  )
+  workerHeartbeatController = null
+  if (localWorker) {
     worker = null
-    if (!(await settleScanWorkerForShutdown(closed))) {
+  }
+  const { workerClosed, heartbeatsStopped } = await scanWorkerSettlement
+  if (!heartbeatsStopped) {
+    forcedExit = true
+    logger.warn("Worker heartbeat did not settle before shutdown timeout")
+  }
+  if (localWorker) {
+    if (!workerClosed) {
       forcedExit = true
-      if (!closed) {
-        logger.warn("Worker.close() returned null, forcing shutdown")
-      } else {
-        logger.warn("BullMQ worker did not close cleanly; forcing shutdown")
-      }
+      logger.warn("BullMQ worker did not close cleanly; forcing shutdown")
     } else {
       logger.info("BullMQ worker closed", { workerId: localWorker.id })
     }
@@ -335,20 +378,29 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     logger.info("Webhook track retry worker closed")
   }
 
-  if (plannedRestart) {
-    await handoffScanWorker(workerId).catch((error) => {
-      logger.warn("Could not retain scan-worker handoff lease", {
-        error: error instanceof Error ? error.message : String(error),
+  const registrationAction = await finalizeScanWorkerRegistrationForShutdown(
+    plannedRestart,
+    heartbeatsStopped,
+    () =>
+      handoffScanWorker(workerId).catch((error) => {
+        logger.warn("Could not retain scan-worker handoff lease", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }),
+    () =>
+      unregisterScanWorker(workerId).catch((error) => {
+        logger.warn("Could not unregister scan worker", {
+          error: error instanceof Error ? error.message : String(error),
+        })
       })
-    })
+  )
+  if (registrationAction === "handoff") {
     logger.info("Retaining scan-worker handoff lease for planned restart", {
       graceMs: SCAN_WORKER_RESTART_GRACE_MS,
     })
-  } else {
-    await unregisterScanWorker(workerId).catch((error) => {
-      logger.warn("Could not unregister scan worker", {
-        error: error instanceof Error ? error.message : String(error),
-      })
+  } else if (registrationAction === "skipped") {
+    logger.warn("Skipping scan-worker registry update after heartbeat shutdown timeout", {
+      plannedRestart,
     })
   }
   await removeWorkerReadiness().catch((error) => {

@@ -11,9 +11,11 @@ import {
   createWorkerHeartbeatController,
   deactivateScanWorkerForDrain,
   failClosedAfterEgressDrainCancellation,
+  finalizeScanWorkerRegistrationForShutdown,
   markWorkerActive,
   refreshWorkerReadiness,
   removeWorkerReadiness,
+  settleScanWorkerLifecycleForShutdown,
   settleScanWorkerForShutdown,
 } from "./index"
 import { trackActiveEngineProcess } from "./engine/runner"
@@ -247,6 +249,52 @@ describe("worker readiness lifecycle", () => {
     expect(terminate).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(25_000)
     await expect(settling).resolves.toBe(false)
+
+    stopTracking()
+    vi.useRealTimers()
+  })
+
+  it("bounds a stalled heartbeat, terminates engines immediately, and suppresses handoff", async () => {
+    vi.useFakeTimers()
+    const register = vi.fn(() => new Promise<void>(() => {}))
+    const heartbeatController = createWorkerHeartbeatController(
+      register,
+      vi.fn().mockResolvedValue(undefined)
+    )
+    void heartbeatController.heartbeat()
+    const closeWorker = vi.fn().mockResolvedValue(undefined)
+    const terminate = vi.fn()
+    const stopTracking = trackActiveEngineProcess(terminate)
+
+    const settlement = settleScanWorkerLifecycleForShutdown(
+      heartbeatController,
+      closeWorker,
+      25_000
+    )
+    expect(closeWorker).toHaveBeenCalledOnce()
+    expect(terminate).toHaveBeenCalledOnce()
+    await heartbeatController.heartbeat()
+    expect(register).toHaveBeenCalledOnce()
+
+    await vi.advanceTimersByTimeAsync(25_000)
+    await expect(settlement).resolves.toEqual({
+      workerClosed: true,
+      heartbeatsStopped: false,
+    })
+
+    const retainHandoff = vi.fn().mockResolvedValue(undefined)
+    const unregister = vi.fn().mockResolvedValue(undefined)
+    await expect(
+      finalizeScanWorkerRegistrationForShutdown(true, false, retainHandoff, unregister)
+    ).resolves.toBe("skipped")
+    expect(retainHandoff).not.toHaveBeenCalled()
+    expect(unregister).not.toHaveBeenCalled()
+
+    await expect(
+      finalizeScanWorkerRegistrationForShutdown(true, true, retainHandoff, unregister)
+    ).resolves.toBe("handoff")
+    expect(retainHandoff).toHaveBeenCalledOnce()
+    expect(unregister).not.toHaveBeenCalled()
 
     stopTracking()
     vi.useRealTimers()
