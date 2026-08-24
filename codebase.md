@@ -229,7 +229,10 @@ Safe/Quick/Standard use Luna/medium. Deep/Custom use Terra/medium root plus Luna
 - Deterministic clean retest can produce `VALIDATED` only with complete originating coverage.
 - Engine-only retest absence remains `INCONCLUSIVE`.
 - Direct `FIXED` becomes `FIXED_PENDING_RETEST` until server-owned retest evidence exists.
-- Manifest is finalization checkpoint; retry resumes scoring rather than repeating paid work.
+- Retest validation binds to stored immutable evidence: the finding's original source scan and the retest scan must both have stored result manifests, exact repository revisions (which may differ after a fix) or matching URL checksums, and complete deterministic family coverage. Missing or malformed identity writes an idempotent `INCONCLUSIVE` receipt and never sets `FIXED`.
+- The result manifest is persisted before retest finalization; crash recovery resumes pending retests from stored receipt evidence before scoring, without replaying billable work.
+- Findings list responses carry a deterministic page-local priority heuristic (severity, status, verified, confidence, target environment, business impact/exploitability context). It is triage context, never proof of exploitability or reachability, and does not change cursor pagination.
+- Finding detail never exposes raw evidence storage URIs; retest receipts surface baseline/retest scan IDs, manifest checksums, revisions, method, and coverage state.
 
 ### GitHub and approvals
 
