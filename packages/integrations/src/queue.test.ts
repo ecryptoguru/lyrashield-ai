@@ -3,44 +3,31 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => {
   const members = new Map<string, number>()
   const values = new Map<string, string>()
+  const commandCalls: Array<{ name: string; args: unknown[] }> = []
+  const commandErrors = new Map<string, Error>()
   let existsError: Error | null = null
   const redis = {
     members,
     values,
-    multi() {
-      const commands: Array<() => number> = []
-      const chain = {
-        zremrangebyscore(_key: string, _min: string, max: number) {
-          commands.push(() => {
-            let removed = 0
-            for (const [id, expiry] of members) {
-              if (expiry <= Number(max)) {
-                members.delete(id)
-                removed += 1
-              }
-            }
-            return removed
-          })
-          return chain
-        },
-        zadd(_key: string, score: number, member: string) {
-          commands.push(() => {
-            members.set(member, Number(score))
-            return 1
-          })
-          return chain
-        },
-        pexpire() {
-          commands.push(() => 1)
-          return chain
-        },
-        zcard() {
-          commands.push(() => members.size)
-          return chain
-        },
-        exec: async () => commands.map((command) => [null, command()]),
+    defineCommand(name: string) {
+      const command = async (...args: unknown[]) => {
+        commandCalls.push({ name, args })
+        const error = commandErrors.get(name)
+        if (error) throw error
+
+        const now = Number(args[1])
+        for (const [id, expiry] of members) {
+          if (expiry <= now) members.delete(id)
+        }
+
+        if (name === "scanWorkerHeartbeat") {
+          members.set(String(args[3]), Number(args[2]))
+          return 1
+        }
+        if (name === "scanWorkerReadiness") return members.size
+        throw new Error(`Unexpected command: ${name}`)
       }
-      return chain
+      Object.assign(redis, { [name]: command })
     },
     async zrem(_key: string, member: string) {
       return members.delete(member) ? 1 : 0
@@ -56,6 +43,8 @@ const mocks = vi.hoisted(() => {
   }
   return {
     redis,
+    commandCalls,
+    commandErrors,
     queueAdd: vi.fn(),
     queueWorkersCount: vi.fn(),
     setExistsError(error: Error | null) {
@@ -89,6 +78,8 @@ describe("scan worker availability", () => {
   beforeEach(() => {
     mocks.redis.members.clear()
     mocks.redis.values.clear()
+    mocks.commandCalls.length = 0
+    mocks.commandErrors.clear()
     mocks.setExistsError(null)
     mocks.queueAdd.mockReset()
     mocks.queueWorkersCount.mockReset()
@@ -106,6 +97,23 @@ describe("scan worker availability", () => {
     await unregisterScanWorker("worker-1")
     expect(await isScanWorkerAvailable(20_000)).toBe(true)
     expect(await isScanWorkerAvailable(5_600_000)).toBe(false)
+  })
+
+  it("uses one atomic script command for each heartbeat and readiness check", async () => {
+    await registerScanWorker("worker-1", 1_000)
+
+    expect(mocks.commandCalls).toEqual([
+      {
+        name: "scanWorkerHeartbeat",
+        args: ["lyrashield:scan-workers", 1_000, 301_000, "worker-1", 600_000],
+      },
+    ])
+
+    mocks.commandCalls.length = 0
+    expect(await isScanWorkerAvailable(2_000)).toBe(true)
+    expect(mocks.commandCalls).toEqual([
+      { name: "scanWorkerReadiness", args: ["lyrashield:scan-workers", 2_000] },
+    ])
   })
 
   it("refuses queue submission without a live worker", async () => {
@@ -162,6 +170,29 @@ describe("scan worker availability", () => {
     await expect(
       enqueueScan({
         scanId: "scan-uncertain",
+        workspaceId: "workspace-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    ).rejects.toBeInstanceOf(ScanWorkerUnavailableError)
+    expect(mocks.queueAdd).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when worker scripts fail", async () => {
+    mocks.commandErrors.set("scanWorkerHeartbeat", new Error("Heartbeat script failed"))
+    await expect(registerScanWorker("worker-1", Date.now())).rejects.toThrow(
+      "Heartbeat script failed"
+    )
+
+    mocks.commandErrors.delete("scanWorkerHeartbeat")
+    await registerScanWorker("worker-1", Date.now())
+    mocks.commandErrors.set("scanWorkerReadiness", new Error("Readiness script failed"))
+
+    expect(await isScanWorkerAvailable()).toBe(false)
+    await expect(
+      enqueueScan({
+        scanId: "scan-script-error",
         workspaceId: "workspace-1",
         targetId: "target-1",
         goal: "TEST_APP",

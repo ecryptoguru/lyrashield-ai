@@ -24,14 +24,53 @@ function requireRedis() {
   return redis
 }
 
+type ScanWorkerRedis = ReturnType<typeof requireRedis> & {
+  scanWorkerHeartbeat(
+    key: string,
+    now: number,
+    expiresAt: number,
+    workerId: string,
+    keyTtl: number
+  ): Promise<number>
+  scanWorkerReadiness(key: string, now: number): Promise<number>
+}
+
+function getScanWorkerRedis(): ScanWorkerRedis {
+  const redis = requireRedis() as ScanWorkerRedis
+
+  if (!redis.scanWorkerHeartbeat) {
+    redis.defineCommand("scanWorkerHeartbeat", {
+      numberOfKeys: 1,
+      lua: `
+        redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+        redis.call("ZADD", KEYS[1], ARGV[2], ARGV[3])
+        return redis.call("PEXPIRE", KEYS[1], ARGV[4])
+      `,
+    })
+  }
+
+  if (!redis.scanWorkerReadiness) {
+    redis.defineCommand("scanWorkerReadiness", {
+      numberOfKeys: 1,
+      lua: `
+        redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+        return redis.call("ZCARD", KEYS[1])
+      `,
+    })
+  }
+
+  return redis
+}
+
 export async function registerScanWorker(workerId: string, now = Date.now()): Promise<void> {
-  const redis = requireRedis()
-  await redis
-    .multi()
-    .zremrangebyscore(SCAN_WORKER_REGISTRY_KEY, "-inf", now)
-    .zadd(SCAN_WORKER_REGISTRY_KEY, now + SCAN_WORKER_TTL_MS, workerId)
-    .pexpire(SCAN_WORKER_REGISTRY_KEY, SCAN_WORKER_TTL_MS * 2)
-    .exec()
+  const redis = getScanWorkerRedis()
+  await redis.scanWorkerHeartbeat(
+    SCAN_WORKER_REGISTRY_KEY,
+    now,
+    now + SCAN_WORKER_TTL_MS,
+    workerId,
+    SCAN_WORKER_TTL_MS * 2
+  )
 }
 
 export async function unregisterScanWorker(workerId: string): Promise<void> {
@@ -49,20 +88,15 @@ export async function handoffScanWorker(workerId: string, now = Date.now()): Pro
 }
 
 export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> {
-  const redis = getRedis()
-  if (!redis) return false
+  if (!getRedis()) return false
 
   try {
-    const results = await redis
-      .multi()
-      .zremrangebyscore(SCAN_WORKER_REGISTRY_KEY, "-inf", now)
-      .zcard(SCAN_WORKER_REGISTRY_KEY)
-      .exec()
+    const workers = await getScanWorkerRedis().scanWorkerReadiness(SCAN_WORKER_REGISTRY_KEY, now)
     // Managed Redis proxies do not reliably expose other clients' names via
     // CLIENT LIST, which makes BullMQ getWorkersCount() connection-dependent.
     // The worker owns this short-lived registration, removes it on shutdown,
     // and clears readiness when its heartbeat fails.
-    return Number(results?.[1]?.[1] ?? 0) > 0
+    return Number(workers) > 0
   } catch {
     return false
   }
@@ -73,6 +107,7 @@ export async function assertScanWorkerAvailable(): Promise<void> {
   if (!redis) throw new ScanWorkerUnavailableError()
 
   try {
+    // This key is in a different Redis Cluster slot from the worker registry.
     if ((await redis.exists(SCAN_ADMISSION_STOP_KEY)) > 0) {
       throw new ScanWorkerUnavailableError()
     }
