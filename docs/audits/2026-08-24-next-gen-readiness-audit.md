@@ -7,7 +7,7 @@ Scope: LyraShield AI product, agent integrations, public discovery surfaces, das
 
 The two-mode dashboard is the right product shape. It is currently implemented on the **dashboard home** as **Guided** (vibe coders, new developers, and non-technical operators) plus **Pro** (experienced developers, security practitioners, and small teams). Both modes use the same launch-readiness computation; Pro reveals additional risk-posture, finding-mix, remediation-flow, and recent-activity sections. Other dashboard routes do not currently change presentation by mode.
 
-The branch is suitable for review after its local gates pass. It is **not authorization to provision production administrators, activate billing, deploy, or publish**. Production administrator provisioning remains a separate controlled operation requiring the exact two verified accounts, enrolled TOTP, the production system database identity, migration deployment, and a fresh TOTP sign-in after all prior sessions are revoked.
+The implementation passed its repository gates and was deployed as product `19bc0b28115efb3e524ef241b7541208f40e6890` in release run `32726286951`. Deployment is **not authorization to provision production administrators or activate billing**. Production administrator provisioning remains a separate controlled operation requiring the exact two verified accounts, enrolled TOTP, the production system database identity, successful preflight, and a fresh TOTP sign-in after all prior sessions are revoked.
 
 ## Security and administration
 
@@ -81,7 +81,7 @@ Remaining live proof:
 Remaining UI proof:
 
 - Extend Guided/Pro only when research shows route-specific density is needed. The current home-only switch is the smallest coherent implementation and avoids duplicating evidence semantics across the product.
-- Replace the admin overview warning after deployment: it says MFA elevation and mandatory audit are not active, while those controls now exist and mutations remain disabled for a different reason. Also rename “Manage affiliates” to “Review affiliates” while actions remain fail closed.
+- The deployed admin overview now describes the operation-specific elevation/audit boundary accurately and labels the read-only destination “Review affiliates.” Authenticated production proof still requires a successfully provisioned, freshly TOTP-verified operator session.
 - Guided and Pro density should still receive periodic visual-regression review as their underlying dashboard content evolves.
 - Run external screen-reader and contrast checks on the deployed revision; the local semantic pass is not equivalent to assistive-technology certification.
 
@@ -99,7 +99,11 @@ Measured focused benchmark: unchanged-artifact persistence decreased from 117.10
 4. Add release-policy templates by user outcome (safe demo, public beta, paid launch, regulated data) while preserving a single evidence model.
 5. Track time-to-first-evidence, inconclusive-coverage rate, retest completion, false-positive disposition, launch blockers resolved, model cost per completed scan, and queue/cancellation health. Do not expose internal model cost in customer payloads.
 
-## Release evidence recorded for this branch
+## Release evidence
+
+- Production release `32726286951` applied the forward migration set and promoted app `lyrashield-app--0000169`, scanner `lyrashield-scanner--0000150`, and egress proxy `lyrashield-egress-proxy--0000019` at 100% traffic. Public app, scan, scanner, and egress health passed.
+- Worker digest `sha256:aeeffe89ec8a490671ca559ae6466a0622df79ba6ded2ffb8211b908e2404f36` runs product `19bc0b28` and engine `944a84f`; the VM launcher hash matches the reviewed repository script and `/api/ready/scans` passed after promotion.
+- Production admin preflight `32728732596` failed safely before account reads or mutations because its workflow omitted Prisma generation. PR #413 adds the missing generation step; production account state remains unproven until that fix merges and preflight is repeated.
 
 - Fresh PostgreSQL 17: all migrations applied; privileged owner access passed; `app_runtime_prod` held no table privileges and direct access was denied.
 - Core test suite: 274 files passed, 1 skipped; 2,262 tests passed, 16 skipped.
