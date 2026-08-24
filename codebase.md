@@ -414,6 +414,7 @@ Current command output is authoritative; never copy historical test counts forwa
 - Egress: direct public denied, proxy public allowed, loopback denied `ssrf_blocked`.
 - DNS refresh timer: active during Standard scan; no worker restart.
 - Backup/restore: encrypted backup, isolated restore, schema/RLS/audit/app startup verified.
+- Code ahead of production: `main` is `80460f80d32f42e1a647eed180be6a3fa9f4bf51` with green CI. Release `32755678337` pushed images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Those images are not deployed. Production remains on the exact worker proof above with purchase admissions `off`.
 
 ### Current Standard scan proof
 
