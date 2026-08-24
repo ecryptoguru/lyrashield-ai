@@ -316,6 +316,9 @@ const envSchema = z
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
+    // Azure resource group for read-only alert/action-group verification by
+    // the launch-assurance command (host-side `az`).
+    AZURE_RESOURCE_GROUP: z.string().optional().or(z.literal("")),
 
     // Worker execution provenance. Optional in the shared schema so web and
     // scanner processes never need them; the worker enforces presence in

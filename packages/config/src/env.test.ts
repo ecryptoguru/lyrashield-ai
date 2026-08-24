@@ -66,6 +66,7 @@ const envSchema = z
     PAYONEER_PAYOUT_ADMISSION: z.literal("off").default("off"),
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
+    AZURE_RESOURCE_GROUP: z.string().optional().or(z.literal("")),
     LYRASHIELD_PRODUCT_REVISION: z
       .string()
       .regex(/^[0-9a-fA-F]{40}$/, "LYRASHIELD_PRODUCT_REVISION must be a 40-character commit SHA")
