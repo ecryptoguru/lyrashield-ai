@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { z } from "zod"
+import { resolveWorkerExecutionProvenanceFrom } from "./env"
 
 // Test the Zod schema directly without importing the module
 // (which calls loadEnv() at import time and would throw)
@@ -65,6 +66,24 @@ const envSchema = z
     PAYONEER_PAYOUT_ADMISSION: z.literal("off").default("off"),
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
+    LYRASHIELD_PRODUCT_REVISION: z
+      .string()
+      .regex(/^[0-9a-fA-F]{40}$/, "LYRASHIELD_PRODUCT_REVISION must be a 40-character commit SHA")
+      .optional()
+      .or(z.literal("")),
+    LYRASHIELD_WORKER_IMAGE_DIGEST: z
+      .string()
+      .regex(
+        /^sha256:[0-9a-fA-F]{64}$/,
+        "LYRASHIELD_WORKER_IMAGE_DIGEST must be a sha256:<64 hex> digest"
+      )
+      .optional()
+      .or(z.literal("")),
+    LYRASHIELD_ENGINE_REVISION: z
+      .string()
+      .regex(/^[0-9a-fA-F]{40}$/, "LYRASHIELD_ENGINE_REVISION must be a 40-character commit SHA")
+      .optional()
+      .or(z.literal("")),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   })
   .refine((val) => !val.POLAR_ACCESS_TOKEN || Boolean(val.POLAR_ENVIRONMENT), {
@@ -377,5 +396,68 @@ describe("Env Validation Schema", () => {
     const parsed = envSchema.parse(validEnv)
     expect(parsed.LYRASHIELD_PROMPT_CACHE_EXPLICIT).toBe("1")
     expect(parsed.LYRASHIELD_PROMPT_CACHE).toBe("1")
+  })
+})
+
+const PROD_WORKER_ENV = {
+  NODE_ENV: "production",
+  LYRASHIELD_PRODUCT_REVISION: "a".repeat(40),
+  LYRASHIELD_WORKER_IMAGE_DIGEST: `sha256:${"b".repeat(64)}`,
+  LYRASHIELD_ENGINE_REVISION: "c".repeat(40),
+}
+
+describe("worker execution provenance", () => {
+  it("accepts valid provenance values in the schema", () => {
+    expect(
+      envSchema.safeParse({
+        ...validEnv,
+        ...PROD_WORKER_ENV,
+        TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
+      }).success
+    ).toBe(true)
+  })
+
+  it.each([
+    ["short product revision", { LYRASHIELD_PRODUCT_REVISION: "abc" }],
+    ["non-hex product revision", { LYRASHIELD_PRODUCT_REVISION: "z".repeat(40) }],
+    ["missing sha256 prefix", { LYRASHIELD_WORKER_IMAGE_DIGEST: "b".repeat(64) }],
+    ["short digest", { LYRASHIELD_WORKER_IMAGE_DIGEST: "sha256:abc" }],
+    ["non-hex digest", { LYRASHIELD_WORKER_IMAGE_DIGEST: `sha256:${"z".repeat(64)}` }],
+    ["short engine revision", { LYRASHIELD_ENGINE_REVISION: "def" }],
+    ["non-hex engine revision", { LYRASHIELD_ENGINE_REVISION: "z".repeat(40) }],
+  ])("rejects a malformed %s", (_label, override) => {
+    expect(envSchema.safeParse({ ...validEnv, ...PROD_WORKER_ENV, ...override }).success).toBe(
+      false
+    )
+  })
+
+  it("returns null outside production so local scans do not invent provenance", () => {
+    expect(
+      resolveWorkerExecutionProvenanceFrom({ ...PROD_WORKER_ENV, NODE_ENV: "test" })
+    ).toBeNull()
+    expect(
+      resolveWorkerExecutionProvenanceFrom({ ...PROD_WORKER_ENV, NODE_ENV: "development" })
+    ).toBeNull()
+  })
+
+  it("returns the immutable provenance object when production values are complete", () => {
+    expect(resolveWorkerExecutionProvenanceFrom(PROD_WORKER_ENV)).toEqual({
+      productRevision: "a".repeat(40),
+      workerImageDigest: `sha256:${"b".repeat(64)}`,
+      engineRevision: "c".repeat(40),
+    })
+  })
+
+  it.each([
+    ["missing product revision", { LYRASHIELD_PRODUCT_REVISION: "" }],
+    ["missing worker digest", { LYRASHIELD_WORKER_IMAGE_DIGEST: "" }],
+    ["missing engine revision", { LYRASHIELD_ENGINE_REVISION: "" }],
+    ["malformed product revision", { LYRASHIELD_PRODUCT_REVISION: "short" }],
+    ["malformed worker digest", { LYRASHIELD_WORKER_IMAGE_DIGEST: "sha256:short" }],
+    ["malformed engine revision", { LYRASHIELD_ENGINE_REVISION: "short" }],
+  ])("fails closed in production with %s", (_label, override) => {
+    expect(() => resolveWorkerExecutionProvenanceFrom({ ...PROD_WORKER_ENV, ...override })).toThrow(
+      /Worker execution provenance is incomplete/
+    )
   })
 })

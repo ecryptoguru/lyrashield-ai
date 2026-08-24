@@ -446,10 +446,66 @@ describe("result integrity", () => {
               sourceRevision: "b".repeat(40),
             }),
             accounting: expect.objectContaining({ maxBudgetUsd: 1.2, reconciled: true }),
+            workerExecution: null,
           }),
         }),
       })
     )
+  })
+
+  it("binds worker execution provenance into the stored manifest checksum", async () => {
+    vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
+
+    const workerExecution = {
+      productRevision: "a".repeat(40),
+      workerImageDigest: `sha256:${"b".repeat(64)}`,
+      engineRevision: "c".repeat(40),
+    }
+    await persistResultManifest({
+      scanId: "scan-provenance",
+      target: { id: "target-1", type: "URL", url: "https://example.com" },
+      sourceCheckoutAvailable: false,
+      engineFindingCount: 0,
+      coverageIssues: [],
+      workerExecution,
+    })
+
+    const createCall = vi.mocked(prisma.scanResultManifest.create).mock.calls[0][0] as {
+      data: { checksum: string; manifest: { workerExecution: unknown } }
+    }
+    expect(createCall.data.manifest.workerExecution).toEqual(workerExecution)
+
+    const firstChecksum = createCall.data.checksum
+
+    // Same contents again is idempotent: the existing checksum matches.
+    vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue({
+      checksum: firstChecksum,
+    } as never)
+    vi.mocked(prisma.scanResultManifest.create).mockClear()
+    await persistResultManifest({
+      scanId: "scan-provenance",
+      target: { id: "target-1", type: "URL", url: "https://example.com" },
+      sourceCheckoutAvailable: false,
+      engineFindingCount: 0,
+      coverageIssues: [],
+      workerExecution,
+    })
+    expect(prisma.scanResultManifest.create).not.toHaveBeenCalled()
+
+    // Any single provenance field change must fail closed against the stored
+    // manifest instead of silently overwriting it.
+    vi.mocked(prisma.scanResultManifest.create).mockClear()
+    await expect(
+      persistResultManifest({
+        scanId: "scan-provenance",
+        target: { id: "target-1", type: "URL", url: "https://example.com" },
+        sourceCheckoutAvailable: false,
+        engineFindingCount: 0,
+        coverageIssues: [],
+        workerExecution: { ...workerExecution, engineRevision: "d".repeat(40) },
+      })
+    ).rejects.toThrow("Scan result manifest already exists with different contents")
+    expect(prisma.scanResultManifest.create).not.toHaveBeenCalled()
   })
 
   it("never stores raw PoC content in a detection ledger payload", async () => {

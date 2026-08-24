@@ -1,7 +1,7 @@
 import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { env } from "@lyrashield/config"
+import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { recordAgentMinutes, getUsageBalance, enterGrace, debitOverage } from "@lyrashield/billing"
 import {
   buildVibeSecurityInstruction,
@@ -483,6 +483,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   // auto-scoping safety net is active for all DB queries. Without this, a
   // missed manual workspaceId filter could leak cross-tenant data.
   return runWithWorkspaceContext(workspaceId, async () => {
+    // Exact product/image/engine identity for every result manifest. The
+    // worker startup gate already fails closed before readiness; this second
+    // call ensures each scan's manifests carry the identity even if a future
+    // caller skips startup validation. Null outside production.
+    const workerExecution = resolveWorkerExecutionProvenance()
     let globalScanTimeoutReached = false
     let scanRuntimeBudgetMs = MAX_SCAN_RUNTIME_MS
     let billablePhaseStarted = false
@@ -992,6 +997,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             reconciled: costReconciled,
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
+          workerExecution,
         })
         await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
           errorCategory: "BUDGET_EXCEEDED",
@@ -1043,6 +1049,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             reconciled: costReconciled,
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
+          workerExecution,
         })
         await updateScanStatus(scanId, "FAILED" as ScanStatus, {
           errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
@@ -1424,6 +1431,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             reconciled: costReconciled,
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
+          workerExecution,
         })
 
         await completeRetestsForScan({ scanId, workspaceId })
