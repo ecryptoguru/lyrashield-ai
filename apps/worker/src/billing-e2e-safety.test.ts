@@ -37,7 +37,9 @@ describe("billing E2E origin safety", () => {
   })
 
   it("keeps trace capture off while an access header can be present", () => {
-    const config = readFileSync("../../playwright.config.ts", "utf8")
+    // Path is anchored to this test module and never accepts external input.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const config = readFileSync(new URL("../../../playwright.config.ts", import.meta.url), "utf8")
     expect(config).toContain('trace: accessHeaderConfigured ? "off" : "retain-on-failure"')
   })
 })
