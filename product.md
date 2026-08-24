@@ -144,7 +144,7 @@ Discovery foundation includes canonical URLs, structured data, sitemap/robots co
 4. Public-launch timing and build-in-public voice.
 5. Approved model/provider and first controlled scan.
 6. One app, two modes: Local (paid license, BYOK) + Cloud (subscription, hosted).
-7. No lifetime deals, no refunds on Local licenses, 14-day money-back on Cloud.
+7. No lifetime deals. Cloud subscriptions, Local licenses, and minute packs are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.
 8. Affiliate: 25% recurring Cloud (30% at 10+), 20% one-time Local, $100 min payout, net-30.
 9. Payouts: RazorpayX (India) + Payoneer (global), no Wise/PayPal/Stripe Connect.
 

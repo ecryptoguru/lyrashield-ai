@@ -15,8 +15,9 @@ audited configuration change.
   sandbox credentials, webhook contracts, and one sandbox payout are approved.
 
 Admission gates new purchases and payouts only. Signed webhook processing,
-existing subscription management, refunds, and reconciliation remain active.
-Set purchase and payout admissions to `off` before rollback.
+existing subscription management, approved policy-exception reversals,
+chargebacks, and reconciliation remain active. Set purchase and payout
+admissions to `off` before rollback.
 
 ## Local purchase contract
 

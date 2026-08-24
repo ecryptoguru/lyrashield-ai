@@ -13,7 +13,7 @@ import {
  *
  * - Tier escalation: 10 active referred subs → next commission at 30%
  * - 12-month cap: subscription past capEndsAt → EXPIRED amount=0
- * - Refund within 14-day Cloud window → clawback
+ * - Provider-confirmed refund or chargeback → clawback
  * - New-affiliate reserve: 25% held first 90 days
  * - Payout minimum: request button disabled below $100
  */
@@ -110,7 +110,7 @@ test.describe("Commission rules", () => {
     expect(result.status).toBe("EXPIRED")
   })
 
-  test("refund within 14-day Cloud window → clawback", async () => {
+  test("provider-confirmed refund → clawback", async () => {
     const externalId = `polar_refund_${suffix}`
 
     // First, create a commission

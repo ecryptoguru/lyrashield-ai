@@ -55,9 +55,6 @@ export const DEFAULT_MIN_PAYOUT_USD = 100
 /** Payout day of month (net-30 on the 15th). */
 export const PAYOUT_DAY_OF_MONTH = 15
 
-/** Cloud refund window in days. */
-export const CLOUD_REFUND_WINDOW_DAYS = 14
-
 /** Manual review threshold for clawbacks (USD major units). */
 export const CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD = 200
 

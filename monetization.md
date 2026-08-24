@@ -15,7 +15,7 @@ LyraShield AI master business & monetization plan (Aug 2026): one app with Local
 - **Affiliate program** pays 25% recurring / 12 months to drive low-CAC acquisition.
 - **Free tools + content + GitHub Action** are the only free surfaces — the top-of-funnel that feeds both paid modes.
 
-**The plan optimizes for fastest path to sustainable revenue:** activate the implemented Cloud billing and Local-mode packaging only after their production gates, then open the affiliate program when payout operations are ready. No lifetime deals or permanent free tier; Cloud retains its 14-day refund window and activated Local licenses remain non-refundable.
+**The plan optimizes for fastest path to sustainable revenue:** activate the implemented Cloud billing and Local-mode packaging only after their production gates, then open the affiliate program when payout operations are ready. No lifetime deals or permanent free tier; Cloud subscriptions, Local licenses, and minute packs are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.
 
 **The single most important thing to understand:** Local mode is the **fast-cash, privacy-led, zero-COGS** product; Cloud mode is the **compounding-MRR platform**. They share an engine and an account, and Cloud sync is the bridge that upgrades a Local user into a Cloud subscriber.
 
@@ -146,10 +146,10 @@ A **custom-built, application-gated** program on our own platform (transparency 
 - **India affiliates:** **RazorpayX Payouts** — INR domestic, ~₹4–9/payout, instant IMPS/UPI; pairs with our existing Razorpay billing.
 - **Global (non-India) affiliates:** **Payoneer Enterprise Mass Payouts** (primary) — proven affiliate-network scale, API + webhooks, 190+ countries, recipient KYC/tax portal; funded from our Indian AD bank under RBI's outward-remittance route. **Caveat:** enterprise API access needs partnership approval; mass-payout fee is custom/not public — get a quote. **RBI-native fallback: BriskPe (PA-CB I&O)** (or Cashfree). **Optional at scale: Trolley** for W-8/W-9/1099/withholding automation.
 - **Avoid:** Wise India (receive-only for business), Stripe Connect self-serve from India (not eligible), PayPal, manual SWIFT for many affiliates.
-- **Threshold/cadence/hold (unchanged):** $100 min, monthly net-30 on the 15th (`PAYOUT_DAY_OF_MONTH = 15`), 30-day hold, tax-form gate, 25% new-affiliate reserve (90 days), automatic clawback on refund/chargeback (incl. the Cloud 14-day money-back, `CLOUD_REFUND_WINDOW_DAYS = 14`).
+- **Threshold/cadence/hold (unchanged):** $100 min, monthly net-30 on the 15th (`PAYOUT_DAY_OF_MONTH = 15`), 30-day hold, tax-form gate, 25% new-affiliate reserve (90 days), and automatic clawback on provider-confirmed refunds or chargebacks.
 - **India tax (confirm with AD bank + tax advisor):** purpose code for affiliate/marketing commission, Form 15CA/15CB, TDS 194H 2% >₹20k/yr/payee, GST 18% if the affiliate is GST-registered, DTAA/treaty rates for non-residents.
 
-**Fraud controls (designed against the documented vectors):** pay only on paid invoice + activation (never signup/trial), self-referral rejection, disposable-email/proxy/device-fingerprint checks, 30-day hold + reserve, automatic clawback, zero-tolerance brand-bidding clause, FTC/ASA disclosure required, honest-claims-only (LyraShield guardrails extend to affiliates; money-back language only for Cloud).
+**Fraud controls (designed against the documented vectors):** pay only on paid invoice + activation (never signup/trial), self-referral rejection, disposable-email/proxy/device-fingerprint checks, 30-day hold + reserve, automatic clawback, zero-tolerance brand-bidding clause, FTC/ASA disclosure required, and honest-claims-only language with no refund promises.
 
 **Influencer/creator motion:** pure affiliate for micro creators/agencies; **hybrid (small flat fee + affiliate tail)** for mid dev creators; flat-fee sponsorship + affiliate for larger dev YouTube/newsletters. Each deal individually QA + founder-approved. Local-license referrals give creators a clean one-time payout story alongside the recurring Cloud tail.
 
@@ -274,7 +274,7 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 | ------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **No free tier slows PLG**                              | Lower top-of-funnel conversion     | The free tools + GitHub Action + content carry the free burden; the no-card 14-day full trial is the risk-free on-ramp; instrument the funnel to confirm it converts |
 | **Trial abuse (no card)**                               | COGS burn                          | Email verification, 100 agent-min hard cap, no Deep, 3-target cap, scan-frequency throttle, 80% warning, no auto-charge                                              |
-| **Refund abuse on Cloud (14-day window)**               | Refund fraud / chargebacks         | The affiliate clawback path + hold already handle it; monitor refund rate; the trial reduces "bought-blind" refunds. **Local stays no-refund** (digital goods).      |
+| **Refund exceptions and chargebacks**                   | Fraud / commission leakage         | The affiliate clawback path + hold handle provider-confirmed reversals; monitor reversal and dispute rates. The no-card trial reduces bought-blind purchases.        |
 | **Local-mode support burden** (Docker/env/local issues) | Support cost eats license margin   | Clean installer + diagnostics + `doctor` command; community support on Individual, priority on Team; price includes support                                          |
 | **Local models deferred**                               | Some BYOK buyers want local models | Launch on ChatGPT/Azure subs (supported); communicate local models as roadmap; don't overpromise scan quality on weak models                                         |
 | **License piracy / sharing**                            | Lost license revenue               | Accept casual sharing (dev-tool norm); seat-count activation, not invasive DRM; **no-refund on Local limits refund farming**                                         |
@@ -318,7 +318,7 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 - Tiers $29/$99/$299 + $499 contact-led; annual 15/20/25% off; INR = USD×100.
 - Meter = targets + agent-minutes (active-loop time, Deep 3×). **Allowances: Starter 300 / Pro 1,200 / Team 4,000 agent-min/mo. Targets: Starter 5 / Pro 15 / Team 50. Overage $0.15/min. Packs: 100/$15 · 250/$30 · 500/$50 (valid 180 days, `PACK_VALIDITY_DAYS = 180`).** Team metered overage + spend limit. **Mid-scan grace: 15 min (`GRACE_CAP_MS = 900,000 ms`), then `STOPPED_BUDGET`.**
 - **Deep scans gated to Pro and above** (Starter = Standard only — Starter is the price anchor for Pro).
-- Polar (global MoR) + Razorpay (India). **Refunds: 14-day money-back window on Cloud subscriptions.** EDU/OSS discounted, not free. Marketplace Phase 2. Support: community free / priority on higher tiers.
+- Polar (global MoR) + Razorpay (India). **Refunds: purchases are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.** EDU/OSS discounted, not free. Marketplace Phase 2. Support: community free / priority on higher tiers.
 
 **Local (BYOK license):**
 
@@ -329,9 +329,9 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 
 **Affiliate:**
 
-- **Cloud:** 25% recurring/12mo (30% at 10+ active, monthly only); 60-day last-click + promo override; net pre-tax base; annual commissioned as paid at **flat 25%** (tier kicker is monthly-only, founder-confirmed 2026-08-19); subscriptions only (no pack commission); RazorpayX (India) / Payoneer (global) $100 net-30 on the 15th; 30-day hold; 25% reserve 90 days; clawback on refund/chargeback (incl. the Cloud 14-day money-back); application + approval; custom in-app dashboard; binding terms `2026-08-18-v1`.
+- **Cloud:** 25% recurring/12mo (30% at 10+ active, monthly only); 60-day last-click + promo override; net pre-tax base; annual commissioned as paid at **flat 25%** (tier kicker is monthly-only, founder-confirmed 2026-08-19); subscriptions only (no pack commission); RazorpayX (India) / Payoneer (global) $100 net-30 on the 15th; 30-day hold; 25% reserve 90 days; clawback on provider-confirmed refund or chargeback; application + approval; custom in-app dashboard; binding terms `2026-08-18-v1`.
 - **Local (v1.1):** 20% one-time commission on referred Local-license sales.
 
 **Sequencing:** Cloud billing + Local packaging in parallel; affiliate after billing; enterprise/marketplace Phase 4.
 
-**Standing guardrails:** no LTD, no benchmark/coverage/"only-we" claims, no naming the upstream engine, no FUD, honest evidence-state language, privacy promise must be literally true. **Refund copy: the 14-day money-back applies to Cloud only — never claim it for Local.**
+**Standing guardrails:** no LTD, no benchmark/coverage/"only-we" claims, no naming the upstream engine, no FUD, honest evidence-state language, privacy promise must be literally true. **Refund copy: state that purchases are non-refundable and describe only the narrow legal and payment-error exceptions accurately.**
