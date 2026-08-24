@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { assertSafeBillingE2EBaseUrl } from "../../../e2e/billing/base-url-safety"
 
@@ -37,7 +38,10 @@ describe("billing E2E origin safety", () => {
   })
 
   it("keeps trace capture off while an access header can be present", () => {
-    const config = readFileSync("playwright.config.ts", "utf8")
+    const config = readFileSync(
+      fileURLToPath(new URL("../../../playwright.config.ts", import.meta.url)),
+      "utf8"
+    )
     expect(config).toContain('trace: accessHeaderConfigured ? "off" : "retain-on-failure"')
   })
 })
