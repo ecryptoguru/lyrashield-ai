@@ -940,7 +940,7 @@ jobs:
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.
       - name: Roll back production traffic on health failure
-        if: failure() && steps.smoke-public.outcome == 'failure'
+        if: failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}

@@ -10,11 +10,23 @@ interface ApiErrorCardProps {
   reset?: () => void
 }
 
+const MAX_ERROR_MESSAGE_LENGTH = 500
+
+export function safeApiErrorMessage(message: unknown): string {
+  if (typeof message !== "string") return "Unknown error"
+  const sanitized = message.replace(/[\p{Cc}\p{Cf}]/gu, " ").trim()
+  if (!sanitized) return "Unknown error"
+  return sanitized.length > MAX_ERROR_MESSAGE_LENGTH
+    ? `${sanitized.slice(0, MAX_ERROR_MESSAGE_LENGTH)}…`
+    : sanitized
+}
+
 export function ApiErrorCard({ error, reset }: ApiErrorCardProps) {
   const [copied, setCopied] = useState(false)
+  const message = safeApiErrorMessage(error.message)
 
   const details = [
-    `Message: ${error.message ?? "Unknown error"}`,
+    `Message: ${message}`,
     ...(error.digest ? [`Digest: ${error.digest}`] : []),
   ].join("\n")
 
@@ -41,7 +53,7 @@ export function ApiErrorCard({ error, reset }: ApiErrorCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-foreground text-sm wrap-break-word">{error.message}</p>
+        <p className="text-foreground text-sm wrap-break-word">{message}</p>
         {error.digest ? (
           <div className="space-y-1">
             <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
