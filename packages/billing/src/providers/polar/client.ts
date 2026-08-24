@@ -23,6 +23,7 @@ export function getPolarClient(): Polar | null {
   if (!clientInstance) {
     clientInstance = new Polar({
       accessToken: env.POLAR_ACCESS_TOKEN,
+      server: env.POLAR_ENVIRONMENT,
     })
   }
 

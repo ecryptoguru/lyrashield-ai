@@ -27,6 +27,14 @@ env:
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
   REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}
   PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
+  # Purchase admission stays closed during provider verification. Provider
+  # credentials and catalog IDs are still bound so signed test/live webhooks,
+  # reconciliation, and a later reviewed admission change use one revision.
+  POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
+  POLAR_BILLING_ADMISSION: "off"
+  POLAR_LOCAL_BILLING_ADMISSION: "off"
+  RAZORPAY_BILLING_ADMISSION: "off"
+  RAZORPAY_LOCAL_BILLING_ADMISSION: "off"
 
 jobs:
   build:
@@ -492,6 +500,79 @@ jobs:
             sync_bullmq_secret "$AZURE_SCANNER_CONTAINER_APP_NAME"
           fi
 
+      - name: Verify billing provider deployment configuration
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
+          POLAR_ORG_ID: ${{ vars.POLAR_ORG_ID }}
+          POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
+          POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
+        run: |
+          if [ "${POLAR_ENVIRONMENT}" != "production" ]; then
+            echo "::error::azure-production requires POLAR_ENVIRONMENT=production; Sandbox belongs only in isolated staging."
+            exit 1
+          fi
+          required=(
+            POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_ORG_ID
+            POLAR_PRODUCT_IDS POLAR_LOCAL_PRODUCT_IDS
+            RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET
+            RAZORPAY_PLAN_IDS
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "::error::${name} is required for declarative billing configuration. Purchase admission remains off, but provider webhook and reconciliation configuration must be complete."
+              exit 1
+            fi
+          done
+          case "$RAZORPAY_KEY_ID" in
+            rzp_live_*) ;;
+            *)
+              echo "::error::azure-production requires a Razorpay live key ID; Test Mode belongs only in isolated staging."
+              exit 1
+              ;;
+          esac
+          # JavaScript template literal below is not shell expansion.
+          # shellcheck disable=SC2016
+          node -e '
+            for (const name of ["POLAR_PRODUCT_IDS", "POLAR_LOCAL_PRODUCT_IDS", "RAZORPAY_PLAN_IDS"]) {
+              const value = JSON.parse(process.env[name]);
+              if (!value || Array.isArray(value) || typeof value !== "object" || Object.keys(value).length === 0) {
+                throw new Error(`${name} must be a non-empty JSON object`);
+              }
+            }
+          '
+          echo "Billing provider configuration is complete; all purchase admissions remain off."
+
+      - name: Sync billing provider secrets to app Container App
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: |
+          if ! timeout --foreground 180s az containerapp secret set \
+            --only-show-errors \
+            --name "$AZURE_APP_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --secrets \
+              "polar-access-token=${POLAR_ACCESS_TOKEN}" \
+              "polar-webhook-secret=${POLAR_WEBHOOK_SECRET}" \
+              "razorpay-key-id=${RAZORPAY_KEY_ID}" \
+              "razorpay-key-secret=${RAZORPAY_KEY_SECRET}" \
+              "razorpay-webhook-secret=${RAZORPAY_WEBHOOK_SECRET}"; then
+            echo "::error::Failed to sync billing provider secrets to ${AZURE_APP_CONTAINER_APP_NAME}."
+            exit 1
+          fi
+
       - name: Verify email verification credentials
         env:
           EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
@@ -609,6 +690,10 @@ jobs:
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
           EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
+          POLAR_ORG_ID: ${{ vars.POLAR_ORG_ID }}
+          POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
+          POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
+          RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
         run: |
@@ -633,6 +718,21 @@ jobs:
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
+              "POLAR_ENVIRONMENT=${{ env.POLAR_ENVIRONMENT }}" \
+              "POLAR_ACCESS_TOKEN=secretref:polar-access-token" \
+              "POLAR_ORG_ID=${POLAR_ORG_ID}" \
+              "POLAR_WEBHOOK_SECRET=secretref:polar-webhook-secret" \
+              "POLAR_PRODUCT_IDS=${POLAR_PRODUCT_IDS}" \
+              "POLAR_LOCAL_PRODUCT_IDS=${POLAR_LOCAL_PRODUCT_IDS}" \
+              "POLAR_BILLING_ADMISSION=${{ env.POLAR_BILLING_ADMISSION }}" \
+              "POLAR_LOCAL_BILLING_ADMISSION=${{ env.POLAR_LOCAL_BILLING_ADMISSION }}" \
+              "RAZORPAY_KEY_ID=secretref:razorpay-key-id" \
+              "RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret" \
+              "RAZORPAY_WEBHOOK_SECRET=secretref:razorpay-webhook-secret" \
+              "RAZORPAY_PLAN_IDS=${RAZORPAY_PLAN_IDS}" \
+              "RAZORPAY_BILLING_ADMISSION=${{ env.RAZORPAY_BILLING_ADMISSION }}" \
+              "RAZORPAY_LOCAL_BILLING_ADMISSION=${{ env.RAZORPAY_LOCAL_BILLING_ADMISSION }}" \
+              "BILLING_CANARY_WORKSPACE_IDS=" \
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
@@ -692,6 +792,11 @@ jobs:
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
+              "POLAR_BILLING_ADMISSION=${{ env.POLAR_BILLING_ADMISSION }}" \
+              "POLAR_LOCAL_BILLING_ADMISSION=${{ env.POLAR_LOCAL_BILLING_ADMISSION }}" \
+              "RAZORPAY_BILLING_ADMISSION=${{ env.RAZORPAY_BILLING_ADMISSION }}" \
+              "RAZORPAY_LOCAL_BILLING_ADMISSION=${{ env.RAZORPAY_LOCAL_BILLING_ADMISSION }}" \
+              "BILLING_CANARY_WORKSPACE_IDS=" \
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
@@ -936,6 +1041,99 @@ jobs:
           smoke_public app "${{ env.APP_URL }}/api/ready"
           smoke_public scanner "${{ env.SCANNER_URL }}/api/ready"
           smoke_egress_from_worker "$EGRESS_URL"
+
+      - name: Deactivate superseded Container App revisions
+        if: steps.smoke-public.outcome == 'success'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_CURRENT: ${{ steps.deploy-app.outputs.revision }}
+          APP_ROLLBACK: ${{ steps.rollout.outputs.app_previous }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_CURRENT: ${{ steps.deploy-scanner.outputs.revision }}
+          SCANNER_ROLLBACK: ${{ steps.rollout.outputs.scanner_previous }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_CURRENT: ${{ steps.deploy-egress-proxy.outputs.revision }}
+          EGRESS_ROLLBACK: ${{ steps.rollout.outputs.egress_previous }}
+        run: |
+          deactivate_superseded() {
+            local label="$1"
+            local name="$2"
+            local current="$3"
+            local rollback="$4"
+            if [ -z "$name" ]; then return 0; fi
+            if [ -z "$current" ] || [ -z "$rollback" ] || [ "$current" = "$rollback" ]; then
+              echo "::error::${label} revision cleanup requires distinct current and rollback revisions."
+              return 1
+            fi
+
+            local traffic_revision
+            local traffic_weight
+            traffic_revision=$(az containerapp ingress traffic show \
+              --name "$name" \
+              --resource-group "$RG" \
+              --query "[?weight == \`100\`].revisionName | [0]" \
+              --output tsv)
+            traffic_weight=$(az containerapp ingress traffic show \
+              --name "$name" \
+              --resource-group "$RG" \
+              --query "[?revisionName == '${current}'].weight | [0]" \
+              --output tsv)
+            if [ "$traffic_revision" != "$current" ] || [ "$traffic_weight" != "100" ]; then
+              echo "::error::${label} cleanup refused: ${current} is not the sole 100% traffic revision."
+              return 1
+            fi
+
+            mapfile -t active_revisions < <(az containerapp revision list \
+              --name "$name" \
+              --resource-group "$RG" \
+              --query "[?properties.active].name" \
+              --output tsv)
+            if ! printf '%s\n' "${active_revisions[@]}" | grep -Fxq "$current" || \
+               ! printf '%s\n' "${active_revisions[@]}" | grep -Fxq "$rollback"; then
+              echo "::error::${label} cleanup refused: current or rollback revision is not active."
+              return 1
+            fi
+
+            for revision in "${active_revisions[@]}"; do
+              if [ "$revision" = "$current" ] || [ "$revision" = "$rollback" ]; then
+                continue
+              fi
+              local weight
+              weight=$(az containerapp ingress traffic show \
+                --name "$name" \
+                --resource-group "$RG" \
+                --query "[?revisionName == '${revision}'].weight | [0]" \
+                --output tsv)
+              if [ -n "$weight" ] && [ "$weight" != "0" ]; then
+                echo "::error::${label} cleanup refused to deactivate traffic-serving revision ${revision} (${weight}%)."
+                return 1
+              fi
+              az containerapp revision deactivate \
+                --name "$name" \
+                --resource-group "$RG" \
+                --revision "$revision" \
+                --output none
+            done
+
+            local active_count
+            active_count=$(az containerapp revision list \
+              --name "$name" \
+              --resource-group "$RG" \
+              --query "[?properties.active] | length(@)" \
+              --output tsv)
+            if [ "$active_count" != "2" ]; then
+              echo "::error::${label} must retain exactly current and one rollback revision; found ${active_count}."
+              return 1
+            fi
+            echo "${label} retained current ${current} and rollback ${rollback}; superseded revisions are inactive."
+          }
+
+          CLEANUP_FAILED=0
+          deactivate_superseded app "$APP_NAME" "$APP_CURRENT" "$APP_ROLLBACK" || CLEANUP_FAILED=1
+          deactivate_superseded scanner "$SCANNER_NAME" "$SCANNER_CURRENT" "$SCANNER_ROLLBACK" || CLEANUP_FAILED=1
+          deactivate_superseded egress-proxy "$EGRESS_NAME" "$EGRESS_CURRENT" "$EGRESS_ROLLBACK" || CLEANUP_FAILED=1
+          exit "$CLEANUP_FAILED"
 
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.
