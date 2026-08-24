@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 
 const state = vi.hoisted(() => ({
-  env: { NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com" } as Record<
-    string,
-    string | undefined
-  >,
+  env: {
+    NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com",
+    NEXT_PUBLIC_MARKETING_URL: "https://lyrashieldai.com",
+  } as Record<string, string | undefined>,
+  provider: "razorpay",
 }))
 
 vi.mock("@lyrashield/config", () => ({ env: state.env }))
@@ -17,10 +18,10 @@ vi.mock("@lyrashield/db", () => ({
       findFirst: vi.fn().mockResolvedValue({ workspaceId: "ws_1" }),
     },
     billingAccount: {
-      findUnique: vi.fn().mockResolvedValue({
+      findUnique: vi.fn().mockImplementation(async () => ({
         externalId: "cust_1",
-        provider: "razorpay",
-      }),
+        provider: state.provider,
+      })),
     },
   },
 }))
@@ -30,34 +31,45 @@ vi.mock("@lyrashield/billing", () => ({
 
 const { GET } = await import("./route")
 
-describe("GET /billing/portal — Razorpay fallback URL", () => {
-  it("builds the dashboard fallback from validated config", async () => {
+describe("GET /billing/portal", () => {
+  it("redirects Razorpay customers to the explicit billing support path", async () => {
     const response = await GET()
-    expect(response.status).toBe(200)
-    const body = (await response.json()) as { data: { url: string } }
-    expect(body.data.url).toBe("https://app.lyrashieldai.com/dashboard/billing")
+    expect(response.status).toBe(307)
+    expect(response.headers.get("location")).toBe(
+      "https://lyrashieldai.com/support?topic=billing&provider=razorpay"
+    )
+  })
+
+  it("redirects Polar customers to the hosted portal", async () => {
+    state.provider = "polar"
+    try {
+      const response = await GET()
+      expect(response.status).toBe(307)
+      expect(response.headers.get("location")).toBe("https://polar.example/portal")
+    } finally {
+      state.provider = "razorpay"
+    }
   })
 
   it("fails closed with an explicit configuration error instead of interpolating undefined", async () => {
-    state.env.NEXT_PUBLIC_APP_URL = undefined
+    state.env.NEXT_PUBLIC_MARKETING_URL = undefined
     try {
       const response = await GET()
       expect(response.status).toBe(503)
       const body = (await response.json()) as { error: { code: string } }
       expect(body.error.code).toBe("CONFIGURATION_ERROR")
     } finally {
-      state.env.NEXT_PUBLIC_APP_URL = "https://app.lyrashieldai.com"
+      state.env.NEXT_PUBLIC_MARKETING_URL = "https://lyrashieldai.com"
     }
   })
 
   it("never returns a URL containing an undefined interpolation", async () => {
-    state.env.NEXT_PUBLIC_APP_URL = undefined
+    state.env.NEXT_PUBLIC_MARKETING_URL = undefined
     try {
       const response = await GET()
-      const body = (await response.json()) as { data?: { url?: string } }
-      expect(body.data?.url ?? "").not.toContain("undefined")
+      expect(response.headers.get("location") ?? "").not.toContain("undefined")
     } finally {
-      state.env.NEXT_PUBLIC_APP_URL = "https://app.lyrashieldai.com"
+      state.env.NEXT_PUBLIC_MARKETING_URL = "https://lyrashieldai.com"
     }
   })
 })

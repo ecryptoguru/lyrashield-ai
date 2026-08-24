@@ -76,7 +76,7 @@ export async function createRazorpaySubscription(params: {
 }
 
 /**
- * Create a Razorpay one-time payment link for minute pack purchases.
+ * Create a Razorpay hosted one-time payment link.
  *
  * @returns The payment link URL or payment ID.
  */
@@ -85,6 +85,8 @@ export async function createRazorpayPaymentLink(params: {
   description: string
   notes?: Record<string, string>
   callbackUrl: string
+  referenceId?: string
+  partialPayment?: false
 }): Promise<{ id: string; url: string } | null> {
   const client = getRazorpayClient()
   if (!client) return null
@@ -100,6 +102,8 @@ export async function createRazorpayPaymentLink(params: {
             notes?: Record<string, string>
             callback_url: string
             callback_method: string
+            reference_id?: string
+            accept_partial?: false
           }) => Promise<{ id: string; short_url: string }>
         }
       }
@@ -110,6 +114,8 @@ export async function createRazorpayPaymentLink(params: {
       notes: params.notes ?? {},
       callback_url: params.callbackUrl,
       callback_method: "get",
+      ...(params.referenceId ? { reference_id: params.referenceId } : {}),
+      ...(params.partialPayment === false ? { accept_partial: false } : {}),
     })
 
     return { id: paymentLink.id, url: paymentLink.short_url }

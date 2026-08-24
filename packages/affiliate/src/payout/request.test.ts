@@ -36,6 +36,9 @@ vi.mock("@lyrashield/db", () => ({
   },
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), error: vi.fn() } }))
+vi.mock("@lyrashield/config", () => ({
+  env: { RAZORPAYX_PAYOUT_ADMISSION: "public", PAYONEER_PAYOUT_ADMISSION: "off" },
+}))
 vi.mock("./eligibility", () => ({
   checkPayoutEligibility: vi.fn().mockResolvedValue({ eligible: true, reasons: [] }),
 }))
@@ -54,7 +57,7 @@ describe("requestPayout provider ambiguity", () => {
       reserveUntil: null,
     })
     vi.mocked(prisma.commission.findMany).mockResolvedValue([
-      { id: "commission-1", amount: new FakeDecimal("125"), currency: "USD" },
+      { id: "commission-1", amount: new FakeDecimal("125"), currency: "INR" },
     ])
     vi.mocked(prisma.commission.updateMany).mockResolvedValue({ count: 1 })
     vi.mocked(prisma.payout.create).mockResolvedValue({ id: "payout-1" })
@@ -65,6 +68,7 @@ describe("requestPayout provider ambiguity", () => {
   it("keeps captured commissions reserved when provider outcome is ambiguous", async () => {
     const result = await requestPayout({
       affiliateId: "affiliate-1",
+      provider: "razorpayx",
       sendFn: vi.fn().mockRejectedValue(new Error("timeout")),
     })
 
@@ -81,5 +85,37 @@ describe("requestPayout provider ambiguity", () => {
     })
     expect(prisma.payoutItem.deleteMany).not.toHaveBeenCalled()
     expect(prisma.commission.updateMany).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps commissions reserved while provider state is pending", async () => {
+    const result = await requestPayout({
+      affiliateId: "affiliate-1",
+      provider: "razorpayx",
+      sendFn: vi
+        .fn()
+        .mockResolvedValue({ success: false, pending: true, providerPayoutId: "pout_1" }),
+    })
+    expect(result.success).toBe(false)
+    expect(prisma.payout.updateMany).toHaveBeenCalledWith({
+      where: { id: "payout-1", status: "PROCESSING" },
+      data: { failureCode: "PROVIDER_PENDING", providerPayoutId: "pout_1" },
+    })
+    expect(prisma.payoutItem.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("rejects non-INR or mixed-currency batches before reserving commissions", async () => {
+    vi.mocked(prisma.commission.findMany).mockResolvedValue([
+      { id: "commission-1", amount: new FakeDecimal("125"), currency: "INR" },
+      { id: "commission-2", amount: new FakeDecimal("25"), currency: "USD" },
+    ])
+
+    const result = await requestPayout({
+      affiliateId: "affiliate-1",
+      provider: "razorpayx",
+      sendFn: vi.fn(),
+    })
+
+    expect(result).toEqual({ success: false, error: "RazorpayX payouts require INR commissions" })
+    expect(prisma.commission.updateMany).not.toHaveBeenCalled()
   })
 })

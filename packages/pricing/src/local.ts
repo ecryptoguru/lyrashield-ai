@@ -19,6 +19,8 @@ export interface LocalSku {
   description: string
   /** Price in USD (major units). */
   priceUsd: number
+  /** Published India price in INR major units when available. */
+  priceInr?: number
   /** Billing period: "one_time", "per_seat", "per_seat_year". */
   billing: "one_time" | "per_seat" | "per_seat_year"
   /** Whether this SKU includes update eligibility. */
@@ -33,6 +35,7 @@ export const LOCAL_SKUS: readonly LocalSku[] = [
     name: "Individual — Launch",
     description: "Single-user perpetual license at launch pricing.",
     priceUsd: 199,
+    priceInr: 19_900,
     billing: "one_time",
     includesUpdates: true,
     updateDays: 365,

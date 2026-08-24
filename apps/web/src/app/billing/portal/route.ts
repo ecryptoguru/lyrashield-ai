@@ -2,12 +2,13 @@ import { prisma } from "@lyrashield/db"
 import { requireAuth } from "@lyrashield/auth/server"
 import { getPolarPortalUrl } from "@lyrashield/billing"
 import { env } from "@lyrashield/config"
-import { apiError, apiSuccess } from "@/lib/api-response"
+import { apiError } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
+import { NextResponse } from "next/server"
 
 /**
- * GET /billing/portal — returns the Polar customer portal URL for
+ * GET /billing/portal — redirects to subscription management for
  * subscription management (upgrade, downgrade, cancel, update payment method).
  *
  * A-M07: Fixed from requirePermission("", ...) which always returned 401.
@@ -43,24 +44,18 @@ export async function GET(_request: Request) {
       if (!url) {
         return apiError("PROVIDER_NOT_CONFIGURED", "Polar portal is not configured.", 503)
       }
-      return apiSuccess({ url }, 200)
+      return NextResponse.redirect(url)
     }
 
-    // Razorpay doesn't have a self-serve portal — send customers to the
-    // dashboard billing page built from validated config. Fail closed with an
-    // explicit configuration error instead of ever returning `${undefined}`.
-    const appUrl = env.NEXT_PUBLIC_APP_URL
-    if (!appUrl) {
-      logger.error("NEXT_PUBLIC_APP_URL is not configured; cannot build billing fallback URL")
+    // Razorpay has no self-serve subscription portal. Send customers to the
+    // explicit billing-support path for cancellation and payment help.
+    const marketingUrl = env.NEXT_PUBLIC_MARKETING_URL
+    if (!marketingUrl) {
+      logger.error("NEXT_PUBLIC_MARKETING_URL is not configured; cannot build billing support URL")
       return apiError("CONFIGURATION_ERROR", "Billing portal is not configured.", 503)
     }
-    return apiSuccess(
-      {
-        url: `${appUrl}/dashboard/billing`,
-        message:
-          "Razorpay customers: manage your subscription from the dashboard or contact support.",
-      },
-      200
+    return NextResponse.redirect(
+      `${marketingUrl.replace(/\/$/, "")}/support?topic=billing&provider=razorpay`
     )
   } catch (error) {
     const authErr = authErrorResponse(error)

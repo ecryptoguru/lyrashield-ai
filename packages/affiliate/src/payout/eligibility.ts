@@ -31,6 +31,8 @@ export async function checkPayoutEligibility(affiliateId: string): Promise<Payou
       payoutMethod: true,
       reservePct: true,
       reserveUntil: true,
+      payoutMethodVerifiedAt: true,
+      taxFormStatus: true,
     },
   })
 
@@ -66,17 +68,22 @@ export async function checkPayoutEligibility(affiliateId: string): Promise<Payou
   const payoutMethod = affiliate.payoutMethod as {
     type?: string
     valid?: boolean
-    taxFormComplete?: boolean
   } | null
 
   if (!payoutMethod || !payoutMethod.type) {
     reasons.push("No payout method configured")
-  } else if (payoutMethod.valid === false) {
+  } else if (!affiliate.payoutMethodVerifiedAt || payoutMethod.valid !== true) {
     reasons.push("Payout method is not valid")
   }
 
+  if (payoutMethod?.type === "razorpayx" && env.RAZORPAYX_PAYOUT_ADMISSION !== "public") {
+    reasons.push("RazorpayX payouts are disabled")
+  } else if (payoutMethod?.type === "payoneer") {
+    reasons.push("Payoneer payouts are not approved")
+  }
+
   // Check tax form
-  if (!payoutMethod?.taxFormComplete) {
+  if (affiliate.taxFormStatus !== "VERIFIED") {
     reasons.push("Tax form not complete (W-9/W-8BEN/W-8BEN-E required, or GSTIN for India)")
   }
 

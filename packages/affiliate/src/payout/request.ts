@@ -13,6 +13,8 @@ import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { checkPayoutEligibility } from "./eligibility"
 import { isReserveActive } from "./reserve"
+import { env } from "@lyrashield/config"
+import { createRazorpayXProvider } from "./providers/razorpayx"
 
 export interface PayoutRequestResult {
   success: boolean
@@ -30,9 +32,21 @@ export async function requestPayout(params: {
     amount: string,
     currency: string,
     payoutMethod: unknown
-  ) => Promise<{ success: boolean; providerPayoutId?: string; error?: string }>
+  ) => Promise<{
+    success: boolean
+    pending?: boolean
+    rejected?: boolean
+    providerPayoutId?: string
+    error?: string
+  }>
 }): Promise<PayoutRequestResult> {
   const { affiliateId, provider, sendFn } = params
+
+  if (provider !== "razorpayx" && provider !== "payoneer") {
+    return { success: false, error: "Payout provider is not supported" }
+  }
+  const admitted = provider === "razorpayx" ? env.RAZORPAYX_PAYOUT_ADMISSION === "public" : false
+  if (!admitted) return { success: false, error: "Payout provider is disabled" }
 
   const affiliate = await prisma.affiliate.findUnique({
     where: { id: affiliateId },
@@ -65,6 +79,13 @@ export async function requestPayout(params: {
 
       if (available.length === 0) {
         throw new Error("No available commissions to pay out")
+      }
+
+      if (
+        provider === "razorpayx" &&
+        available.some((commission) => commission.currency !== "INR")
+      ) {
+        throw new Error("RazorpayX payouts require INR commissions")
       }
 
       const capturedIds = available.map((c) => c.id)
@@ -137,6 +158,7 @@ export async function requestPayout(params: {
     if (
       message.includes("No available commissions") ||
       message.includes("Concurrent payout") ||
+      message.includes("RazorpayX payouts require INR") ||
       message.includes("eligibility") ||
       message.includes("; ")
     ) {
@@ -145,10 +167,18 @@ export async function requestPayout(params: {
     throw error
   }
 
-  if (sendFn) {
-    let result: { success: boolean; providerPayoutId?: string; error?: string }
+  const providerSend =
+    sendFn ?? (provider === "razorpayx" ? createRazorpayXProvider().send : undefined)
+  if (providerSend) {
+    let result: {
+      success: boolean
+      pending?: boolean
+      rejected?: boolean
+      providerPayoutId?: string
+      error?: string
+    }
     try {
-      result = await sendFn(
+      result = await providerSend(
         payout.id,
         payout.amount.toString(),
         payout.currency,
@@ -167,6 +197,11 @@ export async function requestPayout(params: {
         payoutId: payout.id,
         error: "Payout outcome pending reconciliation",
       }
+    }
+
+    if (result.pending) {
+      await markPayoutForReconciliation(payout.id, "PROVIDER_PENDING", result.providerPayoutId)
+      return { success: false, payoutId: payout.id, error: "Payout outcome pending reconciliation" }
     }
 
     if (result.success) {
@@ -239,6 +274,11 @@ export async function requestPayout(params: {
       }
     }
 
+    if (!result.rejected) {
+      await markPayoutForReconciliation(payout.id, "PROVIDER_UNCONFIRMED", result.providerPayoutId)
+      return { success: false, payoutId: payout.id, error: "Payout outcome pending reconciliation" }
+    }
+
     // Provider explicitly rejected the payout. Only this known-negative result
     // may release captured commissions.
     await prisma.$transaction(async (tx) => {
@@ -262,17 +302,8 @@ export async function requestPayout(params: {
     return { success: false, payoutId: payout.id, error: "Provider payout failed" }
   }
 
-  logger.info("Payout created (pending provider confirmation)", {
-    payoutId: payout.id,
-    amount: payout.amount.toString(),
-  })
-
-  return {
-    success: true,
-    payoutId: payout.id,
-    amount: payout.amount.toString(),
-    itemCount: payout.itemCount,
-  }
+  await markPayoutForReconciliation(payout.id, "PROVIDER_NOT_IMPLEMENTED")
+  return { success: false, payoutId: payout.id, error: "Payout provider is unavailable" }
 }
 
 async function markPayoutForReconciliation(

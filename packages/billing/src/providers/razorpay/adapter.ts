@@ -32,6 +32,11 @@ export async function processRazorpayEvent(
 ): Promise<RazorpayAdapterResult> {
   try {
     switch (event.event) {
+      case "payment_link.paid":
+        // Local license and affiliate effects run in their dedicated required
+        // tracks. Billing records receipt without granting cloud entitlement.
+        return { handled: true, action: "payment_link.paid.received", workspaceId: null }
+
       case "payment.captured": {
         const payment = event.payload.payment?.entity
         if (!payment) {

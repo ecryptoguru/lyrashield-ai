@@ -71,6 +71,14 @@ export {
   type BillingProvider,
 } from "./geo"
 
+export {
+  evaluateBillingAdmission,
+  getBillingAdmission,
+  type BillingAdmissionMode,
+  type BillingAdmissionReason,
+  type BillingAdmissionDecision,
+} from "./admission"
+
 // Trial
 export {
   startTrial,
@@ -124,6 +132,7 @@ export {
   type BillingProviderName,
   type ProductKind,
   type NormalizedEventKind,
+  type CanonicalMoney,
   type NormalizedBillingEvent,
   type SubscriptionPaidEvent,
   type SubscriptionRenewedEvent,

@@ -9,7 +9,11 @@ interface AffiliateAdminActionsProps {
   showSuspend?: boolean
   showTierOverride?: boolean
   showReactivate?: boolean
-  showPayoutApprove?: boolean
+  showPayoutReconcile?: boolean
+  showPayoutProfileVerification?: boolean
+  currentProviderPayoutId?: string | null
+  currentPayoutMethodVerified?: boolean
+  currentTaxStatus?: "PENDING_REVIEW" | "VERIFIED" | "REJECTED" | "NOT_SUBMITTED"
   currentBaseRate?: number
   currentTierRate?: number
 }
@@ -31,6 +35,16 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
   )
   const [tierRate, setTierRate] = useState(
     props.currentTierRate != null ? String(props.currentTierRate) : "3000"
+  )
+  const [providerPayoutId, setProviderPayoutId] = useState(props.currentProviderPayoutId ?? "")
+  const [providerStatus, setProviderStatus] = useState("processing")
+  const [payoutMethodVerified, setPayoutMethodVerified] = useState(
+    props.currentPayoutMethodVerified ?? false
+  )
+  const [taxStatus, setTaxStatus] = useState(
+    props.currentTaxStatus === "VERIFIED" || props.currentTaxStatus === "REJECTED"
+      ? props.currentTaxStatus
+      : "PENDING_REVIEW"
   )
 
   async function action(name: string, body: Record<string, unknown>, confirmText?: string) {
@@ -115,19 +129,97 @@ export function AffiliateAdminActions(props: AffiliateAdminActionsProps) {
             Reactivate
           </button>
         )}
-
-        {props.showPayoutApprove && (
-          <button
-            onClick={() =>
-              action("approvePayout", { action: "approvePayout", payoutId: props.payoutId })
-            }
-            disabled={loading === "approvePayout"}
-            className={BTN_GREEN}
-          >
-            Approve Payout
-          </button>
-        )}
       </div>
+
+      {props.showPayoutReconcile && props.payoutId && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            action(
+              "reconcilePayout",
+              {
+                action: "reconcilePayout",
+                payoutId: props.payoutId,
+                providerPayoutId,
+                providerStatus,
+              },
+              `Record provider state ${providerStatus} for this payout?`
+            )
+          }}
+        >
+          <label className="text-xs">
+            Provider payout ID
+            <input
+              required
+              maxLength={191}
+              value={providerPayoutId}
+              onChange={(event) => setProviderPayoutId(event.target.value)}
+              className="mt-1 block w-48 rounded-md border px-2 py-1 text-xs"
+            />
+          </label>
+          <label className="text-xs">
+            Confirmed provider state
+            <select
+              value={providerStatus}
+              onChange={(event) => setProviderStatus(event.target.value)}
+              className="mt-1 block rounded-md border px-2 py-1 text-xs"
+            >
+              <option value="processing">Processing</option>
+              <option value="processed">Processed</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+          <button type="submit" disabled={loading === "reconcilePayout"} className={BTN_SLATE}>
+            Record reconciliation
+          </button>
+        </form>
+      )}
+
+      {props.showPayoutProfileVerification && props.affiliateId && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            action(
+              "verifyPayoutProfile",
+              {
+                action: "verifyPayoutProfile",
+                affiliateId: props.affiliateId,
+                payoutMethodVerified,
+                taxStatus,
+              },
+              "Record this operator review?"
+            )
+          }}
+        >
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={payoutMethodVerified}
+              onChange={(event) => setPayoutMethodVerified(event.target.checked)}
+            />
+            Payout method verified
+          </label>
+          <label className="text-xs">
+            Tax review
+            <select
+              value={taxStatus}
+              onChange={(event) =>
+                setTaxStatus(event.target.value as "PENDING_REVIEW" | "VERIFIED" | "REJECTED")
+              }
+              className="mt-1 block rounded-md border px-2 py-1 text-xs"
+            >
+              <option value="PENDING_REVIEW">Pending review</option>
+              <option value="VERIFIED">Verified</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+          </label>
+          <button type="submit" disabled={loading === "verifyPayoutProfile"} className={BTN_SLATE}>
+            Save verification
+          </button>
+        </form>
+      )}
 
       {props.showTierOverride && props.affiliateId && (
         <form

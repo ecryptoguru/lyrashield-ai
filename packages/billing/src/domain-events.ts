@@ -50,11 +50,23 @@ interface NormalizedEventBase {
   productKind: ProductKind
   occurredAt: Date | null
   rawType: string
+  /** Validated provider money in major units. Null means affiliate processing must retry. */
+  money: CanonicalMoney | null
+  /** Canonical provider metadata assembled from supported resource notes. */
+  metadata: Record<string, unknown>
   /**
    * Provider-specific resource record for downstream mappers (affiliate).
    * Engine/provider output — treat as untrusted. Never log it raw.
    */
   entity: Record<string, unknown>
+}
+
+export interface CanonicalMoney {
+  currency: "USD" | "INR"
+  grossAmount: string
+  discountAmount: string
+  taxAmount: string
+  commissionableAmount: string
 }
 
 export interface SubscriptionPaidEvent extends NormalizedEventBase {
@@ -92,6 +104,7 @@ const PAID_RAW_TYPES = new Set([
   "order.paid",
   "subscription.paid",
   "payment.captured",
+  "payment_link.paid",
   "subscription.charged",
 ])
 
@@ -131,7 +144,8 @@ interface ProviderFacts {
   orderEntity: Record<string, unknown>
   paymentEntity: Record<string, unknown>
   subscriptionEntity: Record<string, unknown>
-  metaBag: Record<string, unknown> | undefined
+  paymentLinkEntity: Record<string, unknown>
+  metaBag: Record<string, unknown>
   occurredAt: Date | null
 }
 
@@ -145,6 +159,7 @@ function extractFacts(provider: BillingProviderName, payload: unknown): Provider
       orderEntity: data,
       paymentEntity: {},
       subscriptionEntity: data,
+      paymentLinkEntity: {},
       metaBag: asRecord(data.metadata ?? data.notes),
       occurredAt: parseOccurredAt(data.created_at ?? data.createdAt),
     }
@@ -156,6 +171,13 @@ function extractFacts(provider: BillingProviderName, payload: unknown): Provider
   const refundEntity = asRecord(asRecord(sections.refund).entity)
   const orderEntity = asRecord(asRecord(sections.order).entity)
   const subscriptionEntity = asRecord(asRecord(sections.subscription).entity)
+  const paymentLinkEntity = asRecord(asRecord(sections.payment_link).entity)
+  const metaBag = {
+    ...asRecord(orderEntity.notes ?? orderEntity.metadata),
+    ...asRecord(subscriptionEntity.notes ?? subscriptionEntity.metadata),
+    ...asRecord(paymentLinkEntity.notes ?? paymentLinkEntity.metadata),
+    ...asRecord(paymentEntity.notes ?? paymentEntity.metadata),
+  }
   const primary =
     Object.keys(refundEntity).length > 0
       ? refundEntity
@@ -165,13 +187,100 @@ function extractFacts(provider: BillingProviderName, payload: unknown): Provider
           ? subscriptionEntity
           : orderEntity
   return {
-    entity: primary,
+    entity: Object.keys(metaBag).length > 0 ? { ...primary, notes: metaBag } : primary,
     refundEntity,
     orderEntity,
     paymentEntity,
     subscriptionEntity,
-    metaBag: asRecord(primary.metadata ?? primary.notes),
+    paymentLinkEntity,
+    metaBag,
     occurredAt: parseOccurredAt(rp.created_at),
+  }
+}
+
+const SUPPORTED_CURRENCIES = new Set(["USD", "INR"])
+
+function minorInteger(value: unknown): bigint | null {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value >= 0 ? BigInt(value) : null
+  }
+  if (typeof value === "string" && /^\d+$/.test(value)) return BigInt(value)
+  return null
+}
+
+function currencyCode(value: unknown): "USD" | "INR" | null {
+  if (typeof value !== "string") return null
+  const currency = value.toUpperCase()
+  return SUPPORTED_CURRENCIES.has(currency) ? (currency as "USD" | "INR") : null
+}
+
+function formatScaled4(value: bigint): string {
+  const units = value / 10_000n
+  const decimals = (value % 10_000n).toString().padStart(4, "0")
+  return `${units}.${decimals}`
+}
+
+function minorToScaled4(value: bigint): bigint {
+  return value * 100n
+}
+
+function roundDivide(value: bigint, divisor: bigint): bigint {
+  return (value + divisor / 2n) / divisor
+}
+
+function canonicalMoney(
+  provider: BillingProviderName,
+  facts: ProviderFacts,
+  eventType: string
+): CanonicalMoney | null {
+  const entity = facts.entity
+  const currency = currencyCode(
+    entity.currency ?? facts.paymentEntity.currency ?? facts.refundEntity.currency
+  )
+  if (!currency) return null
+
+  if (REFUND_RAW_TYPES.has(eventType)) {
+    const refundMinor = minorInteger(facts.refundEntity.amount)
+    if (refundMinor === null) return null
+    const amount = formatScaled4(minorToScaled4(refundMinor))
+    return {
+      currency,
+      grossAmount: amount,
+      discountAmount: "0.0000",
+      taxAmount: "0.0000",
+      commissionableAmount: amount,
+    }
+  }
+
+  if (!PAID_RAW_TYPES.has(eventType)) return null
+
+  if (provider === "polar") {
+    const gross = minorInteger(entity.total_amount)
+    const discount = minorInteger(entity.discount_amount)
+    const tax = minorInteger(entity.tax_amount)
+    const commissionable = minorInteger(entity.net_amount)
+    if (gross === null || discount === null || tax === null || commissionable === null) return null
+    if (commissionable + tax !== gross || discount > gross) return null
+    return {
+      currency,
+      grossAmount: formatScaled4(minorToScaled4(gross)),
+      discountAmount: formatScaled4(minorToScaled4(discount)),
+      taxAmount: formatScaled4(minorToScaled4(tax)),
+      commissionableAmount: formatScaled4(minorToScaled4(commissionable)),
+    }
+  }
+
+  const grossMinor = minorInteger(facts.paymentEntity.amount)
+  if (grossMinor === null || currency !== "INR") return null
+  const gross = minorToScaled4(grossMinor)
+  // Published INR prices are GST-inclusive: tax component = total × 18 / 118.
+  const tax = roundDivide(grossMinor * 18n * 100n, 118n)
+  return {
+    currency,
+    grossAmount: formatScaled4(gross),
+    discountAmount: "0.0000",
+    taxAmount: formatScaled4(tax),
+    commissionableAmount: formatScaled4(gross - tax),
   }
 }
 
@@ -254,6 +363,8 @@ export function normalizeProviderEvent(input: {
     occurredAt: facts.occurredAt,
     rawType: eventType,
     entity: facts.entity,
+    money: canonicalMoney(provider, facts, eventType),
+    metadata: facts.metaBag,
   }
 
   if (REFUND_RAW_TYPES.has(eventType)) {

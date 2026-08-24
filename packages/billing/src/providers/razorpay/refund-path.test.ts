@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("@lyrashield/config", () => ({ env: {} }))
+
 vi.mock("../../usage/refund", () => ({
   reverseRefund: vi.fn().mockResolvedValue({ reversed: true, minutesReversed: 100 }),
 }))
@@ -52,5 +54,25 @@ describe("Razorpay refund.created", () => {
       workspaceId: "ws-1",
     })
     expect(reverseRefund).toHaveBeenCalledWith("ws-1", "pay-1")
+  })
+
+  it("accepts the hosted Local payment-link paid event without inventing a billing mutation", async () => {
+    expect(isHandledRazorpayEvent("payment_link.paid")).toBe(true)
+    await expect(
+      processRazorpayEvent({
+        event: "payment_link.paid",
+        created_at: Math.floor(Date.now() / 1000),
+        payload: {
+          payment: { entity: { id: "pay-local", amount: 1_990_000, currency: "INR" } },
+          payment_link: {
+            entity: { id: "plink-local", notes: { productId: "individual_launch" } },
+          },
+        },
+      })
+    ).resolves.toEqual({
+      handled: true,
+      action: "payment_link.paid.received",
+      workspaceId: null,
+    })
   })
 })

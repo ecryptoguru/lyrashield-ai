@@ -42,13 +42,8 @@ export interface WebhookTrackHandlers {
 
 function isCommissionRelevant(event: NormalizedBillingEvent): boolean {
   if (event.kind === "refund_completed") return true
-  // Historical dispatch triggers were exactly `order.paid` | `subscription.paid`
-  // (any provider), excluding minute packs. Razorpay recurring/captured events
-  // were never commission-bearing and remain so.
-  const paidTrigger = event.rawType === "order.paid" || event.rawType === "subscription.paid"
   return (
-    paidTrigger &&
-    event.productKind !== "minute_pack" &&
+    (event.productKind === "subscription" || event.productKind === "local") &&
     (event.kind === "subscription_paid" ||
       event.kind === "subscription_renewed" ||
       event.kind === "local_purchase_paid")

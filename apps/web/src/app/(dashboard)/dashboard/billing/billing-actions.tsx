@@ -9,6 +9,7 @@ interface BillingActionsProps {
   plan: string
   isTeam: boolean
   workspaceId: string
+  purchasesAvailable: boolean
 }
 
 /**
@@ -18,12 +19,19 @@ interface BillingActionsProps {
  * linking directly to POST routes via GET (which would 405).
  * No $ cost values are displayed here per the billing design constraint.
  */
-export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingActionsProps) {
+export function BillingActions({
+  plan,
+  isTeam: _isTeam,
+  workspaceId,
+  purchasesAvailable,
+}: BillingActionsProps) {
   const router = useRouter()
   const [loading, setLoading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleCheckout(targetPlan: string, interval: string) {
     setLoading(`checkout-${targetPlan}`)
+    setError(null)
     try {
       const res = await fetch("/billing/checkout", {
         method: "POST",
@@ -31,7 +39,9 @@ export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingAc
         body: JSON.stringify({ workspaceId, plan: targetPlan, interval }),
       })
       const data = await res.json()
-      if (data.success && data.data?.url) {
+      if (!res.ok) {
+        setError(data.error?.message ?? "Unable to start checkout. Please try again.")
+      } else if (data.success && data.data?.url) {
         window.location.href = data.data.url
       } else if (data.success && data.data?.subscriptionId && data.data?.keyId) {
         await openRazorpaySubscriptionCheckout({
@@ -40,18 +50,24 @@ export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingAc
           onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
         })
       } else {
-        console.error("Checkout failed", data)
+        setError("Unable to start checkout. Please try again.")
       }
-    } catch (err) {
-      console.error("Checkout request failed", err)
+    } catch {
+      setError("Unable to start checkout. Check your connection and try again.")
     } finally {
       setLoading(null)
     }
   }
 
   if (plan === "FREE" || plan === "STARTER") {
+    if (!purchasesAvailable) return null
     return (
-      <div className="flex gap-2">
+      <div className="flex flex-col items-end gap-2">
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
         <button
           onClick={() => handleCheckout("PRO", "monthly")}
           disabled={loading === "checkout-PRO"}
@@ -65,17 +81,26 @@ export function BillingActions({ plan, isTeam: _isTeam, workspaceId }: BillingAc
 
   if (plan === "PRO") {
     return (
-      <div className="flex gap-2">
-        <button
-          onClick={() => handleCheckout("TEAM", "monthly")}
-          disabled={loading === "checkout-TEAM"}
-          className={buttonVariants({ variant: "default", size: "sm" })}
-        >
-          {loading === "checkout-TEAM" ? "Loading..." : "Upgrade to Team"}
-        </button>
-        <a href="/billing/portal" className={buttonVariants({ variant: "outline", size: "sm" })}>
-          Manage
-        </a>
+      <div className="flex flex-col items-end gap-2">
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="flex gap-2">
+          {purchasesAvailable && (
+            <button
+              onClick={() => handleCheckout("TEAM", "monthly")}
+              disabled={loading === "checkout-TEAM"}
+              className={buttonVariants({ variant: "default", size: "sm" })}
+            >
+              {loading === "checkout-TEAM" ? "Loading..." : "Upgrade to Team"}
+            </button>
+          )}
+          <a href="/billing/portal" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Manage
+          </a>
+        </div>
       </div>
     )
   }

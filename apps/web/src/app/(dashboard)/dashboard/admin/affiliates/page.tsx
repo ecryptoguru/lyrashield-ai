@@ -115,6 +115,12 @@ export default async function AffiliateAdminPage() {
                       affiliateId={aff.id}
                       showSuspend
                       showTierOverride
+                      showPayoutProfileVerification
+                      currentPayoutMethodVerified={Boolean(aff.payoutMethodVerifiedAt)}
+                      currentTaxStatus={
+                        aff.taxFormStatus as
+                          "PENDING_REVIEW" | "VERIFIED" | "REJECTED" | "NOT_SUBMITTED"
+                      }
                       currentBaseRate={aff.baseRateBps}
                       currentTierRate={aff.tierRateBps}
                     />
@@ -143,7 +149,11 @@ export default async function AffiliateAdminPage() {
                     {new Date(p.requestedAt).toLocaleDateString()}
                   </div>
                 </div>
-                <AffiliateAdminActions payoutId={p.id} showPayoutApprove />
+                <AffiliateAdminActions
+                  payoutId={p.id}
+                  showPayoutReconcile
+                  currentProviderPayoutId={p.providerPayoutId}
+                />
               </div>
             ))
           )}

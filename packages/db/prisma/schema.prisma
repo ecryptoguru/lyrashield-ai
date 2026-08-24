@@ -1806,6 +1806,12 @@ model Affiliate {
   reservePct      Int             @default(25)
   reserveUntil    DateTime?
   payoutMethod    Json?
+  payoutMethodVerifiedAt DateTime?
+  payoutMethodVerifiedBy String?
+  taxFormType     String?
+  taxFormStatus   String          @default("NOT_SUBMITTED")
+  taxReviewedAt   DateTime?
+  taxReviewedBy   String?
   createdAt       DateTime        @default(now())
   approvedAt      DateTime?
   acceptedTermsAt DateTime?
@@ -1821,6 +1827,7 @@ model Affiliate {
   attributionTokens AttributionToken[]
 
   @@index([reserveUntil])
+  @@index([taxFormStatus])
 }
 
 model AffiliateProgram {

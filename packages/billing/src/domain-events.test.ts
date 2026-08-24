@@ -40,6 +40,11 @@ describe("normalizeProviderEvent", () => {
           productId: "individual_regular",
           customer_email: "buyer@example.com",
           seats: 1,
+          currency: "usd",
+          total_amount: 19900,
+          discount_amount: 0,
+          tax_amount: 0,
+          net_amount: 19900,
           created_at: "2026-08-01T00:00:00Z",
         },
       },
@@ -52,6 +57,34 @@ describe("normalizeProviderEvent", () => {
     expect(event.rawType).toBe("order.paid")
     expect(event.workspaceId).toBeNull()
     expect(event.customerId).toBeNull()
+    expect(event.money).toEqual({
+      currency: "USD",
+      grossAmount: "199.0000",
+      discountAmount: "0.0000",
+      taxAmount: "0.0000",
+      commissionableAmount: "199.0000",
+    })
+  })
+
+  it("rejects inconsistent Polar total, tax, and commissionable evidence", () => {
+    const event = normalizeProviderEvent({
+      provider: "polar",
+      eventType: "order.paid",
+      deliveryId: "del_polar_bad_money",
+      payload: {
+        type: "order.paid",
+        data: {
+          id: "ord_bad",
+          currency: "USD",
+          total_amount: 19900,
+          discount_amount: 0,
+          tax_amount: 100,
+          net_amount: 19900,
+        },
+      },
+    })
+
+    expect(event.money).toBeNull()
   })
 
   it("classifies a Polar provider product UUID through POLAR_LOCAL_PRODUCT_IDS as local", () => {
@@ -80,7 +113,13 @@ describe("normalizeProviderEvent", () => {
       deliveryId: "del_refund_polar",
       payload: {
         type: "refund.created",
-        data: { id: "ref_P_1", order_id: "ord_P_REF", amount: 100, status: "succeeded" },
+        data: {
+          id: "ref_P_1",
+          order_id: "ord_P_REF",
+          amount: 100,
+          currency: "USD",
+          status: "succeeded",
+        },
       },
     })
     const razorpay = normalizeProviderEvent({
@@ -91,8 +130,18 @@ describe("normalizeProviderEvent", () => {
         event: "refund.created",
         created_at: 1_755_000_000,
         payload: {
-          refund: { entity: { id: "rfnd_R_1", payment_id: "pay_R_1", amount: 100 } },
-          payment: { entity: { id: "pay_R_1", order_id: "order_R_REF", notes: {} } },
+          refund: {
+            entity: { id: "rfnd_R_1", payment_id: "pay_R_1", amount: 100, currency: "INR" },
+          },
+          payment: {
+            entity: {
+              id: "pay_R_1",
+              order_id: "order_R_REF",
+              amount: 100,
+              currency: "INR",
+              notes: {},
+            },
+          },
         },
       },
     })
@@ -100,6 +149,7 @@ describe("normalizeProviderEvent", () => {
     for (const event of [polar, razorpay]) {
       expect(event.kind).toBe("refund_completed")
       expect(event.refundId).toBeTruthy()
+      expect(event.money?.grossAmount).toBe("1.0000")
     }
     expect(polar.orderId).toBe("ord_P_REF")
     // Razorpay primary entity is the refund; order reference still resolved.
@@ -119,6 +169,8 @@ describe("normalizeProviderEvent", () => {
           payment: {
             entity: {
               id: "pay_S1",
+              amount: 290000,
+              currency: "INR",
               notes: isFirstPayment === undefined ? {} : { isFirstPayment },
             },
           },
@@ -133,6 +185,70 @@ describe("normalizeProviderEvent", () => {
     expect(first.productKind).toBe("subscription")
     expect(renewed.kind).toBe("subscription_renewed")
     expect(renewed.subscriptionId).toBe("sub_S1")
+    expect(first.money).toEqual({
+      currency: "INR",
+      grossAmount: "2900.0000",
+      discountAmount: "0.0000",
+      taxAmount: "442.3729",
+      commissionableAmount: "2457.6271",
+    })
+  })
+
+  it("normalizes payment_link.paid from paise and merges payment-link notes", () => {
+    const event = normalizeProviderEvent({
+      provider: "razorpay",
+      eventType: "payment_link.paid",
+      deliveryId: "evt_link_1",
+      payload: {
+        event: "payment_link.paid",
+        created_at: 1_755_000_000,
+        payload: {
+          payment: {
+            entity: {
+              id: "pay_LOCAL_1",
+              amount: 1_990_000,
+              currency: "INR",
+              notes: { click_id: "click_1" },
+            },
+          },
+          payment_link: {
+            entity: {
+              id: "plink_1",
+              reference_id: "local_ref_1",
+              notes: { productId: "individual_launch", affiliate_id: "aff_1" },
+            },
+          },
+        },
+      },
+    })
+
+    expect(event.kind).toBe("local_purchase_paid")
+    expect(event.productKind).toBe("local")
+    expect(event.paymentId).toBe("pay_LOCAL_1")
+    expect(event.metadata).toEqual(
+      expect.objectContaining({
+        productId: "individual_launch",
+        affiliate_id: "aff_1",
+        click_id: "click_1",
+      })
+    )
+    expect(event.money?.commissionableAmount).toBe("16864.4068")
+  })
+
+  it("does not guess money when amount evidence or currency is invalid", () => {
+    for (const entity of [
+      { id: "pay_missing", currency: "INR" },
+      { id: "pay_unknown", amount: 100, currency: "BTC" },
+      { id: "pay_decimal", amount: 1.5, currency: "INR" },
+    ]) {
+      const event = normalizeProviderEvent({
+        provider: "razorpay",
+        eventType: "payment.captured",
+        deliveryId: `evt_${entity.id}`,
+        payload: { event: "payment.captured", payload: { payment: { entity } } },
+      })
+      expect(event.money).toBeNull()
+    }
   })
 
   it("classifies minute packs as productKind 'minute_pack' and one-time paid shape", () => {

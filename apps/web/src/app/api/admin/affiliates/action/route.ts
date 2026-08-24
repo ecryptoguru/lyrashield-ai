@@ -20,8 +20,16 @@ const ActionSchema = z.discriminatedUnion("action", [
     affiliateId: z.string().min(1),
   }),
   z.object({
-    action: z.literal("approvePayout"),
+    action: z.literal("reconcilePayout"),
     payoutId: z.string().min(1),
+    providerPayoutId: z.string().min(1).max(191),
+    providerStatus: z.enum(["processing", "processed", "rejected"]),
+  }),
+  z.object({
+    action: z.literal("verifyPayoutProfile"),
+    affiliateId: z.string().min(1),
+    payoutMethodVerified: z.boolean(),
+    taxStatus: z.enum(["PENDING_REVIEW", "VERIFIED", "REJECTED"]),
   }),
   z.object({
     action: z.literal("tierOverride"),
@@ -191,10 +199,61 @@ export async function POST(request: Request) {
       affiliateId: data.affiliateId,
       adminUserId: session.userId,
     })
-  } else if (data.action === "approvePayout") {
+  } else if (data.action === "verifyPayoutProfile") {
+    const existing = await prisma.affiliate.findUnique({
+      where: { id: data.affiliateId },
+      select: { payoutMethod: true, taxFormType: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "Affiliate not found" }, { status: 404 })
+    }
+    const payoutMethod = existing.payoutMethod as Record<string, unknown> | null
+    if (data.payoutMethodVerified && !payoutMethod) {
+      return NextResponse.json(
+        { success: false, error: "Payout method is required" },
+        { status: 400 }
+      )
+    }
+    if (data.taxStatus === "VERIFIED" && !existing.taxFormType) {
+      return NextResponse.json(
+        { success: false, error: "Tax form type is required" },
+        { status: 400 }
+      )
+    }
+    await prisma.affiliate.update({
+      where: { id: data.affiliateId },
+      data: {
+        payoutMethod: payoutMethod
+          ? { ...payoutMethod, valid: data.payoutMethodVerified }
+          : undefined,
+        payoutMethodVerifiedAt: data.payoutMethodVerified ? new Date() : null,
+        payoutMethodVerifiedBy: data.payoutMethodVerified ? session.userId : null,
+        taxFormStatus: data.taxStatus,
+        taxReviewedAt: new Date(),
+        taxReviewedBy: session.userId,
+      },
+    })
+    await writeAffiliateAudit(session.userId, {
+      action: "affiliate.payout_profile_verified",
+      resourceType: "affiliate",
+      resourceId: data.affiliateId,
+      metadata: {
+        payoutMethodVerified: data.payoutMethodVerified,
+        taxFormType: existing.taxFormType,
+        taxStatus: data.taxStatus,
+      },
+    })
+  } else if (data.action === "reconcilePayout") {
     const payout = await prisma.payout.findUnique({
       where: { id: data.payoutId },
-      select: { id: true, status: true, isReserveRelease: true, amount: true, affiliateId: true },
+      select: {
+        id: true,
+        status: true,
+        isReserveRelease: true,
+        amount: true,
+        affiliateId: true,
+        providerPayoutId: true,
+      },
     })
 
     if (!payout) {
@@ -203,7 +262,19 @@ export async function POST(request: Request) {
 
     // Replay safe: already PAID is idempotent success
     if (payout.status === "PAID") {
-      return NextResponse.json({ success: true })
+      return payout.providerPayoutId === data.providerPayoutId
+        ? NextResponse.json({ success: true })
+        : NextResponse.json(
+            { success: false, error: "Provider payout ID mismatch" },
+            { status: 409 }
+          )
+    }
+
+    if (payout.providerPayoutId && payout.providerPayoutId !== data.providerPayoutId) {
+      return NextResponse.json(
+        { success: false, error: "Provider payout ID mismatch" },
+        { status: 409 }
+      )
     }
 
     if (payout.status !== "PENDING" && payout.status !== "PROCESSING") {
@@ -211,6 +282,65 @@ export async function POST(request: Request) {
         { success: false, error: `Payout is ${payout.status}, not PENDING/PROCESSING` },
         { status: 409 }
       )
+    }
+
+    if (data.providerStatus === "processing") {
+      const updated = await prisma.payout.updateMany({
+        where: { id: data.payoutId, status: { in: ["PENDING", "PROCESSING"] } },
+        data: {
+          status: "PROCESSING",
+          providerPayoutId: data.providerPayoutId,
+          failureCode: "PROVIDER_PENDING",
+        },
+      })
+      if (updated.count === 0) {
+        return NextResponse.json(
+          { success: false, error: "Payout status changed" },
+          { status: 409 }
+        )
+      }
+      await writeAffiliateAudit(session.userId, {
+        action: "affiliate.payout_reconciled",
+        resourceType: "payout",
+        resourceId: data.payoutId,
+        metadata: { providerPayoutId: data.providerPayoutId, providerStatus: data.providerStatus },
+      })
+      return NextResponse.json({ success: true, status: "PROCESSING" })
+    }
+
+    if (data.providerStatus === "rejected") {
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.payout.updateMany({
+          where: { id: data.payoutId, status: { in: ["PENDING", "PROCESSING"] } },
+          data: {
+            status: "FAILED",
+            providerPayoutId: data.providerPayoutId,
+            failureCode: "PROVIDER_REJECTED",
+          },
+        })
+        if (updated.count === 0) throw new Error("Payout status changed")
+        if (!payout.isReserveRelease) {
+          const rejectedItems = await tx.payoutItem.findMany({
+            where: { payoutId: data.payoutId },
+            select: { commissionId: true },
+          })
+          await tx.commission.updateMany({
+            where: {
+              id: { in: rejectedItems.map((item) => item.commissionId) },
+              status: "RESERVED",
+            },
+            data: { status: "AVAILABLE" },
+          })
+          await tx.payoutItem.deleteMany({ where: { payoutId: data.payoutId } })
+        }
+      })
+      await writeAffiliateAudit(session.userId, {
+        action: "affiliate.payout_reconciled",
+        resourceType: "payout",
+        resourceId: data.payoutId,
+        metadata: { providerPayoutId: data.providerPayoutId, providerStatus: data.providerStatus },
+      })
+      return NextResponse.json({ success: true, status: "FAILED" })
     }
 
     const items = await prisma.payoutItem.findMany({
@@ -249,7 +379,7 @@ export async function POST(request: Request) {
       await prisma.$transaction(async (tx) => {
         const upd = await tx.payout.updateMany({
           where: { id: data.payoutId, status: { in: ["PENDING", "PROCESSING"] } },
-          data: { status: "PAID", paidAt: new Date() },
+          data: { status: "PAID", paidAt: new Date(), providerPayoutId: data.providerPayoutId },
         })
         if (upd.count === 0) {
           const existing = await tx.payout.findUnique({
@@ -303,35 +433,22 @@ export async function POST(request: Request) {
         payout.amount instanceof Prisma.Decimal
           ? (payout.amount as InstanceType<typeof Prisma.Decimal>)
           : new Prisma.Decimal(String(payout.amount))
-      const sumStr = (sum as unknown as { toString: () => string }).toString()
-      const payoutStr = (payoutAmount as unknown as { toString: () => string }).toString()
-      if (sumStr !== payoutStr) {
-        // Fallback numeric compare for Decimal string variants (e.g., 35.0000 vs 35)
-        const sumNum = Number.parseFloat(sumStr)
-        const payoutNum = Number.parseFloat(payoutStr)
-        if (Math.abs(sumNum - payoutNum) > 1e-9) {
-          return NextResponse.json(
-            { success: false, error: "Payout amount does not match sum of items" },
-            { status: 409 }
-          )
-        }
+      if (!sum.equals(payoutAmount)) {
+        return NextResponse.json(
+          { success: false, error: "Payout amount does not match sum of items" },
+          { status: 409 }
+        )
       }
       // Per-commission amount identity (replay safe): each item amount must equal commission.reserveReleasedAmount
       for (const item of items) {
         const c = commissions.find((cc) => cc.id === item.commissionId)
         if (!c) continue
         if (c.reserveReleasedAmount !== null && c.reserveReleasedAmount !== undefined) {
-          const itemStr = String(item.amount)
-          const releasedStr = String(c.reserveReleasedAmount)
-          if (itemStr !== releasedStr) {
-            const a = Number.parseFloat(itemStr)
-            const b = Number.parseFloat(releasedStr)
-            if (Math.abs(a - b) > 1e-9) {
-              return NextResponse.json(
-                { success: false, error: "Reserve-release amount mismatch" },
-                { status: 409 }
-              )
-            }
+          if (!new Prisma.Decimal(String(item.amount)).equals(c.reserveReleasedAmount)) {
+            return NextResponse.json(
+              { success: false, error: "Reserve-release amount mismatch" },
+              { status: 409 }
+            )
           }
         }
       }
@@ -339,7 +456,7 @@ export async function POST(request: Request) {
       await prisma.$transaction(async (tx) => {
         const upd = await tx.payout.updateMany({
           where: { id: data.payoutId, status: { in: ["PENDING", "PROCESSING"] } },
-          data: { status: "PAID", paidAt: new Date() },
+          data: { status: "PAID", paidAt: new Date(), providerPayoutId: data.providerPayoutId },
         })
         if (upd.count === 0) {
           const existing = await tx.payout.findUnique({
@@ -355,13 +472,18 @@ export async function POST(request: Request) {
 
     // C-M06: Audit log
     await writeAffiliateAudit(session.userId, {
-      action: "affiliate.payout_approved",
+      action: "affiliate.payout_reconciled",
       resourceType: "payout",
       resourceId: data.payoutId,
-      metadata: { payoutId: data.payoutId, commissionCount: items.length },
+      metadata: {
+        payoutId: data.payoutId,
+        providerPayoutId: data.providerPayoutId,
+        providerStatus: data.providerStatus,
+        commissionCount: items.length,
+      },
     })
 
-    logger.info("Payout approved", { payoutId: data.payoutId, adminUserId: session.userId })
+    logger.info("Payout reconciled", { payoutId: data.payoutId, adminUserId: session.userId })
   } else if (data.action === "tierOverride") {
     await prisma.affiliate.update({
       where: { id: data.affiliateId },
