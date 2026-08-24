@@ -335,6 +335,7 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Discovery records eligible, scanned, skipped, and reason counts plus a bounded skipped-path sample. These limits flow into scoring, coverage issues, dashboard disclosure, and an immutable `ai_app_security` family receipt; incomplete AI coverage cannot support a clean claim.
 - A 217-file regression fixture proves Quick remains honestly bounded at 200 while still scanning vulnerable production code, and Standard evaluates all 217 files.
 - Current production deployment: app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020` run product `8347fda923032960661079491a0a17956aebefd9`. Worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413` runs the same product with engine `944a84f15f913909039c89146c25db650cd87137`; release run `32738811470`, worker health, and `/api/ready/scans` passed.
+- Product `main` is `80460f80d32f42e1a647eed180be6a3fa9f4bf51` with green CI. Release run `32755678337` built and pushed images but failed the provider-mode guard before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode. Those images are not deployed; production remains on `8347fda9` with all Cloud and Local purchase admissions `off`.
 
 ### Infrastructure evidence — 2026-08-21
 
@@ -360,6 +361,7 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Dedicated worker compute, immutable worker promotion, readiness heartbeat, and rollback image.
 - Backup/restore drill.
 - Polar/Razorpay test credentials, product/price maps, webhook secrets, signed smoke, and non-charge objects.
+- Read-only Brave provider review on 2026-08-24: Razorpay Test Mode contains six cloud plans; the live account is activated and website-approved but has no live plans or webhook. Polar Sandbox has no active products or active organization token; Polar Live setup is 5/7 with identity verification and payouts pending and no active products. No provider mutation or payment was performed.
 - Cloud billing, usage, Local/Desktop, and affiliate implementations merged.
 - Guided/Pro dashboard experiences, exact-two platform-admin authorization, bounded read console, TOTP elevation primitives, additive schema migration, and fail-closed provisioning workflow are implemented in code.
 - SEO/AEO/GEO foundations include canonical/schema metadata, sitemap and robots controls, dated `llms.txt`, `agents.md`, answer-engine crawler stanzas, integration guides, comparison/research pages, and content validation.
@@ -369,7 +371,7 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 1. Prove private S3-compatible evidence persistence, encryption, retrieval, and failure behavior in production.
 2. Connect readiness, queue, provider, cost, and worker logs to actionable monitoring, alerts, capacity evidence, and named incident ownership.
 3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work.
-4. Verify live-provider entitlement and usage metering events; keep live paid activation founder-controlled.
+4. Provision matching live provider credentials, catalogs, and webhooks; rerun the guarded deployment; then verify live-provider entitlement and usage events. Keep every purchase admission off until founder approval. Razorpay hosted-checkout payment methods above INR 15,000 remain transaction-unproven.
 5. Complete current production license-signing activation and proof through Azure Key Vault.
 6. Provision RazorpayX and Payoneer payout API access and tax-form workflow.
 7. Verify scorecard metadata/card formats/badge, revocation/expiry, referral continuity, human-event deduplication, and external unfurls on public domains.

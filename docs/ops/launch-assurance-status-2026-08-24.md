@@ -4,9 +4,11 @@ This record separates code and local evidence from production and external evide
 
 ## Release dependency
 
-Product PRs #411–#419 merged through `8347fda923032960661079491a0a17956aebefd9`. They cover the platform console, admin provisioning safety, desktop secret/licensing boundaries, billing authorization and atomic minute debits, no-refunds policy, catalog-driven pricing, accessibility/loading states, release rollback and scheduled restore gates, and full-history secret-scan review. Required CI, security, RLS, engine-contract, browser, Desktop, and CodeRabbit gates passed for their affected surfaces. Engine PR #97 remains the pinned runtime `944a84f15f913909039c89146c25db650cd87137`; documentation PRs #98–#100 merged afterward without changing that pin. Marketplace PR #11 remains `2c364eee934c13f72b1d3582ac9259599becd0d0`, passed validation for 26 generated artifacts, and is published as `v0.1.17`.
+Product PRs #411–#424 merged through `80460f80d32f42e1a647eed180be6a3fa9f4bf51`. PRs #421–#424 added provider-environment deployment gates, hardened billing verification, short-lived Desktop sync sessions and output redaction, stronger platform-admin identity boundaries, Agent Plugin `0.1.18`, and build/runtime environment isolation. Required CI for `80460f80` is green. Engine PR #97 remains the pinned runtime `944a84f15f913909039c89146c25db650cd87137`; documentation PRs #98–#100 merged afterward without changing that pin. Marketplace PR #11 remains `2c364eee934c13f72b1d3582ac9259599becd0d0` and published `v0.1.17`; product-owned export source is now `v0.1.18`, pending a separately verified marketplace export and publication.
 
 Production release run `32738811470` completed successfully for `8347fda9`. It applied forward migrations, deployed and promoted app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020`, then passed candidate and public smoke. The separately promoted worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413` has product label `8347fda9`, engine label `944a84f`, healthy Docker state, and successful external scan-readiness readback; the prior worker configuration is retained for rollback.
+
+Release run `32755678337` for `80460f80` built, verified, and pushed web, worker, and egress-proxy images, then failed closed at the protected provider-configuration check because the stored Razorpay credential is Test Mode and production requires Live Mode. Azure login, migrations, secret synchronization, revision creation, promotion, worker rollout, and runtime mutation did not run. The pushed images are build artifacts only, not deployment evidence. Production remains healthy on `8347fda9`, and all Cloud and Local purchase admissions remain `off`.
 
 ## Code-ready and local evidence
 
@@ -35,9 +37,18 @@ Every gate below remains **INCONCLUSIVE** until retained evidence is bound to th
 | Deep/Terra acceptance                 | Obtain founder approval for provider/model, target, paid budget, and timing. Then run one controlled Deep acceptance bound to exact app/engine/image revisions, prove Terra-root/Luna-specialist routing, terminal state, complete per-request accounting, reconciled cost, evidence/coverage receipts, findings, and cleanup.                                                                                                                                                                                                                                           | Awaiting founder approval — hard stop       |
 | Platform-admin account proof          | Run exact-two preflight after both named users are unique, email-verified, and personally TOTP-enrolled; only then apply roles, revoke prior sessions/elevations, retain bootstrap audit, and capture fresh-session MFA browser proof. Read-only main run `32733611844` proved the isolated client reached account validation and failed because verified account `ecryptoguru@gmail.com` has not enrolled TOTP. The script stopped at that first fail-closed result, so `ankit@lyrashieldai.com` was not evaluated; no apply or account/session/role mutation occurred. | Personal TOTP required; no account modified |
 
+## Provider console evidence
+
+A read-only Brave review on 2026-08-24 established configuration state only:
+
+- Razorpay Test Mode showed six Cloud plans. Live Account Activation was complete and the website was approved, but the live plan catalog was empty and no live webhook was configured. Hosted-checkout payment-method behavior above INR 15,000 was not transaction-proven.
+- Polar Sandbox showed its sandbox boundary, no active products, and no active organization token. Polar Live setup was 5/7; identity verification remained pending and gates payouts, active products were empty, and only archived private test products existed.
+
+No charge, credential creation, new financial terms, admission change, or provider mutation was performed. This is not live checkout, webhook, entitlement, settlement, or payout proof.
+
 ## Actions intentionally not performed
 
-This release deployed the reviewed product and worker only. It did not activate Polar or Razorpay live billing, initiate RazorpayX or Payoneer payouts, run production failure injection, submit webmaster changes, provision either platform-admin account, or run a paid Deep acceptance. Those gates remain separate and founder-controlled where stated.
+The current production release deployed product `8347fda9` and its worker only. The newer `80460f80` images were not deployed. No work activated Polar or Razorpay live billing, created live provider credentials/catalogs/webhooks, initiated RazorpayX or Payoneer payouts, ran production failure injection, submitted webmaster changes, provisioned either platform-admin account, or ran a paid Deep acceptance. Those gates remain separate and founder-controlled where stated.
 
 ## Launch decision
 
