@@ -107,6 +107,9 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Finding detail exposes no raw evidence storage URIs; retest receipts surface scan IDs, manifest checksums, revisions, method, and coverage state.
 - `Policy.maxBudgetUsd` is nullable but never negative; PostgreSQL enforces `Policy_maxBudgetUsd_nonnegative`.
 - Findings list pages carry a deterministic, page-local Priority heuristic (severity, status, verified, confidence, target environment, business-impact/exploitability context). It is triage context, never a claim of exploitability or reachability, and does not change cursor pagination.
+- Result manifests bind worker execution provenance (`LYRASHIELD_PRODUCT_REVISION`, `LYRASHIELD_WORKER_IMAGE_DIGEST`, `LYRASHIELD_ENGINE_REVISION`) into the checksum; the production worker fails closed before readiness without them, and `run-worker.sh` derives them only from the digest-pinned image and its OCI labels.
+- `provision-alerts.sh` readback-fails unless every rule is enabled, auto-mitigates, and binds the operator action group; `scan_worker_lease_expired` is never provisioned until a durable counter exists.
+- `verify:launch-assurance` is dry-run-first and read-only by default; mutation requires exact scan/workspace IDs, the production confirmation phrase, authenticated cancellation, and shared queue recovery only.
 - Direct updates must not set `FIXED`; retain `FIXED_PENDING_RETEST` until trusted retest receipt.
 
 ### Queue, worker, and network

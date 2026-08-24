@@ -163,6 +163,7 @@ Result integrity requirements:
 - engine-only absence remains inconclusive;
 - evidence uploads fail closed and require checksum plus valid encryption key reference;
 - `Policy.maxBudgetUsd` is nullable but never negative (PostgreSQL check constraint);
+- every result manifest binds exact worker execution provenance (product revision, worker image digest, engine revision) into its checksum; production workers fail closed before readiness without it;
 - retries must not duplicate findings, evidence, usage, webhooks, payouts, or commissions.
 
 ## 4. Product workflows
