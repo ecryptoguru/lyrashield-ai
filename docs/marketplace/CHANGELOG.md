@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.18
+
+- Sanitized marketplace validation failures so detected credentials are never echoed into CI logs.
+- Regenerated the deterministic public marketplace boundary from the current product source.
+
 ## 0.1.17
 
 - Removed the Zed extension's `process:exec` capability after it was found unnecessary; the
