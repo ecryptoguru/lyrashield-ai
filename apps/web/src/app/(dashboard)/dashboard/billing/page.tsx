@@ -7,7 +7,6 @@ import {
   getGraceState,
   CLOUD_PLAN_MAP,
   resolveProvider,
-  getBillingAdmission,
 } from "@lyrashield/billing"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -19,6 +18,7 @@ import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 import { headers } from "next/headers"
+import { getRequestBillingAdmission } from "@/lib/billing-admission"
 
 export default async function BillingPage() {
   const session = await getCachedSession()
@@ -45,10 +45,15 @@ export default async function BillingPage() {
 
   const canManageBilling = membership && hasPermission(membership.role, PERMISSIONS.billing.manage)
   const requestHeaders = await headers()
-  const { provider: checkoutProvider } = resolveProvider(
-    new Request("https://app.lyrashieldai.com/dashboard/billing", { headers: requestHeaders })
-  )
-  const purchasesAvailable = getBillingAdmission(checkoutProvider, workspaceId).allowed
+  const billingRequest = new Request("https://app.lyrashieldai.com/dashboard/billing", {
+    headers: requestHeaders,
+  })
+  const { provider: checkoutProvider } = resolveProvider(billingRequest)
+  const purchasesAvailable = getRequestBillingAdmission(
+    checkoutProvider,
+    workspaceId,
+    billingRequest
+  ).allowed
 
   const [billingAccount, balance, trialState, graceState] = await Promise.all([
     prisma.billingAccount.findUnique({

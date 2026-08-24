@@ -342,7 +342,7 @@ Trust-boundary rules:
 ### Web and worker
 
 - Auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, OAuth provider values, trusted origins.
-- Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, worker-only `DATABASE_SYSTEM_URL` where required.
+- Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, and a separately scoped `DATABASE_SYSTEM_URL` where a verified cross-workspace path requires it. Production web does not receive the system URL; isolated billing staging receives `app_system_staging`, limited to license tables, while ordinary app traffic stays on the RLS-bound `app_runtime_staging` URL.
 - Queue: `REDIS_URL`; production BullMQ requires authenticated `rediss://`.
 - Rate limit: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` only.
 - Engine: `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LYRASHIELD_LLM`, Azure API values.
@@ -421,6 +421,7 @@ Current command output is authoritative; never copy historical test counts forwa
 - DNS refresh timer: active during Standard scan; no worker restart.
 - Backup/restore: encrypted backup, isolated restore, schema/RLS/audit/app startup verified.
 - Code ahead of production: `main` is `3966e24c` after PRs #421–#424 and the current assurance hardening PRs #428–#430, with green CI. Release `32755678337` pushed images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Those images are not deployed. Production remains on the exact worker proof above with purchase admissions `off`.
+- Billing staging is a distinct code-only deployment surface: `.github/workflows/deploy-billing-staging.yml` builds `runner` and `workspace-builder` from the dispatched main SHA into the isolated ACR, deploys only immutable digests, invokes image-owned migration/role scripts as exact Container Apps Job commands, and cleans up the jobs. The web proxy gates ordinary staging routes with an opaque HttpOnly same-origin access session while leaving exact health/readiness and signature-validating billing webhook ingress reachable. `BILLING_STAGING_ADMISSION=restricted` requires staging marker/origin plus Sandbox/Test modes and all production admissions off; no execution or live billing proof is implied.
 
 ### Current Standard scan proof
 

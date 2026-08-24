@@ -16,7 +16,7 @@ jobs:
     name: Deploy isolated billing staging
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     environment:
       name: billing-staging
       url: ${{ vars.STAGING_APP_URL }}
@@ -25,9 +25,7 @@ jobs:
       CONTAINER_ENVIRONMENT: ${{ vars.STAGING_CONTAINER_ENVIRONMENT }}
       CONTAINER_APP: ${{ vars.STAGING_CONTAINER_APP }}
       REGISTRY: ${{ vars.STAGING_REGISTRY }}
-      WEB_DIGEST: ${{ vars.STAGING_WEB_DIGEST }}
-      MIGRATION_DIGEST: ${{ vars.STAGING_MIGRATION_DIGEST }}
-      IMAGE_SHA: ${{ vars.STAGING_IMAGE_SHA }}
+      IMAGE_SHA: ${{ github.sha }}
       PULL_IDENTITY_ID: ${{ vars.STAGING_PULL_IDENTITY_ID }}
       APP_IDENTITY_ID: ${{ vars.STAGING_APP_IDENTITY_ID }}
       APP_IDENTITY_CLIENT_ID: ${{ vars.STAGING_APP_IDENTITY_CLIENT_ID }}
@@ -50,12 +48,21 @@ jobs:
       RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
       BILLING_USD_INR_RATE: ${{ vars.BILLING_USD_INR_RATE }}
     steps:
+      - name: Checkout exact main revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Validate staging-only contract
         shell: bash
         env:
-          DATABASE_SYSTEM_URL: ${{ secrets.DATABASE_SYSTEM_URL }}
+          DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RUNTIME_PASSWORD: ${{ secrets.STAGING_DATABASE_RUNTIME_PASSWORD }}
+          SYSTEM_PASSWORD: ${{ secrets.STAGING_DATABASE_SYSTEM_PASSWORD }}
+          STAGING_ACCESS_TOKEN: ${{ secrets.STAGING_BILLING_ACCESS_TOKEN }}
           REDIS_PASSWORD: ${{ secrets.STAGING_REDIS_PASSWORD }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           INTERNAL_API_KEY: ${{ secrets.LYRASHIELD_INTERNAL_API_KEY }}
@@ -67,11 +74,12 @@ jobs:
         run: |
           set -euo pipefail
           required=(
-            RESOURCE_GROUP CONTAINER_ENVIRONMENT CONTAINER_APP REGISTRY WEB_DIGEST
-            MIGRATION_DIGEST IMAGE_SHA PULL_IDENTITY_ID APP_IDENTITY_ID APP_IDENTITY_CLIENT_ID
+            RESOURCE_GROUP CONTAINER_ENVIRONMENT CONTAINER_APP REGISTRY IMAGE_SHA
+            PULL_IDENTITY_ID APP_IDENTITY_ID APP_IDENTITY_CLIENT_ID
             DEPLOY_CLIENT_ID DEPLOY_TENANT_ID DEPLOY_SUBSCRIPTION_ID APP_URL REDIS_HOST
             KEY_VAULT_NAME LICENSE_SIGNING_KEY_ID DATABASE_HOST DATABASE_NAME DATABASE_ADMIN_USER
-            DATABASE_SYSTEM_URL DATABASE_URL RUNTIME_PASSWORD REDIS_PASSWORD BETTER_AUTH_SECRET
+            DATABASE_ADMIN_URL DATABASE_URL RUNTIME_PASSWORD SYSTEM_PASSWORD STAGING_ACCESS_TOKEN
+            REDIS_PASSWORD BETTER_AUTH_SECRET
             INTERNAL_API_KEY POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_ORG_ID
             POLAR_PRODUCT_IDS POLAR_LOCAL_PRODUCT_IDS RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET
             RAZORPAY_WEBHOOK_SECRET RAZORPAY_PLAN_IDS
@@ -90,14 +98,13 @@ jobs:
           [ "$REQUIRE_EMAIL_VERIFICATION" = "0" ]
           case "$RAZORPAY_KEY_ID" in rzp_test_*) ;; *) exit 1 ;; esac
           [[ "$IMAGE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$WEB_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-          [[ "$MIGRATION_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$APP_URL" =~ ^https://lyrashield-billing-staging\..+\.azurecontainerapps\.io$ ]]
           [[ "$REGISTRY" =~ ^lyrashieldbillingstageacr\.azurecr\.io$ ]]
           [[ "${PULL_IDENTITY_ID,,}" == *"/resourcegroups/lyrashieldai-billing-staging/"* ]]
           [[ "${APP_IDENTITY_ID,,}" == *"/resourcegroups/lyrashieldai-billing-staging/"* ]]
           [ "$KEY_VAULT_NAME" = "lyrashieldbillingstage" ]
           [[ "$REDIS_HOST" =~ ^lyrashield-billing-redis\.internal\..+\.azurecontainerapps\.io$ ]]
+          [ "${#STAGING_ACCESS_TOKEN}" -ge 32 ]
 
           for admission in \
             "${{ vars.POLAR_BILLING_ADMISSION }}" \
@@ -117,7 +124,7 @@ jobs:
               const map = JSON.parse(process.env[name]);
               if (!map || Array.isArray(map) || Object.keys(map).length === 0) process.exit(1);
             }
-            for (const [name, user] of [["DATABASE_SYSTEM_URL", process.env.DATABASE_ADMIN_USER], ["DATABASE_URL", "app_runtime_staging"]]) {
+            for (const [name, user] of [["DATABASE_ADMIN_URL", process.env.DATABASE_ADMIN_USER], ["DATABASE_URL", "app_runtime_staging"]]) {
               const url = new URL(process.env[name]);
               if (url.protocol !== "postgresql:" || url.hostname !== process.env.DATABASE_HOST ||
                   url.pathname !== `/${process.env.DATABASE_NAME}` || decodeURIComponent(url.username) !== user) process.exit(1);
@@ -125,13 +132,14 @@ jobs:
           '
 
       - name: Log in to isolated Azure staging
+        id: azure-login
         uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ env.DEPLOY_CLIENT_ID }}
           tenant-id: ${{ env.DEPLOY_TENANT_ID }}
           subscription-id: ${{ env.DEPLOY_SUBSCRIPTION_ID }}
 
-      - name: Verify OIDC scope and immutable images
+      - name: Verify isolated OIDC scope
         shell: bash
         run: |
           set -euo pipefail
@@ -157,6 +165,56 @@ jobs:
             esac
           done <<< "$assignments"
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to isolated staging registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          az acr login --name "${REGISTRY%%.*}" --only-show-errors
+
+      - name: Build and push exact-SHA staging web image
+        id: build-web
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: ${{ env.REGISTRY }}/lyrashield-web:${{ env.IMAGE_SHA }}
+          build-args: |
+            BUILD_APP_URL=${{ env.APP_URL }}
+            BUILD_PUBLIC_APP_URL=${{ env.APP_URL }}
+            BUILD_PUBLIC_MARKETING_URL=https://lyrashieldai.com
+            BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
+            BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0
+          labels: |
+            org.opencontainers.image.revision=${{ env.IMAGE_SHA }}
+          cache-from: type=gha,scope=billing-staging-web
+          cache-to: type=gha,mode=max,scope=billing-staging-web
+
+      - name: Build and push exact-SHA staging migration image
+        id: build-migration
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          target: workspace-builder
+          push: true
+          tags: ${{ env.REGISTRY }}/lyrashield-migrate:${{ env.IMAGE_SHA }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.IMAGE_SHA }}
+          cache-from: type=gha,scope=billing-staging-migrate
+          cache-to: type=gha,mode=max,scope=billing-staging-migrate
+
+      - name: Verify staging image provenance and owned job executables
+        shell: bash
+        env:
+          WEB_DIGEST: ${{ steps.build-web.outputs.digest }}
+          MIGRATION_DIGEST: ${{ steps.build-migration.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$WEB_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$MIGRATION_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           registry_name=${REGISTRY%%.*}
           web_tag_digest=$(az acr manifest show-metadata \
             --registry "$registry_name" \
@@ -169,11 +227,28 @@ jobs:
           [ "$web_tag_digest" = "$WEB_DIGEST" ]
           [ "$migration_tag_digest" = "$MIGRATION_DIGEST" ]
 
+          web_image="${REGISTRY}/lyrashield-web@${WEB_DIGEST}"
+          migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
+          docker pull "$web_image"
+          docker pull "$migration_image"
+          [ "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$web_image")" = "$IMAGE_SHA" ]
+          [ "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$migration_image")" = "$IMAGE_SHA" ]
+          docker run --rm --entrypoint /usr/bin/test "$migration_image" \
+            -x /app/packages/db/scripts/run-billing-staging-migrations.sh
+          docker run --rm --entrypoint /usr/bin/test "$migration_image" \
+            -x /app/packages/db/scripts/provision-billing-staging-roles.mjs
+
+          {
+            echo "WEB_DIGEST=${WEB_DIGEST}"
+            echo "MIGRATION_DIGEST=${MIGRATION_DIGEST}"
+          } >> "$GITHUB_ENV"
+
       - name: Run migrations and provision restricted runtime role
         shell: bash
         env:
-          DATABASE_SYSTEM_URL: ${{ secrets.DATABASE_SYSTEM_URL }}
+          DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
           RUNTIME_PASSWORD: ${{ secrets.STAGING_DATABASE_RUNTIME_PASSWORD }}
+          SYSTEM_PASSWORD: ${{ secrets.STAGING_DATABASE_SYSTEM_PASSWORD }}
         run: |
           set -euo pipefail
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
@@ -202,105 +277,54 @@ jobs:
             return 1
           }
 
-          ensure_job() {
-            local job=$1 secret_name=$2 secret_value=$3 command=$4
+          create_job() {
+            local job=$1 executable=$2
             if az containerapp job show --name "$job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
-              az containerapp job identity assign \
-                --name "$job" --resource-group "$RESOURCE_GROUP" \
-                --user-assigned "$PULL_IDENTITY_ID" --output none
-              az containerapp job registry set \
-                --name "$job" --resource-group "$RESOURCE_GROUP" \
-                --server "$REGISTRY" --identity "$PULL_IDENTITY_ID" --output none
-              az containerapp job secret set \
-                --name "$job" --resource-group "$RESOURCE_GROUP" \
-                --secrets "${secret_name}=${secret_value}" --output none
-              az containerapp job update \
-                --name "$job" --resource-group "$RESOURCE_GROUP" \
-                --image "$migration_image" \
-                --replica-timeout 1200 --replica-retry-limit 0 \
-                --command /bin/sh --args -lc "$command" \
-                --set-env-vars "DATABASE_SYSTEM_URL=secretref:${secret_name}" \
-                --output none
-            else
-              az containerapp job create \
-                --name "$job" --resource-group "$RESOURCE_GROUP" \
-                --environment "$CONTAINER_ENVIRONMENT" \
-                --trigger-type Manual --parallelism 1 --replica-completion-count 1 \
-                --replica-timeout 1200 --replica-retry-limit 0 \
-                --image "$migration_image" \
-                --mi-user-assigned "$PULL_IDENTITY_ID" \
-                --registry-server "$REGISTRY" --registry-identity "$PULL_IDENTITY_ID" \
-                --secrets "${secret_name}=${secret_value}" \
-                --env-vars "DATABASE_SYSTEM_URL=secretref:${secret_name}" \
-                --command /bin/sh --args -lc "$command" \
-                --tags environment=billing-staging "source-sha=${IMAGE_SHA}" \
-                --output none
+              az containerapp job delete \
+                --name "$job" --resource-group "$RESOURCE_GROUP" --yes --output none
             fi
+            az containerapp job create \
+              --name "$job" --resource-group "$RESOURCE_GROUP" \
+              --environment "$CONTAINER_ENVIRONMENT" \
+              --trigger-type Manual --parallelism 1 --replica-completion-count 1 \
+              --replica-timeout 1200 --replica-retry-limit 0 \
+              --image "$migration_image" \
+              --mi-user-assigned "$PULL_IDENTITY_ID" \
+              --registry-server "$REGISTRY" --registry-identity "$PULL_IDENTITY_ID" \
+              --command "$executable" \
+              --tags environment=billing-staging "source-sha=${IMAGE_SHA}" \
+              --output none
           }
 
-          # Variables expand inside the job container.
-          # shellcheck disable=SC2016
-          ensure_job \
-            "$migration_job" db-system-url "$DATABASE_SYSTEM_URL" \
-            'cd /app && DATABASE_URL="$DATABASE_SYSTEM_URL" DATABASE_DIRECT_URL="$DATABASE_SYSTEM_URL" pnpm --filter @lyrashield/db exec prisma migrate deploy'
+          create_job "$migration_job" /app/packages/db/scripts/run-billing-staging-migrations.sh
+          az containerapp job secret set \
+            --name "$migration_job" --resource-group "$RESOURCE_GROUP" \
+            --secrets "database-admin-url=${DATABASE_ADMIN_URL}" --output none
+          az containerapp job update \
+            --name "$migration_job" --resource-group "$RESOURCE_GROUP" \
+            --set-env-vars 'DATABASE_ADMIN_URL=secretref:database-admin-url' \
+            --output none
           wait_for_job "$migration_job"
 
-          role_script=$(cat <<'NODE'
-          const { Client } = require("pg");
-          const quote = (value) => `'${value.replaceAll("'", "''")}'`;
-          (async () => {
-            const client = new Client({ connectionString: process.env.DATABASE_SYSTEM_URL });
-            await client.connect();
-            try {
-              const password = quote(process.env.RUNTIME_PASSWORD);
-              await client.query(`DO $role$ BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runtime_staging') THEN
-                  EXECUTE format('CREATE ROLE app_runtime_staging LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS', ${password});
-                ELSE
-                  EXECUTE format('ALTER ROLE app_runtime_staging LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS', ${password});
-                END IF;
-              END $role$;`);
-              await client.query(`DO $grant$ BEGIN
-                EXECUTE format('GRANT CONNECT ON DATABASE %I TO app_runtime_staging', current_database());
-              END $grant$;`);
-              await client.query('GRANT USAGE ON SCHEMA public TO app_runtime_staging');
-              await client.query('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_staging');
-              await client.query('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_staging');
-              await client.query('REVOKE ALL PRIVILEGES ON TABLE "PlatformAdminElevation", "PlatformAdminChallengeLimit", "PlatformAdminAudit" FROM app_runtime_staging');
-              const result = await client.query(`SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'app_runtime_staging'`);
-              if (result.rows.length !== 1 || result.rows[0].rolsuper || result.rows[0].rolbypassrls) throw new Error('runtime role is privileged');
-              const adminAccess = await client.query(`
-                SELECT bool_or(has_table_privilege('app_runtime_staging', table_name, privilege)) AS allowed
-                FROM unnest(ARRAY['"PlatformAdminElevation"', '"PlatformAdminChallengeLimit"', '"PlatformAdminAudit"']) AS table_name,
-                     unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) AS privilege
-              `);
-              if (adminAccess.rows[0].allowed) throw new Error('runtime role can access platform admin tables');
-            } finally {
-              await client.end();
-            }
-          })().catch((error) => { console.error(error.message); process.exit(1); });
-          NODE
-          )
-
-          # ROLE_SCRIPT expands inside the job container.
-          # shellcheck disable=SC2016
-          ensure_job \
-            "$role_job" db-system-url "$DATABASE_SYSTEM_URL" \
-            'cd /app/packages/db && node -e "$ROLE_SCRIPT"'
+          create_job "$role_job" /app/packages/db/scripts/provision-billing-staging-roles.mjs
           az containerapp job secret set \
             --name "$role_job" --resource-group "$RESOURCE_GROUP" \
-            --secrets "runtime-password=${RUNTIME_PASSWORD}" --output none
+            --secrets \
+              "database-admin-url=${DATABASE_ADMIN_URL}" \
+              "runtime-password=${RUNTIME_PASSWORD}" \
+              "system-password=${SYSTEM_PASSWORD}" \
+            --output none
           az containerapp job update \
             --name "$role_job" --resource-group "$RESOURCE_GROUP" \
             --set-env-vars \
-              'DATABASE_SYSTEM_URL=secretref:db-system-url' \
+              'DATABASE_ADMIN_URL=secretref:database-admin-url' \
               'RUNTIME_PASSWORD=secretref:runtime-password' \
-              "ROLE_SCRIPT=${role_script}" \
+              'SYSTEM_PASSWORD=secretref:system-password' \
             --output none
           wait_for_job "$role_job"
 
       - name: Delete one-shot database jobs
-        if: always()
+        if: ${{ always() && steps.azure-login.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -318,6 +342,8 @@ jobs:
         shell: bash
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SYSTEM_PASSWORD: ${{ secrets.STAGING_DATABASE_SYSTEM_PASSWORD }}
+          STAGING_ACCESS_TOKEN: ${{ secrets.STAGING_BILLING_ACCESS_TOKEN }}
           REDIS_PASSWORD: ${{ secrets.STAGING_REDIS_PASSWORD }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           INTERNAL_API_KEY: ${{ secrets.LYRASHIELD_INTERNAL_API_KEY }}
@@ -331,12 +357,21 @@ jobs:
           web_image="${REGISTRY}/lyrashield-web@${WEB_DIGEST}"
           encoded_redis_password=$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["REDIS_PASSWORD"], safe=""))')
           redis_url="redis://:${encoded_redis_password}@${REDIS_HOST}:6379"
+          system_database_url=$(node -e '
+            const url = new URL(process.env.DATABASE_URL);
+            url.username = "app_system_staging";
+            url.password = process.env.SYSTEM_PASSWORD;
+            process.stdout.write(url.toString());
+          ')
           echo "::add-mask::${redis_url}"
+          echo "::add-mask::${system_database_url}"
 
           secrets=(
             "database-url=${DATABASE_URL}"
+            "database-system-url=${system_database_url}"
             "better-auth-secret=${BETTER_AUTH_SECRET}"
             "internal-api-key=${INTERNAL_API_KEY}"
+            "billing-staging-access=${STAGING_ACCESS_TOKEN}"
             "redis-url=${redis_url}"
             "polar-access-token=${POLAR_ACCESS_TOKEN}"
             "polar-webhook=${POLAR_WEBHOOK_SECRET}"
@@ -346,8 +381,12 @@ jobs:
           )
           env_vars=(
             'DATABASE_URL=secretref:database-url'
+            'DATABASE_SYSTEM_URL=secretref:database-system-url'
             'BETTER_AUTH_SECRET=secretref:better-auth-secret'
             'LYRASHIELD_INTERNAL_API_KEY=secretref:internal-api-key'
+            'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
+            'BILLING_STAGING_ADMISSION=restricted'
+            'BILLING_STAGING_ACCESS_TOKEN=secretref:billing-staging-access'
             'REDIS_URL=secretref:redis-url'
             "BETTER_AUTH_URL=${APP_URL}"
             "NEXT_PUBLIC_APP_URL=${APP_URL}"
@@ -414,7 +453,7 @@ jobs:
             --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
             --query 'length(@)' --output tsv)
           [ "$restrictions" = "0" ] || {
-            echo "::error::Billing staging must stay publicly reachable for provider webhook delivery."
+            echo "::error::Provider webhook ingress requires the application-level staging gate."
             exit 1
           }
 
@@ -434,13 +473,17 @@ jobs:
             sleep 10
           done
           curl --fail --silent --show-error --max-time 10 "${APP_URL}/api/ready" >/dev/null
+          [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "${APP_URL}/sign-up")" = "404" ]
+          [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "${APP_URL}/staging/access")" = "200" ]
+          [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 --request POST "${APP_URL}/billing/webhook")" = "400" ]
 
           {
             echo "### Billing staging deployed"
             echo "- Source SHA: \`${IMAGE_SHA}\`"
             echo "- Web digest: \`${WEB_DIGEST}\`"
             echo "- Migration digest: \`${MIGRATION_DIGEST}\`"
-            echo "- Public ingress retained only for sandbox/test webhook delivery."
-            echo "- Polar, Razorpay, and Local purchase admissions: \`off\`."
+            echo "- External ingress is application-gated; only access bootstrap, signed webhook, and health/readiness paths are public."
+            echo "- Production admission modes remain \`off\`; sandbox/test checkout requires the HttpOnly restricted staging session."
+            echo "- Web system DB client: non-superuser, NOREPLICATION, NOBYPASSRLS \`app_system_staging\`, limited to license tables."
             echo "- Teardown after evidence capture: \`az group delete --name ${RESOURCE_GROUP}\` (founder approval required)."
           } >> "$GITHUB_STEP_SUMMARY"

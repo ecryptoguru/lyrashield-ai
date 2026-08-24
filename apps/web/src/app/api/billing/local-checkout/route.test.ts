@@ -31,6 +31,12 @@ vi.mock("@/lib/rate-limit", () => ({
   clientIpFromRequest: () => "203.0.113.4",
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: mocks.limited })),
 }))
+vi.mock("@/lib/billing-admission", () => ({
+  localBillingAdmissionError: () => {
+    const admission = mocks.provider === "polar" ? mocks.polarAdmission : mocks.razorpayAdmission
+    return admission === "public" ? null : new Response(null, { status: 503 })
+  },
+}))
 vi.mock("@lyrashield/billing", () => ({
   resolveProvider: () => ({
     provider: mocks.provider,

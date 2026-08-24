@@ -13,6 +13,7 @@ import { logger } from "@lyrashield/logger"
 import { LOCAL_SKU_MAP } from "@lyrashield/pricing"
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { checkBillingCheckoutRateLimit, clientIpFromRequest } from "@/lib/rate-limit"
+import { localBillingAdmissionError } from "@/lib/billing-admission"
 
 const Body = z.object({}).strict()
 const LOCAL_SKU = "individual_launch"
@@ -22,11 +23,8 @@ export async function POST(request: Request) {
   if (!parsed.success) return apiError("VALIDATION_ERROR", "Request body must be empty", 400)
 
   const { provider } = resolveProvider(request)
-  const admission =
-    provider === "polar" ? env.POLAR_LOCAL_BILLING_ADMISSION : env.RAZORPAY_LOCAL_BILLING_ADMISSION
-  if (admission !== "public") {
-    return apiError("PAYMENTS_UNAVAILABLE", "Local purchases are temporarily unavailable.", 503)
-  }
+  const admissionError = localBillingAdmissionError(provider, request)
+  if (admissionError) return admissionError
 
   const rateLimit = await checkBillingCheckoutRateLimit(`local:${clientIpFromRequest(request)}`)
   if (rateLimit.limited) {

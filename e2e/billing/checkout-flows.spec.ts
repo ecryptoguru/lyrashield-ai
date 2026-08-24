@@ -66,6 +66,39 @@ test.describe("Polar Sandbox billing proof", () => {
     await expectViewerBillingDenied(actors.viewerRequest, actors.workspaceId)
   })
 
+  test("OWNER starts hosted Sandbox checkout through the real billing UI", async ({
+    browser,
+  }, testInfo) => {
+    const baseURL = String(testInfo.project.use.baseURL)
+    const context = await browser.newContext({ baseURL, storageState: actors.ownerStorageState })
+    const page = await context.newPage()
+    try {
+      await page.route("https://**/*", async (route) => {
+        if (new URL(route.request().url()).origin === new URL(baseURL).origin) {
+          await route.continue()
+        } else {
+          await route.abort()
+        }
+      })
+      await page.goto("/dashboard/billing")
+      const responsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname === "/api/billing/topup"
+      )
+      await page.getByRole("button", { name: "Buy Minute Pack" }).click()
+      const response = await responsePromise
+      expect(response.ok()).toBe(true)
+      expect(response.request().headers()["x-lyrashield-billing-staging-access"]).toBeUndefined()
+      expect(await response.json()).toMatchObject({
+        success: true,
+        data: { provider: "polar", url: expect.stringMatching(/^https:\/\//) },
+      })
+    } finally {
+      await context.close()
+    }
+  })
+
   for (const plan of plans) {
     for (const interval of intervals) {
       test(`${plan} ${interval} creates a hosted Sandbox checkout`, async () => {

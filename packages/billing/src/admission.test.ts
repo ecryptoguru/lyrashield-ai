@@ -1,18 +1,63 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const mocks = vi.hoisted(() => ({
+  deploymentEnvironment: "production",
+  stagingAdmission: "off",
+  stagingAccessToken: "s".repeat(32),
+  appUrl: "https://lyrashield-billing-staging.examplehash.centralindia.azurecontainerapps.io",
+  polarEnvironment: "sandbox",
+  razorpayKeyId: "rzp_test_example",
+}))
 
 vi.mock("@lyrashield/config", () => ({
+  billingStagingConfigError: (value: Record<string, string>) => {
+    if (value.BILLING_STAGING_ADMISSION === "off") return null
+    if (value.LYRASHIELD_DEPLOYMENT_ENVIRONMENT !== "billing-staging") return "wrong environment"
+    return null
+  },
   env: {
     POLAR_BILLING_ADMISSION: "off",
     RAZORPAY_BILLING_ADMISSION: "off",
     BILLING_CANARY_WORKSPACE_IDS: "",
     POLAR_LOCAL_BILLING_ADMISSION: "off",
     RAZORPAY_LOCAL_BILLING_ADMISSION: "off",
+    NODE_ENV: "production",
+    get LYRASHIELD_DEPLOYMENT_ENVIRONMENT() {
+      return mocks.deploymentEnvironment
+    },
+    get BILLING_STAGING_ADMISSION() {
+      return mocks.stagingAdmission
+    },
+    get BILLING_STAGING_ACCESS_TOKEN() {
+      return mocks.stagingAccessToken
+    },
+    get NEXT_PUBLIC_APP_URL() {
+      return mocks.appUrl
+    },
+    get POLAR_ENVIRONMENT() {
+      return mocks.polarEnvironment
+    },
+    get RAZORPAY_KEY_ID() {
+      return mocks.razorpayKeyId
+    },
   },
 }))
 
-import { evaluateBillingAdmission } from "./admission"
+import {
+  evaluateBillingAdmission,
+  getBillingAdmission,
+  getLocalBillingAdmission,
+} from "./admission"
 
 describe("billing admission", () => {
+  beforeEach(() => {
+    mocks.deploymentEnvironment = "production"
+    mocks.stagingAdmission = "off"
+    mocks.stagingAccessToken = "s".repeat(32)
+    mocks.polarEnvironment = "sandbox"
+    mocks.razorpayKeyId = "rzp_test_example"
+  })
+
   it("fails closed when a provider is off", () => {
     expect(
       evaluateBillingAdmission({
@@ -45,5 +90,26 @@ describe("billing admission", () => {
         canaryWorkspaceIds: "malformed!",
       })
     ).toEqual({ allowed: true, mode: "public", reason: "public" })
+  })
+
+  it("admits Cloud and Local test checkout only through the restricted staging contract", () => {
+    mocks.deploymentEnvironment = "billing-staging"
+    mocks.stagingAdmission = "restricted"
+
+    expect(getBillingAdmission("polar", "workspace-a", true)).toEqual({
+      allowed: true,
+      mode: "off",
+      reason: "restricted_staging",
+    })
+    expect(getLocalBillingAdmission("razorpay", true).allowed).toBe(true)
+  })
+
+  it("keeps production and unmarked staging requests fail-closed", () => {
+    mocks.stagingAdmission = "restricted"
+    expect(getBillingAdmission("polar", "workspace-a", true).allowed).toBe(false)
+
+    mocks.deploymentEnvironment = "billing-staging"
+    expect(getBillingAdmission("polar", "workspace-a").allowed).toBe(false)
+    expect(getLocalBillingAdmission("polar").allowed).toBe(false)
   })
 })

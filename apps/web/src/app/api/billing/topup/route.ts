@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
     // A-L04: Client-side region override removed — server-side geo routing only
     const { provider } = resolveProvider(request)
-    const admissionError = billingAdmissionError(provider, workspaceId)
+    const admissionError = billingAdmissionError(provider, workspaceId, request)
     if (admissionError) return admissionError
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"

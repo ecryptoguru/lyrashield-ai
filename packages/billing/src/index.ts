@@ -74,7 +74,9 @@ export {
 export {
   evaluateBillingAdmission,
   getBillingAdmission,
+  getLocalBillingAdmission,
   type BillingAdmissionMode,
+  type LocalBillingAdmissionMode,
   type BillingAdmissionReason,
   type BillingAdmissionDecision,
 } from "./admission"

@@ -36,10 +36,11 @@ describe("billing E2E origin safety", () => {
     ).toThrow(/staging marker/)
   })
 
-  it("keeps trace capture off while an access header can be present", () => {
+  it("keeps trace capture off while the staging access code can be typed", () => {
     // Path is anchored to this test module and never accepts external input.
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const config = readFileSync(new URL("../../../playwright.config.ts", import.meta.url), "utf8")
-    expect(config).toContain('trace: accessHeaderConfigured ? "off" : "retain-on-failure"')
+    expect(config).toContain('trace: stagingAccessConfigured ? "off" : "retain-on-failure"')
+    expect(config).toContain("BILLING_E2E_STAGING_ACCESS_TOKEN")
   })
 })

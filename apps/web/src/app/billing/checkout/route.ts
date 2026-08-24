@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     // A-L04: Resolve provider — client-side region override removed to
     // prevent currency arbitrage. Region is determined server-side only.
     const { region, provider } = resolveProvider(request)
-    const admissionError = billingAdmissionError(provider, workspaceId)
+    const admissionError = billingAdmissionError(provider, workspaceId, request)
     if (admissionError) return admissionError
 
     // Track C integration: resolve affiliate promo code → attach affiliate metadata.

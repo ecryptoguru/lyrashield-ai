@@ -27,30 +27,27 @@ function requireSafeBaseUrl(baseURL: string): void {
   assertSafeBillingE2EBaseUrl(baseURL, process.env.BILLING_E2E_EXPECTED_BASE_HOST, isRemote)
 }
 
-function remoteAccessHeaders(): Record<string, string> {
-  const name = process.env.BILLING_E2E_ACCESS_HEADER_NAME?.trim()
-  const value = process.env.BILLING_E2E_ACCESS_HEADER_VALUE?.trim()
-  if (Boolean(name) !== Boolean(value)) {
-    throw new Error("Both BILLING_E2E_ACCESS_HEADER_NAME and VALUE must be configured together")
-  }
-  return name && value ? { [name]: value } : {}
-}
-
 async function createVerifiedSession(params: {
   browser: Browser
   baseURL: string
   email: string
   name: string
   password: string
-  accessHeaders: Record<string, string>
+  stagingAccessToken?: string
 }): Promise<{ userId: string; storageState: StorageState }> {
   const context = await params.browser.newContext({
     baseURL: params.baseURL,
-    extraHTTPHeaders: params.accessHeaders,
   })
   const page = await context.newPage()
   try {
-    await page.goto("/sign-up")
+    if (params.stagingAccessToken) {
+      await page.goto("/staging/access")
+      await page.getByLabel("Staging access code").fill(params.stagingAccessToken)
+      await page.getByRole("button", { name: "Continue" }).click()
+      await expect(page).toHaveURL(/\/sign-up$/)
+    } else {
+      await page.goto("/sign-up")
+    }
     await page.getByLabel("Name").fill(params.name)
     await page.getByLabel("Email").fill(params.email)
     await page.locator("#password").fill(params.password)
@@ -127,7 +124,7 @@ export async function provisionBillingActors(
   const ownerEmail = `billing-owner-${suffix}@example.com`
   const viewerEmail = `billing-viewer-${suffix}@example.com`
   const workspaceName = `Billing E2E ${suffix}`
-  const accessHeaders = remoteAccessHeaders()
+  const stagingAccessToken = process.env.BILLING_E2E_STAGING_ACCESS_TOKEN?.trim()
 
   let ownerRequest: APIRequestContext | null = null
   let viewerRequest: APIRequestContext | null = null
@@ -144,14 +141,13 @@ export async function provisionBillingActors(
       email: ownerEmail,
       name: "Billing E2E Owner",
       password,
-      accessHeaders,
+      stagingAccessToken,
     })
     ownerUserId = owner.userId
     ownerStorageState = owner.storageState
     ownerRequest = await playwrightRequest.newContext({
       baseURL,
       storageState: ownerStorageState,
-      extraHTTPHeaders: accessHeaders,
     })
 
     const workspaceResponse = await ownerRequest.post("/api/workspaces", {
@@ -168,14 +164,13 @@ export async function provisionBillingActors(
       email: viewerEmail,
       name: "Billing E2E Viewer",
       password,
-      accessHeaders,
+      stagingAccessToken,
     })
     viewerUserId = viewer.userId
     viewerStorageState = viewer.storageState
     viewerRequest = await playwrightRequest.newContext({
       baseURL,
       storageState: viewerStorageState,
-      extraHTTPHeaders: accessHeaders,
     })
 
     await prisma.workspaceMember.create({
