@@ -53,12 +53,19 @@ async function main() {
   const configured = process.env.PLATFORM_ADMIN_EMAILS
   if (!configured) throw new Error("PLATFORM_ADMIN_EMAILS must be explicitly configured")
   normalizePlatformAdminEmails(configured)
-  if (!process.env.DATABASE_SYSTEM_URL) {
+  const databaseSystemUrl = process.env.DATABASE_SYSTEM_URL
+  if (!databaseSystemUrl) {
     throw new Error("DATABASE_SYSTEM_URL is required; ordinary runtime credentials are refused")
   }
 
-  const { getSystemPrisma } = await import("../src/system-client")
-  const prisma = getSystemPrisma()
+  const [{ PrismaClient }, { createBoundedPgAdapter }] = await Promise.all([
+    import("../src/generated/prisma"),
+    import("../src/pool"),
+  ])
+  const prisma = new PrismaClient({
+    adapter: createBoundedPgAdapter(databaseSystemUrl),
+    log: ["error"],
+  })
   try {
     const candidates = await prisma.user.findMany({
       where: {

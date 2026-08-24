@@ -71,12 +71,7 @@ jobs:
 
       - name: Run administrator provisioning gate
         env:
-          NODE_ENV: production
-          DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
           DATABASE_SYSTEM_URL: ${{ secrets.DATABASE_DIRECT_URL }}
-          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-          BETTER_AUTH_URL: https://app.lyrashieldai.com
-          NEXT_PUBLIC_APP_URL: https://app.lyrashieldai.com
           PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
           MODE: ${{ inputs.mode }}
         run: |
