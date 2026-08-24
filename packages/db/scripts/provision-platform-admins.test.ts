@@ -36,7 +36,9 @@ describe("platform admin provisioning preflight", () => {
     expect(transaction.indexOf("tx.user.updateMany")).toBeGreaterThan(
       transaction.indexOf("validatePlatformAdminCandidates")
     )
-    expect(transaction).toContain('{ isolationLevel: "Serializable" }')
+    expect(transaction).toContain('isolationLevel: "Serializable"')
+    expect(transaction).toContain("maxWait: 15_000")
+    expect(transaction).toContain("timeout: 30_000")
   })
 
   it("accepts exactly the two verified MFA accounts", () => {

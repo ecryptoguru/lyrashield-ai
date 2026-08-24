@@ -139,7 +139,11 @@ async function main() {
         })
         return true
       },
-      { isolationLevel: "Serializable" }
+      {
+        isolationLevel: "Serializable",
+        maxWait: 15_000,
+        timeout: 30_000,
+      }
     )
     if (provisioned) {
       console.log("Provisioned exactly two platform administrators with a bootstrap audit receipt.")
