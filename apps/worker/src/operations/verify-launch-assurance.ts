@@ -97,14 +97,14 @@ export interface LaunchAssuranceDeps {
   now: () => Date
   readFile: (path: string) => Promise<string>
   reconcile: () => Promise<QueueReconciliationResult>
-  listActiveScans: (workspaceId: string) => Promise<Array<{ id: string; status: string }>>
+  listActiveScans: (workspaceId: string) => Promise<Array<{ id: string; status: ScanStatus }>>
   getScanState: (
     scanId: string,
     workspaceId: string
   ) => Promise<{
     id: string
     workspaceId: string
-    status: string
+    status: ScanStatus
   }>
   countEngineStartsSince: (scanId: string, since: Date) => Promise<number>
 }
@@ -537,7 +537,7 @@ export async function verifyLaunchAssurance(
           ).then(async (response) => {
             const body = (await response.json()) as {
               success?: boolean
-              data?: { id: string; workspaceId: string; status: string }
+              data?: { id: string; workspaceId: string; status: ScanStatus }
             }
             if (response.status !== 200 || body.success !== true || !body.data) {
               throw new Error(`could not read scan ${scanId} (HTTP ${response.status})`)
@@ -694,8 +694,11 @@ export async function verifyLaunchAssurance(
 // ── CLI entrypoint ──────────────────────────────────────────────────────────
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // pnpm forwards a literal "--" before the script args in some shells.
+  const forwardedArgs = process.argv.slice(2)
+  const args = forwardedArgs[0] === "--" ? forwardedArgs.slice(1) : forwardedArgs
   const { values } = parseArgs({
-    args: process.argv.slice(2),
+    args,
     options: {
       "dry-run": { type: "boolean", default: false },
       "allow-storage-proof": { type: "boolean", default: false },
@@ -746,9 +749,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
   try {
     const options = parseLaunchAssuranceOptions(values)
-    const receipt = await verifyLaunchAssurance(options, deps)
-    console.log(JSON.stringify(receipt, null, 2))
-    process.exit(receipt.overall === "failed" ? 1 : 0)
+    verifyLaunchAssurance(options, deps)
+      .then((receipt) => {
+        console.log(JSON.stringify(receipt, null, 2))
+        process.exit(receipt.overall === "failed" ? 1 : 0)
+      })
+      .catch((error) => {
+        console.error(error instanceof Error ? error.message : String(error))
+        process.exit(2)
+      })
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     process.exit(2)
