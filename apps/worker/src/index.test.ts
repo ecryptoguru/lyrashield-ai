@@ -8,10 +8,10 @@ import {
   advanceReconciliationTimestamp,
   assertWorkerStartupProvenance,
   clearWorkerActive,
+  failClosedAfterEgressDrainCancellation,
   markWorkerActive,
   refreshWorkerReadiness,
   removeWorkerReadiness,
-  resumeWorkerAfterEgressDrainCancellation,
   settleScanWorkerForShutdown,
 } from "./index"
 import { trackActiveEngineProcess } from "./engine/runner"
@@ -144,16 +144,12 @@ describe("worker readiness lifecycle", () => {
     expect(pause).not.toHaveBeenCalled()
   })
 
-  it("resumes claims when the host cancels a failed restart handshake", async () => {
+  it("fails closed after rollback instead of starting an unobserved resumed run loop", async () => {
     await writeFile("/tmp/lyrashield-worker-egress-drain-ready", "b".repeat(64), { mode: 0o600 })
-    const resume = vi.fn().mockResolvedValue(undefined)
-    const restoreReadiness = vi.fn().mockResolvedValue(undefined)
+    const shutdownDrainedWorker = vi.fn().mockResolvedValue(undefined)
 
-    await expect(
-      resumeWorkerAfterEgressDrainCancellation({ resume }, restoreReadiness)
-    ).resolves.toBe(true)
-    expect(resume).toHaveBeenCalledOnce()
-    expect(restoreReadiness).toHaveBeenCalledAfter(resume)
+    await expect(failClosedAfterEgressDrainCancellation(shutdownDrainedWorker)).resolves.toBe(true)
+    expect(shutdownDrainedWorker).toHaveBeenCalledOnce()
     await expect(stat("/tmp/lyrashield-worker-egress-drain-ready")).rejects.toMatchObject({
       code: "ENOENT",
     })

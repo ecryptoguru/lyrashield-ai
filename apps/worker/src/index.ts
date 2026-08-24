@@ -150,16 +150,17 @@ export async function acknowledgeEgressDrainRequest(
   return true
 }
 
-export async function resumeWorkerAfterEgressDrainCancellation(
-  scanWorker: Pick<Worker, "resume">,
-  restoreReadiness: () => Promise<void>
+export async function failClosedAfterEgressDrainCancellation(
+  shutdownDrainedWorker: () => Promise<void>
 ): Promise<boolean> {
   if ((await readOptionalFile(egressDrainRequestPath)) !== null) return false
   await unlink(egressDrainReadyPath).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error
   })
-  await scanWorker.resume()
-  await restoreReadiness()
+  // pause() has already waited for every active scan. Exiting through the
+  // normal shutdown path lets systemd Restart=always create a fresh process
+  // whose BullMQ run promise is observed from its first loop onward.
+  await shutdownDrainedWorker()
   return true
 }
 
@@ -522,13 +523,12 @@ async function main(): Promise<void> {
         }
         if (!egressDrainAcknowledged || !worker) return
         if (
-          await resumeWorkerAfterEgressDrainCancellation(worker, async () => {
-            await registerScanWorker(workerId)
-            await refreshWorkerReadiness()
-          })
+          await failClosedAfterEgressDrainCancellation(() =>
+            shutdown("EGRESS_REFRESH_CANCELLED", 1)
+          )
         ) {
           egressDrainAcknowledged = false
-          logger.info("Worker resumed after cancelled egress refresh")
+          logger.info("Drained worker stopped after cancelled egress refresh")
         }
       })
       .catch((error) => {

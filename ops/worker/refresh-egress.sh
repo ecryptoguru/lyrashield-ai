@@ -272,14 +272,14 @@ read_worker_marker() {
   docker exec lyrashield-worker cat "$1" 2>/dev/null || true
 }
 
-cancel_worker_drain_and_wait() {
+cancel_worker_drain_and_wait_for_exit() {
   if ! docker exec lyrashield-worker rm -f "$drain_request_path" "$planned_restart_path" \
     >/dev/null 2>&1; then
     return 1
   fi
   cancel_attempt=0
   while [ "$cancel_attempt" -lt "$drain_wait_attempts" ]; do
-    if docker exec lyrashield-worker test -s /tmp/lyrashield-worker-ready 2>/dev/null; then
+    if ! docker exec lyrashield-worker true 2>/dev/null; then
       return 0
     fi
     cancel_attempt=$((cancel_attempt + 1))
@@ -346,7 +346,7 @@ EOF
     done <"$temporary_old_pins"
   elif ! docker exec lyrashield-worker sh -c \
     'umask 077; : > /tmp/lyrashield-worker-planned-restart' >/dev/null 2>&1; then
-    cancel_worker_drain_and_wait || true
+    cancel_worker_drain_and_wait_for_exit || true
     echo "Could not prepare the planned worker restart" >&2
     exit 1
   fi
@@ -379,8 +379,8 @@ if [ "$needs_restart" = "1" ]; then
       iptables-restore --noflush <"$temporary_union_rules"
       chmod 600 "$temporary_old_pins"
       mv -f "$temporary_old_pins" "$pin_file"
-      if ! cancel_worker_drain_and_wait; then
-        echo "Worker restart scheduling failed and the drained worker did not resume" >&2
+      if ! cancel_worker_drain_and_wait_for_exit; then
+        echo "Worker restart scheduling failed and the drained worker did not stop" >&2
         exit 1
       fi
     fi

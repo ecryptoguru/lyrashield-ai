@@ -4,6 +4,7 @@ set -eu
 CDPATH=
 export CDPATH
 repo_root=$(cd -- "$(dirname "$0")/../.." && pwd)
+grep -Fqx 'Restart=always' "$repo_root/ops/worker/lyrashield-worker.service"
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 fake_bin="$test_dir/bin"
@@ -12,7 +13,7 @@ docker_capture="$test_dir/docker.log"
 getent_capture="$test_dir/getent.log"
 drain_request_capture="$test_dir/drain-request"
 planned_restart_capture="$test_dir/planned-restart"
-worker_ready_capture="$test_dir/worker-ready"
+worker_running_capture="$test_dir/worker-running"
 activity_transition_capture="$test_dir/activity-transition"
 mkdir -p "$fake_bin"
 
@@ -20,11 +21,10 @@ cat >"$fake_bin/docker" <<'EOF'
 #!/bin/sh
 if [ "$1" = "exec" ]; then
   case "$3" in
-    true) exit 0 ;;
+    true) [ -s "$WORKER_RUNNING_CAPTURE" ] ;;
     test)
       case "$5" in
         /tmp/lyrashield-worker-active) [ "${DOCKER_WORKER_ACTIVE:-0}" = "1" ] ;;
-        /tmp/lyrashield-worker-ready) [ -s "$WORKER_READY_CAPTURE" ] ;;
         *) exit 1 ;;
       esac
       ;;
@@ -47,7 +47,6 @@ if [ "$1" = "exec" ]; then
       case "$5" in
         *egress-drain-request*)
           printf '%s\n' "$7" >"$DRAIN_REQUEST_CAPTURE"
-          rm -f "$WORKER_READY_CAPTURE"
           if [ "${BECOME_ACTIVE_ON_DRAIN:-0}" = "1" ]; then
             : >"$ACTIVITY_TRANSITION_CAPTURE"
           fi
@@ -61,7 +60,7 @@ if [ "$1" = "exec" ]; then
       ;;
     rm)
       rm -f "$DRAIN_REQUEST_CAPTURE" "$PLANNED_RESTART_CAPTURE"
-      printf '%s\n' "resumed" >"$WORKER_READY_CAPTURE"
+      rm -f "$WORKER_RUNNING_CAPTURE"
       ;;
     *) exit 1 ;;
   esac
@@ -128,7 +127,7 @@ iptables_capture="$test_dir/iptables.rules"
 : >"$systemctl_capture"
 : >"$docker_capture"
 : >"$getent_capture"
-: >"$worker_ready_capture"
+printf '%s\n' running >"$worker_running_capture"
 
 run_refresh() {
   worker_active="$1"
@@ -145,7 +144,7 @@ run_refresh() {
   DOCKER_CAPTURE="$docker_capture" \
   DRAIN_REQUEST_CAPTURE="$drain_request_capture" \
   PLANNED_RESTART_CAPTURE="$planned_restart_capture" \
-  WORKER_READY_CAPTURE="$worker_ready_capture" \
+  WORKER_RUNNING_CAPTURE="$worker_running_capture" \
   ACTIVITY_TRANSITION_CAPTURE="$activity_transition_capture" \
   GETENT_CAPTURE="$getent_capture" \
   IPTABLES_CAPTURE="$iptables_capture" \
@@ -218,13 +217,14 @@ fi
 grep -q '^--no-block try-restart lyrashield-worker.service$' "$systemctl_capture"
 test -e "$restart_pending_file"
 test ! -e "$drain_request_capture"
-test -s "$worker_ready_capture"
+test ! -e "$worker_running_capture"
 grep -q '^proxy.test 9.9.9.9 443$' "$pin_file"
 grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT' "$iptables_capture"
 grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT' "$iptables_capture"
 grep -Fq 'retained old pins and pending retry' "$error_output"
 
 : >"$systemctl_capture"
+printf '%s\n' running >"$worker_running_capture"
 run_refresh 0 1 0 "$idle_output" "$error_output"
 grep -q '^--no-block try-restart lyrashield-worker.service$' "$systemctl_capture"
 grep -q 'sh -c umask 077; : > /tmp/lyrashield-worker-planned-restart' "$docker_capture"
