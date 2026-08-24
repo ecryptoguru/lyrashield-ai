@@ -29,9 +29,6 @@ export async function verifyStoredLicense(): Promise<LicenseStatus> {
 export async function startupRevalidateLicense(): Promise<LicenseStatus> {
   return invoke("startup_revalidate_license")
 }
-export async function getLicenseStatus(): Promise<LicenseStatus> {
-  return invoke("get_license_status")
-}
 export async function clearLicense(): Promise<void> {
   return invoke("clear_license")
 }

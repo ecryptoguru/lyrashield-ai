@@ -5,6 +5,11 @@ import { apiError, apiSuccess } from "../../../../lib/api-response"
 
 export const dynamic = "force-dynamic"
 
+const PRIVATE_HEADERS = {
+  "Cache-Control": "private, no-store",
+  "Referrer-Policy": "no-referrer",
+} as const
+
 const RetrieveSchema = z.object({
   token: z.string().min(10).max(500),
 })
@@ -23,7 +28,7 @@ export async function POST(request: Request) {
     const parsed = RetrieveSchema.safeParse(body)
     if (!parsed.success) {
       // Generic 404 to avoid oracle — don't reveal validation details
-      return apiError("NOT_FOUND", "License not found", 404)
+      return apiError("NOT_FOUND", "License not found", 404, PRIVATE_HEADERS)
     }
 
     const { token } = parsed.data
@@ -34,14 +39,14 @@ export async function POST(request: Request) {
     const result = await retrieveLicenseByToken(token)
 
     if (!result) {
-      return apiError("NOT_FOUND", "License not found", 404)
+      return apiError("NOT_FOUND", "License not found", 404, PRIVATE_HEADERS)
     }
 
     logger.info("License retrieved via one-time token", {
       licenseId: result.licenseId,
     })
 
-    return apiSuccess(
+    const response = apiSuccess(
       {
         licenseKey: result.licenseKey,
         licenseBlob: result.licenseBlob,
@@ -49,39 +54,13 @@ export async function POST(request: Request) {
       },
       200
     )
+    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
+    return response
   } catch (error) {
     logger.error("License retrieval failed", {
       error: error instanceof Error ? error.message : String(error),
     })
     // Generic 404 on unexpected error to avoid leaking token validity
-    return apiError("NOT_FOUND", "License not found", 404)
-  }
-}
-
-// GET supports email link click — redirects to dashboard or returns 404 generic
-export async function GET(request: Request) {
-  try {
-    const url = new URL(request.url)
-    const token = url.searchParams.get("token")
-    if (!token) {
-      return apiError("NOT_FOUND", "License not found", 404)
-    }
-    const result = await retrieveLicenseByToken(token)
-    if (!result) {
-      return apiError("NOT_FOUND", "License not found", 404)
-    }
-    logger.info("License retrieved via GET one-time token", {
-      licenseId: result.licenseId,
-    })
-    return apiSuccess(
-      {
-        licenseKey: result.licenseKey,
-        licenseBlob: result.licenseBlob,
-        licenseId: result.licenseId,
-      },
-      200
-    )
-  } catch {
-    return apiError("NOT_FOUND", "License not found", 404)
+    return apiError("NOT_FOUND", "License not found", 404, PRIVATE_HEADERS)
   }
 }

@@ -63,26 +63,6 @@ pub async fn verify_stored_license() -> Result<LicenseStatus, String> {
 }
 
 #[tauri::command]
-pub fn get_license_status() -> Result<LicenseStatus, String> {
-    let stored = store::load_license()?;
-    match stored {
-        Some(s) => {
-            let result = verify_license(&s.license, BUNDLED_PUBLIC_KEY);
-            if !result.valid {
-                return Ok(LicenseStatus::Revoked);
-            }
-            // Machine binding check for status as well.
-            let machine_id = generate_machine_id();
-            if !s.license.machine_ids.contains(&machine_id) {
-                return Ok(LicenseStatus::Revoked);
-            }
-            Ok(license_status_from_file(&s.license, None))
-        }
-        None => Ok(LicenseStatus::None),
-    }
-}
-
-#[tauri::command]
 pub async fn startup_revalidate_license() -> Result<LicenseStatus, String> {
     // Explicit Rust-initiated startup revalidation — all failures non-operational.
     verify_stored_license().await

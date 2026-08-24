@@ -29,7 +29,6 @@ pub fn run() {
             activate_license,
             verify_stored_license,
             startup_revalidate_license,
-            get_license_status,
             clear_license,
             get_runtime_status,
             start_chatgpt_login,
@@ -57,4 +56,16 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running LyraShield desktop app");
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn webview_cannot_access_native_sql_plugin() {
+        let capabilities = include_str!("../capabilities/default.json");
+        let frontend_package = include_str!("../../frontend/package.json");
+
+        assert!(!capabilities.contains("sql:"));
+        assert!(!frontend_package.contains("@tauri-apps/plugin-sql"));
+    }
 }
