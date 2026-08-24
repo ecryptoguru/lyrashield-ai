@@ -1,6 +1,7 @@
 import minimist from "minimist"
 import { getEffectiveCredentials, requireApiKey, DEFAULT_API_URL } from "../credentials.js"
 import type { Output } from "../output.js"
+import { CLI_VERSION } from "../version.js"
 
 const MCP_ENDPOINT = "/api/mcp"
 const PROTOCOL_VERSION = "2025-06-18"
@@ -44,7 +45,7 @@ export async function handleMcp(args: string[], output: Output): Promise<number>
     params: {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: {},
-      clientInfo: { name: "lyrashield-cli", version: "0.1.0" },
+      clientInfo: { name: "lyrashield-cli", version: CLI_VERSION },
     },
   }
 

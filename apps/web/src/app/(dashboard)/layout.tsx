@@ -13,6 +13,7 @@ import {
 } from "@/lib/cache"
 import type { MemberRole } from "@lyrashield/db"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
+import { isPlatformOperator } from "@lyrashield/auth/server"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getCachedSession()
@@ -21,10 +22,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/sign-in")
   }
 
-  const [onboardingState, workspaces, activeWorkspaceId] = await Promise.all([
+  const [onboardingState, workspaces, activeWorkspaceId, canViewPlatformAdmin] = await Promise.all([
     getCachedOnboardingState(session.userId),
     getCachedWorkspaces(session.userId),
     getCachedWorkspaceId(session.userId),
+    isPlatformOperator(session.userId),
   ])
 
   if (onboardingState && !onboardingState.completed && !onboardingState.skipped) {
@@ -63,6 +65,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         activeWorkspaceId={activeWorkspaceId}
         pendingApprovals={pendingApprovals}
         canViewEvidenceVault={canViewEvidenceVault}
+        canViewPlatformAdmin={canViewPlatformAdmin}
       />
       {/* Title derives from the current route via NAV_ITEMS. On a phone the header
             is the only place a screen can be named, so it must not spend that slot
@@ -83,7 +86,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
       >
         <div className="mx-auto w-full max-w-368 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
       </main>
-      <BottomNav unreadNotifications={unreadNotifications} pendingApprovals={pendingApprovals} />
+      <BottomNav
+        unreadNotifications={unreadNotifications}
+        pendingApprovals={pendingApprovals}
+        canViewEvidenceVault={canViewEvidenceVault}
+        canViewPlatformAdmin={canViewPlatformAdmin}
+      />
       <InvitationAcceptBridge />
     </div>
   )

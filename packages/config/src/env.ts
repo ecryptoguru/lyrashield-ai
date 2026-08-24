@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
 
 const envSchema = z
   .object({
@@ -28,6 +29,20 @@ const envSchema = z
     ADDITIONAL_TRUSTED_ORIGINS: z.string().optional().or(z.literal("")),
     // Domain shared by app and marketing subdomains when enabling cross-subdomain cookies.
     BETTER_AUTH_COOKIE_DOMAIN: z.string().optional().or(z.literal("")),
+    PLATFORM_ADMIN_EMAILS: z
+      .string()
+      .default(APPROVED_PLATFORM_ADMIN_EMAILS.join(","))
+      .transform((value, context) => {
+        try {
+          return normalizePlatformAdminEmails(value)
+        } catch (error) {
+          context.addIssue({
+            code: "custom",
+            message: error instanceof Error ? error.message : "Invalid platform admin allowlist",
+          })
+          return z.NEVER
+        }
+      }),
 
     // GitHub OAuth
     GITHUB_CLIENT_ID: z.string().optional().or(z.literal("")),
@@ -309,6 +324,16 @@ const envSchema = z
     {
       path: ["UPSTASH_REDIS_REST_TOKEN"],
       message: "UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is set",
+    }
+  )
+  .refine(
+    (val) =>
+      val.NODE_ENV !== "production" ||
+      process.env.NEXT_PHASE === "phase-production-build" ||
+      Boolean(process.env.PLATFORM_ADMIN_EMAILS),
+    {
+      path: ["PLATFORM_ADMIN_EMAILS"],
+      message: "PLATFORM_ADMIN_EMAILS must be explicitly configured in production",
     }
   )
   .refine(

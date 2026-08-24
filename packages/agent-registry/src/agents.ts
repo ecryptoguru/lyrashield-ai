@@ -1,4 +1,4 @@
-import type { AgentEntry } from "./types"
+import type { AgentEntry, RegistryAgentEntry } from "./types"
 import { API_URL_PLACEHOLDER } from "./render"
 
 const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-08-13"
@@ -857,7 +857,19 @@ const kiroPlugin: AgentEntry = {
   ],
 }
 
-export const AGENTS: readonly AgentEntry[] = [
+const EXPERIMENTAL_AGENT_IDS = new Set([
+  "picode",
+  "vscode-agent-plugin",
+  "github-copilot-agent-plugin",
+])
+const PACKAGE_CONFORMANCE_AGENT_IDS = new Set([
+  "claude-code-agent-plugin",
+  "cursor-agent-plugin",
+  "openai-codex-agent-plugin",
+  "kiro-agent-plugin",
+])
+
+export const AGENTS: readonly RegistryAgentEntry[] = [
   claudeCode,
   cursor,
   devin,
@@ -888,4 +900,30 @@ export const AGENTS: readonly AgentEntry[] = [
   openaiCodexPlugin,
   githubCopilotPlugin,
   kiroPlugin,
-] as const
+].map((agent) => {
+  const supportTier =
+    agent.id === "gemini-cli"
+      ? "DEPRECATED"
+      : EXPERIMENTAL_AGENT_IDS.has(agent.id)
+        ? "EXPERIMENTAL"
+        : "COMPATIBLE"
+  const evidence = PACKAGE_CONFORMANCE_AGENT_IDS.has(agent.id)
+    ? "PACKAGE_CONFORMANCE"
+    : "DOCUMENTATION"
+
+  return {
+    ...agent,
+    supportTier,
+    verification: {
+      evidence,
+      checkedOn: agent.source?.checkedOn ?? LAST_AGENT_REGISTRY_CHECK_DATE,
+      clientVersion: null,
+      platforms: [],
+      reference:
+        evidence === "PACKAGE_CONFORMANCE"
+          ? "packages/agent-plugin/src/__tests__/build.test.ts"
+          : (agent.source?.url ?? `https://lyrashieldai.com/docs/integrations/${agent.docsSlug}`),
+      receipt: null,
+    },
+  } satisfies RegistryAgentEntry
+})

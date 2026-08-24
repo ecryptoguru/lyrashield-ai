@@ -7,7 +7,7 @@ branding:
 
 inputs:
   scan_mode:
-    description: "Scan mode: SAFE (default) or AGGRESSIVE (also scans config/doc file types). DEEP is reserved and currently runs SAFE-equivalent coverage."
+    description: "Scan mode: SAFE (default) or AGGRESSIVE (also scans config/doc file types). DEEP requires the hosted LyraShield scan and is rejected by this local gate."
     required: false
     default: "SAFE"
   fail_on_severity:
@@ -73,12 +73,10 @@ runs:
         fi
         SCAN_MODE="${SCAN_MODE_INPUT:-SAFE}"
         case "$SCAN_MODE" in
-          SAFE|DEEP|AGGRESSIVE) ;;
+          SAFE|AGGRESSIVE) ;;
+          DEEP) echo "::error::scan_mode DEEP requires the hosted LyraShield app, MCP server, or REST API; this local Action supports SAFE and AGGRESSIVE only"; exit 1 ;;
           *) echo "::error::Invalid scan mode"; exit 1 ;;
         esac
-        if [ "$SCAN_MODE" = "DEEP" ]; then
-          echo "::warning::scan_mode DEEP is not yet implemented; running SAFE-equivalent coverage"
-        fi
         SEVERITY="${FAIL_ON_SEVERITY_INPUT:-HIGH}"
         case "$SEVERITY" in
           CRITICAL|HIGH|MEDIUM|LOW|INFO) ;;
@@ -179,7 +177,7 @@ runs:
         jq -n --slurpfile results "$RESULTS_FILE" '{
           "version":"2.1.0",
           "$schema":"https://json.schemastore.org/sarif-2.1.0.json",
-          "runs":[{"tool":{"driver":{"name":"LyraShield GitHub Action","version":"0.1.0","informationUri":"https://github.com/ecryptoguru/lyrashield-ai"}},"results":$results[0]}]
+          "runs":[{"tool":{"driver":{"name":"LyraShield GitHub Action","version":"2.0.0","informationUri":"https://github.com/ecryptoguru/lyrashield-ai"}},"results":$results[0]}]
         }' > "$SARIF_FILE"
         echo "SARIF results count: $(jq '.runs[0].results | length' "$SARIF_FILE")"
         echo "sarif_file=$SARIF_FILE" >> "$GITHUB_OUTPUT"

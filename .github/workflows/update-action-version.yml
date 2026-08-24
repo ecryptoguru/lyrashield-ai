@@ -10,12 +10,12 @@ permissions:
   contents: write
 
 concurrency:
-  group: update-action-version
+  group: update-action-v2-version
   cancel-in-progress: true
 
 jobs:
   update-action-version:
-    name: Update v1 action tag
+    name: Update v2 action tag
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -29,21 +29,22 @@ jobs:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update v1 tag to latest green main
+      - name: Update v2 tag to latest green main
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -fa v1 -m "Update v1 tag to ${HEAD_SHA}"
-          git push origin v1 --force
+          git cat-file -e "${HEAD_SHA}^{commit}"
+          git tag -fa v2 -m "Update v2 tag to ${HEAD_SHA}" "$HEAD_SHA"
+          git push origin v2 --force
 
-      - name: Ensure v1 release exists
+      - name: Ensure v2 release exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if ! gh release view v1 >/dev/null 2>&1; then
-            gh release create v1 --title "LyraShield Security Scan v1" --generate-notes
+          if ! gh release view v2 >/dev/null 2>&1; then
+            gh release create v2 --title "LyraShield Security Scan v2" --generate-notes
           fi

@@ -7,7 +7,6 @@ import { PROGRAM_ARTICLE_COUNT, parseArticle } from "../../scripts/blog-validati
 describe("complete blog program", () => {
   it("has exactly the mapped public articles", () => {
     const blogDirectory = resolve(import.meta.dirname, "../content/blog")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test reads only the repository-owned blog content directory.
     const published = readdirSync(blogDirectory)
       .filter((file) => file.endsWith(".mdx"))
       .map((file) => ({

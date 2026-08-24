@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 import { handleRemoteMcpRequest } from "./http-transport"
 import type { ToolHandlerContext } from "./tools"
 
@@ -22,13 +23,14 @@ function ctx(fetchFn: typeof fetch): ToolHandlerContext {
   return { apiBaseUrl: "https://app.example.com", apiKey: "lsk_test", fetchFn }
 }
 
-function mcpRequest(body: unknown): Request {
+function mcpRequest(body: unknown, protocolVersion?: string): Request {
   return new Request("https://app.example.com/api/mcp", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       // The Streamable HTTP spec requires the client to accept both.
       Accept: "application/json, text/event-stream",
+      ...(protocolVersion ? { "MCP-Protocol-Version": protocolVersion } : {}),
     },
     body: JSON.stringify(body),
   })
@@ -57,6 +59,45 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     expect(res.status).toBe(200)
     const body = await readJson(res)
     expect((body.result as { protocolVersion?: string })?.protocolVersion).toBe(PROTOCOL)
+  })
+
+  it("negotiates the SDK latest stable protocol while preserving the previous client", async () => {
+    for (const protocolVersion of [LATEST_PROTOCOL_VERSION, PROTOCOL]) {
+      const res = await handleRemoteMcpRequest(
+        mcpRequest({
+          ...INIT,
+          params: { ...INIT.params, protocolVersion },
+        }),
+        { toolContext: ctx(fetchStub()) }
+      )
+      expect(res.status).toBe(200)
+      const body = await readJson(res)
+      expect((body.result as { protocolVersion?: string })?.protocolVersion).toBe(protocolVersion)
+    }
+  })
+
+  it("marks authenticated MCP responses as non-cacheable", async () => {
+    const res = await handleRemoteMcpRequest(mcpRequest(INIT), {
+      toolContext: ctx(fetchStub()),
+    })
+
+    expect(res.headers.get("cache-control")).toContain("no-store")
+    expect(res.headers.get("cache-control")).toContain("no-transform")
+    expect(res.headers.get("vary")).toContain("Accept")
+    expect(res.headers.get("vary")).toContain("Authorization")
+    expect(res.headers.get("vary")).toContain("MCP-Protocol-Version")
+  })
+
+  it("rejects unsupported protocol headers with the SDK-supported versions", async () => {
+    const res = await handleRemoteMcpRequest(
+      mcpRequest({ jsonrpc: "2.0", id: 9, method: "tools/list", params: {} }, "2026-07-28"),
+      { toolContext: ctx(fetchStub()) }
+    )
+    const body = await readJson(res)
+
+    expect(res.status).toBe(400)
+    expect((body.error as { message?: string })?.message).toContain("Unsupported protocol version")
+    expect((body.error as { message?: string })?.message).toContain(LATEST_PROTOCOL_VERSION)
   })
 
   it("lists all tools", async () => {

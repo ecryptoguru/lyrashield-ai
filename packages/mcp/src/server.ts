@@ -73,10 +73,15 @@ export class McpServer {
   listTools() {
     return Array.from(this.tools.values()).map((t) => ({
       name: t.name,
+      title: (t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name])?.title,
       description: t.description,
       inputSchema: t.inputSchema,
       annotations: t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name],
       outputSchema: t.outputSchema ?? { type: "object", additionalProperties: true },
+      // SDK 1.30 supports MCP task declarations, but LyraShield scan IDs are
+      // persisted domain jobs. Advertising protocol tasks without a durable
+      // MCP task store would make stateless HTTP cancellation and replay unsafe.
+      execution: { taskSupport: "forbidden" as const },
     }))
   }
 
@@ -84,9 +89,11 @@ export class McpServer {
     const tool = this.tools.get(name)
     if (!tool) {
       logger.warn("MCP tool call — unknown tool", { tool: name })
+      const error = { error: `Unknown tool: ${name}` }
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: `Unknown tool: ${name}` }) }],
+        content: [{ type: "text", text: JSON.stringify(error) }],
         isError: true,
+        structuredContent: error,
       }
     }
 
@@ -98,18 +105,20 @@ export class McpServer {
         detectedPatterns: guardResult.detectedPatterns,
         args,
       })
+      const error = {
+        error: "Tool call blocked by security guard",
+        reason: guardResult.reason,
+        detectedPatterns: guardResult.detectedPatterns,
+      }
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
-              error: "Tool call blocked by security guard",
-              reason: guardResult.reason,
-              detectedPatterns: guardResult.detectedPatterns,
-            }),
+            text: JSON.stringify(error),
           },
         ],
         isError: true,
+        structuredContent: error,
       }
     }
 
@@ -162,18 +171,20 @@ export class McpServer {
           tool: name,
           reason: decision.reason,
         })
+        const error = {
+          error: "Mutating tool requires human approval",
+          tool: name,
+          reason: decision.reason ?? "Approval denied",
+        }
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({
-                error: "Mutating tool requires human approval",
-                tool: name,
-                reason: decision.reason ?? "Approval denied",
-              }),
+              text: JSON.stringify(error),
             },
           ],
           isError: true,
+          structuredContent: error,
         }
       }
       if (decision.result) {
@@ -196,17 +207,19 @@ export class McpServer {
         tool: name,
         error: err instanceof Error ? err.message : String(err),
       })
+      const error = {
+        error: "Tool execution failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      }
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
-              error: "Tool execution failed",
-              message: err instanceof Error ? err.message : "Unknown error",
-            }),
+            text: JSON.stringify(error),
           },
         ],
         isError: true,
+        structuredContent: error,
       }
     }
   }

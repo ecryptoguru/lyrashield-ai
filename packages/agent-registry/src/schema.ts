@@ -3,6 +3,15 @@ import { z } from "zod"
 const configFormatSchema = z.enum(["json", "jsonc", "toml", "yaml"])
 const installStrategySchema = z.enum(["config-file", "vendor-cli", "guided-manual", "agent-plugin"])
 const transportSchema = z.enum(["stdio", "remote-http"])
+const supportTierSchema = z.enum(["NATIVE", "VERIFIED", "COMPATIBLE", "EXPERIMENTAL", "DEPRECATED"])
+const verificationSchema = z.object({
+  evidence: z.enum(["DOCUMENTATION", "PACKAGE_CONFORMANCE", "CLIENT_RUNTIME"]),
+  checkedOn: z.iso.date(),
+  clientVersion: z.string().min(1).nullable(),
+  platforms: z.array(z.enum(["darwin", "linux", "win32"])),
+  reference: z.string().min(1),
+  receipt: z.string().min(1).nullable(),
+})
 
 const credentialStyleSchema = z.union([
   z.object({ kind: z.literal("inline-env") }),
@@ -50,9 +59,35 @@ export const agentEntrySchema = z
         checkedOn: z.string().optional(),
       })
       .optional(),
+    supportTier: supportTierSchema,
+    verification: verificationSchema,
     gotchas: z.array(z.string().min(1)),
   })
   .superRefine((entry, ctx) => {
+    if (entry.supportTier === "NATIVE" || entry.supportTier === "VERIFIED") {
+      if (entry.verification.evidence !== "CLIENT_RUNTIME") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${entry.supportTier} requires CLIENT_RUNTIME evidence`,
+          path: ["verification", "evidence"],
+        })
+      }
+      if (!entry.verification.clientVersion) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${entry.supportTier} requires a tested clientVersion`,
+          path: ["verification", "clientVersion"],
+        })
+      }
+      if (!entry.verification.receipt) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${entry.supportTier} requires a retained runtime receipt`,
+          path: ["verification", "receipt"],
+        })
+      }
+    }
+
     if (entry.installStrategy === "config-file") {
       if (entry.format === null) {
         ctx.addIssue({

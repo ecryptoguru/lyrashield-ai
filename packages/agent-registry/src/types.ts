@@ -1,6 +1,20 @@
 export type ConfigFormat = "json" | "jsonc" | "toml" | "yaml"
 export type InstallStrategy = "config-file" | "vendor-cli" | "guided-manual" | "agent-plugin"
 export type Transport = "stdio" | "remote-http"
+export type SupportTier = "NATIVE" | "VERIFIED" | "COMPATIBLE" | "EXPERIMENTAL" | "DEPRECATED"
+export type VerificationEvidence = "DOCUMENTATION" | "PACKAGE_CONFORMANCE" | "CLIENT_RUNTIME"
+export type VerificationPlatform = "darwin" | "linux" | "win32"
+
+export interface IntegrationVerification {
+  evidence: VerificationEvidence
+  checkedOn: string
+  clientVersion: string | null
+  platforms: VerificationPlatform[]
+  /** Stable test, artifact, or external source that supports the current tier. */
+  reference: string
+  /** Retained runtime receipt. Required before claiming NATIVE or VERIFIED. */
+  receipt: string | null
+}
 
 export type CredentialStyle =
   | { kind: "inline-env" }
@@ -47,7 +61,16 @@ export interface AgentEntry {
    */
   pluginLocations?: ConfigLocation[]
   source?: { url?: string | null; checkedOn?: string }
+  /** Registry exports always populate these fields; optional keeps fixture authors lightweight. */
+  supportTier?: SupportTier
+  verification?: IntegrationVerification
   gotchas: string[]
+}
+
+/** Entry returned by the registry after support evidence is attached. */
+export type RegistryAgentEntry = AgentEntry & {
+  supportTier: SupportTier
+  verification: IntegrationVerification
 }
 
 export interface InstallOptions {

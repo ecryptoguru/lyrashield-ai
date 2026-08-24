@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import minimist from "minimist"
 import { createOutput } from "./output.js"
 import type { Output } from "./output.js"
+import { CLI_VERSION } from "./version.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -16,7 +17,7 @@ async function getVersion(): Promise<string> {
     }
     return pkg.version
   } catch {
-    return "0.1.0"
+    return CLI_VERSION
   }
 }
 

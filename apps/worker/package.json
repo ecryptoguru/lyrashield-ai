@@ -20,7 +20,7 @@
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@sentry/node": "^10.70.0",
-    "bullmq": "6.1.2",
+    "bullmq": "6.2.0",
     "ioredis": "^5.11.1",
     "tsx": "^4.23.12",
     "yaml": "^2.9.0",

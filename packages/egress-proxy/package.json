@@ -14,7 +14,7 @@
   "dependencies": {
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/security": "workspace:*",
-    "undici": "7.29.0",
+    "undici": "8.10.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

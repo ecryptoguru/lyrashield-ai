@@ -19,6 +19,7 @@ model User {
   image         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  twoFactorEnabled Boolean @default(false)
 
   // Platform-level authority, independent of any workspace/tenant role.
   // Only value is "PLATFORM_OPERATOR"; null means an ordinary tenant user.
@@ -27,14 +28,32 @@ model User {
   sessions           Session[]
   accounts           Account[]
   verifications      Verification[]
+  twoFactors         TwoFactor[]
   oauthclients       OauthClient[]
   oauthrefreshtokens OauthRefreshToken[]
   oauthaccesstokens  OauthAccessToken[]
   oauthconsents      OauthConsent[]
   deviceCodes        DeviceCode[]
   affiliate          Affiliate?
+  platformAdminElevations PlatformAdminElevation[]
 
   @@map("users")
+}
+
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String
+  userId                  String
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0)
+  lockedUntil             DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([secret])
+  @@index([userId])
+  @@map("two_factors")
 }
 
 model Session {
@@ -47,12 +66,15 @@ model Session {
   userAgent         String?
   userId            String
   activeWorkspaceId String?
+  twoFactorVerifiedAt DateTime?
 
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   oauthrefreshtokens OauthRefreshToken[]
   oauthaccesstokens  OauthAccessToken[]
+  platformAdminElevations PlatformAdminElevation[]
 
   @@index([userId])
+  @@unique([id, userId])
   @@map("sessions")
 }
 
@@ -1276,6 +1298,52 @@ model AuditLog {
   @@index([actorUserId])
   @@index([action])
   @@index([workspaceId, createdAt])
+}
+
+model PlatformAdminElevation {
+  id         String    @id @default(cuid())
+  userId     String
+  sessionId  String
+  action     String
+  nonceHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [sessionId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@index([userId, sessionId, action, expiresAt])
+  @@index([expiresAt])
+}
+
+model PlatformAdminChallengeLimit {
+  id              String   @id @default(cuid())
+  scope           String
+  keyHash         String
+  attemptCount    Int
+  windowStartedAt DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@unique([scope, keyHash])
+  @@index([windowStartedAt])
+}
+
+model PlatformAdminAudit {
+  id           String   @id @default(cuid())
+  actorUserId  String
+  sessionId    String
+  action       String
+  resourceType String
+  resourceId   String?
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([resourceType, resourceId])
 }
 
 model Report {

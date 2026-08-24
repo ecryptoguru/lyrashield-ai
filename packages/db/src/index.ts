@@ -90,6 +90,13 @@ export {
 } from "./evidence"
 export { withWorkspaceRLS, withoutWorkspaceRLS } from "./rls"
 export {
+  issuePlatformAdminElevation,
+  consumePlatformAdminChallengeAttempt,
+  executePlatformAdminMutation,
+  type IssuePlatformAdminElevationInput,
+  type PlatformAdminMutationInput,
+} from "./platform-admin-security"
+export {
   deleteUserAccount,
   getAccountDeletionPlan,
   AccountDeletionBlockedError,

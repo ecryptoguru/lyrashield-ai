@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { authClient, getAuthErrorMessage, isEmailNotVerifiedError } from "@lyrashield/auth"
+import {
+  authClient,
+  getAuthErrorMessage,
+  isEmailNotVerifiedError,
+  safeAuthCallbackPath,
+} from "@lyrashield/auth"
 import { ShieldCheck, AlertCircle } from "lucide-react"
 import {
   Button,
@@ -19,6 +24,7 @@ import { AuthSplitLayout } from "@/components/auth-split-layout"
 import { PasswordInput } from "@/components/password-input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { storePendingInvitation } from "@/lib/pending-invitation"
+import { setPendingAuthCallback } from "@/lib/auth-callback"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -48,9 +54,7 @@ export default function SignInPage() {
 
   function callbackURL(): string {
     const requested = new URLSearchParams(window.location.search).get("callbackURL")
-    return requested && requested.startsWith("/") && !requested.startsWith("//")
-      ? requested
-      : "/dashboard"
+    return safeAuthCallbackPath(requested)
   }
 
   const [invited, setInvited] = useState(false)
@@ -162,10 +166,12 @@ export default function SignInPage() {
     setError(null)
 
     try {
-      const { error: signInError } = await authClient.signIn.email({
+      const destination = callbackURL()
+      setPendingAuthCallback(destination)
+      const { data, error: signInError } = await authClient.signIn.email({
         email,
         password,
-        callbackURL: callbackURL(),
+        callbackURL: destination,
       })
 
       if (signInError) {
@@ -177,7 +183,9 @@ export default function SignInPage() {
         return
       }
 
-      router.push("/dashboard")
+      if (data && "twoFactorRedirect" in data && data.twoFactorRedirect === true) return
+
+      router.push(destination)
       router.refresh()
     } catch {
       setError("Could not sign in. Check your connection and try again.")

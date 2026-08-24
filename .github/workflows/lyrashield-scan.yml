@@ -10,7 +10,7 @@ on:
         required: false
         type: string
       scan_mode:
-        description: "Scan mode: SAFE, DEEP, or AGGRESSIVE"
+        description: "Local scan mode: SAFE or AGGRESSIVE. DEEP requires the hosted LyraShield scan."
         required: false
         type: string
         default: "SAFE"
@@ -85,31 +85,27 @@ jobs:
             exit 1
           fi
 
-          # scan_mode: SAFE (default) skips non-code files entirely (see the
-          # file-type filters below). AGGRESSIVE additionally scans config/doc
-          # file types that SAFE mode ignores, at the cost of more noise.
-          # DEEP is currently equivalent to SAFE's file selection but is
-          # reserved for future deeper analysis.
-          # TODO: DEEP mode does not yet enable any additional checks beyond SAFE.
+          # SAFE (default) skips non-code files. AGGRESSIVE additionally scans
+          # config/doc file types at the cost of more noise. DEEP belongs to
+          # the hosted scan and must never be represented by this local gate.
           SCAN_MODE="${SCAN_MODE_INPUT:-SAFE}"
           case "$SCAN_MODE" in
-            SAFE|DEEP|AGGRESSIVE) ;;
+            SAFE|AGGRESSIVE) ;;
+            DEEP) echo "::error::scan_mode DEEP requires the hosted LyraShield app, MCP server, or REST API; this local workflow supports SAFE and AGGRESSIVE only"; exit 1 ;;
             *) echo "::error::Invalid scan mode"; exit 1 ;;
           esac
-          if [ "$SCAN_MODE" = "DEEP" ]; then
-            echo "::warning::scan_mode DEEP is not yet implemented; running SAFE-equivalent coverage"
-          fi
           SEVERITY="${FAIL_ON_SEVERITY_INPUT:-HIGH}"
           case "$SEVERITY" in
             CRITICAL|HIGH|MEDIUM|LOW|INFO) ;;
             *) echo "::error::Invalid fail_on_severity"; exit 1 ;;
           esac
           echo "::notice::Scan mode: $SCAN_MODE"
-          echo "scan_mode=$SCAN_MODE" >> "$GITHUB_OUTPUT"
-          echo "fail_on_severity=$SEVERITY" >> "$GITHUB_OUTPUT"
-
-          echo "base_sha=$BASE" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$HEAD" >> "$GITHUB_OUTPUT"
+          {
+            echo "scan_mode=$SCAN_MODE"
+            echo "fail_on_severity=$SEVERITY"
+            echo "base_sha=$BASE"
+            echo "head_sha=$HEAD"
+          } >> "$GITHUB_OUTPUT"
 
           # Get list of changed files
           git diff --name-only "$BASE" "$HEAD" > changed_files.txt
@@ -222,10 +218,15 @@ jobs:
 
           bump_severity() {
             local candidate="$1"
-            local rank_none=0 rank_info=1 rank_low=2 rank_medium=3 rank_high=4 rank_critical=5
             local cur_rank cand_rank
-            eval "cur_rank=\$rank_$(echo "$HIGHEST_SEVERITY" | tr '[:upper:]' '[:lower:]')"
-            eval "cand_rank=\$rank_$(echo "$candidate" | tr '[:upper:]' '[:lower:]')"
+            case "$HIGHEST_SEVERITY" in
+              NONE) cur_rank=0 ;; INFO) cur_rank=1 ;; LOW) cur_rank=2 ;;
+              MEDIUM) cur_rank=3 ;; HIGH) cur_rank=4 ;; CRITICAL) cur_rank=5 ;;
+            esac
+            case "$candidate" in
+              NONE) cand_rank=0 ;; INFO) cand_rank=1 ;; LOW) cand_rank=2 ;;
+              MEDIUM) cand_rank=3 ;; HIGH) cand_rank=4 ;; CRITICAL) cand_rank=5 ;;
+            esac
             if [ "$cand_rank" -gt "$cur_rank" ]; then
               HIGHEST_SEVERITY="$candidate"
             fi
@@ -234,7 +235,7 @@ jobs:
           while IFS= read -r file; do
             if [ ! -f "$file" ]; then continue; fi
 
-            # Skip non-code files in SAFE/DEEP mode. AGGRESSIVE mode also
+            # Skip non-code files in SAFE mode. AGGRESSIVE mode also
             # scans config/doc file types for hardcoded-secret patterns etc.
             case "$file" in
               apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*)

@@ -23,7 +23,7 @@
   "dependencies": {
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "undici": "7.29.0"
+    "undici": "8.10.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

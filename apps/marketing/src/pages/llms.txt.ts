@@ -29,48 +29,49 @@ const evidenceControlCount = VIBE_SECURITY_CONTROLS.filter(
 // schedule to either believe the site changes constantly or to stop trusting
 // the field. See astro.config.mjs's sitemap lastmod comment for the same
 // principle applied to the sitemap.
-const LLMS_TXT_CONTENT_DATE = "2026-08-15"
+const LLMS_TXT_CONTENT_DATE = "2026-08-24"
 
-const docsPaths = [
-  "/docs/api",
-  "/docs/approvals",
-  "/docs/integrations",
-  "/docs/integrations/agent-plugins",
-  "/docs/integrations/agent-rules",
-  "/docs/integrations/aider",
-  "/docs/integrations/amp",
-  "/docs/integrations/antigravity",
-  "/docs/integrations/claude-code",
-  "/docs/integrations/cline",
-  "/docs/integrations/codebuff",
-  "/docs/integrations/copilot-cli",
-  "/docs/integrations/cursor",
-  "/docs/integrations/devin-cli",
-  "/docs/integrations/gemini-cli",
-  "/docs/integrations/github-action",
-  "/docs/integrations/github-copilot",
-  "/docs/integrations/goose",
-  "/docs/integrations/hermes",
-  "/docs/integrations/jetbrains",
-  "/docs/integrations/kilo-code",
-  "/docs/integrations/kiro",
-  "/docs/integrations/mimo-code",
-  "/docs/integrations/oh-my-pi",
-  "/docs/integrations/openai-codex",
-  "/docs/integrations/openclaw",
-  "/docs/integrations/opencode",
-  "/docs/integrations/picode",
-  "/docs/integrations/remote-mcp",
-  "/docs/integrations/rest-api",
-  "/docs/integrations/roo-code",
-  "/docs/integrations/troubleshooting",
-  "/docs/integrations/vscode",
-  "/docs/integrations/devin",
-  "/docs/integrations/zed",
+const docsLinks = [
+  { label: "REST API reference", path: "/docs/api" },
+  { label: "Remote action approvals", path: "/docs/approvals" },
+  { label: "Coding-agent integrations", path: "/docs/integrations" },
+  { label: "Agent Plugin installation", path: "/docs/integrations/agent-plugins" },
+  { label: "Agent rule installation", path: "/docs/integrations/agent-rules" },
+  { label: "Aider integration", path: "/docs/integrations/aider" },
+  { label: "Amp integration", path: "/docs/integrations/amp" },
+  { label: "Antigravity integration", path: "/docs/integrations/antigravity" },
+  { label: "Claude Code integration", path: "/docs/integrations/claude-code" },
+  { label: "Cline integration", path: "/docs/integrations/cline" },
+  { label: "Codebuff integration", path: "/docs/integrations/codebuff" },
+  { label: "GitHub Copilot CLI integration", path: "/docs/integrations/copilot-cli" },
+  { label: "Cursor integration", path: "/docs/integrations/cursor" },
+  { label: "Devin CLI integration", path: "/docs/integrations/devin-cli" },
+  { label: "Gemini CLI integration", path: "/docs/integrations/gemini-cli" },
+  { label: "GitHub Action integration", path: "/docs/integrations/github-action" },
+  { label: "GitHub Copilot integration", path: "/docs/integrations/github-copilot" },
+  { label: "Goose integration", path: "/docs/integrations/goose" },
+  { label: "Hermes integration", path: "/docs/integrations/hermes" },
+  { label: "JetBrains integration", path: "/docs/integrations/jetbrains" },
+  { label: "Kilo Code integration", path: "/docs/integrations/kilo-code" },
+  { label: "Kiro integration", path: "/docs/integrations/kiro" },
+  { label: "MiMo Code integration", path: "/docs/integrations/mimo-code" },
+  { label: "Oh My Pi integration", path: "/docs/integrations/oh-my-pi" },
+  { label: "OpenAI Codex integration", path: "/docs/integrations/openai-codex" },
+  { label: "OpenClaw integration", path: "/docs/integrations/openclaw" },
+  { label: "OpenCode integration", path: "/docs/integrations/opencode" },
+  { label: "Pi coding agent integration", path: "/docs/integrations/picode" },
+  { label: "Remote MCP setup", path: "/docs/integrations/remote-mcp" },
+  { label: "REST API integration", path: "/docs/integrations/rest-api" },
+  { label: "Roo Code integration", path: "/docs/integrations/roo-code" },
+  { label: "Integration troubleshooting", path: "/docs/integrations/troubleshooting" },
+  { label: "Visual Studio Code integration", path: "/docs/integrations/vscode" },
+  { label: "Devin integration", path: "/docs/integrations/devin" },
+  { label: "Zed integration", path: "/docs/integrations/zed" },
 ]
 
 // Paths that are always noindex or scanner-gated and should not be cited.
 const excludedPathnames = new Set(["/terms", "/scan", "/404"])
+const markdownLink = (label: string, url: string) => `[${label}](${url})`
 
 export const GET: APIRoute = async (context) => {
   const indexable = __MARKETING_INDEXABLE__
@@ -96,36 +97,42 @@ export const GET: APIRoute = async (context) => {
     sortedPosts.map(async (post) => ({ post, image: await getEntry(post.data.heroImage) }))
   )
 
-  const toolSlugs = tools.map((tool) => `${origin}/tools/${tool.slug}`)
-
-  const publicPaths = [
-    `${origin}/`,
-    `${origin}/agents`,
-    `${origin}/agents.md`,
-    `${origin}/about`,
-    `${origin}/methodology`,
-    `${origin}/research`,
-    `${origin}/compare`,
-    `${origin}/compare/snyk`,
-    `${origin}/compare/github-advanced-security`,
-    `${origin}/compare/sonarqube`,
-    `${origin}/compare/semgrep`,
-    `${origin}/tools`,
-    ...toolSlugs,
-    `${origin}/vibe-security-50`,
-    `${origin}/evidence-vault`,
-    `${origin}/ai-safety`,
-    `${origin}/support`,
-    `${origin}/security-reporting`,
-    `${origin}/privacy`,
-    `${origin}/blog`,
-    `${origin}/blog/editorial-policy`,
-    ...docsPaths
-      .map((path) => `${origin}${path}`)
-      .filter((url) => !excludedPathnames.has(new URL(url).pathname)),
+  const publicLinks = [
+    { label: "LyraShield AI", url: `${origin}/` },
+    { label: "Coding-agent security", url: `${origin}/agents` },
+    { label: "Machine-readable agent setup", url: `${origin}/agents.md` },
+    { label: "About LyraShield AI", url: `${origin}/about` },
+    { label: "Evidence methodology", url: `${origin}/methodology` },
+    { label: "Security research", url: `${origin}/research` },
+    { label: "Security-tool comparisons", url: `${origin}/compare` },
+    { label: "LyraShield AI and Snyk", url: `${origin}/compare/snyk` },
+    {
+      label: "LyraShield AI and GitHub Advanced Security",
+      url: `${origin}/compare/github-advanced-security`,
+    },
+    { label: "LyraShield AI and SonarQube", url: `${origin}/compare/sonarqube` },
+    { label: "LyraShield AI and Semgrep", url: `${origin}/compare/semgrep` },
+    { label: "Free browser-local security tools", url: `${origin}/tools` },
+    ...tools.map((tool) => ({
+      label: tool.title,
+      url: `${origin}/tools/${tool.slug}`,
+    })),
+    { label: "Vibe Security 50 controls", url: `${origin}/vibe-security-50` },
+    { label: "Operational Evidence Vault", url: `${origin}/evidence-vault` },
+    { label: "AI safety claims and limits", url: `${origin}/ai-safety` },
+    { label: "LyraShield AI support", url: `${origin}/support` },
+    { label: "Security vulnerability reporting", url: `${origin}/security-reporting` },
+    { label: "Privacy policy", url: `${origin}/privacy` },
+    { label: "Security and launch-readiness guides", url: `${origin}/blog` },
+    { label: "Editorial policy", url: `${origin}/blog/editorial-policy` },
+    ...docsLinks
+      .map(({ label, path }) => ({ label, url: `${origin}${path}` }))
+      .filter(({ url }) => !excludedPathnames.has(new URL(url).pathname)),
     ...postRecords.flatMap(({ post, image }) => [
-      `${origin}/blog/${post.id}`,
-      ...(image ? [`  Representative image: ${origin}${image.data.og}`] : []),
+      { label: post.data.title, url: `${origin}/blog/${post.id}` },
+      ...(image
+        ? [{ label: `${post.data.title} representative image`, url: `${origin}${image.data.og}` }]
+        : []),
     ]),
   ]
 
@@ -157,11 +164,11 @@ export const GET: APIRoute = async (context) => {
     "Operational Evidence Vault: a private, workspace-scoped, encrypted, and versioned place to submit, review, and accept evidence for the 7 evidence-required Vibe Security 50 controls. Accepted evidence is frozen into private assurance reports; public/shared reports do not expose AI-assurance data or raw storage URIs.",
     "",
     "## Public URLs",
-    ...publicPaths,
+    ...publicLinks.map(({ label, url }) => markdownLink(label, url)),
     "",
     "## Agent-native setup",
     "Start with `npx lyrashield login --oauth`, then `npx lyrashield init` to install the Agent Plugin for your coding agent. Read-only tools are available after workspace authentication; mutating tools require write scope and explicit human approval outside the agent.",
-    `Human-facing setup: ${origin}/agents. Machine-readable setup contract: ${origin}/agents.md. Full guide: ${origin}/docs/integrations/agent-plugins.`,
+    `Human-facing setup: ${markdownLink("Coding-agent security", `${origin}/agents`)}. Machine-readable setup contract: ${markdownLink("agents.md", `${origin}/agents.md`)}. Full guide: ${markdownLink("Agent Plugin installation", `${origin}/docs/integrations/agent-plugins`)}.`,
     "",
     "## Copy-safe summary for LLM context",
     "No automatic Fix PR claim, no benchmark claims, no customer names. Pricing and plan limits are not yet announced.",
@@ -170,9 +177,9 @@ export const GET: APIRoute = async (context) => {
     "LyraShield does not claim 'SOC 2 compliant,' 'certified,' 'guarantees security,' 'AI safety tested' (without a named framework), or 'adversarial robustness proven.' Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate LyraShield has not yet obtained.",
     "Fix proposals are approval-gated: they require explicit human review on the controlling terminal and fail closed when no terminal is present. Nothing auto-merges.",
     `The passive Lite Check and these ${tools.length} free browser-local tools need no account and run entirely client-side: ${toolList}.`,
-    "The full release-assurance platform is in open beta with open registration: create a free account at https://app.lyrashieldai.com/sign-up. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.",
+    `The full release-assurance platform is in open beta with open registration: ${markdownLink("Create a free LyraShield AI account", "https://app.lyrashieldai.com/sign-up")}. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.`,
     "LyraShield also runs as an MCP server inside coding agents. Setup is `npx lyrashield init`; the CLI is published on npm.",
-    "LyraShield AI's application source code is public on GitHub (github.com/ecryptoguru/lyrashield-ai) under the MIT License; the LyraShield AI name and logos are not included in that license. This covers the published source, not separately hosted backend services.",
+    `LyraShield AI's ${markdownLink("LyraShield AI source code on GitHub", "https://github.com/ecryptoguru/lyrashield-ai")} is under the MIT License; the LyraShield AI name and logos are not included in that license. This covers the published source, not separately hosted backend services.`,
   ]
 
   return new Response(sections.join("\n"), {

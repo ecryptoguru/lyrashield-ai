@@ -1,0 +1,97 @@
+name: Provision platform administrators
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run a read-only preflight or apply the exact administrator set
+        required: true
+        type: choice
+        default: preflight
+        options:
+          - preflight
+          - apply
+      confirmation:
+        description: Type the confirmation phrase shown in the runbook
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-platform-admin-provisioning
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    name: ${{ inputs.mode == 'apply' && 'Apply exact admin set' || 'Validate admin accounts' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: azure-production
+    steps:
+      - name: Validate explicit confirmation
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          expected='preflight-exact-two-platform-admins'
+          if [ "$MODE" = 'apply' ]; then
+            expected='apply-exact-two-platform-admins'
+          fi
+          if [ "$CONFIRMATION" != "$expected" ]; then
+            echo "::error::Confirmation must exactly match: $expected"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify production migration state
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_DIRECT_URL is not configured"
+            exit 1
+          fi
+          pnpm --filter @lyrashield/db exec prisma migrate status
+
+      - name: Run administrator provisioning gate
+        env:
+          DATABASE_SYSTEM_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
+          MODE: ${{ inputs.mode }}
+        run: |
+          command=(pnpm admin:provision)
+          if [ "$MODE" = 'apply' ]; then
+            command+=(-- --apply=apply-exact-two-platform-admins)
+          fi
+          "${command[@]}"
+
+      - name: Record result
+        env:
+          MODE: ${{ inputs.mode }}
+          SHA: ${{ github.sha }}
+        run: |
+          {
+            echo '## Platform administrator provisioning'
+            echo
+            echo "- Mode: $MODE"
+            echo "- Revision: $SHA"
+            echo '- Scope: exactly two allowlisted, verified, TOTP-enrolled accounts'
+            if [ "$MODE" = 'apply' ]; then
+              echo '- Result: roles applied; prior sessions and elevations revoked; bootstrap audit written'
+            else
+              echo '- Result: preflight only; no roles or sessions changed'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

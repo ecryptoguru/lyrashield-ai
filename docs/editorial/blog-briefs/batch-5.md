@@ -83,7 +83,7 @@ An agent tool path crossing a narrow permission boundary into a sealed CI chambe
 
 ### Sources and claim guardrails
 
-Use B5-S01, B5-S02, B5-S03, and B5-S04. Do not claim that full-SHA pinning prevents every supply-chain attack. Do not show real tokens. Do not describe the repository workflow's `DEEP` input as deeper coverage because the current workflow explicitly treats it as SAFE-equivalent.
+Use B5-S01, B5-S02, B5-S03, and B5-S04. Do not claim that full-SHA pinning prevents every supply-chain attack. Do not show real tokens. State that the local repository workflow supports `SAFE` and `AGGRESSIVE`; `DEEP` requires the hosted scan and is rejected locally.
 
 ## Topic 70: Build a Secure MCP Server
 

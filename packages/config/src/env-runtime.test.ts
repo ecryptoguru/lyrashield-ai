@@ -8,6 +8,7 @@ const requiredProductionEnv = {
   NODE_ENV: "production",
   TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
   LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0",
+  PLATFORM_ADMIN_EMAILS: "ecryptoguru@gmail.com,ankit@lyrashieldai.com",
 } as const
 
 describe("runtime environment validation", () => {
@@ -22,6 +23,18 @@ describe("runtime environment validation", () => {
 
   it("allows the production web process to omit worker sandbox configuration", async () => {
     await expect(import("./env")).resolves.toBeDefined()
+  })
+
+  it("rejects a missing or expanded production platform-admin allowlist", async () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", "")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+
+    vi.resetModules()
+    vi.stubEnv(
+      "PLATFORM_ADMIN_EMAILS",
+      "ecryptoguru@gmail.com,ankit@lyrashieldai.com,extra@lyrashieldai.com"
+    )
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
   })
 
   it("rejects an http egress proxy URL in production (bearer-token cleartext transport)", async () => {

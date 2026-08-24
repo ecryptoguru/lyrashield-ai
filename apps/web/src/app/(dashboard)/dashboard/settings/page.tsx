@@ -9,12 +9,19 @@ import { ConnectedAccounts } from "./connected-accounts"
 import { ApiKeysSection } from "./api-keys"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+import { TwoFactorSecurity } from "./two-factor-security"
 
 export default async function SettingsPage() {
   const session = await getCachedSession()
   if (!session) return null
 
-  const workspaceId = await getCachedWorkspaceId(session.userId)
+  const [workspaceId, accountSecurity] = await Promise.all([
+    getCachedWorkspaceId(session.userId),
+    prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { twoFactorEnabled: true },
+    }),
+  ])
   if (!workspaceId) {
     return (
       <div>
@@ -26,6 +33,9 @@ export default async function SettingsPage() {
           icon={Settings}
           description="Create a workspace during onboarding to manage settings."
         />
+        <div className="mt-6">
+          <TwoFactorSecurity enabled={Boolean(accountSecurity?.twoFactorEnabled)} />
+        </div>
       </div>
     )
   }
@@ -95,6 +105,8 @@ export default async function SettingsPage() {
       </Card>
 
       <ConnectedAccounts />
+
+      <TwoFactorSecurity enabled={Boolean(accountSecurity?.twoFactorEnabled)} />
 
       <ApiKeysSection workspaceId={workspaceId} canManage={canManageApiKeys} />
 

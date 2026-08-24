@@ -10,6 +10,7 @@ import {
   Bot,
   ClipboardCheck,
   ShieldCheck,
+  Shield,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -123,6 +124,13 @@ const EVIDENCE_VAULT_BASE: NavItem = {
   icon: ShieldCheck,
 }
 
+const PLATFORM_ADMIN_BASE: NavItem = {
+  href: "/dashboard/admin",
+  label: "Platform Admin",
+  shortLabel: "Admin",
+  icon: Shield,
+}
+
 /** Secondary / Workspace destinations that are always present. */
 const WORKSPACE_NAV_ITEMS: NavItem[] = [
   {
@@ -166,6 +174,8 @@ export interface NavState {
    * The layout gates this on `aiAssurance:view` permission before passing it in.
    */
   canViewEvidenceVault?: boolean
+  /** Server-confirmed platform-operator access; never derive this client-side. */
+  canViewPlatformAdmin?: boolean
 }
 
 function resolveNavItems(state: NavState = {}): NavItem[] {
@@ -192,6 +202,7 @@ export const NAV_ITEMS: NavItem[] = resolveNavItems({ pendingApprovals: 0 })
 export const NAV_TITLE_ITEMS: NavItem[] = [
   ...LIFECYCLE_NAV_ITEMS,
   REVIEW_QUEUE_BASE,
+  PLATFORM_ADMIN_BASE,
   ...WORKSPACE_NAV_ITEMS,
 ]
 
@@ -226,6 +237,8 @@ export interface ResolvedNav {
   reviewQueue: NavItem | null
   /** The Evidence Vault item, or null when the active role lacks aiAssurance:view. */
   evidenceVault: NavItem | null
+  /** Platform Admin item, or null when platform authorization is absent. */
+  platformAdmin: NavItem | null
 }
 
 /**
@@ -237,9 +250,11 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
   const pending = state.pendingApprovals ?? 0
   const reviewQueue = pending > 0 ? reviewQueueItem(pending) : null
   const evidenceVault = state.canViewEvidenceVault ? EVIDENCE_VAULT_BASE : null
+  const platformAdmin = state.canViewPlatformAdmin ? PLATFORM_ADMIN_BASE : null
   const conditional: NavItem[] = []
   if (reviewQueue) conditional.push(reviewQueue)
   if (evidenceVault) conditional.push(evidenceVault)
+  if (platformAdmin) conditional.push(platformAdmin)
   const secondary = [...conditional, ...WORKSPACE_NAV_ITEMS]
   const more = [...conditional, ...WORKSPACE_NAV_ITEMS]
   const items = [...LIFECYCLE_NAV_ITEMS, ...secondary]
@@ -251,5 +266,6 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
     more,
     reviewQueue,
     evidenceVault,
+    platformAdmin,
   }
 }

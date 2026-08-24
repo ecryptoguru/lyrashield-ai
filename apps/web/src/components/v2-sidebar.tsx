@@ -64,6 +64,7 @@ export function V2Sidebar({
   activeWorkspaceId: initialWorkspaceId,
   pendingApprovals = 0,
   canViewEvidenceVault = false,
+  canViewPlatformAdmin = false,
 }: {
   userName: string
   userEmail: string
@@ -71,11 +72,16 @@ export function V2Sidebar({
   activeWorkspaceId: string | null
   pendingApprovals?: number
   canViewEvidenceVault?: boolean
+  canViewPlatformAdmin?: boolean
 }) {
   const pathname = usePathname()
   const router = useRouter()
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(initialWorkspaceId)
-  const { secondary } = resolveNav({ pendingApprovals, canViewEvidenceVault })
+  const { secondary } = resolveNav({
+    pendingApprovals,
+    canViewEvidenceVault,
+    canViewPlatformAdmin,
+  })
 
   async function handleSelectWorkspace(id: string) {
     try {

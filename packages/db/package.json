@@ -30,6 +30,6 @@
     "typescript": "^6.0.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
-    "dotenv": "16.6.1"
+    "dotenv": "17.4.2"
   }
 }

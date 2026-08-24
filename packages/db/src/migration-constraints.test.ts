@@ -25,4 +25,17 @@ describe("forward database constraints", () => {
     expect(sql).toContain('CREATE UNIQUE INDEX "ScorecardShare_snapshotId_active_key"')
     expect(sql).toContain('WHERE "revokedAt" IS NULL')
   })
+
+  it("denies the production runtime role access to global admin authority tables", () => {
+    const sql = migration("../prisma/migrations/20260824090000_platform_admin_totp/migration.sql")
+
+    for (const table of [
+      "PlatformAdminElevation",
+      "PlatformAdminChallengeLimit",
+      "PlatformAdminAudit",
+    ]) {
+      expect(sql).toContain(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`)
+      expect(sql).toContain(`REVOKE ALL PRIVILEGES ON TABLE "${table}" FROM app_runtime_prod`)
+    }
+  })
 })

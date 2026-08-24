@@ -4,6 +4,7 @@ import { prisma, setWorkspaceContext, verifyApiKey } from "@lyrashield/db"
 import type { MemberRole, WorkspaceMember } from "@lyrashield/db"
 import { hasPermission, hasMinimumRole, type Permission } from "./permissions"
 import { verifyOAuthBearer, type OAuthBearerContext } from "./oauth"
+import { env } from "@lyrashield/config"
 
 export interface ApiKeyAuthContext {
   keyId: string
@@ -47,6 +48,10 @@ const READ_SCOPE_PERMISSIONS: ReadonlySet<string> = new Set([
   "agent:view",
   "report:download",
 ])
+
+const PLATFORM_ADMIN_EMAILS = new Set(env.PLATFORM_ADMIN_EMAILS.split(","))
+export const MAX_PLATFORM_ADMIN_ELEVATION_AGE_MS = 30 * 60 * 1000
+export const MAX_PLATFORM_ADMIN_READ_AGE_MS = 12 * 60 * 60 * 1000
 
 async function getBearerSession(): Promise<AuthSession | null> {
   const headerList = await headers()
@@ -124,25 +129,113 @@ export async function requireAuth(): Promise<AuthSession> {
 }
 
 /**
- * Platform-level authority is stored on the User row itself, never derived
- * from workspace membership or tenant roles. Only "PLATFORM_OPERATOR" grants
- * global (cross-workspace) administrative capabilities such as affiliate
- * program administration.
+ * Safe eligibility predicate for navigation and not-found routing. It applies
+ * the complete browser identity guard; workspace roles never grant this access.
  */
 export async function isPlatformOperator(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { platformRole: true },
-  })
-  return user?.platformRole === "PLATFORM_OPERATOR"
+  try {
+    return (await requirePlatformAdminIdentity()).userId === userId
+  } catch {
+    return false
+  }
 }
 
 export async function requirePlatformOperator(): Promise<AuthSession> {
-  const session = await requireAuth()
-  if (!(await isPlatformOperator(session.userId))) {
+  return requirePlatformAdmin()
+}
+
+/**
+ * Read-only platform administration accepts only a verified browser-cookie
+ * session from an explicitly allowlisted, TOTP-enabled platform operator.
+ * Bearer credentials remain tenant-scoped and can never cross this boundary.
+ */
+export async function requirePlatformAdminCandidateIdentity(): Promise<AuthSession> {
+  const requestHeaders = await headers()
+  if (requestHeaders.get("authorization") || !requestHeaders.get("cookie")) {
+    throw new Error("UNAUTHORIZED")
+  }
+
+  const browserSession = await auth.api.getSession({ headers: requestHeaders })
+  if (!browserSession) throw new Error("UNAUTHORIZED")
+
+  const user = await prisma.user.findUnique({
+    where: { id: browserSession.user.id },
+    select: {
+      email: true,
+      emailVerified: true,
+      platformRole: true,
+      twoFactorEnabled: true,
+    },
+  })
+  const normalizedEmail = user?.email.trim().toLowerCase()
+  if (
+    !user ||
+    !normalizedEmail ||
+    !PLATFORM_ADMIN_EMAILS.has(normalizedEmail) ||
+    !user.emailVerified ||
+    user.platformRole !== "PLATFORM_OPERATOR" ||
+    user.twoFactorEnabled !== true
+  ) {
     throw new Error("FORBIDDEN")
   }
-  return session
+
+  return {
+    userId: browserSession.user.id,
+    userEmail: browserSession.user.email,
+    userName: browserSession.user.name,
+    userImage: browserSession.user.image ?? null,
+    sessionId: browserSession.session.id,
+  }
+}
+
+/** Require a TOTP-stamped current browser session before any global read. */
+export async function requirePlatformAdminIdentity(): Promise<AuthSession> {
+  const identity = await requirePlatformAdminCandidateIdentity()
+  await requireRecentPlatformAdminTotp(identity, MAX_PLATFORM_ADMIN_READ_AGE_MS)
+  return identity
+}
+
+async function requireRecentPlatformAdminTotp(
+  identity: AuthSession,
+  maxAgeMs: number
+): Promise<void> {
+  const elevation = await prisma.session.findUnique({
+    where: { id: identity.sessionId },
+    select: { userId: true, twoFactorVerifiedAt: true },
+  })
+  if (!elevation || elevation.userId !== identity.userId || !elevation.twoFactorVerifiedAt) {
+    throw new Error("ADMIN_REAUTH_REQUIRED")
+  }
+  const ageMs = Date.now() - elevation.twoFactorVerifiedAt.getTime()
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > maxAgeMs) {
+    throw new Error("ADMIN_REAUTH_REQUIRED")
+  }
+}
+
+/**
+ * Write authorization adds a fresh server-stamped TOTP elevation to the exact
+ * browser identity check. Critical mutations also require an action-specific,
+ * one-time nonce at their database boundary.
+ *
+ * Successful Better Auth TOTP verification stamps the exact server-side
+ * session. A caller may require a shorter elevation window, but never extend
+ * the 30-minute ceiling.
+ */
+export async function requirePlatformAdmin(options?: {
+  maxElevationAgeMs?: number
+}): Promise<AuthSession> {
+  const identity = await requirePlatformAdminIdentity()
+  const maxElevationAgeMs = options?.maxElevationAgeMs ?? MAX_PLATFORM_ADMIN_ELEVATION_AGE_MS
+  if (
+    !Number.isFinite(maxElevationAgeMs) ||
+    maxElevationAgeMs <= 0 ||
+    maxElevationAgeMs > MAX_PLATFORM_ADMIN_ELEVATION_AGE_MS
+  ) {
+    throw new Error("INVALID_ADMIN_ELEVATION_WINDOW")
+  }
+  await requireRecentPlatformAdminTotp(identity, maxElevationAgeMs)
+
+  return identity
 }
 
 export async function getWorkspaceMembership(

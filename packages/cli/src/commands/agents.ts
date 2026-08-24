@@ -26,6 +26,8 @@ export async function handleAgents(_args: string[], output: Output): Promise<num
         detected,
         configured,
         strategy: agent.installStrategy,
+        supportTier: agent.supportTier,
+        verification: agent.verification,
       }
     })
   )
@@ -33,11 +35,13 @@ export async function handleAgents(_args: string[], output: Output): Promise<num
   if (output.json) {
     output.result(rows)
   } else {
-    output.log("Agent          Detected  Configured  Strategy")
+    output.log("Agent          Detected  Configured  Strategy       Support")
     for (const r of rows) {
       const d = r.detected ? "yes" : "no"
       const c = r.configured ? "yes" : "no"
-      output.log(`${r.id.padEnd(14)} ${d.padEnd(9)} ${c.padEnd(11)} ${r.strategy}`)
+      output.log(
+        `${r.id.padEnd(14)} ${d.padEnd(9)} ${c.padEnd(11)} ${r.strategy.padEnd(14)} ${r.supportTier ?? "UNRATED"}`
+      )
     }
   }
   return 0

@@ -91,6 +91,27 @@ describe("marketing SEO metadata", () => {
     expect(llms).not.toContain("`${origin}/scan`")
   })
 
+  it("publishes every llms.txt public URL as a descriptive Markdown link", () => {
+    const llms = source("../pages/llms.txt.ts")
+
+    expect(llms).toContain(
+      "const markdownLink = (label: string, url: string) => `[${label}](${url})`"
+    )
+    expect(llms).toContain("const publicLinks = [")
+    expect(llms).toContain("...publicLinks.map(({ label, url }) => markdownLink(label, url))")
+    expect(llms).toContain('markdownLink("Create a free LyraShield AI account"')
+    expect(llms).toContain('markdownLink("LyraShield AI source code on GitHub"')
+    expect(llms).not.toContain("const publicPaths = [")
+  })
+
+  it("updates llms.txt freshness only through its manual content date", () => {
+    const llms = source("../pages/llms.txt.ts")
+
+    expect(llms).toContain('const LLMS_TXT_CONTENT_DATE = "2026-08-24"')
+    expect(llms).toContain("Bump this by hand only when a section's CONTENT changes")
+    expect(llms).not.toMatch(/LLMS_TXT_CONTENT_DATE\s*=\s*new Date/)
+  })
+
   it("keeps the 100-post blog surface crawlable, attributable, and draft-gated", () => {
     const index = source("../pages/blog/[...page].astro")
     const post = source("../layouts/BlogPost.astro")
@@ -211,8 +232,10 @@ describe("marketing SEO metadata", () => {
   it("publishes the coding-agent entry in human and machine-readable discovery", () => {
     const llms = source("../pages/llms.txt.ts")
     const agents = source("../pages/agents.astro")
-    expect(llms).toContain("`Human-facing setup: ${origin}/agents")
-    expect(llms).toContain("${origin}/agents.md")
+    expect(llms).toContain(
+      '`Human-facing setup: ${markdownLink("Coding-agent security", `${origin}/agents`)}'
+    )
+    expect(llms).toContain('markdownLink("agents.md", `${origin}/agents.md`)')
     expect(agents).toContain('new URL("/agents", origin).toString()')
     expect(agents).toContain("url: `${pageUrl}#setup`")
     expect(agents).toContain("url: `${pageUrl}#clients`")
