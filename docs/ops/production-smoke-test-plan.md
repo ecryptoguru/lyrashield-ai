@@ -123,9 +123,9 @@ RATE_LIMITED` fires on rapid repeats; `503 PROVIDER_NOT_CONFIGURED` if a
 - **Annual grants monthly, not lump-sum:** a PRO annual checkout grants
   exactly **1200** minutes, not 14400 (pinned by
   `e2e/billing/checkout-flows.spec.ts`).
-- Razorpay UPI AutoPay cap: TEAM monthly (₹29,900) and all annual amounts >
-  ₹15,000 route to card/netbanking; STARTER monthly (₹2,900) may use UPI
-  AutoPay (`UPI_AUTOPAY_CAP_INR = 15000`).
+- Razorpay checkout presents the payment methods and mandate limits available
+  for the exact purchase and account. Record the hosted-checkout receipt; do
+  not claim fixed UPI/card/netbanking routing without current provider proof.
 
 **Logs/DB:** `WebhookEvent` row `provider=polar|razorpay`, unique
 `(provider, externalId)`, `processed=true`.
@@ -172,10 +172,10 @@ $15), exhaust pool + packs, run a scan that spills into overage.
   scans → `403 NO_MINUTES_REMAINING` (spend-limit variant message).
 - `POST /api/billing/spend-limit` on a non-TEAM plan → `403 PLAN_NOT_ELIGIBLE`.
 
-### 1.8 Refund reversal (14-day)
+### 1.8 Refund reversal
 
-**Steps:** refund a minute-pack order in Polar/Razorpay sandbox; let the
-`refund.created` / `payment.refunded` webhook arrive.
+**Steps:** issue an approved policy-exception refund for a minute-pack order in
+Polar/Razorpay sandbox; let the provider's `refund.created` webhook arrive.
 
 **Pass criteria:**
 
@@ -352,7 +352,7 @@ payout method + tax form on file, then `POST /affiliates/api/payouts/request`.
 
 ### 3.5 Clawback on refund
 
-**Steps:** refund the referred subscription inside the 14-day Cloud window.
+**Steps:** issue an approved policy-exception refund for the referred subscription.
 
 **Pass criteria:**
 

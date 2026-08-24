@@ -34,6 +34,18 @@ export interface RecordAgentMinutesResult {
   idempotencyKey: string
 }
 
+const MAX_TRANSACTION_ATTEMPTS = 3
+type MeterTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+function isSerializationConflict(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code: string }).code === "P2034"
+  )
+}
+
 /**
  * Record agent minutes consumed during a scan phase.
  *
@@ -54,15 +66,6 @@ export async function recordAgentMinutes(
   const phase = opts.phase ?? "default"
   const idempotencyKey = `${workspaceId}:${scanId}:${phase}`
 
-  // Idempotency check: if a record with this key exists, return early.
-  const existing = await prisma.usageRecord.findUnique({
-    where: { idempotencyKey },
-    select: { id: true, quantity: true },
-  })
-  if (existing) {
-    return { created: false, minutes: 0, idempotencyKey }
-  }
-
   if (ms <= 0) {
     return { created: false, minutes: 0, idempotencyKey }
   }
@@ -82,97 +85,146 @@ export async function recordAgentMinutes(
   const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
   const minutes = isDeep ? rawMinutes * DEEP_SCAN_MULTIPLIER : rawMinutes
 
-  try {
-    await prisma.usageRecord.create({
-      data: {
-        workspaceId,
-        kind: "agent_minutes",
-        quantity: minutes,
-        idempotencyKey,
-        cycleStart: opts.cycleStart ?? null,
-        metadata: {
-          scanId,
-          mode: opts.mode ?? null,
-          wallClockMs: ms,
-          rawMinutes,
-          multiplier: isDeep ? DEEP_SCAN_MULTIPLIER : 1,
-        },
-      },
-    })
+  for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          // Serialize all usage-record and pack-balance mutations for one
+          // workspace. Serializable transactions can still abort after waiting
+          // for this lock, so P2034 is retried below.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
 
-    // A-M05: Decrement MinutePack.remainingMinutes atomically when consumption
-    // spills into packs. The pool is consumed first; only the overflow reduces
-    // pack balances. We decrement oldest-first (FIFO) matching the draw order.
-    await decrementPackMinutes(workspaceId, minutes)
-  } catch (error) {
-    // P2002 = unique constraint violation — concurrent idempotent insert
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code: string }).code === "P2002"
-    ) {
-      logger.debug("Idempotent replay of recordAgentMinutes", { idempotencyKey })
-      return { created: false, minutes: 0, idempotencyKey }
+          const existing = await tx.usageRecord.findUnique({
+            where: { idempotencyKey },
+            select: { id: true },
+          })
+          if (existing) {
+            return { created: false, minutes: 0, idempotencyKey }
+          }
+
+          await recordMinutesAndDebitIncrementalSpillover(tx, {
+            workspaceId,
+            scanId,
+            minutes,
+            idempotencyKey,
+            cycleStart: opts.cycleStart,
+            mode: opts.mode,
+            wallClockMs: ms,
+            rawMinutes,
+            multiplier: isDeep ? DEEP_SCAN_MULTIPLIER : 1,
+          })
+
+          return { created: true, minutes, idempotencyKey }
+        },
+        { isolationLevel: "Serializable" }
+      )
+    } catch (error) {
+      if (isSerializationConflict(error) && attempt < MAX_TRANSACTION_ATTEMPTS) {
+        logger.warn("Retrying agent-minute transaction after serialization conflict", {
+          workspaceId,
+          idempotencyKey,
+          attempt,
+        })
+        continue
+      }
+
+      // P2002 remains a safe replay fallback if legacy writers do not take the
+      // workspace advisory lock.
+      if (
+        error !== null &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as { code: string }).code === "P2002"
+      ) {
+        logger.debug("Idempotent replay of recordAgentMinutes", { idempotencyKey })
+        return { created: false, minutes: 0, idempotencyKey }
+      }
+      throw error
     }
-    throw error
   }
 
-  return { created: true, minutes, idempotencyKey }
+  throw new Error("agent_minute_transaction_retry_exhausted")
 }
 
 /**
- * Decrement pack remaining minutes for a workspace, oldest-first (FIFO).
+ * Record usage and decrement its incremental pack spillover oldest-first.
  *
- * A-M05: Called after recording agent_minutes to atomically reduce pack
- * balances. Only the overflow beyond the monthly pool consumes pack minutes;
- * the caller passes the total minutes consumed this tick, and this function
- * checks how many pool minutes remain before decrementing packs.
+ * The transaction and advisory lock are owned by recordAgentMinutes. Computing
+ * both pre- and post-record spillover prevents each tick from re-debiting the
+ * cumulative spillover already reflected in MinutePack.remainingMinutes.
  */
-async function decrementPackMinutes(workspaceId: string, _minutesConsumed: number): Promise<void> {
-  // Get the current pool remaining to know how much spills into packs
-  const billingAccount = await prisma.billingAccount.findUnique({
-    where: { workspaceId },
+async function recordMinutesAndDebitIncrementalSpillover(
+  tx: MeterTransaction,
+  input: {
+    workspaceId: string
+    scanId: string
+    minutes: number
+    idempotencyKey: string
+    cycleStart?: Date
+    mode?: ScanMode
+    wallClockMs: number
+    rawMinutes: number
+    multiplier: number
+  }
+): Promise<void> {
+  const billingAccount = await tx.billingAccount.findUnique({
+    where: { workspaceId: input.workspaceId },
     select: { currentPeriodStart: true },
   })
   const cycleStart = billingAccount?.currentPeriodStart
-  if (!cycleStart) return // No cycle → can't compute pool remaining
 
-  const [grantRecords, consumeRecords] = await Promise.all([
-    prisma.usageRecord.findMany({
-      where: {
-        workspaceId,
-        kind: { in: ["pool_grant", "trial_grant"] },
-        deletedAt: null,
-        cycleStart: { gte: cycleStart },
+  const [grantRecords, priorConsumeRecords] = cycleStart
+    ? await Promise.all([
+        tx.usageRecord.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            kind: { in: ["pool_grant", "trial_grant"] },
+            deletedAt: null,
+            cycleStart: { gte: cycleStart },
+          },
+          select: { quantity: true },
+        }),
+        tx.usageRecord.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            kind: "agent_minutes",
+            deletedAt: null,
+            cycleStart: { gte: cycleStart },
+          },
+          select: { quantity: true },
+        }),
+      ])
+    : [[], []]
+
+  await tx.usageRecord.create({
+    data: {
+      workspaceId: input.workspaceId,
+      kind: "agent_minutes",
+      quantity: input.minutes,
+      idempotencyKey: input.idempotencyKey,
+      cycleStart: input.cycleStart ?? cycleStart ?? null,
+      metadata: {
+        scanId: input.scanId,
+        mode: input.mode ?? null,
+        wallClockMs: input.wallClockMs,
+        rawMinutes: input.rawMinutes,
+        multiplier: input.multiplier,
       },
-      select: { quantity: true },
-    }),
-    prisma.usageRecord.findMany({
-      where: {
-        workspaceId,
-        kind: "agent_minutes",
-        deletedAt: null,
-        cycleStart: { gte: cycleStart },
-      },
-      select: { quantity: true },
-    }),
-  ])
+    },
+  })
 
-  const poolMinutes = grantRecords.reduce((s, r) => s + r.quantity, 0)
-  const poolConsumed = consumeRecords.reduce((s, r) => s + r.quantity, 0)
+  if (!cycleStart) return
 
-  // Only the overflow beyond pool remaining consumes pack minutes.
-  // The just-recorded minutes are included in poolConsumed, so poolRemaining
-  // already reflects the post-debit state. If poolConsumed > poolMinutes,
-  // the overflow is the pack consumption.
-  const packSpillover = Math.max(0, poolConsumed - poolMinutes)
-  if (packSpillover <= 0) return
+  const poolMinutes = grantRecords.reduce((sum, record) => sum + record.quantity, 0)
+  const priorConsumed = priorConsumeRecords.reduce((sum, record) => sum + record.quantity, 0)
+  const priorSpillover = Math.max(0, priorConsumed - poolMinutes)
+  const nextSpillover = Math.max(0, priorConsumed + input.minutes - poolMinutes)
+  const incrementalSpillover = nextSpillover - priorSpillover
+  if (incrementalSpillover <= 0) return
 
-  // Decrement oldest packs first (FIFO draw order)
-  const packs = await prisma.minutePack.findMany({
+  const packs = await tx.minutePack.findMany({
     where: {
-      workspaceId,
+      workspaceId: input.workspaceId,
       deletedAt: null,
       OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       remainingMinutes: { gt: 0 },
@@ -181,14 +233,22 @@ async function decrementPackMinutes(workspaceId: string, _minutesConsumed: numbe
     select: { id: true, remainingMinutes: true },
   })
 
-  let toDecrement = packSpillover
+  let toDecrement = incrementalSpillover
   for (const pack of packs) {
     if (toDecrement <= 0) break
     const decrementAmount = Math.min(pack.remainingMinutes, toDecrement)
-    await prisma.minutePack.update({
-      where: { id: pack.id },
+    const result = await tx.minutePack.updateMany({
+      where: {
+        id: pack.id,
+        workspaceId: input.workspaceId,
+        deletedAt: null,
+        remainingMinutes: { gte: decrementAmount },
+      },
       data: { remainingMinutes: { decrement: decrementAmount } },
     })
+    if (result.count !== 1) {
+      throw new Error("minute_pack_balance_changed")
+    }
     toDecrement -= decrementAmount
   }
 }

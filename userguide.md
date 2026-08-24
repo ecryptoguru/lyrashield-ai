@@ -444,7 +444,7 @@ LyraShield Cloud offers a 14-day free trial: 100 agent-minutes, Standard and Qui
 - **Overage:** $0.15/min — Team plan opt-in with a configurable spend limit.
 - **Deep/Custom scans:** 3× agent-minute multiplier, PRO+ only.
 - **Grace period:** 15 min free grace if minutes run out mid-scan.
-- **Refunds:** 14-day money-back on Cloud subscriptions.
+- **Refunds:** Cloud subscriptions are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.
 - **Billing page:** manage subscription, buy minute packs, view usage, and set a spend limit (Team).
 
 ### 20.6 Affiliate program
@@ -494,7 +494,7 @@ Pricing:
 
 - **Individual:** $199 launch / $299 regular — 3 machines.
 - **Team:** $99/seat + $59/seat/yr renewal, or $149/seat/yr subscription with sync.
-- **Refunds:** none on Local licenses.
+- **Refunds:** Local licenses are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.
 
 ### License delivery and retrieval
 

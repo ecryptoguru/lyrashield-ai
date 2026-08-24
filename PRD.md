@@ -219,6 +219,8 @@ Minute packs: 100/$15, 250/$30, 500/$50; 180-day validity. Team overage: $0.15/m
 
 Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 minutes of non-bankable mid-scan grace; a scan starting at zero is rejected.
 
+Cloud subscriptions, Local licenses, and minute packs are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error. Provider-confirmed reversals still revoke entitlements and claw back related commissions.
+
 ### Local pricing
 
 - Individual launch: $199; regular: $299; up to three machines.
@@ -226,7 +228,7 @@ Usage draw order: current monthly pool, oldest valid pack, then allowed overage.
 - Update renewal: $59/seat/year.
 - Cloud Sync add-on: $49/seat/year.
 - 10% team discount at 10+ seats.
-- Local licenses are non-refundable except chargeback handling.
+- Local licenses follow the product-wide non-refundable policy and narrow exceptions above.
 
 ### Affiliate terms
 

@@ -259,7 +259,7 @@ Primary locations:
 - `packages/billing/src/entitlements.ts`: scan/target admission.
 - `apps/web/src/app/billing`: checkout, webhook, portal, UI.
 
-Billing webhook inserts `WebhookEvent` before synchronous Track A/B/C processing. Money uses `Decimal(19,4)`, never Float. Usage, pack purchase, subscription, refund, commission, and payout operations are idempotent.
+Billing webhook inserts `WebhookEvent` before synchronous Track A/B/C processing. Money uses `Decimal(19,4)`, never Float. Usage, pack purchase, subscription, refund, commission, and payout operations are idempotent. Agent-minute recording and FIFO pack debit share one workspace advisory-locked serializable transaction; each tick debits only its incremental spill beyond the monthly pool, and conditional pack updates prevent negative balances.
 
 ### Licenses and Local/Desktop
 
