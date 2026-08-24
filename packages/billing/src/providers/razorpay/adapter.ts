@@ -13,10 +13,11 @@
 
 import { logger } from "@lyrashield/logger"
 import type { RazorpayWebhookEvent } from "./webhooks"
-import { syncSubscription, type SubscriptionStatus, type BillingInterval } from "../../sync"
+import { syncSubscription, type SubscriptionStatus } from "../../sync"
 import { creditTopUp } from "../../usage/packs"
 import { reverseRefund } from "../../usage/refund"
-import { MINUTE_PACK_MAP, type CloudPlanId, type PackId } from "@lyrashield/pricing"
+import { MINUTE_PACK_MAP } from "@lyrashield/pricing"
+import { resolveRazorpayCatalogEvent } from "../../provider-catalog-validation"
 
 export interface RazorpayAdapterResult {
   handled: boolean
@@ -35,6 +36,7 @@ export async function processRazorpayEvent(
       case "payment_link.paid":
         // Local license and affiliate effects run in their dedicated required
         // tracks. Billing records receipt without granting cloud entitlement.
+        resolveRazorpayCatalogEvent(event.event, event as unknown as Record<string, unknown>)
         return { handled: true, action: "payment_link.paid.received", workspaceId: null }
 
       case "payment.captured": {
@@ -45,19 +47,21 @@ export async function processRazorpayEvent(
 
         const notes = payment.notes ?? {}
         const workspaceId = notes.workspaceId ?? null
-        const packId = notes.packId as PackId | undefined
 
         if (!workspaceId) {
           logger.warn("Razorpay payment.captured without workspaceId", { paymentId: payment.id })
           return { handled: false, action: "payment.captured.no_workspace", workspaceId: null }
         }
 
-        if (!packId || !MINUTE_PACK_MAP[packId]) {
-          logger.warn("Razorpay payment.captured with unknown packId", { packId })
-          return { handled: false, action: "payment.captured.unknown_pack", workspaceId }
+        const catalog = resolveRazorpayCatalogEvent(
+          event.event,
+          event as unknown as Record<string, unknown>
+        )
+        if (!catalog) {
+          return { handled: false, action: "payment.captured.non_pack", workspaceId }
         }
-
-        const pack = MINUTE_PACK_MAP[packId]
+        if (catalog.kind !== "pack") throw new Error("razorpay_pack_catalog_mismatch")
+        const pack = MINUTE_PACK_MAP[catalog.packId]
         await creditTopUp(
           workspaceId,
           "razorpay",
@@ -89,9 +93,12 @@ export async function processRazorpayEvent(
           return { handled: false, action: "subscription.no_workspace", workspaceId: null }
         }
 
-        const planId = (notes.plan ?? "STARTER") as CloudPlanId
+        const catalog = resolveRazorpayCatalogEvent(
+          event.event,
+          event as unknown as Record<string, unknown>
+        )
+        if (catalog?.kind !== "plan") throw new Error("razorpay_subscription_catalog_mismatch")
         const status = mapRazorpaySubscriptionStatus(event.event, subscription.status)
-        const interval = (notes.interval ?? "monthly") as BillingInterval
 
         const periodStart = subscription.current_start
           ? new Date(subscription.current_start * 1000)
@@ -107,9 +114,9 @@ export async function processRazorpayEvent(
           workspaceId,
           provider: "razorpay",
           externalId: subscription.id,
-          plan: planId,
+          plan: catalog.plan,
           status,
-          interval,
+          interval: catalog.interval,
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           canceledAt,

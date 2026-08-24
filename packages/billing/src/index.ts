@@ -107,6 +107,21 @@ export {
 } from "./providers/polar/webhooks"
 export { processPolarEvent, type PolarAdapterResult } from "./providers/polar/adapter"
 export { resolveProviderId, resolveProviderKey } from "./provider-ids"
+export {
+  billingQuoteNotes,
+  signBillingQuote,
+  verifyBillingQuote,
+  BillingQuoteConfigError,
+  type BillingQuote,
+  type QuoteKind,
+} from "./provider-quote"
+export {
+  assertProviderCatalogEvent,
+  resolvePolarCatalogEvent,
+  resolveRazorpayCatalogEvent,
+  ProviderCatalogConfigError,
+  type CatalogResolution,
+} from "./provider-catalog-validation"
 
 // Razorpay provider
 export {

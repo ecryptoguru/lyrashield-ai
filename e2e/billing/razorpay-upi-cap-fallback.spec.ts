@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { getSystemPrisma } from "@lyrashield/db"
-import { cancelRazorpaySubscription } from "@lyrashield/billing"
+import { billingQuoteNotes, cancelRazorpaySubscription } from "@lyrashield/billing"
 import { expectViewerBillingDenied, provisionBillingActors, type BillingActors } from "./fixtures"
 import {
   assertSingleProcessedEffect,
@@ -18,10 +18,32 @@ const indiaHeaders = { "x-forwarded-for": "192.0.2.44", "cf-ipcountry": "IN" }
 const plans = ["STARTER", "PRO", "TEAM"] as const
 const intervals = ["monthly", "annual"] as const
 const packs = [
-  ["pack_100", 100],
-  ["pack_250", 250],
-  ["pack_500", 500],
+  ["pack_100", 100, 150_000],
+  ["pack_250", 250, 300_000],
+  ["pack_500", 500, 500_000],
 ] as const
+
+function razorpayPlanId(key: string): string {
+  const id = (JSON.parse(process.env.RAZORPAY_PLAN_IDS ?? "{}") as Record<string, string>)[key]
+  if (!id) throw new Error(`RAZORPAY_PLAN_IDS is missing ${key}`)
+  return id
+}
+
+function signedQuoteNotes(
+  kind: "pack" | "local",
+  workspaceId: string,
+  catalogKey: string,
+  amountMinor: number
+) {
+  return billingQuoteNotes({
+    provider: "razorpay",
+    kind,
+    workspaceId,
+    catalogKey,
+    amountMinor,
+    currency: "INR",
+  })
+}
 
 test.describe("Razorpay Test Mode billing proof", () => {
   test.skip(!enabled, "requires an isolated Razorpay Test Mode billing environment")
@@ -93,6 +115,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
         subscription: {
           entity: {
             id: subscriptionId,
+            plan_id: razorpayPlanId("team_annual"),
             status: "active",
             current_start: now,
             current_end: now + 365 * 86_400,
@@ -102,7 +125,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
         payment: {
           entity: {
             id: `pay_subscription_${Date.now()}`,
-            amount: 59_900_00,
+            amount: 26_900_000,
             currency: "INR",
             notes,
           },
@@ -110,7 +133,15 @@ test.describe("Razorpay Test Mode billing proof", () => {
       },
     }
     await expect(await postRazorpayWebhook(actors.ownerRequest, eventId, charged)).toBeOK()
-    await replayOneHundred(() => postRazorpayWebhook(actors.ownerRequest, eventId, charged))
+    await replayOneHundred(() => postRazorpayWebhook(actors.ownerRequest, eventId, charged), {
+      billingAccount: () =>
+        prisma.billingAccount.count({ where: { workspaceId: actors.workspaceId } }),
+      subscriptionAudit: () =>
+        prisma.auditLog.count({
+          where: { workspaceId: actors.workspaceId, action: "billing.subscription_synced" },
+        }),
+      commission: () => prisma.commission.count(),
+    })
     await assertSingleProcessedEffect({
       provider: "razorpay",
       eventId,
@@ -134,6 +165,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
           subscription: {
             entity: {
               id: subscriptionId,
+              plan_id: razorpayPlanId("team_annual"),
               status: "cancelled",
               ended_at: Math.floor(Date.now() / 1000),
               notes,
@@ -152,7 +184,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
     ).toMatchObject({ status: "canceled" })
   })
 
-  for (const [packId, minutes] of packs) {
+  for (const [packId, minutes, amountMinor] of packs) {
     test(`${packId} hosted link and signed capture create no commission`, async () => {
       const checkout = await actors.ownerRequest.post("/api/billing/topup", {
         headers: indiaHeaders,
@@ -174,16 +206,26 @@ test.describe("Razorpay Test Mode billing proof", () => {
           payment: {
             entity: {
               id: paymentId,
-              amount: 1_500_00,
+              amount: amountMinor,
               currency: "INR",
-              notes: { workspaceId: actors.workspaceId, packId },
+              notes: {
+                workspaceId: actors.workspaceId,
+                packId,
+                ...signedQuoteNotes("pack", actors.workspaceId, packId, amountMinor),
+              },
             },
           },
         },
       }
       await expect(await postRazorpayWebhook(actors.ownerRequest, eventId, captured)).toBeOK()
       if (packId === "pack_100") {
-        await replayOneHundred(() => postRazorpayWebhook(actors.ownerRequest, eventId, captured))
+        await replayOneHundred(() => postRazorpayWebhook(actors.ownerRequest, eventId, captured), {
+          minutePack: () =>
+            prisma.minutePack.count({
+              where: { workspaceId: actors.workspaceId, externalId: paymentId },
+            }),
+          commission: () => prisma.commission.count(),
+        })
       }
       await assertSingleProcessedEffect({ provider: "razorpay", eventId, tracks: ["billing"] })
       expect(
@@ -209,7 +251,11 @@ test.describe("Razorpay Test Mode billing proof", () => {
             id: paymentId,
             amount: 1_500_00,
             currency: "INR",
-            notes: { workspaceId: actors.workspaceId, packId: "pack_100" },
+            notes: {
+              workspaceId: actors.workspaceId,
+              packId: "pack_100",
+              ...signedQuoteNotes("pack", actors.workspaceId, "pack_100", 150_000),
+            },
           },
         },
       },
@@ -234,7 +280,16 @@ test.describe("Razorpay Test Mode billing proof", () => {
       },
     }
     await expect(await postRazorpayWebhook(actors.ownerRequest, refundEventId, refund)).toBeOK()
-    await replayOneHundred(() => postRazorpayWebhook(actors.ownerRequest, refundEventId, refund))
+    await replayOneHundred(() => postRazorpayWebhook(actors.ownerRequest, refundEventId, refund), {
+      minutePack: () =>
+        prisma.minutePack.count({
+          where: { workspaceId: actors.workspaceId, externalId: paymentId },
+        }),
+      refundAudit: () =>
+        prisma.auditLog.count({
+          where: { workspaceId: actors.workspaceId, action: "billing.refund_reversed" },
+        }),
+    })
     await assertSingleProcessedEffect({
       provider: "razorpay",
       eventId: refundEventId,
@@ -268,13 +323,20 @@ test.describe("Razorpay Test Mode billing proof", () => {
 
     const paymentId = `pay_local_${Date.now()}`
     const eventId = `razorpay-local-${Date.now()}`
+    const quoteWorkspaceId = `local-proof-${Date.now()}`
+    const localNotes = {
+      workspaceId: actors.workspaceId,
+      productId: "individual_launch",
+      quoteWorkspaceId,
+      ...signedQuoteNotes("local", quoteWorkspaceId, "individual_launch", 1_990_000),
+    }
     await expect(
       await postRazorpayWebhook(actors.ownerRequest, eventId, {
         event: "payment_link.paid",
         created_at: Math.floor(Date.now() / 1000),
         payload: {
           payment_link: {
-            entity: { id: `plink_${Date.now()}`, notes: { productId: "individual_launch" } },
+            entity: { id: `plink_${Date.now()}`, notes: localNotes },
           },
           payment: {
             entity: {
@@ -282,7 +344,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
               amount: 19_900_00,
               currency: "INR",
               email: actors.ownerEmail,
-              notes: { workspaceId: actors.workspaceId, productId: "individual_launch" },
+              notes: localNotes,
             },
           },
         },

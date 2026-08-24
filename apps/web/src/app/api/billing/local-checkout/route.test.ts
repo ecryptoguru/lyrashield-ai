@@ -39,6 +39,7 @@ vi.mock("@lyrashield/billing", () => ({
   resolveProviderId: (raw: string, key: string) => JSON.parse(raw)[key] ?? null,
   createPolarOneTimeCheckout: mocks.createPolar,
   createRazorpayPaymentLink: mocks.createRazorpay,
+  billingQuoteNotes: () => ({ quotedAmountMinor: "1990000", quoteSignature: "signed-quote" }),
 }))
 
 import { POST } from "./route"
@@ -105,6 +106,11 @@ describe("POST /api/billing/local-checkout", () => {
         amount: 1_990_000,
         partialPayment: false,
         referenceId: expect.stringMatching(/^local_/),
+        notes: expect.objectContaining({
+          quoteWorkspaceId: expect.stringMatching(/^local_/),
+          quotedAmountMinor: "1990000",
+          quoteSignature: "signed-quote",
+        }),
       })
     )
   })

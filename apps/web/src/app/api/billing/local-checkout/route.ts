@@ -5,6 +5,7 @@ import {
   createRazorpayPaymentLink,
   resolveProvider,
   resolveProviderId,
+  billingQuoteNotes,
 } from "@lyrashield/billing"
 import { parseAffiliateCookie, resolveAttribution } from "@lyrashield/affiliate"
 import { env } from "@lyrashield/config"
@@ -54,10 +55,19 @@ export async function POST(request: Request) {
       return apiSuccess({ provider, url }, 200)
     }
 
+    const amountMinor = Math.round(LOCAL_SKU_MAP[LOCAL_SKU].priceInr! * 100)
+    const quoteNotes = billingQuoteNotes({
+      provider: "razorpay",
+      kind: "local",
+      workspaceId: referenceId,
+      catalogKey: LOCAL_SKU,
+      amountMinor,
+      currency: "INR",
+    })
     const result = await createRazorpayPaymentLink({
-      amount: LOCAL_SKU_MAP[LOCAL_SKU].priceInr! * 100,
+      amount: amountMinor,
       description: "LyraShield AI Local — Individual Launch",
-      notes: metadata,
+      notes: { ...metadata, quoteWorkspaceId: referenceId, ...quoteNotes },
       callbackUrl: successUrl,
       referenceId,
       partialPayment: false,

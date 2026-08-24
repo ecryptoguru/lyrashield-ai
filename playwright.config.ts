@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test"
 import { existsSync } from "node:fs"
+import { assertSafeBillingE2EBaseUrl } from "./e2e/billing/base-url-safety"
 
 if (existsSync(".env")) process.loadEnvFile(".env")
 
@@ -10,12 +11,13 @@ const e2eSystemDatabaseUrl =
 const configuredBaseUrl = process.env.LYRASHIELD_E2E_BASE_URL?.trim()
 const baseURL = configuredBaseUrl?.replace(/\/$/, "") || "http://127.0.0.1:3100"
 const usesRemoteServer = Boolean(configuredBaseUrl)
+const accessHeaderConfigured = Boolean(
+  process.env.BILLING_E2E_ACCESS_HEADER_NAME?.trim() &&
+  process.env.BILLING_E2E_ACCESS_HEADER_VALUE?.trim()
+)
 
 if (usesRemoteServer) {
-  const hostname = new URL(baseURL).hostname
-  if (hostname === "app.lyrashieldai.com" || hostname === "lyrashieldai.com") {
-    throw new Error("Playwright billing proof must never target a production LyraShield AI origin")
-  }
+  assertSafeBillingE2EBaseUrl(baseURL, process.env.BILLING_E2E_EXPECTED_BASE_HOST, true)
   if (process.env.BILLING_E2E_ALLOW_REMOTE !== "1") {
     throw new Error("Set BILLING_E2E_ALLOW_REMOTE=1 to target an isolated remote staging origin")
   }
@@ -28,7 +30,9 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL,
-    trace: "retain-on-failure",
+    // Traces persist request headers. Disable them whenever an access-gateway
+    // credential is present so the credential cannot enter a trace artifact.
+    trace: accessHeaderConfigured ? "off" : "retain-on-failure",
     screenshot: "only-on-failure",
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }

@@ -11,10 +11,16 @@ const prisma = getSystemPrisma()
 const plans = ["STARTER", "PRO", "TEAM"] as const
 const intervals = ["monthly", "annual"] as const
 const packs = [
-  ["pack_100", 100],
-  ["pack_250", 250],
-  ["pack_500", 500],
+  ["pack_100", 100, 1500],
+  ["pack_250", 250, 3000],
+  ["pack_500", 500, 5000],
 ] as const
+
+function polarProductId(key: string): string {
+  const id = (JSON.parse(process.env.POLAR_PRODUCT_IDS ?? "{}") as Record<string, string>)[key]
+  if (!id) throw new Error(`POLAR_PRODUCT_IDS is missing ${key}`)
+  return id
+}
 
 test.describe("Polar Sandbox billing proof", () => {
   test.skip(!enabled, "requires an isolated Polar Sandbox billing environment")
@@ -79,6 +85,7 @@ test.describe("Polar Sandbox billing proof", () => {
     const activeEventId = `polar-active-${Date.now()}`
     const data = {
       id: subscriptionId,
+      product_id: polarProductId("pro_monthly"),
       status: "active",
       current_period_start: new Date().toISOString(),
       current_period_end: new Date(Date.now() + 30 * 86_400_000).toISOString(),
@@ -86,7 +93,14 @@ test.describe("Polar Sandbox billing proof", () => {
     }
     const active = { type: "subscription.active", data }
     await expect(await postPolarWebhook(actors.ownerRequest, activeEventId, active)).toBeOK()
-    await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, activeEventId, active))
+    await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, activeEventId, active), {
+      billingAccount: () =>
+        prisma.billingAccount.count({ where: { workspaceId: actors.workspaceId } }),
+      subscriptionAudit: () =>
+        prisma.auditLog.count({
+          where: { workspaceId: actors.workspaceId, action: "billing.subscription_synced" },
+        }),
+    })
     await assertSingleProcessedEffect({
       provider: "polar",
       eventId: activeEventId,
@@ -118,7 +132,7 @@ test.describe("Polar Sandbox billing proof", () => {
     ).toMatchObject({ status: "canceled" })
   })
 
-  for (const [packId, minutes] of packs) {
+  for (const [packId, minutes, amountMinor] of packs) {
     test(`${packId} checkout and signed credit create no commission`, async () => {
       const checkout = await actors.ownerRequest.post("/api/billing/topup", {
         data: { workspaceId: actors.workspaceId, pack: packId },
@@ -131,17 +145,25 @@ test.describe("Polar Sandbox billing proof", () => {
         type: "order.paid",
         data: {
           id: orderId,
+          product_id: polarProductId(packId),
           currency: "USD",
-          total_amount: 1500,
+          subtotal_amount: amountMinor,
+          total_amount: amountMinor,
           discount_amount: 0,
           tax_amount: 0,
-          net_amount: 1500,
+          net_amount: amountMinor,
           metadata: { workspaceId: actors.workspaceId, packId },
         },
       }
       await expect(await postPolarWebhook(actors.ownerRequest, eventId, event)).toBeOK()
       if (packId === "pack_100") {
-        await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, eventId, event))
+        await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, eventId, event), {
+          minutePack: () =>
+            prisma.minutePack.count({
+              where: { workspaceId: actors.workspaceId, externalId: orderId },
+            }),
+          commission: () => prisma.commission.count(),
+        })
       }
       await assertSingleProcessedEffect({ provider: "polar", eventId, tracks: ["billing"] })
       expect(
@@ -162,17 +184,20 @@ test.describe("Polar Sandbox billing proof", () => {
       type: "order.paid",
       data: {
         id: orderId,
+        product_id: polarProductId("pro_monthly"),
         customer_id: `customer-${Date.now()}`,
         customer_email: actors.ownerEmail,
         currency: "USD",
-        total_amount: 4900,
+        subtotal_amount: 9900,
+        total_amount: 9900,
         discount_amount: 0,
         tax_amount: 0,
-        net_amount: 4900,
+        net_amount: 9900,
         metadata: {
           workspaceId: actors.workspaceId,
           plan: "PRO",
           planId: "PRO",
+          interval: "monthly",
           subscriptionId: `polar-affiliate-sub-${Date.now()}`,
           isFirstPayment: true,
           affiliate_id: affiliateId,
@@ -180,7 +205,10 @@ test.describe("Polar Sandbox billing proof", () => {
       },
     }
     await expect(await postPolarWebhook(actors.ownerRequest, paidEventId, event)).toBeOK()
-    await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, paidEventId, event))
+    await replayOneHundred(() => postPolarWebhook(actors.ownerRequest, paidEventId, event), {
+      conversion: () => prisma.conversion.count({ where: { externalId: orderId } }),
+      commission: () => prisma.commission.count({ where: { affiliateId } }),
+    })
     await assertSingleProcessedEffect({
       provider: "polar",
       eventId: paidEventId,
@@ -198,7 +226,7 @@ test.describe("Polar Sandbox billing proof", () => {
         data: {
           id: refundEventId,
           order_id: orderId,
-          amount: 4900,
+          amount: 9900,
           currency: "USD",
           metadata: { workspaceId: actors.workspaceId },
         },
@@ -241,8 +269,10 @@ test.describe("Polar Sandbox billing proof", () => {
         data: {
           id: orderId,
           product_id: providerProductId,
+          seats: 1,
           customer_email: actors.ownerEmail,
           currency: "USD",
+          subtotal_amount: 19900,
           total_amount: 19900,
           discount_amount: 0,
           tax_amount: 0,

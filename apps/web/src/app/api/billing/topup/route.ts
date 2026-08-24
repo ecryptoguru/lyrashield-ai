@@ -7,6 +7,7 @@ import {
   createRazorpayPaymentLink,
   resolveProviderId,
   MINUTE_PACK_MAP,
+  billingQuoteNotes,
   type PackId,
 } from "@lyrashield/billing"
 import { apiError, apiSuccess } from "@/lib/api-response"
@@ -98,11 +99,19 @@ export async function POST(request: Request) {
       // Amount in paise (1 INR = 100 paise)
       // A-L02: Use configurable USD→INR rate instead of hardcoded 83
       const usdInrRate = env.BILLING_USD_INR_RATE
-      const amountInr = pack.priceUsd * usdInrRate * 100
+      const amountInr = Math.round(pack.priceUsd * usdInrRate * 100)
+      const quoteNotes = billingQuoteNotes({
+        provider: "razorpay",
+        kind: "pack",
+        workspaceId,
+        catalogKey: packId,
+        amountMinor: amountInr,
+        currency: "INR",
+      })
       const result = await createRazorpayPaymentLink({
-        amount: Math.round(amountInr),
+        amount: amountInr,
         description: pack.name,
-        notes: metadata,
+        notes: { ...metadata, ...quoteNotes },
         callbackUrl: successUrl,
       })
 

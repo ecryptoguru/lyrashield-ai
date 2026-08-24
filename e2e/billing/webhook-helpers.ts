@@ -68,8 +68,20 @@ export async function assertSingleProcessedEffect(params: {
 }
 
 export async function replayOneHundred(
-  post: () => Promise<Awaited<ReturnType<APIRequestContext["post"]>>>
+  post: () => Promise<Awaited<ReturnType<APIRequestContext["post"]>>>,
+  downstreamCounts: Record<string, () => Promise<number>>
 ): Promise<void> {
+  const before = Object.fromEntries(
+    await Promise.all(
+      Object.entries(downstreamCounts).map(async ([name, count]) => [name, await count()])
+    )
+  )
   const responses = await Promise.all(Array.from({ length: 100 }, post))
   for (const response of responses) await expect(response).toBeOK()
+  const after = Object.fromEntries(
+    await Promise.all(
+      Object.entries(downstreamCounts).map(async ([name, count]) => [name, await count()])
+    )
+  )
+  expect(after).toEqual(before)
 }

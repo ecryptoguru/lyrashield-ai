@@ -162,6 +162,7 @@ describe("marketing SEO metadata", () => {
       expect(redirects).toContain(`${pathname} ${target} 301`)
       expect(middleware).toContain(`${JSON.stringify(pathname)}: ${JSON.stringify(target)}`)
     }
+    expect(middleware).toContain("status: 301")
   })
 
   it("captures privacy-bounded PostHog page lifecycle events without query or fragment data", () => {

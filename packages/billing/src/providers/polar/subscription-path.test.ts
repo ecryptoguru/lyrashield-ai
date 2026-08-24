@@ -8,6 +8,9 @@ vi.mock("../../sync", () => ({
 vi.mock("../../usage/packs", () => ({ creditTopUp: vi.fn() }))
 vi.mock("../../usage/refund", () => ({ reverseRefund: vi.fn() }))
 vi.mock("@lyrashield/pricing", () => ({ MINUTE_PACK_MAP: {} }))
+vi.mock("../../provider-catalog-validation", () => ({
+  resolvePolarCatalogEvent: () => ({ kind: "plan", plan: "PRO", interval: "annual" }),
+}))
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))

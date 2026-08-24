@@ -1,6 +1,7 @@
 import type { APIRequestContext, Browser, BrowserContext } from "@playwright/test"
 import { expect, request as playwrightRequest } from "@playwright/test"
 import { deleteUserAccount, getSystemPrisma } from "@lyrashield/db"
+import { assertSafeBillingE2EBaseUrl } from "./base-url-safety"
 
 const DISPOSABLE_CONFIRMATION = "DELETE DISPOSABLE BILLING DATA"
 type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>
@@ -22,9 +23,8 @@ export interface BillingActors {
 
 function requireSafeBaseUrl(baseURL: string): void {
   const url = new URL(baseURL)
-  if (url.hostname === "app.lyrashieldai.com" || url.hostname === "lyrashieldai.com") {
-    throw new Error("Billing E2E fixtures refuse to target a production LyraShield AI origin")
-  }
+  const isRemote = url.hostname !== "127.0.0.1" && url.hostname !== "localhost"
+  assertSafeBillingE2EBaseUrl(baseURL, process.env.BILLING_E2E_EXPECTED_BASE_HOST, isRemote)
 }
 
 function remoteAccessHeaders(): Record<string, string> {

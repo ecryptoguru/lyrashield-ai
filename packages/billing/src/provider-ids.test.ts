@@ -19,4 +19,22 @@ describe("resolveProviderId", () => {
     expect(resolveProviderKey(raw, "unknown")).toBeNull()
     expect(resolveProviderKey("not-json", "prod_pack")).toBeNull()
   })
+
+  it("keeps the first configured ID current while resolving immutable legacy IDs", () => {
+    const raw = JSON.stringify({ starter_monthly: ["prod_current", "prod_legacy"] })
+
+    expect(resolveProviderId(raw, "starter_monthly")).toBe("prod_current")
+    expect(resolveProviderKey(raw, "prod_current")).toBe("starter_monthly")
+    expect(resolveProviderKey(raw, "prod_legacy")).toBe("starter_monthly")
+  })
+
+  it("fails closed when a legacy-ID array is empty or contains malformed entries", () => {
+    expect(resolveProviderId(JSON.stringify({ starter_monthly: [] }), "starter_monthly")).toBeNull()
+    expect(
+      resolveProviderId(JSON.stringify({ starter_monthly: ["prod_current", 7] }), "starter_monthly")
+    ).toBeNull()
+    expect(
+      resolveProviderKey(JSON.stringify({ starter_monthly: ["prod_current", 7] }), "prod_current")
+    ).toBeNull()
+  })
 })

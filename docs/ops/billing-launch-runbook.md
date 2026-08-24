@@ -42,6 +42,13 @@ Required protected-environment configuration:
 - Secrets: `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`,
   `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET`.
 
+Catalog-map values accept either a single provider ID or a current-first array
+such as `{"pro_monthly":["current-id","legacy-id"]}`. New checkouts use the
+first ID. Retain immutable legacy IDs for as long as an existing subscription,
+pending checkout, delayed webhook, refund, or reconciliation record can refer
+to them. A missing or malformed map is a retryable server configuration failure,
+not a malformed-provider-payload response.
+
 Do not mix Sandbox/Test values with production catalog IDs or webhook endpoints.
 Changing `POLAR_ENVIRONMENT` without rotating the whole Polar credential and
 catalog set fails review even when checkout admission is off.
@@ -80,6 +87,20 @@ ambiguous payout.
 For each enabled purchase rail, retain signed request/event identifiers,
 exactly one `WebhookEvent`, required track outcomes, entitlement or license
 effect, GST split where applicable, commission outcome, and 100 replay results.
+Entitlement-bearing events must also prove that the provider-owned product or
+plan ID resolves through the configured catalog map. Polar one-time packs and
+Local purchases use exact pre-discount/pre-tax `subtotal_amount`; recurring plan
+events use their immutable provider product ID and matching plan metadata so a
+legitimate discount, tax, proration, or legacy price does not fail fulfillment.
+Razorpay pack and Local Payment Links carry an HMAC-protected server quote over
+provider, purchase kind, workspace/reference, catalog key, integer minor-unit
+amount, and currency. Fulfillment requires a valid quote and exact paid amount,
+so a later FX/catalog change cannot upgrade or reject a pending purchase.
+`payment_link.paid` validates but never credits a minute pack; the independently
+signed `payment.captured` event is the sole pack-credit authority. Razorpay
+subscription renewals use immutable plan ID plus matching plan metadata and do
+not compare against today's catalog price. Signed metadata without the provider
+ID or server-origin quote required for its purchase kind is never authority.
 For RazorpayX, retain allowlisted-egress proof, idempotency response, provider
 state transitions, reconciliation, and operator acknowledgement. Test evidence
 does not authorize live charges or payouts.
@@ -100,12 +121,14 @@ LyraShield AI origins and will not mutate until all of the following agree:
 - `BILLING_E2E_DISPOSABLE_CONFIRM="DELETE DISPOSABLE BILLING DATA"`;
 - `BILLING_E2E_EXPECTED_DATABASE` equals PostgreSQL `current_database()`;
 - `BILLING_E2E_EXPECTED_DATABASE_HOST` equals the host in both database URLs;
+- `BILLING_E2E_EXPECTED_BASE_HOST` exactly equals the browser origin host;
 - remote origins additionally set `LYRASHIELD_E2E_BASE_URL` and
   `BILLING_E2E_ALLOW_REMOTE=1`.
 
 Use `BILLING_E2E_ACCESS_HEADER_NAME` and `BILLING_E2E_ACCESS_HEADER_VALUE` only
 for the restricted staging access gateway. The header is applied in memory and
-is not persisted in browser storage state. The fixture deletes the VIEWER first
+is not persisted in browser storage state; Playwright trace capture is disabled
+while it is configured because traces can persist request headers. The fixture deletes the VIEWER first
 and then uses the RLS-safe account-deletion path to remove the OWNER and its
 workspace. License tests separately delete their exact issued license because
 license workspace deletion intentionally uses `SET NULL`.

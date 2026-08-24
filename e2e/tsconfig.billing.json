@@ -7,5 +7,5 @@
     },
     "typeRoots": ["../node_modules/.pnpm/node_modules/@types"]
   },
-  "include": ["billing/fixtures.ts", "billing/webhook-helpers.ts", "billing/*.spec.ts"]
+  "include": ["billing/*.ts"]
 }
