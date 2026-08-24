@@ -26,6 +26,7 @@ env:
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
   REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}
+  PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
 
 jobs:
   build:
@@ -630,6 +631,7 @@ jobs:
               "NEXT_PUBLIC_APP_URL=${{ env.APP_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
+              "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
@@ -688,6 +690,7 @@ jobs:
               "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
+              "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \

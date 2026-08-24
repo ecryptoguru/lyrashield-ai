@@ -127,6 +127,12 @@ describe("worker Docker runtime", () => {
     expect(engineContractVerifier).toContain("uv run lyrashield --help")
     expect(engineContractVerifier).toContain('corepack pnpm exec vitest run "${contract_tests[@]}"')
     expect(deployWorkflow).toContain("Verify pushed worker image")
+    expect(
+      deployWorkflow.match(/"PLATFORM_ADMIN_EMAILS=\$\{\{ env\.PLATFORM_ADMIN_EMAILS \}\}"/g) ?? []
+    ).toHaveLength(2)
+    expect(ciWorkflow).toContain(
+      'PLATFORM_ADMIN_EMAILS: "ecryptoguru@gmail.com,ankit@lyrashieldai.com"'
+    )
     expect(deployWorkflow).toContain("@${{ steps.build-worker.outputs.digest }}")
     expect(deployWorkflow).toContain("tags: ${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}")
     expect(deployWorkflow).not.toContain("${{ env.WORKER_IMAGE }}:latest")
