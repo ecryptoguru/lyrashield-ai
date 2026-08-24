@@ -4,6 +4,7 @@ import {
   MANAGED_REDIS_DRAIN_DELAY_SECONDS,
   MANAGED_REDIS_STALLED_INTERVAL_MS,
   RECONCILIATION_INTERVAL_MS,
+  advanceReconciliationTimestamp,
   assertWorkerStartupProvenance,
   clearWorkerActive,
   markWorkerActive,
@@ -80,6 +81,14 @@ describe("worker readiness lifecycle", () => {
     expect(baselineIdleCommandsPerWorker).toBe(47_520)
     expect(baselineIdleCommandsPerWorker * 2).toBeLessThan(100_000)
     expect(idleReconciliationsPerWorker).toBe(720)
+  })
+
+  it("keeps the reconciliation timestamp monotonic when ticks finish out of order", () => {
+    const olderTickMs = Date.parse("2026-07-18T12:00:00Z")
+    const newerTickMs = Date.parse("2026-07-18T12:05:00Z")
+    const afterNewerTick = advanceReconciliationTimestamp(olderTickMs, newerTickMs)
+
+    expect(advanceReconciliationTimestamp(afterNewerTick, olderTickMs)).toBe(newerTickMs)
   })
 
   it("publishes a root-readable marker while a scan job is active", async () => {

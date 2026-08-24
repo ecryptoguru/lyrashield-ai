@@ -53,6 +53,10 @@ export const RECONCILIATION_INTERVAL_MS = 300_000
 export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
 export const MANAGED_REDIS_STALLED_INTERVAL_MS = 60_000
 
+export function advanceReconciliationTimestamp(currentMs: number, completedTickMs: number): number {
+  return Math.max(currentMs, completedTickMs)
+}
+
 // Sentry is optional and a no-op unless SENTRY_DSN is set. Dynamically imported
 // so the dependency is only loaded when configured.
 async function initSentry(): Promise<void> {
@@ -376,7 +380,10 @@ async function main(): Promise<void> {
     void reconcileScanQueueIfNeeded(lastReconciliationAtMs, now)
       .then(async (reconciliation) => {
         if (!reconciliation) return
-        lastReconciliationAtMs = now.getTime()
+        lastReconciliationAtMs = advanceReconciliationTimestamp(
+          lastReconciliationAtMs,
+          now.getTime()
+        )
         await emitOperationalHealthAlerts(reconciliation).catch((error) => {
           logger.warn("Operational health collection failed", {
             error: error instanceof Error ? error.message : String(error),
