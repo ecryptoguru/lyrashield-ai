@@ -288,6 +288,12 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: sh ops/worker/refresh-egress.test.sh
 
+      - name: Test Azure deployment and alert operations
+        if: needs.changes.outputs.docs-only != 'true'
+        run: |
+          sh ops/deployment/azure-vm-run-command.test.sh
+          sh ops/monitoring/provision-alerts.test.sh
+
       - name: Build
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm build
