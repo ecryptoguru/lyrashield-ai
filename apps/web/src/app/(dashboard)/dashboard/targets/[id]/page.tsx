@@ -1,5 +1,4 @@
-import { getSession } from "@lyrashield/auth/server"
-import { prisma } from "@lyrashield/db"
+import { withWorkspaceRLS } from "@lyrashield/db"
 import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, GitBranch, Globe, Bug, Crosshair } from "lucide-react"
@@ -8,73 +7,78 @@ import { ScorecardControls } from "./scorecard-controls"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { modeLabel } from "@/lib/labels"
 import { TARGET_SINGULAR } from "@/lib/terminology"
+import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
 export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
+  const session = await getCachedSession()
   if (!session) redirect("/sign-in")
 
   const { id } = await params
+  const workspaceId = await getCachedWorkspaceId(session.userId)
+  if (!workspaceId) notFound()
 
-  const target = await prisma.target.findFirst({
-    where: {
-      id,
-      deletedAt: null,
-      workspace: { members: { some: { userId: session.userId, status: "active" } } },
-    },
-    include: {
-      workspace: {
-        select: {
-          members: {
-            where: { userId: session.userId, status: "active" },
-            take: 1,
-            select: { role: true },
+  const target = await withWorkspaceRLS(workspaceId, (tx) =>
+    tx.target.findFirst({
+      where: {
+        id,
+        workspaceId,
+        deletedAt: null,
+      },
+      include: {
+        workspace: {
+          select: {
+            members: {
+              where: { userId: session.userId, status: "active" },
+              take: 1,
+              select: { role: true },
+            },
           },
         },
-      },
-      project: { select: { id: true, name: true } },
-      scans: {
-        orderBy: { createdAt: "desc" },
-        take: 10,
-        select: {
-          id: true,
-          goal: true,
-          status: true,
-          mode: true,
-          createdAt: true,
-          startedAt: true,
-          endedAt: true,
+        project: { select: { id: true, name: true } },
+        scans: {
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          select: {
+            id: true,
+            goal: true,
+            status: true,
+            mode: true,
+            createdAt: true,
+            startedAt: true,
+            endedAt: true,
+          },
         },
-      },
-      scoreSnapshots: {
-        orderBy: { computedAt: "desc" },
-        take: 1,
-        select: {
-          score: true,
-          grade: true,
-          shareEligible: true,
-          expiresAt: true,
-          shares: {
-            where: { revokedAt: null, createdById: session.userId },
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: {
-              id: true,
-              slug: true,
-              publicPayload: true,
-              viewCount: true,
-              _count: { select: { events: { where: { eventType: "SHARE" } } } },
-              referralCode: {
-                select: { code: true, _count: { select: { attributions: true } } },
+        scoreSnapshots: {
+          orderBy: { computedAt: "desc" },
+          take: 1,
+          select: {
+            score: true,
+            grade: true,
+            shareEligible: true,
+            expiresAt: true,
+            shares: {
+              where: { revokedAt: null, createdById: session.userId },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: {
+                id: true,
+                slug: true,
+                publicPayload: true,
+                viewCount: true,
+                _count: { select: { events: { where: { eventType: "SHARE" } } } },
+                referralCode: {
+                  select: { code: true, _count: { select: { attributions: true } } },
+                },
               },
             },
           },
         },
+        _count: { select: { scans: true, findings: true } },
       },
-      _count: { select: { scans: true, findings: true } },
-    },
-  })
+    })
+  )
 
-  if (!target) {
+  if (!target || !target.workspace.members[0]) {
     notFound()
   }
 
