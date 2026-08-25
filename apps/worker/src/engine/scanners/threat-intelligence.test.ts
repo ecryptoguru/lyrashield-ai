@@ -6,6 +6,8 @@ vi.mock("@lyrashield/logger", () => ({
 
 import { clearThreatIntelligenceCache, fetchThreatSignals } from "./threat-intelligence"
 
+const publicResolver = async () => ["93.184.216.34"]
+
 describe("fetchThreatSignals", () => {
   beforeEach(() => clearThreatIntelligenceCache())
 
@@ -40,10 +42,11 @@ describe("fetchThreatSignals", () => {
       )
     }) as unknown as typeof fetch
 
-    const signals = await fetchThreatSignals(
-      ["CVE-2021-44228", "not-a-cve", "CVE-2021-44228"],
-      fetchFn
-    )
+    const signals = await fetchThreatSignals(["CVE-2021-44228", "not-a-cve", "CVE-2021-44228"], {
+      fetchFn,
+      cisaFetchFn: fetchFn,
+      cisaResolver: publicResolver,
+    })
 
     expect(signals.get("CVE-2021-44228")).toEqual({
       knownExploited: true,
@@ -55,19 +58,95 @@ describe("fetchThreatSignals", () => {
       epssDate: "2026-07-17",
     })
     expect(fetchFn).toHaveBeenCalledTimes(2)
-    expect(String(vi.mocked(fetchFn).mock.calls[1]?.[0])).toContain("CVE-2021-44228")
-    expect(String(vi.mocked(fetchFn).mock.calls[1]?.[0])).not.toContain("not-a-cve")
+    const epssUrl = vi
+      .mocked(fetchFn)
+      .mock.calls.map((call) => String(call[0]))
+      .find((url) => url.includes("api.first.org"))
+    expect(epssUrl).toContain("CVE-2021-44228")
+    expect(epssUrl).not.toContain("not-a-cve")
+  })
+
+  it("skips CISA without a proxy fetch and keeps FIRST direct", async () => {
+    const fetchFn = vi.fn(
+      async () => new Response(JSON.stringify({ data: [{ cve: "CVE-2024-12345", epss: "0.2" }] }))
+    ) as unknown as typeof fetch
+
+    await expect(fetchThreatSignals(["CVE-2024-12345"], { fetchFn })).resolves.toEqual(
+      new Map([["CVE-2024-12345", { epss: 0.2 }]])
+    )
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    expect(String(vi.mocked(fetchFn).mock.calls[0]?.[0])).toContain("api.first.org")
   })
 
   it("returns partial intelligence when one public source is unavailable", async () => {
-    const fetchFn = vi.fn(async (input: string | URL | Request) => {
-      if (String(input).includes("cisa.gov")) return new Response("unavailable", { status: 503 })
+    const fetchFn = vi.fn(async () => {
       return new Response(JSON.stringify({ data: [{ cve: "CVE-2024-12345", epss: "0.42" }] }))
     }) as unknown as typeof fetch
+    const cisaFetchFn = vi.fn(
+      async () => new Response("unavailable", { status: 503 })
+    ) as unknown as typeof fetch
 
-    await expect(fetchThreatSignals(["CVE-2024-12345"], fetchFn)).resolves.toEqual(
-      new Map([["CVE-2024-12345", { epss: 0.42 }]])
-    )
+    await expect(
+      fetchThreatSignals(["CVE-2024-12345"], {
+        fetchFn,
+        cisaFetchFn,
+        cisaResolver: publicResolver,
+      })
+    ).resolves.toEqual(new Map([["CVE-2024-12345", { epss: 0.42 }]]))
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    expect(String(vi.mocked(fetchFn).mock.calls[0]?.[0])).toContain("api.first.org")
+    expect(cisaFetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  it("routes only CISA through the safe custom fetch and follows redirects", async () => {
+    const fetchFn = vi.fn(
+      async () => new Response(JSON.stringify({ data: [{ cve: "CVE-2024-12345", epss: "0.25" }] }))
+    ) as unknown as typeof fetch
+    const cisaFetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { Location: "/feeds/known_exploited_vulnerabilities.json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ vulnerabilities: [{ cveID: "CVE-2024-12345" }] }), {
+          headers: { "Content-Type": "application/json" },
+        })
+      ) as unknown as typeof fetch
+
+    await expect(
+      fetchThreatSignals(["CVE-2024-12345"], {
+        fetchFn,
+        cisaFetchFn,
+        cisaResolver: publicResolver,
+      })
+    ).resolves.toEqual(new Map([["CVE-2024-12345", { knownExploited: true, epss: 0.25 }]]))
+
+    expect(cisaFetchFn).toHaveBeenCalledTimes(2)
+    expect(
+      vi.mocked(cisaFetchFn).mock.calls.every((call) => String(call[0]).includes("cisa.gov"))
+    ).toBe(true)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    expect(String(vi.mocked(fetchFn).mock.calls[0]?.[0])).toContain("api.first.org/data/v1/epss?")
+  })
+
+  it("rejects an oversized proxied CISA response while retaining FIRST data", async () => {
+    const fetchFn = vi.fn(
+      async () => new Response(JSON.stringify({ data: [{ cve: "CVE-2024-12345", epss: "0.1" }] }))
+    ) as unknown as typeof fetch
+    const cisaFetchFn = vi.fn(
+      async () => new Response("x".repeat(5 * 1024 * 1024 + 1))
+    ) as unknown as typeof fetch
+
+    await expect(
+      fetchThreatSignals(["CVE-2024-12345"], {
+        fetchFn,
+        cisaFetchFn,
+        cisaResolver: publicResolver,
+      })
+    ).resolves.toEqual(new Map([["CVE-2024-12345", { epss: 0.1 }]]))
   })
 
   it("does not start enrichment when the parent scan is already cancelled", async () => {
@@ -77,11 +156,18 @@ describe("fetchThreatSignals", () => {
       if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError")
       return new Response("{}")
     }) as unknown as typeof fetch
+    const cisaFetchFn = vi.fn(async () => new Response("{}")) as unknown as typeof fetch
 
     await expect(
-      fetchThreatSignals(["CVE-2024-12345"], fetchFn, controller.signal)
+      fetchThreatSignals(["CVE-2024-12345"], {
+        fetchFn,
+        cisaFetchFn,
+        cisaResolver: publicResolver,
+        signal: controller.signal,
+      })
     ).rejects.toThrow("SCA scan cancelled")
-    expect(fetchFn).toHaveBeenCalledTimes(2)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
     expect(vi.mocked(fetchFn).mock.calls.every((call) => call[1]?.signal?.aborted)).toBe(true)
+    expect(cisaFetchFn).not.toHaveBeenCalled()
   })
 })

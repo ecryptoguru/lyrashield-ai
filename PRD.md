@@ -352,6 +352,7 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Legacy Redis container is stopped and restart-disabled, retained only for rollback.
 - Direct arbitrary public fetch denied; authenticated proxy public fetch allowed; loopback denied with `ssrf_blocked`.
 - Five-minute DNS-pin refresh stayed active through the paid scan without restarting the worker.
+- The current Redis/egress efficiency candidate is not deployed. Its 30-day idle-command estimate falls from 324,019 to 132,495 commands (59.11%); this is a model, not live telemetry or production proof.
 - Encrypted backup and isolated restore completed schema, RLS, audit-chain, and application-startup verification.
 
 ## 9. Release status
@@ -374,7 +375,7 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 ### Remaining before broader paid/untrusted exposure
 
 1. Prove private S3-compatible evidence persistence, encryption, retrieval, and failure behavior in production. The launch-assurance orchestrator composes the fail-closed and round-trip proofs in code (PR #429); production execution remains the gate.
-2. Connect readiness, queue, provider, cost, and worker logs to actionable monitoring, alerts, capacity evidence, and named incident ownership. Alert provisioning code and the monitoring runbook are merged (PR #429); production provisioning and a test-alert acknowledgment remain the gate.
+2. Connect readiness, queue, provider, cost, and worker logs to actionable monitoring, alerts, capacity evidence, named incident ownership, live Redis command metrics, and staged worker-rollout evidence. Alert provisioning code and the monitoring runbook are merged (PR #429); production provisioning and a test-alert acknowledgment remain the gate.
 3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work. The launch-assurance orchestrator composes authenticated cancellation, settle wait, queue recovery, and post-recovery readiness in code (PR #429); production failure injection remains the gate.
 4. Provision matching live provider credentials, catalogs, and webhooks; rerun the guarded deployment; then verify live-provider entitlement and usage events. Keep every purchase admission off until founder approval. Razorpay hosted-checkout payment methods above INR 15,000 remain transaction-unproven.
 5. Complete current production license-signing activation and proof through Azure Key Vault.

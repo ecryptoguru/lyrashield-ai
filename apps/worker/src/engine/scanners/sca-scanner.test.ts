@@ -11,6 +11,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { scanSca } from "./sca-scanner"
+import { clearThreatIntelligenceCache } from "./threat-intelligence"
 import type { ScannerCoverageIssue } from "../scanner-coverage"
 
 const TEST_DIR = join(tmpdir(), "lyrashield-sca-test-" + Date.now())
@@ -58,6 +59,7 @@ function makeMockFetch(
 describe("scanSca", () => {
   beforeEach(() => {
     cleanupRepo()
+    clearThreatIntelligenceCache()
   })
 
   it("returns empty array when no dependency files exist", async () => {
@@ -104,6 +106,67 @@ describe("scanSca", () => {
           fixed_version: "4.17.21",
         },
       })
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it("uses the proxy fetch only for CISA while OSV and FIRST stay direct", async () => {
+    const dir = await setupRepo({
+      "package.json": JSON.stringify({ dependencies: { lodash: "4.17.20" } }),
+    })
+    const fetchFn = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes("api.osv.dev")) {
+        return new Response(
+          JSON.stringify({
+            results: [
+              {
+                vulns: [
+                  {
+                    id: "CVE-2024-12345",
+                    summary: "Dependency issue",
+                    database_specific: { severity: "high" },
+                  },
+                ],
+              },
+            ],
+          })
+        )
+      }
+      if (url.includes("api.first.org")) {
+        return new Response(JSON.stringify({ data: [{ cve: "CVE-2024-12345", epss: "0.5" }] }))
+      }
+      throw new Error(`Unexpected direct fetch: ${url} ${init?.method ?? "GET"}`)
+    }) as unknown as typeof fetch
+    const cisaFetchFn = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ vulnerabilities: [{ cveID: "CVE-2024-12345" }] }), {
+          headers: { "Content-Type": "application/json" },
+        })
+    ) as unknown as typeof fetch
+
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        fetchFn,
+        cisaFetchFn,
+        cisaResolver: async () => ["93.184.216.34"],
+      })
+
+      expect(findings[0]?.technical_analysis).toContain("CISA KEV")
+      expect(findings[0]?.technical_analysis).toContain("FIRST EPSS")
+      expect(cisaFetchFn).toHaveBeenCalledTimes(1)
+      expect(String(vi.mocked(cisaFetchFn).mock.calls[0]?.[0])).toContain("www.cisa.gov")
+      expect(vi.mocked(fetchFn).mock.calls.map((call) => String(call[0]))).toEqual([
+        "https://api.osv.dev/v1/querybatch",
+        expect.stringContaining("https://api.first.org/data/v1/epss?"),
+      ])
+      expect(vi.mocked(fetchFn).mock.calls[0]?.[1]?.method).toBe("POST")
+      expect(
+        vi.mocked(fetchFn).mock.calls.some((call) => String(call[0]).includes("cisa.gov"))
+      ).toBe(false)
     } finally {
       cleanupRepo()
     }

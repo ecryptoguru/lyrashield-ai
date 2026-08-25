@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   },
   queue: { getJob: vi.fn(), getJobs: vi.fn() },
   prisma: {
-    scan: { findMany: vi.fn(), findUnique: vi.fn() },
+    scan: { count: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
   },
   updateScanStatus: vi.fn(),
 }))
@@ -25,6 +25,14 @@ vi.mock("@lyrashield/integrations", () => ({ getRedis: () => mocks.redis }))
 vi.mock("@lyrashield/db", () => ({
   getSystemPrisma: () => mocks.prisma,
   prisma: mocks.prisma,
+  TERMINAL_SCAN_STATUSES: new Set([
+    "COMPLETED",
+    "PARTIAL",
+    "FAILED",
+    "CANCELLED",
+    "STOPPED_BUDGET",
+    "TIMED_OUT",
+  ]),
   updateScanStatus: mocks.updateScanStatus,
 }))
 vi.mock("@lyrashield/logger", () => ({
@@ -32,7 +40,12 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 vi.mock("./queue", () => ({ getScanQueue: () => mocks.queue }))
 
-import { reconcileFailedQueueJob, reconcileScanQueue } from "./queue-reconciliation"
+import {
+  RECONCILIATION_IDLE_BACKSTOP_MS,
+  reconcileFailedQueueJob,
+  reconcileScanQueue,
+  reconcileScanQueueIfNeeded,
+} from "./queue-reconciliation"
 
 describe("scan queue reconciliation", () => {
   beforeEach(() => {
@@ -68,12 +81,74 @@ describe("scan queue reconciliation", () => {
     mocks.lockRedis.quit.mockResolvedValue("OK")
     mocks.queue.getJob.mockResolvedValue(null)
     mocks.queue.getJobs.mockResolvedValue([])
+    mocks.prisma.scan.count.mockResolvedValue(0)
     mocks.prisma.scan.findMany.mockResolvedValue([])
     mocks.updateScanStatus.mockResolvedValue({ id: "scan-1" })
   })
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it("reconciles every periodic tick while a nonterminal scan exists", async () => {
+    mocks.prisma.scan.count.mockResolvedValue(1)
+    const now = new Date("2026-07-18T12:00:00Z")
+
+    await expect(reconcileScanQueueIfNeeded(now.getTime() - 300_000, now)).resolves.toMatchObject({
+      leaseAcquired: true,
+    })
+
+    const preflight = mocks.prisma.scan.count.mock.calls[0]?.[0]
+    expect(preflight).toEqual({
+      where: {
+        deletedAt: null,
+        status: {
+          notIn: ["COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"],
+        },
+      },
+    })
+    expect(preflight.where.status.notIn).not.toContain("REQUIRES_APPROVAL")
+    expect(mocks.redis.duplicate).toHaveBeenCalledOnce()
+  })
+
+  it("skips Redis and BullMQ while idle before the hourly backstop", async () => {
+    const now = new Date("2026-07-18T12:00:00Z")
+
+    await expect(
+      reconcileScanQueueIfNeeded(now.getTime() - RECONCILIATION_IDLE_BACKSTOP_MS + 1, now)
+    ).resolves.toBeNull()
+
+    expect(mocks.redis.duplicate).not.toHaveBeenCalled()
+    expect(mocks.queue.getJobs).not.toHaveBeenCalled()
+  })
+
+  it("reconciles idle queues at the exact hourly backstop", async () => {
+    const now = new Date("2026-07-18T12:00:00Z")
+
+    await expect(
+      reconcileScanQueueIfNeeded(now.getTime() - RECONCILIATION_IDLE_BACKSTOP_MS, now)
+    ).resolves.toMatchObject({ leaseAcquired: true })
+
+    expect(mocks.redis.duplicate).toHaveBeenCalledOnce()
+  })
+
+  it("reconciles fail-safe when the database preflight errors", async () => {
+    mocks.prisma.scan.count.mockRejectedValue(new Error("database unavailable"))
+
+    await expect(reconcileScanQueueIfNeeded(Date.now())).resolves.toMatchObject({
+      leaseAcquired: true,
+    })
+
+    expect(mocks.redis.duplicate).toHaveBeenCalledOnce()
+  })
+
+  it("keeps direct startup reconciliation unconditional", async () => {
+    mocks.prisma.scan.count.mockRejectedValue(new Error("preflight must not run"))
+
+    await expect(reconcileScanQueue()).resolves.toMatchObject({ leaseAcquired: true })
+
+    expect(mocks.prisma.scan.count).not.toHaveBeenCalled()
+    expect(mocks.redis.duplicate).toHaveBeenCalledOnce()
   })
 
   it("fails stale queued scans without recreating jobs", async () => {

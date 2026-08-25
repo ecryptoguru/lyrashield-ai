@@ -130,7 +130,8 @@ async function runScaScan(
   coverageIssues: ScannerCoverageIssue[],
   signal: AbortSignal,
   resolvedDependencyInventory?: ResolvedDependencyInventory,
-  advisoryBatch?: AdvisoryBatchResult
+  advisoryBatch?: AdvisoryBatchResult,
+  cisaFetchFn?: typeof fetch
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting SCA scan phase", { scanId })
@@ -141,6 +142,7 @@ async function runScaScan(
       signal,
       resolvedDependencyInventory,
       advisoryBatch,
+      cisaFetchFn,
     })
     logger.info("SCA scan phase complete", { scanId, findingCount: findings.length })
     return findings
@@ -185,19 +187,11 @@ async function runUrlScan(
   workspaceDir: string,
   coverageIssues: ScannerCoverageIssue[],
   signal: AbortSignal,
-  apiSpecUrl?: string | null
+  apiSpecUrl?: string | null,
+  fetchFn?: typeof fetch
 ): Promise<{ findings: EngineVulnerability[]; execution?: UrlExecutionSummary }> {
   try {
     logger.info("Starting URL scan phase", { scanId, targetUrl: redactUrlForLogs(targetUrl) })
-    const fetchFn =
-      env.LYRASHIELD_EGRESS_PROXY_URL && env.LYRASHIELD_EGRESS_PROXY_SECRET
-        ? createEgressProxyFetchFn({
-            url: env.LYRASHIELD_EGRESS_PROXY_URL,
-            secret: env.LYRASHIELD_EGRESS_PROXY_SECRET,
-            connectTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS,
-            readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
-          })
-        : undefined
     const isApiContract =
       profile.targetType === "API" && (profile.mode === "STANDARD" || profile.mode === "DEEP")
     const scanResult =
@@ -346,12 +340,16 @@ export async function runScannerOrchestrator(
   // Source scanners must never report an empty or unvalidated repository
   // workspace as clean. The engine supplies the checkout after cloning it.
   const targetUrl = target.url ?? ""
-  if (
-    targetUrl &&
-    config.urlProfile &&
-    env.NODE_ENV === "production" &&
-    (!env.LYRASHIELD_EGRESS_PROXY_URL || !env.LYRASHIELD_EGRESS_PROXY_SECRET)
-  ) {
+  const egressProxyFetchFn =
+    env.LYRASHIELD_EGRESS_PROXY_URL && env.LYRASHIELD_EGRESS_PROXY_SECRET
+      ? createEgressProxyFetchFn({
+          url: env.LYRASHIELD_EGRESS_PROXY_URL,
+          secret: env.LYRASHIELD_EGRESS_PROXY_SECRET,
+          connectTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS,
+          readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
+        })
+      : undefined
+  if (targetUrl && config.urlProfile && env.NODE_ENV === "production" && !egressProxyFetchFn) {
     const message =
       "Production URL scans require the authenticated egress proxy; retry after worker configuration is restored"
     await addScanEvent(scanId, "scanner", "error", message, { scanner: "url" })
@@ -425,7 +423,8 @@ export async function runScannerOrchestrator(
               coverageIssues,
               signal,
               dependencyInventory,
-              advisoryBatch
+              advisoryBatch,
+              egressProxyFetchFn
             )
           : Promise.resolve([] as EngineVulnerability[]),
         hasSourceCheckout
@@ -439,7 +438,8 @@ export async function runScannerOrchestrator(
               absWorkspace,
               coverageIssues,
               signal,
-              target.apiSpecUrl
+              target.apiSpecUrl,
+              egressProxyFetchFn
             )
           : Promise.resolve({ findings: [] as EngineVulnerability[], execution: undefined }),
         hasSourceCheckout

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mockEnv = vi.hoisted(() => ({
   NODE_ENV: "test",
@@ -187,6 +187,8 @@ describe("runScannerOrchestrator", () => {
     mockEnv.LYRASHIELD_EGRESS_PROXY_SECRET = ""
   })
 
+  afterEach(() => vi.unstubAllGlobals())
+
   it("runs all scanners and merges findings", async () => {
     const result = await runScannerOrchestrator({
       scanId: "scan-1",
@@ -275,6 +277,101 @@ describe("runScannerOrchestrator", () => {
 
     expect(scanUrl).toHaveBeenCalled()
     expect(result.urlFindings.length).toBe(1)
+  })
+
+  it("builds one authenticated proxy fetch for URL scans and CISA enrichment", async () => {
+    mockEnv.LYRASHIELD_EGRESS_PROXY_URL = "https://proxy.example.com"
+    mockEnv.LYRASHIELD_EGRESS_PROXY_SECRET = "test-secret"
+
+    await runScannerOrchestrator({
+      scanId: "scan-shared-egress-proxy",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: {
+        id: "target-1",
+        type: "REPO",
+        url: "https://example.test",
+        name: "Repository with web surface",
+      },
+      goal: "LAUNCH_REVIEW",
+      mode: "SAFE",
+      engineFindings: [],
+      workspaceDir: sourceCheckout,
+      urlProfile: {
+        id: "WEB_APP_SAFE",
+        targetType: "WEB_APP",
+        mode: "SAFE",
+        label: "Surface Review",
+        description: "...",
+        maxDocuments: 1,
+        maxAssets: 6,
+        maxDepth: 0,
+        maxTotalBytes: 8 * 1024 * 1024,
+        maxResponseBytes: 3 * 1024 * 1024,
+        maxConcurrency: 3,
+        maxWallTimeMs: 60_000,
+        maxOperations: 0,
+        maxMethodProbes: 0,
+        maxOriginProbes: 0,
+        allowedMethods: ["GET"],
+        requiresApiSpec: false,
+      },
+    })
+
+    const cisaFetchFn = vi.mocked(scanSca).mock.calls.at(-1)?.[0].cisaFetchFn
+    const urlFetchFn = vi.mocked(scanUrl).mock.calls.at(-1)?.[0].fetchFn
+    expect(cisaFetchFn).toBeTypeOf("function")
+    expect(cisaFetchFn).toBe(urlFetchFn)
+
+    const cisaUrl =
+      "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+    const proxyTransport = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            html: "{}",
+            status: 200,
+            headers: { "content-type": "application/json" },
+            finalUrl: cisaUrl,
+            urlHistory: [cisaUrl],
+            bodyBytes: 2,
+            bodyTruncated: false,
+          },
+        })
+      )
+    )
+    vi.stubGlobal("fetch", proxyTransport)
+
+    await cisaFetchFn!(cisaUrl, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer target-secret",
+        "User-Agent": "LyraShield-CISA-Test",
+      },
+      body: "target-body",
+      timeoutMs: 1_234,
+      maxBytes: 5_678,
+    } as RequestInit)
+
+    expect(proxyTransport).toHaveBeenCalledTimes(1)
+    const [proxyUrl, proxyInit] = proxyTransport.mock.calls[0]!
+    expect(proxyUrl).toBe("https://proxy.example.com/v1/fetch")
+    expect(proxyInit).toMatchObject({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-secret",
+      },
+    })
+    expect(JSON.parse(String(proxyInit.body))).toEqual({
+      url: cisaUrl,
+      userAgent: "LyraShield-CISA-Test",
+      timeoutMs: 1_234,
+      maxBytes: 5_678,
+    })
+    expect(String(proxyInit.body)).not.toContain("target-secret")
+    expect(String(proxyInit.body)).not.toContain("target-body")
   })
 
   it("fails closed before a production URL scan when the egress proxy is unavailable", async () => {
