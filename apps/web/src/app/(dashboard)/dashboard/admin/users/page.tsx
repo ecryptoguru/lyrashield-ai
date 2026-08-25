@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
@@ -6,6 +7,10 @@ import { PageHeader } from "@/components/page-header"
 import { getPlatformAdminUsers, parseAdminCursor } from "@/lib/platform-admin-lists"
 
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Admin users",
+}
 
 export default async function PlatformAdminUsersPage({
   searchParams,

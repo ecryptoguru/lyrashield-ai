@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { prisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
 import { Plug } from "lucide-react"
@@ -7,6 +8,10 @@ import { PageHeader } from "@/components/page-header"
 import { GithubIntegration } from "./github-integration"
 import { McpIntegration } from "./mcp-integration"
 import { CliIntegration } from "./cli-integration"
+
+export const metadata: Metadata = {
+  title: "Integrations",
+}
 
 export default async function IntegrationsPage({
   searchParams,

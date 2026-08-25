@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 import { prisma, getAiSystemProfile, getThreatModel, listControlEvidence } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceContext } from "@/lib/cache"
@@ -7,6 +8,10 @@ import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { AiAssuranceClient } from "./ai-assurance-client"
 import { ShieldCheck } from "lucide-react"
 import { buildControlEvidenceList } from "@/lib/ai-assurance"
+
+export const metadata: Metadata = {
+  title: "Evidence Vault",
+}
 
 export default async function AiAssurancePage({
   searchParams,

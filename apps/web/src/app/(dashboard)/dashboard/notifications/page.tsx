@@ -1,9 +1,14 @@
+import type { Metadata } from "next"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { Bell } from "lucide-react"
 import { NotificationsClient } from "./notifications-client"
 import { NotificationPreferences } from "@/components/notification-preferences"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+
+export const metadata: Metadata = {
+  title: "Notifications",
+}
 
 export default async function NotificationsPage() {
   const session = await getCachedSession()

@@ -12,7 +12,7 @@ import { AgentWizard } from "./agent-wizard"
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
-  title: "Agent integration | LyraShield AI",
+  title: "Agent integration",
   description: "Set up and verify an agent integration for your workspace.",
   openGraph: {
     title: "Agent integration | LyraShield AI",

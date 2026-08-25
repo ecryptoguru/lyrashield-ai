@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { Rocket } from "lucide-react"
 import { LaunchReadinessClient } from "./launch-readiness-client"
@@ -5,6 +6,10 @@ import { prisma } from "@lyrashield/db"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+
+export const metadata: Metadata = {
+  title: "Launch Readiness",
+}
 
 export default async function LaunchReadinessPage() {
   const session = await getCachedSession()

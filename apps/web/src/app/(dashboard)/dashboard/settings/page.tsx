@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
 import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
@@ -10,6 +11,10 @@ import { ApiKeysSection } from "./api-keys"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { TwoFactorSecurity } from "./two-factor-security"
+
+export const metadata: Metadata = {
+  title: "Settings",
+}
 
 export default async function SettingsPage() {
   const session = await getCachedSession()

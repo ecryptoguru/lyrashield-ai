@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { Crosshair } from "lucide-react"
@@ -6,6 +7,10 @@ import { TARGET_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+
+export const metadata: Metadata = {
+  title: "Targets",
+}
 
 export default async function TargetsPage({
   searchParams,

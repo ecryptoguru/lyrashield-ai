@@ -6,7 +6,7 @@ import { isPlatformOperator } from "@lyrashield/auth/server"
 import { AffiliateAdminActions } from "./admin-actions"
 
 export const metadata = {
-  title: "Affiliate Admin — LyraShield AI",
+  title: "Affiliate Admin",
 }
 
 export default async function AffiliateAdminPage() {

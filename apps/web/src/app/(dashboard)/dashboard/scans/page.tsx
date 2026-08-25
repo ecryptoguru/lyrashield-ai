@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { prisma, listScans } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { Radar } from "lucide-react"
@@ -16,6 +17,10 @@ const SCANS_TABS: SectionTab[] = [
 
 function normalizeTab(value: string | undefined): "runs" | "monitoring" {
   return value === "monitoring" ? "monitoring" : "runs"
+}
+
+export const metadata: Metadata = {
+  title: "Trust Runs",
 }
 
 export default async function ScansPage({
