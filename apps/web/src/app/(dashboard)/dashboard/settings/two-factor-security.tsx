@@ -171,7 +171,7 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
               />
             </FormField>
             <p className="text-muted-foreground text-xs">
-              Signed up with Google or GitHub and do not have a password?{" "}
+              Signed up with a social provider and do not have a password?{" "}
               <Link href="/forgot-password" className="text-primary font-medium hover:underline">
                 Set one securely by email
               </Link>
