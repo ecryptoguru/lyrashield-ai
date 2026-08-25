@@ -69,6 +69,21 @@ assert_positive_count() {
   fi
 }
 
+# Container Apps console logs arrive through the current custom-table diagnostic
+# mapping with an empty _ResourceId. Resolve and validate the app identity through
+# Azure before using its exact name as the log scope.
+app_identity=$(az_run resource show \
+  --ids "$APP_RESOURCE_ID" \
+  --query "join('|', [name, resourceGroup, type])" -o tsv)
+app_name=${app_identity%%|*}
+app_identity_rest=${app_identity#*|}
+app_resource_group=${app_identity_rest%%|*}
+app_type=${app_identity_rest#*|}
+if [ -z "$app_name" ] || [ "$app_resource_group" != "$AZURE_RESOURCE_GROUP" ] || [ "$app_type" != "Microsoft.App/containerApps" ]; then
+  echo "APP_RESOURCE_ID must resolve to a Container App in AZURE_RESOURCE_GROUP" >&2
+  exit 1
+fi
+
 worker_log_count=$(az_run monitor log-analytics query \
   --workspace "$LOG_ANALYTICS_WORKSPACE_GUID" \
   --analytics-query "Syslog | where TimeGenerated > ago(24h) | where SyslogMessage has '\"message\":\"LyraShield worker starting\"' | count" \
@@ -77,7 +92,7 @@ assert_positive_count "worker application" "$worker_log_count"
 
 app_log_count=$(az_run monitor log-analytics query \
   --workspace "$LOG_ANALYTICS_WORKSPACE_GUID" \
-  --analytics-query "ContainerAppConsoleLogs_CL | where TimeGenerated > ago(24h) | where _ResourceId =~ '$APP_RESOURCE_ID' | count" \
+  --analytics-query "ContainerAppConsoleLogs_CL | where TimeGenerated > ago(24h) | where ContainerAppName_s =~ '$app_name' | count" \
   --query "tables[0].rows[0][0]" -o tsv)
 assert_positive_count "production app Container Apps" "$app_log_count"
 
@@ -140,7 +155,7 @@ worker_log_alert() {
     --output none
 }
 
-readiness_query="ContainerAppConsoleLogs_CL | where TimeGenerated > ago(10m) | where _ResourceId =~ '$APP_RESOURCE_ID' | where Log_s has '\"message\":\"Scan service readiness check failed\"' | summarize FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated) | where LastSeen - FirstSeen > 5m"
+readiness_query="ContainerAppConsoleLogs_CL | where TimeGenerated > ago(10m) | where ContainerAppName_s =~ '$app_name' | where Log_s has '\"message\":\"Scan service readiness check failed\"' | summarize FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated) | where LastSeen - FirstSeen > 5m"
 az_run monitor scheduled-query create \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --location "$AZURE_LOCATION" \

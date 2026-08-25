@@ -13,6 +13,7 @@ case "$*" in
   *"vm extension show"*) printf 'Succeeded\n' ;;
   *"data-collection rule association list"*) printf '%s\n' "${FAKE_DCR_COUNT:-1}" ;;
   *"data-collection rule show"*) printf '1\n' ;;
+  *"resource show"*) printf '%s\n' "${FAKE_APP_IDENTITY:-app|rg|Microsoft.App/containerApps}" ;;
   *"log-analytics query"*"LyraShield worker starting"*) printf '%s\n' "${FAKE_WORKER_LOG_COUNT:-1}" ;;
   *"log-analytics query"*"ContainerAppConsoleLogs_CL"*) printf '%s\n' "${FAKE_APP_LOG_COUNT:-1}" ;;
   *"action-group create"*) printf '%s\n' "${FAKE_ACTION_GROUP_ID:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}" ;;
@@ -46,8 +47,9 @@ grep -q 'vm extension show.*AzureMonitorLinuxAgent' "$capture"
 grep -q 'data-collection rule association list' "$capture"
 grep -q 'data-collection rule show.*length(dataSources.syslog)' "$capture"
 grep -q 'data-collection rule show.*workspaceResourceId' "$capture"
+grep -q "resource show.*$APP_RESOURCE_ID" "$capture"
 grep -q 'log-analytics query.*LyraShield worker starting' "$capture"
-grep -q "log-analytics query.*ContainerAppConsoleLogs_CL.*_ResourceId =~ '$APP_RESOURCE_ID'" "$capture"
+grep -q "log-analytics query.*ContainerAppConsoleLogs_CL.*ContainerAppName_s =~ 'app'" "$capture"
 grep -q 'action-group create.*lyrashield-operator-alerts' "$capture"
 grep -q 'worker-cpu-high.*Percentage CPU > 85.*window-size 15m' "$capture"
 grep -q 'app-no-active-replica.*Replicas < 1' "$capture"
@@ -64,6 +66,11 @@ do
   grep -q "$code" "$capture"
 done
 grep -q 'scan-readiness-unavailable.*Scan service readiness check failed' "$capture"
+grep -q "scan-readiness-unavailable.*ContainerAppName_s =~ 'app'" "$capture"
+if grep -q "ContainerAppConsoleLogs_CL.*_ResourceId" "$capture"; then
+  echo "Container Apps custom-table queries must not depend on empty _ResourceId" >&2
+  exit 1
+fi
 
 test "$(grep -c 'monitor scheduled-query create' "$capture")" = 7
 test "$(grep -c 'monitor metrics alert create' "$capture")" = 6
@@ -83,6 +90,19 @@ if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
 fi
 test "$(grep -c 'action-group create' "$capture" || true)" = 0
 sed -i.bak 's/printf '\''Failed\\n'\''/printf '\''Succeeded\\n'\''/' "$test_dir/az"
+
+# The app name is accepted only after Azure confirms the exact resource group and type.
+: >"$capture"
+export FAKE_DCR_COUNT=1
+export FAKE_WORKER_LOG_COUNT=1
+export FAKE_APP_LOG_COUNT=1
+export FAKE_APP_IDENTITY='app|other-rg|Microsoft.App/containerApps'
+if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
+  echo "provisioning must fail when APP_RESOURCE_ID resolves outside AZURE_RESOURCE_GROUP" >&2
+  exit 1
+fi
+test "$(grep -c 'action-group create' "$capture" || true)" = 0
+export FAKE_APP_IDENTITY='app|rg|Microsoft.App/containerApps'
 
 # DCR configuration alone is insufficient when the actual worker stream is absent.
 : >"$capture"
