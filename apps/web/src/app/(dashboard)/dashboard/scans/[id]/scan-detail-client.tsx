@@ -258,7 +258,8 @@ const COMPLETION_NOTICE_DISMISS_MS = 6_000
 
 /** Ticking elapsed time from a start timestamp, returning a formatted string. */
 function useElapsedTime(startedAt: string | null): string {
-  const [elapsed, setElapsed] = useState(() => formatDuration(startedAt, null))
+  // Keep server and first client render identical; the effect starts the live clock.
+  const [elapsed, setElapsed] = useState("—")
   useEffect(() => {
     if (!startedAt) return
     const tick = () => setElapsed(formatDuration(startedAt, null))
