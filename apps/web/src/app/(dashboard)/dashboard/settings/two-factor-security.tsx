@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { Check, Copy, ShieldCheck } from "lucide-react"
+import QRCode from "qrcode"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import {
   Button,
@@ -22,9 +24,21 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
   const [password, setPassword] = useState("")
   const [code, setCode] = useState("")
   const [setup, setSetup] = useState<{ totpURI: string; backupCodes: string[] } | null>(null)
+  const [qrCode, setQrCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!setup) return
+    let active = true
+    void QRCode.toDataURL(setup.totpURI, { width: 224, margin: 2 }).then((dataUrl) => {
+      if (active) setQrCode(dataUrl)
+    })
+    return () => {
+      active = false
+    }
+  }, [setup])
 
   async function beginEnrollment(event: React.FormEvent) {
     event.preventDefault()
@@ -104,7 +118,21 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
         ) : setup ? (
           <>
             <div className="space-y-2">
-              <p className="text-sm font-medium">Add this URI to your authenticator app</p>
+              <p className="text-sm font-medium">Scan with your authenticator app</p>
+              {qrCode && (
+                <Image
+                  src={qrCode}
+                  alt="Authenticator setup QR code"
+                  width={224}
+                  height={224}
+                  unoptimized
+                  className="rounded-md border bg-white p-2"
+                />
+              )}
+              <p className="text-muted-foreground text-xs">
+                Generated only in this browser. If scanning is unavailable, enter the URI manually.
+              </p>
+              <p className="text-sm font-medium">Manual authenticator URI</p>
               <textarea
                 readOnly
                 rows={4}
