@@ -29,6 +29,7 @@ import {
   runEngineTriage,
   type EngineRunResult,
 } from "../engine/runner"
+import { engineWorkspacePath } from "../engine/workspace-path"
 import { mergeLlmUsage } from "../engine/output-parser"
 import { buildEngineTriageInput, eligibleForEngineTriage } from "../engine/ai-security-triage"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
@@ -1662,7 +1663,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
       try {
-        await cleanupEngineWorkspace(`lyrashield_runs/${scanId}`, scanId)
+        await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
       } catch (cleanupError) {
         const error = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
         log.error("Engine workspace cleanup requires operator attention", { scanId, error })

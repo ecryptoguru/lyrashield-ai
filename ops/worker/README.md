@@ -33,6 +33,8 @@ GHCR_USERNAME=<github-username-or-bot>
 
 `/etc/lyrashield/worker.env` supplies the remaining runtime variables. Defaults in `run-worker.sh` set `NODE_ENV=production`, the exact two-account platform-admin allowlist, `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`, and `LYRASHIELD_WORKER_CONCURRENCY=1`; override email verification or concurrency there when needed. The platform-admin allowlist is code-owned and must not drift.
 
+`run-worker.sh` bind-mounts `/var/lib/lyrashield/worker` at the same absolute path in the worker. Engine workspaces and `TMPDIR` must remain below this shared root because the worker uses the host Docker daemon: sandbox bind sources created only inside the worker container are invisible to that daemon and fail closed before model execution.
+
 ## Promote a verified worker release
 
 Digest pinning prevents silent updates; it does not freeze the worker. After the application repository's main deployment verifies a SHA-only worker image, its exact digest, and its OCI labels, update only `LYRASHIELD_WORKER_IMAGE` in `/etc/lyrashield/worker-runtime.conf` to that `@sha256:` reference. Retain the previous configuration as the rollback record and restart `lyrashield-worker.service`.
@@ -51,7 +53,7 @@ systemctl enable --now lyrashield-worker-egress-refresh.timer
 systemctl enable --now lyrashield-worker.service
 ```
 
-Do not place secrets in the runtime configuration. `refresh-secrets.sh` owns the exact Key Vault-to-environment mapping and fails closed when a required secret is absent or empty. The Key Vault must contain both `worker-database-url` (the RLS-restricted runtime role) and `worker-database-system-url` (the privileged ownership-check role), the BullMQ TLS endpoint as `worker-redis-url`, and both authenticated egress-proxy secrets. `run-worker.sh` initializes the persistent runs volume through a networkless one-shot container, then starts the application as the image's non-root user.
+Do not place secrets in the runtime configuration. `refresh-secrets.sh` owns the exact Key Vault-to-environment mapping and fails closed when a required secret is absent or empty. The Key Vault must contain both `worker-database-url` (the RLS-restricted runtime role) and `worker-database-system-url` (the privileged ownership-check role), the BullMQ TLS endpoint as `worker-redis-url`, and both authenticated egress-proxy secrets. `run-worker.sh` initializes the host-visible shared run root through a networkless one-shot container, then starts the application as the image's non-root user.
 
 Keep `LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED=1`. The defaults run every 15 minutes and consider only resources at least 24 hours old. The reaper selects containers by the `strix-run-id` label and directories under the fixed checkout/run roots, skips running containers and scans in `QUEUED`, `PREFLIGHT`, `RUNNING`, or `VERIFYING`, and fails safe when scan ownership cannot be read. `REQUIRES_APPROVAL` occurs before worker execution and owns no checkout, run directory, or sandbox container. Do not replace the reaper with `docker system prune` or broad filesystem deletion.
 

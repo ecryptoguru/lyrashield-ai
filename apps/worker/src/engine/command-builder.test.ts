@@ -4,6 +4,7 @@ import { buildEngineCommand, resolveScanBudgetUsd, type TargetInfo } from "./com
 vi.mock("@lyrashield/config", () => ({
   env: {
     LYRASHIELD_ENGINE_PATH: "",
+    LYRASHIELD_ENGINE_WORK_ROOT: "/var/lib/lyrashield/worker",
     LYRASHIELD_IMAGE: "",
     PLATFORM_MAX_SCAN_BUDGET_USD: 50,
   },
@@ -56,7 +57,7 @@ describe("command-builder", () => {
       expect(cmd.args).toContain("https://github.com/org/repo")
       expect(cmd.args).toContain("--scan-mode")
       expect(cmd.args).toContain("quick")
-      expect(cmd.workDir).toBe("lyrashield_runs/scan-1")
+      expect(cmd.workDir).toBe("/var/lib/lyrashield/worker/lyrashield_runs/scan-1")
     })
 
     it("builds command for WEB_APP target", () => {

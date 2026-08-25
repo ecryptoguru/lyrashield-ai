@@ -2,7 +2,6 @@ import { execFile, spawn, type ChildProcess } from "child_process"
 import { constants as fsConstants } from "fs"
 import { rm, mkdir, readdir, stat, lstat, realpath, open, writeFile } from "fs/promises"
 import { join, relative, resolve, sep } from "path"
-import { tmpdir } from "os"
 import { promisify } from "util"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
@@ -13,6 +12,7 @@ import {
   parseEngineTriageArtifact,
   type EngineTriageArtifact,
 } from "@lyrashield/security/ai-security"
+import { ENGINE_CHECKOUT_ROOT, ENGINE_WORK_ROOT } from "./workspace-path"
 
 export interface EngineRunResult {
   exitCode: number
@@ -654,11 +654,6 @@ async function runEngineProcess(
 const ENGINE_RUN_LAYOUTS = ["strix_runs", "lyrashield_runs"] as const
 const ENGINE_OUTPUT_ARTIFACTS = ["run.json", "vulnerabilities.json"] as const
 const MAX_RUN_OUTPUT_ENTRIES = 50_000
-const ENGINE_CHECKOUT_ROOT = resolve(tmpdir(), "strix_repos")
-const ENGINE_WORK_ROOT = resolve(
-  env.LYRASHIELD_ENGINE_WORK_ROOT?.trim() || process.cwd(),
-  "lyrashield_runs"
-)
 
 /**
  * Extract only a repository checkout created by the engine below its dedicated

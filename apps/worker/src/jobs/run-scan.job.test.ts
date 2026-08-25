@@ -1,3 +1,4 @@
+import { resolve } from "node:path"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const completeUsage = vi.hoisted(() => ({
@@ -1294,7 +1295,10 @@ describe("processScanJob", () => {
   it("always cleans up engine workspace", async () => {
     await processScanJob(mockJob)
 
-    expect(cleanupEngineWorkspace).toHaveBeenCalledWith("lyrashield_runs/scan-1", "scan-1")
+    expect(cleanupEngineWorkspace).toHaveBeenCalledWith(
+      resolve(process.cwd(), "lyrashield_runs", "scan-1"),
+      "scan-1"
+    )
   })
 
   it("records cleanup failure without discarding completed scan results", async () => {

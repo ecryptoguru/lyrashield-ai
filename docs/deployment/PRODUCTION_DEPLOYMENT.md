@@ -275,6 +275,7 @@ The live Lite Scanner is a separate passive API and cannot be promoted into the 
 - a managed authenticated `rediss://` service compatible with BullMQ and reachable by both web and worker. Production uses the Upstash TLS TCP endpoint for `REDIS_URL`; the Upstash REST URL/token variables remain the separate HTTP interface used by `@upstash/ratelimit` and do not replace `REDIS_URL`;
 - a deployed authenticated Next.js application origin to create targets, authorize users, enqueue scans, and render retained results;
 - dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, controlled access to the digest-pinned sandbox runtime, and a dedicated internal network shared only with scan sandboxes;
+- a host-visible `/var/lib/lyrashield/worker` run root bind-mounted at the same absolute path in the worker, with engine `TMPDIR` below it, so host Docker can resolve every read-only sandbox bind source;
 - an authorized Luna/Terra/fallback model route and provider credentials;
 - private S3-compatible evidence storage configured through all five `S3_*` values;
 - secret management, TLS, monitoring, backup/restore, and deployment-level egress enforcement.

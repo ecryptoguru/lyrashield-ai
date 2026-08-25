@@ -1,19 +1,16 @@
 import { execFile } from "child_process"
 import { lstat, readdir, rm, stat } from "fs/promises"
-import { tmpdir } from "os"
-import { join, resolve } from "path"
+import { join } from "path"
 import { promisify } from "util"
 import { getSystemPrisma, type ScanStatus } from "@lyrashield/db"
-import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
+import {
+  ENGINE_CHECKOUT_ROOT as CHECKOUT_ROOT,
+  ENGINE_WORK_ROOT as RUN_ROOT,
+} from "./workspace-path"
 
 const execFileAsync = promisify(execFile)
 const ACTIVE_SCAN_STATUSES: ScanStatus[] = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"]
-const CHECKOUT_ROOT = resolve(tmpdir(), "strix_repos")
-const RUN_ROOT = resolve(
-  env.LYRASHIELD_ENGINE_WORK_ROOT?.trim() || process.cwd(),
-  "lyrashield_runs"
-)
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CUID_RUN_ID = /^c[a-z0-9]{24}$/
 
