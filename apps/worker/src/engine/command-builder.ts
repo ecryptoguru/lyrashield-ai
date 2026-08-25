@@ -1,6 +1,7 @@
 import { env } from "@lyrashield/config"
 import { checkInstructionSafety } from "@lyrashield/security"
 import { resolveScanProfile } from "@lyrashield/types"
+import { engineWorkspacePath } from "./workspace-path"
 
 export type TargetType = "REPO" | "WEB_APP" | "API" | "CLOUD_ACCOUNT" | "CONTAINER" | "IAC"
 
@@ -116,7 +117,7 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
     args.push("--max-budget-usd", String(config.maxBudgetUsd))
   }
 
-  const workDir = `lyrashield_runs/${config.scanId}`
+  const workDir = engineWorkspacePath(config.scanId)
 
   return { executable, args, workDir }
 }

@@ -216,4 +216,15 @@ describe("worker Docker runtime", () => {
     // No mutable tag or manually typed revision may supply provenance.
     expect(workerRunner).toContain("${LYRASHIELD_WORKER_IMAGE##*@}")
   })
+
+  it("shares engine work and temp paths with the host Docker daemon", () => {
+    expect(workerRunner).toContain("worker_shared_root=/var/lib/lyrashield/worker")
+    expect(workerRunner).toContain('--env LYRASHIELD_ENGINE_WORK_ROOT="$worker_shared_root"')
+    expect(workerRunner).toContain('--env TMPDIR="$worker_shared_root/tmp"')
+    expect(
+      workerRunner.match(/type=bind,src="\$worker_shared_root",dst="\$worker_shared_root"/g) ?? []
+    ).toHaveLength(2)
+    expect(workerRunner).not.toContain("lyrashield-worker-runs")
+    expect(workerRunner).not.toContain("dst=/app/apps/worker/lyrashield_runs")
+  })
 })

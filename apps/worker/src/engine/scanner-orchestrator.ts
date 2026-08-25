@@ -27,6 +27,7 @@ import {
   type ResolvedDependencyInventory,
 } from "./scanners/resolved-dependencies"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "./scanner-coverage"
+import { engineWorkspacePath } from "./workspace-path"
 import {
   redactUrlForLogs,
   createEgressProxyFetchFn,
@@ -34,7 +35,7 @@ import {
   type AISecurityCoverage,
   type AISecuritySignal,
 } from "@lyrashield/security"
-import { join, resolve } from "path"
+import { resolve } from "path"
 import { mkdir } from "fs/promises"
 
 export interface ScannerOrchestratorConfig {
@@ -322,7 +323,7 @@ export async function runScannerOrchestrator(
         ? "DEEP"
         : "QUICK"
 
-  const scanWorkspace = workspaceDir ?? join(process.cwd(), "lyrashield_runs", scanId)
+  const scanWorkspace = workspaceDir ?? engineWorkspacePath(scanId)
   const absWorkspace = resolve(scanWorkspace)
   // An absent repository checkout must not become a newly created empty
   // directory that source scanners would misreport as clean.

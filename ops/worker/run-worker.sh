@@ -177,15 +177,17 @@ while read -r pinned_host pinned_address pinned_port extra; do
   set -- "$@" --add-host "${pinned_host}:${pinned_address}"
 done <"$pin_file"
 
+worker_shared_root=/var/lib/lyrashield/worker
+install -d -m 700 "$worker_shared_root" "$worker_shared_root/lyrashield_runs" "$worker_shared_root/tmp"
+
 docker rm -f lyrashield-worker >/dev/null 2>&1 || true
-docker volume create lyrashield-worker-runs >/dev/null
 docker run --rm \
   --network none \
   --user 0:0 \
-  --mount type=volume,src=lyrashield-worker-runs,dst=/work \
+  --mount type=bind,src="$worker_shared_root",dst="$worker_shared_root" \
   --entrypoint sh \
   "$LYRASHIELD_WORKER_IMAGE" \
-  -c 'chown -R lyrashield:lyrashield /work && chmod 700 /work'
+  -c "chown -R lyrashield:lyrashield '$worker_shared_root' && chmod 700 '$worker_shared_root' '$worker_shared_root/lyrashield_runs' '$worker_shared_root/tmp'"
 
 docker create \
   --name lyrashield-worker \
@@ -199,6 +201,8 @@ docker create \
   --env PLATFORM_MAX_SCAN_BUDGET_USD=50 \
   --env LYRASHIELD_RUNTIME_BACKEND=docker \
   --env LYRASHIELD_ENGINE_PATH=/opt/lyrashield-venv/bin/lyrashield \
+  --env LYRASHIELD_ENGINE_WORK_ROOT="$worker_shared_root" \
+  --env TMPDIR="$worker_shared_root/tmp" \
   --env LYRASHIELD_ENGINE_SANDBOX_NETWORK="$LYRASHIELD_SANDBOX_NETWORK" \
   --env LYRASHIELD_IMAGE="$LYRASHIELD_SANDBOX_IMAGE" \
   --env LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST="${LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST:-0}" \
@@ -216,7 +220,7 @@ docker create \
   --env LYRASHIELD_ENGINE_REVISION="$engine_revision" \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
-  --mount type=volume,src=lyrashield-worker-runs,dst=/app/apps/worker/lyrashield_runs \
+  --mount type=bind,src="$worker_shared_root",dst="$worker_shared_root" \
   --tmpfs /tmp:rw,nosuid,nodev,size=4g \
   --security-opt no-new-privileges=true \
   --cap-drop ALL \
