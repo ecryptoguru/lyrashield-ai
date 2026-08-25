@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { Wrench } from "lucide-react"
@@ -5,6 +6,10 @@ import { FixesClient } from "./fixes-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+
+export const metadata: Metadata = {
+  title: "Proposed fixes",
+}
 
 export default async function FixesPage() {
   const session = await getCachedSession()

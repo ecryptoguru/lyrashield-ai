@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { ISSUE_PLURAL, RUN_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId, getCachedFindings } from "@/lib/cache"
 import { prisma } from "@lyrashield/db"
@@ -29,6 +30,10 @@ type FindingsTab = "issues" | "evidence" | "reports"
 function normalizeTab(value: string | undefined): FindingsTab {
   if (value === "evidence" || value === "reports") return value
   return "issues"
+}
+
+export const metadata: Metadata = {
+  title: "Issues",
 }
 
 export default async function FindingsPage({

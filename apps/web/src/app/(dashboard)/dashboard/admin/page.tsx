@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { Activity, Building2, CircleDollarSign, ListTodo, Radar, Users } from "lucide-react"
 import { Badge, Card, buttonVariants } from "@lyrashield/ui"
@@ -50,6 +51,10 @@ function Datum({ label, value }: { label: string; value: number | null }) {
       <dd className="mt-1 text-xl font-semibold tabular-nums">{count(value)}</dd>
     </div>
   )
+}
+
+export const metadata: Metadata = {
+  title: "Platform Admin",
 }
 
 export default async function PlatformAdminPage() {

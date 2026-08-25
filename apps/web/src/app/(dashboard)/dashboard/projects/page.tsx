@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { FolderKanban } from "lucide-react"
@@ -5,6 +6,10 @@ import { ProjectsClient } from "./projects-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+
+export const metadata: Metadata = {
+  title: "Projects",
+}
 
 export default async function ProjectsPage() {
   const session = await getCachedSession()

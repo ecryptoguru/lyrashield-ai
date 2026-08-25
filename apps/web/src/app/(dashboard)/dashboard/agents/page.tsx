@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { listPreferredAgents } from "@lyrashield/agent-registry"
 import { env } from "@lyrashield/config"
 import { Bot } from "lucide-react"
@@ -24,6 +25,10 @@ function mapAgentsToCardData(): AgentCardData[] {
     })),
     rulesFiles: [...agent.rulesFiles],
   }))
+}
+
+export const metadata: Metadata = {
+  title: "Coding Agents",
 }
 
 export default async function AgentsPage() {

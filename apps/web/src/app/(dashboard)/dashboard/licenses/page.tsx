@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { KeyRound } from "lucide-react"
@@ -13,6 +14,10 @@ import { LicensesClient } from "./licenses-client"
  * global admin view, not workspace-scoped: the founder can see every license
  * issued across the platform.
  */
+export const metadata: Metadata = {
+  title: "Licenses",
+}
+
 export default async function LicensesPage({
   searchParams,
 }: {

@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { withWorkspaceRLS } from "@lyrashield/db"
 import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
@@ -8,6 +9,10 @@ import { formatDate, formatDateTime } from "@/lib/date-format"
 import { modeLabel } from "@/lib/labels"
 import { TARGET_SINGULAR } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+
+export const metadata: Metadata = {
+  title: "Target",
+}
 
 export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getCachedSession()

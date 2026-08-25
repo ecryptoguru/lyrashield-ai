@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { getScanWithEvents, getScanResultManifestDetail, prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { Radar } from "lucide-react"
@@ -6,6 +7,10 @@ import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { RUN_SINGULAR } from "@/lib/terminology"
 import { ScanDetailClient } from "./scan-detail-client"
+
+export const metadata: Metadata = {
+  title: "Trust Run",
+}
 
 export default async function ScanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getCachedSession()

@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
@@ -13,6 +14,10 @@ import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 import { headers } from "next/headers"
 import { getRequestBillingAdmission, resolveRequestBillingProvider } from "@/lib/billing-admission"
+
+export const metadata: Metadata = {
+  title: "Billing",
+}
 
 export default async function BillingPage() {
   const session = await getCachedSession()

@@ -37,7 +37,7 @@ import { dashboardPrimaryAction } from "@/components/trust-command-center.utils"
 import { FeatureTour } from "@/components/feature-tour"
 
 export const metadata: Metadata = {
-  title: "Dashboard | LyraShield AI",
+  title: "Dashboard",
   description: "Workspace overview, recent scans, findings, and launch readiness.",
   openGraph: {
     title: "Dashboard | LyraShield AI",

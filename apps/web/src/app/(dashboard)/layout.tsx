@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { V2Sidebar } from "@/components/v2-sidebar"
 import { BottomNav } from "@/components/bottom-nav"
@@ -14,6 +15,18 @@ import {
 import type { MemberRole } from "@lyrashield/db"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { isPlatformOperator } from "@lyrashield/auth/server"
+
+/**
+ * Every authenticated dashboard route inherits this. The title template means a
+ * page exports just its own name ("Billing") and gets "Billing | LyraShield AI"
+ * — without it, a page that omits metadata silently falls back to the root
+ * marketing title, which is what shipped for most of these routes.
+ * robots noindex: these pages are behind auth and must never be indexed.
+ */
+export const metadata: Metadata = {
+  title: { template: "%s | LyraShield AI", default: "Dashboard | LyraShield AI" },
+  robots: { index: false, follow: false },
+}
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getCachedSession()

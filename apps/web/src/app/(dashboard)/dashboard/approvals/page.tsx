@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
 import { listApprovals, prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
@@ -8,6 +9,10 @@ import { ApprovalsClient } from "./approvals-client"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
+
+export const metadata: Metadata = {
+  title: "Review Queue",
+}
 
 export default async function ApprovalsPage() {
   const session = await getCachedSession()
