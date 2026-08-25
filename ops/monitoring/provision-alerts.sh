@@ -11,7 +11,13 @@ set -eu
 : "${WORKER_VM_RESOURCE_ID:?WORKER_VM_RESOURCE_ID is required}"
 : "${APP_RESOURCE_ID:?APP_RESOURCE_ID is required}"
 : "${SCANNER_RESOURCE_ID:?SCANNER_RESOURCE_ID is required}"
-: "${LYRASHIELD_OPERATOR_EMAIL:?LYRASHIELD_OPERATOR_EMAIL is required}"
+: "${LYRASHIELD_PRIMARY_OPERATOR_EMAIL:?LYRASHIELD_PRIMARY_OPERATOR_EMAIL is required}"
+: "${LYRASHIELD_FOUNDER_ESCALATION_EMAIL:?LYRASHIELD_FOUNDER_ESCALATION_EMAIL is required}"
+
+if [ "$LYRASHIELD_PRIMARY_OPERATOR_EMAIL" = "$LYRASHIELD_FOUNDER_ESCALATION_EMAIL" ]; then
+  echo "Primary operator and founder escalation emails must be different" >&2
+  exit 1
+fi
 
 az_run() {
   az "$@" --subscription "$AZURE_SUBSCRIPTION_ID" --only-show-errors
@@ -100,8 +106,59 @@ action_group_id=$(az_run monitor action-group create \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --name lyrashield-operator-alerts \
   --short-name LyraOps \
-  --action email operator "$LYRASHIELD_OPERATOR_EMAIL" \
+  --action email primary-operator "$LYRASHIELD_PRIMARY_OPERATOR_EMAIL" usecommonalertschema \
+  --action email founder-escalation "$LYRASHIELD_FOUNDER_ESCALATION_EMAIL" usecommonalertschema \
   --query id -o tsv)
+
+# Fail before creating/updating alert rules unless Azure retained exactly the
+# declared receiver set.
+action_readback=$(az_run monitor action-group show \
+  --name lyrashield-operator-alerts \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --query name -o tsv)
+[ "$action_readback" = "lyrashield-operator-alerts" ] || {
+  echo "Action group readback failed after provisioning" >&2
+  exit 1
+}
+
+action_group_enabled=$(az_run monitor action-group show \
+  --name lyrashield-operator-alerts \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --query enabled -o tsv)
+[ "$action_group_enabled" = "true" ] || {
+  echo "Action group is not enabled after provisioning" >&2
+  exit 1
+}
+
+receiver_count=$(az_run monitor action-group show \
+  --name lyrashield-operator-alerts \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --query "length(emailReceivers)" -o tsv)
+[ "$receiver_count" = "2" ] || {
+  echo "Action group must contain exactly two email receivers" >&2
+  exit 1
+}
+
+enabled_common_schema_count=$(az_run monitor action-group show \
+  --name lyrashield-operator-alerts \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --query "length(emailReceivers[?status == 'Enabled' && useCommonAlertSchema == \`true\`])" -o tsv)
+[ "$enabled_common_schema_count" = "2" ] || {
+  echo "Both action-group email receivers must be enabled with common alert schema" >&2
+  exit 1
+}
+
+expected_receiver_emails=$(printf '%s\n%s\n' \
+  "$LYRASHIELD_PRIMARY_OPERATOR_EMAIL" \
+  "$LYRASHIELD_FOUNDER_ESCALATION_EMAIL" | sort)
+receiver_emails=$(az_run monitor action-group show \
+  --name lyrashield-operator-alerts \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --query "sort(emailReceivers[].emailAddress)" -o tsv)
+[ "$receiver_emails" = "$expected_receiver_emails" ] || {
+  echo "Action-group email receiver set does not match the declared operators" >&2
+  exit 1
+}
 
 metric_alert() {
   name=$1
@@ -239,15 +296,6 @@ readback_scheduled_query() {
     echo "Scheduled query $name is not bound to lyrashield-operator-alerts" >&2
     exit 1
   }
-}
-
-action_readback=$(az_run monitor action-group show \
-  --name lyrashield-operator-alerts \
-  --resource-group "$AZURE_RESOURCE_GROUP" \
-  --query name -o tsv)
-[ "$action_readback" = "lyrashield-operator-alerts" ] || {
-  echo "Action group readback failed after provisioning" >&2
-  exit 1
 }
 
 for rule in \

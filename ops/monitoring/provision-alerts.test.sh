@@ -17,6 +17,14 @@ case "$*" in
   *"log-analytics query"*"LyraShield worker starting"*) printf '%s\n' "${FAKE_WORKER_LOG_COUNT:-1}" ;;
   *"log-analytics query"*"ContainerAppConsoleLogs_CL"*) printf '%s\n' "${FAKE_APP_LOG_COUNT:-1}" ;;
   *"action-group create"*) printf '%s\n' "${FAKE_ACTION_GROUP_ID:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}" ;;
+  *"action-group show"*"useCommonAlertSchema"*) printf '%s\n' "${FAKE_COMMON_SCHEMA_COUNT:-2}" ;;
+  *"action-group show"*"length(emailReceivers)"*) printf '%s\n' "${FAKE_RECEIVER_COUNT:-2}" ;;
+  *"action-group show"*"sort(emailReceivers"*)
+    printf '%s\n%s\n' \
+      "${FAKE_PRIMARY_OPERATOR_EMAIL:-ecryptoguru@gmail.com}" \
+      "${FAKE_FOUNDER_ESCALATION_EMAIL:-ankit@lyrashieldai.com}" | sort
+    ;;
+  *"action-group show"*"--query enabled"*) printf 'true\n' ;;
   *"action-group show"*) printf 'lyrashield-operator-alerts\n' ;;
   *"metrics alert show"*"--query enabled"*) printf 'true\n' ;;
   *"metrics alert show"*"actionGroupId"*) printf '%s\n' "${FAKE_ACTION_GROUP_ID:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}" ;;
@@ -39,7 +47,8 @@ export WORKER_VM_NAME=worker
 export WORKER_VM_RESOURCE_ID=/subscriptions/test/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/worker
 export APP_RESOURCE_ID=/subscriptions/test/resourceGroups/rg/providers/Microsoft.App/containerApps/app
 export SCANNER_RESOURCE_ID=/subscriptions/test/resourceGroups/rg/providers/Microsoft.App/containerApps/scanner
-export LYRASHIELD_OPERATOR_EMAIL=operator@example.test
+export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=ecryptoguru@gmail.com
+export LYRASHIELD_FOUNDER_ESCALATION_EMAIL=ankit@lyrashieldai.com
 
 sh ops/monitoring/provision-alerts.sh >/dev/null
 
@@ -51,6 +60,8 @@ grep -q "resource show.*$APP_RESOURCE_ID" "$capture"
 grep -q 'log-analytics query.*LyraShield worker starting' "$capture"
 grep -q "log-analytics query.*ContainerAppConsoleLogs_CL.*ContainerAppName_s =~ 'app'" "$capture"
 grep -q 'action-group create.*lyrashield-operator-alerts' "$capture"
+grep -q 'action-group create.*primary-operator ecryptoguru@gmail.com usecommonalertschema' "$capture"
+grep -q 'action-group create.*founder-escalation ankit@lyrashieldai.com usecommonalertschema' "$capture"
 grep -q 'worker-cpu-high.*Percentage CPU > 85.*window-size 15m' "$capture"
 grep -q 'app-no-active-replica.*Replicas < 1' "$capture"
 grep -q 'app-replica-restart.*RestartCount > 0' "$capture"
@@ -145,7 +156,7 @@ test "$(grep -c 'metrics alert show.*actionGroupId' "$capture")" = 6
 test "$(grep -c 'scheduled-query show.*--query enabled' "$capture")" = 7
 test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 7
 test "$(grep -c 'scheduled-query show.*actionGroups\[0\]' "$capture")" = 7
-test "$(grep -c 'action-group show' "$capture")" = 1
+test "$(grep -c 'action-group show' "$capture")" = 5
 for rule in \
   worker-vm-unavailable worker-cpu-high app-no-active-replica \
   app-replica-restart scanner-no-active-replica scanner-replica-restart
@@ -190,15 +201,50 @@ if grep -q 'delete' "$capture"; then
   exit 1
 fi
 
-# ── Empty delivery configuration fails before any mutation ──────────────────
+# ── Delivery configuration and readback fail closed ─────────────────────────
 : >"$capture"
-export LYRASHIELD_OPERATOR_EMAIL=""
+export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=""
 if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
-  echo "provisioning must fail with an empty operator delivery address" >&2
+  echo "provisioning must fail with an empty primary operator delivery address" >&2
   exit 1
 fi
 test "$(grep -c 'action-group create' "$capture" || true)" = 0
-unset LYRASHIELD_OPERATOR_EMAIL
+export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=ecryptoguru@gmail.com
+
+: >"$capture"
+export LYRASHIELD_FOUNDER_ESCALATION_EMAIL="$LYRASHIELD_PRIMARY_OPERATOR_EMAIL"
+if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
+  echo "provisioning must fail when both delivery addresses are identical" >&2
+  exit 1
+fi
+test "$(grep -c 'action-group create' "$capture" || true)" = 0
+export LYRASHIELD_FOUNDER_ESCALATION_EMAIL=ankit@lyrashieldai.com
+
+: >"$capture"
+export FAKE_RECEIVER_COUNT=3
+if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
+  echo "provisioning must fail when an undeclared third email receiver remains" >&2
+  exit 1
+fi
+test "$(grep -c 'monitor metrics alert create' "$capture" || true)" = 0
+test "$(grep -c 'monitor scheduled-query create' "$capture" || true)" = 0
+unset FAKE_RECEIVER_COUNT
+
+: >"$capture"
+export FAKE_FOUNDER_ESCALATION_EMAIL=unexpected@example.test
+if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
+  echo "provisioning must fail when receiver email readback differs" >&2
+  exit 1
+fi
+unset FAKE_FOUNDER_ESCALATION_EMAIL
+
+: >"$capture"
+export FAKE_COMMON_SCHEMA_COUNT=1
+if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
+  echo "provisioning must fail unless both receivers are enabled with common schema" >&2
+  exit 1
+fi
+unset FAKE_COMMON_SCHEMA_COUNT
 
 # ── Query content stays code-only and bounded ───────────────────────────────
 # Application log queries match structured operator_alert codes only. They
