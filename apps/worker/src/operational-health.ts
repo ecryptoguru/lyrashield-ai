@@ -1,5 +1,8 @@
 import { getSystemPrisma } from "@lyrashield/db"
 
+export const TERMINAL_COST_DISPOSITION_STAGE = "terminal_cost_operator_reconciled"
+export const TERMINAL_COST_DISPOSITION_RECEIPT_TYPE = "terminal_cost_operator_disposition_v1"
+
 export const OPERATIONAL_ALERT_THRESHOLDS = {
   readinessFailureMs: 5 * 60_000,
   queueDepthMultiplier: 2,
@@ -193,6 +196,26 @@ export async function collectOperationalHealthSnapshot(params: {
           { providerCostUsd: { not: null } },
           { events: { some: { stage: "llm_usage_unavailable", deletedAt: null } } },
         ],
+        events: {
+          none: {
+            stage: TERMINAL_COST_DISPOSITION_STAGE,
+            deletedAt: null,
+            AND: [
+              {
+                metadata: {
+                  path: ["receiptType"],
+                  equals: TERMINAL_COST_DISPOSITION_RECEIPT_TYPE,
+                },
+              },
+              {
+                metadata: {
+                  path: ["conclusion", "providerCostUsd"],
+                  equals: "0.000000",
+                },
+              },
+            ],
+          },
+        },
       },
       select: { endedAt: true },
       orderBy: { endedAt: "asc" },

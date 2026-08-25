@@ -134,7 +134,29 @@ describe("collectOperationalHealthSnapshot", () => {
     })
     expect(mocks.prisma.scan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ billedCostUsd: null, target: { type: "REPO" } }),
+        where: expect.objectContaining({
+          billedCostUsd: null,
+          target: { type: "REPO" },
+          events: {
+            none: expect.objectContaining({
+              stage: "terminal_cost_operator_reconciled",
+              AND: expect.arrayContaining([
+                {
+                  metadata: {
+                    path: ["receiptType"],
+                    equals: "terminal_cost_operator_disposition_v1",
+                  },
+                },
+                {
+                  metadata: {
+                    path: ["conclusion", "providerCostUsd"],
+                    equals: "0.000000",
+                  },
+                },
+              ]),
+            }),
+          },
+        }),
       })
     )
   })
