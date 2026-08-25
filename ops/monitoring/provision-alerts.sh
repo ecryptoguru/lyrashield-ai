@@ -92,7 +92,7 @@ fi
 
 worker_log_count=$(az_run monitor log-analytics query \
   --workspace "$LOG_ANALYTICS_WORKSPACE_GUID" \
-  --analytics-query "Syslog | where TimeGenerated > ago(24h) | where SyslogMessage has '\"message\":\"LyraShield worker starting\"' | count" \
+  --analytics-query "Syslog | where TimeGenerated > ago(24h) | where SyslogMessage contains '\"message\":\"LyraShield worker starting\"' | count" \
   --query "tables[0].rows[0][0]" -o tsv)
 assert_positive_count "worker application" "$worker_log_count"
 
