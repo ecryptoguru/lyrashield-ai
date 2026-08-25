@@ -8,6 +8,7 @@ import { logger } from "@lyrashield/logger"
 import { checkScanUrlSafe } from "../../../lib/ssrf"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiPaginated, parsePaginationParams } from "../../../lib/api-response"
+import { assertTargetAllowed } from "@lyrashield/billing"
 
 export async function POST(request: Request) {
   let body: unknown
@@ -89,6 +90,17 @@ export async function POST(request: Request) {
           { status: 404 }
         )
       }
+    }
+
+    const entitlement = await assertTargetAllowed(workspaceId)
+    if (!entitlement.allowed) {
+      return apiError(
+        entitlement.code ?? "TARGET_NOT_ALLOWED",
+        entitlement.message ?? "Target not allowed",
+        403,
+        undefined,
+        { targetsUsed: entitlement.targetsUsed, targetCap: entitlement.targetCap }
+      )
     }
 
     // A caller-supplied installationId must belong to an active GitHub

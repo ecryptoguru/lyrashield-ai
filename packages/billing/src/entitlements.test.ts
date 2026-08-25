@@ -150,7 +150,7 @@ describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
     expect(result.isTrial).toBe(true)
   })
 
-  it("blocks STANDARD when the trial target cap is reached (TRIAL_TARGET_LIMIT)", async () => {
+  it("allows STANDARD for an existing target when the trial target cap is reached", async () => {
     vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
       plan: "FREE",
       deepAllowed: false,
@@ -165,8 +165,7 @@ describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
 
     const result = await assertScanAllowed("ws-trial-capped", "STANDARD")
 
-    expect(result.allowed).toBe(false)
-    expect(result.code).toBe("TRIAL_TARGET_LIMIT")
+    expect(result.allowed).toBe(true)
     expect(result.isTrial).toBe(true)
   })
 })
