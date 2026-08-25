@@ -367,6 +367,47 @@ describe("verifyLaunchAssurance", () => {
     expect(receipt.steps.some((step) => step.status === "failed")).toBe(false)
   })
 
+  it("runs storage proof without requiring failure-injection authorization", async () => {
+    const deps = makeDeps()
+    const receipt = await verifyLaunchAssurance(
+      {
+        ...baseOptions(),
+        allowFailureInjection: false,
+        scanId: undefined,
+        workspaceId: undefined,
+        environment: undefined,
+        confirmProduction: undefined,
+      },
+      deps
+    )
+
+    expect(receipt.mode).toBe("storage-proof")
+    expect(receipt.overall).toBe("passed")
+    expect(
+      receipt.steps
+        .filter((step) => step.name.startsWith("storage_"))
+        .every((step) => step.status === "passed")
+    ).toBe(true)
+    expect(
+      receipt.steps
+        .filter((step) =>
+          [
+            "failure_injection_preflight",
+            "authenticated_cancellation",
+            "settle_wait",
+            "queue_recovery",
+            "post_recovery_readiness",
+          ].includes(step.name)
+        )
+        .every(
+          (step) =>
+            step.status === "skipped" &&
+            step.reason === "storage proof: failure injection not authorized"
+        )
+    ).toBe(true)
+    expect(deps.reconcile).not.toHaveBeenCalled()
+  })
+
   it("records a step timeout as failed", async () => {
     const deps = makeDeps({
       fetch: vi.fn(
