@@ -14,8 +14,10 @@ If no acknowledgment exists after five minutes, the **Founder Escalation Owner**
 incident command.
 
 Do not put a shared mailbox, anonymous identity, or unowned webhook in the action
-group. Set `LYRASHIELD_OPERATOR_EMAIL` to the currently assigned primary operator when
-provisioning. Receiver rotation requires re-running provisioning and a test alert.
+group. Set `LYRASHIELD_PRIMARY_OPERATOR_EMAIL` and
+`LYRASHIELD_FOUNDER_ESCALATION_EMAIL` to the two named operators. Provisioning fails
+unless the action group contains exactly those two enabled common-schema email
+receivers. Receiver rotation requires re-running provisioning and a test alert.
 
 ## Rules
 
@@ -77,7 +79,8 @@ manage Monitor resources. Set:
   Syslog into that workspace;
 - `WORKER_VM_NAME` and `WORKER_VM_RESOURCE_ID`;
 - `APP_RESOURCE_ID` and `SCANNER_RESOURCE_ID`;
-- `LYRASHIELD_OPERATOR_EMAIL`.
+- `LYRASHIELD_PRIMARY_OPERATOR_EMAIL` and
+  `LYRASHIELD_FOUNDER_ESCALATION_EMAIL`.
 
 Then run:
 

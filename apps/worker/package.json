@@ -6,6 +6,7 @@
     "dev": "node --env-file=../../.env --import tsx --watch src/index.ts",
     "start": "tsx src/index.ts",
     "verify:launch-assurance": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-launch-assurance.ts",
+    "verify:queue-orphan-fixture": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-queue-orphan-fixture.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0"
   },

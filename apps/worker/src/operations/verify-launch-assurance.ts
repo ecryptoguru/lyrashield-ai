@@ -513,7 +513,11 @@ export async function verifyLaunchAssurance(
     )
   }
 
-  if (mode === "dry-run") {
+  if (mode !== "full") {
+    const reason =
+      mode === "dry-run"
+        ? "dry run: no mutation"
+        : "storage proof: failure injection not authorized"
     for (const name of [
       "failure_injection_preflight",
       "authenticated_cancellation",
@@ -521,7 +525,7 @@ export async function verifyLaunchAssurance(
       "queue_recovery",
       "post_recovery_readiness",
     ]) {
-      steps.push({ name, status: "skipped", reason: "dry run: no mutation", durationMs: 0 })
+      steps.push({ name, status: "skipped", reason, durationMs: 0 })
     }
   } else {
     // 6. Failure-injection preflight

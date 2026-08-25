@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   },
   queue: { getJob: vi.fn(), getJobs: vi.fn() },
   prisma: {
-    scan: { count: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+    scan: { count: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
   },
   updateScanStatus: vi.fn(),
 }))
@@ -42,6 +42,7 @@ vi.mock("./queue", () => ({ getScanQueue: () => mocks.queue }))
 
 import {
   RECONCILIATION_IDLE_BACKSTOP_MS,
+  reconcileExactQueuedScanOrphan,
   reconcileFailedQueueJob,
   reconcileScanQueue,
   reconcileScanQueueIfNeeded,
@@ -82,6 +83,7 @@ describe("scan queue reconciliation", () => {
     mocks.queue.getJob.mockResolvedValue(null)
     mocks.queue.getJobs.mockResolvedValue([])
     mocks.prisma.scan.count.mockResolvedValue(0)
+    mocks.prisma.scan.findFirst.mockResolvedValue(null)
     mocks.prisma.scan.findMany.mockResolvedValue([])
     mocks.updateScanStatus.mockResolvedValue({ id: "scan-1" })
   })
@@ -175,6 +177,46 @@ describe("scan queue reconciliation", () => {
       55_000,
       "NX"
     )
+  })
+
+  it("reconciles one exact stale queued fixture without scanning other rows", async () => {
+    mocks.prisma.scan.findFirst.mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" })
+
+    await expect(
+      reconcileExactQueuedScanOrphan("scan-1", "ws-1", new Date("2026-07-18T12:00:00Z"))
+    ).resolves.toEqual({ leaseAcquired: true, reconciled: true, jobState: "missing" })
+
+    expect(mocks.prisma.scan.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "scan-1",
+        workspaceId: "ws-1",
+        status: "QUEUED",
+        deletedAt: null,
+        updatedAt: { lt: new Date("2026-07-18T11:55:00Z") },
+      },
+      select: { id: true, workspaceId: true },
+    })
+    expect(mocks.updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      {
+        errorCategory: "QUEUE",
+        errorMessage: expect.stringContaining("QUEUE_ORPHANED"),
+      },
+      "ws-1"
+    )
+    expect(mocks.prisma.scan.findMany).not.toHaveBeenCalled()
+    expect(mocks.queue.getJobs).not.toHaveBeenCalled()
+  })
+
+  it("does not reconcile when the exact fixture is absent or not stale", async () => {
+    await expect(reconcileExactQueuedScanOrphan("scan-1", "ws-1")).resolves.toEqual({
+      leaseAcquired: true,
+      reconciled: false,
+      jobState: null,
+    })
+    expect(mocks.updateScanStatus).not.toHaveBeenCalled()
+    expect(mocks.queue.getJob).not.toHaveBeenCalled()
   })
 
   it("does nothing when another worker owns the reconciliation lease", async () => {
