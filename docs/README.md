@@ -5,7 +5,7 @@ Use this index to find the owning document and avoid duplicating current truth.
 ## Current sources of truth
 
 - [`../PRD.md`](../PRD.md) — product scope, release status, backlog, and founder decisions.
-- [`../Phase2.md`](../Phase2.md) — verbatim archive of Phase 2 and future-roadmap material removed from the consolidated PRD; status may be historical.
+- [`../Phase2.md`](../Phase2.md) — dated future-roadmap planning overlay followed by the verbatim Phase 2 archive; `PRD.md` remains current product truth.
 - [`../codebase.md`](../codebase.md) — architecture, runtime contracts, code map, and compact implementation ledger.
 - [`../AGENTS.md`](../AGENTS.md) — immediate engineering handoff, execution queue, rules, and landmines.
 - [`../product.md`](../product.md) — positioning and commercial decisions.

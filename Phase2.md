@@ -1,6 +1,79 @@
-# LyraShield AI — Phase 2 and Future Roadmap Archive
+# LyraShield AI — Phase 2 Roadmap and Future Archive
 
 > Verbatim extraction from `PRD.md` at commit `69a72afcce5f28df976bbc72b08d7c4d67acfe83`, immediately before the 2026-08-21 consolidation. Wording, status labels, estimates, examples, and historical references below are preserved without summarization; current product and release truth remains in `PRD.md`.
+
+## Planning overlay — 2026-08-26
+
+This section records the current Phase 2 direction without rewriting the historical archive below. `PRD.md`, `AGENTS.md`, running code, CI, and retained production evidence remain authoritative for current implementation and release status.
+
+### Product direction
+
+- Initial enterprise segment: regulated SaaS and fintech teams.
+- Deployment shape: LyraShield SaaS control plane with an outbound-only customer private worker.
+- Pilot: 2–3 design partners, a 90-day build, and a 30-day pilot.
+- Pilot success: governance proof plus basic evidence retention and export around the existing Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report loop.
+- Public-market research is directional input, not customer validation. Design-partner interviews must confirm workflow, deployment, data-boundary, and procurement priorities before broader Phase 2 scope is committed.
+
+### Prerequisites before Phase 2
+
+1. Close the current production launch gates tracked in `AGENTS.md` and `PRD.md`; do not duplicate their changing status here.
+2. Interview 2–3 design partners and retain a decision log covering finding overload, proof that a fix worked, approval fatigue, private data flow, audit evidence, and non-human identity controls.
+3. Confirm the initial customer segment, private-worker boundary, procurement requirements, retention/export needs, and measurable pilot success criteria before committing the wider roadmap.
+
+### Enterprise governance pilot
+
+Build only after the prerequisites above are satisfied and design-partner evidence confirms the need.
+
+#### Months 1–3: pilot wedge
+
+- OIDC enterprise sign-in; add SAML only when a signed design partner requires it.
+- Enterprise role-management UI over the existing permission model; do not create a second authorization system.
+- Workspace policy CRUD and enforcement for scan scope, production approval, budget, duration, evidence retention, and release conditions.
+- Outbound-only private-worker registration, short-lived credentials, job pull, status, revocation, and version/provenance receipts.
+- Workspace audit export and basic evidence retention/export.
+- Pilot proof for tenant isolation, private-worker data flow, policy enforcement, exact-revision retest, audit completeness, and operator recovery.
+
+#### Months 4–6: productize validated demand
+
+- SCIM lifecycle management.
+- SAML where confirmed by customer demand.
+- Customer-managed evidence storage and KMS/Vault keys.
+- Retention and deletion controls with fail-closed evidence semantics.
+- Evidence-backed compliance mappings and export packs; no certification or compliance claim.
+- Data-residency controls where contractually required.
+- Full contextual prioritization using repository reachability and customer-owned business context, with provenance and explicit uncertainty.
+
+#### Months 7–9: requested integrations
+
+- Implement only integrations requested by active design partners or paying customers.
+- Prefer one generic signed outbound webhook before maintaining many narrow adapters.
+- Likely candidates: SIEM, Jira/Linear, GitHub/GitLab release gates, CI/CD, and cloud identity directories.
+
+#### Months 10–12: choose one expansion branch
+
+Choose one branch from validated demand and capacity evidence: customer VPC deployment, Helm/self-hosted deployment, MSP/MSSP multi-tenant operations, or deeper scanner coverage. Do not run all four programs in parallel.
+
+### Explicit deferrals
+
+- Broad ASPM graph and attack-path platform.
+- Large integration catalog without named customer demand.
+- Security Copilot sidebar and visual security plans/recaps.
+- Full self-hosting, VPC, MSP/MSSP, and broad scanner expansion before the month 10–12 branch decision.
+- IaC, container, cloud-account, and broad reachability scanning outside the validated pilot need.
+- Local/self-hosted model support.
+- Human-validated pentest add-on.
+
+### Customer pain signals shaping this split
+
+- Finding volume without business or reachability context creates triage work rather than decisions.
+- Teams need exact, server-owned evidence that a fix was retested against the intended revision.
+- Risk-tiered approvals are more usable than approval prompts on every action.
+- Enterprise buyers need an exact data-flow and private-processing boundary, not a generic “private” claim.
+- Audit evidence must be operationally exportable and attributable to both human and non-human actors.
+
+---
+
+## Historical archive begins
 
 Product phases:
 

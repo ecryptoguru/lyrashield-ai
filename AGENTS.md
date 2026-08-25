@@ -161,7 +161,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 ## Documentation ownership
 
 - [PRD.md](./PRD.md): strategy, scope, release status, backlog, founder decisions.
-- [Phase2.md](./Phase2.md): verbatim original Phase 2/future-roadmap archive; do not treat historical status as current.
+- [Phase2.md](./Phase2.md): dated future-roadmap planning overlay followed by the verbatim original archive; do not treat historical status as current.
 - [codebase.md](./codebase.md): architecture, code map, runtime contracts, compact history.
 - [AGENTS.md](./AGENTS.md): current handoff, queue, rules, landmines.
 - [product.md](./product.md): positioning and commercial decisions.
