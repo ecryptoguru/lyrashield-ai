@@ -178,7 +178,7 @@ export function TargetsClient({
         repoOwner: repoForm.repoOwner,
         repoName: repoForm.repoName,
         ...(repoForm.installationId ? { installationId: repoForm.installationId } : {}),
-        ...(repoForm.branch ? { branch: repoForm.branch } : {}),
+        ...(repoForm.branch.trim() ? { branch: repoForm.branch.trim() } : {}),
       })
       setShowForm(false)
       setRepoForm({
@@ -396,6 +396,23 @@ export function TargetsClient({
                       />
                     </FormField>
                   </div>
+                  <FormField label="Branch or tag (optional)" htmlFor="repo-ref">
+                    <p id="repo-ref-help" className="text-muted-foreground mb-1 text-xs">
+                      Leave blank to use the default branch, or enter an exact branch or release tag
+                      such as v0.1.17.
+                    </p>
+                    <Input
+                      id="repo-ref"
+                      type="text"
+                      value={repoForm.branch}
+                      onChange={(e) => setRepoForm({ ...repoForm, branch: e.target.value })}
+                      maxLength={255}
+                      aria-describedby="repo-ref-help"
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="main or v0.1.17"
+                    />
+                  </FormField>
                   {githubConnected && repoMode === "manual" && (
                     <button
                       type="button"

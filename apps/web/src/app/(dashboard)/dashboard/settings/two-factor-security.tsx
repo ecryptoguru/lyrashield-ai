@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Check, Copy, ShieldCheck } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import {
   Button,
@@ -103,7 +105,19 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
         ) : setup ? (
           <>
             <div className="space-y-2">
-              <p className="text-sm font-medium">Add this URI to your authenticator app</p>
+              <p className="text-sm font-medium">Scan with your authenticator app</p>
+              <div className="w-fit rounded-md border bg-white p-2">
+                <QRCodeSVG
+                  value={setup.totpURI}
+                  size={224}
+                  marginSize={2}
+                  title="Authenticator setup QR code"
+                />
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Generated only in this browser. If scanning is unavailable, enter the URI manually.
+              </p>
+              <p className="text-sm font-medium">Manual authenticator URI</p>
               <textarea
                 readOnly
                 rows={4}
@@ -156,6 +170,13 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
                 autoComplete="current-password"
               />
             </FormField>
+            <p className="text-muted-foreground text-xs">
+              Signed up with a social provider and do not have a password?{" "}
+              <Link href="/forgot-password" className="text-primary font-medium hover:underline">
+                Set one securely by email
+              </Link>
+              .
+            </p>
             <Button type="submit" disabled={loading || !password}>
               {loading && <Spinner className="mr-2" />} Set up authenticator
             </Button>
