@@ -93,13 +93,13 @@ fi
 worker_log_count=$(az_run monitor log-analytics query \
   --workspace "$LOG_ANALYTICS_WORKSPACE_GUID" \
   --analytics-query "Syslog | where TimeGenerated > ago(24h) | where SyslogMessage contains '\"message\":\"LyraShield worker starting\"' | count" \
-  --query "tables[0].rows[0][0]" -o tsv)
+  --query "[0].Count" -o tsv)
 assert_positive_count "worker application" "$worker_log_count"
 
 app_log_count=$(az_run monitor log-analytics query \
   --workspace "$LOG_ANALYTICS_WORKSPACE_GUID" \
   --analytics-query "ContainerAppConsoleLogs_CL | where TimeGenerated > ago(24h) | where ContainerAppName_s =~ '$app_name' | count" \
-  --query "tables[0].rows[0][0]" -o tsv)
+  --query "[0].Count" -o tsv)
 assert_positive_count "production app Container Apps" "$app_log_count"
 
 action_group_id=$(az_run monitor action-group create \

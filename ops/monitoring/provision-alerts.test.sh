@@ -59,6 +59,7 @@ grep -q 'data-collection rule show.*workspaceResourceId' "$capture"
 grep -q "resource show.*$APP_RESOURCE_ID" "$capture"
 grep -q 'log-analytics query.*contains.*LyraShield worker starting' "$capture"
 grep -q "log-analytics query.*ContainerAppConsoleLogs_CL.*ContainerAppName_s =~ 'app'" "$capture"
+test "$(grep -c 'log-analytics query.*--query \[0\]\.Count' "$capture")" = 2
 grep -q 'action-group create.*lyrashield-operator-alerts' "$capture"
 grep -q 'action-group create.*primary-operator ecryptoguru@gmail.com usecommonalertschema' "$capture"
 grep -q 'action-group create.*founder-escalation ankit@lyrashieldai.com usecommonalertschema' "$capture"

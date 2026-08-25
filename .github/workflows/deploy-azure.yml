@@ -925,6 +925,7 @@ jobs:
           EGRESS_FQDN: ${{ steps.deploy-egress-proxy.outputs.fqdn }}
           EGRESS_REVISION: ${{ steps.deploy-egress-proxy.outputs.revision }}
         run: |
+          source ops/deployment/azure-vm-run-command.sh
           smoke_candidate() {
             local label="$1"
             local name="$2"
@@ -978,7 +979,7 @@ jobs:
                 --output tsv)
               if [ "$health" = "Healthy" ] && [[ "$running" == Running* ]]; then
                 local result
-                result=$(az vm run-command invoke \
+                result=$(azure_vm_run_command_with_retry \
                   --name "$WORKER_VM_NAME" \
                   --resource-group "$RG" \
                   --command-id RunShellScript \
@@ -1051,6 +1052,7 @@ jobs:
           EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: |
+          source ops/deployment/azure-vm-run-command.sh
           smoke_public() {
             local label="$1"
             local url="$2"
@@ -1070,7 +1072,7 @@ jobs:
             local url="$1"
             if [ -z "$url" ]; then return 0; fi
             local result
-            result=$(az vm run-command invoke \
+            result=$(azure_vm_run_command_with_retry \
               --name "$WORKER_VM_NAME" \
               --resource-group "$RG" \
               --command-id RunShellScript \
@@ -1205,6 +1207,7 @@ jobs:
           APP_SMOKE_URL: ${{ env.APP_URL }}/api/ready
           SCANNER_SMOKE_URL: ${{ env.SCANNER_URL }}/api/ready
         run: |
+          source ops/deployment/azure-vm-run-command.sh
           rollback_app() {
             local name="$1"
             local revision="$2"
@@ -1246,7 +1249,7 @@ jobs:
               --revision-weight "$revision=100" \
               --output none
             local result
-            result=$(az vm run-command invoke \
+            result=$(azure_vm_run_command_with_retry \
               --name "$WORKER_VM_NAME" \
               --resource-group "$RG" \
               --command-id RunShellScript \
