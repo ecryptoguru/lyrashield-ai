@@ -10,6 +10,8 @@ describe("two-factor enrollment UI security contract", () => {
     expect(source).toContain("password,")
     expect(source).toContain('method: "totp"')
     expect(source).toContain('autoComplete="current-password"')
+    expect(source).toContain('href="/forgot-password"')
+    expect(source).toContain("Signed up with Google or GitHub")
   })
 
   it("never trusts the device and exposes recovery material without an external QR service", () => {

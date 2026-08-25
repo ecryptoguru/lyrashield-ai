@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Check, Copy, ShieldCheck } from "lucide-react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import {
@@ -156,6 +157,13 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
                 autoComplete="current-password"
               />
             </FormField>
+            <p className="text-muted-foreground text-xs">
+              Signed up with Google or GitHub and do not have a password?{" "}
+              <Link href="/forgot-password" className="text-primary font-medium hover:underline">
+                Set one securely by email
+              </Link>
+              .
+            </p>
             <Button type="submit" disabled={loading || !password}>
               {loading && <Spinner className="mr-2" />} Set up authenticator
             </Button>
