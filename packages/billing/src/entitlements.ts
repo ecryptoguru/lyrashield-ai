@@ -35,7 +35,7 @@ export interface EntitlementResult {
  * - DEEP/CUSTOM scans require a plan with deepAllowed=true (PRO, TEAM, AGENCY)
  * - TRIAL and STARTER plans cannot run DEEP/CUSTOM scans
  * - The workspace must have remaining agent-minutes > 0
- * - Trial workspaces are subject to scan-frequency throttle
+ * - Trial workspaces may scan any target already admitted to the workspace
  */
 export async function assertScanAllowed(
   workspaceId: string,
@@ -163,21 +163,6 @@ export async function assertScanAllowed(
         isTrial,
         plan,
         remainingMinutes: 0,
-      }
-    }
-  }
-
-  // Trial scan-frequency throttle: trial workspaces limited to 3 targets
-  // A-L05: Reuse the trialState from above instead of calling getTrialState again
-  if (isTrial && trialState) {
-    if (trialState.targetsUsed >= trialState.targetCap) {
-      return {
-        allowed: false,
-        code: "TRIAL_TARGET_LIMIT",
-        message: `Trial is limited to ${trialState.targetCap} targets. Upgrade for more.`,
-        isTrial,
-        plan,
-        remainingMinutes: balance.totalRemaining,
       }
     }
   }
