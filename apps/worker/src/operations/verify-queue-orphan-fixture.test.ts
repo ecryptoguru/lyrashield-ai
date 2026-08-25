@@ -27,8 +27,8 @@ vi.mock("../queue-reconciliation", () => ({
 
 import {
   assertExactFixtureDeletionPlan,
-  parseContainerEnvironment,
   parseQueueOrphanFixtureOptions,
+  validateWorkerStopProvenanceReceipt,
   verifyQueueOrphanFixture,
   type QueueOrphanFixtureDeps,
 } from "./verify-queue-orphan-fixture"
@@ -45,6 +45,7 @@ function options() {
   return {
     environment: "production",
     confirmProduction: "I AUTHORIZE LYRASHIELD QUEUE ORPHAN FIXTURE",
+    incidentCommander: "Ankit",
   }
 }
 
@@ -73,6 +74,7 @@ function deps(overrides: Partial<QueueOrphanFixtureDeps> = {}): QueueOrphanFixtu
         activeScanIds: [],
         enabledScheduleCount: 0,
         queueDepth: 0,
+        terminalCostUncertainty: false,
       })
       .mockResolvedValueOnce({
         admissionStopped: true,
@@ -85,6 +87,7 @@ function deps(overrides: Partial<QueueOrphanFixtureDeps> = {}): QueueOrphanFixtu
         activeScanIds: [fixture.scanId],
         enabledScheduleCount: 0,
         queueDepth: 0,
+        terminalCostUncertainty: false,
       })
       .mockResolvedValueOnce({
         admissionStopped: true,
@@ -97,6 +100,7 @@ function deps(overrides: Partial<QueueOrphanFixtureDeps> = {}): QueueOrphanFixtu
         activeScanIds: [],
         enabledScheduleCount: 0,
         queueDepth: 0,
+        terminalCostUncertainty: false,
       }),
     createFixture: vi.fn(async () => fixture),
     wait: vi.fn(async () => undefined),
@@ -137,8 +141,18 @@ describe("queue orphan fixture options", () => {
       parseQueueOrphanFixtureOptions({
         environment: "production",
         "confirm-production": "I AUTHORIZE LYRASHIELD QUEUE ORPHAN FIXTURE",
+        "incident-commander": "Ankit",
       })
     ).toEqual(options())
+  })
+
+  it("requires a named incident commander", () => {
+    expect(() =>
+      parseQueueOrphanFixtureOptions({
+        environment: "production",
+        "confirm-production": "I AUTHORIZE LYRASHIELD QUEUE ORPHAN FIXTURE",
+      })
+    ).toThrow("named --incident-commander")
   })
 })
 
@@ -171,16 +185,36 @@ describe("queue orphan fixture cleanup boundary", () => {
   })
 })
 
-describe("stopped container environment parsing", () => {
-  it("preserves every byte after the first equals sign", () => {
+describe("worker stop provenance receipt", () => {
+  const receipt = {
+    version: 1,
+    capturedAtEpochSeconds: Date.parse("2026-08-25T01:00:00.000Z") / 1_000,
+    containerId: "d".repeat(64),
+    imageReference: `worker@sha256:${"b".repeat(64)}`,
+    productRevision: "a".repeat(40),
+    workerImageDigest: `sha256:${"b".repeat(64)}`,
+    engineRevision: "c".repeat(40),
+    databaseUrlSha256: "1".repeat(64),
+    databaseSystemUrlSha256: "2".repeat(64),
+    redisUrlSha256: "3".repeat(64),
+  }
+
+  it("accepts a fresh immutable root-stop payload", () => {
     expect(
-      parseContainerEnvironment(
-        "DATABASE_URL=postgresql://user:secret@db/prod?sslmode=require&options=a=b\nREDIS_URL=rediss://default:key@redis:6380/0\n"
+      validateWorkerStopProvenanceReceipt(receipt, new Date("2026-08-25T01:05:00.000Z"))
+    ).toEqual(receipt)
+  })
+
+  it("rejects stale or mutable-image payloads", () => {
+    expect(() =>
+      validateWorkerStopProvenanceReceipt(receipt, new Date("2026-08-25T01:16:00.000Z"))
+    ).toThrow("stale")
+    expect(() =>
+      validateWorkerStopProvenanceReceipt(
+        { ...receipt, imageReference: "worker:latest" },
+        new Date("2026-08-25T01:05:00.000Z")
       )
-    ).toEqual({
-      DATABASE_URL: "postgresql://user:secret@db/prod?sslmode=require&options=a=b",
-      REDIS_URL: "rediss://default:key@redis:6380/0",
-    })
+    ).toThrow("invalid")
   })
 })
 
@@ -216,7 +250,8 @@ describe("queue orphan fixture", () => {
       fixture,
       expect.any(Object),
       expect.any(Object),
-      expect.any(Date)
+      expect.any(Date),
+      "Ankit"
     )
     expect(mocked.retainCleanupAuditReceipt).toHaveBeenCalledWith(
       fixture,
@@ -255,11 +290,26 @@ describe("queue orphan fixture", () => {
         activeScanIds: [],
         enabledScheduleCount: 0,
         queueDepth: 0,
+        terminalCostUncertainty: false,
         ...changed,
       })),
     })
 
     await expect(verifyQueueOrphanFixture(options(), mocked)).rejects.toThrow()
+    expect(mocked.createFixture).not.toHaveBeenCalled()
+    expect(mocked.reconcile).not.toHaveBeenCalled()
+  })
+
+  it("fails before fixture creation when terminal provider cost is uncertain", async () => {
+    const base = deps()
+    const initial = await base.preflight()
+    const mocked = deps({
+      preflight: vi.fn(async () => ({ ...initial, terminalCostUncertainty: true })),
+    })
+
+    await expect(verifyQueueOrphanFixture(options(), mocked)).rejects.toThrow(
+      "terminal provider cost uncertainty exists"
+    )
     expect(mocked.createFixture).not.toHaveBeenCalled()
     expect(mocked.reconcile).not.toHaveBeenCalled()
   })

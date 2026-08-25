@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { execFile as nodeExecFile } from "node:child_process"
+import { lstat, readFile } from "node:fs/promises"
 import { parseArgs, promisify } from "node:util"
 import { pathToFileURL } from "node:url"
 import {
@@ -28,16 +29,20 @@ import {
 } from "@lyrashield/integrations"
 import { getScanQueue } from "../queue"
 import { QUEUE_ORPHAN_GRACE_MS, reconcileExactQueuedScanOrphan } from "../queue-reconciliation"
+import { findOldestTerminalUnreconciledCost } from "../operational-health"
 
 const nodeExecFileAsync = promisify(nodeExecFile)
 let runtimeQueuesOpened = false
 
 const CONFIRMATION_PHRASE = "I AUTHORIZE LYRASHIELD QUEUE ORPHAN FIXTURE"
 const FIXTURE_WAIT_MS = QUEUE_ORPHAN_GRACE_MS + 5_000
+const STOP_RECEIPT_PATH = "/run/lyrashield/worker-stop-provenance.json"
+const STOP_RECEIPT_MAX_AGE_MS = 15 * 60_000
 
 export interface QueueOrphanFixtureOptions {
   environment?: string
   confirmProduction?: string
+  incidentCommander?: string
 }
 
 interface FixtureIds {
@@ -79,6 +84,20 @@ interface FixturePreflight {
   activeScanIds: string[]
   enabledScheduleCount: number
   queueDepth: number
+  terminalCostUncertainty: boolean
+}
+
+interface WorkerStopProvenanceReceipt {
+  version: 1
+  capturedAtEpochSeconds: number
+  containerId: string
+  imageReference: string
+  productRevision: string
+  workerImageDigest: string
+  engineRevision: string
+  databaseUrlSha256: string
+  databaseSystemUrlSha256: string
+  redisUrlSha256: string
 }
 
 export interface QueueOrphanFixtureDeps {
@@ -99,7 +118,8 @@ export interface QueueOrphanFixtureDeps {
     fixture: FixtureIds,
     preflight: FixturePreflight,
     state: FixtureState,
-    reconciledAt: Date
+    reconciledAt: Date,
+    incidentCommander: string
   ): Promise<string>
   retainCleanupAuditReceipt(
     fixture: FixtureIds,
@@ -114,6 +134,7 @@ export interface QueueOrphanFixtureReceipt {
   timestamp: string
   workspaceId: string
   scanId: string
+  incidentCommander: string
   waitedMs: number
   provenance: WorkerExecutionProvenance
   runtimeStopProof: {
@@ -138,12 +159,19 @@ export function parseQueueOrphanFixtureOptions(
     environment: typeof values.environment === "string" ? values.environment : undefined,
     confirmProduction:
       typeof values["confirm-production"] === "string" ? values["confirm-production"] : undefined,
+    incidentCommander:
+      typeof values["incident-commander"] === "string"
+        ? values["incident-commander"].trim()
+        : undefined,
   }
   if (options.environment !== "production") {
     throw new Error("queue orphan fixture requires --environment production")
   }
   if (options.confirmProduction !== CONFIRMATION_PHRASE) {
     throw new Error("queue orphan fixture requires the exact --confirm-production phrase")
+  }
+  if (!options.incidentCommander || options.incidentCommander.length > 100) {
+    throw new Error("queue orphan fixture requires a named --incident-commander")
   }
   return options
 }
@@ -155,6 +183,7 @@ export async function verifyQueueOrphanFixture(
   parseQueueOrphanFixtureOptions({
     environment: options.environment,
     "confirm-production": options.confirmProduction,
+    "incident-commander": options.incidentCommander,
   })
   const preflight = await deps.preflight()
   assertFixturePreflight(preflight, [])
@@ -216,7 +245,8 @@ export async function verifyQueueOrphanFixture(
       fixture,
       preflight,
       state,
-      reconciledAt
+      reconciledAt,
+      options.incidentCommander!
     )
     await deps.cleanupFixture(fixture)
     cleanupCompleted = true
@@ -231,6 +261,7 @@ export async function verifyQueueOrphanFixture(
       timestamp: reconciledAt.toISOString(),
       workspaceId: fixture.workspaceId,
       scanId: fixture.scanId,
+      incidentCommander: options.incidentCommander!,
       waitedMs: FIXTURE_WAIT_MS,
       provenance: preflight.provenance,
       runtimeStopProof: {
@@ -264,24 +295,78 @@ function endpointFingerprint(raw: string, name: string): string {
 }
 
 function bindRuntimeEndpoint(
-  containerEnv: Record<string, string>,
+  expectedDigest: string,
   name: "DATABASE_URL" | "DATABASE_SYSTEM_URL" | "REDIS_URL"
 ): string {
-  const containerValue = containerEnv[name]
   const processValue = process.env[name]
-  if (!containerValue || !processValue || containerValue !== processValue) {
-    throw new Error(`${name} does not exactly match the stopped worker container`)
+  if (
+    !processValue ||
+    createHash("sha256").update(processValue, "utf8").digest("hex") !== expectedDigest
+  ) {
+    throw new Error(`${name} does not exactly match the pre-stop worker receipt`)
   }
   return endpointFingerprint(processValue, name)
 }
 
-export function parseContainerEnvironment(output: string): Record<string, string> {
-  return Object.fromEntries(
-    output.split("\n").flatMap((line) => {
-      const separator = line.indexOf("=")
-      return separator > 0 ? [[line.slice(0, separator), line.slice(separator + 1)]] : []
-    })
-  )
+export function validateWorkerStopProvenanceReceipt(
+  value: unknown,
+  now: Date
+): WorkerStopProvenanceReceipt {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("worker stop provenance receipt is invalid")
+  }
+  const receipt = value as Record<string, unknown>
+  const hex40 = /^[0-9a-f]{40}$/
+  const hex64 = /^[0-9a-f]{64}$/
+  const digest = /^sha256:[0-9a-f]{64}$/
+  if (
+    receipt.version !== 1 ||
+    !Number.isInteger(receipt.capturedAtEpochSeconds) ||
+    typeof receipt.containerId !== "string" ||
+    !hex64.test(receipt.containerId) ||
+    typeof receipt.imageReference !== "string" ||
+    !receipt.imageReference.endsWith(`@${String(receipt.workerImageDigest)}`) ||
+    typeof receipt.productRevision !== "string" ||
+    !hex40.test(receipt.productRevision) ||
+    typeof receipt.workerImageDigest !== "string" ||
+    !digest.test(receipt.workerImageDigest) ||
+    typeof receipt.engineRevision !== "string" ||
+    !hex40.test(receipt.engineRevision) ||
+    typeof receipt.databaseUrlSha256 !== "string" ||
+    !hex64.test(receipt.databaseUrlSha256) ||
+    typeof receipt.databaseSystemUrlSha256 !== "string" ||
+    !hex64.test(receipt.databaseSystemUrlSha256) ||
+    typeof receipt.redisUrlSha256 !== "string" ||
+    !hex64.test(receipt.redisUrlSha256)
+  ) {
+    throw new Error("worker stop provenance receipt is invalid")
+  }
+  const ageMs = now.getTime() - Number(receipt.capturedAtEpochSeconds) * 1_000
+  if (ageMs < 0 || ageMs > STOP_RECEIPT_MAX_AGE_MS) {
+    throw new Error("worker stop provenance receipt is stale")
+  }
+  return receipt as unknown as WorkerStopProvenanceReceipt
+}
+
+async function readRootWorkerStopProvenanceReceipt(
+  now: Date
+): Promise<WorkerStopProvenanceReceipt> {
+  if (process.getuid?.() !== 0) throw new Error("queue orphan fixture must run as root")
+  const receiptPath = process.env.LYRASHIELD_WORKER_STOP_RECEIPT ?? STOP_RECEIPT_PATH
+  // Root operator configuration selects this host-only receipt path.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  const metadata = await lstat(receiptPath)
+  if (
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    metadata.uid !== 0 ||
+    (metadata.mode & 0o777) !== 0o600
+  ) {
+    throw new Error("worker stop provenance receipt must be a root-owned 0600 regular file")
+  }
+  // Root ownership, mode, and regular-file checks above prevent untrusted path substitution.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  return validateWorkerStopProvenanceReceipt(JSON.parse(await readFile(receiptPath, "utf8")), now)
 }
 
 function assertFixturePreflight(
@@ -295,6 +380,9 @@ function assertFixturePreflight(
   }
   if (preflight.enabledScheduleCount !== 0) throw new Error("enabled schedules exist")
   if (preflight.queueDepth !== 0) throw new Error("scan queue is not empty")
+  if (preflight.terminalCostUncertainty) {
+    throw new Error("terminal provider cost uncertainty exists")
+  }
   if (
     preflight.activeScanIds.length !== expectedActiveScanIds.length ||
     preflight.activeScanIds.some((id, index) => id !== expectedActiveScanIds[index])
@@ -334,50 +422,40 @@ async function runtimePreflight(): Promise<FixturePreflight> {
   const queue = getScanQueue()
   const webhookRetryQueue = getWebhookTrackRetryQueue()
   runtimeQueuesOpened = true
-  const [serviceStateResult, containerStateResult, containerEnvResult, imageResult] =
-    await Promise.all([
-      nodeExecFileAsync("systemctl", [
-        "show",
-        "--property",
-        "ActiveState",
-        "--value",
-        "lyrashield-worker.service",
-      ]),
-      nodeExecFileAsync("docker", [
-        "inspect",
-        "--format",
-        "{{.State.Running}}",
-        "lyrashield-worker",
-      ]),
-      nodeExecFileAsync("docker", [
-        "inspect",
-        "--format",
-        "{{range .Config.Env}}{{println .}}{{end}}",
-        "lyrashield-worker",
-      ]),
-      nodeExecFileAsync("docker", [
-        "inspect",
-        "--format",
-        "{{.Config.Image}}",
-        "lyrashield-worker",
-      ]),
-    ])
-  const containerEnv = parseContainerEnvironment(String(containerEnvResult.stdout))
+  const now = new Date()
+  const [serviceStateResult, containerListResult, stopReceipt] = await Promise.all([
+    nodeExecFileAsync("systemctl", [
+      "show",
+      "--property",
+      "ActiveState",
+      "--value",
+      "lyrashield-worker.service",
+    ]),
+    nodeExecFileAsync("docker", [
+      "ps",
+      "--all",
+      "--filter",
+      "name=^/lyrashield-worker$",
+      "--format",
+      "{{.ID}}",
+    ]),
+    readRootWorkerStopProvenanceReceipt(now),
+  ])
   const provenance = resolveWorkerExecutionProvenanceFrom({
-    NODE_ENV: containerEnv.NODE_ENV,
-    LYRASHIELD_PRODUCT_REVISION: containerEnv.LYRASHIELD_PRODUCT_REVISION,
-    LYRASHIELD_WORKER_IMAGE_DIGEST: containerEnv.LYRASHIELD_WORKER_IMAGE_DIGEST,
-    LYRASHIELD_ENGINE_REVISION: containerEnv.LYRASHIELD_ENGINE_REVISION,
+    NODE_ENV: "production",
+    LYRASHIELD_PRODUCT_REVISION: stopReceipt.productRevision,
+    LYRASHIELD_WORKER_IMAGE_DIGEST: stopReceipt.workerImageDigest,
+    LYRASHIELD_ENGINE_REVISION: stopReceipt.engineRevision,
   })
-  if (!provenance) throw new Error("stopped worker container is not a production runtime")
-  const imageReference = String(imageResult.stdout).trim()
+  if (!provenance) throw new Error("worker stop receipt is not a production runtime")
+  const imageReference = stopReceipt.imageReference
   if (!imageReference.endsWith(`@${provenance.workerImageDigest}`)) {
     throw new Error("stopped worker image does not match its immutable provenance")
   }
   const runtimeBindingFingerprints = {
-    database: bindRuntimeEndpoint(containerEnv, "DATABASE_URL"),
-    systemDatabase: bindRuntimeEndpoint(containerEnv, "DATABASE_SYSTEM_URL"),
-    redis: bindRuntimeEndpoint(containerEnv, "REDIS_URL"),
+    database: bindRuntimeEndpoint(stopReceipt.databaseUrlSha256, "DATABASE_URL"),
+    systemDatabase: bindRuntimeEndpoint(stopReceipt.databaseSystemUrlSha256, "DATABASE_SYSTEM_URL"),
+    redis: bindRuntimeEndpoint(stopReceipt.redisUrlSha256, "REDIS_URL"),
   }
 
   const [
@@ -387,6 +465,7 @@ async function runtimePreflight(): Promise<FixturePreflight> {
     enabledScheduleCount,
     scanCounts,
     webhookRetryCounts,
+    terminalCostUncertainty,
   ] = await Promise.all([
     redis.exists(SCAN_ADMISSION_STOP_KEY),
     isScanWorkerAvailable(),
@@ -398,12 +477,13 @@ async function runtimePreflight(): Promise<FixturePreflight> {
     getSystemPrisma().schedule.count({ where: { enabled: true } }),
     queue.getJobCounts("wait", "active", "delayed", "prioritized"),
     webhookRetryQueue.getJobCounts("wait", "active", "delayed", "prioritized"),
+    findOldestTerminalUnreconciledCost(now).then((scan) => scan !== null),
   ])
   return {
     admissionStopped: admissionStopped === 1,
     workerAvailable,
     serviceState: String(serviceStateResult.stdout).trim(),
-    containerRunning: String(containerStateResult.stdout).trim() === "true",
+    containerRunning: String(containerListResult.stdout).trim() !== "",
     imageReference,
     provenance,
     runtimeBindingFingerprints,
@@ -413,6 +493,7 @@ async function runtimePreflight(): Promise<FixturePreflight> {
       (sum, count) => sum + count,
       0
     ),
+    terminalCostUncertainty,
   }
 }
 
@@ -420,7 +501,8 @@ async function retainRuntimeAuditReceipt(
   fixture: FixtureIds,
   preflight: FixturePreflight,
   state: FixtureState,
-  reconciledAt: Date
+  reconciledAt: Date,
+  incidentCommander: string
 ): Promise<string> {
   const receipt = await getSystemPrisma().platformAdminAudit.create({
     data: {
@@ -444,6 +526,7 @@ async function retainRuntimeAuditReceipt(
         runtimeBindingFingerprints: preflight.runtimeBindingFingerprints,
         reconciledAt: reconciledAt.toISOString(),
         cleanupState: "pending",
+        incidentCommander,
       },
     },
     select: { id: true },
@@ -616,6 +699,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     options: {
       environment: { type: "string" },
       "confirm-production": { type: "string" },
+      "incident-commander": { type: "string" },
     },
     strict: true,
   })

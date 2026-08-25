@@ -21,7 +21,7 @@ The production worker image must run from its own `worker` stage on the digest-p
 
 ## Install
 
-Copy the three scripts to `/usr/local/libexec/`, the units to `/etc/systemd/system/`, and make the scripts root-executable. Create `/etc/lyrashield/worker-runtime.conf` with mode `0600`:
+Copy the four scripts to `/usr/local/libexec/`, including `capture-stop-provenance.sh` as `/usr/local/libexec/lyrashield-capture-worker-stop-provenance`; copy the units to `/etc/systemd/system/`, and make the scripts root-executable. Create `/etc/lyrashield/worker-runtime.conf` with mode `0600`:
 
 ```sh
 LYRASHIELD_WORKER_IMAGE=ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:<approved-worker-digest>
@@ -64,7 +64,7 @@ Before enabling scan admission:
 3. Verify a non-allowlisted public endpoint, `169.254.169.254`, and RFC1918 destinations are blocked from that same network.
 4. Verify a disposable container on `lyrashield-sandbox` cannot reach a public IP.
 5. Confirm the worker becomes healthy, `/api/ready/scans` becomes `200`, and the registry score advances after 45 seconds.
-6. Stop the service gracefully and confirm `/api/ready/scans` returns `503`; restart it and confirm readiness recovers without replaying work.
+6. Stop the service gracefully and confirm `/api/ready/scans` returns `503`, the worker container is absent, and `/run/lyrashield/worker-stop-provenance.json` is a fresh root-owned `0600` receipt; restart it and confirm readiness recovers without replaying work. Receipt capture failure never blocks an emergency stop, but it removes any prior receipt so the offline drill fails closed.
 7. Run the engine's bounded provider-contract baseline against the deployed Azure route. Record its capability result with the deployment revision; run the programmatic-tool gate only when evaluating that optional feature.
 8. Confirm the worker image revision label matches the reviewed app commit and its engine-revision label matches the immutable engine checkout used by CI.
 9. Run the stale-resource reaper acceptance case: an old stopped owned fixture is removed, an active/running fixture is retained, and the result is visible in worker logs.

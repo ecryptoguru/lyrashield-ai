@@ -60,9 +60,10 @@ The scheduled `Production scan readiness` workflow probes `/api/ready/scans` eve
 five minutes. A non-200 result fails the workflow and emits an app `5xx`, which is
 routed by the existing one-minute `app-any-5xx` Azure Monitor alert.
 
-Before a controlled worker restart or failure injection, record enabled schedules,
-non-terminal scans, and BullMQ waiting/delayed/prioritized/active counts. Do not
-continue while unexpected work exists. After recovery, require all of:
+Before a controlled worker restart or failure injection, name the incident commander,
+record the founder go decision, enabled schedules, non-terminal scans, BullMQ
+waiting/delayed/prioritized/active counts, and terminal provider-cost uncertainty. Do not
+continue while unexpected work or unreconciled terminal provider cost exists. After recovery, require all of:
 
 1. `/api/ready/scans` returns worker `true`.
 2. Worker image is healthy and its lease has refreshed.
@@ -82,14 +83,18 @@ NODE_ENV=production pnpm --filter @lyrashield/worker exec node \
   --env-file=/etc/lyrashield/worker.env \
   --import tsx src/operations/verify-queue-orphan-fixture.ts -- \
   --environment production \
+  --incident-commander "<full name>" \
   --confirm-production "I AUTHORIZE LYRASHIELD QUEUE ORPHAN FIXTURE"
 ```
 
 The command reads `systemd` and Docker state directly and fails unless both the worker
-service and its digest-pinned container are stopped. It binds the receipt to the stopped
-container's product, worker-image, and engine revisions, and refuses to continue unless the
-host process's database, privileged database, and Redis URLs exactly match the stopped
-container. Only non-secret endpoint fingerprints appear in the receipt. It creates one isolated `.invalid`
+service is inactive and the `ExecStopPost`-removed worker container is absent. Immediately
+before Docker stops the container, systemd writes
+`/run/lyrashield/worker-stop-provenance.json` through the root-only capture helper. The
+command accepts only a fresh root-owned `0600` regular-file receipt, binds it to the stopped
+runtime's product, worker-image, engine revision, and connection-value digests, and refuses
+to continue unless the host process's database, privileged database, and Redis URLs match.
+Only non-secret endpoint fingerprints appear in the retained receipt. It creates one isolated `.invalid`
 user and sole-member workspace, creates the scan through `createScan()`, writes the normal
 audit entry, and deliberately never calls `enqueueScan()`. After the five-minute orphan
 grace period it rechecks admission, runtime, schedules, every nonterminal scan ID, queue
@@ -151,11 +156,17 @@ pnpm --filter @lyrashield/worker verify:launch-assurance -- \
   --azure-resource-group <rg> \
   --allow-failure-injection --scan-id <exact-scan-id> --workspace-id <exact-workspace-id> \
   --environment production \
+  --incident-commander "<full name>" \
   --confirm-production "I AUTHORIZE LYRASHIELD FAILURE INJECTION"
 ```
 
-Full mode refuses to proceed when another active scan exists, the selected scan
-is terminal or ambiguous, or the confirmation phrase is not exact. Cancellation
+Full mode refuses to proceed unless admission is stopped, schedules and webhook work are
+zero, every active database scan is the selected scan, and BullMQ contains exactly that scan's
+one expected job: waiting/delayed/prioritized for `QUEUED`, or active for
+`PREFLIGHT`/`RUNNING`/`VERIFYING`. Missing, duplicated, state-mismatched, or unrelated scan
+jobs fail closed without removal or replay. It also refuses when terminal provider cost
+remains uncertain, the incident commander is absent, or the confirmation phrase is not
+exact. A failed failure-injection preflight marks every later mutation step skipped. Cancellation
 goes through the authenticated scan API; recovery goes through
 `reconcileScanQueue()` exactly once. The command never deletes BullMQ keys,
 calls `job.remove()`, auto-requeues, or synthesizes paid work.
