@@ -4,7 +4,9 @@ import { prisma } from "@lyrashield/db"
 
 const adminEmail = "ankit@lyrashieldai.com"
 const password = "E2e-admin-password-123!"
-const forwardedFor = "192.0.2.240"
+// Keep this privileged flow out of the randomized 192.0.2.0/24 buckets used by
+// the parallel critical-flow and AI-assurance suites.
+const forwardedFor = "203.0.113.240"
 
 function totpFromUri(uri: string): string {
   const secret = new URL(uri).searchParams.get("secret")
@@ -72,10 +74,11 @@ test("admin enrollment, deny-by-default, TOTP sign-in, and console work end to e
   await page.getByRole("button", { name: "Create account" }).click()
   await expect.poll(() => prisma.user.findUnique({ where: { email: adminEmail } })).not.toBeNull()
   await prisma.user.update({ where: { email: adminEmail }, data: { emailVerified: true } })
-  await page.request.patch("/api/onboarding", {
+  const onboardingResponse = await page.request.patch("/api/onboarding", {
     data: { skipped: true },
     headers: { "x-forwarded-for": forwardedFor },
   })
+  await expect(onboardingResponse).toBeOK()
 
   await page.goto("/dashboard/settings")
   await page.getByLabel("Current password").fill(password)
