@@ -420,9 +420,9 @@ Current command output is authoritative; never copy historical test counts forwa
 - Legacy Redis: stopped, restart-disabled, rollback-only.
 - Egress: direct public denied, proxy public allowed, loopback denied `ssrf_blocked`.
 - DNS refresh timer: active during Standard scan; no worker restart.
-- The Redis/egress efficiency candidate described above is not part of this deployed-worker proof. Live command metrics and a staged worker-first rollout remain required.
+- The merged Redis/egress efficiency code described above is not part of this deployed-worker proof. Live command metrics and a staged worker-first rollout remain required.
 - Backup/restore: encrypted backup, isolated restore, schema/RLS/audit/app startup verified.
-- Code ahead of production: the current billing-staging candidate is based on `main` at `d7f38001` after PR #431. Release `32755678337` pushed earlier images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Those images and the billing-staging candidate are not deployed. Production remains on the exact worker proof above with purchase admissions `off`.
+- Code ahead of production: product `main` includes PR #426 billing-staging hardening and PR #432 Redis/egress efficiency work at `3629b442`. Those changes are not deployed. Release `32755678337` pushed earlier images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Production remains on the exact worker proof above with purchase admissions `off`.
 - Billing staging is a distinct code-only deployment surface: `.github/workflows/deploy-billing-staging.yml` builds `runner` and `workspace-builder` from the dispatched main SHA into the isolated ACR, deploys only immutable digests, invokes image-owned migration/role scripts as exact Container Apps Job commands, and cleans up the jobs. The web proxy gates ordinary staging routes with an opaque HttpOnly same-origin access session while leaving exact health/readiness and signature-validating billing webhook ingress reachable. `BILLING_STAGING_ADMISSION=restricted` requires staging marker/origin plus Sandbox/Test modes and all production admissions off; no execution or live billing proof is implied.
 
 ### Current Standard scan proof

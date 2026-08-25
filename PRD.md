@@ -338,7 +338,7 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Discovery records eligible, scanned, skipped, and reason counts plus a bounded skipped-path sample. These limits flow into scoring, coverage issues, dashboard disclosure, and an immutable `ai_app_security` family receipt; incomplete AI coverage cannot support a clean claim.
 - A 217-file regression fixture proves Quick remains honestly bounded at 200 while still scanning vulnerable production code, and Standard evaluates all 217 files.
 - Current production deployment: app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020` run product `8347fda923032960661079491a0a17956aebefd9`. Worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413` runs the same product with engine `944a84f15f913909039c89146c25db650cd87137`; release run `32738811470`, worker health, and `/api/ready/scans` passed.
-- The current billing-staging candidate is based on `main` at `d7f38001` after PR #431. Release run `32755678337` built and pushed earlier images but failed the provider-mode guard before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode. Those images and the billing-staging candidate are not deployed; production remains on `8347fda9` with all Cloud and Local purchase admissions `off`.
+- Product `main` includes PR #426 billing-staging hardening and PR #432 Redis/egress efficiency work at `3629b442`. Those changes are not deployed. Release run `32755678337` built and pushed earlier images but failed the provider-mode guard before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode. Production remains on `8347fda9` with all Cloud and Local purchase admissions `off`.
 - A billing-staging-only admission and deployment contract is implemented in code. It is bound to an explicit staging marker, isolated Azure origin, Sandbox/Test providers, an HttpOnly access session, exact-main-SHA images built in the staging registry, and separate `app_runtime_staging`/least-privilege `app_system_staging` database URLs. It cannot enable production admission, does not enable live billing, and is not runtime or hosted-checkout proof until the protected workflow and browser/provider evidence actually run.
 
 ### Infrastructure evidence — 2026-08-21
@@ -352,7 +352,7 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - Legacy Redis container is stopped and restart-disabled, retained only for rollback.
 - Direct arbitrary public fetch denied; authenticated proxy public fetch allowed; loopback denied with `ssrf_blocked`.
 - Five-minute DNS-pin refresh stayed active through the paid scan without restarting the worker.
-- The current Redis/egress efficiency candidate is not deployed. Its 30-day idle-command estimate falls from 324,019 to 132,495 commands (59.11%); this is a model, not live telemetry or production proof.
+- The merged Redis/egress efficiency code is not deployed. Its 30-day idle-command estimate falls from 324,019 to 132,495 commands (59.11%); this is a model, not live telemetry or production proof.
 - Encrypted backup and isolated restore completed schema, RLS, audit-chain, and application-startup verification.
 
 ## 9. Release status
