@@ -128,6 +128,28 @@ export const CreateProjectSchema = z.object({
 
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>
 
+function isValidGitRef(value: string): boolean {
+  if (
+    value === "@" ||
+    value.startsWith("/") ||
+    value.endsWith("/") ||
+    value.includes("//") ||
+    value.includes("..") ||
+    value.includes("@{") ||
+    /\s/u.test(value) ||
+    /[\u0000-\u001F\u007F]/u.test(value) ||
+    /[~^:?*\[\]\\]/u.test(value)
+  ) {
+    return false
+  }
+  return value
+    .split("/")
+    .every(
+      (part) =>
+        part.length > 0 && !part.startsWith(".") && !part.endsWith(".lock") && !part.endsWith(".")
+    )
+}
+
 export const CreateRepoTargetSchema = z.object({
   workspaceId: z.string().min(1),
   projectId: z.string().optional(),
@@ -153,7 +175,7 @@ export const CreateRepoTargetSchema = z.object({
   // arbitrary string can never reach Target.installationId; the route
   // additionally verifies the id belongs to this workspace.
   installationId: z.string().regex(/^\d+$/, "Invalid installation id").max(20).optional(),
-  branch: z.string().max(255).optional(),
+  branch: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git branch or tag").optional(),
   environment: TargetEnvironmentSchema.default("STAGING"),
 })
 
@@ -217,6 +239,13 @@ export const PatchApiSpecSchema = z.object({
     )
     .nullable(),
 })
+
+export const PatchRepoRefSchema = z.object({
+  workspaceId: z.string().min(1),
+  branch: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git branch or tag"),
+})
+
+export const PatchTargetSchema = z.union([PatchApiSpecSchema.strict(), PatchRepoRefSchema.strict()])
 
 export const CreateScanSchema = z.object({
   workspaceId: z.string().min(1),

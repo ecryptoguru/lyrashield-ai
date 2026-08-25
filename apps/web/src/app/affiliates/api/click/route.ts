@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { z } from "zod"
 import { detectAttribution } from "@lyrashield/affiliate"
 import { parseAffiliateCookie } from "@lyrashield/affiliate"
+import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
 
 const ClickSchema = z.object({
   code: z.string().min(1).max(64),
@@ -103,6 +104,15 @@ function getClientIp(request: NextRequest): string | undefined {
  * S6: Rate limited (max 10 clicks/IP/minute) and bot-detected.
  */
 export async function POST(request: NextRequest) {
+  if (
+    !scorecardTrackingAllowed({
+      doNotTrack: request.headers.get("dnt"),
+      globalPrivacyControl: request.headers.get("sec-gpc") === "1",
+    })
+  ) {
+    return NextResponse.json({ success: false, suppressed: true })
+  }
+
   // S6: Bot detection — reject requests with no user-agent or known bot UAs
   const rawUserAgent = request.headers.get("user-agent")
   if (isBotUserAgent(rawUserAgent)) {
