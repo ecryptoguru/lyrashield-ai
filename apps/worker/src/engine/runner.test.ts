@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { mkdtemp, mkdir, realpath, rm, utimes, writeFile } from "fs/promises"
+import { mkdtemp, mkdir, realpath, rm, symlink, utimes, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
 
@@ -734,21 +734,62 @@ describe("resolveEngineSourceCheckout", () => {
     ).resolves.toBeNull()
   })
 
+  it("rejects invalid scan IDs before checkout discovery", async () => {
+    const runRecord = {
+      run_id: "../run",
+      run_name: "../run",
+      start_time: "now",
+      end_time: null,
+      status: "completed",
+      targets_info: [],
+    }
+
+    await expect(resolveEngineSourceCheckout(runRecord, "../run")).resolves.toBeNull()
+    await expect(resolveEngineSourceCheckout(runRecord, "..")).resolves.toBeNull()
+  })
+
+  it("rejects a symlinked checkout", async () => {
+    const scanId = `symlink-${Date.now()}`
+    const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
+    const outside = await mkdtemp(join(tmpdir(), "outside-strix-symlink-"))
+    const checkout = join(runRoot, "repo")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await mkdir(runRoot, { recursive: true })
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await symlink(outside, checkout)
+    cleanupPaths.push(runRoot, outside)
+
+    await expect(
+      resolveEngineSourceCheckout(
+        {
+          run_id: scanId,
+          run_name: scanId,
+          start_time: "now",
+          end_time: null,
+          status: "completed",
+          targets_info: [{ details: { cloned_repo_path: checkout } }],
+        },
+        scanId
+      )
+    ).resolves.toBeNull()
+  })
+
   it("rejects a checkout path outside the engine temporary root", async () => {
+    const scanId = `outside-${Date.now()}`
     const checkout = await mkdtemp(join(tmpdir(), "outside-strix-checkout-"))
     cleanupPaths.push(checkout)
 
     await expect(
       resolveEngineSourceCheckout(
         {
-          run_id: "run",
-          run_name: "run",
+          run_id: scanId,
+          run_name: scanId,
           start_time: "now",
           end_time: null,
           status: "completed",
           targets_info: [{ details: { cloned_repo_path: checkout } }],
         },
-        "run"
+        scanId
       )
     ).resolves.toBeNull()
   })
