@@ -7,6 +7,7 @@
     "start": "tsx src/index.ts",
     "verify:launch-assurance": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-launch-assurance.ts",
     "verify:queue-orphan-fixture": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-queue-orphan-fixture.ts",
+    "review:terminal-cost-disposition": "node --env-file-if-exists=../../.env --import tsx src/operations/review-terminal-cost-disposition.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0"
   },
