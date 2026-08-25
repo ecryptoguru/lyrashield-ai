@@ -14,7 +14,7 @@ import {
 } from "@/lib/cache"
 import type { MemberRole } from "@lyrashield/db"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
-import { isPlatformOperator } from "@lyrashield/auth/server"
+import { getPlatformAdminNavigationState } from "@lyrashield/auth/server"
 
 /**
  * Every authenticated dashboard route inherits this. The title template means a
@@ -35,12 +35,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/sign-in")
   }
 
-  const [onboardingState, workspaces, activeWorkspaceId, canViewPlatformAdmin] = await Promise.all([
+  const [onboardingState, workspaces, activeWorkspaceId, platformAdminState] = await Promise.all([
     getCachedOnboardingState(session.userId),
     getCachedWorkspaces(session.userId),
     getCachedWorkspaceId(session.userId),
-    isPlatformOperator(session.userId),
+    getPlatformAdminNavigationState(session.userId),
   ])
+
+  const platformAdminHref =
+    platformAdminState === "ready"
+      ? "/dashboard/admin"
+      : platformAdminState === "verify"
+        ? "/two-factor?callbackURL=%2Fdashboard%2Fadmin"
+        : null
 
   if (onboardingState && !onboardingState.completed && !onboardingState.skipped) {
     redirect("/onboarding")
@@ -78,7 +85,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         activeWorkspaceId={activeWorkspaceId}
         pendingApprovals={pendingApprovals}
         canViewEvidenceVault={canViewEvidenceVault}
-        canViewPlatformAdmin={canViewPlatformAdmin}
+        platformAdminHref={platformAdminHref}
       />
       {/* Title derives from the current route via NAV_ITEMS. On a phone the header
             is the only place a screen can be named, so it must not spend that slot
@@ -103,7 +110,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         unreadNotifications={unreadNotifications}
         pendingApprovals={pendingApprovals}
         canViewEvidenceVault={canViewEvidenceVault}
-        canViewPlatformAdmin={canViewPlatformAdmin}
+        platformAdminHref={platformAdminHref}
       />
       <InvitationAcceptBridge />
     </div>

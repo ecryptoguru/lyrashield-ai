@@ -7,6 +7,7 @@ export {
   getWorkspaceMembership,
   requireWorkspaceAccess,
   requirePermission,
+  getPlatformAdminNavigationState,
   isPlatformOperator,
   requirePlatformAdminCandidateIdentity,
   requirePlatformAdminIdentity,
@@ -20,6 +21,7 @@ export type {
   WorkspaceContext,
   ApiKeyAuthContext,
   PlatformAdminIdentity,
+  PlatformAdminNavigationState,
 } from "./session"
 export type { OAuthAuthContext } from "./session"
 export { verifyOAuthBearer } from "./oauth"
