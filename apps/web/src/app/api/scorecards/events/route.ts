@@ -2,7 +2,7 @@ import { recordScorecardEvent } from "@lyrashield/db"
 import { isProd } from "@lyrashield/config"
 import { z } from "zod"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { SCORECARD_CHANNELS } from "../../../../lib/scorecard-sharing"
+import { SCORECARD_CHANNELS, scorecardTrackingAllowed } from "../../../../lib/scorecard-sharing"
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto"
 
 const VISITOR_COOKIE = "ls_scorecard_visitor"
@@ -19,6 +19,15 @@ const Body = z
   .strict()
 
 export async function POST(request: Request) {
+  if (
+    !scorecardTrackingAllowed({
+      doNotTrack: request.headers.get("dnt"),
+      globalPrivacyControl: request.headers.get("sec-gpc") === "1",
+    })
+  ) {
+    return new Response(null, { status: 204, headers: { "Cache-Control": "private, no-store" } })
+  }
+
   const parsed = Body.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return apiError("INVALID_PARAM", "Invalid scorecard event", 400)
   if (parsed.data.eventType === "SHARE" && !parsed.data.channel) {

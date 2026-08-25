@@ -6,10 +6,14 @@ vi.mock("@lyrashield/db", () => ({ recordScorecardEvent }))
 
 const { POST } = await import("./route")
 
-function request(body: unknown, cookie?: string) {
+function request(body: unknown, cookie?: string, privacyHeaders?: Record<string, string>) {
   return new Request("http://localhost/api/scorecards/events", {
     method: "POST",
-    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+    headers: {
+      "content-type": "application/json",
+      ...(cookie ? { cookie } : {}),
+      ...privacyHeaders,
+    },
     body: JSON.stringify(body),
   })
 }
@@ -65,4 +69,19 @@ describe("POST /api/scorecards/events", () => {
     expect((await POST(request({ ...valid, channel: undefined }))).status).toBe(400)
     expect((await POST(request({ ...valid, targetUrl: "https://private.test" }))).status).toBe(400)
   })
+
+  it.each([
+    ["DNT", { dnt: "1" }],
+    ["GPC", { "sec-gpc": "1" }],
+  ])(
+    "suppresses server-side event capture and visitor cookies for %s",
+    async (_signal, headers) => {
+      const response = await POST(request(valid, undefined, headers))
+
+      expect(response.status).toBe(204)
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store")
+      expect(response.headers.getSetCookie()).toEqual([])
+      expect(recordScorecardEvent).not.toHaveBeenCalled()
+    }
+  )
 })

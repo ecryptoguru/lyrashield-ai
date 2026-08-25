@@ -4,7 +4,9 @@ import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, GitBranch, Globe, Bug, Crosshair } from "lucide-react"
 import { Card, Badge } from "@lyrashield/ui"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { ScorecardControls } from "./scorecard-controls"
+import { RepositoryRefEditor } from "./repository-ref-editor"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { modeLabel } from "@/lib/labels"
 import { TARGET_SINGULAR } from "@/lib/terminology"
@@ -88,6 +90,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
   }
 
   const membership = target.workspace.members[0]!
+  const canUpdateTarget = hasPermission(membership.role, PERMISSIONS.target.update)
   const latestScore = target.scoreSnapshots[0]
   const scoreExpired = latestScore ? latestScore.expiresAt <= new Date() : false
 
@@ -200,10 +203,23 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
               <dt className="text-muted-foreground">Repository</dt>
               <dd className="font-medium">{target.repoFullName}</dd>
             </div>
-            <div>
-              <dt className="text-muted-foreground">Branch</dt>
-              <dd className="font-medium">{target.branch}</dd>
-            </div>
+            {target._count.scans === 0 && canUpdateTarget ? (
+              <div>
+                <dt className="sr-only">Branch or tag</dt>
+                <dd>
+                  <RepositoryRefEditor
+                    targetId={target.id}
+                    workspaceId={target.workspaceId}
+                    initialRef={target.branch ?? ""}
+                  />
+                </dd>
+              </div>
+            ) : (
+              <div>
+                <dt className="text-muted-foreground">Branch or tag</dt>
+                <dd className="font-medium">{target.branch ?? "Default branch"}</dd>
+              </div>
+            )}
           </dl>
         </div>
       )}

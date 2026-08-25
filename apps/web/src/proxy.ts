@@ -8,6 +8,7 @@ import {
 } from "@/lib/rate-limit"
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
 import { hasBillingStagingAccess } from "@/lib/billing-staging-access"
+import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
 
 // This is the Next.js 16 middleware entry. Next.js detects `proxy.ts` as the
 // proxy/middleware file; do not create a separate `middleware.ts` or the build
@@ -135,6 +136,17 @@ async function handleAffiliateAttribution(
 
   if (!hasRef && !isShortLink) {
     return null
+  }
+
+  const trackingAllowed = scorecardTrackingAllowed({
+    doNotTrack: request.headers.get("dnt"),
+    globalPrivacyControl: request.headers.get("sec-gpc") === "1",
+  })
+  if (!trackingAllowed) {
+    if (!isShortLink) return null
+    const response = NextResponse.redirect(new URL("/", request.url))
+    response.headers.set("Content-Security-Policy", csp)
+    return response
   }
 
   // Detect attribution

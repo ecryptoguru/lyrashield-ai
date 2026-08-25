@@ -18,6 +18,7 @@ import {
   CreateProjectSchema,
   CreateRepoTargetSchema,
   CreateUrlTargetSchema,
+  PatchRepoRefSchema,
 } from "./index"
 
 describe("OnboardingStepSchema", () => {
@@ -374,6 +375,23 @@ describe("CreateRepoTargetSchema", () => {
       }).success
     ).toBe(false)
   })
+
+  it.each(["feature bad", "feature..bad", ".hidden", "release.lock", "topic~1", "topic@{1}"])(
+    "rejects invalid Git ref %s",
+    (branch) => {
+      expect(
+        CreateRepoTargetSchema.safeParse({
+          workspaceId: "ws-1",
+          type: "REPO",
+          name: "My Repo",
+          repoOwner: "ecryptoguru",
+          repoName: "lyrashield-ai",
+          branch,
+        }).success
+      ).toBe(false)
+      expect(PatchRepoRefSchema.safeParse({ workspaceId: "ws-1", branch }).success).toBe(false)
+    }
+  )
 })
 
 describe("CreateUrlTargetSchema", () => {

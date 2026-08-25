@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextRequest } from "next/server"
 
 const stagingAccess = vi.hoisted(() => ({ allowed: false }))
+const affiliate = vi.hoisted(() => ({ detectAttribution: vi.fn() }))
 
 // Mock rate-limit so we don't need Redis in tests
 vi.mock("@/lib/rate-limit", () => ({
@@ -16,6 +17,10 @@ vi.mock("@/lib/rate-limit", () => ({
 }))
 vi.mock("@/lib/billing-staging-access", () => ({
   hasBillingStagingAccess: () => stagingAccess.allowed,
+}))
+vi.mock("@lyrashield/affiliate", () => ({
+  detectAttribution: affiliate.detectAttribution,
+  parseAffiliateCookie: vi.fn().mockReturnValue(null),
 }))
 
 // Import after mock
@@ -272,5 +277,31 @@ describe("CSP nonce proxy", () => {
     process.env.LYRASHIELD_DEPLOYMENT_ENVIRONMENT = "billing-staging"
     stagingAccess.allowed = true
     expect((await proxy(makePublicRequest("/dashboard"))).status).toBe(200)
+  })
+
+  it.each([
+    ["DNT", { dnt: "1" }],
+    ["GPC", { "sec-gpc": "1" }],
+  ])("does not capture referral attribution when %s is enabled", async (_signal, headers) => {
+    const response = await proxy(
+      new NextRequest("https://app.example.com/score/public?ref=CODE1234", { headers })
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("Set-Cookie")).toBeNull()
+    expect(affiliate.detectAttribution).not.toHaveBeenCalled()
+  })
+
+  it("preserves short-link navigation without tracking when GPC is enabled", async () => {
+    const response = await proxy(
+      new NextRequest("https://app.example.com/r/CODE1234", {
+        headers: { "sec-gpc": "1" },
+      })
+    )
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get("location")).toBe("https://app.example.com/")
+    expect(response.headers.get("Set-Cookie")).toBeNull()
+    expect(affiliate.detectAttribution).not.toHaveBeenCalled()
   })
 })
