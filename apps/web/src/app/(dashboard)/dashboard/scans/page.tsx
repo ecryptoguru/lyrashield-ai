@@ -26,7 +26,13 @@ export const metadata: Metadata = {
 export default async function ScansPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string; tab?: string }>
+  searchParams: Promise<{
+    new?: string
+    tab?: string
+    target?: string
+    goal?: string
+    mode?: string
+  }>
 }) {
   const session = await getCachedSession()
   if (!session) redirect("/sign-in")
@@ -97,6 +103,7 @@ export default async function ScansPage({
   }))
 
   const autoOpen = params.new === "1"
+  const recoveryTarget = targets.find((target) => target.id === params.target)
 
   return (
     <div>
@@ -119,6 +126,9 @@ export default async function ScansPage({
         initialData={initialData}
         initialNextCursor={nextCursor}
         initialShowCreate={autoOpen}
+        initialTargetId={recoveryTarget?.id}
+        initialGoal={params.goal}
+        initialMode={params.mode}
       />
     </div>
   )

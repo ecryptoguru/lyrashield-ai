@@ -12,6 +12,7 @@ import {
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { assertScanAllowed } from "@lyrashield/billing"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -28,6 +29,10 @@ import {
 } from "../../../lib/rate-limit"
 
 const ACTIVE_SCAN_STATUSES = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] as const
+const ScanIdQuerySchema = z
+  .array(z.string().trim().min(1).max(128))
+  .min(1)
+  .max(MAX_CONCURRENT_WORKSPACE_SCANS)
 
 /**
  * Concurrent in-flight reviews per workspace (shared with the scheduled-scan
@@ -360,9 +365,23 @@ export async function GET(request: Request) {
     const workspaceId = searchParams.get("workspaceId")
     const targetId = searchParams.get("targetId")
     const rawStatus = searchParams.get("status")
+    const rawScanIds = searchParams.get("ids")
 
     if (!workspaceId) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
+    }
+
+    let scanIds: string[] | undefined
+    if (rawScanIds !== null) {
+      const parsed = ScanIdQuerySchema.safeParse(rawScanIds.split(",").map((id) => id.trim()))
+      if (!parsed.success) {
+        return apiError(
+          "INVALID_PARAM",
+          `ids must contain 1-${MAX_CONCURRENT_WORKSPACE_SCANS} valid scan IDs`,
+          400
+        )
+      }
+      scanIds = parsed.data
     }
 
     // Support a single status value or a comma-separated list of statuses.
@@ -395,6 +414,7 @@ export async function GET(request: Request) {
 
     const { items, nextCursor } = await listScans({
       workspaceId,
+      ...(scanIds ? { scanIds } : {}),
       ...(targetId ? { targetId } : {}),
       ...(statusFilter ? { statuses: statusFilter } : singleStatus ? { status: singleStatus } : {}),
       ...(cursor ? { cursor } : {}),

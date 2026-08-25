@@ -40,6 +40,12 @@ const workerRunner = readFileSync(
 )
 // The path is anchored to this test module rather than derived from external input.
 // eslint-disable-next-line security/detect-non-literal-fs-filename
+const dockerCompose = readFileSync(
+  fileURLToPath(new URL("../../../docker-compose.yml", import.meta.url)),
+  "utf8"
+)
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 const engineContractVerifier = readFileSync(
   fileURLToPath(
     new URL("../../../.github/scripts/verify-engine-worker-contract.sh", import.meta.url)
@@ -226,5 +232,25 @@ describe("worker Docker runtime", () => {
     ).toHaveLength(2)
     expect(workerRunner).not.toContain("lyrashield-worker-runs")
     expect(workerRunner).not.toContain("dst=/app/apps/worker/lyrashield_runs")
+  })
+
+  it("requires an operator-owned worker temp path without privileged recursive mutation", () => {
+    const workerService = dockerCompose.slice(
+      dockerCompose.indexOf("  worker:"),
+      dockerCompose.indexOf("\nvolumes:")
+    )
+
+    expect(workerService).toContain(
+      'TMPDIR: "${LYRASHIELD_WORKER_TEMP_ROOT:-${PWD}/.lyrashield-worker-tmp}"'
+    )
+    expect(
+      workerService.match(
+        /\$\{LYRASHIELD_WORKER_TEMP_ROOT:-\$\{PWD\}\/\.lyrashield-worker-tmp\}/g
+      ) ?? []
+    ).toHaveLength(3)
+    expect(workerService).not.toContain("- /tmp:/tmp")
+    expect(workerService).not.toContain("source: /tmp/lyrashield-worker")
+    expect(dockerCompose).not.toContain("worker-temp-init")
+    expect(dockerCompose).not.toContain("chown -R")
   })
 })

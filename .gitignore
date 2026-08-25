@@ -49,6 +49,7 @@ output/playwright/
 apps/agent/
 tmp-*-test/
 lyrashield_runs/
+.lyrashield-worker-tmp/
 
 # Prisma generated (tracked via migrations)
 packages/db/src/generated/

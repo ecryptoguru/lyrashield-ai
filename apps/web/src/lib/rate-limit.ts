@@ -14,8 +14,10 @@ const store = new Map<string, RateLimitEntry>()
 // in-memory per-IP buckets. Production deploys leave these unset, so the
 // production limits are unchanged.
 const WINDOW_MS = 60_000
+const UPSTASH_FAILURE_COOLDOWN_MS = 60_000
 const AUTH_MAX = readIntEnv("RATE_LIMIT_AUTH_MAX", 5)
 const API_MAX = readIntEnv("RATE_LIMIT_API_MAX", 30)
+const HEALTH_MAX = readIntEnv("RATE_LIMIT_HEALTH_MAX", 120)
 const LITE_SCAN_MAX = readIntEnv("RATE_LIMIT_LITE_SCAN_MAX", 5)
 const APPROVAL_CREATE_MAX = readIntEnv("RATE_LIMIT_APPROVAL_CREATE_MAX", 10)
 // Providers may deliver bursts and the idempotency proof intentionally replays
@@ -118,6 +120,8 @@ type UpstashClient = {
 let upstashClient: UpstashClient = null
 // Single in-flight init promise so concurrent callers share one initialization.
 let initPromise: Promise<UpstashClient> | null = null
+let upstashRetryAt = 0
+let upstashFailureLoggedUntil = 0
 
 async function initUpstash(): Promise<UpstashClient> {
   if (!upstashConfigured()) {
@@ -147,11 +151,12 @@ async function initUpstash(): Promise<UpstashClient> {
     }
 
     return { getOrCreate }
-  } catch (error) {
+  } catch {
     // Fail loud: a misconfigured Upstash client silently degrading to
     // per-instance limiting is a security-control failure, not a warning.
     logger.error("Failed to initialize Upstash rate limiter; falling back to in-memory", {
-      error: String(error),
+      reason: "initialization_failed",
+      cooldownMs: UPSTASH_FAILURE_COOLDOWN_MS,
     })
     return null
   }
@@ -159,7 +164,20 @@ async function initUpstash(): Promise<UpstashClient> {
 
 async function getUpstashClient(): Promise<UpstashClient> {
   if (upstashClient !== null) return upstashClient
-  if (!initPromise) initPromise = initUpstash().then((client) => (upstashClient = client))
+  if (!initPromise) {
+    initPromise = initUpstash()
+      .then((client) => {
+        upstashClient = client
+        if (!client) {
+          upstashRetryAt = Date.now() + UPSTASH_FAILURE_COOLDOWN_MS
+          upstashFailureLoggedUntil = upstashRetryAt
+        }
+        return client
+      })
+      .finally(() => {
+        if (upstashClient === null) initPromise = null
+      })
+  }
   return initPromise
 }
 
@@ -169,23 +187,35 @@ async function checkUpstash(
   identifier: string
 ): Promise<{ limited: boolean; remaining: number; retryAfter: number } | null> {
   if (!isProd || !upstashConfigured()) return null
+  if (Date.now() < upstashRetryAt) return null
   const client = await getUpstashClient()
   if (!client) return null
   const rl = client.getOrCreate(lim, window)
   try {
     const result = await rl.limit(identifier)
+    upstashRetryAt = 0
+    upstashFailureLoggedUntil = 0
     return {
       limited: !result.success,
       remaining: result.remaining,
       retryAfter: Math.ceil((result.reset - Date.now()) / 1000),
     }
   } catch (error) {
-    // Treat Upstash failures as a transient outage: log once and fall back to
-    // per-instance in-memory limiting rather than failing the request.
-    logger.error("Upstash rate-limit check failed; falling back to in-memory", {
-      identifier,
-      error: error instanceof Error ? error.message : String(error),
-    })
+    // Avoid retrying a known-broken dependency on every request. The local
+    // limiter keeps requests bounded during the short cooldown; the next
+    // request after it expires probes shared limiting again.
+    const now = Date.now()
+    upstashRetryAt = now + UPSTASH_FAILURE_COOLDOWN_MS
+    if (now >= upstashFailureLoggedUntil) {
+      upstashFailureLoggedUntil = upstashRetryAt
+      const message = error instanceof Error ? error.message : String(error)
+      logger.error("Upstash rate-limit check failed; falling back to in-memory", {
+        reason: message.includes("max requests limit exceeded")
+          ? "quota_exceeded"
+          : "request_failed",
+        cooldownMs: UPSTASH_FAILURE_COOLDOWN_MS,
+      })
+    }
     return null
   }
 }
@@ -200,6 +230,11 @@ export async function checkApiRateLimit(ip: string) {
   const upstash = await checkUpstash(API_MAX, "60 s", `api:${ip}`)
   if (upstash) return upstash
   return checkInMemory(`api:${ip}`, API_MAX, WINDOW_MS)
+}
+
+/** Keep public dependency probes bounded without spending a shared Redis command. */
+export function checkHealthRateLimit(ip: string) {
+  return checkInMemory(`health:${ip}`, HEALTH_MAX, WINDOW_MS)
 }
 
 export async function checkBillingWebhookRateLimit(ip: string) {

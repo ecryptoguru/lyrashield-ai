@@ -9,8 +9,8 @@ export default function Loading() {
         <Skeleton className="bg-muted h-8 w-72 max-w-full rounded-none" />
         <Skeleton className="bg-muted h-4 w-56 max-w-full rounded-none" />
       </div>
-      <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-5">
-        {[0, 1, 2, 3, 4].map((item) => (
+      <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-6">
+        {[0, 1, 2, 3, 4, 5].map((item) => (
           <div key={item} className="bg-card h-24 p-4">
             <Skeleton className="bg-muted h-4 w-24 max-w-full rounded-none" />
             <Skeleton className="bg-muted mt-2 h-6 w-14 max-w-full rounded-none" />

@@ -23,18 +23,29 @@ import { getPluginDir } from "@lyrashield/agent-plugin"
 const mockedGetPluginDir = vi.mocked(getPluginDir)
 
 const ORIGINAL_ENV = { ...process.env }
+let pluginSourceDir: string
 
 beforeEach(async () => {
   process.env = { ...ORIGINAL_ENV }
   process.env.LYRASHIELD_API_KEY = "lsk_test"
-  // Default: return the real plugin directory.
-  const actual = await vi.importActual<typeof import("@lyrashield/agent-plugin")>(
-    "@lyrashield/agent-plugin"
+  // Use an isolated source so the Agent Plugin generator can run in parallel
+  // without renaming files while this suite copies them.
+  pluginSourceDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-source-"))
+  await writeFile(
+    path.join(pluginSourceDir, "plugin.json"),
+    JSON.stringify({ name: "lyrashield" }),
+    "utf-8"
   )
-  mockedGetPluginDir.mockReturnValue(actual.getPluginDir())
+  await writeFile(
+    path.join(pluginSourceDir, "mcp.json"),
+    JSON.stringify({ mcpServers: { lyrashield: {} } }),
+    "utf-8"
+  )
+  mockedGetPluginDir.mockReturnValue(pluginSourceDir)
 })
 
-afterEach(() => {
+afterEach(async () => {
+  await rm(pluginSourceDir, { recursive: true, force: true })
   process.env = ORIGINAL_ENV
   vi.clearAllMocks()
 })

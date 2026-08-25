@@ -341,6 +341,7 @@ export async function getScanForWorkspace(
 
 export interface ListScansParams {
   workspaceId: string
+  scanIds?: string[]
   targetId?: string
   status?: ScanStatus
   statuses?: ScanStatus[]
@@ -422,6 +423,7 @@ export async function listScans(params: ListScansParams): Promise<{
   const where: Record<string, unknown> = {
     workspaceId: params.workspaceId,
     deletedAt: null,
+    ...(params.scanIds?.length ? { id: { in: params.scanIds } } : {}),
     ...(params.targetId ? { targetId: params.targetId } : {}),
     ...statusFilter,
   }

@@ -140,13 +140,28 @@ Open the local app, sign up for a new account, and complete onboarding. Any emai
 
 ```bash
 cd ~/Desktop/lyrashieldai
+launch_worker_temp_root="${LYRASHIELD_WORKER_TEMP_ROOT:-$PWD/.lyrashield-worker-tmp}"
+case "$launch_worker_temp_root" in /*) ;; *) echo "Worker temp root must be absolute" >&2; exit 1 ;; esac
+if [ -L "$launch_worker_temp_root" ]; then echo "Worker temp root must not be a symlink" >&2; exit 1; fi
+[ -d "$launch_worker_temp_root" ] || mkdir -p "$launch_worker_temp_root"
 docker compose build worker
+# Native Linux only: grant the image's non-root UID/GID ownership of this exact
+# project directory. This is non-recursive and never targets shared /tmp.
+if [ "$(uname -s)" = "Linux" ]; then
+  docker run --rm --user 0:0 \
+    --mount type=bind,src="$launch_worker_temp_root",dst=/worker-tmp \
+    --entrypoint sh lyrashield-worker:local \
+    -c 'chown 100:101 /worker-tmp && chmod 700 /worker-tmp'
+else
+  chmod 700 "$launch_worker_temp_root"
+fi
+export LYRASHIELD_WORKER_TEMP_ROOT="$launch_worker_temp_root"
 docker compose up -d web worker
 docker compose exec worker lyrashield --version
 curl -fsS http://localhost:3000/api/ready/scans
 ```
 
-The worker image consumes the sibling engine source through its named Docker build context. Compose also creates the internal `lyrashield-sandbox` network shared by the worker and its dynamically created scan sandboxes. This network is required for the worker-to-Caido control plane and has no default external route. The worker exits before accepting scans if the resolved model, selected provider credential, or sandbox network name is missing.
+The worker image consumes the sibling engine source through its named Docker build context. The protected project-owned `.lyrashield-worker-tmp` directory is bind-mounted at the same absolute path in the worker because the host Docker daemon must see engine checkouts. Set `LYRASHIELD_WORKER_TEMP_ROOT` to another pre-created absolute `0700` directory when needed. Compose never runs a privileged recursive ownership change on this path; worker startup rejects an absent, symlinked, or unwritable directory before accepting scans. Compose also creates the internal `lyrashield-sandbox` network shared by the worker and its dynamically created scan sandboxes. This network is required for the worker-to-Caido control plane and has no default external route. The worker exits before accepting scans if the resolved model, selected provider credential, or sandbox network name is missing.
 
 The web app accepts a scan only while a worker heartbeat is live. Workers refresh their Redis lease every two minutes and it expires after five minutes following a crash or lost Redis connection. Heartbeat registration and readiness are each one-key Lua operations; the separate admission-stop key uses `EXISTS` so Redis Cluster does not receive a cross-slot script. `/api/ready/scans` returns `503` while no worker is available, and the UI asks the user to retry instead of leaving a scan permanently queued.
 

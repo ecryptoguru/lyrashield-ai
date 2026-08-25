@@ -32,6 +32,7 @@ export default async function PlatformAdminScansPage({
         <table className="w-full min-w-5xl text-left text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
+              <th className="px-4 py-3 font-medium">Scan ID</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Mode</th>
               <th className="px-4 py-3 font-medium">Workspace</th>
@@ -44,6 +45,7 @@ export default async function PlatformAdminScansPage({
           <tbody className="divide-y">
             {page.items.map((scan) => (
               <tr key={scan.id}>
+                <td className="px-4 py-3 font-mono text-xs break-all select-all">{scan.id}</td>
                 <td className="px-4 py-3">
                   <Badge variant="muted">{scan.status}</Badge>
                 </td>

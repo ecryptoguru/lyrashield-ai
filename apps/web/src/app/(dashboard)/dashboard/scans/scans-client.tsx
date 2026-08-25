@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import {
   Radar,
@@ -27,15 +27,29 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
-import { apiDelete, apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
+import {
+  ApiError,
+  apiDelete,
+  apiPost,
+  apiGetPaginated,
+  apiGetPaginatedConditional,
+} from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
-import { getReviewSetupGuidance, mergePolledScans } from "./scans-client.utils"
+import {
+  findRecoveryPreset,
+  getReviewSetupGuidance,
+  isBillingRecoveryCode,
+  mergePolledScans,
+  mergeResolvedOffPageScans,
+  missingActiveScanIds,
+} from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getManualScanOptions } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { getGoalLabel } from "@/lib/labels"
 import { formatEstimate } from "@/lib/estimator"
+import { safeApiErrorMessage } from "@/components/api-error-card"
 
 function modeBadgeVariant(mode: string): "default" | "success" | "info" | "warning" | "muted" {
   switch (mode) {
@@ -126,6 +140,9 @@ interface ScansClientProps {
   initialData: ScanItem[]
   initialNextCursor: string | null
   initialShowCreate?: boolean
+  initialTargetId?: string
+  initialGoal?: string
+  initialMode?: string
 }
 
 export function ScansClient({
@@ -134,22 +151,45 @@ export function ScansClient({
   initialData,
   initialNextCursor,
   initialShowCreate = false,
+  initialTargetId = "",
+  initialGoal,
+  initialMode,
 }: ScansClientProps) {
   const [scans, setScans] = useState<ScanItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
   const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(initialShowCreate)
-  const [selectedTarget, setSelectedTarget] = useState("")
-  const [selectedPreset, setSelectedPreset] = useState("")
+  const [selectedTarget, setSelectedTarget] = useState(initialTargetId)
+  const [selectedPreset, setSelectedPreset] = useState(() => {
+    const target = targets.find((item) => item.id === initialTargetId)
+    return findRecoveryPreset(
+      getManualScanOptions({
+        type: target?.type ?? "",
+        hasApiSpec: Boolean(target?.apiSpecUrl),
+      }),
+      initialGoal,
+      initialMode
+    )
+  })
   const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [pollStale, setPollStale] = useState(false)
+  const scansRef = useRef(scans)
+  const firstPageIdsRef = useRef(new Set(initialData.map((scan) => scan.id)))
+  const firstPageHasMoreRef = useRef(initialNextCursor !== null)
+
+  useEffect(() => {
+    scansRef.current = scans
+  }, [scans])
 
   async function handleCreateScan() {
+    setErrorCode(null)
     if (!selectedTarget) {
       setError("Select a target to scan")
       return
@@ -176,6 +216,7 @@ export function ScansClient({
       setSelectedTarget("")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create scan")
+      setErrorCode(err instanceof ApiError ? err.code : null)
     } finally {
       setCreating(false)
     }
@@ -184,6 +225,7 @@ export function ScansClient({
   async function handleCancelScan(scanId: string) {
     setCancelling(scanId)
     setError(null)
+    setErrorCode(null)
     try {
       const result = await apiPost(
         `/api/scans/${scanId}`,
@@ -205,6 +247,7 @@ export function ScansClient({
   async function handleRemoveScan(scanId: string) {
     setRemoving(scanId)
     setError(null)
+    setErrorCode(null)
     try {
       await apiDelete(`/api/scans/${scanId}?workspaceId=${encodeURIComponent(workspaceId)}`)
       setScans((prev) => prev.filter((scan) => scan.id !== scanId))
@@ -218,6 +261,7 @@ export function ScansClient({
   async function handleLoadMore() {
     if (!nextCursor) return
     setLoadingMore(true)
+    setErrorCode(null)
     try {
       const result = await apiGetPaginated<ScanItem>(
         "/api/scans",
@@ -239,6 +283,7 @@ export function ScansClient({
   async function handleRefresh() {
     setRefreshing(true)
     setError(null)
+    setErrorCode(null)
     try {
       const result = await apiGetPaginated<ScanItem>(
         "/api/scans",
@@ -247,8 +292,11 @@ export function ScansClient({
       )
       setScans(result.items)
       setNextCursor(result.nextCursor)
+      firstPageIdsRef.current = new Set(result.items.map((scan) => scan.id))
+      firstPageHasMoreRef.current = result.nextCursor !== null
+      setPollStale(false)
     } catch {
-      setError("Failed to refresh scans")
+      setPollStale(true)
     } finally {
       setRefreshing(false)
     }
@@ -271,8 +319,6 @@ export function ScansClient({
         hasApiSpec: Boolean(selectedTargetDetails.apiSpecUrl),
       })
     : null
-
-  const ACTIVE_STATUS_PARAM = "QUEUED,PREFLIGHT,RUNNING,VERIFYING,REQUIRES_APPROVAL"
 
   function handleSelectTarget(targetId: string) {
     setSelectedTarget(targetId)
@@ -336,12 +382,12 @@ export function ScansClient({
     const poll = async () => {
       if (document.hidden) return
       try {
-        // Poll only active-status scans to keep the payload small. Merge the
-        // refreshed active rows into the full list so completed scans are preserved.
+        // Poll the bounded first page so a scan's terminal state replaces its
+        // previous active row. Older paginated terminal rows stay preserved.
         // The ETag from the previous tick makes an unchanged list a bodyless 304.
         const { data, etag } = await apiGetPaginatedConditional(
           "/api/scans",
-          { workspaceId, status: ACTIVE_STATUS_PARAM },
+          { workspaceId },
           {
             signal: controller.signal,
             schema: scansPaginatedSchema,
@@ -349,11 +395,36 @@ export function ScansClient({
           }
         )
         if (etag) pollEtag = etag
-        if (data && !controller.signal.aborted) {
-          setScans((current) => mergePolledScans(current, data.items))
+        if (data) {
+          firstPageIdsRef.current = new Set(data.items.map((scan) => scan.id))
+          firstPageHasMoreRef.current = data.nextCursor !== null
+        }
+
+        const missingIds = missingActiveScanIds(
+          scansRef.current,
+          firstPageIdsRef.current,
+          firstPageHasMoreRef.current
+        )
+        const resolvedMissing = missingIds.length
+          ? await apiGetPaginated<ScanItem>(
+              "/api/scans",
+              { workspaceId, ids: missingIds.join(",") },
+              { signal: controller.signal, schema: scansPaginatedSchema }
+            )
+          : null
+
+        setPollStale(false)
+        if (!controller.signal.aborted && (data || resolvedMissing)) {
+          setScans((current) => {
+            let merged = data
+              ? mergePolledScans(current, data.items, { hasMore: data.nextCursor !== null })
+              : current
+            if (!resolvedMissing) return merged
+            return mergeResolvedOffPageScans(merged, resolvedMissing.items, missingIds)
+          })
         }
       } catch {
-        // Keep the current list visible; the manual refresh action reports errors.
+        if (!controller.signal.aborted) setPollStale(true)
       }
       if (isAborted) return
       const elapsed = Date.now() - pollStartedAt
@@ -402,7 +473,30 @@ export function ScansClient({
           role="alert"
           className="border-destructive/50 bg-destructive/10 text-destructive mb-4 rounded-lg border p-3 text-sm"
         >
-          {error}
+          <span>{safeApiErrorMessage(error)}</span>
+          {isBillingRecoveryCode(errorCode) && (
+            <Link href="/dashboard/billing" className="ml-2 underline underline-offset-4">
+              Review billing options
+            </Link>
+          )}
+        </div>
+      )}
+
+      {pollStale && (
+        <div
+          role="status"
+          className="border-amber-500/50 bg-amber-500/10 mb-4 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>Updates are paused. The displayed scan status may be stale.</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+          >
+            {refreshing ? "Refreshing" : "Try again"}
+          </Button>
         </div>
       )}
 
@@ -694,7 +788,9 @@ export function ScansClient({
                       <p className="text-muted-foreground text-sm">{scan.summary}</p>
                     )}
                     {scan.errorMessage && (
-                      <p className="text-destructive text-sm">{scan.errorMessage}</p>
+                      <p className="text-destructive line-clamp-2 text-sm wrap-break-word">
+                        {safeApiErrorMessage(scan.errorMessage)}
+                      </p>
                     )}
                     <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <span className="whitespace-nowrap">{formatDateTime(scan.createdAt)}</span>

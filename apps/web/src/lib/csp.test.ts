@@ -11,6 +11,7 @@ vi.mock("@/lib/rate-limit", () => ({
   checkBillingWebhookRateLimit: vi
     .fn()
     .mockResolvedValue({ limited: false, remaining: 1_199, retryAfter: 0 }),
+  checkHealthRateLimit: vi.fn().mockReturnValue({ limited: false, remaining: 119, retryAfter: 0 }),
   checkLiteScanRateLimit: vi
     .fn()
     .mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
@@ -232,6 +233,34 @@ describe("CSP nonce proxy", () => {
     expect(res.status).toBe(200)
     expect(checkApiRateLimit).toHaveBeenCalledOnce()
     expect(checkAuthRateLimit).not.toHaveBeenCalled()
+  })
+
+  it.each(["/api/health", "/api/ready", "/api/ready/scans"])(
+    "does not charge the exact health path %s against Redis rate limits",
+    async (pathname) => {
+      const {
+        checkApiRateLimit,
+        checkAuthRateLimit,
+        checkHealthRateLimit,
+        checkLiteScanRateLimit,
+      } = await import("@/lib/rate-limit")
+
+      const response = await proxy(makeRequest(pathname))
+
+      expect(response.status).toBe(200)
+      expect(checkApiRateLimit).not.toHaveBeenCalled()
+      expect(checkAuthRateLimit).not.toHaveBeenCalled()
+      expect(checkLiteScanRateLimit).not.toHaveBeenCalled()
+      expect(checkHealthRateLimit).toHaveBeenCalledOnce()
+    }
+  )
+
+  it("keeps near-match readiness paths behind the general API limit", async () => {
+    const { checkApiRateLimit } = await import("@/lib/rate-limit")
+
+    await proxy(makeRequest("/api/ready/scans/detail"))
+
+    expect(checkApiRateLimit).toHaveBeenCalledOnce()
   })
 
   it("uses a dedicated burst-safe bound for signed billing webhook ingress", async () => {

@@ -466,6 +466,17 @@ describe("buildEngineEnv", () => {
     expect(engineEnv.LYRASHIELD_PROMPT_CACHE_EXPLICIT).toBe("1")
     expect(engineEnv.LYRASHIELD_PROMPT_CACHE).toBe("1")
   })
+
+  it("keeps engine checkouts on the worker's host-visible temporary root", () => {
+    const engineEnv = buildEngineEnv({
+      model: "azure/gpt-5.6-luna",
+      reasoningEffort: "medium",
+      delegateModel: "azure/gpt-5.6-luna",
+      delegateReasoningEffort: "medium",
+    })
+
+    expect(engineEnv.TMPDIR).toBe(tmpdir())
+  })
 })
 
 describe("readEngineProgressFingerprint", () => {

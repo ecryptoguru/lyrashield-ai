@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const { systemPrisma } = vi.hoisted(() => ({
+  systemPrisma: { report: { findFirst: vi.fn() } },
+}))
+
 vi.mock("./client", () => ({
   prisma: {
     $transaction: vi.fn(),
@@ -9,6 +13,7 @@ vi.mock("./client", () => ({
     finding: { findMany: vi.fn(), groupBy: vi.fn() },
   },
 }))
+vi.mock("./system-client", () => ({ getSystemPrisma: vi.fn(() => systemPrisma) }))
 
 import { randomBytes } from "crypto"
 import { prisma } from "./client"
@@ -20,6 +25,9 @@ const mockPrisma = prisma as unknown as {
   report: { findFirst: ReturnType<typeof vi.fn> }
   scan: { findFirst: ReturnType<typeof vi.fn> }
   finding: { findMany: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> }
+}
+const mockSystemPrisma = systemPrisma as unknown as {
+  report: { findFirst: ReturnType<typeof vi.fn> }
 }
 
 describe("getShareableReport", () => {
@@ -240,16 +248,16 @@ describe("getReportByShareToken", () => {
       const report = await getReportByShareToken(token)
       expect(report).toBeNull()
     }
-    expect(mockPrisma.report.findFirst).not.toHaveBeenCalled()
+    expect(mockSystemPrisma.report.findFirst).not.toHaveBeenCalled()
   })
 
   it("returns null when no unrevoked report matches the token hash", async () => {
-    mockPrisma.report.findFirst.mockResolvedValue(null)
+    mockSystemPrisma.report.findFirst.mockResolvedValue(null)
 
     const report = await getReportByShareToken(validToken)
 
     expect(report).toBeNull()
-    expect(mockPrisma.report.findFirst).toHaveBeenCalledWith(
+    expect(mockSystemPrisma.report.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           revokedAt: null,
@@ -260,7 +268,7 @@ describe("getReportByShareToken", () => {
   })
 
   it("returns null when the shared report has expired", async () => {
-    mockPrisma.report.findFirst.mockResolvedValue({
+    mockSystemPrisma.report.findFirst.mockResolvedValue({
       id: "report-1",
       workspaceId: "ws-1",
       shareExpiresAt: new Date(Date.now() - 60_000),
@@ -272,7 +280,7 @@ describe("getReportByShareToken", () => {
   })
 
   it("returns the report when the token is valid, unrevoked, and not expired", async () => {
-    mockPrisma.report.findFirst.mockResolvedValue({
+    mockSystemPrisma.report.findFirst.mockResolvedValue({
       id: "report-1",
       workspaceId: "ws-1",
       shareExpiresAt: new Date(Date.now() + 60_000),

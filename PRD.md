@@ -63,6 +63,8 @@ Implemented:
 - Better Auth email/password, GitHub OAuth, optional Google OAuth, email verification, sessions, account deletion, and anonymization.
 - Workspaces, memberships, invitations, roles, projects, repository/URL/API targets, onboarding, and active-workspace persistence.
 - BullMQ scan admission, queueing, preflight, target serialization, lifecycle events, cancellation, orphan reconciliation, schedules, and fail-closed worker readiness.
+- Host-visible worker/engine temporary paths for Docker sandbox source mounts; pre-provider
+  sandbox failures remain non-billable.
 - Findings, normalization, CWE/OWASP metadata, SCA, secrets, deterministic URL/API checks, AI App Security checks, evidence states, candidates, receipts, manifests, retests, reports, notifications, and launch readiness.
 - LyraShield Score, private snapshots, public scorecards, cards, badges, privacy-bounded analytics, referrals, and social sharing.
 - Agent actions, exact-input approvals, MCP over stdio and Streamable HTTP, hosted OAuth, CLI login/install/doctor flows, SDK, agent registry, and portable agent plugin.
@@ -266,6 +268,9 @@ Cloud subscriptions, Local licenses, and minute packs are non-refundable except 
 - Repository sandbox uses non-root execution, bounded resources, read-only/ephemeral storage where possible, no-new-privileges, and deny-by-default egress.
 - Worker arbitrary public access is denied; approved public fetching goes through the authenticated SSRF-safe proxy.
 - BullMQ uses managed authenticated TLS Redis. Upstash REST credentials are used only for distributed rate limiting.
+- Exact health/readiness probes are locally bounded without Upstash commands. Upstash
+  initialization and runtime failures use a 60-second retry cooldown while ordinary endpoints retain their
+  in-memory fallback limits.
 
 ### Secrets, evidence, and audit
 
