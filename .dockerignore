@@ -3,6 +3,7 @@ node_modules
 **/.next
 **/.astro
 **/dist
+**/target
 **/*.tsbuildinfo
 .git
 .gitignore
