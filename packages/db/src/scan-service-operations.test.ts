@@ -442,4 +442,19 @@ describe("listScans", () => {
 
     expect(items[0]!.findingCount).toBe(0)
   })
+
+  it("scopes a bounded status refresh to the requested scan IDs", async () => {
+    mockPrisma.scan.findMany.mockResolvedValue([])
+
+    await listScans({ workspaceId: "ws-1", scanIds: ["scan-1", "scan-2"] })
+
+    expect(mockPrisma.scan.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: "ws-1",
+          id: { in: ["scan-1", "scan-2"] },
+        }),
+      })
+    )
+  })
 })

@@ -54,6 +54,10 @@ function deriveCurrentStage(status: string, events: ScanEvent[]): string {
   return humanizeStatus(status)
 }
 
+export function buildScanAnnouncement(currentStage: string, findingsCount: number): string {
+  return `${currentStage}. ${findingsCount} finding${findingsCount === 1 ? "" : "s"} detected so far.`
+}
+
 type StageState = "done" | "active" | "pending"
 
 interface Phase {
@@ -162,14 +166,12 @@ export function ScanInProgress({
 
   return (
     <div className="space-y-4">
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {buildScanAnnouncement(currentStage, findingsCount)}
+      </p>
+
       {/* Status hero card */}
-      <Card
-        className="overflow-hidden p-0"
-        role="status"
-        aria-live="polite"
-        aria-busy="true"
-        aria-label="Scan in progress"
-      >
+      <Card className="overflow-hidden p-0" aria-label="Scan in progress">
         {/*
           Indeterminate progress affordance: a pulsing bar.
           The global prefers-reduced-motion rule kills the animation;
@@ -246,13 +248,7 @@ export function ScanInProgress({
                     <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
                     <span>
                       Findings so far:{" "}
-                      <span
-                        className="font-medium tabular-nums"
-                        aria-live="polite"
-                        aria-atomic="true"
-                      >
-                        {findingsCount}
-                      </span>
+                      <span className="font-medium tabular-nums">{findingsCount}</span>
                     </span>
                   </span>
                 )}
@@ -321,15 +317,8 @@ export function ScanInProgress({
           />
           <div>
             <p className="text-sm font-semibold">
-              <span
-                className="tabular-nums"
-                aria-live="polite"
-                aria-atomic="true"
-                aria-label={`${findingsCount} finding${findingsCount === 1 ? "" : "s"} detected so far`}
-              >
-                {findingsCount}
-              </span>{" "}
-              finding{findingsCount === 1 ? "" : "s"} detected so far
+              <span className="tabular-nums">{findingsCount}</span> finding
+              {findingsCount === 1 ? "" : "s"} detected so far
             </p>
             <p className="text-muted-foreground text-xs">
               Final counts may change as verification completes.
@@ -354,8 +343,6 @@ export function ScanInProgress({
           <ul
             ref={feedRef}
             className="max-h-56 space-y-1 overflow-y-auto"
-            aria-live="polite"
-            aria-relevant="additions"
             aria-label="Scan activity feed"
             tabIndex={0}
           >

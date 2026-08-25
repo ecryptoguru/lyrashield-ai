@@ -679,6 +679,26 @@ describe("GET /api/scans", () => {
     )
   })
 
+  it("passes at most three validated scan IDs to the scoped list query", async () => {
+    vi.mocked(listScans).mockResolvedValue({ items: [], nextCursor: null } as never)
+
+    const response = await GET(makeGetRequest({ workspaceId: "ws-1", ids: "scan-1,scan-2,scan-3" }))
+
+    expect(response.status).toBe(200)
+    expect(listScans).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-1", scanIds: ["scan-1", "scan-2", "scan-3"] })
+    )
+  })
+
+  it("rejects an oversized scan-ID status query", async () => {
+    const response = await GET(
+      makeGetRequest({ workspaceId: "ws-1", ids: "scan-1,scan-2,scan-3,scan-4" })
+    )
+
+    expect(response.status).toBe(400)
+    expect(listScans).not.toHaveBeenCalled()
+  })
+
   it("returns 403 when user lacks scan.view permission", async () => {
     vi.mocked(requirePermission).mockRejectedValue(new Error("FORBIDDEN") as never)
 

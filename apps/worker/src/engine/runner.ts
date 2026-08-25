@@ -12,7 +12,7 @@ import {
   parseEngineTriageArtifact,
   type EngineTriageArtifact,
 } from "@lyrashield/security/ai-security"
-import { ENGINE_CHECKOUT_ROOT, ENGINE_WORK_ROOT } from "./workspace-path"
+import { ENGINE_CHECKOUT_ROOT, ENGINE_TEMP_ROOT, ENGINE_WORK_ROOT } from "./workspace-path"
 
 export interface EngineRunResult {
   exitCode: number
@@ -145,7 +145,6 @@ const ENGINE_LLM_STALL_MS = 30 * 60 * 1000
  * legitimately approaching the cap is not killed prematurely. Founder-tunable.
  */
 export const OVERSHOOT_GRACE = 0.075
-const MAX_ENGINE_ERROR_TAIL_BYTES = 4096
 const MAX_ENGINE_FAILURE_MARKER_WINDOW = 512
 
 /**
@@ -389,6 +388,11 @@ export function buildEngineEnv(profile: EngineProfile, scanId?: string): Record<
   if (!("LYRASHIELD_PROMPT_CACHE" in filtered)) {
     filtered.LYRASHIELD_PROMPT_CACHE = "1"
   }
+  // The engine clones repositories below TMPDIR before asking host Docker to
+  // bind-mount them into the sandbox. Keep the child on the same host-visible
+  // temp root as the worker; /tmp inside the worker container is not visible
+  // to the host Docker daemon.
+  filtered.TMPDIR = ENGINE_TEMP_ROOT
   if (profile.model) filtered.LYRASHIELD_LLM = profile.model
   filtered.LYRASHIELD_REASONING_EFFORT = profile.reasoningEffort
   if (profile.delegateModel) filtered.LYRASHIELD_DELEGATE_LLM = profile.delegateModel
@@ -460,12 +464,8 @@ async function runEngineProcess(
 
     let stdoutBytes = 0
     let stderrBytes = 0
-    let stderrTail = Buffer.alloc(0)
-    // Keep a bounded tail of STDOUT too: the engine writes some startup/clone
-    // errors to stdout (not stderr), and a non-zero exit with only a byte count
-    // left the cause invisible (the production "engine exited code 1, no detail"
-    // case). Capturing a tail lets a failed run surface the real reason.
-    let stdoutTail = Buffer.alloc(0)
+    // Capture only the engine-owned fixed failure class. Raw stream content can
+    // contain target or credential data and must not enter operational logs.
     let failureMarkerWindow = ""
     let failureType: string | null = null
     let timedOut = false
@@ -594,12 +594,10 @@ async function runEngineProcess(
 
     child.stdout?.on("data", (chunk: Buffer) => {
       stdoutBytes += chunk.byteLength
-      stdoutTail = Buffer.concat([stdoutTail, chunk]).subarray(-MAX_ENGINE_ERROR_TAIL_BYTES)
     })
 
     child.stderr?.on("data", (chunk: Buffer) => {
       stderrBytes += chunk.byteLength
-      stderrTail = Buffer.concat([stderrTail, chunk]).subarray(-MAX_ENGINE_ERROR_TAIL_BYTES)
       const marker = collectEngineFailureType(failureMarkerWindow, chunk)
       failureMarkerWindow = marker.window
       failureType = marker.failureType ?? failureType
@@ -615,17 +613,11 @@ async function runEngineProcess(
       stopTracking()
       const exitCode = code ?? (timedOut || cancelled || budgetKilled ? -1 : 1)
       logger.info("Engine streams consumed", { scanId, stdoutBytes, stderrBytes })
-      // On a non-clean exit, surface the captured stdout+stderr tails so the
-      // engine's real error (which it may write to stdout) is in the worker log
-      // instead of being discarded. Bounded to the last 4KB of each stream.
       if (exitCode !== 0) {
-        const stdoutText = stdoutTail.toString("utf8").trim()
-        const stderrText = stderrTail.toString("utf8").trim()
         logger.warn("Engine exited with an error", {
           scanId,
           exitCode,
-          ...(stdoutText ? { stdoutTail: stdoutText } : {}),
-          ...(stderrText ? { stderrTail: stderrText } : {}),
+          ...(failureType ? { failureType } : {}),
         })
       }
       resolvePromise({
@@ -634,7 +626,7 @@ async function runEngineProcess(
         timeoutReason,
         cancelled,
         budgetKilled,
-        failureType: failureType ?? extractEngineFailureType(stderrTail.toString("utf8")),
+        failureType,
       })
     })
 
@@ -1063,7 +1055,7 @@ export async function runEngine(
       sourceCheckoutPath ? "info" : "warning",
       sourceCheckoutPath
         ? "Validated engine source checkout for deterministic scanners"
-        : "Validated engine source checkout unavailable; deterministic repository scanners will be skipped",
+        : "Validated engine source checkout unavailable; source-dependent scanners will report bounded coverage",
       { available: Boolean(sourceCheckoutPath) }
     )
   }

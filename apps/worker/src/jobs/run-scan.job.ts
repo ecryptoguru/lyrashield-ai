@@ -30,7 +30,7 @@ import {
   type EngineRunResult,
 } from "../engine/runner"
 import { engineWorkspacePath } from "../engine/workspace-path"
-import { mergeLlmUsage } from "../engine/output-parser"
+import { mergeLlmUsage, type EngineRunRecord } from "../engine/output-parser"
 import { buildEngineTriageInput, eligibleForEngineTriage } from "../engine/ai-security-triage"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import {
@@ -155,6 +155,42 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
     singleModel,
     engineReportedCostUsd: extractActualCostUsd(usage),
   }
+}
+
+export function shouldRecordAgentMinutes(
+  scanId: string,
+  exitStatus: "COMPLETED" | "FAILED",
+  runRecord: EngineRunRecord | null
+): boolean {
+  if (!runRecord) return false
+  if (runRecord.run_id !== scanId || runRecord.run_name !== scanId) return false
+
+  const validCompletedReceipt = exitStatus === "COMPLETED" && runRecord.status === "completed"
+  if (validCompletedReceipt) return true
+
+  if (!runRecord.llm_usage) return false
+  const usage = extractUsageSummary(runRecord.llm_usage)
+  return [
+    usage.requestCount,
+    usage.inputTokens,
+    usage.cachedInputTokens,
+    usage.cacheWriteInputTokens,
+    usage.outputTokens,
+    usage.engineReportedCostUsd,
+    ...(usage.pricingBuckets ? Object.values(usage.pricingBuckets) : []),
+    ...(usage.modelPricingBuckets
+      ? usage.modelPricingBuckets.flatMap((bucket) => [
+          bucket.standardInputTokens,
+          bucket.standardCachedInputTokens,
+          bucket.standardCacheWriteInputTokens,
+          bucket.standardOutputTokens,
+          bucket.longInputTokens,
+          bucket.longCachedInputTokens,
+          bucket.longCacheWriteInputTokens,
+          bucket.longOutputTokens,
+        ])
+      : []),
+  ].some((value) => typeof value === "number" && value > 0)
 }
 
 const MAX_SCAN_RUNTIME_MS = 30 * 60 * 1000
@@ -440,6 +476,18 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     policyId,
   } = parseResult.data
 
+  // enqueueScan() uses scanId as the BullMQ job ID. Reject any alternate ID
+  // before loading or mutating the canonical scan so duplicate/forged jobs
+  // cannot execute provider work under another queue identity.
+  if (String(job.id) !== scanId) {
+    log.warn("Scan job ID does not match scan ID", { jobId: job.id, scanId })
+    return {
+      status: "failed",
+      errorCategory: "INVALID_JOB",
+      errorMessage: "Scan job ID does not match the scan ID",
+    }
+  }
+
   log.info("Processing scan job", { scanId, targetId, mode, jobId: job.id })
 
   // Do not trust the workspaceId from the queue payload. Load the scan record
@@ -449,28 +497,43 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   try {
     scanRecord = await getSystemPrisma().scan.findUnique({
       where: { id: scanId },
-      select: { id: true, workspaceId: true, targetId: true },
+      select: {
+        id: true,
+        workspaceId: true,
+        targetId: true,
+        goal: true,
+        mode: true,
+        policyId: true,
+      },
     })
   } catch (err) {
-    throw new Error(
-      `Failed to verify scan ownership: ${err instanceof Error ? err.message : String(err)}`
-    )
+    throw new Error("Failed to verify scan authority", { cause: err })
   }
   if (
     !scanRecord ||
     scanRecord.workspaceId !== claimedWorkspaceId ||
-    scanRecord.targetId !== targetId
+    scanRecord.targetId !== targetId ||
+    scanRecord.goal !== goal ||
+    scanRecord.mode !== mode ||
+    scanRecord.policyId !== (policyId ?? null)
   ) {
-    try {
-      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-        errorCategory: "INVALID_JOB",
-        errorMessage: "Scan job does not match the stored scan record",
-      })
-    } catch (statusErr) {
-      log.warn("Failed to mark invalid scan job as failed", {
-        scanId,
-        error: statusErr instanceof Error ? statusErr.message : String(statusErr),
-      })
+    if (scanRecord) {
+      try {
+        await updateScanStatus(
+          scanId,
+          "FAILED" as ScanStatus,
+          {
+            errorCategory: "INVALID_JOB",
+            errorMessage: "Scan job does not match the stored scan record",
+          },
+          scanRecord.workspaceId
+        )
+      } catch (statusErr) {
+        log.warn("Failed to mark invalid scan job as failed", {
+          scanId,
+          errorType: statusErr instanceof Error ? statusErr.name : "UNKNOWN",
+        })
+      }
     }
     return {
       status: "failed",
@@ -723,6 +786,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       let engineResult: EngineRunResult
+      let engineStartedAtMs: number | null = null
       let maxBudgetUsd = 0
 
       if (target.type === "REPO") {
@@ -795,6 +859,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         // its self-reported spend and liveness keep advancing.
         const engineTimeoutMs = Math.max(0, scanRuntimeBudgetMs - (Date.now() - scanStartedAtMs))
 
+        engineStartedAtMs = Date.now()
         engineResult = await runEngine(
           {
             scanId,
@@ -861,59 +926,69 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         )
       }
 
+      const runRecord = engineResult.output.runRecord
+      const exitInterpretation = interpretExitCode(engineResult.exitCode)
+      const engineWorkObserved =
+        target.type === "REPO" &&
+        shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord)
+
       // ─── Sprint 10: Agent-minute metering (wall-clock) ──────────────────
-      // Record wall-clock agent minutes consumed by the engine run.
+      // Record wall-clock agent minutes only after a valid completed receipt
+      // or affirmative provider usage proves that model-backed work occurred.
       // Per D1 constraint: minutes are wall-clock, NOT "active-loop" or "thinking time".
       // Deep/Custom scans consume 3× minutes (applied inside recordAgentMinutes).
-      const engineWallClockMs = Date.now() - scanStartedAtMs
-      try {
-        const billingAccount = await prisma.billingAccount.findUnique({
-          where: { workspaceId },
-          select: { currentPeriodStart: true },
-        })
-        await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
-          mode,
-          phase: "engine_run",
-          cycleStart: billingAccount?.currentPeriodStart ?? undefined,
-        })
-
-        // Check balance after metering — if exhausted, enter grace
-        const balance = await getUsageBalance(workspaceId)
-        if (balance.totalRemaining <= 0) {
-          // Check if overage is available (Team plan with spend limit)
-          const acct = await prisma.billingAccount.findUnique({
+      const engineWallClockMs =
+        engineStartedAtMs === null ? 0 : Math.max(1, Date.now() - engineStartedAtMs)
+      if (engineWorkObserved) {
+        try {
+          const billingAccount = await prisma.billingAccount.findUnique({
             where: { workspaceId },
-            select: { currentPlan: true, spendLimitCents: true },
+            select: { currentPeriodStart: true },
           })
-          const overageAvailable = acct?.currentPlan === "TEAM" && (acct.spendLimitCents ?? 0) > 0
+          await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
+            mode,
+            phase: "engine_run",
+            cycleStart: billingAccount?.currentPeriodStart ?? undefined,
+          })
 
-          if (overageAvailable) {
-            // Debit overage for the remaining engine time
-            const overageMinutes = Math.ceil(engineWallClockMs / 60_000)
-            await debitOverage(workspaceId, overageMinutes, scanId, "engine_overage")
-          } else {
-            // Enter grace period (15min cap)
-            const graceResult = await enterGrace(workspaceId, engineWallClockMs)
-            if (!graceResult.shouldContinue) {
-              // Grace exceeded — stop the scan
-              await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-                errorCategory: "BUDGET_EXCEEDED",
-                errorMessage: "Agent-minute balance exhausted and grace period exceeded",
-              })
-              return {
-                status: "failed",
-                errorCategory: "BUDGET_EXCEEDED",
-                errorMessage: "Agent-minute balance exhausted and grace period exceeded",
+          // Check balance after metering — if exhausted, enter grace
+          const balance = await getUsageBalance(workspaceId)
+          if (balance.totalRemaining <= 0) {
+            // Check if overage is available (Team plan with spend limit)
+            const acct = await prisma.billingAccount.findUnique({
+              where: { workspaceId },
+              select: { currentPlan: true, spendLimitCents: true },
+            })
+            const overageAvailable = acct?.currentPlan === "TEAM" && (acct.spendLimitCents ?? 0) > 0
+
+            if (overageAvailable) {
+              // Debit overage for the remaining engine time
+              const overageMinutes = Math.ceil(engineWallClockMs / 60_000)
+              await debitOverage(workspaceId, overageMinutes, scanId, "engine_overage")
+            } else {
+              // Enter grace period (15min cap)
+              const graceResult = await enterGrace(workspaceId, engineWallClockMs)
+              if (!graceResult.shouldContinue) {
+                // Grace exceeded — stop the scan
+                await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+                  errorCategory: "BUDGET_EXCEEDED",
+                  errorMessage: "Agent-minute balance exhausted and grace period exceeded",
+                })
+                return {
+                  status: "failed",
+                  errorCategory: "BUDGET_EXCEEDED",
+                  errorMessage: "Agent-minute balance exhausted and grace period exceeded",
+                }
               }
             }
           }
+        } catch (meterError) {
+          log.warn("Failed to record agent minutes", {
+            scanId,
+            error: meterError instanceof Error ? meterError.message : String(meterError),
+          })
+          // Non-fatal: don't block the scan if metering fails
         }
-      } catch (meterError) {
-        log.warn("Failed to record agent minutes", {
-          scanId,
-          error: meterError instanceof Error ? meterError.message : String(meterError),
-        })
-        // Non-fatal: don't block the scan if metering fails
       }
 
       // Persist usage before deterministic scanners or finding persistence can
@@ -926,10 +1001,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
           usageExpected: target.type === "REPO",
         })
-      const runRecord = engineResult.output.runRecord
-      const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const engineExecution =
-        target.type === "REPO" && engineProfile && engineModel
+        engineWorkObserved && engineProfile && engineModel
           ? {
               model: engineModel,
               reasoningEffort: engineProfile.reasoningEffort,
@@ -1579,17 +1652,23 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         summary: scanSummary,
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      const errorCategory = error instanceof Error ? error.name : "UNKNOWN"
-      const finalErrorCategory =
-        globalScanTimeoutReached || isTimeoutError(error) ? "TIMEOUT" : errorCategory
-      const finalErrorMessage =
-        finalErrorCategory === "TIMEOUT" &&
-        !errorMessage.includes("Scan exceeded the configured runtime limit")
-          ? timeoutErrorMessage(scanRuntimeBudgetMs)
-          : errorMessage
+      const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
+      const timedOut = globalScanTimeoutReached || isTimeoutError(error)
+      const finalErrorCategory = timedOut
+        ? "TIMEOUT"
+        : isTerminalPrerequisiteFailure
+          ? "EVIDENCE_STORAGE_CONFIGURATION"
+          : "INTERNAL_ERROR"
+      const finalErrorMessage = timedOut
+        ? timeoutErrorMessage(scanRuntimeBudgetMs)
+        : isTerminalPrerequisiteFailure
+          ? "Evidence storage is not configured"
+          : "The scan could not be completed because an internal service failed."
 
-      log.error("Scan job failed", { scanId, error: errorMessage })
+      log.error("Scan job failed", {
+        scanId,
+        errorType: error instanceof Error ? error.name : "UNKNOWN",
+      })
 
       const currentScan = await prisma.scan
         .findUnique({
@@ -1613,7 +1692,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       const maxAttempts = job.opts?.attempts ?? 1
-      const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
       if (
         !billablePhaseStarted &&
         !isTerminalPrerequisiteFailure &&
@@ -1642,7 +1720,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       } catch (updateErr) {
         log.error("Failed to update scan status on error", {
           scanId,
-          error: updateErr instanceof Error ? updateErr.message : String(updateErr),
+          errorType: updateErr instanceof Error ? updateErr.name : "UNKNOWN",
         })
         // ponytail: let BullMQ retain the terminal infrastructure failure when the DB cannot.
         throw error

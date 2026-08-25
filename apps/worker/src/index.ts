@@ -32,6 +32,7 @@ import {
   type QueueReconciliationResult,
 } from "./queue-reconciliation"
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
+import { assertEngineTempRootReady } from "./engine/workspace-path"
 import { reapStaleScanResources } from "./engine/stale-resource-reaper"
 import { observeWorkerRun } from "./worker-lifecycle"
 import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./operational-health"
@@ -434,6 +435,7 @@ async function main(): Promise<void> {
   logger.info("LyraShield worker starting", { redisConfigured: Boolean(env.REDIS_URL) })
   assertEvidenceStorageConfigured()
   assertRepositoryScanRuntimeConfigured()
+  await assertEngineTempRootReady()
 
   worker = new Worker<ScanJobData, ScanJobResult>(
     SCAN_QUEUE_NAME,

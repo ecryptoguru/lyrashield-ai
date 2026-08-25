@@ -4,6 +4,7 @@ import {
   checkAuthRateLimit,
   checkApiRateLimit,
   checkBillingWebhookRateLimit,
+  checkHealthRateLimit,
   checkLiteScanRateLimit,
 } from "@/lib/rate-limit"
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
@@ -22,6 +23,7 @@ import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
 
 let warnedUnknownIp = false
 const READ_ONLY_AUTH_PATHS = new Set(["/api/auth/providers", "/api/auth/get-session"])
+const RATE_LIMIT_BYPASS_PATHS = new Set(["/api/health", "/api/ready", "/api/ready/scans"])
 const BILLING_STAGING_PUBLIC_PATHS = new Set([
   "/staging/access",
   "/api/staging/access",
@@ -311,6 +313,28 @@ export async function proxy(request: NextRequest) {
       response.headers.set("Referrer-Policy", "no-referrer")
     if (pathname === "/licenses/retrieve")
       response.headers.set("Cache-Control", "private, no-store")
+    return response
+  }
+
+  // Readiness endpoints already perform their own dependency checks. Charging
+  // health probes against shared client buckets wastes Redis commands and can
+  // hide the dependency state the probes exist to report.
+  if (RATE_LIMIT_BYPASS_PATHS.has(pathname)) {
+    const result = checkHealthRateLimit(getClientIP(request))
+    if (result.limited) {
+      const response = NextResponse.json(
+        {
+          success: false,
+          error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." },
+        },
+        { status: 429, headers: { "Retry-After": String(result.retryAfter) } }
+      )
+      response.headers.set("Content-Security-Policy", csp)
+      return response
+    }
+    const response = NextResponse.next({ request: { headers: requestHeaders } })
+    response.headers.set("Content-Security-Policy", csp)
+    response.headers.set("X-RateLimit-Remaining", String(result.remaining))
     return response
   }
 

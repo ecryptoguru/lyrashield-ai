@@ -117,11 +117,18 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 ### Queue, worker, and network
 
 - Queue authority is `packages/integrations/src/queue.ts`; use `enqueueScan()` and `getScanQueue()`.
+- Treat BullMQ job identity and data as untrusted: require `job.id === scanId`, then bind
+  workspace, target, goal, mode, and policy back to the stored scan before execution.
 - Never create one-off queues, delete BullMQ keys directly, or auto-requeue ambiguous paid work.
 - Worker heartbeat and readiness use single-key Lua operations. Keep the admission-stop `EXISTS` check separate because its key is in a different Redis Cluster slot.
 - Reconcile unconditionally at worker start; on five-minute ticks, inspect BullMQ when the DB has nonterminal scans, at least hourly while idle, and whenever the DB preflight is uncertain. Never turn that uncertainty into a skipped reconciliation.
 - Invoke external engine only for `REPO`; URL/API use deterministic scanners.
 - `REDIS_URL` is BullMQ TCP; `UPSTASH_REDIS_REST_URL/TOKEN` are rate limiting. Never interchange them.
+- Keep worker and engine child on the same protected, host-visible `TMPDIR`; pre-create
+  local bind roots with restrictive permissions and never recursively chown a predictable
+  shared `/tmp` path.
+- Meter agent-minutes only after a scan-bound completed receipt or scan-bound affirmative
+  provider usage. Deterministic URL/API scans and pre-provider failures are non-billable.
 - Set `TRUSTED_PROXY_IP_HEADER` only when ingress strips incoming copies and writes the authoritative value.
 - Keep authenticated egress proxy, DNS pinning, drain-before-restart, union rollback/fail-close, and negative egress tests intact. CISA KEV uses the proxy; a direct CISA pin is allowed only as the staged legacy route while rolling out the proxy-capable worker first.
 

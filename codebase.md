@@ -123,6 +123,12 @@ POST /api/scans
 ```
 
 Only repository targets invoke the external engine. URL/API targets use deterministic, profile-bound scanners until an equivalent engine transport contract exists.
+Before execution, the worker binds every authority-bearing BullMQ field (`workspaceId`,
+`targetId`, `goal`, `mode`, and `policyId`) back to the stored scan; schema-valid queue
+data cannot upgrade routing, budget, or policy.
+The scans list revalidates its first page with an ETag. If pagination hides a loaded active
+scan, one workspace-scoped query refreshes only those IDs, bounded by the three-scan
+workspace concurrency limit, so terminal transitions do not become stale polling loops.
 
 ### URL/API scan
 
@@ -207,9 +213,15 @@ Alternatives: `FAILED`, `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, `REQUIRES_AP
 - Product code lives in engine `lyrashield/**` and `lyrashield_adapter/**`; upstream `strix/**` retains only hard-gated generic seams.
 - Stable upstream releases enter through reviewed PRs; never force-push or auto-resolve conflicts.
 - Worker builds engine from sibling repo using named Docker context.
+- Worker and engine child share the same resolved, host-visible `TMPDIR`; engine
+  checkout paths are derived from it so host Docker can bind-mount the cloned source.
+  Local Compose uses a protected project-owned path (or explicit
+  `LYRASHIELD_WORKER_TEMP_ROOT`) and performs no privileged recursive ownership mutation.
 - `lyrashield --version`, immutable app/engine OCI labels, and digest reconciliation are image gates.
 - CLI exit `0` means completed/no findings; `2` means completed/findings; other nonzero means runtime/config failure.
-- Output artifact reads and parsed fields are bounded. Raw stdout/stderr and raw engine output are not persisted.
+- Output artifact reads and parsed fields are bounded. Raw stdout/stderr and raw engine
+  output are neither logged nor persisted; only the fixed engine-owned failure class may
+  enter operational logs.
 
 ### Model routing and accounting
 
@@ -220,6 +232,11 @@ Authorities:
 - `apps/worker/src/engine/gpt56-pricing.ts`: versioned rate card.
 
 Safe/Quick/Standard use Luna/medium. Deep/Custom use Terra/medium root plus Luna/high specialists. The fallback model remains mandatory and policy values may only lower caps. Private receipts preserve actual model, requests, token buckets, cache reads/writes, long-context usage, provider cost, billed cost, and reconciliation status.
+
+Agent-minute wall time starts immediately before `runEngine()`. A repository run is
+metered only after a scan-bound completed receipt or scan-bound affirmative provider usage proves
+model-backed work occurred. Deterministic URL/API runs and pre-provider failures do not
+consume agent-minutes; failed runs with positive provider usage remain billable.
 
 ### Findings and result integrity
 
@@ -267,6 +284,11 @@ Primary locations:
 - `apps/web/src/app/billing`: checkout, webhook, portal, UI.
 
 Billing webhook inserts `WebhookEvent` before synchronous Track A/B/C processing. Money uses `Decimal(19,4)`, never Float. Usage, pack purchase, subscription, refund, commission, and payout operations are idempotent. Agent-minute recording and FIFO pack debit share one workspace advisory-locked serializable transaction; each tick debits only its incremental spill beyond the monthly pool, and conditional pack updates prevent negative balances.
+
+Exact health/readiness requests use a local 120/minute bound and do not call the
+Upstash REST limiter. A failed Upstash initialization or request opens a 60-second process-local cooldown;
+ordinary endpoints remain bounded by their existing in-memory fallback and the next
+request after cooldown probes shared limiting once.
 
 ### Licenses and Local/Desktop
 

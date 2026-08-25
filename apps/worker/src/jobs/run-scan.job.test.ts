@@ -17,6 +17,7 @@ const completeUsage = vi.hoisted(() => ({
   long_cache_write_input_tokens: 0,
   long_output_tokens: 0,
 }))
+const systemScanFindUnique = vi.hoisted(() => vi.fn())
 
 vi.mock("@lyrashield/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/config")>()
@@ -39,14 +40,17 @@ vi.mock("@lyrashield/db", () => ({
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    billingAccount: {
+      findUnique: vi.fn().mockResolvedValue({
+        currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
+        currentPlan: "STARTER",
+        spendLimitCents: 0,
+      }),
+    },
   },
   getSystemPrisma: vi.fn(() => ({
     scan: {
-      findUnique: vi.fn().mockResolvedValue({
-        id: "scan-1",
-        workspaceId: "ws-1",
-        targetId: "target-1",
-      }),
+      findUnique: systemScanFindUnique,
     },
   })),
   updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
@@ -69,6 +73,13 @@ vi.mock("@lyrashield/logger", () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+}))
+
+vi.mock("@lyrashield/billing", () => ({
+  recordAgentMinutes: vi.fn().mockResolvedValue(undefined),
+  getUsageBalance: vi.fn().mockResolvedValue({ totalRemaining: 100 }),
+  enterGrace: vi.fn().mockResolvedValue({ shouldContinue: true }),
+  debitOverage: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock("../engine/runner", () => ({
@@ -161,6 +172,7 @@ import {
   processScanJob,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
+  shouldRecordAgentMinutes,
 } from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
@@ -173,6 +185,7 @@ import {
   EvidenceStorageConfigurationError,
 } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
+import { recordAgentMinutes } from "@lyrashield/billing"
 import {
   completeScanWithScore,
   qualifyReferralForWorkspace,
@@ -183,7 +196,7 @@ import {
 } from "@lyrashield/db"
 
 const mockJob = {
-  id: "job-1",
+  id: "scan-1",
   data: {
     scanId: "scan-1",
     workspaceId: "ws-1",
@@ -192,6 +205,28 @@ const mockJob = {
     mode: "SAFE",
   },
 } as never
+
+function mockStoredScanAuthority(
+  overrides: Partial<{
+    workspaceId: string
+    targetId: string
+    goal: string
+    mode: string
+    policyId: string | null
+  }> = {}
+) {
+  systemScanFindUnique.mockResolvedValue({
+    id: "scan-1",
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    goal: "TEST_APP",
+    mode: "SAFE",
+    policyId: null,
+    ...overrides,
+  })
+}
+
+mockStoredScanAuthority()
 
 const mockRepoTarget = {
   id: "target-1",
@@ -208,6 +243,59 @@ const mockUrlTarget = {
   url: "https://example.com",
   repoFullName: null,
 }
+
+describe("shouldRecordAgentMinutes", () => {
+  it("does not bill an engine failure that has no provider-work receipt", () => {
+    expect(shouldRecordAgentMinutes("scan-1", "FAILED", null)).toBe(false)
+    expect(
+      shouldRecordAgentMinutes("scan-1", "FAILED", {
+        run_id: "scan-1",
+        run_name: "scan-1",
+        status: "failed",
+        llm_usage: { request_count: 0, input_tokens: 0, output_tokens: 0 },
+      } as never)
+    ).toBe(false)
+  })
+
+  it("bills a failed engine only when provider usage is affirmative", () => {
+    expect(
+      shouldRecordAgentMinutes("scan-1", "FAILED", {
+        run_id: "scan-1",
+        run_name: "scan-1",
+        status: "failed",
+        llm_usage: { request_count: 1 },
+      } as never)
+    ).toBe(true)
+  })
+
+  it("does not bill provider usage from a different scan receipt", () => {
+    expect(
+      shouldRecordAgentMinutes("scan-1", "FAILED", {
+        run_id: "different-scan",
+        run_name: "different-scan",
+        status: "failed",
+        llm_usage: { request_count: 1 },
+      } as never)
+    ).toBe(false)
+  })
+
+  it("bills a valid completed receipt even when usage telemetry is unavailable", () => {
+    expect(
+      shouldRecordAgentMinutes("scan-1", "COMPLETED", {
+        run_id: "scan-1",
+        run_name: "scan-1",
+        status: "completed",
+      } as never)
+    ).toBe(true)
+    expect(
+      shouldRecordAgentMinutes("scan-1", "COMPLETED", {
+        run_id: "different-scan",
+        run_name: "scan-1",
+        status: "completed",
+      } as never)
+    ).toBe(false)
+  })
+})
 
 describe("resolveScanRuntimeBudgetMs", () => {
   it.each(["SAFE", "QUICK", "STANDARD"] as const)(
@@ -237,6 +325,7 @@ it("keeps URL targets out of the unpinned external engine", async () => {
   await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
 
   expect(runEngine).not.toHaveBeenCalled()
+  expect(recordAgentMinutes).not.toHaveBeenCalled()
   expect(addScanEvent).toHaveBeenCalledWith(
     "scan-1",
     "engine_skipped",
@@ -310,6 +399,7 @@ describe("processScanJob", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockStoredScanAuthority()
     // Restore default mock implementations after clearAllMocks
     vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
     vi.mocked(runEngine).mockImplementation(
@@ -381,6 +471,7 @@ describe("processScanJob", () => {
 
     expect(result.status).toBe("completed")
     expect(result.summary).toBe("Scan completed with 0 findings")
+    expect(recordAgentMinutes).toHaveBeenCalledOnce()
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PREFLIGHT")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "RUNNING")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
@@ -421,13 +512,53 @@ describe("processScanJob", () => {
     )
   })
 
+  it("meters only engine wall time, excluding setup before invocation", async () => {
+    const startedAt = new Date("2026-08-25T00:00:00.000Z")
+    vi.useFakeTimers()
+    vi.setSystemTime(startedAt)
+    vi.mocked(addScanEvent).mockImplementation(async (_scanId, stage) => {
+      if (stage === "budget_cap") vi.setSystemTime(startedAt.getTime() + 60_000)
+    })
+    vi.mocked(runEngine).mockImplementationOnce(async ({ scanId }) => {
+      vi.setSystemTime(startedAt.getTime() + 180_000)
+      return {
+        exitCode: 0,
+        output: {
+          vulnerabilities: [],
+          findingsComplete: true,
+          runRecord: {
+            run_id: scanId,
+            run_name: scanId,
+            status: "completed",
+            llm_usage: completeUsage,
+          },
+          summary: "Scan completed with 0 findings",
+          findingCount: 0,
+        },
+      } as never
+    })
+
+    try {
+      await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+      expect(recordAgentMinutes).toHaveBeenCalledWith(
+        "ws-1",
+        "scan-1",
+        120_000,
+        expect.objectContaining({ phase: "engine_run" })
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("does not let a workspace policy upgrade the selected profile budget", async () => {
+    mockStoredScanAuthority({ policyId: "policy-1" })
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 6.5 },
       maxDurationMinutes: 75,
     } as never)
     const policyJob = {
-      id: "job-policy-1",
+      id: "scan-1",
       discard: vi.fn(),
       data: {
         scanId: "scan-1",
@@ -455,12 +586,13 @@ describe("processScanJob", () => {
   })
 
   it("applies the profile wall-clock budget as the engine timeout for a progressing Deep engine", async () => {
+    mockStoredScanAuthority({ mode: "DEEP", policyId: "policy-deep" })
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 3.2 },
       maxDurationMinutes: 75,
     } as never)
     const deepPolicyJob = {
-      id: "job-deep-policy-1",
+      id: "scan-1",
       discard: vi.fn(),
       data: {
         scanId: "scan-1",
@@ -744,7 +876,7 @@ describe("processScanJob", () => {
 
     await expect(processScanJob(mockJob)).resolves.toMatchObject({
       status: "failed",
-      errorMessage: "scanner unavailable",
+      errorMessage: "The scan could not be completed because an internal service failed.",
     })
 
     expect(prisma.scan.update).toHaveBeenCalledWith({
@@ -814,6 +946,7 @@ describe("processScanJob", () => {
   })
 
   it("rejects API Standard without an OpenAPI document inside the worker", async () => {
+    mockStoredScanAuthority({ mode: "STANDARD" })
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       ...mockUrlTarget,
       type: "API",
@@ -881,6 +1014,32 @@ describe("processScanJob", () => {
 
     expect(result.status).toBe("failed")
     expect(result.errorCategory).toBe("ENGINE_ERROR")
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({ engineExecution: undefined })
+    )
+  })
+
+  it("meters a failed engine when provider usage is affirmative", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 1,
+      output: {
+        vulnerabilities: [],
+        findingsComplete: false,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "failed",
+          llm_usage: { request_count: 1, input_tokens: 10, output_tokens: 1 },
+        },
+        summary: "Engine failed after provider work",
+        findingCount: 0,
+      },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
+
+    expect(recordAgentMinutes).toHaveBeenCalledOnce()
   })
 
   it("stops without overwriting a cancellation reported by the engine", async () => {
@@ -1106,13 +1265,22 @@ describe("processScanJob", () => {
     )
   })
 
-  it("catches unexpected errors and marks scan as FAILED", async () => {
-    vi.mocked(runPreflight).mockRejectedValue(new Error("Unexpected DB error") as never)
+  it("keeps unexpected failure details out of persisted and returned messages", async () => {
+    vi.mocked(runPreflight).mockRejectedValue(
+      new Error("database failed with Bearer secret-runtime-token") as never
+    )
 
     const result = await processScanJob(mockJob)
 
-    expect(result.status).toBe("failed")
-    expect(result.errorMessage).toBe("Unexpected DB error")
+    expect(result).toMatchObject({
+      status: "failed",
+      errorCategory: "INTERNAL_ERROR",
+      errorMessage: "The scan could not be completed because an internal service failed.",
+    })
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
+      errorCategory: "INTERNAL_ERROR",
+      errorMessage: "The scan could not be completed because an internal service failed.",
+    })
   })
 
   it("rethrows when it cannot persist a terminal failure", async () => {
@@ -1125,7 +1293,7 @@ describe("processScanJob", () => {
   it("rethrows a transient failure while BullMQ attempts remain", async () => {
     vi.mocked(runPreflight).mockRejectedValue(new Error("temporary database error") as never)
     const retryingJob = {
-      id: "job-retry-1",
+      id: "scan-1",
       attemptsMade: 0,
       opts: { attempts: 3 },
       data: {
@@ -1240,7 +1408,7 @@ describe("processScanJob", () => {
   it("does not rethrow a post-billing failure while attempts remain", async () => {
     vi.mocked(persistFindings).mockRejectedValue(new Error("post-billing database error") as never)
     const retryingJob = {
-      id: "job-post-billing-error",
+      id: "scan-1",
       attemptsMade: 0,
       opts: { attempts: 3 },
       data: {
@@ -1254,12 +1422,14 @@ describe("processScanJob", () => {
 
     await expect(processScanJob(retryingJob)).resolves.toMatchObject({
       status: "failed",
-      errorMessage: "post-billing database error",
+      errorMessage: "The scan could not be completed because an internal service failed.",
     })
     expect(updateScanStatus).toHaveBeenCalledWith(
       "scan-1",
       "FAILED",
-      expect.objectContaining({ errorMessage: "post-billing database error" })
+      expect.objectContaining({
+        errorMessage: "The scan could not be completed because an internal service failed.",
+      })
     )
   })
 
@@ -1268,7 +1438,7 @@ describe("processScanJob", () => {
       throw new EvidenceStorageConfigurationError()
     })
     const retryingJob = {
-      id: "job-evidence-storage-1",
+      id: "scan-1",
       attemptsMade: 0,
       opts: { attempts: 3 },
       data: {
@@ -1573,7 +1743,7 @@ describe("processScanJob", () => {
 
   it("fails INVALID_JOB when the job workspaceId does not match the scan record", async () => {
     const forgedJob = {
-      id: "job-forged",
+      id: "scan-1",
       data: {
         scanId: "scan-1",
         workspaceId: "ws-evil",
@@ -1590,14 +1760,15 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith(
       "scan-1",
       "FAILED",
-      expect.objectContaining({ errorCategory: "INVALID_JOB" })
+      expect.objectContaining({ errorCategory: "INVALID_JOB" }),
+      "ws-1"
     )
     expect(runEngine).not.toHaveBeenCalled()
   })
 
   it("fails INVALID_JOB when the job targetId does not match the scan record", async () => {
     const forgedJob = {
-      id: "job-forged-target",
+      id: "scan-1",
       data: {
         scanId: "scan-1",
         workspaceId: "ws-1",
@@ -1611,6 +1782,45 @@ describe("processScanJob", () => {
 
     expect(result.status).toBe("failed")
     expect(result.errorCategory).toBe("INVALID_JOB")
+    expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["goal", { goal: "LAUNCH_REVIEW" }],
+    ["mode", { mode: "DEEP" }],
+    ["policy", { policyId: "policy-evil" }],
+  ])("fails INVALID_JOB when the job %s does not match the stored scan", async (_label, patch) => {
+    const forgedJob = {
+      id: "scan-1",
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+        ...patch,
+      },
+    } as never
+
+    const result = await processScanJob(forgedJob)
+
+    expect(result).toMatchObject({ status: "failed", errorCategory: "INVALID_JOB" })
+    expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("rejects an alternate BullMQ job ID without loading or mutating the canonical scan", async () => {
+    const duplicateJob = {
+      ...mockJob,
+      id: "alternate-job-id",
+    } as never
+
+    await expect(processScanJob(duplicateJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "INVALID_JOB",
+    })
+
+    expect(systemScanFindUnique).not.toHaveBeenCalled()
+    expect(updateScanStatus).not.toHaveBeenCalled()
     expect(runEngine).not.toHaveBeenCalled()
   })
 
@@ -1634,12 +1844,13 @@ describe("processScanJob", () => {
 
 describe("REPO scan wall-clock budget enforcement", () => {
   it("passes the remaining runtime budget as the engine timeout for REPO scans", async () => {
+    mockStoredScanAuthority({ policyId: "policy-duration-1" })
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 3.2 },
       maxDurationMinutes: 20,
     } as never)
     const policyJob = {
-      id: "job-duration-policy-1",
+      id: "scan-1",
       discard: vi.fn(),
       data: {
         scanId: "scan-1",

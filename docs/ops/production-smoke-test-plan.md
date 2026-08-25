@@ -82,6 +82,9 @@ the workspace = 1.
 - Scan completes; a `UsageRecord` `kind=agent_minutes` row is written with
   `idempotencyKey="<workspaceId>:<scanId>:<phase>"` and quantity =
   `ceil(ms/60000)` (min 1), no 3× multiplier.
+- A forced pre-provider sandbox failure writes no agent-minute usage row. A failed run
+  with scan-bound affirmative provider usage remains billable and must retain its usage
+  receipt.
 - `GET /api/billing/usage?workspaceId=` shows `poolConsumed` increased and
   `totalRemaining` decreased by the same amount.
 

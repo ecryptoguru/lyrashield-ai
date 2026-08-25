@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const { systemPrisma } = vi.hoisted(() => ({
+  systemPrisma: { schedule: { findMany: vi.fn() } },
+}))
+
 vi.mock("./client", () => ({
   prisma: {
     schedule: {
@@ -11,6 +15,7 @@ vi.mock("./client", () => ({
     },
   },
 }))
+vi.mock("./system-client", () => ({ getSystemPrisma: vi.fn(() => systemPrisma) }))
 
 import { prisma } from "./client"
 import {
@@ -32,6 +37,9 @@ const mockPrisma = prisma as unknown as {
     update: ReturnType<typeof vi.fn>
     updateMany: ReturnType<typeof vi.fn>
   }
+}
+const mockSystemPrisma = systemPrisma as unknown as {
+  schedule: { findMany: ReturnType<typeof vi.fn> }
 }
 
 const baseSchedule = {
@@ -299,13 +307,15 @@ describe("schedule-service", () => {
 
   describe("getDueSchedules", () => {
     it("returns enabled schedules with nextRunAt <= now", async () => {
-      mockPrisma.schedule.findMany.mockResolvedValue([{ ...baseSchedule, target: baseTarget }])
+      mockSystemPrisma.schedule.findMany.mockResolvedValue([
+        { ...baseSchedule, target: baseTarget },
+      ])
 
       const now = new Date("2026-01-01T12:00:00Z")
       const result = await getDueSchedules(now)
 
       expect(result).toHaveLength(1)
-      expect(mockPrisma.schedule.findMany).toHaveBeenCalledWith(
+      expect(mockSystemPrisma.schedule.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
             enabled: true,

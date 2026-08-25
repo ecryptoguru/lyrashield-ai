@@ -11,6 +11,7 @@ const {
   checkAuthRateLimit,
   checkApiRateLimit,
   checkBillingWebhookRateLimit,
+  checkHealthRateLimit,
   checkLiteScanRateLimit,
 } = await import("./rate-limit")
 
@@ -101,6 +102,14 @@ describe("Rate Limiter", () => {
       expect(apiResult.limited).toBe(false)
       expect(apiResult.remaining).toBe(29)
     })
+  })
+
+  it("bounds health probes locally without consuming the general API bucket", async () => {
+    for (let i = 0; i < 120; i++) {
+      expect(checkHealthRateLimit("health-client").limited).toBe(false)
+    }
+    expect(checkHealthRateLimit("health-client").limited).toBe(true)
+    expect((await checkApiRateLimit("health-client")).remaining).toBe(29)
   })
 
   describe("checkLiteScanRateLimit (in-memory, 5/min)", () => {

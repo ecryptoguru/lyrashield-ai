@@ -80,6 +80,15 @@ before the container image is swapped, and passed to both apps as secret referen
 them the limiter falls back to a per-instance in-memory store, so the effective limit becomes
 (limit x replica count) and scaling out to absorb load weakens the control.
 
+Exact dependency probes (`/api/health`, `/api/ready`, `/api/ready/scans`) use a
+per-instance 120-request/minute guard and do not spend Upstash REST commands. If a
+runtime Upstash request fails, ordinary API/auth/webhook limits fall back to their
+existing in-memory buckets for a 60-second cooldown before one shared-limit probe is
+retried. The cooldown log contains only a bounded reason category; it never includes the
+client identifier or provider response. Rotate the REST URL and token as one matching
+credential pair. Initialization failures follow the same cooldown and retry once it expires.
+Updating BullMQ `REDIS_URL` does not update this separate control.
+
 This is deliberately a deploy gate rather than boot validation. Boot validation fires in
 every production-mode process — including the Playwright E2E server — and would fail a
 running app on restart, trading a rate-limiting weakness for an availability outage. The
@@ -276,6 +285,9 @@ The live Lite Scanner is a separate passive API and cannot be promoted into the 
 - a deployed authenticated Next.js application origin to create targets, authorize users, enqueue scans, and render retained results;
 - dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, controlled access to the digest-pinned sandbox runtime, and a dedicated internal network shared only with scan sandboxes;
 - a host-visible `/var/lib/lyrashield/worker` run root bind-mounted at the same absolute path in the worker, with engine `TMPDIR` below it, so host Docker can resolve every read-only sandbox bind source;
+- the worker must pass that host-visible `TMPDIR` to the engine child. A container-local
+  `/tmp` lets the engine clone successfully but makes the source path invisible to the
+  host Docker daemon, causing sandbox creation to fail before any model request;
 - an authorized Luna/Terra/fallback model route and provider credentials;
 - private S3-compatible evidence storage configured through all five `S3_*` values;
 - secret management, TLS, monitoring, backup/restore, and deployment-level egress enforcement.

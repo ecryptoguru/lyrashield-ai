@@ -29,6 +29,8 @@ import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/e
 import { ScanInProgress } from "./scan-in-progress"
 import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel } from "@/lib/labels"
+import { safeApiErrorMessage } from "@/components/api-error-card"
+import { scanRecoveryHref } from "../scans-client.utils"
 
 interface ScanEvent {
   id: string
@@ -304,6 +306,7 @@ export function ScanDetailClient({
     message: string
   } | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState(false)
   const isActive = isActiveScan(scan.status)
   const elapsedTime = useElapsedTime(isActive ? scan.startedAt : null)
   const presentation = getScanPresentation(scan.status)
@@ -345,6 +348,7 @@ export function ScanDetailClient({
           { signal, etag: etagRef.current, schema: scanPollDataSchema }
         )
         etagRef.current = etag
+        setRefreshError(false)
         if (!data || signal.aborted) return
 
         const updated = data
@@ -410,7 +414,7 @@ export function ScanDetailClient({
           if (refreshedFindings) setCurrentFindings(refreshedFindings)
         }
       } catch {
-        // Network errors during polling are non-fatal — keep showing stale data
+        if (!signal.aborted) setRefreshError(true)
       }
     },
     [scan.aiSecurity, scan.id, scan.target, scan.workspaceId, scan.integrity]
@@ -558,7 +562,7 @@ export function ScanDetailClient({
               <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            {isActive && (
+            {isActive && !refreshError && (
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
@@ -573,6 +577,24 @@ export function ScanDetailClient({
           </div>
         </div>
       </div>
+
+      {refreshError && (
+        <div
+          role="status"
+          className="border-amber-500/50 bg-amber-500/10 mb-6 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>Updates are paused. The displayed scan status may be stale.</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void handleManualRefresh()}
+            disabled={refreshing}
+          >
+            Try again
+          </Button>
+        </div>
+      )}
 
       {/* In-progress view: replaces the stat-heavy completed layout while the scan is active */}
       {isActive && (
@@ -736,14 +758,26 @@ export function ScanDetailClient({
             >
               <p className="font-semibold">{presentation.headline}</p>
               <p className="text-foreground/80 mt-1">{presentation.description}</p>
+              {scan.target && (
+                <Link
+                  href={scanRecoveryHref({
+                    targetId: scan.target.id,
+                    goal: scan.goal,
+                    mode: scan.mode,
+                  })}
+                  className={buttonVariants({ variant: "outline", className: "mt-3" })}
+                >
+                  Start a new scan
+                </Link>
+              )}
               {scan.errorMessage && (
                 <details className="text-foreground mt-3">
                   <summary className="cursor-pointer font-medium">Failure details</summary>
                   <p className="mt-2 wrap-break-word">
-                    {scan.errorCategory ? `${scan.errorCategory}: ` : ""}
+                    {scan.errorCategory ? `${safeApiErrorMessage(scan.errorCategory)}: ` : ""}
                     {scan.status === "STOPPED_BUDGET" || scan.errorCategory === "BUDGET_EXCEEDED"
                       ? "The protected run limit was reached."
-                      : scan.errorMessage}
+                      : safeApiErrorMessage(scan.errorMessage)}
                   </p>
                 </details>
               )}
