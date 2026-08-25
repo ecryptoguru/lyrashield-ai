@@ -1,11 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import Image from "next/image"
 import { Check, Copy, ShieldCheck } from "lucide-react"
-import QRCode from "qrcode"
+import { QRCodeSVG } from "qrcode.react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import {
   Button,
@@ -24,21 +23,9 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
   const [password, setPassword] = useState("")
   const [code, setCode] = useState("")
   const [setup, setSetup] = useState<{ totpURI: string; backupCodes: string[] } | null>(null)
-  const [qrCode, setQrCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    if (!setup) return
-    let active = true
-    void QRCode.toDataURL(setup.totpURI, { width: 224, margin: 2 }).then((dataUrl) => {
-      if (active) setQrCode(dataUrl)
-    })
-    return () => {
-      active = false
-    }
-  }, [setup])
 
   async function beginEnrollment(event: React.FormEvent) {
     event.preventDefault()
@@ -119,16 +106,14 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
           <>
             <div className="space-y-2">
               <p className="text-sm font-medium">Scan with your authenticator app</p>
-              {qrCode && (
-                <Image
-                  src={qrCode}
-                  alt="Authenticator setup QR code"
-                  width={224}
-                  height={224}
-                  unoptimized
-                  className="rounded-md border bg-white p-2"
+              <div className="w-fit rounded-md border bg-white p-2">
+                <QRCodeSVG
+                  value={setup.totpURI}
+                  size={224}
+                  marginSize={2}
+                  title="Authenticator setup QR code"
                 />
-              )}
+              </div>
               <p className="text-muted-foreground text-xs">
                 Generated only in this browser. If scanning is unavailable, enter the URI manually.
               </p>
