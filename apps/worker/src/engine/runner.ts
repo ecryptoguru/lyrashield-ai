@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess } from "child_process"
 import { constants as fsConstants } from "fs"
-import { rm, mkdir, readdir, stat, lstat, realpath, open, writeFile } from "fs/promises"
+import { rm, mkdir, readdir, lstat, realpath, open, writeFile } from "fs/promises"
 import { join, relative, resolve, sep } from "path"
 import { promisify } from "util"
 import { env } from "@lyrashield/config"
@@ -653,9 +653,11 @@ const MAX_RUN_OUTPUT_ENTRIES = 50_000
  * worker files.
  */
 export async function resolveEngineSourceCheckout(
-  runRecord: ParsedScanOutput["runRecord"]
+  runRecord: ParsedScanOutput["runRecord"],
+  scanId: string
 ): Promise<string | null> {
-  if (!Array.isArray(runRecord?.targets_info)) return null
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(scanId) || scanId.includes("..")) return null
+  if (runRecord?.run_id !== scanId || runRecord.run_name !== scanId) return null
 
   let checkoutRoot: string
   try {
@@ -666,33 +668,65 @@ export async function resolveEngineSourceCheckout(
     return null
   }
 
-  for (const target of runRecord.targets_info) {
+  const checkoutPrefix = `repo_${scanId}_`
+  const validateCheckout = async (sourcePath: string): Promise<string | null> => {
+    try {
+      // sourcePath is engine-controlled. Reject links before resolving and require
+      // the exact scan-owned clone layout: <root>/repo_<scanId>_<random>/<repo>.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const sourceStat = await lstat(sourcePath)
+      if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) return null
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const checkout = await realpath(sourcePath)
+      const pathFromRoot = relative(checkoutRoot, checkout)
+      const pathParts = pathFromRoot.split(sep)
+      if (
+        pathParts.length !== 2 ||
+        !pathParts[0]?.startsWith(checkoutPrefix) ||
+        !pathParts[1] ||
+        resolve(checkoutRoot, pathFromRoot) !== checkout
+      ) {
+        return null
+      }
+      const ownerRoot = resolve(checkoutRoot, pathParts[0])
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const ownerStat = await lstat(ownerRoot)
+      return ownerStat.isDirectory() && !ownerStat.isSymbolicLink() ? checkout : null
+    } catch {
+      return null
+    }
+  }
+
+  for (const target of Array.isArray(runRecord?.targets_info) ? runRecord.targets_info : []) {
     if (typeof target !== "object" || target === null) continue
     const details = (target as { details?: unknown }).details
     if (typeof details !== "object" || details === null) continue
     const sourcePath = (details as { cloned_repo_path?: unknown }).cloned_repo_path
     if (typeof sourcePath !== "string" || !sourcePath.trim()) continue
 
-    try {
-      // sourcePath comes from the engine run record and is validated against the checkout root.
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      const checkout = await realpath(sourcePath)
-      const pathFromRoot = relative(checkoutRoot, checkout)
-      if (
-        pathFromRoot === "" ||
-        pathFromRoot === ".." ||
-        pathFromRoot.startsWith(`..${sep}`) ||
-        resolve(checkoutRoot, pathFromRoot) !== checkout
-      ) {
-        logger.warn("Engine checkout path escaped the expected root", { sourcePath })
-        continue
-      }
-      // checkout has already been resolved and confined to the engine checkout root.
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      if ((await stat(checkout)).isDirectory()) return checkout
-    } catch {
-      // Missing checkouts are a coverage gap, not an empty source scan.
-    }
+    const checkout = await validateCheckout(sourcePath)
+    if (checkout) return checkout
+  }
+
+  // Public run.json deliberately redacts cloned_repo_path. Recover the checkout
+  // from the fixed worker-owned root without reading the private resume record.
+  try {
+    // ENGINE_CHECKOUT_ROOT is fixed; entries remain untrusted engine output.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const ownedRoots = (await readdir(checkoutRoot, { withFileTypes: true })).filter(
+      (entry) => entry.name.startsWith(checkoutPrefix) && entry.isDirectory()
+    )
+    if (ownedRoots.length !== 1) return null
+
+    const ownerRoot = resolve(checkoutRoot, ownedRoots[0]!.name)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const children = (await readdir(ownerRoot, { withFileTypes: true })).filter((entry) =>
+      entry.isDirectory()
+    )
+    if (children.length !== 1) return null
+    return validateCheckout(resolve(ownerRoot, children[0]!.name))
+  } catch {
+    // Missing, ambiguous, or unsafe checkouts are a coverage gap, never an empty source scan.
   }
 
   return null
@@ -1044,7 +1078,7 @@ export async function runEngine(
     : { vulnerabilitiesRaw: "", runJsonRaw: "" }
 
   const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw)
-  const sourceCheckoutPath = await resolveEngineSourceCheckout(output.runRecord)
+  const sourceCheckoutPath = await resolveEngineSourceCheckout(output.runRecord, scanId)
   const sourceRevision = await resolveEngineSourceRevision(sourceCheckoutPath)
   const sandboxRemoved = await verifySandboxRemoved(scanId)
 

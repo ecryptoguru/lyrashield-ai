@@ -614,7 +614,8 @@ describe("OVERSHOOT_GRACE", () => {
 
 describe("resolveEngineSourceCheckout", () => {
   it("accepts an engine checkout below its dedicated temporary root", async () => {
-    const runRoot = join(tmpdir(), "strix_repos", `runner-test-${Date.now()}`)
+    const scanId = `runner-test-${Date.now()}`
+    const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
     const checkout = join(runRoot, "repo")
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(checkout, { recursive: true })
@@ -623,15 +624,114 @@ describe("resolveEngineSourceCheckout", () => {
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const canonicalCheckout = await realpath(checkout)
     await expect(
-      resolveEngineSourceCheckout({
-        run_id: "run",
-        run_name: "run",
-        start_time: "now",
-        end_time: null,
-        status: "completed",
-        targets_info: [{ details: { cloned_repo_path: checkout } }],
-      })
+      resolveEngineSourceCheckout(
+        {
+          run_id: scanId,
+          run_name: scanId,
+          start_time: "now",
+          end_time: null,
+          status: "completed",
+          targets_info: [{ details: { cloned_repo_path: checkout } }],
+        },
+        scanId
+      )
     ).resolves.toBe(canonicalCheckout)
+  })
+
+  it("recovers the scan-owned checkout when public run.json redacts its path", async () => {
+    const scanId = `sanitized-${Date.now()}`
+    const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
+    const checkout = join(runRoot, "repo")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await mkdir(checkout, { recursive: true })
+    cleanupPaths.push(runRoot)
+
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const canonicalCheckout = await realpath(checkout)
+    await expect(
+      resolveEngineSourceCheckout(
+        {
+          run_id: scanId,
+          run_name: scanId,
+          start_time: "now",
+          end_time: null,
+          status: "completed",
+          targets_info: [],
+        },
+        scanId
+      )
+    ).resolves.toBe(canonicalCheckout)
+  })
+
+  it("fails closed when multiple checkout roots claim the same scan", async () => {
+    const scanId = `ambiguous-${Date.now()}`
+    const first = join(tmpdir(), "strix_repos", `repo_${scanId}_first`)
+    const second = join(tmpdir(), "strix_repos", `repo_${scanId}_second`)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await mkdir(join(first, "repo"), { recursive: true })
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await mkdir(join(second, "repo"), { recursive: true })
+    cleanupPaths.push(first, second)
+
+    await expect(
+      resolveEngineSourceCheckout(
+        {
+          run_id: scanId,
+          run_name: scanId,
+          start_time: "now",
+          end_time: null,
+          status: "completed",
+          targets_info: [],
+        },
+        scanId
+      )
+    ).resolves.toBeNull()
+  })
+
+  it("fails closed when a scan-owned root has multiple checkout directories", async () => {
+    const scanId = `children-${Date.now()}`
+    const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await mkdir(join(runRoot, "first"), { recursive: true })
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await mkdir(join(runRoot, "second"), { recursive: true })
+    cleanupPaths.push(runRoot)
+
+    await expect(
+      resolveEngineSourceCheckout(
+        {
+          run_id: scanId,
+          run_name: scanId,
+          start_time: "now",
+          end_time: null,
+          status: "completed",
+          targets_info: [],
+        },
+        scanId
+      )
+    ).resolves.toBeNull()
+  })
+
+  it("rejects a checkout when the durable receipt belongs to another scan", async () => {
+    const scanId = `receipt-${Date.now()}`
+    const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await mkdir(join(runRoot, "repo"), { recursive: true })
+    cleanupPaths.push(runRoot)
+
+    await expect(
+      resolveEngineSourceCheckout(
+        {
+          run_id: "another-scan",
+          run_name: "another-scan",
+          start_time: "now",
+          end_time: null,
+          status: "completed",
+          targets_info: [],
+        },
+        scanId
+      )
+    ).resolves.toBeNull()
   })
 
   it("rejects a checkout path outside the engine temporary root", async () => {
@@ -639,14 +739,17 @@ describe("resolveEngineSourceCheckout", () => {
     cleanupPaths.push(checkout)
 
     await expect(
-      resolveEngineSourceCheckout({
-        run_id: "run",
-        run_name: "run",
-        start_time: "now",
-        end_time: null,
-        status: "completed",
-        targets_info: [{ details: { cloned_repo_path: checkout } }],
-      })
+      resolveEngineSourceCheckout(
+        {
+          run_id: "run",
+          run_name: "run",
+          start_time: "now",
+          end_time: null,
+          status: "completed",
+          targets_info: [{ details: { cloned_repo_path: checkout } }],
+        },
+        "run"
+      )
     ).resolves.toBeNull()
   })
 })
