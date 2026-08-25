@@ -174,8 +174,8 @@ export interface NavState {
    * The layout gates this on `aiAssurance:view` permission before passing it in.
    */
   canViewEvidenceVault?: boolean
-  /** Server-confirmed platform-operator access; never derive this client-side. */
-  canViewPlatformAdmin?: boolean
+  /** Server-confirmed platform-admin destination; never derive this client-side. */
+  platformAdminHref?: string | null
 }
 
 function resolveNavItems(state: NavState = {}): NavItem[] {
@@ -250,7 +250,9 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
   const pending = state.pendingApprovals ?? 0
   const reviewQueue = pending > 0 ? reviewQueueItem(pending) : null
   const evidenceVault = state.canViewEvidenceVault ? EVIDENCE_VAULT_BASE : null
-  const platformAdmin = state.canViewPlatformAdmin ? PLATFORM_ADMIN_BASE : null
+  const platformAdmin = state.platformAdminHref
+    ? { ...PLATFORM_ADMIN_BASE, href: state.platformAdminHref }
+    : null
   const conditional: NavItem[] = []
   if (reviewQueue) conditional.push(reviewQueue)
   if (evidenceVault) conditional.push(evidenceVault)

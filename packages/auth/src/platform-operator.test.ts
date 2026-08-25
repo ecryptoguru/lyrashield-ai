@@ -28,6 +28,7 @@ vi.mock("@lyrashield/config", () => ({
 }))
 
 import {
+  getPlatformAdminNavigationState,
   isPlatformOperator,
   requirePlatformAdmin,
   requirePlatformAdminCandidateIdentity,
@@ -198,5 +199,15 @@ describe("platform-operator identity lookup", () => {
 
     headersMock.mockResolvedValue(browserHeaders({ authorization: "Bearer lsk_test" }))
     expect(await isPlatformOperator("user-2")).toBe(false)
+  })
+
+  it("shows eligible admins a verification destination before granting global reads", async () => {
+    sessionFindUnique.mockResolvedValue({ userId: "user-2", twoFactorVerifiedAt: null })
+
+    await expect(getPlatformAdminNavigationState("user-2")).resolves.toBe("verify")
+    await expect(isPlatformOperator("user-2")).resolves.toBe(false)
+
+    userFindUnique.mockResolvedValue(adminUser({ platformRole: null }))
+    await expect(getPlatformAdminNavigationState("user-2")).resolves.toBe("hidden")
   })
 })

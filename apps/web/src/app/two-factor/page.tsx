@@ -36,7 +36,8 @@ export default function TwoFactorPage() {
         setError(getAuthErrorMessage(verificationError) ?? "Verification failed.")
         return
       }
-      window.location.assign(consumePendingAuthCallback())
+      const callbackURL = new URLSearchParams(window.location.search).get("callbackURL")
+      window.location.assign(consumePendingAuthCallback(callbackURL))
     } catch {
       setError("Could not verify the code. Check your connection and try again.")
     } finally {

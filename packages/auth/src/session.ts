@@ -136,14 +136,35 @@ export async function requireAuth(): Promise<AuthSession> {
 }
 
 /**
- * Safe eligibility predicate for navigation and not-found routing. It applies
- * the complete browser identity guard; workspace roles never grant this access.
+ * Safe ready-state predicate for legacy callers. It applies the complete
+ * browser identity guard; workspace roles never grant this access.
  */
 export async function isPlatformOperator(userId: string): Promise<boolean> {
+  return (await getPlatformAdminNavigationState(userId)) === "ready"
+}
+
+export type PlatformAdminNavigationState = "hidden" | "verify" | "ready"
+
+/**
+ * Server-only navigation state. Eligibility may reveal the admin destination,
+ * but global reads still require a fresh TOTP stamp at their own boundary.
+ */
+export async function getPlatformAdminNavigationState(
+  userId: string
+): Promise<PlatformAdminNavigationState> {
   try {
-    return (await requirePlatformAdminIdentity()).userId === userId
+    const identity = await requirePlatformAdminCandidateIdentity()
+    if (identity.userId !== userId) return "hidden"
+    try {
+      await requireRecentPlatformAdminTotp(identity, MAX_PLATFORM_ADMIN_READ_AGE_MS)
+      return "ready"
+    } catch (error) {
+      return error instanceof Error && error.message === "ADMIN_REAUTH_REQUIRED"
+        ? "verify"
+        : "hidden"
+    }
   } catch {
-    return false
+    return "hidden"
   }
 }
 

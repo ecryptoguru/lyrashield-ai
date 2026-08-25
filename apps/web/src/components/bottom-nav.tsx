@@ -96,19 +96,19 @@ export function BottomNav({
   unreadNotifications = 0,
   pendingApprovals = 0,
   canViewEvidenceVault = false,
-  canViewPlatformAdmin = false,
+  platformAdminHref = null,
 }: {
   unreadNotifications?: number
   pendingApprovals?: number
   canViewEvidenceVault?: boolean
-  canViewPlatformAdmin?: boolean
+  platformAdminHref?: string | null
 }) {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
   const { mobilePrimary, more } = resolveNav({
     pendingApprovals,
     canViewEvidenceVault,
-    canViewPlatformAdmin,
+    platformAdminHref,
   })
 
   return (

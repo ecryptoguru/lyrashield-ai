@@ -100,14 +100,18 @@ describe("nav-items workspace destinations", () => {
 
   it("surfaces Platform Admin only after the server authorizes the operator", () => {
     expect(
-      resolveNav({ canViewPlatformAdmin: false }).secondary.map((item) => item.href)
+      resolveNav({ platformAdminHref: null }).secondary.map((item) => item.href)
     ).not.toContain("/dashboard/admin")
-    expect(resolveNav({ canViewPlatformAdmin: true }).secondary.map((item) => item.href)).toContain(
-      "/dashboard/admin"
-    )
-    expect(resolveNav({ canViewPlatformAdmin: true }).more.map((item) => item.href)).toContain(
-      "/dashboard/admin"
-    )
+    expect(
+      resolveNav({ platformAdminHref: "/dashboard/admin" }).secondary.map((item) => item.href)
+    ).toContain("/dashboard/admin")
+    expect(
+      resolveNav({ platformAdminHref: "/dashboard/admin" }).more.map((item) => item.href)
+    ).toContain("/dashboard/admin")
+    expect(
+      resolveNav({ platformAdminHref: "/two-factor?callbackURL=%2Fdashboard%2Fadmin" })
+        .platformAdmin?.href
+    ).toBe("/two-factor?callbackURL=%2Fdashboard%2Fadmin")
   })
 })
 
