@@ -294,6 +294,10 @@ jobs:
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
 
+      - name: Test worker stop provenance
+        if: needs.changes.outputs.docs-only != 'true'
+        run: sh ops/worker/capture-stop-provenance.test.sh
+
       - name: Build
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm build

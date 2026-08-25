@@ -1,13 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { readFileSync } from "node:fs"
 import { parseArgs } from "node:util"
+import { fileURLToPath } from "node:url"
 import type { ScanStatus } from "@lyrashield/db"
 import {
+  assertSelectedScanQueueIsolation,
   parseLaunchAssuranceOptions,
   verifyLaunchAssurance,
   type LaunchAssuranceDeps,
 } from "./verify-launch-assurance"
 
 const DIGEST = `sha256:${"b".repeat(64)}`
+// The test reads its adjacent source file to lock the privileged-client boundary.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const operationSource = readFileSync(
+  fileURLToPath(new URL("./verify-launch-assurance.ts", import.meta.url)),
+  "utf8"
+)
 
 function baseOptions() {
   return {
@@ -21,6 +30,7 @@ function baseOptions() {
     workspaceId: "cmt7np5uv000002s6pnr7c376",
     environment: "production",
     confirmProduction: "I AUTHORIZE LYRASHIELD FAILURE INJECTION",
+    incidentCommander: "Ankit",
     apiBaseUrl: "http://app.test",
     apiKey: "test-key",
     azureResourceGroup: "rg",
@@ -212,6 +222,18 @@ function makeDeps(overrides: Partial<LaunchAssuranceDeps> = {}): LaunchAssurance
       })
     ),
     countEngineStartsSince: vi.fn(async () => 0),
+    hasTerminalCostUncertainty: vi.fn(async () => false),
+    resolveProvenance: vi.fn(() => ({
+      productRevision: "a".repeat(40),
+      workerImageDigest: DIGEST,
+      engineRevision: "c".repeat(40),
+    })),
+    getFailureInjectionOperationalState: vi.fn(async () => ({
+      admissionStopped: true,
+      enabledScheduleCount: 0,
+      scanJobs: [{ id: "cmt0q9a28000501jnmn1t453t", state: "active" as const }],
+      webhookQueueDepth: 0,
+    })),
     ...overrides,
   }
 }
@@ -290,6 +312,18 @@ describe("parseLaunchAssuranceOptions", () => {
     ).toThrow(/--environment production/)
   })
 
+  it("requires a named incident commander for failure injection", () => {
+    expect(() =>
+      parseLaunchAssuranceOptions({
+        "allow-failure-injection": true,
+        "scan-id": "cmt0q9a28000501jnmn1t453t",
+        "workspace-id": "cmt7np5uv000002s6pnr7c376",
+        environment: "production",
+        "confirm-production": "I AUTHORIZE LYRASHIELD FAILURE INJECTION",
+      })
+    ).toThrow(/incident-commander/)
+  })
+
   it("rejects unknown CLI flags at the parser boundary", () => {
     expect(() =>
       parseArgs({
@@ -301,10 +335,64 @@ describe("parseLaunchAssuranceOptions", () => {
   })
 })
 
+describe("production dependency boundary", () => {
+  it("uses the system client for the global active-scan preflight", () => {
+    expect(operationSource).toContain("return getSystemPrisma().scan.findMany({")
+    expect(operationSource).toContain("listActiveScans: listGlobalActiveScans")
+  })
+})
+
+describe("selected scan queue isolation", () => {
+  it("allows exactly the selected queued waiting job", () => {
+    expect(() =>
+      assertSelectedScanQueueIsolation("scan-1", "QUEUED", [{ id: "scan-1", state: "waiting" }])
+    ).not.toThrow()
+  })
+
+  it("allows exactly the selected running active job", () => {
+    expect(() =>
+      assertSelectedScanQueueIsolation("scan-1", "RUNNING", [{ id: "scan-1", state: "active" }])
+    ).not.toThrow()
+  })
+
+  it("rejects unrelated queue work", () => {
+    expect(() =>
+      assertSelectedScanQueueIsolation("scan-1", "RUNNING", [
+        { id: "scan-1", state: "active" },
+        { id: "customer-scan", state: "waiting" },
+      ])
+    ).toThrow("unexpected or ambiguous")
+  })
+
+  it("fails closed for missing or ambiguous selected jobs", () => {
+    expect(() => assertSelectedScanQueueIsolation("scan-1", "RUNNING", [])).toThrow(
+      "no processable queue job"
+    )
+    expect(() =>
+      assertSelectedScanQueueIsolation("scan-1", "RUNNING", [
+        { id: "scan-1", state: "active" },
+        { id: "scan-1", state: "waiting" },
+      ])
+    ).toThrow("unexpected or ambiguous")
+    expect(() =>
+      assertSelectedScanQueueIsolation("scan-1", "RUNNING", [{ id: "scan-1", state: "waiting" }])
+    ).toThrow("does not match")
+  })
+})
+
 describe("verifyLaunchAssurance", () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllEnvs()
+  })
+
+  it("cannot bypass incident authorization through the exported orchestrator", async () => {
+    const deps = makeDeps()
+    await expect(
+      verifyLaunchAssurance({ ...baseOptions(), incidentCommander: undefined }, deps)
+    ).rejects.toThrow("incident-commander")
+    expect(deps.fetch).not.toHaveBeenCalled()
+    expect(deps.reconcile).not.toHaveBeenCalled()
   })
 
   it("runs the fixed step order in full mode", async () => {
@@ -327,6 +415,47 @@ describe("verifyLaunchAssurance", () => {
     expect(receipt.steps.every((step) => step.status === "passed")).toBe(true)
     expect(receipt.overall).toBe("passed")
     expect(deps.reconcile).toHaveBeenCalledTimes(1)
+  })
+
+  it("accepts exactly the selected queued waiting job", async () => {
+    const baseline = makeDeps()
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes("/api/v1/scans/") && url.includes("workspaceId=")) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              id: "cmt0q9a28000501jnmn1t453t",
+              workspaceId: "cmt7np5uv000002s6pnr7c376",
+              status: "QUEUED",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+      return baseline.fetch(input, init)
+    }) as unknown as typeof globalThis.fetch
+    const deps = makeDeps({
+      fetch,
+      listActiveScans: vi.fn(async () => [
+        { id: "cmt0q9a28000501jnmn1t453t", status: "QUEUED" as const },
+      ]),
+      getFailureInjectionOperationalState: vi.fn(async () => ({
+        admissionStopped: true,
+        enabledScheduleCount: 0,
+        scanJobs: [{ id: "cmt0q9a28000501jnmn1t453t", state: "waiting" as const }],
+        webhookQueueDepth: 0,
+      })),
+    })
+
+    const receipt = await verifyLaunchAssurance(baseOptions(), deps)
+
+    expect(receipt.overall).toBe("passed")
+    expect(receipt.steps.find((step) => step.name === "authenticated_cancellation")?.status).toBe(
+      "passed"
+    )
+    expect(deps.reconcile).toHaveBeenCalledOnce()
   })
 
   it("keeps dry run read-only and labels it preflight_passed", async () => {
@@ -473,17 +602,17 @@ describe("verifyLaunchAssurance", () => {
   })
 
   it("cleans up the disposable container when a storage proof fails", async () => {
-    const deps = makeDeps({
-      execFile: vi.fn(async (command: string, args: string[]) => {
-        if (command === "docker" && args[0] === "run") {
-          throw new Error("docker run failed")
-        }
-        if (command === "docker" && args[0] === "rm") {
-          return { stdout: "" }
-        }
-        throw new Error(`unexpected command: ${command}`)
-      }) as unknown as LaunchAssuranceDeps["execFile"],
-    })
+    const deps = makeDeps()
+    const execFile = deps.execFile
+    deps.execFile = vi.fn(async (command: string, args: string[]) => {
+      if (command === "docker" && args[0] === "run") {
+        throw new Error("docker run failed")
+      }
+      if (command === "docker" && args[0] === "rm") {
+        return { stdout: "" }
+      }
+      return execFile(command, args)
+    }) as unknown as LaunchAssuranceDeps["execFile"]
     const receipt = await verifyLaunchAssurance(
       {
         ...baseOptions(),
@@ -505,6 +634,89 @@ describe("verifyLaunchAssurance", () => {
     expect(receipt.cleanup.removedContainers.length).toBeGreaterThanOrEqual(1)
   })
 
+  it("does not inject failure after any required prior gate fails", async () => {
+    const deps = makeDeps()
+    const execFile = deps.execFile
+    deps.execFile = vi.fn(async (command: string, args: string[]) => {
+      if (command === "docker" && args[0] === "run") throw new Error("storage proof failed")
+      return execFile(command, args)
+    })
+
+    const receipt = await verifyLaunchAssurance(baseOptions(), deps)
+
+    expect(receipt.steps.find((step) => step.name === "failure_injection_preflight")).toMatchObject(
+      {
+        status: "failed",
+        reason: "required prior gate failed: storage_fail_closed_proof",
+      }
+    )
+    expect(deps.listActiveScans).not.toHaveBeenCalled()
+    expect(deps.reconcile).not.toHaveBeenCalled()
+    const dockerRunCalls = vi
+      .mocked(deps.execFile)
+      .mock.calls.filter(([command, args]) => command === "docker" && args[0] === "run")
+    expect(dockerRunCalls).toHaveLength(1)
+    expect(receipt.steps.find((step) => step.name === "storage_round_trip_proof")).toMatchObject({
+      status: "skipped",
+      reason: "storage fail-closed proof failed",
+    })
+  })
+
+  it.each([
+    [
+      "provenance",
+      () =>
+        makeDeps({
+          resolveProvenance: vi.fn(() => null),
+        }),
+    ],
+    [
+      "readiness",
+      () =>
+        makeDeps({
+          fetch: vi.fn(
+            async () => new Response("unavailable", { status: 503 })
+          ) as unknown as typeof fetch,
+        }),
+    ],
+    [
+      "azure_alert_readback",
+      () => {
+        const deps = makeDeps()
+        const execFile = deps.execFile
+        deps.execFile = vi.fn(async (command: string, args: string[]) => {
+          if (command === "az" && args.includes("action-group")) {
+            throw new Error("alert readback failed")
+          }
+          return execFile(command, args)
+        })
+        return deps
+      },
+    ],
+  ])("does not mutate after the %s gate fails", async (gate, makeFailingDeps) => {
+    const deps = makeFailingDeps()
+    const receipt = await verifyLaunchAssurance(baseOptions(), deps)
+
+    expect(receipt.steps.find((step) => step.name === gate)?.status).toBe("failed")
+    expect(receipt.steps.find((step) => step.name === "failure_injection_preflight")).toMatchObject(
+      {
+        status: "failed",
+        reason: `required prior gate failed: ${gate}`,
+      }
+    )
+    expect(deps.listActiveScans).not.toHaveBeenCalled()
+    expect(deps.getScanState).not.toHaveBeenCalled()
+    expect(deps.reconcile).not.toHaveBeenCalled()
+    const dockerRunCalls = vi
+      .mocked(deps.execFile)
+      .mock.calls.filter(([command, args]) => command === "docker" && args[0] === "run")
+    expect(dockerRunCalls).toHaveLength(0)
+    const mutationCalls = vi
+      .mocked(deps.fetch)
+      .mock.calls.filter(([, init]) => init?.method === "POST")
+    expect(mutationCalls).toHaveLength(0)
+  })
+
   it("refuses failure injection when unrelated active work exists", async () => {
     const deps = makeDeps({
       listActiveScans: vi.fn(async (): Promise<Array<{ id: string; status: ScanStatus }>> => [
@@ -517,6 +729,75 @@ describe("verifyLaunchAssurance", () => {
     expect(preflight?.status).toBe("failed")
     expect(preflight?.reason).toContain("unrelated active scan")
     expect(receipt.overall).toBe("failed")
+    expect(deps.reconcile).not.toHaveBeenCalled()
+    expect(deps.getScanState).not.toHaveBeenCalled()
+    const cancellationCalls = vi
+      .mocked(deps.fetch)
+      .mock.calls.filter(
+        ([input, init]) => String(input).includes("/api/v1/scans/") && init?.method === "POST"
+      )
+    expect(cancellationCalls).toHaveLength(0)
+    expect(
+      receipt.steps
+        .filter((step) =>
+          [
+            "authenticated_cancellation",
+            "settle_wait",
+            "queue_recovery",
+            "post_recovery_readiness",
+          ].includes(step.name)
+        )
+        .every((step) => step.status === "skipped")
+    ).toBe(true)
+  })
+
+  it("refuses failure injection while terminal provider cost is uncertain", async () => {
+    const deps = makeDeps({ hasTerminalCostUncertainty: vi.fn(async () => true) })
+    const receipt = await verifyLaunchAssurance(baseOptions(), deps)
+
+    expect(receipt.steps.find((step) => step.name === "failure_injection_preflight")).toMatchObject(
+      {
+        status: "failed",
+        reason: expect.stringContaining("terminal provider cost uncertainty"),
+      }
+    )
+    expect(deps.reconcile).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["open admission", { admissionStopped: false }],
+    ["enabled schedules", { enabledScheduleCount: 1 }],
+    [
+      "unrelated scan queue work",
+      {
+        scanJobs: [
+          { id: "cmt0q9a28000501jnmn1t453t", state: "active" as const },
+          { id: "customer-scan", state: "waiting" as const },
+        ],
+      },
+    ],
+    ["webhook queue work", { webhookQueueDepth: 1 }],
+  ])("refuses failure injection with %s", async (_label, changed) => {
+    const deps = makeDeps({
+      getFailureInjectionOperationalState: vi.fn(async () => ({
+        admissionStopped: true,
+        enabledScheduleCount: 0,
+        scanJobs: [{ id: "cmt0q9a28000501jnmn1t453t", state: "active" as const }],
+        webhookQueueDepth: 0,
+        ...changed,
+      })),
+    })
+
+    const receipt = await verifyLaunchAssurance(baseOptions(), deps)
+
+    expect(receipt.steps.find((step) => step.name === "failure_injection_preflight")?.status).toBe(
+      "failed"
+    )
+    expect(deps.getScanState).not.toHaveBeenCalled()
+    expect(deps.reconcile).not.toHaveBeenCalled()
+    expect(
+      vi.mocked(deps.fetch).mock.calls.filter(([, init]) => init?.method === "POST")
+    ).toHaveLength(0)
   })
 
   it("poll cancellation through settle and rejects post-cancellation engine starts", async () => {
@@ -548,6 +829,31 @@ describe("verifyLaunchAssurance", () => {
     expect(failing.steps.find((step) => step.name === "settle_wait")?.reason).toContain(
       "engine_start"
     )
+    expect(failingDeps.reconcile).not.toHaveBeenCalled()
+    expect(failing.steps.find((step) => step.name === "queue_recovery")?.status).toBe("skipped")
+  })
+
+  it("does not settle or reconcile after authenticated cancellation fails", async () => {
+    const baseline = makeDeps()
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return new Response(JSON.stringify({ success: false }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        })
+      }
+      return baseline.fetch(input, init)
+    }) as unknown as typeof fetch
+    const deps = makeDeps({ fetch })
+
+    const receipt = await verifyLaunchAssurance(baseOptions(), deps)
+
+    expect(receipt.steps.find((step) => step.name === "authenticated_cancellation")?.status).toBe(
+      "failed"
+    )
+    expect(deps.getScanState).not.toHaveBeenCalled()
+    expect(deps.reconcile).not.toHaveBeenCalled()
+    expect(receipt.steps.find((step) => step.name === "settle_wait")?.status).toBe("skipped")
   })
 
   it("never replays ambiguous paid work through reconciliation", async () => {

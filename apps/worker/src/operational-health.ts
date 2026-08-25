@@ -162,6 +162,47 @@ export function resetOperationalHealthState(): void {
   queueDepthExceededSinceMs = null
 }
 
+export async function findOldestTerminalUnreconciledCost(now: Date) {
+  const terminalCostCutoff = new Date(
+    now.getTime() - OPERATIONAL_ALERT_THRESHOLDS.terminalUnreconciledCostMs
+  )
+  return getSystemPrisma().scan.findFirst({
+    where: {
+      status: { in: [...TERMINAL_SCAN_STATUSES] },
+      endedAt: { lt: terminalCostCutoff },
+      deletedAt: null,
+      target: { type: "REPO" },
+      billedCostUsd: null,
+      OR: [
+        { providerCostUsd: { not: null } },
+        { events: { some: { stage: "llm_usage_unavailable", deletedAt: null } } },
+      ],
+      events: {
+        none: {
+          stage: TERMINAL_COST_DISPOSITION_STAGE,
+          deletedAt: null,
+          AND: [
+            {
+              metadata: {
+                path: ["receiptType"],
+                equals: TERMINAL_COST_DISPOSITION_RECEIPT_TYPE,
+              },
+            },
+            {
+              metadata: {
+                path: ["conclusion", "providerCostUsd"],
+                equals: "0.000000",
+              },
+            },
+          ],
+        },
+      },
+    },
+    select: { id: true, endedAt: true },
+    orderBy: { endedAt: "asc" },
+  })
+}
+
 export async function collectOperationalHealthSnapshot(params: {
   now: Date
   queueDepth: number
@@ -180,46 +221,9 @@ export async function collectOperationalHealthSnapshot(params: {
   }
 
   const prisma = getSystemPrisma()
-  const terminalCostCutoff = new Date(
-    now.getTime() - OPERATIONAL_ALERT_THRESHOLDS.terminalUnreconciledCostMs
-  )
   const [webhookDeadLetterCount, oldestUnreconciled, evidenceFailureCount] = await Promise.all([
     prisma.webhookEventTrack.count({ where: { status: "dead_letter" } }),
-    prisma.scan.findFirst({
-      where: {
-        status: { in: [...TERMINAL_SCAN_STATUSES] },
-        endedAt: { lt: terminalCostCutoff },
-        deletedAt: null,
-        target: { type: "REPO" },
-        billedCostUsd: null,
-        OR: [
-          { providerCostUsd: { not: null } },
-          { events: { some: { stage: "llm_usage_unavailable", deletedAt: null } } },
-        ],
-        events: {
-          none: {
-            stage: TERMINAL_COST_DISPOSITION_STAGE,
-            deletedAt: null,
-            AND: [
-              {
-                metadata: {
-                  path: ["receiptType"],
-                  equals: TERMINAL_COST_DISPOSITION_RECEIPT_TYPE,
-                },
-              },
-              {
-                metadata: {
-                  path: ["conclusion", "providerCostUsd"],
-                  equals: "0.000000",
-                },
-              },
-            ],
-          },
-        },
-      },
-      select: { endedAt: true },
-      orderBy: { endedAt: "asc" },
-    }),
+    findOldestTerminalUnreconciledCost(now),
     prisma.scan.count({
       where: {
         status: "FAILED",
