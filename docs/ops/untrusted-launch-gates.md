@@ -73,6 +73,37 @@ continue while unexpected work exists. After recovery, require all of:
 Use the queue reconciliation code path and its normal `updateScanStatus` lifecycle.
 Do not delete BullMQ keys or alter a scan row directly to simulate this condition.
 
+After admission is stopped, schedules are disabled, the worker is stopped, alerts have
+fired and been acknowledged, and the recorded database/queue counts are zero, run the
+disposable orphan fixture from the reviewed production checkout on the worker VM host:
+
+```sh
+NODE_ENV=production pnpm --filter @lyrashield/worker exec node \
+  --env-file=/etc/lyrashield/worker.env \
+  --import tsx src/operations/verify-queue-orphan-fixture.ts -- \
+  --environment production \
+  --confirm-production "I AUTHORIZE LYRASHIELD QUEUE ORPHAN FIXTURE"
+```
+
+The command reads `systemd` and Docker state directly and fails unless both the worker
+service and its digest-pinned container are stopped. It binds the receipt to the stopped
+container's product, worker-image, and engine revisions, and refuses to continue unless the
+host process's database, privileged database, and Redis URLs exactly match the stopped
+container. Only non-secret endpoint fingerprints appear in the receipt. It creates one isolated `.invalid`
+user and sole-member workspace, creates the scan through `createScan()`, writes the normal
+audit entry, and deliberately never calls `enqueueScan()`. After the five-minute orphan
+grace period it rechecks admission, runtime, schedules, every nonterminal scan ID, queue
+depth for both scan and webhook-retry work, and provenance before calling the exact-scan entry point that shares the normal
+reconciliation lease, queue-state check, and `updateScanStatus()` lifecycle. It requires a
+`FAILED/QUEUE_ORPHANED` result, zero durable `engine_start` events, and an empty final queue.
+Before cleanup it writes a retained platform audit receipt bound to the fixture and immutable
+runtime provenance. After successful cleanup it appends a second immutable platform audit
+receipt bound to the first, so the durable trail distinguishes pending from completed cleanup.
+Cleanup uses `cancelScan()` when needed, `removeScan()`, and the RLS-safe retryable
+`deleteUserAccount()` path only when the deletion plan still contains exactly the disposable
+workspace and no retained or blocked workspace; no unrelated scan row or BullMQ job/key is
+reconciled or edited.
+
 ## Unified launch-assurance proof
 
 `verify:launch-assurance` composes the evidence round-trip, fail-closed check,

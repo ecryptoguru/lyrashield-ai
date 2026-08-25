@@ -13,7 +13,7 @@ import { getScanQueue } from "./queue"
 const RECONCILIATION_LOCK_KEY = "lyrashield:scan-queue:reconciliation"
 const RECONCILIATION_LOCK_MS = 55_000
 const RECONCILIATION_LOCK_RENEW_MS = 50_000
-const ORPHAN_GRACE_MS = 5 * 60_000
+export const QUEUE_ORPHAN_GRACE_MS = 5 * 60_000
 const BATCH_SIZE = 500
 const ACTIVE_SCAN_STATUSES = new Set<ScanStatus>(["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"])
 export const RECONCILIATION_IDLE_BACKSTOP_MS = 3_600_000
@@ -155,6 +155,65 @@ class ReconciliationLease {
   }
 }
 
+async function reconcileOrphanedScanCandidate(
+  queue: ReturnType<typeof getScanQueue>,
+  lease: ReconciliationLease,
+  scan: { id: string; workspaceId: string }
+): Promise<{ reconciled: boolean; jobState: string }> {
+  lease.assertOwned()
+  const job = await queue.getJob(scan.id)
+  const jobState = job ? await job.getState() : "missing"
+  if (jobState !== "missing" && jobState !== "failed" && jobState !== "completed") {
+    return { reconciled: false, jobState }
+  }
+
+  lease.assertOwned()
+  await updateScanStatus(
+    scan.id,
+    "FAILED",
+    {
+      errorCategory: "QUEUE",
+      errorMessage: "QUEUE_ORPHANED: active scan has no processable queue job",
+    },
+    scan.workspaceId
+  )
+  return { reconciled: true, jobState }
+}
+
+/**
+ * Production drill helper: reconcile one exact stale QUEUED fixture through the
+ * same lease, queue-state check, and status lifecycle as global reconciliation.
+ * It never scans or mutates unrelated rows or queue jobs.
+ */
+export async function reconcileExactQueuedScanOrphan(
+  scanId: string,
+  workspaceId: string,
+  now = new Date()
+): Promise<{ leaseAcquired: boolean; reconciled: boolean; jobState: string | null }> {
+  const redis = getRedis()
+  if (!redis) return { leaseAcquired: false, reconciled: false, jobState: null }
+
+  const lease = await ReconciliationLease.acquire(redis)
+  if (!lease) return { leaseAcquired: false, reconciled: false, jobState: null }
+  try {
+    const scan = await getSystemPrisma().scan.findFirst({
+      where: {
+        id: scanId,
+        workspaceId,
+        status: "QUEUED",
+        deletedAt: null,
+        updatedAt: { lt: new Date(now.getTime() - QUEUE_ORPHAN_GRACE_MS) },
+      },
+      select: { id: true, workspaceId: true },
+    })
+    if (!scan) return { leaseAcquired: true, reconciled: false, jobState: null }
+    const result = await reconcileOrphanedScanCandidate(getScanQueue(), lease, scan)
+    return { leaseAcquired: true, ...result }
+  } finally {
+    await lease.release()
+  }
+}
+
 export async function reconcileScanQueue(now = new Date()): Promise<QueueReconciliationResult> {
   const result: QueueReconciliationResult = {
     leaseAcquired: false,
@@ -178,7 +237,7 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
         where: {
           status: { in: [...ACTIVE_SCAN_STATUSES] },
           deletedAt: null,
-          updatedAt: { lt: new Date(now.getTime() - ORPHAN_GRACE_MS) },
+          updatedAt: { lt: new Date(now.getTime() - QUEUE_ORPHAN_GRACE_MS) },
         },
         select: { id: true, workspaceId: true },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -187,23 +246,9 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
       })
 
       for (const scan of staleScans) {
-        lease.assertOwned()
-        const job = await queue.getJob(scan.id)
-        const state = job ? await job.getState() : "missing"
-        if (state !== "missing" && state !== "failed" && state !== "completed") continue
-
         try {
-          lease.assertOwned()
-          await updateScanStatus(
-            scan.id,
-            "FAILED",
-            {
-              errorCategory: "QUEUE",
-              errorMessage: "QUEUE_ORPHANED: active scan has no processable queue job",
-            },
-            scan.workspaceId
-          )
-          result.failedOrphanedScans += 1
+          const candidate = await reconcileOrphanedScanCandidate(queue, lease, scan)
+          if (candidate.reconciled) result.failedOrphanedScans += 1
         } catch (error) {
           logger.warn("Could not reconcile orphaned scan", {
             scanId: scan.id,

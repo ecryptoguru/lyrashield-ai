@@ -38,6 +38,7 @@ export {
   isScanWorkerAvailable,
   assertScanWorkerAvailable,
   ScanWorkerUnavailableError,
+  SCAN_ADMISSION_STOP_KEY,
   SCAN_WORKER_HEARTBEAT_MS,
   SCAN_WORKER_RESTART_GRACE_MS,
   SCAN_WORKER_TTL_MS,
