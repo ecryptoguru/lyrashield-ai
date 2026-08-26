@@ -106,19 +106,18 @@ describe("normalizeProviderEvent", () => {
     expect(event.productKind).toBe("local")
   })
 
-  it("maps refund.created from BOTH providers to refund_completed with refundId", () => {
+  it("maps only provider-proven full refunds to refund_completed", () => {
     const polar = normalizeProviderEvent({
       provider: "polar",
-      eventType: "refund.created",
+      eventType: "order.refunded",
       deliveryId: "del_refund_polar",
       payload: {
-        type: "refund.created",
+        type: "order.refunded",
         data: {
-          id: "ref_P_1",
-          order_id: "ord_P_REF",
-          amount: 100,
+          id: "ord_P_REF",
+          total_amount: 100,
           currency: "USD",
-          status: "succeeded",
+          status: "refunded",
         },
       },
     })
@@ -131,14 +130,22 @@ describe("normalizeProviderEvent", () => {
         created_at: 1_755_000_000,
         payload: {
           refund: {
-            entity: { id: "rfnd_R_1", payment_id: "pay_R_1", amount: 100, currency: "INR" },
+            entity: {
+              id: "rfnd_R_1",
+              payment_id: "pay_R_1",
+              amount: 40,
+              currency: "INR",
+              status: "processed",
+            },
           },
           payment: {
             entity: {
               id: "pay_R_1",
               order_id: "order_R_REF",
               amount: 100,
+              amount_refunded: 100,
               currency: "INR",
+              refund_status: "full",
               notes: {},
             },
           },
@@ -148,12 +155,156 @@ describe("normalizeProviderEvent", () => {
 
     for (const event of [polar, razorpay]) {
       expect(event.kind).toBe("refund_completed")
-      expect(event.refundId).toBeTruthy()
       expect(event.money?.grossAmount).toBe("1.0000")
     }
     expect(polar.orderId).toBe("ord_P_REF")
     // Razorpay primary entity is the refund; order reference still resolved.
     expect(razorpay.refundId).toBe("rfnd_R_1")
+  })
+
+  it("keeps partial and ambiguous refund deliveries non-mutating", () => {
+    const polarPartial = normalizeProviderEvent({
+      provider: "polar",
+      eventType: "order.refunded",
+      deliveryId: "del_polar_partial",
+      payload: {
+        type: "order.refunded",
+        data: {
+          id: "ord_partial",
+          status: "partially_refunded",
+          total_amount: 10_000,
+          currency: "USD",
+        },
+      },
+    })
+    const razorpayPartial = normalizeProviderEvent({
+      provider: "razorpay",
+      eventType: "refund.created",
+      deliveryId: "del_razorpay_partial",
+      payload: {
+        event: "refund.created",
+        payload: {
+          payment: {
+            entity: {
+              id: "pay_partial",
+              amount: 10_000,
+              amount_refunded: 4_000,
+              currency: "INR",
+              refund_status: "partial",
+              notes: { workspaceId: "ws_1" },
+            },
+          },
+          refund: {
+            entity: {
+              id: "refund_partial",
+              payment_id: "pay_partial",
+              amount: 4_000,
+              currency: "INR",
+              status: "processed",
+            },
+          },
+        },
+      },
+    })
+    const polarRefundRow = normalizeProviderEvent({
+      provider: "polar",
+      eventType: "refund.created",
+      deliveryId: "del_polar_row",
+      payload: {
+        type: "refund.created",
+        data: { id: "refund_row", order_id: "ord_1", status: "succeeded" },
+      },
+    })
+
+    for (const event of [polarPartial, razorpayPartial, polarRefundRow]) {
+      expect(event.kind).toBe("entitlement_transitioned")
+      expect(event.money).toBeNull()
+    }
+  })
+
+  it.each([
+    {
+      name: "first partial slice",
+      amountRefunded: 400,
+      refundAmount: 400,
+      refundStatus: "partial",
+      refundCurrency: "INR",
+      expectedKind: "entitlement_transitioned",
+      expectedMoney: null,
+    },
+    {
+      name: "second slice completes cumulative full refund",
+      amountRefunded: 1000,
+      refundAmount: 600,
+      refundStatus: "full",
+      refundCurrency: "INR",
+      expectedKind: "refund_completed",
+      expectedMoney: "10.0000",
+    },
+    {
+      name: "cumulative full amount with mismatched currency",
+      amountRefunded: 1000,
+      refundAmount: 600,
+      refundStatus: "full",
+      refundCurrency: "USD",
+      expectedKind: "entitlement_transitioned",
+      expectedMoney: null,
+    },
+  ])("classifies Razorpay $name", (fixture) => {
+    const event = normalizeProviderEvent({
+      provider: "razorpay",
+      eventType: "refund.created",
+      deliveryId: `del_${fixture.name}`,
+      payload: {
+        event: "refund.created",
+        payload: {
+          payment: {
+            entity: {
+              id: "pay_cumulative",
+              amount: 1000,
+              amount_refunded: fixture.amountRefunded,
+              refund_status: fixture.refundStatus,
+              currency: "INR",
+              notes: { workspaceId: "ws_1", planId: "individual_monthly" },
+            },
+          },
+          refund: {
+            entity: {
+              id: `refund_${fixture.amountRefunded}`,
+              payment_id: "pay_cumulative",
+              amount: fixture.refundAmount,
+              currency: fixture.refundCurrency,
+              status: "processed",
+            },
+          },
+        },
+      },
+    })
+
+    expect(event.kind).toBe(fixture.expectedKind)
+    expect(event.money?.grossAmount ?? null).toBe(fixture.expectedMoney)
+  })
+
+  it("preserves chargeback.created as a completed money reversal", () => {
+    const event = normalizeProviderEvent({
+      provider: "polar",
+      eventType: "chargeback.created",
+      deliveryId: "del_chargeback",
+      payload: {
+        type: "chargeback.created",
+        data: {
+          id: "chargeback_1",
+          order_id: "order_1",
+          amount: 4900,
+          currency: "USD",
+        },
+      },
+    })
+
+    expect(event.kind).toBe("refund_completed")
+    expect(event.orderId).toBe("order_1")
+    expect(event.refundId).toBe("chargeback_1")
+    expect(event.money?.grossAmount).toBe("49.0000")
   })
 
   it("distinguishes subscription first payment vs renewal via isFirstPayment meta", () => {

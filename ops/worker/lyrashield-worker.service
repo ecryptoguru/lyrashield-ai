@@ -8,7 +8,7 @@ StartLimitBurst=3
 [Service]
 Type=simple
 ExecStartPre=/usr/local/libexec/lyrashield-refresh-secrets
-ExecStartPre=/usr/bin/env LYRASHIELD_REFRESH_PINNED_HOSTS=1 LYRASHIELD_CLEAR_PENDING_RESTART=1 /usr/local/libexec/lyrashield-refresh-egress
+ExecStartPre=/usr/bin/env LYRASHIELD_REFRESH_PINNED_HOSTS=1 /usr/local/libexec/lyrashield-refresh-egress
 ExecStart=/usr/local/libexec/lyrashield-run-worker
 # Capture failure must not block an emergency stop; helper invalidates prior receipt first.
 ExecStop=-/usr/local/libexec/lyrashield-capture-worker-stop-provenance

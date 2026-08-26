@@ -140,7 +140,7 @@ describe("computeApplicableTracks — applicability matrix", () => {
     })
     expect(computeApplicableTracks(lifecycle)).toEqual(["billing"])
 
-    // Refund: billing + affiliate clawback, never license.
+    // Proven full refund: billing + affiliate clawback, never license.
     const refund = normalizeProviderEvent({
       provider: "razorpay",
       eventType: "refund.created",
@@ -148,10 +148,77 @@ describe("computeApplicableTracks — applicability matrix", () => {
       payload: {
         event: "refund.created",
         created_at: 1,
-        payload: { refund: { entity: { id: "rfnd_1", payment_id: "pay_1" } } },
+        payload: {
+          payment: {
+            entity: {
+              id: "pay_1",
+              amount: 100,
+              amount_refunded: 100,
+              currency: "INR",
+              refund_status: "full",
+            },
+          },
+          refund: {
+            entity: {
+              id: "rfnd_1",
+              payment_id: "pay_1",
+              amount: 100,
+              currency: "INR",
+              status: "processed",
+            },
+          },
+        },
       },
     })
     expect(computeApplicableTracks(refund)).toEqual(["billing", "affiliate"])
+
+    expect(computeApplicableTracks({ ...refund, productKind: "minute_pack" })).toEqual(["billing"])
+
+    const partialRefund = normalizeProviderEvent({
+      provider: "razorpay",
+      eventType: "refund.created",
+      deliveryId: "d5",
+      payload: {
+        event: "refund.created",
+        payload: {
+          payment: {
+            entity: {
+              id: "pay_2",
+              amount: 100,
+              amount_refunded: 25,
+              currency: "INR",
+              refund_status: "partial",
+            },
+          },
+          refund: {
+            entity: {
+              id: "rfnd_2",
+              payment_id: "pay_2",
+              amount: 25,
+              currency: "INR",
+              status: "processed",
+            },
+          },
+        },
+      },
+    })
+    expect(computeApplicableTracks(partialRefund)).toEqual(["billing"])
+
+    const chargeback = normalizeProviderEvent({
+      provider: "polar",
+      eventType: "chargeback.created",
+      deliveryId: "d6",
+      payload: {
+        type: "chargeback.created",
+        data: {
+          id: "chargeback_1",
+          order_id: "order_1",
+          amount: 100,
+          currency: "USD",
+        },
+      },
+    })
+    expect(computeApplicableTracks(chargeback)).toEqual(["billing", "affiliate"])
   })
 })
 

@@ -10,8 +10,7 @@
  * Applicability matrix (computeApplicableTracks):
  * - billing:   always (entitlements/pack credit/refund reversal adapters)
  * - license:   local-purchase-paid shape with productKind "local" (both providers)
- * - affiliate: commission-relevant events — refund completions (both providers,
- *              fixes the `refund.created` clawback gap) and paid orders matching
+ * - affiliate: commission-relevant events — provider-proven full refunds and paid orders matching
  *              the historical dispatch triggers, minus minute packs (C2).
  */
 
@@ -42,7 +41,7 @@ export interface WebhookTrackHandlers {
 }
 
 function isCommissionRelevant(event: NormalizedBillingEvent): boolean {
-  if (event.kind === "refund_completed") return true
+  if (event.kind === "refund_completed") return event.productKind !== "minute_pack"
   return (
     (event.productKind === "subscription" || event.productKind === "local") &&
     (event.kind === "subscription_paid" ||

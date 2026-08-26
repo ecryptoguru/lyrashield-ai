@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+vi.mock("@lyrashield/config", () => ({ env: {} }))
+
 // Mock prisma before importing the module under test. clawback.ts uses
 // `new Prisma.Decimal(...)` at runtime, so the mock must expose a Decimal
 // constructor. This minimal stand-in supports the methods clawback uses
@@ -26,6 +28,9 @@ vi.mock("@lyrashield/db", () => {
     }
     lte(other: { toString: () => string }) {
       return this.n <= Number.parseFloat(String(other))
+    }
+    equals(other: { toString: () => string }) {
+      return this.n === Number.parseFloat(String(other))
     }
     plus(other: { toString: () => string }) {
       return new FakeDecimal(this.n + Number.parseFloat(String(other)))
@@ -79,12 +84,16 @@ describe("clawback — RISK-C3 replay guard", () => {
       idempotencyKey: "polar:order-123",
       subscriptionId: "sub-1",
       affiliateId: "aff-1",
+      grossAmount: { toString: () => "50.0000" },
+      currency: "USD",
       commissions: [REVERSED_COMMISSION],
     })
 
     const result = await onRefund({
       provider: "polar",
       externalId: "order-123",
+      refundAmount: "50.0000",
+      currency: "USD",
       reason: "REFUND",
     })
 
@@ -94,6 +103,29 @@ describe("clawback — RISK-C3 replay guard", () => {
     expect(prisma.commission.update).not.toHaveBeenCalled()
     // Critical: the affiliate activeReferrals decrement must NOT happen on replay
     expect(prisma.affiliate.findUnique).not.toHaveBeenCalled()
+    expect(prisma.affiliate.update).not.toHaveBeenCalled()
+  })
+
+  it("keeps chargeback replay idempotent without refund-only money evidence", async () => {
+    vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
+      id: "conv-chargeback",
+      idempotencyKey: "polar:order-chargeback",
+      subscriptionId: "sub-chargeback",
+      affiliateId: "aff-chargeback",
+      grossAmount: { toString: () => "50.0000" },
+      currency: "USD",
+      commissions: [REVERSED_COMMISSION],
+    })
+
+    const result = await onRefund({
+      provider: "polar",
+      externalId: "order-chargeback",
+      reason: "CHARGEBACK",
+      isChargeback: true,
+    })
+
+    expect(result).toEqual(expect.objectContaining({ reversed: true, replay: true }))
+    expect(prisma.commission.update).not.toHaveBeenCalled()
     expect(prisma.affiliate.update).not.toHaveBeenCalled()
   })
 
@@ -112,6 +144,8 @@ describe("clawback — RISK-C3 replay guard", () => {
       idempotencyKey: "polar:order-456",
       subscriptionId: "sub-2",
       affiliateId: "aff-2",
+      grossAmount: { toString: () => "50.0000" },
+      currency: "USD",
       commissions: [activeCommission],
     })
     vi.mocked(prisma.affiliate.findUnique).mockResolvedValue({ activeReferrals: 5 })
@@ -121,6 +155,8 @@ describe("clawback — RISK-C3 replay guard", () => {
     const result = await onRefund({
       provider: "polar",
       externalId: "order-456",
+      refundAmount: "50.0000",
+      currency: "USD",
       reason: "REFUND",
     })
 
@@ -130,5 +166,38 @@ describe("clawback — RISK-C3 replay guard", () => {
     expect(prisma.commission.update).toHaveBeenCalledOnce()
     // The activeReferrals decrement happened (first-time refund)
     expect(prisma.affiliate.update).toHaveBeenCalledOnce()
+  })
+
+  it("fails closed before mutation when refund amount or currency disagrees", async () => {
+    vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
+      id: "conv-3",
+      idempotencyKey: "razorpay:pay-789",
+      subscriptionId: null,
+      affiliateId: "aff-3",
+      grossAmount: { toString: () => "50.0000" },
+      currency: "INR",
+      commissions: [
+        {
+          id: "comm-3",
+          amount: { gt: () => false, toString: () => "10.0000" },
+          status: "PENDING",
+        },
+      ],
+    })
+
+    for (const evidence of [
+      { refundAmount: "49.0000", currency: "INR" },
+      { refundAmount: "50.0000", currency: "USD" },
+    ]) {
+      await expect(
+        onRefund({
+          provider: "razorpay",
+          externalId: "pay-789",
+          reason: "REFUND",
+          ...evidence,
+        })
+      ).rejects.toThrow("affiliate_refund_money_mismatch")
+    }
+    expect(prisma.commission.update).not.toHaveBeenCalled()
   })
 })

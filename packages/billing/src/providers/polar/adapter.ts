@@ -17,6 +17,7 @@ import { creditTopUp } from "../../usage/packs"
 import { reverseRefund } from "../../usage/refund"
 import { MINUTE_PACK_MAP } from "@lyrashield/pricing"
 import { resolvePolarCatalogEvent } from "../../provider-catalog-validation"
+import { classifyProviderRefundEvidence } from "../../refund-evidence"
 
 export interface PolarAdapterResult {
   handled: boolean
@@ -122,19 +123,34 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         return { handled: true, action: `customer.state_changed.${state}`, workspaceId }
       }
 
-      case "refund.created": {
-        // Refund — reverse the entitlement.
-        // Polar refund events include data.order_id — use the original order ID
-        // (not the refund ID) so reverseRefund can find the MinutePack by
-        // its externalId (which was set to the order ID at purchase time).
-        if (!workspaceId) {
-          return { handled: false, action: "refund.no_workspace", workspaceId: null }
+      case "refund.created":
+        return { handled: true, action: "refund.created.recorded", workspaceId }
+
+      case "order.refunded": {
+        const evidence = classifyProviderRefundEvidence({
+          provider: "polar",
+          eventType: event.type,
+          payload: event,
+        })
+        if (evidence.classification !== "full") {
+          return { handled: true, action: "order.refunded.not_full_recorded", workspaceId }
         }
-
-        const orderId = String(data.order_id ?? data.id ?? "")
-        await reverseRefund(workspaceId, orderId, String(data.id ?? orderId))
-
-        return { handled: true, action: "refund.reversed", workspaceId }
+        if (evidence.purchaseKind !== "minute_pack") {
+          return { handled: true, action: "order.refunded.full_recorded", workspaceId }
+        }
+        if (!evidence.workspaceId || !evidence.orderId) {
+          return { handled: false, action: "order.refunded.no_identity", workspaceId: null }
+        }
+        await reverseRefund(
+          evidence.workspaceId,
+          evidence.orderId,
+          evidence.refundId ?? evidence.orderId
+        )
+        return {
+          handled: true,
+          action: "order.refunded.reversed",
+          workspaceId: evidence.workspaceId,
+        }
       }
 
       default:

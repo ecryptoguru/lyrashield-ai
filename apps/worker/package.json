@@ -6,6 +6,7 @@
     "dev": "node --env-file=../../.env --import tsx --watch src/index.ts",
     "start": "tsx src/index.ts",
     "verify:launch-assurance": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-launch-assurance.ts",
+    "verify:retained-evidence": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-retained-evidence.ts",
     "verify:queue-orphan-fixture": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-queue-orphan-fixture.ts",
     "review:terminal-cost-disposition": "node --env-file-if-exists=../../.env --import tsx src/operations/review-terminal-cost-disposition.ts",
     "typecheck": "tsc --noEmit",

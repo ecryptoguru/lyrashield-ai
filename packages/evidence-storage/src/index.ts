@@ -28,6 +28,7 @@ export { EvidenceEnvelopeError, isEnvelope, verifyEnvelopeShape } from "./envelo
  */
 export const EVIDENCE_KEY_REF = ENVELOPE_KEY_REF
 const LOCAL_EVIDENCE_KEY_REF = "local-hkdf/better-auth-secret/lyrashield-evidence/v1"
+const VERSIONED_EVIDENCE_KEY_REF = /^envkeystore\/lyrashield-evidence-kek\/v([1-9][0-9]*)$/
 
 export interface UploadEncryptedArtifactInput {
   workspaceId: string
@@ -86,13 +87,31 @@ function evidenceKekKeyring(): Record<string, string> {
     throw new EvidenceEnvelopeError("LYRASHIELD_EVIDENCE_KEK_KEYRING must be a JSON object")
   }
   const validated: Record<string, string> = {}
+  const activeKeyRef = activeEvidenceKeyRef()
+  const activeVersionMatch = VERSIONED_EVIDENCE_KEY_REF.exec(activeKeyRef)
+  if (!activeVersionMatch) {
+    throw new EvidenceEnvelopeError("Active evidence envelope key reference is not versioned")
+  }
+  const activeKek = env.LYRASHIELD_EVIDENCE_KEK || ""
   for (const [keyRef, secret] of Object.entries(keyring)) {
     assertEvidenceEncrypted(keyRef)
     if (typeof secret !== "string") {
       throw new EvidenceEnvelopeError("LYRASHIELD_EVIDENCE_KEK_KEYRING values must be strings")
     }
     resolveEnvelopeKek(secret)
+    const historicalVersion = VERSIONED_EVIDENCE_KEY_REF.exec(keyRef)
+    if (!historicalVersion || Number(historicalVersion[1]) >= Number(activeVersionMatch[1])) {
+      throw new EvidenceEnvelopeError("Historical evidence envelope key reference is invalid")
+    }
+    if (secret === activeKek) {
+      throw new EvidenceEnvelopeError("Active and historical evidence envelope keys must differ")
+    }
     validated[keyRef] = secret
+  }
+  for (let version = 1; version < Number(activeVersionMatch[1]); version += 1) {
+    if (!validated[`envkeystore/lyrashield-evidence-kek/v${version}`]) {
+      throw new EvidenceEnvelopeError("Evidence envelope keyring is missing a prior version")
+    }
   }
   return validated
 }
@@ -281,6 +300,8 @@ export interface ReadEncryptedArtifactResult {
   content: Buffer
   /** sha256 of the decrypted plaintext. */
   checksum: string
+  /** Key reference authenticated by the encrypted artifact. */
+  encryptionKeyRef: string
   /** Always false; non-envelope S3 objects fail closed. */
   legacy: false
 }
@@ -300,7 +321,12 @@ export async function readEncryptedArtifact(
     if (!isLocalEvidenceConfigured()) throw new EvidenceStorageConfigurationError()
     const { readLocalEvidence } = await import(/* turbopackIgnore: true */ "./local.js")
     const content = await readLocalEvidence(storageUri, expectedWorkspaceId)
-    return { content, checksum: computeChecksum(content), legacy: false }
+    return {
+      content,
+      checksum: computeChecksum(content),
+      encryptionKeyRef: LOCAL_EVIDENCE_KEY_REF,
+      legacy: false,
+    }
   }
 
   const parsed = new URL(storageUri)
@@ -329,7 +355,12 @@ export async function readEncryptedArtifact(
   if (keyRef !== envelopeKeyRef) {
     throw new EvidenceEnvelopeError("Evidence envelope key reference is invalid")
   }
-  return { content: plaintext, checksum: computeChecksum(plaintext), legacy: false }
+  return {
+    content: plaintext,
+    checksum: computeChecksum(plaintext),
+    encryptionKeyRef: keyRef,
+    legacy: false,
+  }
 }
 
 /**

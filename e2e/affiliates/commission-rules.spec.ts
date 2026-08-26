@@ -130,6 +130,8 @@ test.describe("Commission rules", () => {
     const clawbackResult = await onRefund({
       provider: "polar",
       externalId,
+      refundAmount: "29.00",
+      currency: "USD",
       reason: "REFUND",
     })
 

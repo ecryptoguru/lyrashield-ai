@@ -7,30 +7,6 @@ worker_network="${LYRASHIELD_WORKER_NETWORK:-bridge}"
 sandbox_network="${LYRASHIELD_SANDBOX_NETWORK:-lyrashield-sandbox}"
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
 refresh_pins="${LYRASHIELD_REFRESH_PINNED_HOSTS:-0}"
-restart_worker_on_pin_change="${LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE:-0}"
-clear_pending_restart="${LYRASHIELD_CLEAR_PENDING_RESTART:-0}"
-restart_pending_file="${LYRASHIELD_EGRESS_RESTART_PENDING_FILE:-/run/lyrashield-egress-restart-pending}"
-drain_request_path="/tmp/lyrashield-worker-egress-drain-request"
-drain_ready_path="/tmp/lyrashield-worker-egress-drain-ready"
-planned_restart_path="/tmp/lyrashield-worker-planned-restart"
-active_job_path="/tmp/lyrashield-worker-active"
-drain_wait_attempts="${LYRASHIELD_EGRESS_DRAIN_WAIT_ATTEMPTS:-20}"
-
-case "$drain_wait_attempts" in
-  '' | *[!0-9]* | 0)
-    echo "LYRASHIELD_EGRESS_DRAIN_WAIT_ATTEMPTS must be a positive integer" >&2
-    exit 1
-    ;;
-esac
-case "$clear_pending_restart" in
-  0 | 1) ;;
-  *) echo "LYRASHIELD_CLEAR_PENDING_RESTART must be 0 or 1" >&2; exit 1 ;;
-esac
-if [ "$clear_pending_restart" = "1" ] &&
-  { [ "$refresh_pins" != "1" ] || [ "$restart_worker_on_pin_change" = "1" ]; }; then
-  echo "LYRASHIELD_CLEAR_PENDING_RESTART requires a restart-disabled pin refresh" >&2
-  exit 1
-fi
 
 if [ ! -r "$environment_file" ]; then
   echo "Worker environment file is unavailable: $environment_file" >&2
@@ -240,11 +216,7 @@ append_endpoint_rules "$LYRASHIELD_EGRESS_PROXY_URL" 443
 append_endpoint_rules "https://api.parallel.ai" 443
 
 pins_changed=0
-defer_pin_change=0
-needs_restart=0
 worker_running=0
-worker_active=0
-drain_ready=0
 if [ "$refresh_pins" = "1" ]; then
   LC_ALL=C sort -u "$temporary_pins" -o "$temporary_pins"
   if ! cmp -s "$temporary_old_pins" "$temporary_pins"; then
@@ -273,83 +245,117 @@ if [ "$refresh_pins" = "1" ]; then
   fi
 fi
 
-if [ "$pins_changed" = "1" ] && [ "$restart_worker_on_pin_change" = "1" ]; then
-  : >"$restart_pending_file"
-fi
-if [ "$restart_worker_on_pin_change" = "1" ] && [ -e "$restart_pending_file" ]; then
-  needs_restart=1
-fi
+cat >>"$temporary_rules" <<EOF
+-A ${chain_name} -j REJECT --reject-with icmp-admin-prohibited
+COMMIT
+EOF
 
-read_worker_marker() {
-  docker exec lyrashield-worker cat "$1" 2>/dev/null || true
+apply_firewall_rules() {
+  rules_file="$1"
+  iptables -N "$chain_name" 2>/dev/null || true
+  iptables-restore --noflush <"$rules_file" || return 1
+  if ! iptables -C DOCKER-USER -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name" 2>/dev/null; then
+    iptables -I DOCKER-USER 1 -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name"
+  fi
 }
 
-cancel_worker_drain_and_wait_for_exit() {
-  if ! docker exec lyrashield-worker rm -f "$drain_request_path" "$planned_restart_path" \
-    >/dev/null 2>&1; then
+worker_hosts_prefix="/tmp/lyrashield-egress-hosts.$$"
+worker_hosts_pins="${worker_hosts_prefix}.pins"
+worker_hosts_approved="${worker_hosts_prefix}.approved"
+worker_hosts_backup="${worker_hosts_prefix}.backup"
+worker_hosts_next="${worker_hosts_prefix}.next"
+
+copy_worker_file() {
+  source_file="$1"
+  destination_file="$2"
+  docker exec --user 0:0 -i lyrashield-worker sh -c \
+    'umask 077; cat > "$1"' sh "$destination_file" <"$source_file"
+}
+
+cleanup_worker_host_files() {
+  docker exec --user 0:0 lyrashield-worker rm -f \
+    "$worker_hosts_pins" "$worker_hosts_approved" "$worker_hosts_backup" "$worker_hosts_next" \
+    >/dev/null 2>&1 || true
+}
+
+restore_worker_hosts() {
+  docker exec --user 0:0 lyrashield-worker sh -c \
+    'test -s "$1" && cat "$1" > /etc/hosts' sh "$worker_hosts_backup" \
+    >/dev/null 2>&1
+}
+
+update_and_verify_worker_hosts() {
+  copy_worker_file "$temporary_pins" "$worker_hosts_pins" || return 1
+  copy_worker_file "$temporary_approved_endpoints" "$worker_hosts_approved" || return 1
+
+  if ! docker exec --user 0:0 lyrashield-worker sh -c '
+    set -eu
+    pins=$1
+    approved=$2
+    backup=$3
+    next=$4
+    cp /etc/hosts "$backup"
+    awk '\''
+      NR == FNR { approved[$1] = 1; next }
+      {
+        keep = 1
+        for (field = 2; field <= NF; field++) {
+          if ($field in approved) keep = 0
+        }
+        if (keep) print
+      }
+    '\'' "$approved" /etc/hosts >"$next"
+    awk '\''{ print $2 " " $1 }'\'' "$pins" >>"$next"
+    test -s "$next"
+    cat "$next" > /etc/hosts
+  ' sh "$worker_hosts_pins" "$worker_hosts_approved" "$worker_hosts_backup" "$worker_hosts_next"; then
+    restore_worker_hosts || true
     return 1
   fi
-  cancel_attempt=0
-  while [ "$cancel_attempt" -lt "$drain_wait_attempts" ]; do
-    if ! docker exec lyrashield-worker true 2>/dev/null; then
-      return 0
-    fi
-    cancel_attempt=$((cancel_attempt + 1))
-    sleep 1
-  done
-  return 1
+
+  if ! docker exec --user 0:0 lyrashield-worker sh -c '
+    set -eu
+    pins=$1
+    approved=$2
+    while read -r host; do
+      expected=$(awk -v host="$host" '\''$1 == host { print $2 }'\'' "$pins" | LC_ALL=C sort -u)
+      actual=$(getent ahostsv4 "$host" | awk '\''{ print $1 }'\'' | LC_ALL=C sort -u)
+      [ -n "$expected" ] && [ "$actual" = "$expected" ]
+    done <<EOF
+$(awk '\''{ print $1 }'\'' "$pins" | LC_ALL=C sort -u)
+EOF
+    while read -r host _port; do
+      if ! awk -v host="$host" '\''$1 == host { found = 1 } END { exit !found }'\'' "$pins"; then
+        if awk -v host="$host" '\''
+          {
+            for (field = 2; field <= NF; field++) {
+              if ($field == host) found = 1
+            }
+          }
+          END { exit !found }
+        '\'' /etc/hosts; then
+          exit 1
+        fi
+      fi
+    done <"$approved"
+  ' sh "$worker_hosts_pins" "$worker_hosts_approved"; then
+    restore_worker_hosts || true
+    return 1
+  fi
 }
 
-if [ "$needs_restart" = "1" ] && docker exec lyrashield-worker true 2>/dev/null; then
+if [ "$pins_changed" = "1" ] && docker exec lyrashield-worker true 2>/dev/null; then
   worker_running=1
   if [ ! -s "$temporary_old_pins" ]; then
-    echo "Cannot refresh worker egress while validated old pins are unavailable" >&2
+    echo "Cannot refresh running worker egress without validated old pins" >&2
     exit 1
   fi
 
-  # An active single-concurrency worker cannot safely restart yet. Keep the
-  # validated old/new union and pending marker, but do not pause claims or
-  # remove readiness. The next idle timer run still performs the challenge,
-  # closing the race where work starts after this preflight.
-  if docker exec lyrashield-worker test -s "$active_job_path" 2>/dev/null; then
-    worker_active=1
-  else
-    drain_token=$(read_worker_marker "$drain_request_path")
-    if [ -z "$drain_token" ]; then
-      drain_token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
-      if [ "${#drain_token}" -ne 64 ]; then
-        echo "Could not create worker egress drain challenge" >&2
-        exit 1
-      fi
-      if ! docker exec lyrashield-worker sh -c \
-        'umask 077; printf "%s\n" "$1" > /tmp/lyrashield-worker-egress-drain-request' \
-        sh "$drain_token" >/dev/null 2>&1; then
-        drain_token=""
-      fi
-    else
-      if [ "${#drain_token}" -ne 64 ]; then
-        echo "Worker egress drain challenge is invalid" >&2
-        exit 1
-      fi
-      case "$drain_token" in
-        *[!a-f0-9]*) echo "Worker egress drain challenge is invalid" >&2; exit 1 ;;
-      esac
-    fi
-
-    if [ -n "$drain_token" ]; then
-      drain_attempt=0
-      while [ "$drain_attempt" -lt "$drain_wait_attempts" ]; do
-        if [ "$(read_worker_marker "$drain_ready_path")" = "$drain_token" ]; then
-          drain_ready=1
-          break
-        fi
-        drain_attempt=$((drain_attempt + 1))
-        sleep 1
-      done
-    fi
-  fi
-
   cp "$temporary_rules" "$temporary_union_rules"
+  # Remove final deny/commit, append old pins, then restore final deny. Existing
+  # connections remain allowed by ESTABLISHED while both pin sets are accepted.
+  sed -i.bak '/^-A LYRASHIELD-EGRESS -j REJECT --reject-with icmp-admin-prohibited$/d; /^COMMIT$/d' "$temporary_union_rules"
+  rm -f "${temporary_union_rules}.bak"
   while read -r pinned_host pinned_address pinned_port; do
     append_approved_ip_rule "$pinned_host" "$pinned_address" "$pinned_port" \
       "$temporary_union_rules"
@@ -359,59 +365,34 @@ if [ "$needs_restart" = "1" ] && docker exec lyrashield-worker true 2>/dev/null;
 COMMIT
 EOF
 
-  if [ "$drain_ready" != "1" ]; then
-    defer_pin_change=1
-    while read -r pinned_host pinned_address pinned_port; do
-      append_approved_ip_rule "$pinned_host" "$pinned_address" "$pinned_port"
-    done <"$temporary_old_pins"
-  elif ! docker exec lyrashield-worker sh -c \
-    'umask 077; : > /tmp/lyrashield-worker-planned-restart' >/dev/null 2>&1; then
-    cancel_worker_drain_and_wait_for_exit || true
-    echo "Could not prepare the planned worker restart" >&2
+  apply_firewall_rules "$temporary_union_rules"
+  if ! update_and_verify_worker_hosts; then
+    cleanup_worker_host_files
+    echo "Running worker hosts refresh failed; retained old pins and old/new firewall union" >&2
     exit 1
   fi
 fi
 
-cat >>"$temporary_rules" <<EOF
--A ${chain_name} -j REJECT --reject-with icmp-admin-prohibited
-COMMIT
-EOF
-
-iptables -N "$chain_name" 2>/dev/null || true
-iptables-restore --noflush <"$temporary_rules"
-if ! iptables -C DOCKER-USER -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name" 2>/dev/null; then
-  iptables -I DOCKER-USER 1 -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name"
+if [ "$pins_changed" = "1" ]; then
+  chmod 600 "$temporary_pins"
+  mv -f "$temporary_pins" "$pin_file"
 fi
+
+if ! apply_firewall_rules "$temporary_rules"; then
+  if [ "$pins_changed" = "1" ]; then
+    chmod 600 "$temporary_old_pins"
+    mv -f "$temporary_old_pins" "$pin_file"
+  fi
+  if [ "$worker_running" = "1" ]; then
+    apply_firewall_rules "$temporary_union_rules" || true
+    restore_worker_hosts || true
+    cleanup_worker_host_files
+  fi
+  echo "Worker egress firewall refresh failed; retained old pins and old/new firewall union" >&2
+  exit 1
+fi
+
+cleanup_worker_host_files
 if [ "$pins_changed" = "1" ]; then
   echo "Worker egress pins changed; hosts: $changed_hosts; IP addresses redacted"
-  if [ "$defer_pin_change" != "1" ]; then
-    chmod 600 "$temporary_pins"
-    mv -f "$temporary_pins" "$pin_file"
-  fi
-fi
-if [ "$needs_restart" = "1" ]; then
-  if [ "$defer_pin_change" = "1" ]; then
-    if [ "$worker_active" = "1" ]; then
-      echo "Worker egress restart deferred; active scan remains healthy"
-    else
-      echo "Worker egress restart deferred; drain handshake is not ready"
-    fi
-  elif systemctl --no-block try-restart lyrashield-worker.service; then
-    rm -f "$restart_pending_file"
-  else
-    if [ "$worker_running" = "1" ]; then
-      iptables-restore --noflush <"$temporary_union_rules"
-      chmod 600 "$temporary_old_pins"
-      mv -f "$temporary_old_pins" "$pin_file"
-      if ! cancel_worker_drain_and_wait_for_exit; then
-        echo "Worker restart scheduling failed and the drained worker did not stop" >&2
-        exit 1
-      fi
-    fi
-    echo "Worker restart scheduling failed; retained old pins and pending retry" >&2
-    exit 1
-  fi
-fi
-if [ "$clear_pending_restart" = "1" ]; then
-  rm -f "$restart_pending_file"
 fi

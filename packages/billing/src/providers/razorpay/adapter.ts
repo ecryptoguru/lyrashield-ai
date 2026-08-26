@@ -8,7 +8,7 @@
  * - subscription.cancelled → syncSubscription (canceled)
  * - subscription.paused → syncSubscription (paused)
  * - subscription.pending → syncSubscription (past_due)
- * - refund.created → reverseRefund
+ * - refund.created → reverseRefund only for a proven full minute-pack refund
  */
 
 import { logger } from "@lyrashield/logger"
@@ -18,6 +18,7 @@ import { creditTopUp } from "../../usage/packs"
 import { reverseRefund } from "../../usage/refund"
 import { MINUTE_PACK_MAP } from "@lyrashield/pricing"
 import { resolveRazorpayCatalogEvent } from "../../provider-catalog-validation"
+import { classifyProviderRefundEvidence } from "../../refund-evidence"
 
 export interface RazorpayAdapterResult {
   handled: boolean
@@ -130,21 +131,34 @@ export async function processRazorpayEvent(
       }
 
       case "refund.created": {
-        const payment = event.payload.payment?.entity
-        const refund = event.payload.refund?.entity
-        if (!payment || !refund) {
-          return { handled: false, action: "refund.created.no_data", workspaceId: null }
+        const evidence = classifyProviderRefundEvidence({
+          provider: "razorpay",
+          eventType: event.event,
+          payload: event,
+        })
+        if (evidence.classification !== "full") {
+          return {
+            handled: true,
+            action: "refund.created.not_full_recorded",
+            workspaceId: evidence.workspaceId,
+          }
         }
-
-        const notes = payment.notes ?? {}
-        const workspaceId = notes.workspaceId ?? null
-        if (!workspaceId) {
-          return { handled: false, action: "refund.created.no_workspace", workspaceId: null }
+        if (evidence.purchaseKind !== "minute_pack") {
+          return {
+            handled: true,
+            action: "refund.created.full_recorded",
+            workspaceId: evidence.workspaceId,
+          }
         }
-
-        await reverseRefund(workspaceId, refund.payment_id, refund.id)
-
-        return { handled: true, action: "refund.created.reversed", workspaceId }
+        if (!evidence.workspaceId || !evidence.paymentId || !evidence.refundId) {
+          return { handled: false, action: "refund.created.no_identity", workspaceId: null }
+        }
+        await reverseRefund(evidence.workspaceId, evidence.paymentId, evidence.refundId)
+        return {
+          handled: true,
+          action: "refund.created.reversed",
+          workspaceId: evidence.workspaceId,
+        }
       }
 
       default:

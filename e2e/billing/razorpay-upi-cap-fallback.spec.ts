@@ -269,11 +269,21 @@ test.describe("Razorpay Test Mode billing proof", () => {
           entity: {
             id: paymentId,
             amount: 1_500_00,
+            amount_refunded: 1_500_00,
             currency: "INR",
-            notes: { workspaceId: actors.workspaceId },
+            refund_status: "full",
+            notes: { workspaceId: actors.workspaceId, packId: "pack_100" },
           },
         },
-        refund: { entity: { id: refundId, payment_id: paymentId, amount: 1_500_00 } },
+        refund: {
+          entity: {
+            id: refundId,
+            payment_id: paymentId,
+            amount: 1_500_00,
+            currency: "INR",
+            status: "processed",
+          },
+        },
       },
     }
     await expect(await postRazorpayWebhook(actors.ownerRequest, refundEventId, refund)).toBeOK()
@@ -290,7 +300,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
     await assertSingleProcessedEffect({
       provider: "razorpay",
       eventId: refundEventId,
-      tracks: ["billing", "affiliate"],
+      tracks: ["billing"],
     })
     expect(
       await prisma.minutePack.findUnique({

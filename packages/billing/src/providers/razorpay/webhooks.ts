@@ -13,7 +13,7 @@
  * - subscription.cancelled → syncSubscription (canceled)
  * - subscription.paused → syncSubscription (paused)
  * - subscription.pending → syncSubscription (past_due)
- * - refund.created → reverseRefund
+ * - refund.created → reverseRefund only with cumulative full-refund evidence
  */
 
 import { createHash, createHmac } from "node:crypto"
@@ -33,12 +33,20 @@ export interface RazorpayWebhookEvent {
         notes?: Record<string, string>
         email?: string
         order_id?: string
+        amount_refunded?: number
+        amountRefunded?: number
+        refund_status?: string
+        refundStatus?: string
+        status?: string
       }
     }
     refund?: {
       entity: {
         id: string
         payment_id: string
+        amount?: number
+        currency?: string
+        status?: string
       }
     }
     order?: {

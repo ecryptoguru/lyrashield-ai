@@ -40,6 +40,18 @@ const workerRunner = readFileSync(
 )
 // The path is anchored to this test module rather than derived from external input.
 // eslint-disable-next-line security/detect-non-literal-fs-filename
+const workerPromoter = readFileSync(
+  fileURLToPath(new URL("../../../.github/scripts/promote-worker-vm.sh", import.meta.url)),
+  "utf8"
+)
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const workerSecretRefresh = readFileSync(
+  fileURLToPath(new URL("../../../ops/worker/refresh-secrets.sh", import.meta.url)),
+  "utf8"
+)
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 const dockerCompose = readFileSync(
   fileURLToPath(new URL("../../../docker-compose.yml", import.meta.url)),
   "utf8"
@@ -203,14 +215,20 @@ describe("worker Docker runtime", () => {
     expect(imageVerifier).toContain("interface/viewer/frontend")
   })
 
-  it("records exact worker provenance without auto-promoting the VM", () => {
+  it("promotes the exact worker digest with bounded rollback and verification", () => {
     expect(deployWorkflow).toContain("Validate worker provenance record")
     expect(deployWorkflow).toContain("LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}")
     expect(deployWorkflow).toContain("LYRASHIELD_WORKER_IMAGE_DIGEST=$digest")
     expect(deployWorkflow).toContain("LYRASHIELD_ENGINE_REVISION=${{ env.ENGINE_REVISION }}")
-    expect(deployWorkflow).toContain("Promotion of the worker VM is NOT performed by this workflow")
-    // The workflow must not restart or promote the worker itself.
-    expect(deployWorkflow).not.toContain("run-worker.sh")
+    expect(deployWorkflow).toContain("Promote verified worker digest on VM")
+    expect(deployWorkflow).toContain("AZURE_VM_RUN_COMMAND_TIMEOUT_SECONDS=1800")
+    expect(deployWorkflow).toContain("needs: [build, deploy]")
+    expect(workerPromoter).toContain('systemctl stop "$timer"')
+    expect(workerPromoter).toContain('docker pull "$target"')
+    expect(workerPromoter).toContain("Worker promotion requires empty scan and webhook queues")
+    expect(workerPromoter).toContain('cp -p "$backup" "$config"')
+    expect(workerPromoter).toContain("LYRASHIELD_WORKER_IMAGE_DIGEST")
+    expect(workerPromoter).toContain("resume_admission")
   })
 
   it("injects immutable image-derived provenance into the worker runtime", () => {
@@ -221,6 +239,27 @@ describe("worker Docker runtime", () => {
     expect(workerRunner).toContain("--env LYRASHIELD_ENGINE_REVISION=")
     // No mutable tag or manually typed revision may supply provenance.
     expect(workerRunner).toContain("${LYRASHIELD_WORKER_IMAGE##*@}")
+    expect(workerRunner).toContain('if ! docker image inspect "$image" >/dev/null 2>&1; then')
+    expect(workerRunner).toContain('docker pull "$image" >/dev/null')
+  })
+
+  it("refreshes the complete evidence key rotation set before worker startup", () => {
+    expect(workerSecretRefresh).toContain(
+      "write_secret LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF worker-evidence-kek-active-ref"
+    )
+    expect(workerSecretRefresh).toContain(
+      'write_secret LYRASHIELD_EVIDENCE_KEK "worker-evidence-kek-$evidence_kek_version"'
+    )
+    expect(workerSecretRefresh).toContain(
+      'write_secret LYRASHIELD_EVIDENCE_KEK_KEYRING "worker-evidence-kek-keyring-$evidence_kek_version"'
+    )
+    expect(deployWorkflow).toContain(
+      '"LYRASHIELD_EVIDENCE_KEK_KEYRING=secretref:lyrashield-evidence-kek-keyring-${LYRASHIELD_EVIDENCE_KEK_VERSION}"'
+    )
+    expect(deployWorkflow).not.toContain('"lyrashield-evidence-kek=${LYRASHIELD_EVIDENCE_KEK}"')
+    expect(deployWorkflow).toContain("az containerapp secret list")
+    expect(deployWorkflow).toContain("preserving them")
+    expect(deployWorkflow).toContain("refusing to overwrite or repair immutable entries")
   })
 
   it("shares engine work and temp paths with the host Docker daemon", () => {

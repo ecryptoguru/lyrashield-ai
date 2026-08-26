@@ -7,10 +7,11 @@ azure_vm_run_command_with_retry() {
   local error_output
   local result
   local status
+  local timeout_seconds=${AZURE_VM_RUN_COMMAND_TIMEOUT_SECONDS:-180}
 
   while [ "$attempt" -le "$max_attempts" ]; do
     error_file=$(mktemp)
-    if result=$(timeout --foreground 180s az vm run-command invoke "$@" 2>"$error_file"); then
+    if result=$(timeout --foreground "${timeout_seconds}s" az vm run-command invoke "$@" 2>"$error_file"); then
       status=0
     else
       status=$?
