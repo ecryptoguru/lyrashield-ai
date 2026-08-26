@@ -560,7 +560,35 @@ jobs:
       - name: Build production marketing Worker
         env:
           PUBLIC_POSTHOG_KEY: ${{ secrets.PUBLIC_POSTHOG_KEY }}
+          LYRASHIELD_MARKETING_REVISION: ${{ github.sha }}
         run: pnpm --filter @lyrashield/marketing build
+
+      - name: Verify generated marketing revision
+        env:
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs"
+
+          const expected = process.env.EXPECTED_REVISION
+          if (!/^[0-9a-f]{40}$/.test(expected ?? "")) {
+            throw new Error("EXPECTED_REVISION must be a full Git SHA")
+          }
+
+          const html = readFileSync("apps/marketing/dist/client/index.html", "utf8")
+          const marker = `<meta name="lyrashield-build-revision" content="${expected}">`
+          if (!html.includes(marker)) {
+            throw new Error("Generated marketing homepage is missing the exact build revision")
+          }
+
+          const worker = JSON.parse(
+            readFileSync("apps/marketing/dist/server/wrangler.json", "utf8")
+          )
+          if (worker.assets?.directory !== "../client") {
+            throw new Error("Generated Cloudflare Worker does not serve the verified client artifact")
+          }
+          console.log(`Generated marketing artifact serves revision ${expected}`)
+          NODE
 
       - name: Apply D1 migrations and deploy
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
@@ -610,25 +638,28 @@ jobs:
             homepage="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
               -H 'Cache-Control: no-cache' \
               "https://lyrashieldai.com/?cachebust=${GITHUB_SHA}-${attempt}")"
+            live_revision="$(printf '%s' "$homepage" | sed -n 's/.*<meta name="lyrashield-build-revision" content="\([0-9a-f]\{40\}\)".*/\1/p' | head -n 1)"
 
-            missing=""
-            for marker in "${markers[@]}"; do
-              if ! printf '%s' "$homepage" | grep --quiet --fixed-strings "$marker"; then
-                missing="$marker"
-                break
+            if [ "$live_revision" = "$GITHUB_SHA" ]; then
+              missing=""
+              for marker in "${markers[@]}"; do
+                if ! printf '%s' "$homepage" | grep --quiet --fixed-strings "$marker"; then
+                  missing="$marker"
+                  break
+                fi
+              done
+
+              if [ -z "$missing" ]; then
+                echo "Live homepage serves revision ${GITHUB_SHA} with expected feature markers (attempt ${attempt})."
+                exit 0
               fi
-            done
-
-            if [ -z "$missing" ]; then
-              echo "Live homepage matches this deploy (attempt ${attempt})."
-              exit 0
             fi
 
-            echo "Attempt ${attempt}: homepage missing '${missing}', retrying in 15s..."
+            echo "Attempt ${attempt}: live revision '${live_revision:-missing}', expected '${GITHUB_SHA}', missing marker '${missing:-none}'; retrying in 15s..."
             sleep 15
           done
 
-          echo "::error::Live homepage is missing '${missing}' after 8 attempts — the deploy did not land."
+          echo "::error::Live homepage did not serve revision '${GITHUB_SHA}' with all expected markers after 8 attempts."
           exit 1
 
       - name: Lighthouse production measurement

@@ -98,8 +98,8 @@ export function SetupScreen({ onComplete, onBack }: Props) {
 
   if (step === "runtime") {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="w-full max-w-lg space-y-6 rounded-lg border border-border bg-card p-8 shadow-sm">
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <div className="w-full max-w-lg space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm sm:p-8">
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold text-foreground">Setup</h1>
             <p className="text-sm text-muted-foreground">
@@ -144,8 +144,8 @@ export function SetupScreen({ onComplete, onBack }: Props) {
 
   if (step === "byok") {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="w-full max-w-lg space-y-6 rounded-lg border border-border bg-card p-8 shadow-sm">
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <div className="w-full max-w-lg space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm sm:p-8">
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold text-foreground">Bring Your Own AI</h1>
             <p className="text-sm text-muted-foreground">
@@ -166,7 +166,9 @@ export function SetupScreen({ onComplete, onBack }: Props) {
                 <p className="text-sm text-success">Already signed in.</p>
               )}
               {chatgptStatus?.status === "error" && (
-                <p className="text-sm text-destructive">{chatgptStatus.message}</p>
+                <p role="alert" className="text-sm text-destructive">
+                  {chatgptStatus.message}
+                </p>
               )}
               <button
                 onClick={handleChatGptLogin}
@@ -190,21 +192,37 @@ export function SetupScreen({ onComplete, onBack }: Props) {
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-foreground">Configure Azure OpenAI.</p>
+              <label htmlFor="azure-api-key" className="block text-sm font-medium text-foreground">
+                Azure OpenAI API key
+              </label>
               <input
+                id="azure-api-key"
                 type="password"
+                autoComplete="off"
+                spellCheck={false}
                 value={azureKeyInput}
                 onChange={(e) => setAzureKeyInput(e.target.value)}
                 placeholder="API Key"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
               />
+              <label htmlFor="azure-endpoint" className="block text-sm font-medium text-foreground">
+                Azure OpenAI endpoint
+              </label>
               <input
-                type="text"
+                id="azure-endpoint"
+                type="url"
+                autoComplete="url"
+                spellCheck={false}
                 value={azureEndpoint}
                 onChange={(e) => setAzureEndpoint(e.target.value)}
                 placeholder="https://your-resource.openai.azure.com"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
               />
-              {validationError && <p className="text-sm text-destructive">{validationError}</p>}
+              {validationError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {validationError}
+                </p>
+              )}
               <button
                 onClick={handleAzureSave}
                 disabled={loading || !azureKeyInput || !azureEndpoint}
@@ -220,7 +238,7 @@ export function SetupScreen({ onComplete, onBack }: Props) {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-background">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="max-w-md space-y-6 text-center">
         <h1 className="text-2xl font-semibold text-foreground">Ready to Scan</h1>
         <p className="text-sm text-muted-foreground">LyraShield Local is configured and ready.</p>

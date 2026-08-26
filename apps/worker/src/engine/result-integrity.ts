@@ -52,11 +52,16 @@ type ResultManifestInput = {
     workerImageDigest: string
     engineRevision: string
   } | null
+  terminalOutcome?: {
+    status: "COMPLETED" | "PARTIAL" | "FAILED" | "STOPPED_BUDGET"
+    errorCategory: string | null
+    errorMessage: string | null
+  }
 }
 
 type FindingInput = EngineVulnerability | NormalizedFinding
 
-const MANIFEST_VERSION = 5
+const MANIFEST_VERSION = 6
 const SCANNER_CONTRACT_VERSION = "2026-08-21"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
@@ -341,6 +346,7 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     // Exact product/image/engine identity of the worker that produced this
     // result. Bound into the checksum so a manifest cannot be re-attributed.
     workerExecution: input.workerExecution ?? null,
+    terminalOutcome: input.terminalOutcome ?? null,
     // Coverage limitations are part of the immutable result contract. Keep
     // their bounded subjects and reasons in the manifest, not only in the
     // mutable receipt table.
@@ -500,7 +506,14 @@ export async function markRetestsRunning(scanId: string): Promise<void> {
   })
 }
 
-const DETERMINISTIC_RETEST_SCANNERS = new Set(["sca", "secrets", "url", "agent_config"])
+const DETERMINISTIC_RETEST_SCANNERS = new Set([
+  "sca",
+  "secrets",
+  "url",
+  "agent_config",
+  "ai_app_security",
+  "ml_supply_chain",
+])
 const SOURCE_REVISION_PATTERN = /^[0-9a-f]{40}$/i
 const URL_CHECKSUM_PATTERN = /^[0-9a-f]{64}$/i
 

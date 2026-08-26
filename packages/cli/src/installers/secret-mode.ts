@@ -21,19 +21,6 @@ export interface SecretModeOptions {
   cwd?: string
 }
 
-async function isFileGitTracked(filePath: string, cwd?: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    execFile(
-      "git",
-      ["ls-files", "--error-unmatch", filePath],
-      { cwd: cwd ?? process.cwd() },
-      (err) => {
-        resolve(!err)
-      }
-    )
-  })
-}
-
 async function isFileGitIgnored(filePath: string, cwd?: string): Promise<boolean> {
   return new Promise((resolve) => {
     execFile("git", ["check-ignore", filePath], { cwd: cwd ?? process.cwd() }, (err) => {
@@ -80,12 +67,11 @@ export async function resolveSecretMode(opts: SecretModeOptions): Promise<Resolv
       }
     }
 
-    const tracked = await isFileGitTracked(location.path, cwd)
     const ignored = await isFileGitIgnored(location.path, cwd)
-    if (tracked && !ignored) {
+    if (!ignored) {
       return {
         mode: "manual",
-        reason: `Refusing to inline secret into ${location.path}: file is tracked by git and not ignored. Use a .env or shell export instead.`,
+        reason: `Refusing to inline secret into ${location.path}: file is not ignored by git. Use a .env or shell export instead.`,
       }
     }
   }

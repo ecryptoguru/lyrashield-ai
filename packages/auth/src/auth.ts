@@ -299,6 +299,7 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: emailVerificationEnabled,
     sendResetPassword: sendResetPasswordEmail,
+    revokeSessionsOnPasswordReset: true,
   },
   ...(emailVerificationEnabled && !isDev
     ? {

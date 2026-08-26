@@ -19,6 +19,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
       type="button"
       role="tab"
       aria-selected="true"
+      tabindex="0"
       aria-controls="ai-app-files-panel"
       id="ai-app-files-tab"
       class="ai-app-tab flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors"
@@ -30,6 +31,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
       type="button"
       role="tab"
       aria-selected="false"
+      tabindex="-1"
       aria-controls="ai-app-paste-panel"
       id="ai-app-paste-tab"
       class="ai-app-tab flex-1 rounded-md px-3 py-2 text-sm font-medium text-text-muted transition-colors"
@@ -107,6 +109,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
     for (const t of tabs) {
       const selected = t.dataset.tab === tab
       t.setAttribute("aria-selected", String(selected))
+      t.tabIndex = selected ? 0 : -1
       t.classList.toggle("text-text-muted", !selected)
     }
     for (const p of panels) {
@@ -119,6 +122,23 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
     tab.addEventListener("click", () => {
       const value = tab.dataset.tab
       if (value === "files" || value === "paste") switchTab(value)
+    })
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+      event.preventDefault()
+      const current = [...tabs].indexOf(tab)
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? tabs.length - 1
+            : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length
+      const nextTab = tabs[next]
+      const value = nextTab?.dataset.tab
+      if (nextTab && (value === "files" || value === "paste")) {
+        switchTab(value)
+        nextTab.focus()
+      }
     })
   }
 

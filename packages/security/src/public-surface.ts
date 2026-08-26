@@ -520,6 +520,7 @@ async function collectExpandedSurface(ctx: {
   const executing = new Set<Promise<void>>()
   let reservedBytes = 0
   let documentCount = 1 // seed is already recorded
+  let reservedDocuments = 0
   let assetCount = 0
   let sourceMapCount = 0
 
@@ -754,6 +755,7 @@ async function collectExpandedSurface(ctx: {
       }
     } finally {
       reservedBytes -= reserved
+      if (item.kind === "document") reservedDocuments--
     }
   }
 
@@ -776,7 +778,7 @@ async function collectExpandedSurface(ctx: {
       if (!item) break
 
       if (item.kind === "document") {
-        if (documentCount >= ctx.profile.maxDocuments) {
+        if (documentCount + reservedDocuments >= ctx.profile.maxDocuments) {
           truncated = true
           ctx.issues.push(
             issue(
@@ -818,6 +820,7 @@ async function collectExpandedSurface(ctx: {
       }
 
       if (!reserve(maxSpend)) break
+      if (item.kind === "document") reservedDocuments++
 
       const task = processWorkItem(item, maxSpend).finally(() => executing.delete(task))
       executing.add(task)

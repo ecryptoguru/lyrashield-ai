@@ -76,13 +76,14 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
   )
 
   async function elicitApproval(
-    toolName: string
+    toolName: string,
+    args: Record<string, unknown>
   ): Promise<{ approved: boolean; reason?: string } | null> {
     const caps = server.getClientCapabilities()
     if (!caps?.elicitation) return null
     try {
       const result = await server.elicitInput({
-        message: `LyraShield wants to run the mutating tool "${toolName}". Approve this action?`,
+        message: `LyraShield wants to run the mutating tool "${toolName}" with these exact arguments:\n${JSON.stringify(args, null, 2)}\nApprove this action?`,
         requestedSchema: {
           type: "object",
           properties: {
@@ -109,7 +110,10 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
     }
   }
 
-  async function ttyApproval(toolName: string): Promise<{ approved: boolean; reason?: string }> {
+  async function ttyApproval(
+    toolName: string,
+    args: Record<string, unknown>
+  ): Promise<{ approved: boolean; reason?: string }> {
     // Only attempt an interactive prompt when a controlling terminal actually
     // exists. An MCP server launched by an IDE (or a CI job) has no TTY —
     // attempting to read /dev/tty there would hang, so we fail closed instead.
@@ -119,7 +123,9 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
     try {
       const input = createReadStream("/dev/tty")
       const prompt = createPrompt({ input, output: process.stderr })
-      const answer = await prompt.question(`Approve LyraShield MCP mutation "${toolName}"? [y/N] `)
+      const answer = await prompt.question(
+        `Approve LyraShield MCP mutation "${toolName}" with these exact arguments?\n${JSON.stringify(args, null, 2)}\n[y/N] `
+      )
       prompt.close()
       input.close()
       return {
@@ -137,10 +143,10 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
       "This LyraShield endpoint has no interactive approval channel. Run the mutating tool from the local stdio MCP server (which prompts for approval), or use a trusted automation configured with allowMutations.",
   })
 
-  const interactiveGate: ApprovalGate = async (toolName) => {
-    const elicited = await elicitApproval(toolName)
+  const interactiveGate: ApprovalGate = async (toolName, args) => {
+    const elicited = await elicitApproval(toolName, args)
     if (elicited) return elicited
-    return ttyApproval(toolName)
+    return ttyApproval(toolName, args)
   }
 
   let approvalGate: ApprovalGate | undefined

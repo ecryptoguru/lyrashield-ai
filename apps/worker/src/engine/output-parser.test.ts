@@ -757,3 +757,11 @@ describe("checkRunRecordSchemaVersion", () => {
     expect(check?.message).toContain("not a parsable")
   })
 })
+
+describe("parseRunJson schema version", () => {
+  it("preserves the producer schema version for the contract tripwire", () => {
+    expect(
+      parseRunJson(JSON.stringify({ schema_version: "99.0", run_id: "run-1", status: "completed" }))
+    ).toMatchObject({ schema_version: "99.0" })
+  })
+})

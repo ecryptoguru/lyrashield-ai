@@ -35,6 +35,7 @@ describe("GET /api/admin/overview", () => {
   it.each([
     ["UNAUTHORIZED", 401],
     ["FORBIDDEN", 403],
+    ["ADMIN_REAUTH_REQUIRED", 401],
   ])("maps %s without reading platform data", async (message, status) => {
     requirePlatformAdminIdentity.mockRejectedValue(new Error(message))
 

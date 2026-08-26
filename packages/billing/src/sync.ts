@@ -6,7 +6,7 @@
  * keep data, stop paid-only scans, audit-log.
  */
 
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { CLOUD_PLAN_MAP, type CloudPlanId } from "@lyrashield/pricing"
 import type { WorkspacePlan } from "@lyrashield/types"
@@ -101,7 +101,7 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
   // Wrap domain writes in a single transaction for atomicity.
   // Audit log is created post-commit best-effort so a hash-chain failure
   // cannot roll back the billing state transition.
-  await prisma.$transaction(async (tx) => {
+  await withWorkspaceRLS(workspaceId, async (tx) => {
     // Update billing account
     await tx.billingAccount.upsert({
       where: { workspaceId },
@@ -197,7 +197,7 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
  * Data is preserved; scans are blocked by the entitlement gate.
  */
 export async function downgradeToFree(workspaceId: string, reason: string): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  await withWorkspaceRLS(workspaceId, async (tx) => {
     await tx.workspace.update({
       where: { id: workspaceId },
       data: {

@@ -2,6 +2,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest"
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
+import { execFileSync } from "node:child_process"
 import path from "node:path"
 import { getAgent } from "@lyrashield/agent-registry"
 import { installAgent, uninstallAgent } from "../../installers/install.js"
@@ -15,6 +16,11 @@ const API_KEY = "lsk_testkey123"
 
 async function tempDir(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), "lyrashield-cli-"))
+}
+
+async function ignoreSharedConfig(cwd: string): Promise<void> {
+  execFileSync("git", ["init", "-q"], { cwd })
+  await writeFile(path.join(cwd, ".gitignore"), ".mcp.json\n", "utf-8")
 }
 
 function parseJsoncContent(content: string): Record<string, unknown> {
@@ -50,6 +56,7 @@ describe("conformance: install/uninstall round-trips", () => {
   })
 
   it("claude-code merge-safety keeps foreign servers and unrelated keys", async () => {
+    await ignoreSharedConfig(cwd)
     const fixture = `{
   "mcpServers": {
     "acme": {
@@ -128,6 +135,7 @@ describe("conformance: install/uninstall round-trips", () => {
   })
 
   it("claude-code idempotency is ALREADY_CONFIGURED on second install", async () => {
+    await ignoreSharedConfig(cwd)
     await installAgent({
       agent: claude,
       transport: "stdio",
@@ -154,6 +162,7 @@ describe("conformance: install/uninstall round-trips", () => {
   })
 
   it("claude-code uninstall removes the entry while preserving fixture", async () => {
+    await ignoreSharedConfig(cwd)
     const fixture = `{
   "mcpServers": {
     "acme": {
@@ -239,6 +248,7 @@ describe("conformance: install/uninstall round-trips", () => {
   })
 
   it("inline-secret flag can write the literal key with a warning", async () => {
+    await ignoreSharedConfig(cwd)
     const result = await installAgent({
       agent: claude,
       transport: "stdio",
@@ -255,6 +265,27 @@ describe("conformance: install/uninstall round-trips", () => {
 
     const content = await readFile(path.join(cwd, ".mcp.json"), "utf-8")
     expect(content).toContain(API_KEY)
+  })
+
+  it("inline-secret refuses a new unignored shared config", async () => {
+    execFileSync("git", ["init", "-q"], { cwd })
+
+    const result = await installAgent({
+      agent: claude,
+      transport: "stdio",
+      apiUrl: API_URL,
+      apiKey: API_KEY,
+      scope: "project",
+      cwd,
+      all: true,
+      inlineSecret: true,
+    })
+
+    expect(result.outcome).toBe("MANUAL_REQUIRED")
+    expect(result.message).toMatch(/not ignored/i)
+    await expect(readFile(path.join(cwd, ".mcp.json"), "utf-8")).rejects.toMatchObject({
+      code: "ENOENT",
+    })
   })
 
   it("toml merge-safety keeps foreign servers and unrelated keys", async () => {

@@ -1,5 +1,12 @@
 import { prisma } from "./client"
+import { Prisma } from "./generated/prisma"
 import { runWithDatabaseRLSContext } from "./scoping"
+
+interface WorkspaceTransactionOptions {
+  maxWait?: number
+  timeout?: number
+  isolationLevel?: Prisma.TransactionIsolationLevel
+}
 
 /**
  * Run a callback inside a Prisma transaction with `SET LOCAL
@@ -28,12 +35,13 @@ import { runWithDatabaseRLSContext } from "./scoping"
  */
 export async function withWorkspaceRLS<T>(
   workspaceId: string,
-  fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>
+  fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>,
+  options?: WorkspaceTransactionOptions
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
     return runWithDatabaseRLSContext(workspaceId, () => fn(tx))
-  })
+  }, options)
 }
 
 /**

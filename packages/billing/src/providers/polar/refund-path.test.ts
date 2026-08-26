@@ -53,7 +53,7 @@ describe("Polar refund.created — FAIL-A2 unblock (refund reversal path)", () =
     expect(result.handled).toBe(true)
     expect(result.action).toBe("refund.reversed")
     expect(reverseRefund).toHaveBeenCalledOnce()
-    expect(reverseRefund).toHaveBeenCalledWith("ws-1", "order-abc")
+    expect(reverseRefund).toHaveBeenCalledWith("ws-1", "order-abc", "refund-1")
   })
 
   it("processPolarEvent returns not-handled when refund.created has no workspaceId", async () => {

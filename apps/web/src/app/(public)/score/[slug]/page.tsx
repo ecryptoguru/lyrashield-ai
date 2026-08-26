@@ -107,7 +107,7 @@ export default async function ScorecardPage({
     <main className="gradient-hero bg-background text-foreground min-h-screen px-4 py-6 sm:px-6 sm:py-12">
       <ReferralCapture code={activeReferral ?? undefined} source={referralSource} />
       <div className="mx-auto max-w-5xl">
-        <header className="mb-8 flex min-h-12 items-center justify-between gap-4">
+        <header className="mb-8 flex min-h-12 flex-wrap items-center justify-between gap-4">
           <Link href="/" className="flex min-h-11 items-center gap-3 font-semibold tracking-wide">
             <span className="bg-primary/10 border-primary/25 flex size-10 items-center justify-center rounded-xl border">
               <ShieldCheck className="text-primary size-5" aria-hidden="true" />
@@ -153,7 +153,7 @@ export default async function ScorecardPage({
                 .
               </p>
             </div>
-            <div className="min-w-64 space-y-4">
+            <div className="min-w-0 space-y-4 sm:min-w-64">
               <div className="bg-muted/45 rounded-xl border p-5">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <CheckCircle2 className="text-success size-4" aria-hidden="true" />

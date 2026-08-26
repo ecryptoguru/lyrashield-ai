@@ -239,6 +239,8 @@ describe("s3 envelope encryption", () => {
     delete process.env.S3_ACCESS_KEY
     delete process.env.S3_SECRET_KEY
     delete process.env.LYRASHIELD_EVIDENCE_KEK
+    delete process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF
+    delete process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING
   })
 
   it("uploads only envelope ciphertext and records the envelope key ref", async () => {
@@ -282,6 +284,47 @@ describe("s3 envelope encryption", () => {
     expect(read.content.equals(plaintext)).toBe(true)
     expect(read.checksum).toBe(createHash("sha256").update(plaintext).digest("hex"))
     expect(putBody.indexOf(plaintext)).toBe(-1)
+  })
+
+  it("reads an older envelope after activating a new KEK", async () => {
+    const originalKek = Buffer.from(new Array(32).fill(3)).toString("base64")
+    vi.resetModules()
+    const originalMod = await import("./index")
+    const plaintext = Buffer.from("retained evidence encrypted before rotation")
+    await originalMod.uploadEncryptedArtifact({
+      workspaceId: "ws-1",
+      ownerId: "owner-1",
+      type: "proof",
+      content: plaintext,
+    })
+
+    process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF = "envkeystore/lyrashield-evidence-kek/v2"
+    process.env.LYRASHIELD_EVIDENCE_KEK = Buffer.from(new Array(32).fill(4)).toString("base64")
+    process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING = JSON.stringify({
+      "envkeystore/lyrashield-evidence-kek/v1": originalKek,
+    })
+    try {
+      vi.resetModules()
+      const rotatedMod = await import("./index")
+
+      const read = await rotatedMod.readEncryptedArtifact(
+        "s3://evidence-bucket/evidence/ws-1/owner-1/proof/x",
+        "ws-1"
+      )
+      expect(read.content.equals(plaintext)).toBe(true)
+
+      const newArtifact = await rotatedMod.uploadEncryptedArtifact({
+        workspaceId: "ws-1",
+        ownerId: "owner-2",
+        type: "proof",
+        content: "new evidence",
+      })
+      expect(newArtifact.encryptionKeyRef).toBe("envkeystore/lyrashield-evidence-kek/v2")
+    } finally {
+      process.env.LYRASHIELD_EVIDENCE_KEK = originalKek
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING
+    }
   })
 
   it("rejects legacy SSE-only objects", async () => {
@@ -338,5 +381,20 @@ describe("s3 envelope encryption", () => {
       })
     ).rejects.toThrow()
     process.env.LYRASHIELD_EVIDENCE_KEK = Buffer.from(new Array(32).fill(3)).toString("base64")
+  })
+
+  it("fails readiness when a configured historical KEK keyring is malformed", async () => {
+    process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF = "envkeystore/lyrashield-evidence-kek/v2"
+    process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING = "not-json"
+    try {
+      vi.resetModules()
+      const mod = await import("./index")
+      expect(() => mod.assertEvidenceStorageConfigured()).toThrow(
+        "LYRASHIELD_EVIDENCE_KEK_KEYRING is not valid JSON"
+      )
+    } finally {
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING
+    }
   })
 })

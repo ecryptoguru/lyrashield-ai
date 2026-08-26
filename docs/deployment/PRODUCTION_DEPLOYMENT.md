@@ -275,6 +275,15 @@ one-time secret:
 4. **Never** commit the value, paste it into tickets/chats/logs, or reuse
    another secret for it.
 
+Do not overwrite the active KEK in place. For a controlled rotation, assign a
+new immutable `LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF`, put the new 32-byte base64
+secret in `LYRASHIELD_EVIDENCE_KEK`, and retain each prior secret in
+`LYRASHIELD_EVIDENCE_KEK_KEYRING` as a JSON object keyed by its exact envelope
+reference. Provision the same three values to every evidence reader and writer
+before emitting envelopes under the new reference. Removing a historical entry
+makes the evidence written under that reference unreadable, so removal requires
+separate retention, backup, and restore evidence.
+
 ## Full-scan resource checklist
 
 The live Lite Scanner is a separate passive API and cannot be promoted into the full worker by configuration alone. A controlled repository scan requires all of the following:

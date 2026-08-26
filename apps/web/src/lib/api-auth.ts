@@ -34,6 +34,18 @@ export function authErrorResponse(error: unknown): NextResponse | null {
         { status: 403 }
       )
     }
+    if (error.message === "ADMIN_REAUTH_REQUIRED") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "ADMIN_REAUTH_REQUIRED",
+            message: "Administrator verification is required",
+          },
+        },
+        { status: 401 }
+      )
+    }
   }
   return null
 }

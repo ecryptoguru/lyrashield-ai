@@ -508,6 +508,40 @@ describe("result integrity", () => {
     expect(prisma.scanResultManifest.create).not.toHaveBeenCalled()
   })
 
+  it("versions and checksum-binds the durable terminal outcome", async () => {
+    vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
+
+    const persist = async (status: "COMPLETED" | "FAILED") => {
+      vi.mocked(prisma.scanResultManifest.create).mockClear()
+      await persistResultManifest({
+        scanId: `scan-${status.toLowerCase()}`,
+        target: { id: "target-1", type: "URL", url: "https://example.com" },
+        sourceCheckoutAvailable: false,
+        engineFindingCount: 0,
+        coverageIssues: [],
+        terminalOutcome: {
+          status,
+          errorCategory: status === "FAILED" ? "TIMEOUT" : null,
+          errorMessage: status === "FAILED" ? "Scan timed out" : null,
+        },
+      })
+      return vi.mocked(prisma.scanResultManifest.create).mock.calls[0][0].data as {
+        version: number
+        checksum: string
+        manifest: { version: number; terminalOutcome: { status: string } }
+      }
+    }
+
+    const completed = await persist("COMPLETED")
+    const failed = await persist("FAILED")
+
+    expect(completed).toMatchObject({
+      version: 6,
+      manifest: { version: 6, terminalOutcome: { status: "COMPLETED" } },
+    })
+    expect(failed.checksum).not.toBe(completed.checksum)
+  })
+
   it("never stores raw PoC content in a detection ledger payload", async () => {
     vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
 
@@ -742,6 +776,27 @@ describe("result integrity", () => {
         })
       )
     })
+
+    it.each(["ai_app_security", "ml_supply_chain"])(
+      "validates complete %s deterministic coverage",
+      async (scannerSource) => {
+        mockRepoRetestState({
+          candidates: [{ findingId: "finding-1", scanId: "scan-1", scannerSource }],
+          baselineReceipts: [
+            { id: `baseline-${scannerSource}`, controlId: scannerSource, status: "COMPLETED" },
+          ],
+          retestReceipts: [
+            { id: `retest-${scannerSource}`, controlId: scannerSource, status: "COMPLETED" },
+          ],
+        })
+
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+
+        expect(prisma.finding.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ status: "FIXED" }) })
+        )
+      }
+    )
 
     it("marks a redetected finding failed without touching the finding record", async () => {
       mockRepoRetestState({ retestFindingIds: ["finding-1"] })

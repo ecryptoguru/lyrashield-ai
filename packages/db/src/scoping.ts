@@ -35,6 +35,7 @@ export const SOFT_DELETE_MODELS = new Set<string>([
   "Notification",
   "Schedule",
   "BillingAccount",
+  "MinutePack",
   "Invitation",
   "WebhookEvent",
 ])
@@ -63,6 +64,7 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "Notification",
   "Schedule",
   "BillingAccount",
+  "MinutePack",
   "Invitation",
   "WebhookEvent",
   "Retest",

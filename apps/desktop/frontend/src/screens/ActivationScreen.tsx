@@ -41,8 +41,8 @@ export function ActivationScreen({ onActivated }: Props) {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-md space-y-6 rounded-lg border border-border bg-card p-8 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm sm:p-8">
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-semibold text-foreground">Activate LyraShield</h1>
           <p className="text-sm text-muted-foreground">
@@ -50,8 +50,15 @@ export function ActivationScreen({ onActivated }: Props) {
           </p>
         </div>
         <div className="space-y-4">
+          <label htmlFor="license-key" className="block text-sm font-medium text-foreground">
+            License key
+          </label>
           <input
+            id="license-key"
             type="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={licenseKey}
             onChange={(e) => setLicenseKey(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !loading && handleActivate()}
@@ -59,7 +66,11 @@ export function ActivationScreen({ onActivated }: Props) {
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             disabled={loading}
           />
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           <button
             onClick={handleActivate}
             disabled={loading}

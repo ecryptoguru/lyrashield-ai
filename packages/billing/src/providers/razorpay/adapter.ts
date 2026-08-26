@@ -142,7 +142,7 @@ export async function processRazorpayEvent(
           return { handled: false, action: "refund.created.no_workspace", workspaceId: null }
         }
 
-        await reverseRefund(workspaceId, refund.payment_id)
+        await reverseRefund(workspaceId, refund.payment_id, refund.id)
 
         return { handled: true, action: "refund.created.reversed", workspaceId }
       }

@@ -13,6 +13,7 @@ import {
   EvidenceEnvelopeError,
   isEnvelope,
   openEnvelope,
+  readEnvelopeKeyRef,
   resolveEnvelopeKek,
   sealEnvelope,
   verifyEnvelopeShape,
@@ -66,6 +67,47 @@ function isLocalEvidenceConfigured(): boolean {
   return env.NODE_ENV !== "production" && env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE === "1"
 }
 
+function activeEvidenceKeyRef(): string {
+  const keyRef = env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF || EVIDENCE_KEY_REF
+  assertEvidenceEncrypted(keyRef)
+  return keyRef
+}
+
+function evidenceKekKeyring(): Record<string, string> {
+  let keyring: unknown
+  try {
+    keyring = JSON.parse(env.LYRASHIELD_EVIDENCE_KEK_KEYRING || "{}")
+  } catch (error) {
+    throw new EvidenceEnvelopeError("LYRASHIELD_EVIDENCE_KEK_KEYRING is not valid JSON", {
+      cause: error,
+    })
+  }
+  if (!keyring || typeof keyring !== "object" || Array.isArray(keyring)) {
+    throw new EvidenceEnvelopeError("LYRASHIELD_EVIDENCE_KEK_KEYRING must be a JSON object")
+  }
+  const validated: Record<string, string> = {}
+  for (const [keyRef, secret] of Object.entries(keyring)) {
+    assertEvidenceEncrypted(keyRef)
+    if (typeof secret !== "string") {
+      throw new EvidenceEnvelopeError("LYRASHIELD_EVIDENCE_KEK_KEYRING values must be strings")
+    }
+    resolveEnvelopeKek(secret)
+    validated[keyRef] = secret
+  }
+  return validated
+}
+
+function resolveEvidenceKek(keyRef: string): Buffer {
+  if (keyRef === activeEvidenceKeyRef()) {
+    return resolveEnvelopeKek(env.LYRASHIELD_EVIDENCE_KEK || undefined)
+  }
+  const secret = evidenceKekKeyring()[keyRef]
+  if (typeof secret !== "string") {
+    throw new EvidenceEnvelopeError("Evidence envelope key reference is invalid")
+  }
+  return resolveEnvelopeKek(secret)
+}
+
 export function assertEvidenceStorageConfigured(): void {
   if (isLocalEvidenceConfigured()) {
     assertEvidenceEncrypted(LOCAL_EVIDENCE_KEY_REF)
@@ -74,8 +116,8 @@ export function assertEvidenceStorageConfigured(): void {
   if (isS3Configured()) {
     // Fail closed: without a valid KEK the artifact could only be stored
     // unencrypted, and evidence holds PoC exploit code and captured secrets.
-    resolveEnvelopeKek(env.LYRASHIELD_EVIDENCE_KEK || undefined)
-    assertEvidenceEncrypted(EVIDENCE_KEY_REF)
+    resolveEvidenceKek(activeEvidenceKeyRef())
+    evidenceKekKeyring()
     return
   }
   throw new EvidenceStorageConfigurationError()
@@ -142,7 +184,8 @@ function buildKey(
 export async function uploadEncryptedArtifact(
   input: UploadEncryptedArtifactInput
 ): Promise<UploadEncryptedArtifactResult> {
-  if (input.encryptionKeyRef !== undefined && input.encryptionKeyRef !== EVIDENCE_KEY_REF) {
+  const activeKeyRef = activeEvidenceKeyRef()
+  if (input.encryptionKeyRef !== undefined && input.encryptionKeyRef !== activeKeyRef) {
     throw new Error("encryptionKeyRef is internal-only")
   }
   const {
@@ -153,7 +196,7 @@ export async function uploadEncryptedArtifact(
     namespace,
     artifactId = randomUUID(),
     contentType = "application/octet-stream",
-    encryptionKeyRef = EVIDENCE_KEY_REF,
+    encryptionKeyRef = activeKeyRef,
   } = input
 
   const payload = toBuffer(content)
@@ -179,7 +222,7 @@ export async function uploadEncryptedArtifact(
 
   const client = getS3Client()
   assertEvidenceEncrypted(encryptionKeyRef)
-  const kek = resolveEnvelopeKek(env.LYRASHIELD_EVIDENCE_KEK || undefined)
+  const kek = resolveEvidenceKek(encryptionKeyRef)
 
   // Envelope-encrypt before the object leaves this process: the bucket only
   // ever receives ciphertext sealed under a per-object data key, wrapped by
@@ -280,9 +323,10 @@ export async function readEncryptedArtifact(
     throw new EvidenceEnvelopeError("Evidence object is not envelope-encrypted")
   }
 
-  const kek = resolveEnvelopeKek(env.LYRASHIELD_EVIDENCE_KEK || undefined)
+  const envelopeKeyRef = readEnvelopeKeyRef(body)
+  const kek = resolveEvidenceKek(envelopeKeyRef)
   const { plaintext, keyRef } = openEnvelope(body, kek)
-  if (keyRef !== EVIDENCE_KEY_REF) {
+  if (keyRef !== envelopeKeyRef) {
     throw new EvidenceEnvelopeError("Evidence envelope key reference is invalid")
   }
   return { content: plaintext, checksum: computeChecksum(plaintext), legacy: false }

@@ -314,34 +314,36 @@ export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidR
 
   // If past cap → EXPIRED amount=0
   if (isExpired) {
-    const conversion = await prisma.conversion.create({
-      data: {
-        externalId,
-        idempotencyKey,
-        subscriptionId,
-        affiliateId,
-        grossAmount: new Prisma.Decimal(grossAmount),
-        taxAmount: new Prisma.Decimal(taxAmount),
-        commissionableAmount: new Prisma.Decimal(0),
-        currency,
-        method: attributionMethod,
-        promoCode: promoCode ?? null,
-        subid: subid ?? null,
-        occurredAt: new Date(),
-      },
-    })
-
-    const commission = await prisma.commission.create({
-      data: {
-        conversionId: conversion.id,
-        affiliateId,
-        rateBps: 0,
-        amount: new Prisma.Decimal(0),
-        currency,
-        status: "EXPIRED",
-        earnedAt: new Date(),
-        availableAt: null,
-      },
+    const { conversion, commission } = await prisma.$transaction(async (tx) => {
+      const conversion = await tx.conversion.create({
+        data: {
+          externalId,
+          idempotencyKey,
+          subscriptionId,
+          affiliateId,
+          grossAmount: new Prisma.Decimal(grossAmount),
+          taxAmount: new Prisma.Decimal(taxAmount),
+          commissionableAmount: new Prisma.Decimal(0),
+          currency,
+          method: attributionMethod,
+          promoCode: promoCode ?? null,
+          subid: subid ?? null,
+          occurredAt: new Date(),
+        },
+      })
+      const commission = await tx.commission.create({
+        data: {
+          conversionId: conversion.id,
+          affiliateId,
+          rateBps: 0,
+          amount: new Prisma.Decimal(0),
+          currency,
+          status: "EXPIRED",
+          earnedAt: new Date(),
+          availableAt: null,
+        },
+      })
+      return { conversion, commission }
     })
 
     logger.info("Commission: expired (past cap)", {
@@ -418,34 +420,36 @@ export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidR
   const now = new Date()
   const availableAt = new Date(now.getTime() + holdDays * 24 * 60 * 60 * 1000)
 
-  const conversion = await prisma.conversion.create({
-    data: {
-      externalId,
-      idempotencyKey,
-      subscriptionId,
-      affiliateId,
-      grossAmount: gross,
-      taxAmount: new Prisma.Decimal(taxAmount),
-      commissionableAmount: commissionableBase,
-      currency,
-      method: attributionMethod,
-      promoCode: promoCode ?? null,
-      subid: subid ?? null,
-      occurredAt: now,
-    },
-  })
-
-  const commission = await prisma.commission.create({
-    data: {
-      conversionId: conversion.id,
-      affiliateId,
-      rateBps,
-      amount: commissionAmount,
-      currency,
-      status: "PENDING",
-      earnedAt: now,
-      availableAt,
-    },
+  const { conversion, commission } = await prisma.$transaction(async (tx) => {
+    const conversion = await tx.conversion.create({
+      data: {
+        externalId,
+        idempotencyKey,
+        subscriptionId,
+        affiliateId,
+        grossAmount: gross,
+        taxAmount: new Prisma.Decimal(taxAmount),
+        commissionableAmount: commissionableBase,
+        currency,
+        method: attributionMethod,
+        promoCode: promoCode ?? null,
+        subid: subid ?? null,
+        occurredAt: now,
+      },
+    })
+    const commission = await tx.commission.create({
+      data: {
+        conversionId: conversion.id,
+        affiliateId,
+        rateBps,
+        amount: commissionAmount,
+        currency,
+        status: "PENDING",
+        earnedAt: now,
+        availableAt,
+      },
+    })
+    return { conversion, commission }
   })
 
   logger.info("Commission created", {

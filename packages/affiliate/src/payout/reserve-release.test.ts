@@ -45,6 +45,10 @@ const { FakeDecimal, models, runTransaction } = vi.hoisted(() => {
     equals(other: { toString: () => string }) {
       return Math.abs(this.n - Number.parseFloat(String(other))) < 1e-9
     }
+    toDecimalPlaces(places: number) {
+      const scale = 10 ** places
+      return new FakeDecimal(Math.round(this.n * scale) / scale)
+    }
   }
 
   const models = {
@@ -72,7 +76,7 @@ const { FakeDecimal, models, runTransaction } = vi.hoisted(() => {
 
 vi.mock("@lyrashield/db", () => {
   return {
-    Prisma: { Decimal: FakeDecimal },
+    Prisma: { Decimal: Object.assign(FakeDecimal, { ROUND_HALF_UP: 4 }) },
     prisma: {
       ...models,
       $transaction: vi.fn(runTransaction),
@@ -202,5 +206,20 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
     const legCalls = (prisma.commission.update as unknown as ReturnType<typeof vi.fn>).mock.calls
       .length
     expect(updCalls + legCalls).toBe(1)
+  })
+
+  it("rounds reserve-release legs to provider minor units", async () => {
+    vi.mocked(prisma.commission.findMany).mockResolvedValue([
+      fakeCommission({ id: "c4", amount: "100.1234", paidAmount: "75.0000" }),
+    ])
+
+    const result = await releaseReserveForAffiliate("aff-2")
+
+    expect(result.totalAmount.toString()).toBe("25.12")
+    expect(prisma.payoutItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ amount: expect.objectContaining({}) }),
+    })
+    const amount = vi.mocked(prisma.payoutItem.create).mock.calls[0]?.[0].data.amount
+    expect(amount.toString()).toBe("25.12")
   })
 })

@@ -1,5 +1,4 @@
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { startTrial } from "@lyrashield/billing"
@@ -39,33 +38,7 @@ export async function POST(request: Request) {
     // Verify the caller has billing.manage on this workspace
     const { session } = await requirePermission(workspaceId, PERMISSIONS.billing.manage)
 
-    // Prevent trial abuse across workspaces: check if the user already has
-    // any workspace with a trial already started.
-    const memberships = await prisma.workspaceMember.findMany({
-      where: { userId: session.userId },
-      select: { workspaceId: true },
-    })
-    const workspaceIds = memberships.map((m) => m.workspaceId)
-
-    if (workspaceIds.length > 0) {
-      const existingTrial = await prisma.workspace.findFirst({
-        where: {
-          id: { in: workspaceIds },
-          trialStartedAt: { not: null },
-        },
-        select: { id: true, trialStartedAt: true },
-      })
-
-      if (existingTrial) {
-        return apiError(
-          "TRIAL_ALREADY_USED",
-          "You have already started a trial on another workspace. Upgrade to continue.",
-          409
-        )
-      }
-    }
-
-    const result = await startTrial(workspaceId)
+    const result = await startTrial(workspaceId, session.userId)
 
     logger.info("Trial start requested", {
       workspaceId,
@@ -75,8 +48,10 @@ export async function POST(request: Request) {
 
     if (!result.started) {
       return apiError(
-        "TRIAL_ALREADY_STARTED",
-        "A trial has already been started for this workspace.",
+        result.alreadyUsed ? "TRIAL_ALREADY_USED" : "TRIAL_ALREADY_STARTED",
+        result.alreadyUsed
+          ? "You have already started a trial on another workspace. Upgrade to continue."
+          : "A trial has already been started for this workspace.",
         409
       )
     }

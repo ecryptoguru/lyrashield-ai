@@ -71,6 +71,16 @@ describe("egress proxy", () => {
     expect((body.result as Record<string, unknown>).html).toContain("Example Domain")
   })
 
+  it("accepts a zero-byte body budget for header-only behavior probes", async () => {
+    const { status, body } = await fetchJson(`http://localhost:${proxy.port}/v1/fetch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ url: "https://example.com/", maxBytes: 0 }),
+    })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+  })
+
   it("returns a structured error for an unreachable target", async () => {
     const { status, body } = await fetchJson(`http://localhost:${proxy.port}/v1/fetch`, {
       method: "POST",

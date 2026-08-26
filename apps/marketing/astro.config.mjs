@@ -107,6 +107,7 @@ const siteUrl = configuredSiteUrl || "http://localhost:4321"
 const indexable =
   (process.env.PUBLIC_INDEXABLE || wranglerVar("PUBLIC_INDEXABLE") || "false") === "true"
 const xUrl = process.env.PUBLIC_X_URL || wranglerVar("PUBLIC_X_URL") || ""
+const buildRevision = process.env.LYRASHIELD_MARKETING_REVISION || process.env.GITHUB_SHA || "local"
 const configuredAppUrl = process.env.PUBLIC_APP_URL || wranglerVar("PUBLIC_APP_URL")
 const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL || wranglerVar("PUBLIC_SCANNER_URL")
 const turnstileSiteKey =
@@ -249,6 +250,7 @@ export default defineConfig({
     define: {
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
       __MARKETING_X_URL__: JSON.stringify(xUrl),
+      __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),
     },
   },
 })

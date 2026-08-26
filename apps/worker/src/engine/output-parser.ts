@@ -52,6 +52,7 @@ export interface EngineVulnerability {
 }
 
 export interface EngineRunRecord {
+  schema_version?: string
   run_id: string
   run_name: string | null
   start_time: string
@@ -760,6 +761,9 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
         : undefined
 
     const runRecord: EngineRunRecord = {
+      ...(boundedString(record.schema_version)
+        ? { schema_version: boundedString(record.schema_version) }
+        : {}),
       run_id: runId,
       run_name: boundedString(record.run_name) ?? null,
       start_time: boundedString(record.start_time) ?? "",

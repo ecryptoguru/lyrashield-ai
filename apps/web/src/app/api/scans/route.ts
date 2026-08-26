@@ -1,5 +1,12 @@
 import { createHash } from "crypto"
-import { prisma, createScan, listScans, updateScanStatus, type ScanListItem } from "@lyrashield/db"
+import {
+  prisma,
+  createScan,
+  listScans,
+  updateScanStatus,
+  WorkspaceScanConcurrencyLimitError,
+  type ScanListItem,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
@@ -342,6 +349,13 @@ export async function POST(request: Request) {
       201
     )
   } catch (error) {
+    if (error instanceof WorkspaceScanConcurrencyLimitError) {
+      return apiError(
+        "SCAN_CONCURRENCY_LIMIT",
+        `This workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} reviews running. Wait for one to finish before starting another.`,
+        409
+      )
+    }
     if (
       (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
       (error instanceof Error && error.message === "Target already has an active scan")

@@ -165,6 +165,21 @@ describe("marketing SEO metadata", () => {
     expect(middleware).toContain("status: 301")
   })
 
+  it("binds the live Cloudflare smoke check to the exact marketing build revision", () => {
+    const config = source("../../astro.config.mjs")
+    const seoHead = source("../components/SeoHead.astro")
+    const workflow = source("../../../../.github/workflows/ci.yml")
+
+    expect(config).toContain("process.env.LYRASHIELD_MARKETING_REVISION || process.env.GITHUB_SHA")
+    expect(config).toContain("__MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision)")
+    expect(seoHead).toContain(
+      '<meta name="lyrashield-build-revision" content={__MARKETING_BUILD_REVISION__} />'
+    )
+    expect(workflow).toContain("LYRASHIELD_MARKETING_REVISION: ${{ github.sha }}")
+    expect(workflow).toContain("Generated marketing artifact serves revision ${expected}")
+    expect(workflow).toContain('if [ "$live_revision" = "$GITHUB_SHA" ]; then')
+  })
+
   it("captures privacy-bounded PostHog page lifecycle events without query or fragment data", () => {
     const base = source("../layouts/Base.astro")
 

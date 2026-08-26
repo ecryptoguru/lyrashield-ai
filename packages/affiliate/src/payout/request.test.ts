@@ -15,6 +15,10 @@ const { FakeDecimal, models } = vi.hoisted(() => {
     div(other: { toString(): string }) {
       return new FakeDecimal(this.value / Number(other.toString()))
     }
+    toDecimalPlaces(places: number) {
+      const scale = 10 ** places
+      return new FakeDecimal(Math.round(this.value * scale) / scale)
+    }
     toString() {
       return this.value.toFixed(4)
     }
@@ -29,7 +33,7 @@ const { FakeDecimal, models } = vi.hoisted(() => {
 })
 
 vi.mock("@lyrashield/db", () => ({
-  Prisma: { Decimal: FakeDecimal },
+  Prisma: { Decimal: Object.assign(FakeDecimal, { ROUND_HALF_UP: 4 }) },
   prisma: {
     ...models,
     $transaction: vi.fn((callback) => callback(models)),
@@ -117,5 +121,16 @@ describe("requestPayout provider ambiguity", () => {
 
     expect(result).toEqual({ success: false, error: "RazorpayX payouts require INR commissions" })
     expect(prisma.commission.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("rounds each payout leg to paise before provider submission", async () => {
+    vi.mocked(prisma.commission.findMany).mockResolvedValue([
+      { id: "commission-1", amount: new FakeDecimal("125.1234"), currency: "INR" },
+    ])
+    const sendFn = vi.fn().mockResolvedValue({ success: false, pending: true })
+
+    await requestPayout({ affiliateId: "affiliate-1", provider: "razorpayx", sendFn })
+
+    expect(sendFn).toHaveBeenCalledWith("payout-1", "125.1200", "INR", { type: "bank" })
   })
 })

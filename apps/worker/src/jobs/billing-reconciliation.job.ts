@@ -4,8 +4,8 @@
  * Daily BullMQ job that:
  * 1. Pulls recent Polar orders/subscriptions and Razorpay payments
  * 2. Compares against WebhookEvent rows in the database
- * 3. Replays missed events (webhooks that were not received or processed)
- * 4. Alerts on drift (events in the provider but not in the DB, or vice versa)
+ * 3. Re-enqueues locally persisted webhook tracks that are safe to retry
+ * 4. Alerts on provider drift without synthesizing unverified webhook payloads
  *
  * This is a safety net — webhooks should handle 99% of events, but this
  * job catches the ones that fall through the cracks.
@@ -21,7 +21,7 @@ export interface ReconciliationResult {
   polarChecked: number
   /** Number of Razorpay events checked. */
   razorpayChecked: number
-  /** Number of missed events replayed. */
+  /** Legacy metric retained for compatibility; provider-only rows are never synthesized. */
   replayed: number
   /** Number of drift alerts raised. */
   driftAlerts: number
@@ -148,16 +148,16 @@ async function reconcilePolar(since: Date, result: ReconciliationResult): Promis
         result.polarChecked++
 
         // Check if we have a WebhookEvent for this order
-        const existing = await prisma.webhookEvent.findUnique({
+        const existing = await prisma.webhookEvent.findFirst({
           where: {
-            provider_externalId: { provider: "polar", externalId: order.id },
+            provider: "polar",
+            eventType: "order.paid",
+            payload: { path: ["data", "id"], equals: order.id },
           },
           select: { id: true, processed: true, eventType: true, payload: true },
         })
 
         if (!existing) {
-          // A-M06: Missed event — attempt to replay it by constructing a
-          // synthetic webhook event and processing it.
           result.driftAlerts++
           result.alerts.push({
             provider: "polar",
@@ -165,23 +165,6 @@ async function reconcilePolar(since: Date, result: ReconciliationResult): Promis
             type: "order.paid",
             message: "Polar order not found in WebhookEvent table — webhook may have been missed",
           })
-
-          // Attempt replay: insert the event and mark for processing
-          try {
-            await prisma.webhookEvent.create({
-              data: {
-                provider: "polar",
-                externalId: order.id,
-                eventType: "order.paid",
-                payload: { id: order.id, replayed: true },
-                processed: false,
-              },
-            })
-            result.replayed++
-            logger.info("Replayed missed Polar event", { externalId: order.id })
-          } catch {
-            // P2002 — race with another reconciler, ignore
-          }
         } else if (!existing.processed) {
           // A-M06: Unprocessed event — flag for reprocessing
           result.driftAlerts++
@@ -251,9 +234,14 @@ async function reconcileRazorpay(_since: Date, result: ReconciliationResult): Pr
 
         if (payment.status !== "captured") continue
 
-        const existing = await prisma.webhookEvent.findUnique({
+        const existing = await prisma.webhookEvent.findFirst({
           where: {
-            provider_externalId: { provider: "razorpay", externalId: payment.id },
+            provider: "razorpay",
+            eventType: "payment.captured",
+            payload: {
+              path: ["payload", "payment", "entity", "id"],
+              equals: payment.id,
+            },
           },
           select: { id: true, processed: true },
         })

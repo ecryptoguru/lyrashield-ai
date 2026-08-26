@@ -147,6 +147,12 @@ describe("platform admin Better Auth TOTP hooks", () => {
     })
   })
 
+  it("revokes existing sessions after a password reset", () => {
+    expect(captured.options?.emailAndPassword).toMatchObject({
+      revokeSessionsOnPasswordReset: true,
+    })
+  })
+
   it("limits direct TOTP endpoint attempts by resolved user and authoritative IP", async () => {
     await hooks().before(context())
 

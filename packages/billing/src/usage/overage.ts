@@ -12,7 +12,7 @@
  * All money is in integer cents (Decimal-safe, never Float).
  */
 
-import { prisma } from "@lyrashield/db"
+import { withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { STANDARD_OVERAGE_PER_MINUTE_USD } from "@lyrashield/pricing"
 
@@ -29,6 +29,11 @@ export interface DebitOverageResult {
 
 /** Overage rate per minute in cents (from $0.15). */
 const OVERAGE_PER_MINUTE_CENTS = Math.round(STANDARD_OVERAGE_PER_MINUTE_USD * 100)
+const MAX_TRANSACTION_ATTEMPTS = 3
+
+function hasPrismaCode(error: unknown, code: string): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === code)
+}
 
 /**
  * Debit overage minutes for a workspace.
@@ -51,122 +56,93 @@ export async function debitOverage(
     return { debited: false, minutes: 0, estimatedCostCents: 0, reason: "no_minutes" }
   }
 
-  const billingAccount = await prisma.billingAccount.findUnique({
-    where: { workspaceId },
-    select: {
-      currentPlan: true,
-      spendLimitCents: true,
-      currentPeriodStart: true,
-    },
-  })
-
-  // Only Team plan can use overage
-  if (!billingAccount || billingAccount.currentPlan !== "TEAM") {
-    return {
-      debited: false,
-      minutes: 0,
-      estimatedCostCents: 0,
-      reason: "overage_not_available",
-    }
-  }
-
-  // Spend limit must be set (opt-in)
-  if (!billingAccount.spendLimitCents || billingAccount.spendLimitCents <= 0) {
-    return {
-      debited: false,
-      minutes: 0,
-      estimatedCostCents: 0,
-      reason: "no_spend_limit",
-    }
-  }
-
-  // A-M03: Use a transaction with serializable isolation to prevent the
-  // TOCTOU race where concurrent ticks both pass the spend-limit check.
-  // The $transaction wraps the read + insert so only one tick at a time
-  // can check-and-debit against the spend limit.
-  const cycleStart = billingAccount.currentPeriodStart ?? new Date(0)
   const idempotencyKey = `${workspaceId}:${scanId}:${phase}:overage`
+  let debitResult: { minutes: number; replayed: boolean } | null = null
+  for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
+    try {
+      debitResult = await withWorkspaceRLS(
+        workspaceId,
+        async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
+          const existing = await tx.usageRecord.findUnique({
+            where: { idempotencyKey },
+            select: { id: true, quantity: true },
+          })
+          if (existing) return { minutes: existing.quantity, replayed: true }
 
-  const existing = await prisma.usageRecord.findUnique({
-    where: { idempotencyKey },
-    select: { id: true },
-  })
-  if (existing) {
-    return { debited: false, minutes: 0, estimatedCostCents: 0, reason: "idempotent_replay" }
-  }
+          const billingAccount = await tx.billingAccount.findUnique({
+            where: { workspaceId },
+            select: { currentPlan: true, spendLimitCents: true, currentPeriodStart: true },
+          })
+          if (!billingAccount || billingAccount.currentPlan !== "TEAM")
+            throw new Error("overage_not_available")
+          if (!billingAccount.spendLimitCents || billingAccount.spendLimitCents <= 0)
+            throw new Error("no_spend_limit")
 
-  try {
-    await prisma.$transaction(async (tx) => {
-      // Re-read overage records inside the transaction for consistent reads
-      const overageRecords = await tx.usageRecord.findMany({
-        where: {
-          workspaceId,
-          kind: "overage_minutes",
-          deletedAt: null,
-          cycleStart: { gte: cycleStart },
+          const cycleStart = billingAccount.currentPeriodStart ?? new Date(0)
+          const overageRecords = await tx.usageRecord.findMany({
+            where: {
+              workspaceId,
+              kind: "overage_minutes",
+              deletedAt: null,
+              cycleStart: { gte: cycleStart },
+            },
+            select: { quantity: true },
+          })
+          const currentOverageMinutes = overageRecords.reduce((sum, r) => sum + r.quantity, 0)
+          const remainingBudgetCents =
+            billingAccount.spendLimitCents - currentOverageMinutes * OVERAGE_PER_MINUTE_CENTS
+          const allowedMinutes = Math.min(
+            minutes,
+            Math.floor(remainingBudgetCents / OVERAGE_PER_MINUTE_CENTS)
+          )
+          if (allowedMinutes <= 0) throw new Error("spend_limit_reached")
+
+          await tx.usageRecord.create({
+            data: {
+              workspaceId,
+              kind: "overage_minutes",
+              quantity: allowedMinutes,
+              idempotencyKey,
+              cycleStart: billingAccount.currentPeriodStart ?? null,
+              metadata: {
+                scanId,
+                phase,
+                costCents: allowedMinutes * OVERAGE_PER_MINUTE_CENTS,
+                rateCentsPerMinute: OVERAGE_PER_MINUTE_CENTS,
+              },
+            },
+          })
+          return { minutes: allowedMinutes, replayed: false }
         },
-        select: { quantity: true },
-      })
-      const currentOverageMinutes = overageRecords.reduce((sum, r) => sum + r.quantity, 0)
-      const currentOverageCostCents = currentOverageMinutes * OVERAGE_PER_MINUTE_CENTS
-
-      let debitMinutes = minutes
-      const requestedCostCents = debitMinutes * OVERAGE_PER_MINUTE_CENTS
-      const projectedCostCents = currentOverageCostCents + requestedCostCents
-
-      const spendLimit = billingAccount.spendLimitCents!
-      if (projectedCostCents > spendLimit) {
-        const remainingBudgetCents = spendLimit - currentOverageCostCents
-        const allowedMinutes = Math.floor(remainingBudgetCents / OVERAGE_PER_MINUTE_CENTS)
-        if (allowedMinutes <= 0) {
-          throw new Error("spend_limit_reached")
-        }
-        debitMinutes = allowedMinutes
+        { isolationLevel: "Serializable" }
+      )
+      break
+    } catch (error) {
+      if (hasPrismaCode(error, "P2034") && attempt < MAX_TRANSACTION_ATTEMPTS) continue
+      if (hasPrismaCode(error, "P2002"))
+        return { debited: false, minutes: 0, estimatedCostCents: 0, reason: "idempotent_replay" }
+      const reason = error instanceof Error ? error.message : ""
+      if (["overage_not_available", "no_spend_limit", "spend_limit_reached"].includes(reason)) {
+        return { debited: false, minutes: 0, estimatedCostCents: 0, reason }
       }
-
-      await tx.usageRecord.create({
-        data: {
-          workspaceId,
-          kind: "overage_minutes",
-          quantity: debitMinutes,
-          idempotencyKey,
-          cycleStart: billingAccount.currentPeriodStart ?? null,
-          metadata: {
-            scanId,
-            phase,
-            costCents: debitMinutes * OVERAGE_PER_MINUTE_CENTS,
-            rateCentsPerMinute: OVERAGE_PER_MINUTE_CENTS,
-          },
-        },
-      })
-
-      // Update minutes for the return value
-      minutes = debitMinutes
-    })
-  } catch (error) {
-    if (error instanceof Error && error.message === "spend_limit_reached") {
-      return { debited: false, minutes: 0, estimatedCostCents: 0, reason: "spend_limit_reached" }
+      throw error
     }
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code: string }).code === "P2002"
-    ) {
-      return { debited: false, minutes: 0, estimatedCostCents: 0, reason: "idempotent_replay" }
-    }
-    throw error
   }
+
+  if (!debitResult) throw new Error("overage_transaction_retry_exhausted")
+  const debitedMinutes = debitResult.minutes
 
   logger.info("Debited overage minutes", {
     workspaceId,
-    minutes,
-    costCents: minutes * OVERAGE_PER_MINUTE_CENTS,
+    minutes: debitedMinutes,
+    costCents: debitedMinutes * OVERAGE_PER_MINUTE_CENTS,
   })
 
   return {
     debited: true,
-    minutes,
-    estimatedCostCents: minutes * OVERAGE_PER_MINUTE_CENTS,
+    minutes: debitedMinutes,
+    estimatedCostCents: debitedMinutes * OVERAGE_PER_MINUTE_CENTS,
+    ...(debitResult.replayed ? { reason: "idempotent_replay" } : {}),
   }
 }

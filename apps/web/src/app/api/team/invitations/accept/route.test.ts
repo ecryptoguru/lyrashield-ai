@@ -9,14 +9,14 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 const systemPrismaMocks = {
+  $transaction: vi.fn(),
   invitation: {
     findUnique: vi.fn(),
     updateMany: vi.fn(),
   },
   workspaceMember: {
     findUnique: vi.fn(),
-    update: vi.fn(),
-    create: vi.fn(),
+    upsert: vi.fn(),
   },
 }
 
@@ -59,9 +59,10 @@ describe("POST /api/team/invitations/accept", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGetSession.mockResolvedValue(SESSION as never)
+    systemPrismaMocks.$transaction.mockImplementation((callback) => callback(systemPrismaMocks))
     systemPrismaMocks.invitation.updateMany.mockResolvedValue({ count: 1 } as never)
     systemPrismaMocks.workspaceMember.findUnique.mockResolvedValue(null as never)
-    systemPrismaMocks.workspaceMember.create.mockResolvedValue({ id: "member-1" } as never)
+    systemPrismaMocks.workspaceMember.upsert.mockResolvedValue({ id: "member-1" } as never)
   })
 
   it("accepts a pending invitation for the matching account", async () => {
@@ -83,9 +84,9 @@ describe("POST /api/team/invitations/accept", () => {
         data: expect.objectContaining({ status: "ACCEPTED" }),
       })
     )
-    expect(systemPrismaMocks.workspaceMember.create).toHaveBeenCalledWith(
+    expect(systemPrismaMocks.workspaceMember.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
+        create: expect.objectContaining({
           workspaceId: "ws-1",
           userId: "user-1",
           status: "active",
@@ -121,7 +122,7 @@ describe("POST /api/team/invitations/accept", () => {
     )
 
     expect(response.status).toBe(404)
-    expect(systemPrismaMocks.workspaceMember.create).not.toHaveBeenCalled()
+    expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
   })
 
   it("410s for an expired invitation", async () => {
@@ -171,13 +172,30 @@ describe("POST /api/team/invitations/accept", () => {
     )
 
     expect(response.status).toBe(200)
-    expect(systemPrismaMocks.workspaceMember.update).toHaveBeenCalledWith(
+    expect(systemPrismaMocks.workspaceMember.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "member-existing" },
-        data: expect.objectContaining({ status: "active", role: "MEMBER" }),
+        where: {
+          workspaceId_userId: { workspaceId: "ws-1", userId: "user-1" },
+        },
+        update: expect.objectContaining({ status: "active", role: "MEMBER" }),
       })
     )
-    expect(systemPrismaMocks.workspaceMember.create).not.toHaveBeenCalled()
+  })
+
+  it("does not grant membership when the invitation consume loses a race", async () => {
+    systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)
+    systemPrismaMocks.invitation.updateMany.mockResolvedValue({ count: 0 } as never)
+    systemPrismaMocks.workspaceMember.findUnique.mockResolvedValue(null as never)
+
+    const response = await POST(
+      new Request("http://localhost/api/team/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token: "tok-1" }),
+      })
+    )
+
+    expect(response.status).toBe(409)
+    expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
   })
 })
 

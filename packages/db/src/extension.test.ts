@@ -209,8 +209,8 @@ describe("Prisma Extension — request-scoped context isolation", () => {
 })
 
 describe("Prisma Extension — model set correctness (matches schema columns)", () => {
-  it("soft-delete set contains only models with a deletedAt column (19)", () => {
-    expect(SOFT_DELETE_MODELS.size).toBe(19)
+  it("soft-delete set contains only models with a deletedAt column (20)", () => {
+    expect(SOFT_DELETE_MODELS.size).toBe(20)
     for (const m of [
       "WorkspaceMember",
       "CredentialSet",
@@ -224,8 +224,8 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     expect(SOFT_DELETE_MODELS.has("ScanEvent")).toBe(true)
   })
 
-  it("workspace-scoped set contains only auto-scopable models with workspaceId (29)", () => {
-    expect(WORKSPACE_SCOPED_MODELS.size).toBe(29)
+  it("workspace-scoped set contains only auto-scopable models with workspaceId (30)", () => {
+    expect(WORKSPACE_SCOPED_MODELS.size).toBe(30)
     for (const m of [
       "ScanEvent",
       "Evidence",
@@ -240,5 +240,6 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     }
     expect(WORKSPACE_SCOPED_MODELS.has("AuditLog")).toBe(true)
     expect(WORKSPACE_SCOPED_MODELS.has("AiSecurityScoreSnapshot")).toBe(true)
+    expect(WORKSPACE_SCOPED_MODELS.has("MinutePack")).toBe(true)
   })
 })

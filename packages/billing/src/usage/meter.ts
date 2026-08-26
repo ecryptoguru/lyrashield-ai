@@ -11,7 +11,7 @@
  * Deep/Custom scans consume minutes at 3× the standard rate (DEEP_SCAN_MULTIPLIER).
  */
 
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { DEEP_SCAN_MULTIPLIER } from "@lyrashield/pricing"
 import type { ScanMode } from "@lyrashield/types"
@@ -32,6 +32,8 @@ export interface RecordAgentMinutesResult {
   minutes: number
   /** The idempotency key used. */
   idempotencyKey: string
+  /** Incremental minutes not covered by the monthly pool or minute packs. */
+  overageMinutes: number
 }
 
 const MAX_TRANSACTION_ATTEMPTS = 3
@@ -44,6 +46,12 @@ function isSerializationConflict(error: unknown): boolean {
     "code" in error &&
     (error as { code: string }).code === "P2034"
   )
+}
+
+function recordedOverageMinutes(metadata: unknown): number {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return 0
+  const value = (metadata as Record<string, unknown>).overageMinutes
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0
 }
 
 /**
@@ -67,7 +75,7 @@ export async function recordAgentMinutes(
   const idempotencyKey = `${workspaceId}:${scanId}:${phase}`
 
   if (ms <= 0) {
-    return { created: false, minutes: 0, idempotencyKey }
+    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
   }
 
   // A-L06: Validate input bounds — reject oversized ms values.
@@ -75,7 +83,7 @@ export async function recordAgentMinutes(
   // larger values indicate a bug or abuse attempt.
   const MAX_TICK_MS = 60 * 60 * 1000 // 1 hour
   if (!Number.isFinite(ms) || ms > MAX_TICK_MS) {
-    return { created: false, minutes: 0, idempotencyKey }
+    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
   }
 
   // Wall-clock ms → integer minutes (ceiling, min 1)
@@ -87,7 +95,8 @@ export async function recordAgentMinutes(
 
   for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
     try {
-      return await prisma.$transaction(
+      return await withWorkspaceRLS(
+        workspaceId,
         async (tx) => {
           // Serialize all usage-record and pack-balance mutations for one
           // workspace. Serializable transactions can still abort after waiting
@@ -96,13 +105,18 @@ export async function recordAgentMinutes(
 
           const existing = await tx.usageRecord.findUnique({
             where: { idempotencyKey },
-            select: { id: true },
+            select: { id: true, metadata: true },
           })
           if (existing) {
-            return { created: false, minutes: 0, idempotencyKey }
+            return {
+              created: false,
+              minutes: 0,
+              idempotencyKey,
+              overageMinutes: recordedOverageMinutes(existing.metadata),
+            }
           }
 
-          await recordMinutesAndDebitIncrementalSpillover(tx, {
+          const overageMinutes = await recordMinutesAndDebitIncrementalSpillover(tx, {
             workspaceId,
             scanId,
             minutes,
@@ -114,7 +128,7 @@ export async function recordAgentMinutes(
             multiplier: isDeep ? DEEP_SCAN_MULTIPLIER : 1,
           })
 
-          return { created: true, minutes, idempotencyKey }
+          return { created: true, minutes, idempotencyKey, overageMinutes }
         },
         { isolationLevel: "Serializable" }
       )
@@ -137,7 +151,7 @@ export async function recordAgentMinutes(
         (error as { code: string }).code === "P2002"
       ) {
         logger.debug("Idempotent replay of recordAgentMinutes", { idempotencyKey })
-        return { created: false, minutes: 0, idempotencyKey }
+        return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
       }
       throw error
     }
@@ -166,7 +180,7 @@ async function recordMinutesAndDebitIncrementalSpillover(
     rawMinutes: number
     multiplier: number
   }
-): Promise<void> {
+): Promise<number> {
   const billingAccount = await tx.billingAccount.findUnique({
     where: { workspaceId: input.workspaceId },
     select: { currentPeriodStart: true },
@@ -196,6 +210,44 @@ async function recordMinutesAndDebitIncrementalSpillover(
       ])
     : [[], []]
 
+  const poolMinutes = grantRecords.reduce((sum, record) => sum + record.quantity, 0)
+  const priorConsumed = priorConsumeRecords.reduce((sum, record) => sum + record.quantity, 0)
+  const priorSpillover = Math.max(0, priorConsumed - poolMinutes)
+  const nextSpillover = Math.max(0, priorConsumed + input.minutes - poolMinutes)
+  const incrementalSpillover = nextSpillover - priorSpillover
+
+  let toDecrement = incrementalSpillover
+  if (toDecrement > 0) {
+    const packs = await tx.minutePack.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        deletedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        remainingMinutes: { gt: 0 },
+      },
+      orderBy: { purchasedAt: "asc" },
+      select: { id: true, remainingMinutes: true },
+    })
+
+    for (const pack of packs) {
+      if (toDecrement <= 0) break
+      const decrementAmount = Math.min(pack.remainingMinutes, toDecrement)
+      const result = await tx.minutePack.updateMany({
+        where: {
+          id: pack.id,
+          workspaceId: input.workspaceId,
+          deletedAt: null,
+          remainingMinutes: { gte: decrementAmount },
+        },
+        data: { remainingMinutes: { decrement: decrementAmount } },
+      })
+      if (result.count !== 1) {
+        throw new Error("minute_pack_balance_changed")
+      }
+      toDecrement -= decrementAmount
+    }
+  }
+
   await tx.usageRecord.create({
     data: {
       workspaceId: input.workspaceId,
@@ -209,46 +261,9 @@ async function recordMinutesAndDebitIncrementalSpillover(
         wallClockMs: input.wallClockMs,
         rawMinutes: input.rawMinutes,
         multiplier: input.multiplier,
+        overageMinutes: toDecrement,
       },
     },
   })
-
-  if (!cycleStart) return
-
-  const poolMinutes = grantRecords.reduce((sum, record) => sum + record.quantity, 0)
-  const priorConsumed = priorConsumeRecords.reduce((sum, record) => sum + record.quantity, 0)
-  const priorSpillover = Math.max(0, priorConsumed - poolMinutes)
-  const nextSpillover = Math.max(0, priorConsumed + input.minutes - poolMinutes)
-  const incrementalSpillover = nextSpillover - priorSpillover
-  if (incrementalSpillover <= 0) return
-
-  const packs = await tx.minutePack.findMany({
-    where: {
-      workspaceId: input.workspaceId,
-      deletedAt: null,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      remainingMinutes: { gt: 0 },
-    },
-    orderBy: { purchasedAt: "asc" },
-    select: { id: true, remainingMinutes: true },
-  })
-
-  let toDecrement = incrementalSpillover
-  for (const pack of packs) {
-    if (toDecrement <= 0) break
-    const decrementAmount = Math.min(pack.remainingMinutes, toDecrement)
-    const result = await tx.minutePack.updateMany({
-      where: {
-        id: pack.id,
-        workspaceId: input.workspaceId,
-        deletedAt: null,
-        remainingMinutes: { gte: decrementAmount },
-      },
-      data: { remainingMinutes: { decrement: decrementAmount } },
-    })
-    if (result.count !== 1) {
-      throw new Error("minute_pack_balance_changed")
-    }
-    toDecrement -= decrementAmount
-  }
+  return toDecrement
 }

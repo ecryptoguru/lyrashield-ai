@@ -389,6 +389,8 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
     let mut cmd = Command::new(engine_cmd);
     cmd.args(&args);
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.env_clear();
+    cmd.envs(crate::runtime::inherited_runtime_env());
     for (k, v) in &byok_env {
         cmd.env(k, v);
     }

@@ -411,4 +411,170 @@ describe("scanOpenApi", () => {
     expect(unsafeCalls).toHaveLength(0)
     expect(result.attemptedOperations).toHaveLength(0)
   })
+
+  it("inherits root security and does not probe protected operations", async () => {
+    const apiSpecUrl = "https://api.example.com/openapi.json"
+    const spec = {
+      openapi: "3.0.0",
+      security: [{ bearerAuth: [] }],
+      servers: [{ url: "https://api.example.com/" }],
+      paths: { "/private": { get: { responses: { "200": { description: "OK" } } } } },
+    }
+    const fetchFn = defaultFetch({ [apiSpecUrl]: makeSpecResponse(JSON.stringify(spec)) })
+
+    const result = await scanOpenApi({
+      targetUrl: "https://api.example.com",
+      apiSpecUrl,
+      profile: getUrlScanProfile("API", "STANDARD"),
+      fetchFn,
+      resolver: PUBLIC_RESOLVER,
+    })
+
+    expect(fetchFn).not.toHaveBeenCalledWith("https://api.example.com/private", expect.anything())
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "AUTHENTICATION_REQUIRED" })
+    )
+  })
+
+  it("honors an anonymous alternative in root security", async () => {
+    const apiSpecUrl = "https://api.example.com/openapi.json"
+    const spec = {
+      openapi: "3.0.0",
+      security: [{}, { bearerAuth: [] }],
+      servers: [{ url: "https://api.example.com/" }],
+      paths: { "/public": { get: { responses: { "200": { description: "OK" } } } } },
+    }
+    const fetchFn = defaultFetch({ [apiSpecUrl]: makeSpecResponse(JSON.stringify(spec)) })
+
+    await scanOpenApi({
+      targetUrl: "https://api.example.com",
+      apiSpecUrl,
+      profile: getUrlScanProfile("API", "STANDARD"),
+      fetchFn,
+      resolver: PUBLIC_RESOLVER,
+    })
+
+    expect(fetchFn).toHaveBeenCalledWith("https://api.example.com/public", expect.anything())
+  })
+
+  it("fails closed on malformed root security declarations", async () => {
+    const apiSpecUrl = "https://api.example.com/openapi.json"
+    const spec = {
+      openapi: "3.0.0",
+      security: "bearerAuth",
+      servers: [{ url: "https://api.example.com/" }],
+      paths: { "/private": { get: { responses: { "200": { description: "OK" } } } } },
+    }
+    const fetchFn = defaultFetch({ [apiSpecUrl]: makeSpecResponse(JSON.stringify(spec)) })
+
+    const result = await scanOpenApi({
+      targetUrl: "https://api.example.com",
+      apiSpecUrl,
+      profile: getUrlScanProfile("API", "STANDARD"),
+      fetchFn,
+      resolver: PUBLIC_RESOLVER,
+    })
+
+    expect(fetchFn).not.toHaveBeenCalledWith("https://api.example.com/private", expect.anything())
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "AUTHENTICATION_REQUIRED" })
+    )
+  })
+
+  it("applies path-level parameters before probing operations", async () => {
+    const apiSpecUrl = "https://api.example.com/openapi.json"
+    const spec = {
+      openapi: "3.0.0",
+      servers: [{ url: "https://api.example.com/" }],
+      paths: {
+        "/users/{id}": {
+          parameters: [{ name: "id", in: "path", required: true, example: 42 }],
+          get: { responses: { "200": { description: "OK" } } },
+        },
+      },
+    }
+    const fetchFn = defaultFetch({ [apiSpecUrl]: makeSpecResponse(JSON.stringify(spec)) })
+
+    const result = await scanOpenApi({
+      targetUrl: "https://api.example.com",
+      apiSpecUrl,
+      profile: getUrlScanProfile("API", "STANDARD"),
+      fetchFn,
+      resolver: PUBLIC_RESOLVER,
+    })
+
+    expect(result.attemptedOperations.map((operation) => operation.url)).toEqual([
+      "https://api.example.com/users/42",
+      "https://api.example.com/users/42",
+    ])
+  })
+
+  it("does not probe unresolved path templates from malformed parameter declarations", async () => {
+    const apiSpecUrl = "https://api.example.com/openapi.json"
+    const spec = {
+      openapi: "3.0.0",
+      servers: [{ url: "https://api.example.com/" }],
+      paths: {
+        "/users/{id}": {
+          parameters: { name: "id", in: "path", example: 42 },
+          get: { responses: { "200": { description: "OK" } } },
+        },
+      },
+    }
+    const fetchFn = defaultFetch({ [apiSpecUrl]: makeSpecResponse(JSON.stringify(spec)) })
+
+    const result = await scanOpenApi({
+      targetUrl: "https://api.example.com",
+      apiSpecUrl,
+      profile: getUrlScanProfile("API", "STANDARD"),
+      fetchFn,
+      resolver: PUBLIC_RESOLVER,
+    })
+
+    expect(fetchFn).not.toHaveBeenCalledWith(expect.stringContaining("%7Bid%7D"), expect.anything())
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "PARAMETER_VALUE_UNAVAILABLE" })
+    )
+  })
+
+  it("bounds recursive local references instead of overflowing the stack", async () => {
+    const apiSpecUrl = "https://api.example.com/openapi.json"
+    const spec = {
+      openapi: "3.0.0",
+      servers: [{ url: "https://api.example.com/" }],
+      paths: {
+        "/nodes": {
+          get: {
+            responses: {
+              "200": {
+                description: "OK",
+                content: {
+                  "application/json": { schema: { $ref: "#/components/schemas/Node" } },
+                },
+              },
+            },
+          },
+        },
+      },
+      components: {
+        schemas: {
+          Node: {
+            type: "object",
+            properties: { child: { $ref: "#/components/schemas/Node" } },
+          },
+        },
+      },
+    }
+    const fetchFn = defaultFetch({ [apiSpecUrl]: makeSpecResponse(JSON.stringify(spec)) })
+
+    const result = await scanOpenApi({
+      targetUrl: "https://api.example.com",
+      apiSpecUrl,
+      profile: getUrlScanProfile("API", "STANDARD"),
+      fetchFn,
+      resolver: PUBLIC_RESOLVER,
+    })
+
+    expect(result.attemptedOperations).toHaveLength(2)
+  })
 })

@@ -594,7 +594,7 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
   })
   if (!referrerWorkspace) return null
 
-  const [recipient] = await prisma.$transaction(async (tx) => {
+  const [recipient] = await getSystemPrisma().$transaction(async (tx) => {
     // Lock the attribution row so two concurrent scan-completion callbacks for
     // the same referred workspace serialize here rather than both reading
     // status=PENDING and racing. The usageRecord idempotencyKey upserts below

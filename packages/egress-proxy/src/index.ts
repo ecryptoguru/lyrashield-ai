@@ -10,7 +10,7 @@ const FetchRequestSchema = z
     url: z.string().url(),
     userAgent: z.string().optional(),
     timeoutMs: z.coerce.number().int().positive().optional(),
-    maxBytes: z.coerce.number().int().positive().optional(),
+    maxBytes: z.coerce.number().int().nonnegative().optional(),
   })
   .strict()
 

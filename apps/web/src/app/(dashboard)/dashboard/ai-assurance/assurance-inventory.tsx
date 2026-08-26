@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
+import { apiPost } from "@/lib/api-client"
 
 type ProfileValue = {
   systemName: string
@@ -112,18 +113,12 @@ export function AssuranceInventory({
     setPending("profile")
     setError(null)
     try {
-      const response = await fetch("/api/ai-assurance/profile", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ workspaceId, targetId, ...profileFromForm(form) }),
+      const body = await apiPost<{ profile: ProfileValue }>("/api/ai-assurance/profile", {
+        workspaceId,
+        targetId,
+        ...profileFromForm(form),
       })
-      const body = (await response.json()) as {
-        data?: { profile?: ProfileValue }
-        error?: { message?: string }
-      }
-      if (!response.ok || !body.data?.profile)
-        throw new Error(body.error?.message ?? "Profile save failed")
-      setProfile(body.data.profile)
+      setProfile(body.profile)
       setProfileOpen(false)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Profile save failed")
@@ -148,19 +143,13 @@ export function AssuranceInventory({
           reviewDate: threat.reviewDate || null,
         })),
       }
-      const response = await fetch("/api/ai-assurance/threat-model", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ workspaceId, targetId, ...content }),
+      const body = await apiPost<{ content: ThreatValue }>("/api/ai-assurance/threat-model", {
+        workspaceId,
+        targetId,
+        ...content,
       })
-      const body = (await response.json()) as {
-        data?: { content?: ThreatValue }
-        error?: { message?: string }
-      }
-      if (!response.ok || !body.data?.content)
-        throw new Error(body.error?.message ?? "Threat model save failed")
-      setThreatModel(body.data.content)
-      setThreats(body.data.content.threats)
+      setThreatModel(body.content)
+      setThreats(body.content.threats)
       setThreatOpen(false)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Threat model save failed")

@@ -5,6 +5,8 @@ const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
 
 vi.mock("@lyrashield/db", () => ({
   prisma: { $transaction: transactionMock },
+  withWorkspaceRLS: (_workspaceId: string, callback: unknown, options: unknown) =>
+    transactionMock(callback, options),
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -21,6 +23,7 @@ interface UsageRecordState {
   idempotencyKey: string
   cycleStart: Date | null
   deletedAt: Date | null
+  metadata?: Record<string, unknown>
 }
 
 interface PackState {
@@ -104,6 +107,7 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
           idempotencyKey: data.idempotencyKey,
           cycleStart: data.cycleStart,
           deletedAt: null,
+          metadata: data.metadata,
         })
         return {}
       }),
@@ -169,6 +173,19 @@ describe("recordAgentMinutes pack debits", () => {
     expect(packs.map((pack) => pack.remainingMinutes)).toEqual([0, 1])
   })
 
+  it("returns only the incremental minutes left uncovered after packs", async () => {
+    configureDatabase(4, [2])
+
+    const result = await recordAgentMinutes("ws_1", "scan_1", 3 * 60_000, {
+      phase: "tick_1",
+      cycleStart,
+      mode: "DEEP",
+    })
+
+    expect(result).toMatchObject({ created: true, minutes: 9, overageMinutes: 3 })
+    expect(packs[0]?.remainingMinutes).toBe(0)
+  })
+
   it("serializes concurrent ticks without over-debiting packs", async () => {
     configureDatabase(5, [20])
 
@@ -192,6 +209,24 @@ describe("recordAgentMinutes pack debits", () => {
 
     expect(results.map((result) => result.created).sort()).toEqual([false, true])
     expect(packs[0]?.remainingMinutes).toBe(17)
+    expect(updateManyMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("restores uncovered minutes on an idempotent replay after a crash", async () => {
+    configureDatabase(0, [1])
+
+    const first = await recordAgentMinutes("ws_1", "scan_1", 3 * 60_000, {
+      phase: "engine_run",
+      cycleStart,
+    })
+    const replay = await recordAgentMinutes("ws_1", "scan_1", 3 * 60_000, {
+      phase: "engine_run",
+      cycleStart,
+    })
+
+    expect(first.overageMinutes).toBe(2)
+    expect(replay).toMatchObject({ created: false, minutes: 0, overageMinutes: 2 })
+    expect(packs[0]?.remainingMinutes).toBe(0)
     expect(updateManyMock).toHaveBeenCalledTimes(1)
   })
 

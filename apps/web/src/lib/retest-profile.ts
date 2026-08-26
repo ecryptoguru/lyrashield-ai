@@ -1,4 +1,11 @@
-const DETERMINISTIC_SCANNERS = new Set(["sca", "secrets", "url", "agent_config"])
+const DETERMINISTIC_SCANNERS = new Set([
+  "sca",
+  "secrets",
+  "url",
+  "agent_config",
+  "ai_app_security",
+  "ml_supply_chain",
+])
 
 export function resolveRetestProfile(sourceMode: string, scannerSources: readonly string[]) {
   const deterministicSource =

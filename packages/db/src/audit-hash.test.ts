@@ -22,9 +22,9 @@ describe("audit-hash", () => {
   }
 
   describe("computeAuditHash", () => {
-    it("produces a 64-char hex string", () => {
+    it("produces a versioned SHA-256 hash", () => {
       const hash = computeAuditHash(baseEntry, null)
-      expect(hash).toMatch(/^[0-9a-f]{64}$/)
+      expect(hash).toMatch(/^v2:[0-9a-f]{64}$/)
     })
 
     it("produces different hashes for different prevHash values", () => {
@@ -44,6 +44,24 @@ describe("audit-hash", () => {
       const h2 = computeAuditHash(baseEntry, "abc")
       expect(h1).toBe(h2)
     })
+
+    it("binds nested metadata while ignoring object key order", () => {
+      const h1 = computeAuditHash(
+        { ...baseEntry, metadata: { nested: { first: 1, second: ["a", "b"] } } },
+        null
+      )
+      const reordered = computeAuditHash(
+        { ...baseEntry, metadata: { nested: { second: ["a", "b"], first: 1 } } },
+        null
+      )
+      const tampered = computeAuditHash(
+        { ...baseEntry, metadata: { nested: { first: 2, second: ["a", "b"] } } },
+        null
+      )
+
+      expect(reordered).toBe(h1)
+      expect(tampered).not.toBe(h1)
+    })
   })
 
   describe("verifyAuditChain", () => {
@@ -62,6 +80,13 @@ describe("audit-hash", () => {
       expect(verifyAuditChain([e1])).toBe(false)
     })
 
+    it("returns false when v2 nested metadata is tampered", () => {
+      const entry = { ...baseEntry, hash: "", prevHash: null as string | null }
+      entry.hash = computeAuditHash(entry, null)
+
+      expect(verifyAuditChain([{ ...entry, metadata: { key: "tampered" } }])).toBe(false)
+    })
+
     it("returns false when prevHash chain is broken", () => {
       const e1 = { ...baseEntry, hash: "", prevHash: null as string | null }
       e1.hash = computeAuditHash(e1, null)
@@ -74,6 +99,30 @@ describe("audit-hash", () => {
 
     it("returns true for empty chain", () => {
       expect(verifyAuditChain([])).toBe(true)
+    })
+
+    it("verifies legacy hashes already stored before v2", () => {
+      const legacy = {
+        ...baseEntry,
+        hash: "f0bee12981d0d204cf1038b18ba7cd793156b5daad4f1c54a8ad7884ccd59de3",
+        prevHash: null,
+      }
+
+      expect(verifyAuditChain([legacy])).toBe(true)
+    })
+
+    it("verifies a v2 entry appended to a legacy chain", () => {
+      const legacyHash = "f0bee12981d0d204cf1038b18ba7cd793156b5daad4f1c54a8ad7884ccd59de3"
+      const legacy = { ...baseEntry, hash: legacyHash, prevHash: null }
+      const current = {
+        ...baseEntry,
+        id: "test-id-2",
+        prevHash: legacyHash,
+        hash: "",
+      }
+      current.hash = computeAuditHash(current, legacyHash)
+
+      expect(verifyAuditChain([legacy, current])).toBe(true)
     })
   })
 })

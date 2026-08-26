@@ -233,7 +233,7 @@ describe("createScan", () => {
     const tx = {
       $executeRaw: vi.fn().mockResolvedValue(undefined),
       scan: {
-        count: vi.fn().mockResolvedValue(1),
+        count: vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(1),
         create: vi.fn(),
       },
     }
@@ -248,6 +248,30 @@ describe("createScan", () => {
       })
     ).rejects.toThrow("Target already has an active scan")
     expect(tx.$executeRaw).toHaveBeenCalled()
+    expect(tx.scan.create).not.toHaveBeenCalled()
+  })
+
+  it("enforces the workspace scan cap inside the creation transaction", async () => {
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
+      scan: {
+        count: vi.fn().mockResolvedValue(3),
+        create: vi.fn(),
+      },
+    }
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(tx))
+
+    await expect(
+      createScan({
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        createdById: "user-1",
+      })
+    ).rejects.toThrow("Workspace already has 3 active scans")
+    expect(
+      tx.$executeRaw.mock.calls.filter(([query]) => String(query).includes("pg_advisory_xact_lock"))
+    ).toHaveLength(2)
     expect(tx.scan.create).not.toHaveBeenCalled()
   })
 })

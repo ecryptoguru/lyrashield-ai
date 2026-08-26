@@ -257,6 +257,10 @@ const envSchema = z
     // Required (fail-closed) when S3 evidence storage is configured: each artifact
     // is sealed with a per-object data key that is itself encrypted under this KEK.
     LYRASHIELD_EVIDENCE_KEK: z.string().optional().or(z.literal("")),
+    // Optional rotation controls. The active ref labels new envelopes; the JSON
+    // keyring maps older refs to their retained base64 KEKs for read-only decrypt.
+    LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: z.string().optional().or(z.literal("")),
+    LYRASHIELD_EVIDENCE_KEK_KEYRING: z.string().optional().or(z.literal("")),
     // Local Compose-only encrypted evidence store. Production must use S3-compatible storage.
     LYRASHIELD_LOCAL_EVIDENCE_STORAGE: z.enum(["0", "1"]).optional().default("0"),
     LYRASHIELD_LOCAL_EVIDENCE_DIR: z.string().optional().or(z.literal("")),
