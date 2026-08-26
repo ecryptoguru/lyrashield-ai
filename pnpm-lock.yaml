@@ -704,6 +704,9 @@ importers:
       '@lyrashield/types':
         specifier: workspace:*
         version: link:../types
+      '@paralleldrive/cuid2':
+        specifier: ^3.3.0
+        version: 3.3.0
       '@prisma/adapter-pg':
         specifier: 7.9.1
         version: 7.9.1
@@ -2403,6 +2406,10 @@ packages:
 
   '@oxc-project/types@0.144.0':
     resolution: {integrity: sha512-nuhZIOLuI6TFQ32I/WnUx+SCPY7SdSKwgnFHydAuoS1+Z4BRcaP+RRJmGzl9lw+0OFF7UmaESf7KQRXaNLHypg==}
+
+  '@paralleldrive/cuid2@3.3.0':
+    resolution: {integrity: sha512-OqiFvSOF0dBSesELYY2CAMa4YINvlLpvKOz/rv6NeZEqiyttlHgv98Juwv4Ch+GrEV7IZ8jfI2VcEoYUjXXCjw==}
+    hasBin: true
 
   '@playwright/test@1.62.1':
     resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
@@ -4326,6 +4333,9 @@ packages:
   better-result@2.10.0:
     resolution: {integrity: sha512-oQhh0y1qo2/ZKdAAEvHZAqKKiHOFU5k/bW96fE2ScgQOVkJRiHwB+nOS1SgFsYqRlxMDWvefXi9Q3px7QvgNDw==}
 
+  bignumber.js@9.3.1:
+    resolution: {integrity: sha512-Ko0uX15oIUS7wJ3Rb30Fs6SkVbLmPBAKdlm7q9+ak9bbIeFf0MwuBsQV6z7+X768/cHsfg+WlysDWJcmthjsjQ==}
+
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
 
@@ -4847,6 +4857,9 @@ packages:
   env-paths@3.0.0:
     resolution: {integrity: sha512-dtJUTepzMW3Lm/NPxRf3wP4642UWhjL2sQxc+ym2YMj1m/H2zDNQOlezafzkHwn6sMstjHTwG6iQQsctDW/b1A==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  error-causes@3.0.2:
+    resolution: {integrity: sha512-i0B8zq1dHL6mM85FGoxaJnVtx6LD5nL2v0hlpGdntg5FOSyzQ46c9lmz5qx0xRS2+PWHGOHcYxGIBC5Le2dRMw==}
 
   error-stack-parser-es@1.0.5:
     resolution: {integrity: sha512-5qucVt2XcuGMcEGgWI7i+yZpmpByQ8J1lHhcL7PwqCwu9FPP3VUXzT4ltHe5i2z9dePwEHcDVOAfSnHsOlCXRA==}
@@ -9552,6 +9565,12 @@ snapshots:
 
   '@oxc-project/types@0.144.0': {}
 
+  '@paralleldrive/cuid2@3.3.0':
+    dependencies:
+      '@noble/hashes': 2.2.0
+      bignumber.js: 9.3.1
+      error-causes: 3.0.2
+
   '@playwright/test@1.62.1':
     dependencies:
       playwright: 1.62.1
@@ -11525,6 +11544,8 @@ snapshots:
 
   better-result@2.10.0: {}
 
+  bignumber.js@9.3.1: {}
+
   blake3-wasm@2.1.5: {}
 
   body-parser@2.3.0:
@@ -11982,6 +12003,8 @@ snapshots:
   entities@6.0.1: {}
 
   env-paths@3.0.0: {}
+
+  error-causes@3.0.2: {}
 
   error-stack-parser-es@1.0.5: {}
 

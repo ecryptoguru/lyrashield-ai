@@ -23,7 +23,12 @@ import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
 
 let warnedUnknownIp = false
 const READ_ONLY_AUTH_PATHS = new Set(["/api/auth/providers", "/api/auth/get-session"])
-const RATE_LIMIT_BYPASS_PATHS = new Set(["/api/health", "/api/ready", "/api/ready/scans"])
+const RATE_LIMIT_BYPASS_PATHS = new Set([
+  "/api/health",
+  "/api/ready",
+  "/api/ready/evidence",
+  "/api/ready/scans",
+])
 const BILLING_STAGING_PUBLIC_PATHS = new Set([
   "/staging/access",
   "/api/staging/access",

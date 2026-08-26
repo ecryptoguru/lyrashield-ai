@@ -327,6 +327,45 @@ describe("s3 envelope encryption", () => {
     }
   })
 
+  it("reads a v2 envelope after rolling active writes back to v1", async () => {
+    const v1Kek = Buffer.from(new Array(32).fill(3)).toString("base64")
+    const v2Kek = Buffer.from(new Array(32).fill(4)).toString("base64")
+    const plaintext = Buffer.from("retained evidence written during v2 overlap")
+    process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF = "envkeystore/lyrashield-evidence-kek/v2"
+    process.env.LYRASHIELD_EVIDENCE_KEK = v2Kek
+    process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING = JSON.stringify({
+      "envkeystore/lyrashield-evidence-kek/v1": v1Kek,
+    })
+    try {
+      vi.resetModules()
+      const v2Mod = await import("./index")
+      await v2Mod.uploadEncryptedArtifact({
+        workspaceId: "ws-1",
+        ownerId: "owner-1",
+        type: "proof",
+        content: plaintext,
+      })
+
+      process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF = "envkeystore/lyrashield-evidence-kek/v1"
+      process.env.LYRASHIELD_EVIDENCE_KEK = v1Kek
+      process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING = JSON.stringify({
+        "envkeystore/lyrashield-evidence-kek/v2": v2Kek,
+      })
+      vi.resetModules()
+      const rollbackMod = await import("./index")
+      const read = await rollbackMod.readEncryptedArtifact(
+        "s3://evidence-bucket/evidence/ws-1/owner-1/proof/x",
+        "ws-1"
+      )
+      expect(read.content.equals(plaintext)).toBe(true)
+      expect(read.encryptionKeyRef).toBe("envkeystore/lyrashield-evidence-kek/v2")
+    } finally {
+      process.env.LYRASHIELD_EVIDENCE_KEK = v1Kek
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING
+    }
+  })
+
   it("rejects legacy SSE-only objects", async () => {
     vi.resetModules()
     const mod = await import("./index")
@@ -416,6 +455,24 @@ describe("s3 envelope encryption", () => {
       expect(() => mod.assertEvidenceStorageConfigured()).toThrow("must differ")
     } finally {
       process.env.LYRASHIELD_EVIDENCE_KEK = Buffer.from(new Array(32).fill(3)).toString("base64")
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING
+    }
+  })
+
+  it("accepts a future KEK while v1 remains active for overlap and rollback", async () => {
+    process.env.LYRASHIELD_EVIDENCE_KEK = Buffer.from(new Array(32).fill(3)).toString("base64")
+    process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF = "envkeystore/lyrashield-evidence-kek/v1"
+    process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING = JSON.stringify({
+      "envkeystore/lyrashield-evidence-kek/v2": Buffer.from(new Array(32).fill(4)).toString(
+        "base64"
+      ),
+    })
+    try {
+      vi.resetModules()
+      const mod = await import("./index")
+      expect(() => mod.assertEvidenceStorageConfigured()).not.toThrow()
+    } finally {
       delete process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF
       delete process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING
     }

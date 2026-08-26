@@ -12,6 +12,12 @@ if grep -Rq 'LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE\|try-restart lyrashield-wor
   echo "Normal pin refresh still schedules a worker restart" >&2
   exit 1
 fi
+if grep -Eq 'egress-drain|planned-restart|handoffScanWorker' \
+  "$repo_root/apps/worker/src/index.ts" \
+  "$repo_root/packages/integrations/src/queue.ts"; then
+  echo "Worker still contains the obsolete pin-refresh restart handshake" >&2
+  exit 1
+fi
 
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM

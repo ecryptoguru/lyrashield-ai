@@ -1,15 +1,13 @@
 import { randomUUID } from "node:crypto"
 import { hostname } from "node:os"
-import { chmod, readFile, unlink, writeFile } from "node:fs/promises"
+import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import {
   registerScanWorker,
-  handoffScanWorker,
   unregisterScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
-  SCAN_WORKER_RESTART_GRACE_MS,
   WEBHOOK_TRACK_RETRY_QUEUE_NAME,
   type WebhookTrackRetryJobData,
 } from "@lyrashield/integrations"
@@ -32,6 +30,7 @@ import {
   type QueueReconciliationResult,
 } from "./queue-reconciliation"
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
+import { drainArtifactDeletionTasks } from "@lyrashield/evidence-storage"
 import { assertEngineTempRootReady } from "./engine/workspace-path"
 import { reapStaleScanResources } from "./engine/stale-resource-reaper"
 import { observeWorkerRun } from "./worker-lifecycle"
@@ -42,7 +41,6 @@ let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = nul
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let workerHeartbeatController: WorkerHeartbeatController | null = null
-let egressDrainTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
 let staleResourceReaperTimer: NodeJS.Timeout | null = null
 let billingJobsTimers: NodeJS.Timeout[] | null = null
@@ -51,10 +49,6 @@ let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
 const activeJobPath = "/tmp/lyrashield-worker-active"
-const plannedRestartPath = "/tmp/lyrashield-worker-planned-restart"
-const egressDrainRequestPath = "/tmp/lyrashield-worker-egress-drain-request"
-const egressDrainReadyPath = "/tmp/lyrashield-worker-egress-drain-ready"
-const egressDrainTokenPattern = /^[a-f0-9]{64}$/
 export const RECONCILIATION_INTERVAL_MS = 300_000
 export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
 export const MANAGED_REDIS_STALLED_INTERVAL_MS = 60_000
@@ -152,78 +146,6 @@ export async function clearWorkerActive(): Promise<void> {
   })
 }
 
-async function readOptionalFile(path: string): Promise<string | null> {
-  try {
-    // Caller passes only the fixed local handshake paths declared above.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    return (await readFile(path, "utf8")).trim()
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null
-    throw error
-  }
-}
-
-export async function acknowledgeEgressDrainRequest(
-  scanWorker: Pick<Worker, "pause">,
-  deactivateScanWorker: () => Promise<void>
-): Promise<boolean> {
-  const token = await readOptionalFile(egressDrainRequestPath)
-  if (token === null) return false
-  if (!egressDrainTokenPattern.test(token)) throw new Error("Invalid egress drain request token")
-  if ((await readOptionalFile(egressDrainReadyPath)) === token) return true
-
-  // BullMQ sets the local paused flag before waiting for all current jobs, so
-  // no new scan claim can race the matching acknowledgement written below.
-  let paused: Promise<void>
-  try {
-    paused = scanWorker.pause()
-  } catch (error) {
-    await deactivateScanWorker()
-    throw error
-  }
-  await deactivateScanWorker()
-  await paused
-  if ((await readOptionalFile(egressDrainRequestPath)) !== token) {
-    throw new Error("Egress drain request changed before acknowledgement")
-  }
-  await writeFile(egressDrainReadyPath, token, { mode: 0o600 })
-  await chmod(egressDrainReadyPath, 0o600)
-  return true
-}
-
-export async function deactivateScanWorkerForDrain(
-  heartbeatController: Pick<WorkerHeartbeatController, "stop">,
-  unregisterWorker: () => Promise<void>,
-  removeReadiness: () => Promise<void>
-): Promise<void> {
-  // stop() disables new completion/timer heartbeats synchronously, then waits
-  // for any registration already in flight before this worker is removed.
-  const heartbeatsStopped = heartbeatController.stop()
-  let readinessError: unknown
-  try {
-    await removeReadiness()
-  } catch (error) {
-    readinessError = error
-  }
-  await heartbeatsStopped
-  await unregisterWorker()
-  if (readinessError) throw readinessError
-}
-
-export async function failClosedAfterEgressDrainCancellation(
-  shutdownDrainedWorker: () => Promise<void>
-): Promise<boolean> {
-  if ((await readOptionalFile(egressDrainRequestPath)) !== null) return false
-  await unlink(egressDrainReadyPath).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") throw error
-  })
-  // pause() has already waited for every active scan. Exiting through the
-  // normal shutdown path lets systemd Restart=always create a fresh process
-  // whose BullMQ run promise is observed from its first loop onward.
-  await shutdownDrainedWorker()
-  return true
-}
-
 export async function settleScanWorkerForShutdown(
   closePromise: Promise<void> | null | undefined,
   timeoutMs = 25_000
@@ -266,41 +188,9 @@ export async function settleScanWorkerLifecycleForShutdown(
   return { workerClosed: closeWorker ? closed : true, heartbeatsStopped: stopped }
 }
 
-export async function finalizeScanWorkerRegistrationForShutdown(
-  plannedRestart: boolean,
-  heartbeatsStopped: boolean,
-  retainHandoff: () => Promise<void>,
-  unregisterWorker: () => Promise<void>
-): Promise<"handoff" | "unregistered" | "skipped"> {
-  // An unsettled heartbeat can still re-register this exact member. Do not
-  // race it with a handoff or unregister mutation; let its bounded TTL expire.
-  if (!heartbeatsStopped) return "skipped"
-  if (plannedRestart) {
-    await retainHandoff()
-    return "handoff"
-  }
-  await unregisterWorker()
-  return "unregistered"
-}
-
-async function consumePlannedRestart(): Promise<boolean> {
-  try {
-    await unlink(plannedRestartPath)
-    return true
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
-    logger.warn("Could not consume planned worker restart marker", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return false
-  }
-}
-
 async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (shuttingDown) return
   shuttingDown = true
-  const plannedRestart = await consumePlannedRestart()
-
   logger.info("Worker shutting down", { signal })
 
   // Stop periodic work first so the worker cannot be handed new jobs while
@@ -309,10 +199,6 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer)
     heartbeatTimer = null
-  }
-  if (egressDrainTimer) {
-    clearInterval(egressDrainTimer)
-    egressDrainTimer = null
   }
   if (reconciliationTimer) {
     clearInterval(reconciliationTimer)
@@ -379,29 +265,15 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     logger.info("Webhook track retry worker closed")
   }
 
-  const registrationAction = await finalizeScanWorkerRegistrationForShutdown(
-    plannedRestart,
-    heartbeatsStopped,
-    () =>
-      handoffScanWorker(workerId).catch((error) => {
-        logger.warn("Could not retain scan-worker handoff lease", {
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }),
-    () =>
-      unregisterScanWorker(workerId).catch((error) => {
-        logger.warn("Could not unregister scan worker", {
-          error: error instanceof Error ? error.message : String(error),
-        })
+  if (heartbeatsStopped) {
+    await unregisterScanWorker(workerId).catch((error) => {
+      logger.warn("Could not unregister scan worker", {
+        error: error instanceof Error ? error.message : String(error),
       })
-  )
-  if (registrationAction === "handoff") {
-    logger.info("Retaining scan-worker handoff lease for planned restart", {
-      graceMs: SCAN_WORKER_RESTART_GRACE_MS,
     })
-  } else if (registrationAction === "skipped") {
+  } else {
     logger.warn("Skipping scan-worker registry update after heartbeat shutdown timeout", {
-      plannedRestart,
+      workerId,
     })
   }
   await removeWorkerReadiness().catch((error) => {
@@ -540,6 +412,17 @@ async function main(): Promise<void> {
   // Reconcile unconditionally on startup. Every five minutes thereafter, use the
   // database to avoid Redis queue inspection while idle, with an hourly backstop.
   // The distributed lease inside reconcileScanQueue() keeps replicas safe.
+  void drainArtifactDeletionTasks()
+    .then((result) => {
+      if (result.claimed > 0) {
+        logger.info("Artifact deletion outbox drained on startup", { ...result })
+      }
+    })
+    .catch((error) => {
+      logger.warn("Artifact deletion outbox startup drain failed", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
   const startupReconciliation = await reconcileScanQueue()
   let lastReconciliationAtMs = Date.now()
   await emitOperationalHealthAlerts(startupReconciliation).catch((error) => {
@@ -549,6 +432,15 @@ async function main(): Promise<void> {
   })
   reconciliationTimer = setInterval(() => {
     const now = new Date()
+    void drainArtifactDeletionTasks()
+      .then((result) => {
+        if (result.claimed > 0) logger.info("Artifact deletion outbox drained", { ...result })
+      })
+      .catch((error) => {
+        logger.warn("Artifact deletion outbox drain failed", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
     void reconcileScanQueueIfNeeded(lastReconciliationAtMs, now)
       .then(async (reconciliation) => {
         if (!reconciliation) return
@@ -627,46 +519,6 @@ async function main(): Promise<void> {
     queue: SCAN_QUEUE_NAME,
     concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
   })
-  let egressDrainCheckInFlight = false
-  let egressDrainAcknowledged = false
-  egressDrainTimer = setInterval(() => {
-    if (!worker || egressDrainCheckInFlight) return
-    egressDrainCheckInFlight = true
-    void acknowledgeEgressDrainRequest(worker, async () => {
-      if (heartbeatTimer) {
-        clearInterval(heartbeatTimer)
-        heartbeatTimer = null
-      }
-      await deactivateScanWorkerForDrain(
-        scanWorkerHeartbeat,
-        () => unregisterScanWorker(workerId),
-        removeWorkerReadiness
-      )
-    })
-      .then(async (acknowledged) => {
-        if (acknowledged) {
-          egressDrainAcknowledged = true
-          return
-        }
-        if (!egressDrainAcknowledged || !worker) return
-        if (
-          await failClosedAfterEgressDrainCancellation(() =>
-            shutdown("EGRESS_REFRESH_CANCELLED", 1)
-          )
-        ) {
-          egressDrainAcknowledged = false
-          logger.info("Drained worker stopped after cancelled egress refresh")
-        }
-      })
-      .catch((error) => {
-        logger.warn("Worker egress drain handshake failed", {
-          error: error instanceof Error ? error.message : String(error),
-        })
-      })
-      .finally(() => {
-        egressDrainCheckInFlight = false
-      })
-  }, 1_000)
   // Refresh every two minutes, leaving more than one missed interval before
   // the five-minute worker registration expires. Jobs also refresh it on completion.
   heartbeatTimer = setInterval(() => {

@@ -212,11 +212,13 @@ jobs:
           is_64_hex "${digest#sha256:}" || { echo "::error::Worker digest must be sha256:<64 hex>"; exit 1; }
           is_40_hex "${{ env.DEPLOY_SHA }}" || { echo "::error::Product revision must be a 40-character SHA"; exit 1; }
           is_40_hex "${{ env.ENGINE_REVISION }}" || { echo "::error::Engine revision must be a 40-character SHA"; exit 1; }
-          echo "Worker provenance record (worker VM runtime values):" >> "$GITHUB_STEP_SUMMARY"
-          echo "- LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- LYRASHIELD_WORKER_IMAGE_DIGEST=$digest" >> "$GITHUB_STEP_SUMMARY"
-          echo "- LYRASHIELD_ENGINE_REVISION=${{ env.ENGINE_REVISION }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "The deploy job promotes this digest only after Container App smoke checks pass." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Worker provenance record (worker VM runtime values):"
+            echo "- LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}"
+            echo "- LYRASHIELD_WORKER_IMAGE_DIGEST=$digest"
+            echo "- LYRASHIELD_ENGINE_REVISION=${{ env.ENGINE_REVISION }}"
+            echo "The deploy job promotes this digest only after Container App smoke checks pass."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
   # remain immutable and deploy by verified digest. Multi-arch buildx pushes leave untagged manifests
@@ -522,29 +524,51 @@ jobs:
           # Only the app Container App uploads evidence (control-evidence
           # artifacts); the scanner app does not and the worker VM receives the
           # key via Key Vault (ops/worker/refresh-secrets.sh).
+          active_name="ev-kek-${{ steps.verify-evidence-kek.outputs.version }}"
+          keyring_digest=$(printf '%s' "$LYRASHIELD_EVIDENCE_KEK_KEYRING" | sha256sum | cut -c1-12)
+          keyring_name="ev-ring-${keyring_digest}"
+          if [ "${#active_name}" -gt 20 ] || [ "${#keyring_name}" -gt 20 ]; then
+            echo "::error::Derived evidence secret name exceeds the Container Apps 20-character limit."
+            exit 1
+          fi
+          echo "active_name=${active_name}" >> "$GITHUB_OUTPUT"
+          echo "keyring_name=${keyring_name}" >> "$GITHUB_OUTPUT"
           if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
-            active_secret="lyrashield-evidence-kek-${{ steps.verify-evidence-kek.outputs.version }}"
-            keyring_secret="lyrashield-evidence-kek-keyring-${{ steps.verify-evidence-kek.outputs.version }}"
             existing_secrets=$(timeout --foreground 180s az containerapp secret list \
               --only-show-errors \
               --name "$AZURE_APP_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --query '[].name' --output tsv)
-            active_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$active_secret" || true)
-            keyring_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$keyring_secret" || true)
-            if [ "$active_exists" = "1" ] && [ "$keyring_exists" = "1" ]; then
-              echo "Immutable evidence secrets already exist for ${{ steps.verify-evidence-kek.outputs.version }}; preserving them."
-            elif [ "$active_exists" != "0" ] || [ "$keyring_exists" != "0" ]; then
-              echo "::error::Evidence secret set for ${{ steps.verify-evidence-kek.outputs.version }} is incomplete; refusing to overwrite or repair immutable entries."
+            active_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$active_name" || true)
+            keyring_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$keyring_name" || true)
+            if [ "$active_exists" = "1" ]; then
+              echo "Immutable active evidence secret already exists; preserving it."
+            elif [ "$active_exists" = "0" ]; then
+              timeout --foreground 180s az containerapp secret set \
+                --only-show-errors \
+                --name "$AZURE_APP_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --secrets "${active_name}=${LYRASHIELD_EVIDENCE_KEK}" || {
+                  echo "::error::Failed to create immutable active evidence key for ${AZURE_APP_CONTAINER_APP_NAME}."
+                  exit 1
+                }
+            else
+              echo "::error::Active evidence secret inventory is ambiguous."
               exit 1
-            elif ! timeout --foreground 180s az containerapp secret set \
-              --only-show-errors \
-              --name "$AZURE_APP_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --secrets \
-                "${active_secret}=${LYRASHIELD_EVIDENCE_KEK}" \
-                "${keyring_secret}=${LYRASHIELD_EVIDENCE_KEK_KEYRING}"; then
-              echo "::error::Failed to create immutable evidence envelope key configuration for ${AZURE_APP_CONTAINER_APP_NAME}."
+            fi
+            if [ "$keyring_exists" = "1" ]; then
+              echo "Immutable evidence keyring secret already exists; preserving it."
+            elif [ "$keyring_exists" = "0" ]; then
+              timeout --foreground 180s az containerapp secret set \
+                --only-show-errors \
+                --name "$AZURE_APP_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --secrets "${keyring_name}=${LYRASHIELD_EVIDENCE_KEK_KEYRING}" || {
+                  echo "::error::Failed to create immutable evidence keyring for ${AZURE_APP_CONTAINER_APP_NAME}."
+                  exit 1
+                }
+            else
+              echo "::error::Evidence keyring secret inventory is ambiguous."
               exit 1
             fi
           fi
@@ -744,7 +768,8 @@ jobs:
         env:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
           LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
-          LYRASHIELD_EVIDENCE_KEK_VERSION: ${{ steps.verify-evidence-kek.outputs.version }}
+          LYRASHIELD_EVIDENCE_KEK_SECRET: ${{ steps.sync-evidence-kek.outputs.active_name }}
+          LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET: ${{ steps.sync-evidence-kek.outputs.keyring_name }}
           POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
@@ -799,9 +824,9 @@ jobs:
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
-              "LYRASHIELD_EVIDENCE_KEK=secretref:lyrashield-evidence-kek-${LYRASHIELD_EVIDENCE_KEK_VERSION}" \
+              "LYRASHIELD_EVIDENCE_KEK=secretref:${LYRASHIELD_EVIDENCE_KEK_SECRET}" \
               "LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF=${LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF}" \
-              "LYRASHIELD_EVIDENCE_KEK_KEYRING=secretref:lyrashield-evidence-kek-keyring-${LYRASHIELD_EVIDENCE_KEK_VERSION}" \
+              "LYRASHIELD_EVIDENCE_KEK_KEYRING=secretref:${LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET}" \
               "GITHUB_APP_ID=secretref:github-app-id" \
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
@@ -1018,7 +1043,14 @@ jobs:
           smoke_candidate scanner "$SCANNER_NAME" "$SCANNER_REVISION" "$SCANNER_FQDN" /api/ready & SCANNER_SMOKE_PID=$!
           smoke_egress_candidate & EGRESS_SMOKE_PID=$!
           CANDIDATE_SMOKE_FAILED=0
-          wait "$APP_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
+          if wait "$APP_SMOKE_PID"; then
+            if [ -n "$APP_FQDN" ] && ! curl --fail --silent --show-error --max-time 5 "https://${APP_FQDN}/api/ready/evidence"; then
+              echo "::error::app candidate evidence configuration is not ready. Production traffic was not changed."
+              CANDIDATE_SMOKE_FAILED=1
+            fi
+          else
+            CANDIDATE_SMOKE_FAILED=1
+          fi
           wait "$SCANNER_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
           wait "$EGRESS_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
           exit "$CANDIDATE_SMOKE_FAILED"

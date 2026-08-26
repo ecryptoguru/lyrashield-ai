@@ -235,7 +235,7 @@ describe("CSP nonce proxy", () => {
     expect(checkAuthRateLimit).not.toHaveBeenCalled()
   })
 
-  it.each(["/api/health", "/api/ready", "/api/ready/scans"])(
+  it.each(["/api/health", "/api/ready", "/api/ready/evidence", "/api/ready/scans"])(
     "does not charge the exact health path %s against Redis rate limits",
     async (pathname) => {
       const {

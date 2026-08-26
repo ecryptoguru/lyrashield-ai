@@ -1,4 +1,4 @@
-import { getSystemPrisma } from "@lyrashield/db"
+import { countDeadLetterArtifactDeletionTasks, getSystemPrisma } from "@lyrashield/db"
 
 export const TERMINAL_COST_DISPOSITION_STAGE = "terminal_cost_operator_reconciled"
 export const TERMINAL_COST_DISPOSITION_RECEIPT_TYPE = "terminal_cost_operator_disposition_v1"
@@ -19,6 +19,7 @@ export type OperationalAlertCode =
   | "scan_queue_oldest_wait_high"
   | "reconciliation_drift"
   | "webhook_dead_letter"
+  | "artifact_deletion_dead_letter"
   | "evidence_persistence_failure"
   | "terminal_cost_unreconciled"
   | "app_no_active_replica"
@@ -34,6 +35,7 @@ export interface OperationalHealthSnapshot {
   oldestWaitingJobAgeMs?: number
   reconciliationDriftCount?: number
   webhookDeadLetterCount?: number
+  artifactDeletionDeadLetterCount?: number
   evidenceFailureCount?: number
   oldestTerminalUnreconciledCostAgeMs?: number
   activeReplicaCount?: number
@@ -105,6 +107,13 @@ export function evaluateOperationalHealth(
     snapshot.webhookDeadLetterCount !== undefined && snapshot.webhookDeadLetterCount > 0,
     "webhook_dead_letter",
     snapshot.webhookDeadLetterCount ?? 0,
+    0
+  )
+  add(
+    snapshot.artifactDeletionDeadLetterCount !== undefined &&
+      snapshot.artifactDeletionDeadLetterCount > 0,
+    "artifact_deletion_dead_letter",
+    snapshot.artifactDeletionDeadLetterCount ?? 0,
     0
   )
   add(
@@ -221,8 +230,14 @@ export async function collectOperationalHealthSnapshot(params: {
   }
 
   const prisma = getSystemPrisma()
-  const [webhookDeadLetterCount, oldestUnreconciled, evidenceFailureCount] = await Promise.all([
+  const [
+    webhookDeadLetterCount,
+    artifactDeletionDeadLetterCount,
+    oldestUnreconciled,
+    evidenceFailureCount,
+  ] = await Promise.all([
     prisma.webhookEventTrack.count({ where: { status: "dead_letter" } }),
+    countDeadLetterArtifactDeletionTasks(),
     findOldestTerminalUnreconciledCost(now),
     prisma.scan.count({
       where: {
@@ -242,6 +257,7 @@ export async function collectOperationalHealthSnapshot(params: {
     oldestWaitingJobAgeMs,
     reconciliationDriftCount,
     webhookDeadLetterCount,
+    artifactDeletionDeadLetterCount,
     evidenceFailureCount,
     oldestTerminalUnreconciledCostAgeMs: oldestUnreconciled?.endedAt
       ? now.getTime() - oldestUnreconciled.endedAt.getTime()

@@ -244,22 +244,21 @@ describe("worker Docker runtime", () => {
   })
 
   it("refreshes the complete evidence key rotation set before worker startup", () => {
+    expect(workerSecretRefresh).toContain("read_secret_optional worker-evidence-kek-config-ref")
     expect(workerSecretRefresh).toContain(
-      "write_secret LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF worker-evidence-kek-active-ref"
+      'write_secret LYRASHIELD_EVIDENCE_KEK "$evidence_kek_secret_name"'
     )
     expect(workerSecretRefresh).toContain(
-      'write_secret LYRASHIELD_EVIDENCE_KEK "worker-evidence-kek-$evidence_kek_version"'
+      'evidence_kek_keyring_secret_name="worker-evidence-kek-keyring-$evidence_kek_keyring_digest"'
     )
-    expect(workerSecretRefresh).toContain(
-      'write_secret LYRASHIELD_EVIDENCE_KEK_KEYRING "worker-evidence-kek-keyring-$evidence_kek_version"'
-    )
+    expect(workerSecretRefresh).toContain("Evidence KEK keyring digest does not match config ref")
     expect(deployWorkflow).toContain(
-      '"LYRASHIELD_EVIDENCE_KEK_KEYRING=secretref:lyrashield-evidence-kek-keyring-${LYRASHIELD_EVIDENCE_KEK_VERSION}"'
+      '"LYRASHIELD_EVIDENCE_KEK_KEYRING=secretref:${LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET}"'
     )
     expect(deployWorkflow).not.toContain('"lyrashield-evidence-kek=${LYRASHIELD_EVIDENCE_KEK}"')
     expect(deployWorkflow).toContain("az containerapp secret list")
-    expect(deployWorkflow).toContain("preserving them")
-    expect(deployWorkflow).toContain("refusing to overwrite or repair immutable entries")
+    expect(deployWorkflow).toContain("Immutable active evidence secret already exists")
+    expect(deployWorkflow).toContain("Immutable evidence keyring secret already exists")
   })
 
   it("shares engine work and temp paths with the host Docker daemon", () => {

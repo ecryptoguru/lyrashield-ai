@@ -25,6 +25,18 @@ describe("validateKekConfig", () => {
     ).toBe(0)
   })
 
+  it("accepts a future key during overlap and rollback preparation", () => {
+    expect(
+      validate({
+        LYRASHIELD_EVIDENCE_KEK: key(1),
+        LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: "envkeystore/lyrashield-evidence-kek/v1",
+        LYRASHIELD_EVIDENCE_KEK_KEYRING: JSON.stringify({
+          "envkeystore/lyrashield-evidence-kek/v2": key(2),
+        }),
+      }).status
+    ).toBe(0)
+  })
+
   it("rejects an unversioned ref, malformed key, or incomplete history", () => {
     expect(
       validate({
@@ -65,5 +77,15 @@ describe("validateKekConfig", () => {
         }),
       }).stderr
     ).toMatch(/must differ/)
+    expect(
+      validate({
+        LYRASHIELD_EVIDENCE_KEK: key(2),
+        LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: "envkeystore/lyrashield-evidence-kek/v2",
+        LYRASHIELD_EVIDENCE_KEK_KEYRING: JSON.stringify({
+          "envkeystore/lyrashield-evidence-kek/v1": key(1),
+          "envkeystore/lyrashield-evidence-kek/v2": key(3),
+        }),
+      }).stderr
+    ).toMatch(/non-active versioned refs/)
   })
 })

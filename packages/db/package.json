@@ -22,7 +22,8 @@
     "@lyrashield/config": "workspace:*",
     "@lyrashield/score": "workspace:*",
     "@lyrashield/security": "workspace:*",
-    "@lyrashield/types": "workspace:*"
+    "@lyrashield/types": "workspace:*",
+    "@paralleldrive/cuid2": "^3.3.0"
   },
   "devDependencies": {
     "prisma": "7.9.1",

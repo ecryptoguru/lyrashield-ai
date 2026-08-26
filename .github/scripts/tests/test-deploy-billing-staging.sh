@@ -49,6 +49,11 @@ must_contain '[ "$DATABASE_SERVER" = "lyrashield-billing-stage-pg" ]'
 must_contain 'az postgres flexible-server show'
 must_contain 'Microsoft.DBforPostgreSQL/flexibleServers/${DATABASE_SERVER}'
 must_contain 'actual_database_host'
+must_contain 'pull_principal_id=$(az identity show'
+must_contain '--assignee-object-id "$pull_principal_id"'
+must_contain "roleDefinitionName=='AcrPull'"
+must_contain '[ "${acrpull_scope,,}" = "${registry_id,,}" ]'
+must_contain 'Pull identity must have exactly one AcrPull assignment at the isolated staging registry scope.'
 must_contain 'lyrashield-web@${WEB_DIGEST}'
 must_contain 'lyrashield-migrate@${MIGRATION_DIGEST}'
 must_contain 'lyrashield-billing-e2e@${E2E_DIGEST}'
@@ -71,6 +76,11 @@ must_contain 'E2E_DIGEST: ${{ steps.build-e2e.outputs.digest }}'
 must_contain "Verify staging image provenance and owned job executables"
 must_contain '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 must_contain "Delete one-shot database jobs"
+must_contain 'az containerapp job execution show'
+must_contain 'az containerapp job logs show'
+must_contain "--query 'properties.template.containers[0].name'"
+must_contain '--container "$container_name"'
+must_contain '--tail 300'
 must_contain "az containerapp job delete"
 must_contain "lyrashield-stage-migrate"
 must_contain "lyrashield-stage-db-role"
@@ -117,7 +127,9 @@ test -x "$e2e_runner"
 test -x "$e2e_config_smoke"
 grep -Fq '/app/e2e/billing/verify-staging-config.sh' "$e2e_runner"
 grep -Fq 'await import("../../packages/config/src/index.ts")' "$e2e_config_smoke"
-grep -Fq 'exec pnpm --filter @lyrashield/db exec prisma migrate deploy' "$migration_script"
+grep -Fq 'pnpm --filter @lyrashield/db exec prisma migrate deploy 2>&1' "$migration_script"
+grep -Fq 'billing_staging_migration_failed exit_code=${migration_status}' "$migration_script"
+grep -Fq 'pnpm --filter @lyrashield/db exec prisma migrate status 2>&1 || true' "$migration_script"
 grep -Fq 'const SYSTEM_ROLE = "app_system_staging"' "$role_script"
 grep -Fq 'NOSUPERUSER' "$role_script"
 grep -Fq 'NOBYPASSRLS' "$role_script"

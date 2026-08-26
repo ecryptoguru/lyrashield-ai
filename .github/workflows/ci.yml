@@ -240,7 +240,8 @@ jobs:
             -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
             -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
             -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_ci" \
-            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci"
+            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci" \
+            -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci"
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
 
       - name: Lint
@@ -291,6 +292,7 @@ jobs:
       - name: Test Azure deployment and alert operations
         if: needs.changes.outputs.docs-only != 'true'
         run: |
+          bash .github/scripts/tests/test-promote-worker-vm.sh
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
 
@@ -496,7 +498,8 @@ jobs:
             -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
             -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
             -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_ci" \
-            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci"
+            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci" \
+            -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci"
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
 
       - name: Run child-table RLS tests

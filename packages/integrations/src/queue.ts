@@ -7,7 +7,6 @@ const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
 export const SCAN_ADMISSION_STOP_KEY = "lyrashield:scan-admission:stopped"
 export const SCAN_WORKER_HEARTBEAT_MS = 120_000
 export const SCAN_WORKER_TTL_MS = 300_000
-export const SCAN_WORKER_RESTART_GRACE_MS = 60_000
 
 export class ScanWorkerUnavailableError extends Error {
   readonly code = "SCAN_SERVICE_UNAVAILABLE"
@@ -76,15 +75,6 @@ export async function registerScanWorker(workerId: string, now = Date.now()): Pr
 export async function unregisterScanWorker(workerId: string): Promise<void> {
   const redis = requireRedis()
   await redis.zrem(SCAN_WORKER_REGISTRY_KEY, workerId)
-}
-
-/**
- * Keep a short lease while an operator-initiated restart hands work to the
- * replacement process. Crashes still unregister/expire normally.
- */
-export async function handoffScanWorker(workerId: string, now = Date.now()): Promise<void> {
-  const redis = requireRedis()
-  await redis.zadd(SCAN_WORKER_REGISTRY_KEY, now + SCAN_WORKER_RESTART_GRACE_MS, workerId)
 }
 
 export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> {

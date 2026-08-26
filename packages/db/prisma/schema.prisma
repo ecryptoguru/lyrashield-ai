@@ -961,6 +961,29 @@ model Evidence {
   @@index([findingId])
 }
 
+/// Durable operational outbox for deleting external artifacts after an explicit
+/// workspace/account deletion. It deliberately has no Workspace relation: the
+/// task must survive the workspace cascade until the external object is gone.
+/// It is not tenant-facing data and is processed only by server-owned services.
+model ArtifactDeletionTask {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  kind           String
+  storageUri     String
+  status         String   @default("PENDING")
+  attempts       Int      @default(0)
+  nextAttemptAt  DateTime @default(now())
+  leaseToken     String?
+  leaseExpiresAt DateTime?
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([kind, storageUri])
+  @@index([status, nextAttemptAt])
+  @@index([workspaceId])
+}
+
 model ScanResultManifest {
   id        String   @id @default(cuid())
   scanId    String   @unique

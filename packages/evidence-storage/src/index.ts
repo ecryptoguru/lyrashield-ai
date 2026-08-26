@@ -8,6 +8,7 @@ import {
 import { env } from "@lyrashield/config"
 import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
+import { drainArtifactDeletionTasksWith, type ArtifactDeletionDrainResult } from "./deletion-drain"
 import {
   ENVELOPE_KEY_REF,
   EvidenceEnvelopeError,
@@ -20,6 +21,7 @@ import {
 } from "./envelope"
 
 export { EvidenceEnvelopeError, isEnvelope, verifyEnvelopeShape } from "./envelope"
+export type { ArtifactDeletionDrainResult } from "./deletion-drain"
 
 /**
  * Key reference recorded for new artifacts. Objects are envelope-encrypted
@@ -99,9 +101,9 @@ function evidenceKekKeyring(): Record<string, string> {
       throw new EvidenceEnvelopeError("LYRASHIELD_EVIDENCE_KEK_KEYRING values must be strings")
     }
     resolveEnvelopeKek(secret)
-    const historicalVersion = VERSIONED_EVIDENCE_KEY_REF.exec(keyRef)
-    if (!historicalVersion || Number(historicalVersion[1]) >= Number(activeVersionMatch[1])) {
-      throw new EvidenceEnvelopeError("Historical evidence envelope key reference is invalid")
+    const availableVersion = VERSIONED_EVIDENCE_KEY_REF.exec(keyRef)
+    if (!availableVersion || Number(availableVersion[1]) === Number(activeVersionMatch[1])) {
+      throw new EvidenceEnvelopeError("Available evidence envelope key reference is invalid")
     }
     if (secret === activeKek) {
       throw new EvidenceEnvelopeError("Active and historical evidence envelope keys must differ")
@@ -390,4 +392,11 @@ export async function deleteEncryptedArtifact(
   }
   if (!isS3Configured()) throw new EvidenceStorageConfigurationError()
   await getS3Client().send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }))
+}
+
+export function drainArtifactDeletionTasks(options?: {
+  taskIds?: readonly string[]
+  limit?: number
+}): Promise<ArtifactDeletionDrainResult> {
+  return drainArtifactDeletionTasksWith(deleteEncryptedArtifact, options)
 }

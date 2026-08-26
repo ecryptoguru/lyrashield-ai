@@ -56,7 +56,7 @@ export interface ScanWithEvents extends Scan {
   } | null
 }
 
-const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
+export const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
   "QUEUED",
   "PREFLIGHT",
   "RUNNING",
@@ -64,6 +64,13 @@ const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
   "REQUIRES_APPROVAL",
 ]
 type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+export async function lockWorkspaceScanAdmission(
+  tx: ScanTransaction,
+  workspaceId: string
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`scan-admission:${workspaceId}`}, 0))`
+}
 type ScanStatusMetadata = {
   errorCategory?: string
   errorMessage?: string
@@ -77,7 +84,7 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
   const scan = await withWorkspaceRLS(params.workspaceId, async (tx) => {
     // The workspace lock makes the shared concurrency cap atomic across manual,
     // scheduled, retest, and agent-created scans on different targets.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`scan-admission:${params.workspaceId}`}, 0))`
+    await lockWorkspaceScanAdmission(tx, params.workspaceId)
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.targetId}))`
 
     const activeWorkspaceScans = await tx.scan.count({
