@@ -1,6 +1,27 @@
-import { describe, expect, it, afterAll, beforeAll } from "vitest"
+import { describe, expect, it, afterAll, beforeAll, vi } from "vitest"
 import { randomBytes } from "node:crypto"
 import { startProxy, type ProxyServer } from "./index"
+
+vi.mock("@lyrashield/security", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/security")>()
+  return {
+    ...actual,
+    safeFetchOnce: vi.fn(
+      async (url: string, options?: Parameters<typeof actual.safeFetchOnce>[1]) =>
+        url === "https://example.com/"
+          ? {
+              ok: true as const,
+              result: {
+                url,
+                status: 200,
+                contentType: "text/html",
+                html: "<html><body>Example Domain</body></html>",
+              },
+            }
+          : actual.safeFetchOnce(url, options)
+    ),
+  }
+})
 
 const fetchJson = async (url: string, init?: RequestInit) => {
   const res = await fetch(url, init)
