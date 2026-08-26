@@ -7,24 +7,7 @@ const canonical = new URL("/docs/integrations/vscode", origin).toString()
 const title = "LyraShield MCP for VS Code — Setup Guide"
 const description =
   'Add the LyraShield MCP server to VS Code with GitHub Copilot agent mode. The critical difference: VS Code uses the root key "servers" — not "mcpServers" — in .vscode/mcp.json.'
-const updatedDate = "2026-08-12"
-
-const marketplaceRepoUrl = "https://github.com/ecryptoguru/lyrashield-marketplace"
-
-// Repo-committed team recommendation. VS Code reads these keys from workspace settings in
-// either .claude/settings.json or .github/copilot/settings.json.
-const workspaceRecommendation = JSON.stringify(
-  {
-    extraKnownMarketplaces: {
-      "lyrashield-ai": {
-        source: { source: "github", repo: "ecryptoguru/lyrashield-marketplace" },
-      },
-    },
-    enabledPlugins: { "lyrashield@lyrashield-ai": true },
-  },
-  null,
-  2
-)
+const updatedDate = "2026-08-26"
 
 const jsonLd: unknown[] = [
   {
@@ -109,62 +92,10 @@ const jsonLd: unknown[] = [
   </p>
   <pre><code>npx lyrashield install vscode</code></pre>
   <p>
-    Prefer to install LyraShield as an Agent Plugin instead of an MCP config entry? See{" "}
-    <a href="#install-as-an-agent-plugin">Install as an Agent Plugin</a>. Prefer to see exactly
-    what gets written, or set it up without Node.js? Configure it by hand below.
+    Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand
+    below. VS Code's verified LyraShield path is MCP configuration; it is not a preferred Agent
+    Plugin client.
   </p>
-
-  <h2 id="install-as-an-agent-plugin">Install as an Agent Plugin</h2>
-  <p>
-    LyraShield also ships as an Agent Plugin: one install brings the MCP server and the LyraShield
-    review skill together, instead of wiring the server by hand. VS Code can install it straight
-    from the public plugin repository.
-  </p>
-
-  <h3>Install from source (available now)</h3>
-  <p>
-    Open the Command Palette (<code>Ctrl/Cmd + Shift + P</code>) and run{" "}
-    <em>Chat: Install Plugin From Source</em>, then paste the repository URL. VS Code clones the
-    repository and installs the plugin. You can also reach this from{" "}
-    <em>Install Plugin from Source</em> on the <strong>Plugins</strong> page of the Agent
-    Customizations editor.
-  </p>
-  <pre><code>{marketplaceRepoUrl}</code></pre>
-
-  <div class="callout callout--warn">
-    <strong>No one-click marketplace install yet:</strong> LyraShield is not yet listed in a
-    published VS Code plugin marketplace, so there is no one-click install button today. Install
-    from source, or add the marketplace by URL as shown below — both work now and install the same
-    plugin.
-  </div>
-
-  <h3>Recommend the plugin to your whole team</h3>
-  <p>
-    Adoption can be a repo-committed decision rather than something each developer repeats. Add the
-    following to <code>.claude/settings.json</code> or <code>.github/copilot/settings.json</code> in
-    your repository. <code>extraKnownMarketplaces</code> registers the marketplace for the project
-    and <code>enabledPlugins</code> marks the plugin as enabled by default. VS Code shows a
-    recommendation notification the first time someone sends a chat message.
-  </p>
-  <pre><code>{workspaceRecommendation}</code></pre>
-  <p>
-    Teammates can review recommended plugins in the Extensions view by filtering on{" "}
-    <code>@agentPlugins @recommended</code>.
-  </p>
-
-  <div class="callout">
-    <strong>Credentials stay out of the repo:</strong> the snippet above contains no API key. Run
-    <code>npx lyrashield login --oauth</code> once per machine; the plugin's MCP server reads the
-    selected workspace credential from <code>~/.lyrashield/credentials.json</code>.
-  </div>
-
-  <h3>Claude Code and other Agent Plugin clients</h3>
-  <p>
-    The same repository is an addressable plugin marketplace, so clients that support marketplace
-    commands can add it directly:
-  </p>
-  <pre><code>/plugin marketplace add ecryptoguru/lyrashield-marketplace
-/plugin install lyrashield@lyrashield-ai</code></pre>
 
   <h2>Manual configuration</h2>
   <p>Prefer a plain MCP config entry? Configure it by hand below.</p>

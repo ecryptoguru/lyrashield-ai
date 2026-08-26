@@ -76,17 +76,18 @@ marketplace program.
 
 ## Submission tracking
 
-Last checked: 2026-08-12.
+Public-link states were last checked on 2026-08-12 unless an entry names a later release. Private
+dashboard-only states are historical observations from 2026-08-12, not confirmed-current status.
 
 - GitHub Copilot: direct Agent Plugin install is supported. The [Awesome Copilot submission #2592](https://github.com/github/awesome-copilot/issues/2592) was rejected as a product-marketing submission; do not resubmit it.
 - Cline: [issue #2213](https://github.com/cline/mcp-marketplace/issues/2213) is open with no maintainer decision.
 - Kilo: [PR #217](https://github.com/Kilo-Org/kilo-marketplace/pull/217) is open and awaiting maintainer review.
 - Zed: [PR #7149](https://github.com/zed-industries/extensions/pull/7149) is open; package, Danger, and CLA checks pass after the capability fix, and it awaits maintainer re-review. The extension now uses only Zed's `npm:install` capability after the `process:exec` capability was removed as unnecessary.
-- Gemini CLI: the public repository has the `gemini-cli-extension` topic and a public `v0.1.14` release.
+- Gemini CLI: the public repository has the `gemini-cli-extension` topic; the immutable marketplace export is `v0.1.18`.
 - OpenClaw: [ClawHub listing](https://clawhub.ai/ecryptoguru/skills/lyrashield) is published as a community listing; it is not an official OpenClaw channel.
-- Kiro: submitted; its reviewer state is not publicly exposed.
-- Claude: [plugin submissions](https://platform.claude.com/plugins/submissions) show two LyraShield AI submissions pending review.
+- Kiro: submitted; its 2026-08-12 reviewer state was not publicly exposed.
+- Claude: the private plugin dashboard showed two LyraShield AI submissions pending review on 2026-08-12; current status is unverified.
 - Codebuff: the [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) has a public,
   unverified `0.1.1` listing with the MCP declaration live.
-- Cursor: the [LyraShield AI publisher application](https://cursor.com/marketplace/publish) is submitted and awaiting review. The generated Cursor shim is OAuth-first (no raw API-key variable in the plugin manifest).
-- OpenAI/Codex: LyraShield AI `0.1.10` is in review.
+- Cursor: the private publisher dashboard showed the application awaiting review on 2026-08-12. The generated Cursor shim is OAuth-first (no raw API-key variable in the plugin manifest).
+- OpenAI/Codex: LyraShield AI `0.1.10` was in review on 2026-08-12; current dashboard status is unverified.

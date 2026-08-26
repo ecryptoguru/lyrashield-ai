@@ -346,15 +346,15 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 - File selection now prioritizes production/config sources, excludes generated artifacts, and uses mode caps of 200 for Quick/Safe, 500 for Standard, and 1,000 for Deep/Custom while retaining byte, time, walk-depth, and entry bounds.
 - Discovery records eligible, scanned, skipped, and reason counts plus a bounded skipped-path sample. These limits flow into scoring, coverage issues, dashboard disclosure, and an immutable `ai_app_security` family receipt; incomplete AI coverage cannot support a clean claim.
 - A 217-file regression fixture proves Quick remains honestly bounded at 200 while still scanning vulnerable production code, and Standard evaluates all 217 files.
-- Current production deployment: app `lyrashield-app--0000193`, scanner `lyrashield-scanner--0000174`, and egress proxy `lyrashield-egress-proxy--0000043` run product `7abd9baa8943c8e25f954ad6e6d9bd2a6c84d6b7` at 100% traffic. Release run `32916256313`, candidate/public smoke, worker promotion, post-scan Docker health, and `/api/ready/scans` passed.
+- Current production deployment: app `lyrashield-app--0000195`, scanner `lyrashield-scanner--0000176`, and egress proxy `lyrashield-egress-proxy--0000045` run product `16a1fb7014ce3cbf9e56b69bff5074a5d0d8e0dd` at 100% traffic. CI `32966602739`, release `32967467190`, candidate/public smoke, worker promotion, post-recovery Docker health, and `/api/ready/scans` passed.
 - Production includes PR #426 billing-staging hardening, PR #432 Redis/egress efficiency, and PR #450 secure scan-owned checkout recovery. All Cloud and Local purchase admissions remain `off`; no live purchase admission or provider-hosted checkout is proven by this release.
 - A billing-staging-only admission and deployment contract is implemented in code. It is bound to an explicit staging marker, isolated Azure origin, Sandbox/Test providers, an HttpOnly access session, exact-main-SHA images built in the staging registry, and separate `app_runtime_staging`/least-privilege `app_system_staging` database URLs. It cannot enable production admission, does not enable live billing, and is not runtime or hosted-checkout proof until the protected workflow and browser/provider evidence actually run.
 
 ### Infrastructure evidence — 2026-08-26
 
-- Web revision: `lyrashield-app--0000193`, ready for scans.
-- Worker product revision: `7abd9baa8943c8e25f954ad6e6d9bd2a6c84d6b7`.
-- Worker digest: `sha256:fd1888ccaedc9d9f2618398c1924571f23a03fed05efb6b772c922cf43d7cf01`.
+- Web revision: `lyrashield-app--0000195`, ready for scans.
+- Worker product revision: `16a1fb7014ce3cbf9e56b69bff5074a5d0d8e0dd`.
+- Worker digest: `sha256:cb0f836eb54825517e900468a87c6d09b5e9df636121b49d8683b1766849fceb`.
 - Engine revision: `852b1ed7ff76d177cef4db5aa1cfbd3bbe6d2664`; engine version 1.2.1.
 - Upstash BullMQ `rediss://` returned `PONG`; queue was empty before acceptance and heartbeat was live.
 - Azure public Redis `6379` rule is deleted.
@@ -374,26 +374,22 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 - Managed TLS BullMQ Redis and negative egress proof.
 - Dedicated worker compute, immutable worker promotion, readiness heartbeat, and rollback image.
 - Backup/restore drill.
-- Billing code retains signed-webhook, replay, catalog-map, and disposable-account coverage. Razorpay Test Mode has six observed cloud plans; Polar Sandbox did not have an active product or organization token at the last read-only review. Provider-hosted end-to-end staging receipts remain outstanding.
-- Read-only Brave provider review on 2026-08-24: Razorpay Test Mode contains six cloud plans; the live account is activated and website-approved but has no live plans or webhook. Polar Sandbox has no active products or active organization token; Polar Live setup is 5/7 with identity verification and payouts pending and no active products. No provider mutation or payment was performed.
+- Billing code retains signed-webhook, replay, catalog-map, and disposable-account coverage. Provider-hosted end-to-end Sandbox/Test staging receipts remain outstanding.
+- Read-only Brave provider review on 2026-08-26: Razorpay Live is activated with six matching INR Cloud plans and one enabled eight-event webhook. Polar Live has a production token, fifteen private Cloud/pack/Local products, and an enabled lifecycle webhook. No provider mutation or payment was performed; every purchase admission remains `off`.
 - Cloud billing, usage, Local/Desktop, and affiliate implementations merged.
-- Guided/Pro dashboard experiences, exact-two platform-admin authorization, bounded read console, TOTP elevation primitives, additive schema migration, and fail-closed provisioning workflow are implemented in code.
+- Guided/Pro dashboard experiences and the bounded platform-admin console are implemented. Exact-two preflight/apply passed, and both named administrators completed fresh independent Google-plus-TOTP browser proof across every admin destination; bearer-only and workspace-only access remained denied.
+- Production evidence-storage round-trip/fail-closed, actionable notification acknowledgment, terminal-cost disposition, queue-orphan recovery, and Key Vault managed-identity signing proofs passed. See `docs/ops/launch-assurance-status-2026-08-26.md` for exact receipts and limitations.
 - SEO/AEO/GEO foundations include canonical/schema metadata, sitemap and robots controls, dated `llms.txt`, `agents.md`, answer-engine crawler stanzas, integration guides, comparison/research pages, and content validation.
-- Current assurance hardening (PRs #428–#430): nonnegative policy budgets enforced by PostgreSQL check constraint, explainable deterministic finding priority with limitation disclosure, immutable retest validation bound to stored manifests, removal of raw evidence-storage URIs from finding detail, worker execution provenance (product revision, worker image digest, engine revision) bound into manifest checksums with production fail-closed readiness, actionable Azure alert provisioning with readback and idempotent reruns, and a bounded host-side dry-run-first launch-assurance orchestrator composing existing evidence, cancellation, and queue-reconciliation paths. Production proof remains separate and founder-authorized.
+- Current assurance hardening (PRs #428–#430): nonnegative policy budgets enforced by PostgreSQL check constraint, explainable deterministic finding priority with limitation disclosure, immutable retest validation bound to stored manifests, removal of raw evidence-storage URIs from finding detail, worker execution provenance (product revision, worker image digest, engine revision) bound into manifest checksums with production fail-closed readiness, actionable Azure alert provisioning with readback and idempotent reruns, and a bounded host-side dry-run-first launch-assurance orchestrator composing existing evidence, cancellation, and queue-reconciliation paths. Evidence, alert, queue, and signing production receipts are recorded in `docs/ops/launch-assurance-status-2026-08-26.md`; every future deployment or profile still requires revision-bound proof.
 
 ### Remaining before broader paid/untrusted exposure
 
-1. Prove private S3-compatible evidence persistence, encryption, retrieval, and failure behavior in production. The launch-assurance orchestrator composes the fail-closed and round-trip proofs in code (PR #429); production execution remains the gate.
-2. Connect readiness, queue, provider, cost, and worker logs to actionable monitoring, alerts, capacity evidence, named incident ownership, live Redis command metrics, and staged worker-rollout evidence. Alert provisioning code and the monitoring runbook are merged (PR #429); production provisioning and a test-alert acknowledgment remain the gate.
-3. Run worker cancellation and queue recovery under production failure injection without replaying ambiguous paid work. The launch-assurance orchestrator composes authenticated cancellation, settle wait, queue recovery, and post-recovery readiness in code (PR #429); production failure injection remains the gate.
-4. Provision matching live provider credentials, catalogs, and webhooks; rerun the guarded deployment; then verify live-provider entitlement and usage events. Keep every purchase admission off until founder approval. Razorpay hosted-checkout payment methods above INR 15,000 remain transaction-unproven.
-5. Complete current production license-signing activation and proof through Azure Key Vault.
-6. Provision RazorpayX and Payoneer payout API access and tax-form workflow.
-7. Verify scorecard metadata/card formats/badge, revocation/expiry, referral continuity, human-event deduplication, and external unfurls on public domains.
-8. Triage the 24 Standard findings and obtain independent verification where warranted.
-9. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
-10. Rerun read-only exact-two platform-admin preflight after both users complete email verification and personal TOTP enrollment, provision only after both accounts pass, and retain fresh-session MFA browser proof. Until then, production admin access is unproven.
-11. Capture authenticated client-matrix receipts for current CLI/MCP/plugin installs and remote OAuth, plus webmaster indexing and answer-engine citation observations; code and crawl files alone do not prove external discovery.
+1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical/OG readback. The temporary internal scorecard otherwise passed cards, badge, referral, privacy, deduplication, LinkedIn unfurl, and revocation checks.
+2. Run restricted Polar Sandbox and Razorpay Test Mode checkout/webhook/refund/cancellation/license/replay proof. Keep every production admission off. Razorpay hosted-checkout methods above INR 15,000 remain transaction-unproven.
+3. Retain longer-window Redis command/capacity evidence; provision RazorpayX and Payoneer payout API access plus tax-form workflow.
+4. Triage the 25 findings from Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted.
+5. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
+6. Capture authenticated client-matrix receipts plus webmaster indexing and answer-engine citation observations; code, simulated crawlers, and one LinkedIn unfurl do not prove universal discovery.
 
 ### Deferred
 
@@ -417,7 +413,7 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 
 - Trademark clearance for LyraShield AI and `lyrashieldai.com`.
 - Public paid-launch timing and final publishable pricing.
-- Live Polar/Razorpay activation.
+- Enable production Polar/Razorpay purchase admissions.
 - Authorized provider/model and target for first controlled Deep/Terra scan.
 
 ## 11. Success measures

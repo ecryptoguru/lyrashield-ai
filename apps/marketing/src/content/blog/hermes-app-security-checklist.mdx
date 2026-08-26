@@ -134,7 +134,7 @@ Target PR gate:
 - SBOM check: generate CycloneDX for app + skills; see CycloneDX spec at [github.com/CycloneDX/specification](https://github.com/CycloneDX/specification) for component mapping.
 - License + secrets scan on `~/.hermes/skills/` diff and app repo diff. Hermes logs live under `logs/`, ensure CI does not upload them as artifacts with secrets.
 - SCA on lockfile changes agents introduce. Hermes skills that add dependencies must pass the same SCA gate as human contributors.
-- GitHub Action that is diff-aware and SARIF-emitting. LyraShield's action, agentic pentest + SCA + secrets, produces SARIF for GitHub code scanning, then evidence, fix, retest, report. That flow is on the roadmap; the platform is live in open beta with open registration.
+- GitHub Action that is diff-aware and SARIF-emitting. LyraShield's shipped Action runs local secret and risky-pattern checks and uploads SARIF; the open-beta platform handles the separate evidence, fix-proposal, retest, and report loop.
 
 | # | Control | Where to Check | Risk If Skipped |
 |---|---------|----------------|-----------------|
@@ -165,7 +165,7 @@ Reference primary sources while hardening: [OWASP LLM Top 10](https://owasp.org/
 
 Hermes maximizes adaptability: skills that write skills, runs-anywhere backends, model-agnostic routing. LyraShield adds the counterpart: release assurance for AI-built apps with minimal new surface. The combination positioning matters, Hermes owns generation and orchestration, LyraShield owns `target, review, evidence, fix, retest, report` with SCA + secrets + agentic pentest feeding SARIF, not another chat loop. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-Integration is deliberately small: stdio via `npx -y @lyrashield/mcp` and remote Streamable HTTP at `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer per [integrations hub](/docs/integrations). The full loop, fix and retest, is on the roadmap (Sprints 0-2 shipped, scan engine in progress). The platform is live in open beta with open registration, with hardened MCP config and early architecture review for teams shipping AI-built code via Hermes alongside [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist) and [openclaw-app-security-checklist](/blog/openclaw-app-security-checklist).
+Integration is deliberately small: stdio via `npx -y @lyrashield/mcp` and remote Streamable HTTP at `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer per [integrations hub](/docs/integrations). The target-to-report loop is available in the open beta and remains evidence-bounded for teams shipping AI-built code via Hermes alongside [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist) and [openclaw-app-security-checklist](/blog/openclaw-app-security-checklist).
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 

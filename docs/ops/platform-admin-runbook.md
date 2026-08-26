@@ -2,6 +2,8 @@
 
 This runbook owns platform-administrator enrollment, provisioning, access checks, browser proof, and emergency revocation. It does not prove current production account state; the provisioning workflow receipt is the source for each production run.
 
+Current receipt: preflight `32925726620` and apply `32925979621` passed on 2026-08-26. Both named operators then completed independent Google-plus-TOTP sessions across overview, users, workspaces, scans, audit, and affiliates. Unauthenticated, bearer-only, and workspace-header-only overview requests returned `401` with private/no-store caching. Repeat this proof after any future apply.
+
 ## Fixed administrator set
 
 Platform administration is limited to exactly these verified accounts:
@@ -67,7 +69,7 @@ Apply revokes sessions even when both roles were already correct. This is intent
 
 After apply, capture proof separately for each account:
 
-1. Sign in with the account's own password.
+1. Sign in with the account's configured identity provider. Current production operators use Google sign-in.
 2. Complete the TOTP challenge; trusted-device bypass is disabled.
 3. Confirm **Platform Admin** appears in dashboard navigation.
 4. Open `/dashboard/admin` and each Users, Workspaces, Scans, Audit, and Affiliates destination.

@@ -5,8 +5,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/agent-plugins", origin).toString()
 const title = "LyraShield Agent Plugin — One-Install Setup for Coding Agents"
 const description =
-  "Install LyraShield as a portable Agent Plugin (Agent Plugins v1.0.0). One package bundles the MCP server and the security skill for Claude Code, Cursor, VS Code, OpenAI Codex, GitHub Copilot, and Kiro."
-const updatedDate = "2026-08-12"
+  "Install LyraShield as a portable Agent Plugin (Agent Plugins v1.0.0). One package bundles the MCP server and the security skill for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro."
+const updatedDate = "2026-08-26"
 
 // Kept in the same order as the launch-client table below.
 const launchClients = [
@@ -40,12 +40,6 @@ const launchClients = [
     path: "~/.kiro/plugins/lyrashield",
     cliDefault: true,
   },
-  {
-    name: "VS Code",
-    slug: "vscode",
-    path: "~/.lyrashield/plugins/lyrashield",
-    cliDefault: false,
-  },
 ]
 
 const faqItems = [
@@ -55,7 +49,7 @@ const faqItems = [
   },
   {
     q: "Which clients can install the Agent Plugin?",
-    a: "Six launch clients: Claude Code, Cursor, VS Code, OpenAI Codex, GitHub Copilot, and Kiro. Every other supported agent uses the verified config-file, vendor-CLI, or guided-manual path documented in its own guide. There is no Agent Plugin for Windsurf or for any client outside these six.",
+    a: "Five launch clients: Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Every other supported agent uses the verified config-file, vendor-CLI, or guided-manual path documented in its own guide. VS Code and Windsurf use config-file installation.",
   },
   {
     q: "Do I need to log in before installing the plugin?",
@@ -67,7 +61,7 @@ const faqItems = [
   },
   {
     q: "Why does VS Code use an MCP config file instead of the plugin?",
-    a: "A VS Code plugin entry exists, but its verified setup path today is the .vscode/mcp.json config file, which npx lyrashield install vscode writes for you. The VS Code guide documents that path, including the servers root key and the per-entry type of stdio.",
+    a: "No generated VS Code Agent Plugin shim exists. Its verified path is the .vscode/mcp.json file that npx lyrashield install vscode writes. The VS Code guide documents the servers root key and per-entry stdio type.",
   },
 ]
 
@@ -125,7 +119,7 @@ const jsonLd: unknown[] = [
     >{" "}
     standard. One package bundles two things: the LyraShield MCP server, which gives your agent the
     scan, finding, fix-plan, and verify tools, and a security skill that tells the agent when to
-    reach for them. For the six launch clients below, this replaces hand-editing an MCP config file.
+    reach for them. For the five launch clients below, this replaces hand-editing an MCP config file.
   </p>
 
   <h2>Install in two commands</h2>
@@ -151,9 +145,9 @@ npx lyrashield install &lt;agent&gt;</code></pre>
     and clients that cannot complete OAuth. Do not commit either credential.
   </div>
 
-  <h2>The six launch clients</h2>
+  <h2>The five launch clients</h2>
   <p>
-    An Agent Plugin exists for these six clients only. Every other agent LyraShield supports uses
+    An Agent Plugin exists for these five clients only. Every other agent LyraShield supports uses
     the config-file, vendor-CLI, or guided-manual path in its own guide, and those guides stay the
     reference for exactly what gets written.
   </p>
@@ -176,13 +170,10 @@ npx lyrashield install &lt;agent&gt;</code></pre>
     </tbody>
   </table>
 
-  <div class="callout callout--warn">
-    <strong>VS Code is the one exception:</strong> a VS Code plugin entry exists, but the verified
-    setup path today is the <code>.vscode/mcp.json</code> config file, so
-    <code>npx lyrashield install vscode</code> writes that instead. Note the two traps the{" "}
-    <a href="/docs/integrations/vscode">VS Code guide</a> covers: the root key is
-    <code>servers</code>, not <code>mcpServers</code>, and each entry needs
-    <code>"type": "stdio"</code>.
+  <div class="callout">
+    <strong>VS Code uses MCP configuration:</strong> no generated Agent Plugin shim exists for VS
+    Code. Use <code>npx lyrashield install vscode</code> or follow the{" "}
+    <a href="/docs/integrations/vscode">VS Code guide</a>.
   </div>
 
   <h2>What the skill adds</h2>

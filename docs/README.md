@@ -19,6 +19,7 @@ Use this index to find the owning document and avoid duplicating current truth.
 - [`ops/platform-admin-runbook.md`](ops/platform-admin-runbook.md) — exact-two admin provisioning, personal TOTP, session effects, browser proof, and emergency revocation.
 - [`ops/billing-launch-runbook.md`](ops/billing-launch-runbook.md) — billing admission, isolated Sandbox/Test staging, provider evidence, and live-mode boundaries.
 - [`ops/monitoring-launch-runbook.md`](ops/monitoring-launch-runbook.md) — actionable Azure alert inventory, provisioning, readback, stop/resume admission, and release validation.
+- [`ops/launch-assurance-status-2026-08-26.md`](ops/launch-assurance-status-2026-08-26.md) — current exact-revision deployment, runtime, admin, provider, and scorecard evidence plus remaining gates.
 - [`ops/launch-assurance-status-2026-08-24.md`](ops/launch-assurance-status-2026-08-24.md) — retained historical release-gate snapshot; current deployment and scan truth live in `AGENTS.md`, `PRD.md`, and `codebase.md`.
 - [`license-key-compromise-runbook.md`](license-key-compromise-runbook.md) — signing-key incident response.
 
