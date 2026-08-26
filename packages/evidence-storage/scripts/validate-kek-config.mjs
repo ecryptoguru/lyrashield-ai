@@ -36,8 +36,8 @@ export function validateKekConfig(environment = process.env) {
   const activeKek = environment.LYRASHIELD_EVIDENCE_KEK
   for (const [ref, secret] of Object.entries(keyring)) {
     const match = versionedRef.exec(ref)
-    if (!match || Number(match[1]) >= activeVersion) {
-      throw new Error("LYRASHIELD_EVIDENCE_KEK_KEYRING must contain only older versioned refs")
+    if (!match || Number(match[1]) === activeVersion) {
+      throw new Error("LYRASHIELD_EVIDENCE_KEK_KEYRING must contain only non-active versioned refs")
     }
     decodeKek("LYRASHIELD_EVIDENCE_KEK_KEYRING value", secret)
     if (secret === activeKek) {

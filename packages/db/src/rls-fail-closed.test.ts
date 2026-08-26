@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { randomUUID } from "node:crypto"
+import { createId } from "@paralleldrive/cuid2"
 import { PrismaClient } from "./generated/prisma"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { prisma } from "./client"
@@ -35,6 +36,9 @@ const suffix = randomUUID().replace(/-/g, "")
 const workspaceId = `rls-fc-owner-${suffix}`
 const otherWorkspaceId = `rls-fc-other-${suffix}`
 let targetId = ""
+const artifactDeletionTaskId = createId()
+const enqueuedArtifactDeletionTaskId = createId()
+let evidenceStorageUri = ""
 let restricted: PrismaClient
 
 describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
@@ -74,9 +78,48 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       },
     })
     targetId = target.id
+    const scan = await prisma.scan.create({
+      data: {
+        workspaceId,
+        targetId,
+        goal: "LAUNCH_REVIEW",
+        status: "COMPLETED",
+        createdById: `rls-fc-evidence-user-${suffix}`,
+      },
+    })
+    const finding = await prisma.finding.create({
+      data: {
+        workspaceId,
+        targetId,
+        scanId: scan.id,
+        title: "RLS fail-closed evidence",
+        summary: "Fixture for the account-deletion outbox enqueue boundary.",
+        severity: "LOW",
+        dedupeKey: `rls-fc-evidence-${suffix}`,
+      },
+    })
+    evidenceStorageUri = `s3://evidence/evidence/${workspaceId}/${createId()}.enc`
+    await prisma.evidence.create({
+      data: {
+        findingId: finding.id,
+        type: "receipt",
+        storageUri: evidenceStorageUri,
+      },
+    })
+    await prisma.artifactDeletionTask.create({
+      data: {
+        id: artifactDeletionTaskId,
+        workspaceId,
+        kind: "EVIDENCE",
+        storageUri: `s3://test/evidence/${workspaceId}/fixture.enc`,
+      },
+    })
   })
 
   afterAll(async () => {
+    await prisma.artifactDeletionTask.deleteMany({
+      where: { id: { in: [artifactDeletionTaskId, enqueuedArtifactDeletionTaskId] } },
+    })
     if (targetId) {
       await prisma.$executeRaw`DELETE FROM "Target" WHERE id = ${targetId}`
     }
@@ -150,6 +193,64 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       return rows[0]?.name
     })
     expect(name).toBe("RLS fail-closed target")
+  })
+
+  it("hides the post-workspace artifact deletion outbox from the runtime role", async () => {
+    for (const context of [null, workspaceId, otherWorkspaceId]) {
+      let visibleRows = 0
+      try {
+        visibleRows = await asWorkspace(context, async (tx) => {
+          const rows = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT id FROM "ArtifactDeletionTask" WHERE id = ${artifactDeletionTaskId}`
+          return rows.length
+        })
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes("permission denied")) throw error
+      }
+      expect(visibleRows).toBe(0)
+    }
+  })
+
+  it("refuses direct artifact deletion task inserts from the runtime role", async () => {
+    await expect(
+      asWorkspace(
+        workspaceId,
+        (tx) =>
+          tx.$executeRaw`
+          INSERT INTO "ArtifactDeletionTask" (
+            id, "workspaceId", kind, "storageUri", "updatedAt"
+          ) VALUES (
+            ${`forbidden-${suffix}`}, ${workspaceId}, 'EVIDENCE',
+            ${`s3://test/evidence/${workspaceId}/forbidden.enc`}, NOW()
+          )`
+      )
+    ).rejects.toThrow()
+  })
+
+  it("allows only the current workspace to enqueue one of its retained Evidence URIs", async () => {
+    const returnedId = await asWorkspace(workspaceId, async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT app.enqueue_artifact_deletion_task(
+          ${enqueuedArtifactDeletionTaskId}, ${workspaceId}, ${evidenceStorageUri}
+        ) AS id`
+      return rows[0]?.id
+    })
+    expect(returnedId).toBe(enqueuedArtifactDeletionTaskId)
+
+    await expect(
+      asWorkspace(
+        otherWorkspaceId,
+        (tx) => tx.$queryRaw`
+        SELECT app.enqueue_artifact_deletion_task(
+          ${createId()}, ${workspaceId}, ${evidenceStorageUri}
+        ) AS id`
+      )
+    ).rejects.toThrow()
+
+    const task = await prisma.artifactDeletionTask.findUnique({
+      where: { id: enqueuedArtifactDeletionTaskId },
+    })
+    expect(task).toMatchObject({ workspaceId, storageUri: evidenceStorageUri, kind: "EVIDENCE" })
   })
 
   it("keeps AI security score snapshots inside the owning workspace", async () => {

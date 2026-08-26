@@ -7,6 +7,8 @@ import {
   getAccountDeletionPlan,
   AccountDeletionBlockedError,
   AccountDeletionConfirmationRequiredError,
+  AccountDeletionActiveScanError,
+  AccountDeletionUnsupportedArtifactError,
 } from "./account-deletion"
 
 const suffix = randomUUID().replace(/-/g, "")
@@ -16,18 +18,24 @@ const otherMemberId = `other-member-${suffix}`
 const soloUserId = `solo-user-${suffix}`
 const rewardedUserId = `delete-rewarded-${suffix}`
 const richUserId = `rich-user-${suffix}`
+const activeUserId = `active-user-${suffix}`
+const legacyUserId = `legacy-user-${suffix}`
 
 const deletableWorkspaceId = `deletable-ws-${suffix}`
 const retainWorkspaceId = `retain-ws-${suffix}`
 const blockedWorkspaceId = `blocked-ws-${suffix}`
 const soloWorkspaceId = `solo-ws-${suffix}`
 const richWorkspaceId = `rich-ws-${suffix}`
+const activeWorkspaceId = `active-ws-${suffix}`
+const legacyWorkspaceId = `legacy-ws-${suffix}`
 
 const deletableWorkspaceName = `Deletable ${suffix}`
 const retainWorkspaceName = `Retention ${suffix}`
 const blockedWorkspaceName = `Blocked ${suffix}`
 const soloWorkspaceName = `Solo ${suffix}`
 const richWorkspaceName = `Rich ${suffix}`
+const activeWorkspaceName = `Active ${suffix}`
+const legacyWorkspaceName = `Legacy ${suffix}`
 
 const referralCode = `234567${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
 const rewardedReferralCode = `765432${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
@@ -39,6 +47,8 @@ async function cleanup() {
     blockedWorkspaceId,
     soloWorkspaceId,
     richWorkspaceId,
+    activeWorkspaceId,
+    legacyWorkspaceId,
   ]) {
     await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`.catch(
       () => {}
@@ -47,11 +57,25 @@ async function cleanup() {
   }
   await prisma.user.deleteMany({
     where: {
-      id: { in: [userId, otherOwnerId, otherMemberId, soloUserId, rewardedUserId, richUserId] },
+      id: {
+        in: [
+          userId,
+          otherOwnerId,
+          otherMemberId,
+          soloUserId,
+          rewardedUserId,
+          richUserId,
+          activeUserId,
+          legacyUserId,
+        ],
+      },
     },
   })
   await prisma.referralCode.deleteMany({
     where: { code: { in: [referralCode, rewardedReferralCode] } },
+  })
+  await prisma.artifactDeletionTask.deleteMany({
+    where: { workspaceId: { in: [richWorkspaceId, activeWorkspaceId, legacyWorkspaceId] } },
   })
 }
 
@@ -71,6 +95,8 @@ describe("account deletion", () => {
         { id: soloUserId, name: "Solo", email: `${soloUserId}@example.com` },
         { id: rewardedUserId, name: "Rewarded", email: `${rewardedUserId}@example.com` },
         { id: richUserId, name: "Rich", email: `${richUserId}@example.com` },
+        { id: activeUserId, name: "Active", email: `${activeUserId}@example.com` },
+        { id: legacyUserId, name: "Legacy", email: `${legacyUserId}@example.com` },
       ],
     })
     await prisma.workspace.createMany({
@@ -80,6 +106,8 @@ describe("account deletion", () => {
         { id: blockedWorkspaceId, name: blockedWorkspaceName, slug: blockedWorkspaceId },
         { id: soloWorkspaceId, name: soloWorkspaceName, slug: soloWorkspaceId },
         { id: richWorkspaceId, name: richWorkspaceName, slug: richWorkspaceId },
+        { id: activeWorkspaceId, name: activeWorkspaceName, slug: activeWorkspaceId },
+        { id: legacyWorkspaceId, name: legacyWorkspaceName, slug: legacyWorkspaceId },
       ],
     })
     await prisma.workspaceMember.createMany({
@@ -96,6 +124,8 @@ describe("account deletion", () => {
         },
         { workspaceId: soloWorkspaceId, userId: soloUserId, role: "OWNER", status: "active" },
         { workspaceId: richWorkspaceId, userId: richUserId, role: "OWNER", status: "active" },
+        { workspaceId: activeWorkspaceId, userId: activeUserId, role: "OWNER", status: "active" },
+        { workspaceId: legacyWorkspaceId, userId: legacyUserId, role: "OWNER", status: "active" },
       ],
     })
   })
@@ -201,6 +231,28 @@ describe("account deletion", () => {
         ],
       })
     }
+    const evidenceFinding = await prisma.finding.create({
+      data: {
+        workspaceId: richWorkspaceId,
+        targetId: target.id,
+        scanId: scans[0]!.id,
+        title: "Retained evidence",
+        summary: "Deletion outbox regression",
+        severity: "LOW",
+        dedupeKey: `delete-evidence-${suffix}`,
+      },
+    })
+    const evidenceStorageUri = `s3://evidence-test/evidence/${richWorkspaceId}/${evidenceFinding.id}/receipt.enc`
+    await prisma.evidence.create({
+      data: {
+        findingId: evidenceFinding.id,
+        type: "receipt",
+        storageUri: evidenceStorageUri,
+        encryptionKeyRef: "envkeystore/lyrashield-evidence-kek/v1",
+        checksum: suffix.padEnd(64, "0").slice(0, 64),
+        redactionStatus: "complete",
+      },
+    })
     await prisma.notification.create({
       data: {
         workspaceId: richWorkspaceId,
@@ -245,7 +297,7 @@ describe("account deletion", () => {
       })
     }
 
-    await deleteUserAccount(richUserId, richWorkspaceName)
+    const deletion = await deleteUserAccount(richUserId, richWorkspaceName)
 
     expect(await prisma.user.findUnique({ where: { id: richUserId } })).toBeNull()
     expect(await prisma.workspace.findUnique({ where: { id: richWorkspaceId } })).toBeNull()
@@ -261,6 +313,51 @@ describe("account deletion", () => {
     const remainingAuditLogs = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT count(*)::bigint AS count FROM "AuditLog" WHERE "workspaceId" = ${richWorkspaceId}`
     expect(remainingAuditLogs).toMatchObject([{ count: 0n }])
+    expect(deletion.artifactDeletionTaskIds).toHaveLength(1)
+    expect(
+      await prisma.artifactDeletionTask.findUnique({
+        where: { kind_storageUri: { kind: "EVIDENCE", storageUri: evidenceStorageUri } },
+      })
+    ).toMatchObject({ workspaceId: richWorkspaceId, status: "PENDING" })
+  })
+
+  it("fails closed while a deletable workspace has an active scan", async () => {
+    const scan = await prisma.scan.create({
+      data: {
+        workspaceId: activeWorkspaceId,
+        goal: "LAUNCH_REVIEW",
+        status: "RUNNING",
+        createdById: activeUserId,
+      },
+    })
+
+    await expect(deleteUserAccount(activeUserId, activeWorkspaceName)).rejects.toBeInstanceOf(
+      AccountDeletionActiveScanError
+    )
+    expect(await prisma.workspace.findUnique({ where: { id: activeWorkspaceId } })).not.toBeNull()
+    expect(await prisma.user.findUnique({ where: { id: activeUserId } })).not.toBeNull()
+
+    await prisma.scan.update({ where: { id: scan.id }, data: { status: "CANCELLED" } })
+    await deleteUserAccount(activeUserId, activeWorkspaceName)
+  })
+
+  it("fails closed for legacy report storage without a deletion contract", async () => {
+    const report = await prisma.report.create({
+      data: {
+        workspaceId: legacyWorkspaceId,
+        title: "Legacy report",
+        createdById: legacyUserId,
+        storageUri: "s3://legacy-reports/report.html",
+      },
+    })
+
+    await expect(deleteUserAccount(legacyUserId, legacyWorkspaceName)).rejects.toBeInstanceOf(
+      AccountDeletionUnsupportedArtifactError
+    )
+    expect(await prisma.workspace.findUnique({ where: { id: legacyWorkspaceId } })).not.toBeNull()
+
+    await prisma.report.update({ where: { id: report.id }, data: { storageUri: null } })
+    await deleteUserAccount(legacyUserId, legacyWorkspaceName)
   })
 
   it("anonymizes attribution in a co-owned workspace and keeps the audit chain", async () => {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const getSession = vi.fn()
 const deleteUserAccount = vi.fn()
+const drainArtifactDeletionTasks = vi.fn()
 class AccountDeletionBlockedError extends Error {
   constructor(public workspaces: Array<{ id: string; name: string; members?: unknown[] }>) {
     super("blocked")
@@ -15,14 +16,29 @@ class AccountDeletionConfirmationRequiredError extends Error {
     super("confirmation required")
   }
 }
+class AccountDeletionActiveScanError extends Error {
+  constructor(public workspaces: Array<{ id: string; name: string }>) {
+    super("active scans")
+  }
+}
+class AccountDeletionUnsupportedArtifactError extends Error {
+  constructor(public workspaces: Array<{ id: string; name: string }>) {
+    super("unsupported artifact")
+  }
+}
 
 vi.mock("@lyrashield/auth/server", () => ({ getSession }))
 vi.mock("@lyrashield/db", () => ({
   deleteUserAccount,
   AccountDeletionBlockedError,
   AccountDeletionConfirmationRequiredError,
+  AccountDeletionActiveScanError,
+  AccountDeletionUnsupportedArtifactError,
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), error: vi.fn() } }))
+vi.mock("@lyrashield/evidence-storage", () => ({ drainArtifactDeletionTasks }))
+vi.mock("@lyrashield/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
 
 const { DELETE } = await import("./route")
 
@@ -38,6 +54,12 @@ describe("DELETE /api/account", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getSession.mockResolvedValue({ userId: "user-1" })
+    drainArtifactDeletionTasks.mockResolvedValue({
+      claimed: 0,
+      deleted: 0,
+      retrying: 0,
+      deadLettered: 0,
+    })
   })
 
   it("requires an authenticated session", async () => {
@@ -51,9 +73,26 @@ describe("DELETE /api/account", () => {
   })
 
   it("deletes the authenticated account", async () => {
-    deleteUserAccount.mockResolvedValue({ workspaceIds: ["ws-1"] })
+    deleteUserAccount.mockResolvedValue({
+      workspaceIds: ["ws-1"],
+      artifactDeletionTaskIds: ["task-1"],
+    })
     expect((await DELETE(request("DELETE"))).status).toBe(200)
     expect(deleteUserAccount).toHaveBeenCalledWith("user-1", "DELETE")
+    expect(drainArtifactDeletionTasks).toHaveBeenCalledWith({
+      taskIds: ["task-1"],
+      limit: 1,
+    })
+  })
+
+  it("returns success when eager cleanup fails after durable account deletion", async () => {
+    deleteUserAccount.mockResolvedValue({
+      workspaceIds: [],
+      artifactDeletionTaskIds: ["task-1"],
+    })
+    drainArtifactDeletionTasks.mockRejectedValue(new Error("system database unavailable"))
+
+    expect((await DELETE(request("DELETE"))).status).toBe(200)
   })
 
   it("blocks sole owners until ownership is transferred", async () => {
@@ -81,5 +120,25 @@ describe("DELETE /api/account", () => {
       deletableWorkspaces: [{ id: "ws-1", name: "Launch" }],
       expectedConfirmation: "Launch",
     })
+  })
+
+  it("blocks deletion while a workspace has active scans", async () => {
+    deleteUserAccount.mockRejectedValue(
+      new AccountDeletionActiveScanError([{ id: "ws-1", name: "Launch" }])
+    )
+    const response = await DELETE(request("DELETE"))
+    expect(response.status).toBe(409)
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe("ACTIVE_SCANS")
+  })
+
+  it("blocks deletion for legacy external artifact contracts", async () => {
+    deleteUserAccount.mockRejectedValue(
+      new AccountDeletionUnsupportedArtifactError([{ id: "ws-1", name: "Legacy" }])
+    )
+    const response = await DELETE(request("DELETE"))
+    expect(response.status).toBe(409)
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+      "UNSUPPORTED_EXTERNAL_ARTIFACT"
+    )
   })
 })

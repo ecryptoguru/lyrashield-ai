@@ -27,9 +27,8 @@ az login --identity --allow-no-subscriptions --output none >/dev/null
 temporary_file=$(mktemp "${environment_file}.XXXXXX")
 trap 'rm -f "$temporary_file"' EXIT HUP INT TERM
 
-write_secret() {
-  environment_name="$1"
-  secret_name="$2"
+read_secret() {
+  secret_name="$1"
   secret_value=$(az keyvault secret show \
     --vault-name "$vault_name" \
     --name "$secret_name" \
@@ -45,13 +44,16 @@ write_secret() {
     echo "Key Vault secret contains a newline: $secret_name" >&2
     exit 1
   fi
+}
 
+write_secret() {
+  environment_name="$1"
+  read_secret "$2"
   printf '%s=%s\n' "$environment_name" "$secret_value" >>"$temporary_file"
 }
 
-write_secret_optional() {
-  environment_name="$1"
-  secret_name="$2"
+read_secret_optional() {
+  secret_name="$1"
   secret_value=$(az keyvault secret show \
     --vault-name "$vault_name" \
     --name "$secret_name" \
@@ -66,7 +68,14 @@ write_secret_optional() {
     echo "Key Vault secret contains a newline: $secret_name" >&2
     exit 1
   fi
+}
 
+write_secret_optional() {
+  environment_name="$1"
+  read_secret_optional "$2"
+  if [ -z "$secret_value" ]; then
+    return 0
+  fi
   printf '%s=%s\n' "$environment_name" "$secret_value" >>"$temporary_file"
 }
 
@@ -91,31 +100,87 @@ write_secret S3_SECRET_KEY worker-r2-secret-key
 # the S3 block: evidence uploads fail closed without it. Generate once, store
 # durably (loss makes envelope-encrypted evidence unreadable) — see
 # packages/evidence-storage/scripts/generate-kek.mjs and PRODUCTION_DEPLOYMENT.
-write_secret LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF worker-evidence-kek-active-ref
-evidence_kek_active_ref=$secret_value
-evidence_kek_prefix=envkeystore/lyrashield-evidence-kek/
-case "$evidence_kek_active_ref" in
-  "${evidence_kek_prefix}"v*) evidence_kek_version=${evidence_kek_active_ref#"$evidence_kek_prefix"} ;;
-  *)
-    echo "Evidence KEK active ref is not versioned" >&2
+read_secret_optional worker-evidence-kek-config-ref
+evidence_kek_config_ref=$secret_value
+evidence_kek_keyring_secret=
+evidence_kek_expected_keyring_digest=
+if [ -n "$evidence_kek_config_ref" ]; then
+  case "$evidence_kek_config_ref" in
+    */*)
+      evidence_kek_version=${evidence_kek_config_ref%%/*}
+      evidence_kek_keyring_digest=${evidence_kek_config_ref#*/}
+      ;;
+    *)
+      echo "Evidence KEK config ref is invalid" >&2
+      exit 1
+      ;;
+  esac
+  case "$evidence_kek_keyring_digest" in
+    ''|*[!0-9a-f]*)
+      echo "Evidence KEK config ref is invalid" >&2
+      exit 1
+      ;;
+  esac
+  if [ "${#evidence_kek_keyring_digest}" -ne 12 ]; then
+    echo "Evidence KEK config ref is invalid" >&2
     exit 1
-    ;;
-esac
+  fi
+  evidence_kek_active_ref="envkeystore/lyrashield-evidence-kek/$evidence_kek_version"
+  evidence_kek_secret="worker-evidence-kek-$evidence_kek_version"
+  evidence_kek_keyring_secret="worker-evidence-kek-keyring-$evidence_kek_keyring_digest"
+  evidence_kek_expected_keyring_digest=$evidence_kek_keyring_digest
+else
+  # Backward-compatible migration: ordinary refresh remains safe before the
+  # immutable selector and its targets are provisioned. A present malformed
+  # selector never falls back.
+  read_secret_optional worker-evidence-kek-active-ref
+  evidence_kek_active_ref=$secret_value
+  if [ -n "$evidence_kek_active_ref" ]; then
+    evidence_kek_prefix=envkeystore/lyrashield-evidence-kek/
+    case "$evidence_kek_active_ref" in
+      "${evidence_kek_prefix}"v*)
+        evidence_kek_version=${evidence_kek_active_ref#"$evidence_kek_prefix"}
+        ;;
+      *)
+        echo "Evidence KEK active ref is invalid" >&2
+        exit 1
+        ;;
+    esac
+    evidence_kek_secret="worker-evidence-kek-$evidence_kek_version"
+    evidence_kek_keyring_secret="worker-evidence-kek-keyring-$evidence_kek_version"
+  else
+    evidence_kek_version=v1
+    evidence_kek_active_ref=envkeystore/lyrashield-evidence-kek/v1
+    evidence_kek_secret=worker-evidence-kek
+  fi
+fi
 case "$evidence_kek_version" in
   v[1-9]*) evidence_kek_digits=${evidence_kek_version#v} ;;
   *)
-    echo "Evidence KEK active ref is not versioned" >&2
+    echo "Evidence KEK config ref is invalid" >&2
     exit 1
     ;;
 esac
 case "$evidence_kek_digits" in
   ''|*[!0-9]*)
-    echo "Evidence KEK active ref is not versioned" >&2
+    echo "Evidence KEK config ref is invalid" >&2
     exit 1
     ;;
 esac
-write_secret LYRASHIELD_EVIDENCE_KEK "worker-evidence-kek-$evidence_kek_version"
-write_secret LYRASHIELD_EVIDENCE_KEK_KEYRING "worker-evidence-kek-keyring-$evidence_kek_version"
+printf '%s=%s\n' LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF "$evidence_kek_active_ref" >>"$temporary_file"
+write_secret LYRASHIELD_EVIDENCE_KEK "$evidence_kek_secret"
+if [ -n "$evidence_kek_keyring_secret" ]; then
+  write_secret LYRASHIELD_EVIDENCE_KEK_KEYRING "$evidence_kek_keyring_secret"
+  if [ -n "$evidence_kek_expected_keyring_digest" ]; then
+    evidence_kek_actual_keyring_digest=$(printf '%s' "$secret_value" | sha256sum | cut -c1-12)
+    if [ "$evidence_kek_actual_keyring_digest" != "$evidence_kek_expected_keyring_digest" ]; then
+      echo "Evidence KEK keyring digest does not match config ref" >&2
+      exit 1
+    fi
+  fi
+else
+  printf '%s=%s\n' LYRASHIELD_EVIDENCE_KEK_KEYRING '{}' >>"$temporary_file"
+fi
 # Production URL scans fail closed without the authenticated proxy. Requiring
 # both credentials here keeps a misconfigured worker out of service instead of
 # accepting jobs it cannot safely execute.

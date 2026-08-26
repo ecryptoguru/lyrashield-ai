@@ -270,25 +270,50 @@ one-time secret:
    - GitHub variable `LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF` and secrets
      `LYRASHIELD_EVIDENCE_KEK` and `LYRASHIELD_EVIDENCE_KEK_KEYRING` — the
      deploy workflow validates the
-     canonical 32-byte keys and strictly increasing `vN` reference, then injects
-     the active ref and new immutable Container App secrets
-     `lyrashield-evidence-kek-vN` and `lyrashield-evidence-kek-keyring-vN`.
-     Deploying `vN` never overwrites the fixed legacy secret or an older `vN`.
-   - Key Vault secret `worker-evidence-kek-active-ref` plus immutable
-     `worker-evidence-kek-vN` and `worker-evidence-kek-keyring-vN` secrets — the
-     worker VM reads the active ref first, derives `vN`, and writes the coherent
-     set atomically via `ops/worker/refresh-secrets.sh`. Every entry is required.
+     canonical 32-byte keys and versioned `vN` reference, then injects the
+     active ref and immutable Container App secrets `ev-kek-vN` and
+     `ev-ring-<12-character-keyring-digest>`. Content-addressing the keyring lets
+     a future key be distributed before activation and retained during rollback
+     without overwriting the configuration used by an older revision.
+   - Key Vault secret `worker-evidence-kek-config-ref`, whose value is
+     `vN/<12-character-keyring-digest>`, plus immutable
+     `worker-evidence-kek-vN` and
+     `worker-evidence-kek-keyring-<12-character-keyring-digest>` secrets. The
+     worker VM reads the single selector first, derives the immutable names, and
+     writes the coherent set atomically via `ops/worker/refresh-secrets.sh`.
+     Every entry is required.
 4. **Never** commit the value, paste it into tickets/chats/logs, or reuse
    another secret for it.
 
-Do not overwrite the active KEK in place. For a controlled rotation, assign a
-new immutable `LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF`, put the new 32-byte base64
-secret in `LYRASHIELD_EVIDENCE_KEK`, and retain each prior secret in
-`LYRASHIELD_EVIDENCE_KEK_KEYRING` as a JSON object keyed by its exact envelope
-reference. Provision the same three values to every evidence reader and writer
-before emitting envelopes under the new reference. Removing a historical entry
-makes the evidence written under that reference unreadable, so removal requires
-separate retention, backup, and restore evidence.
+Do not overwrite an immutable KEK or keyring in place. First distribute the
+future key in the v1 keyring while v1 remains active, and verify v1 readback on
+every reader. Then activate v2 with v2 as the primary and v1 in its keyring.
+During rollback, restore v1 as primary but keep v2 in the content-addressed v1
+keyring so evidence written during the overlap remains readable. A keyring may
+therefore contain future versions, but never the active reference or active key
+material; it must always contain every prior version. Removing any entry
+requires separate retention, backup, restore, and retained-readback evidence.
+
+Use this order; do not skip directly to v2:
+
+1. Confirm durable offline recovery for v1 and choose exact retained v1 evidence
+   IDs and checksums without copying private URIs into the change record.
+2. Create immutable v2 and overlap-keyring secrets in GitHub, the app Container
+   App, and Key Vault. Do not change either active selector yet.
+3. Deploy the reviewed code while v1 remains active. Existing workers remain
+   compatible: refresh first tries `worker-evidence-kek-config-ref`, then the
+   earlier `worker-evidence-kek-active-ref` layout, then the original fixed
+   `worker-evidence-kek` as v1 with an empty keyring. A present malformed newer
+   selector fails closed and never falls back.
+4. Select the v1 overlap configuration whose keyring contains v2. Restart the
+   worker only after database/queue preflight permits it, then require app
+   evidence readiness, worker readiness, disposable storage proof, and retained
+   v1 readback.
+5. Select v2 with v2 primary and v1 retained. Repeat every readiness and
+   readback gate, then verify one newly retained v2 artifact.
+6. For rollback, reselect the content-addressed v1 overlap configuration. Never
+   use the original empty v1 keyring after any v2 artifact may have been written.
+   Require retained v1 and v2 readback before resuming admission.
 
 After every rotation and before removing any historical key, verify one exact
 retained evidence record written under each retained reference. This command

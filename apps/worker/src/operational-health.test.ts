@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  countDeadLetterArtifactDeletionTasks: vi.fn(),
   prisma: {
     webhookEventTrack: { count: vi.fn() },
     scan: { findFirst: vi.fn(), count: vi.fn() },
   },
 }))
 
-vi.mock("@lyrashield/db", () => ({ getSystemPrisma: () => mocks.prisma }))
+vi.mock("@lyrashield/db", () => ({
+  countDeadLetterArtifactDeletionTasks: mocks.countDeadLetterArtifactDeletionTasks,
+  getSystemPrisma: () => mocks.prisma,
+}))
 
 import {
   collectOperationalHealthSnapshot,
@@ -26,6 +30,7 @@ const healthy: OperationalHealthSnapshot = {
   oldestWaitingJobAgeMs: 0,
   reconciliationDriftCount: 0,
   webhookDeadLetterCount: 0,
+  artifactDeletionDeadLetterCount: 0,
   evidenceFailureCount: 0,
   oldestTerminalUnreconciledCostAgeMs: 0,
   activeReplicaCount: 1,
@@ -37,6 +42,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   resetOperationalHealthState()
   mocks.prisma.webhookEventTrack.count.mockResolvedValue(0)
+  mocks.countDeadLetterArtifactDeletionTasks.mockResolvedValue(0)
   mocks.prisma.scan.findFirst.mockResolvedValue(null)
   mocks.prisma.scan.count.mockResolvedValue(0)
 })
@@ -85,6 +91,7 @@ describe("evaluateOperationalHealth", () => {
       oldestWaitingJobAgeMs: OPERATIONAL_ALERT_THRESHOLDS.oldestWaitingJobMs + 1,
       reconciliationDriftCount: 1,
       webhookDeadLetterCount: 1,
+      artifactDeletionDeadLetterCount: 1,
       evidenceFailureCount: 1,
       oldestTerminalUnreconciledCostAgeMs:
         OPERATIONAL_ALERT_THRESHOLDS.terminalUnreconciledCostMs + 1,
@@ -100,6 +107,7 @@ describe("evaluateOperationalHealth", () => {
       "scan_queue_oldest_wait_high",
       "reconciliation_drift",
       "webhook_dead_letter",
+      "artifact_deletion_dead_letter",
       "evidence_persistence_failure",
       "terminal_cost_unreconciled",
       "app_no_active_replica",
@@ -113,6 +121,7 @@ describe("collectOperationalHealthSnapshot", () => {
   it("collects durable DLQ, evidence, and terminal cost signals", async () => {
     const now = new Date("2026-08-24T12:00:00Z")
     mocks.prisma.webhookEventTrack.count.mockResolvedValue(2)
+    mocks.countDeadLetterArtifactDeletionTasks.mockResolvedValue(3)
     mocks.prisma.scan.findFirst.mockResolvedValue({ endedAt: new Date("2026-08-24T11:40:00Z") })
     mocks.prisma.scan.count.mockResolvedValue(1)
 
@@ -129,6 +138,7 @@ describe("collectOperationalHealthSnapshot", () => {
       oldestWaitingJobAgeMs: 360_000,
       reconciliationDriftCount: 1,
       webhookDeadLetterCount: 2,
+      artifactDeletionDeadLetterCount: 3,
       evidenceFailureCount: 1,
       oldestTerminalUnreconciledCostAgeMs: 1_200_000,
     })

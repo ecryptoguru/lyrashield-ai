@@ -33,6 +33,7 @@ export type {
   ApiKey,
   Finding,
   Evidence,
+  ArtifactDeletionTask,
   ScanResultManifest,
   ScanCoverageReceipt,
   FindingCandidate,
@@ -101,8 +102,16 @@ export {
   getAccountDeletionPlan,
   AccountDeletionBlockedError,
   AccountDeletionConfirmationRequiredError,
+  AccountDeletionActiveScanError,
+  AccountDeletionUnsupportedArtifactError,
   type AccountDeletionPlan,
 } from "./account-deletion"
+export {
+  claimArtifactDeletionTask,
+  completeArtifactDeletionTask,
+  countDeadLetterArtifactDeletionTasks,
+  failArtifactDeletionTask,
+} from "./artifact-deletion"
 export {
   createScan,
   updateScanStatus,

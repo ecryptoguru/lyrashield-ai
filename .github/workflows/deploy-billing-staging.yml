@@ -191,6 +191,25 @@ jobs:
             exit 1
           }
 
+          # The Container Apps CLI may try to create AcrPull even when the
+          # assignment already exists, which this least-privileged OIDC role
+          # intentionally cannot do. Verify the immutable prerequisite using
+          # the object ID path (no Microsoft Graph lookup) before any job/app.
+          pull_principal_id=$(az identity show \
+            --ids "$PULL_IDENTITY_ID" --query principalId --output tsv)
+          registry_id=$(az acr show \
+            --name "${REGISTRY%%.*}" --resource-group "$RESOURCE_GROUP" \
+            --query id --output tsv)
+          acrpull_scope=$(az role assignment list \
+            --assignee-object-id "$pull_principal_id" \
+            --scope "$registry_id" \
+            --query "[?roleDefinitionName=='AcrPull' && principalId=='${pull_principal_id}'].scope" \
+            --output tsv)
+          [ "${acrpull_scope,,}" = "${registry_id,,}" ] || {
+            echo "::error::Pull identity must have exactly one AcrPull assignment at the isolated staging registry scope."
+            exit 1
+          }
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
@@ -335,7 +354,7 @@ jobs:
           role_job="lyrashield-stage-db-role"
 
           wait_for_job() {
-            local job=$1 execution status
+            local job=$1 execution status container_name
             execution=$(az containerapp job start \
               --name "$job" \
               --resource-group "$RESOURCE_GROUP" \
@@ -348,7 +367,28 @@ jobs:
                 --query properties.status --output tsv)
               case "$status" in
                 Succeeded) return 0 ;;
-                Failed|Stopped) echo "::error::${job} ended with ${status}."; return 1 ;;
+                Failed|Stopped)
+                  echo "::error::${job} ended with ${status}."
+                  container_name=$(az containerapp job show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --query 'properties.template.containers[0].name' \
+                    --output tsv)
+                  az containerapp job execution show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --job-execution-name "$execution" \
+                    --query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}' \
+                    --output jsonc || true
+                  az containerapp job logs show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --execution "$execution" \
+                    --container "$container_name" \
+                    --tail 300 \
+                    --format text || true
+                  return 1
+                  ;;
               esac
               sleep 10
             done

@@ -133,8 +133,18 @@ wait_healthy
 [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
 curl --fail --silent --show-error --max-time 10 https://app.lyrashieldai.com/api/ready/scans >/dev/null
 
-resume_admission
 restore_timer
+# Promotion owns these systemd units. Repair disabled or previously inactive
+# units before reopening scan admission so the next rollout needs no VM step.
+systemctl enable "$service" "$timer"
+systemctl start "$timer"
+systemctl is-active --quiet "$service"
+systemctl is-enabled --quiet "$service"
+systemctl is-active --quiet "$timer"
+systemctl is-enabled --quiet "$timer"
+echo "Worker service state: active enabled"
+echo "Worker egress refresh timer state: active enabled"
+resume_admission
 promotion_complete=1
 trap - EXIT HUP INT TERM
 echo "Worker promotion passed for ${target##*@}"

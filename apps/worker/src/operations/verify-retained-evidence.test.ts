@@ -37,7 +37,7 @@ describe("verifyRetainedEvidence", () => {
   it("reads only the exact record and verifies its immutable checksum", async () => {
     const testDeps = deps()
     await expect(verifyRetainedEvidence(EXPECTED, testDeps)).resolves.toBeUndefined()
-    expect(testDeps.findEvidence).toHaveBeenCalledWith("ev_exact_1")
+    expect(testDeps.findEvidence).toHaveBeenCalledWith("ev_exact_1", "ws-1")
     expect(testDeps.readArtifact).toHaveBeenCalledWith(
       "s3://private/evidence/ws-1/artifact",
       "ws-1"

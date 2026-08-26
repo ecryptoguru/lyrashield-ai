@@ -1,6 +1,8 @@
+import { createId } from "@paralleldrive/cuid2"
 import { prisma } from "./client"
 import { computeAuditHash } from "./audit-hash"
 import type { AuditLog } from "./generated/prisma"
+import { ACTIVE_SCAN_STATUSES, lockWorkspaceScanAdmission } from "./scan-service"
 
 const DELETED_USER = "deleted-user"
 
@@ -39,6 +41,20 @@ export class AccountDeletionConfirmationRequiredError extends Error {
   ) {
     super("Confirmation required before deleting this account")
     this.name = "AccountDeletionConfirmationRequiredError"
+  }
+}
+
+export class AccountDeletionActiveScanError extends Error {
+  constructor(public workspaces: AccountDeletionWorkspace[]) {
+    super("Wait for active scans to finish or cancel them before deleting this account")
+    this.name = "AccountDeletionActiveScanError"
+  }
+}
+
+export class AccountDeletionUnsupportedArtifactError extends Error {
+  constructor(public workspaces: AccountDeletionWorkspace[]) {
+    super("Workspace contains external artifacts with no verified deletion contract")
+    this.name = "AccountDeletionUnsupportedArtifactError"
   }
 }
 
@@ -157,7 +173,7 @@ export async function getAccountDeletionPlan(userId: string): Promise<AccountDel
 export async function deleteUserAccount(
   userId: string,
   confirmation = "DELETE"
-): Promise<{ workspaceIds: string[] }> {
+): Promise<{ workspaceIds: string[]; artifactDeletionTaskIds: string[] }> {
   const plan = await getAccountDeletionPlan(userId)
 
   if (plan.blocked.length > 0) {
@@ -194,7 +210,70 @@ export async function deleteUserAccount(
     (id) => !plan.deletable.some((workspace) => workspace.id === id)
   )
 
-  await prisma.$transaction(async (tx) => {
+  const artifactDeletionTaskIds = await prisma.$transaction(async (tx) => {
+    const deletableWorkspaces = [...plan.deletable].sort((a, b) => a.id.localeCompare(b.id))
+    const activeScanWorkspaces: AccountDeletionWorkspace[] = []
+    const unsupportedArtifactWorkspaces: AccountDeletionWorkspace[] = []
+    const evidenceUris: Array<{ workspaceId: string; storageUri: string }> = []
+
+    // Use the exact scan-admission lock used by createScan(). This closes the
+    // deletion/admission race without consulting or mutating BullMQ/Redis.
+    for (const workspace of deletableWorkspaces) {
+      await lockWorkspaceScanAdmission(tx, workspace.id)
+      await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspace.id}, true)`
+
+      const [activeScans, evidence, legacyReports, legacySarifScans] = await Promise.all([
+        tx.scan.count({
+          where: {
+            workspaceId: workspace.id,
+            deletedAt: null,
+            status: { in: ACTIVE_SCAN_STATUSES },
+          },
+        }),
+        tx.evidence.findMany({
+          where: { finding: { workspaceId: workspace.id } },
+          select: { storageUri: true, redactedStorageUri: true },
+        }),
+        tx.report.count({
+          where: { workspaceId: workspace.id, storageUri: { not: null }, deletedAt: null },
+        }),
+        tx.scan.count({
+          where: { workspaceId: workspace.id, sarifUri: { not: null }, deletedAt: null },
+        }),
+      ])
+
+      if (activeScans > 0) activeScanWorkspaces.push(workspace)
+      if (legacyReports > 0 || legacySarifScans > 0) unsupportedArtifactWorkspaces.push(workspace)
+
+      for (const row of evidence) {
+        for (const storageUri of [row.storageUri, row.redactedStorageUri]) {
+          if (storageUri) evidenceUris.push({ workspaceId: workspace.id, storageUri })
+        }
+      }
+    }
+
+    if (activeScanWorkspaces.length > 0) {
+      throw new AccountDeletionActiveScanError(activeScanWorkspaces)
+    }
+    if (unsupportedArtifactWorkspaces.length > 0) {
+      throw new AccountDeletionUnsupportedArtifactError(unsupportedArtifactWorkspaces)
+    }
+
+    const uniqueEvidence = [
+      ...new Map(evidenceUris.map((artifact) => [artifact.storageUri, artifact])).values(),
+    ]
+    const taskIds: string[] = []
+    for (const artifact of uniqueEvidence) {
+      await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${artifact.workspaceId}, true)`
+      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT app.enqueue_artifact_deletion_task(
+          ${createId()}, ${artifact.workspaceId}, ${artifact.storageUri}
+        ) AS id`
+      const taskId = rows[0]?.id
+      if (!taskId) throw new Error("Artifact deletion task was not persisted")
+      taskIds.push(taskId)
+    }
+
     // These models are deliberately not workspace-RLS scoped. Keep their user
     // attribution cleanup outside the per-workspace context loop below.
     await Promise.all([
@@ -324,7 +403,7 @@ export async function deleteUserAccount(
     // delete outright. This does not weaken the trigger elsewhere — the RETAINED
     // path above keeps and anonymizes its audit chain untouched, and any other
     // hard-delete of a workspace with history is still blocked.
-    for (const workspace of [...plan.deletable].sort((a, b) => a.id.localeCompare(b.id))) {
+    for (const workspace of deletableWorkspaces) {
       await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspace.id}, true)`
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspace.id}, 0))`
       await tx.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspace.id}`
@@ -332,6 +411,8 @@ export async function deleteUserAccount(
     }
 
     await tx.user.delete({ where: { id: userId } })
+
+    return taskIds
   })
 
   for (const workspaceId of retainedWorkspaceIds) {
@@ -345,5 +426,5 @@ export async function deleteUserAccount(
     })
   }
 
-  return { workspaceIds: retainedWorkspaceIds }
+  return { workspaceIds: retainedWorkspaceIds, artifactDeletionTaskIds }
 }

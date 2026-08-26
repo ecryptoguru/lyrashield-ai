@@ -10,7 +10,7 @@ interface RetainedEvidenceRecord {
 }
 
 export interface RetainedEvidenceVerifierDeps {
-  findEvidence(id: string): Promise<RetainedEvidenceRecord | null>
+  findEvidence(id: string, workspaceId: string): Promise<RetainedEvidenceRecord | null>
   readArtifact(
     storageUri: string,
     workspaceId: string
@@ -18,9 +18,9 @@ export interface RetainedEvidenceVerifierDeps {
 }
 
 const defaultDeps: RetainedEvidenceVerifierDeps = {
-  findEvidence: (id) =>
-    getSystemPrisma().evidence.findUnique({
-      where: { id },
+  findEvidence: (id, workspaceId) =>
+    getSystemPrisma().evidence.findFirst({
+      where: { id, finding: { workspaceId } },
       select: {
         storageUri: true,
         checksum: true,
@@ -53,7 +53,7 @@ export async function verifyRetainedEvidence(
     throw new Error("--expected-checksum must be one exact lowercase SHA-256 checksum")
   }
 
-  const evidence = await deps.findEvidence(expected.evidenceId)
+  const evidence = await deps.findEvidence(expected.evidenceId, expected.workspaceId)
   if (!evidence) throw new Error("Evidence record was not found")
   if (!evidence.storageUri || !evidence.checksum || !evidence.encryptionKeyRef) {
     throw new Error("Evidence record is missing retained encryption metadata")
