@@ -573,6 +573,56 @@ jobs:
             fi
           fi
 
+      - name: Sync evidence storage credentials to app Container App
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: |
+          if [ -z "$AZURE_APP_CONTAINER_APP_NAME" ]; then
+            exit 0
+          fi
+
+          read_secret() {
+            timeout --foreground 180s az keyvault secret show \
+              --vault-name "$AZURE_KEY_VAULT_NAME" \
+              --name "$1" \
+              --query value \
+              --output tsv
+          }
+
+          S3_ENDPOINT=$(read_secret worker-r2-endpoint)
+          S3_BUCKET=$(read_secret worker-r2-bucket)
+          S3_ACCESS_KEY=$(read_secret worker-r2-access-key)
+          S3_SECRET_KEY=$(read_secret worker-r2-secret-key)
+          for value in "$S3_ENDPOINT" "$S3_BUCKET" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"; do
+            if [ -z "$value" ]; then
+              echo "::error::Evidence storage credential is absent or empty."
+              exit 1
+            fi
+            echo "::add-mask::$value"
+          done
+          export S3_ENDPOINT S3_BUCKET
+          node -e '
+            const endpoint = new URL(process.env.S3_ENDPOINT);
+            if (endpoint.protocol !== "https:" || !endpoint.hostname || !process.env.S3_BUCKET) process.exit(1);
+          ' || {
+            echo "::error::Evidence storage endpoint or bucket is invalid."
+            exit 1
+          }
+
+          timeout --foreground 180s az containerapp secret set \
+            --only-show-errors \
+            --name "$AZURE_APP_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --secrets \
+              "evidence-s3-endpoint=${S3_ENDPOINT}" \
+              "evidence-s3-bucket=${S3_BUCKET}" \
+              "evidence-s3-access=${S3_ACCESS_KEY}" \
+              "evidence-s3-secret=${S3_SECRET_KEY}" \
+            --output none
+          echo "Evidence storage credentials synced to the app Container App."
+
       # secretref: below requires the Container App to already define secrets named
       # upstash-redis-rest-url / upstash-redis-rest-token. Nothing provisioned those, so the
       # secretref would fail az containerapp update outright on a fresh app. This step
@@ -827,6 +877,11 @@ jobs:
               "LYRASHIELD_EVIDENCE_KEK=secretref:${LYRASHIELD_EVIDENCE_KEK_SECRET}" \
               "LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF=${LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF}" \
               "LYRASHIELD_EVIDENCE_KEK_KEYRING=secretref:${LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET}" \
+              "S3_ENDPOINT=secretref:evidence-s3-endpoint" \
+              "S3_BUCKET=secretref:evidence-s3-bucket" \
+              "S3_ACCESS_KEY=secretref:evidence-s3-access" \
+              "S3_SECRET_KEY=secretref:evidence-s3-secret" \
+              "S3_REGION=auto" \
               "GITHUB_APP_ID=secretref:github-app-id" \
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
