@@ -102,7 +102,7 @@ write_secret S3_SECRET_KEY worker-r2-secret-key
 # packages/evidence-storage/scripts/generate-kek.mjs and PRODUCTION_DEPLOYMENT.
 read_secret_optional worker-evidence-kek-config-ref
 evidence_kek_config_ref=$secret_value
-evidence_kek_keyring_secret=
+evidence_kek_keyring_secret_name=
 evidence_kek_expected_keyring_digest=
 if [ -n "$evidence_kek_config_ref" ]; then
   case "$evidence_kek_config_ref" in
@@ -126,8 +126,8 @@ if [ -n "$evidence_kek_config_ref" ]; then
     exit 1
   fi
   evidence_kek_active_ref="envkeystore/lyrashield-evidence-kek/$evidence_kek_version"
-  evidence_kek_secret="worker-evidence-kek-$evidence_kek_version"
-  evidence_kek_keyring_secret="worker-evidence-kek-keyring-$evidence_kek_keyring_digest"
+  evidence_kek_secret_name="worker-evidence-kek-$evidence_kek_version"
+  evidence_kek_keyring_secret_name="worker-evidence-kek-keyring-$evidence_kek_keyring_digest"
   evidence_kek_expected_keyring_digest=$evidence_kek_keyring_digest
 else
   # Backward-compatible migration: ordinary refresh remains safe before the
@@ -146,12 +146,12 @@ else
         exit 1
         ;;
     esac
-    evidence_kek_secret="worker-evidence-kek-$evidence_kek_version"
-    evidence_kek_keyring_secret="worker-evidence-kek-keyring-$evidence_kek_version"
+    evidence_kek_secret_name="worker-evidence-kek-$evidence_kek_version"
+    evidence_kek_keyring_secret_name="worker-evidence-kek-keyring-$evidence_kek_version"
   else
     evidence_kek_version=v1
     evidence_kek_active_ref=envkeystore/lyrashield-evidence-kek/v1
-    evidence_kek_secret=worker-evidence-kek
+    evidence_kek_secret_name=worker-evidence-kek
   fi
 fi
 case "$evidence_kek_version" in
@@ -168,9 +168,9 @@ case "$evidence_kek_digits" in
     ;;
 esac
 printf '%s=%s\n' LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF "$evidence_kek_active_ref" >>"$temporary_file"
-write_secret LYRASHIELD_EVIDENCE_KEK "$evidence_kek_secret"
-if [ -n "$evidence_kek_keyring_secret" ]; then
-  write_secret LYRASHIELD_EVIDENCE_KEK_KEYRING "$evidence_kek_keyring_secret"
+write_secret LYRASHIELD_EVIDENCE_KEK "$evidence_kek_secret_name"
+if [ -n "$evidence_kek_keyring_secret_name" ]; then
+  write_secret LYRASHIELD_EVIDENCE_KEK_KEYRING "$evidence_kek_keyring_secret_name"
   if [ -n "$evidence_kek_expected_keyring_digest" ]; then
     evidence_kek_actual_keyring_digest=$(printf '%s' "$secret_value" | sha256sum | cut -c1-12)
     if [ "$evidence_kek_actual_keyring_digest" != "$evidence_kek_expected_keyring_digest" ]; then

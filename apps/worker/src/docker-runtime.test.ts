@@ -246,10 +246,10 @@ describe("worker Docker runtime", () => {
   it("refreshes the complete evidence key rotation set before worker startup", () => {
     expect(workerSecretRefresh).toContain("read_secret_optional worker-evidence-kek-config-ref")
     expect(workerSecretRefresh).toContain(
-      'write_secret LYRASHIELD_EVIDENCE_KEK "$evidence_kek_secret"'
+      'write_secret LYRASHIELD_EVIDENCE_KEK "$evidence_kek_secret_name"'
     )
     expect(workerSecretRefresh).toContain(
-      'evidence_kek_keyring_secret="worker-evidence-kek-keyring-$evidence_kek_keyring_digest"'
+      'evidence_kek_keyring_secret_name="worker-evidence-kek-keyring-$evidence_kek_keyring_digest"'
     )
     expect(workerSecretRefresh).toContain("Evidence KEK keyring digest does not match config ref")
     expect(deployWorkflow).toContain(

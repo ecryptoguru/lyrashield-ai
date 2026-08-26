@@ -524,23 +524,23 @@ jobs:
           # Only the app Container App uploads evidence (control-evidence
           # artifacts); the scanner app does not and the worker VM receives the
           # key via Key Vault (ops/worker/refresh-secrets.sh).
-          active_secret="ev-kek-${{ steps.verify-evidence-kek.outputs.version }}"
+          active_name="ev-kek-${{ steps.verify-evidence-kek.outputs.version }}"
           keyring_digest=$(printf '%s' "$LYRASHIELD_EVIDENCE_KEK_KEYRING" | sha256sum | cut -c1-12)
-          keyring_secret="ev-ring-${keyring_digest}"
-          if [ "${#active_secret}" -gt 20 ] || [ "${#keyring_secret}" -gt 20 ]; then
+          keyring_name="ev-ring-${keyring_digest}"
+          if [ "${#active_name}" -gt 20 ] || [ "${#keyring_name}" -gt 20 ]; then
             echo "::error::Derived evidence secret name exceeds the Container Apps 20-character limit."
             exit 1
           fi
-          echo "active_secret=${active_secret}" >> "$GITHUB_OUTPUT"
-          echo "keyring_secret=${keyring_secret}" >> "$GITHUB_OUTPUT"
+          echo "active_name=${active_name}" >> "$GITHUB_OUTPUT"
+          echo "keyring_name=${keyring_name}" >> "$GITHUB_OUTPUT"
           if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
             existing_secrets=$(timeout --foreground 180s az containerapp secret list \
               --only-show-errors \
               --name "$AZURE_APP_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --query '[].name' --output tsv)
-            active_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$active_secret" || true)
-            keyring_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$keyring_secret" || true)
+            active_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$active_name" || true)
+            keyring_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$keyring_name" || true)
             if [ "$active_exists" = "1" ]; then
               echo "Immutable active evidence secret already exists; preserving it."
             elif [ "$active_exists" = "0" ]; then
@@ -548,7 +548,7 @@ jobs:
                 --only-show-errors \
                 --name "$AZURE_APP_CONTAINER_APP_NAME" \
                 --resource-group "$AZURE_RESOURCE_GROUP" \
-                --secrets "${active_secret}=${LYRASHIELD_EVIDENCE_KEK}" || {
+                --secrets "${active_name}=${LYRASHIELD_EVIDENCE_KEK}" || {
                   echo "::error::Failed to create immutable active evidence key for ${AZURE_APP_CONTAINER_APP_NAME}."
                   exit 1
                 }
@@ -563,7 +563,7 @@ jobs:
                 --only-show-errors \
                 --name "$AZURE_APP_CONTAINER_APP_NAME" \
                 --resource-group "$AZURE_RESOURCE_GROUP" \
-                --secrets "${keyring_secret}=${LYRASHIELD_EVIDENCE_KEK_KEYRING}" || {
+                --secrets "${keyring_name}=${LYRASHIELD_EVIDENCE_KEK_KEYRING}" || {
                   echo "::error::Failed to create immutable evidence keyring for ${AZURE_APP_CONTAINER_APP_NAME}."
                   exit 1
                 }
@@ -768,8 +768,8 @@ jobs:
         env:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
           LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
-          LYRASHIELD_EVIDENCE_KEK_SECRET: ${{ steps.sync-evidence-kek.outputs.active_secret }}
-          LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET: ${{ steps.sync-evidence-kek.outputs.keyring_secret }}
+          LYRASHIELD_EVIDENCE_KEK_SECRET: ${{ steps.sync-evidence-kek.outputs.active_name }}
+          LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET: ${{ steps.sync-evidence-kek.outputs.keyring_name }}
           POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
