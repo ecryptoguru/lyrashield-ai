@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   countDeadLetterArtifactDeletionTasks: vi.fn(),
+  logger: { warn: vi.fn() },
   prisma: {
     webhookEventTrack: { count: vi.fn() },
     scan: { findFirst: vi.fn(), count: vi.fn() },
@@ -12,6 +13,8 @@ vi.mock("@lyrashield/db", () => ({
   countDeadLetterArtifactDeletionTasks: mocks.countDeadLetterArtifactDeletionTasks,
   getSystemPrisma: () => mocks.prisma,
 }))
+
+vi.mock("@lyrashield/logger", () => ({ logger: mocks.logger }))
 
 import {
   collectOperationalHealthSnapshot,
@@ -168,6 +171,30 @@ describe("collectOperationalHealthSnapshot", () => {
           },
         }),
       })
+    )
+  })
+
+  it("keeps other health signals when the artifact deletion count is unavailable", async () => {
+    mocks.countDeadLetterArtifactDeletionTasks.mockRejectedValue(new Error("database unavailable"))
+    mocks.prisma.webhookEventTrack.count.mockResolvedValue(2)
+    mocks.prisma.scan.count.mockResolvedValue(1)
+
+    const snapshot = await collectOperationalHealthSnapshot({
+      now: new Date("2026-08-24T12:00:00Z"),
+      queueDepth: 0,
+      oldestWaitingJobAgeMs: 0,
+      workerConcurrency: 1,
+      reconciliationDriftCount: 0,
+    })
+
+    expect(snapshot).toMatchObject({
+      webhookDeadLetterCount: 2,
+      evidenceFailureCount: 1,
+    })
+    expect(snapshot.artifactDeletionDeadLetterCount).toBeUndefined()
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Artifact deletion dead-letter count unavailable",
+      { error: "database unavailable" }
     )
   })
 

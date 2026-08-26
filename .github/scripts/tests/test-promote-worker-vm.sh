@@ -33,9 +33,14 @@ case "$command:$unit" in
     [ "$(cat "$MOCK_SERVICE_ENABLED")" = 1 ] ;;
   is-enabled:lyrashield-worker-egress-refresh.timer)
     [ "$(cat "$MOCK_TIMER_ENABLED")" = 1 ] ;;
-  enable:lyrashield-worker.service)
-    printf 1 > "$MOCK_SERVICE_ENABLED"
-    printf 1 > "$MOCK_TIMER_ENABLED" ;;
+  enable:*)
+    for unit in "$@"; do
+      case "$unit" in
+        lyrashield-worker.service) printf 1 > "$MOCK_SERVICE_ENABLED" ;;
+        lyrashield-worker-egress-refresh.timer) printf 1 > "$MOCK_TIMER_ENABLED" ;;
+        *) echo "unexpected enabled unit: $unit" >&2; exit 1 ;;
+      esac
+    done ;;
   stop:lyrashield-worker-egress-refresh.timer)
     printf 0 > "$MOCK_TIMER_ACTIVE" ;;
   start:lyrashield-worker-egress-refresh.timer)
@@ -93,10 +98,11 @@ MOCK
 
 run_case() {
   local name=$1 timer_active=$2 service_enabled=$3 timer_enabled=$4 expected=$5
+  local service_active=${6:-1}
   local case_dir="$tmp/$name"
   mkdir -p "$case_dir"
   write_mocks "$case_dir"
-  printf 1 > "$case_dir/service-active"
+  printf '%s' "$service_active" > "$case_dir/service-active"
   printf '%s' "$timer_active" > "$case_dir/timer-active"
   printf '%s' "$service_enabled" > "$case_dir/service-enabled"
   printf '%s' "$timer_enabled" > "$case_dir/timer-enabled"
@@ -137,5 +143,6 @@ run_case() {
 run_case healthy 1 1 1 success
 run_case repairs-inactive-timer 0 1 1 success
 run_case repairs-disabled-units 1 0 0 success
+run_case repairs-inactive-service 1 1 1 success 0
 
 echo "Worker promotion systemd proof passed."
