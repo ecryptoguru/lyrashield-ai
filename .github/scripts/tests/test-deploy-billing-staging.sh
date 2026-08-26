@@ -69,6 +69,7 @@ must_contain 'WEB_DIGEST: ${{ steps.build-web.outputs.digest }}'
 must_contain 'MIGRATION_DIGEST: ${{ steps.build-migration.outputs.digest }}'
 must_contain 'E2E_DIGEST: ${{ steps.build-e2e.outputs.digest }}'
 must_contain "Verify staging image provenance and owned job executables"
+must_contain '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 must_contain "Delete one-shot database jobs"
 must_contain "az containerapp job delete"
 must_contain "lyrashield-stage-migrate"
@@ -107,6 +108,7 @@ must_not_contain "DATABASE_SYSTEM_URL=secretref:database-admin-url"
 must_not_contain "POLAR_BILLING_ADMISSION=public"
 must_not_contain "RAZORPAY_BILLING_ADMISSION=public"
 must_not_contain '!cancelled()'
+must_not_contain '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}'
 
 test -x "$migration_script"
 test -x "$role_script"

@@ -279,9 +279,9 @@ jobs:
           docker pull "$web_image"
           docker pull "$migration_image"
           docker pull "$e2e_image"
-          [ "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$web_image")" = "$IMAGE_SHA" ]
-          [ "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$migration_image")" = "$IMAGE_SHA" ]
-          [ "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$e2e_image")" = "$IMAGE_SHA" ]
+          [ "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$web_image")" = "$IMAGE_SHA" ]
+          [ "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$migration_image")" = "$IMAGE_SHA" ]
+          [ "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$e2e_image")" = "$IMAGE_SHA" ]
           docker run --rm --entrypoint /usr/bin/test "$migration_image" \
             -x /app/packages/db/scripts/run-billing-staging-migrations.sh
           docker run --rm --entrypoint /usr/bin/test "$migration_image" \
