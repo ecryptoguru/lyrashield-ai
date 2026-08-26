@@ -20,6 +20,8 @@ import {
 const scanIds = ["cmsxsrbmb000001m00cc7e6dx", "cmsxuqxpb000001fhcrr6emat"] as const
 const azureResourceId =
   "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/lyrashield/providers/Microsoft.OperationalInsights/workspaces/lyrashield-logs"
+const azureProviderResourceId =
+  "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/InsightAlphaAI/providers/Microsoft.CognitiveServices/accounts/insightalpha-resource"
 
 function evidencePayload(
   index: number,
@@ -214,6 +216,16 @@ describe("terminal cost operator disposition", () => {
     ).toThrow(`unexpected Azure resource ID for ${scanIds[0]}`)
     expect(() =>
       assertExpectedAzureResourceId(parsed, parsed.scans[0].azureEvidence.resourceId)
+    ).not.toThrow()
+    const providerReceipt = parseTerminalCostDispositionReceipt({
+      ...receipt(),
+      scans: receipt().scans.map((scan) => ({
+        ...scan,
+        azureEvidence: { ...scan.azureEvidence, resourceId: azureProviderResourceId },
+      })),
+    })
+    expect(() =>
+      assertExpectedAzureResourceId(providerReceipt, azureProviderResourceId)
     ).not.toThrow()
     const files = new Map([
       ["/one", evidenceBytes(0)],

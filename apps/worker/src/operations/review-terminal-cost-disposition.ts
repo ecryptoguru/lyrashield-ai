@@ -14,7 +14,7 @@ const HISTORICAL_SCAN_IDS = ["cmsxsrbmb000001m00cc7e6dx", "cmsxuqxpb000001fhcrr6
 const CONFIRMATION_PHRASE = "I AUTHORIZE LYRASHIELD TERMINAL COST DISPOSITION"
 const SHA256 = /^[0-9a-f]{64}$/
 const AZURE_RESOURCE_ID =
-  /^\/subscriptions\/[0-9a-f-]{36}\/resourceGroups\/[^/]+\/providers\/Microsoft\.(?:OperationalInsights\/workspaces|App\/containerApps)\/[^/]+$/i
+  /^\/subscriptions\/[0-9a-f-]{36}\/resourceGroups\/[^/]+\/providers\/Microsoft\.(?:OperationalInsights\/workspaces|App\/containerApps|CognitiveServices\/accounts)\/[^/]+$/i
 const MAX_EVIDENCE_BUFFER_MS = 5 * 60_000
 const terminalStatusSchema = z.enum([
   "COMPLETED",
@@ -509,7 +509,7 @@ export function assertExpectedAzureResourceId(
   expectedResourceId: string
 ): void {
   if (!AZURE_RESOURCE_ID.test(expectedResourceId)) {
-    throw new Error("LOG_ANALYTICS_WORKSPACE_ID must be an exact supported Azure resource ID")
+    throw new Error("terminal-cost evidence must use an exact supported Azure resource ID")
   }
   for (const scan of receipt.scans) {
     if (scan.azureEvidence.resourceId.toLowerCase() !== expectedResourceId.toLowerCase()) {
@@ -545,8 +545,11 @@ async function main(): Promise<void> {
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const receipt = JSON.parse(await readFile(values["receipt-file"], "utf8")) as unknown
   const parsedReceipt = parseTerminalCostDispositionReceipt(receipt)
-  const expectedAzureResourceId = process.env.LOG_ANALYTICS_WORKSPACE_ID
-  if (!expectedAzureResourceId) throw new Error("LOG_ANALYTICS_WORKSPACE_ID is required")
+  const expectedAzureResourceId =
+    process.env.TERMINAL_COST_AZURE_RESOURCE_ID ?? process.env.LOG_ANALYTICS_WORKSPACE_ID
+  if (!expectedAzureResourceId) {
+    throw new Error("TERMINAL_COST_AZURE_RESOURCE_ID is required")
+  }
   assertExpectedAzureResourceId(parsedReceipt, expectedAzureResourceId)
   await verifyTerminalCostEvidenceFiles(parsedReceipt, values["evidence-file"], async (path) => {
     // Operator supplies each local evidence path explicitly; only its digest is retained.
