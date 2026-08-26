@@ -459,7 +459,8 @@ export async function revokeScorecardShare(id: string, workspaceId: string, user
 }
 
 export async function getPublicScorecard(slug: string) {
-  const share = await getSystemPrisma().scorecardShare.findFirst({
+  const systemPrisma = getSystemPrisma()
+  const share = await systemPrisma.scorecardShare.findFirst({
     where: { slug, revokedAt: null, snapshot: { expiresAt: { gt: new Date() } } },
     select: {
       id: true,
@@ -480,7 +481,7 @@ export async function getPublicScorecard(slug: string) {
   // Supersession notice (founder decision #5): a frozen card must disclose when a newer
   // qualifying scan of the same target exists, so an old flattering snapshot can't be
   // pinned silently. Boolean only — never the newer score itself.
-  const newer = await prisma.scoreSnapshot.findFirst({
+  const newer = await systemPrisma.scoreSnapshot.findFirst({
     where: {
       targetId: share.snapshot.targetId,
       workspaceId: share.snapshot.workspaceId,

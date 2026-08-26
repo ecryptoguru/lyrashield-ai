@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const systemScoreSnapshotFindFirst = vi.hoisted(() => vi.fn())
+
 vi.mock("./client", () => ({
   prisma: {
     $transaction: vi.fn(),
@@ -34,7 +36,12 @@ vi.mock("./client", () => ({
 
 vi.mock("./system-client", async () => {
   const { prisma } = await import("./client")
-  return { getSystemPrisma: () => prisma }
+  return {
+    getSystemPrisma: () => ({
+      ...prisma,
+      scoreSnapshot: { ...prisma.scoreSnapshot, findFirst: systemScoreSnapshotFindFirst },
+    }),
+  }
 })
 
 import { prisma } from "./client"
@@ -274,15 +281,16 @@ describe("score-service", () => {
           computedAt: new Date("2026-07-01"),
         },
       })
-      mockPrisma.scoreSnapshot.findFirst.mockResolvedValue({ id: "newer" })
+      systemScoreSnapshotFindFirst.mockResolvedValue({ id: "newer" })
       const result = await getPublicScorecard("slug")
       expect(result).toMatchObject({ referralCode: "CODE2345", superseded: true })
       expect(result?.payload.releaseVerdict).toBe("GO_WITH_CONDITIONS")
-      expect(mockPrisma.scoreSnapshot.findFirst).toHaveBeenCalledWith(
+      expect(systemScoreSnapshotFindFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ targetId: "target-1", workspaceId: "workspace-1" }),
         })
       )
+      expect(mockPrisma.scoreSnapshot.findFirst).not.toHaveBeenCalled()
       expect(mockPrisma.scorecardShare.update).not.toHaveBeenCalled()
     })
 
@@ -297,7 +305,7 @@ describe("score-service", () => {
           computedAt: new Date("2026-07-01"),
         },
       })
-      mockPrisma.scoreSnapshot.findFirst.mockResolvedValue(null)
+      systemScoreSnapshotFindFirst.mockResolvedValue(null)
       const result = await getPublicScorecard("legacy-slug")
       expect(result).not.toBeNull()
       expect(result?.payload.releaseVerdict).toBe("NOT_EVALUATED")

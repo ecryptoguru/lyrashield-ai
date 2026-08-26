@@ -691,8 +691,7 @@ async function cleanupRuntimeFixture(fixture: FixtureIds): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const forwardedArgs = process.argv.slice(2)
+async function runQueueOrphanFixtureCli(forwardedArgs: string[]): Promise<void> {
   const args = forwardedArgs[0] === "--" ? forwardedArgs.slice(1) : forwardedArgs
   const { values } = parseArgs({
     args,
@@ -728,4 +727,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     await closeRedis()
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void runQueueOrphanFixtureCli(process.argv.slice(2))
 }

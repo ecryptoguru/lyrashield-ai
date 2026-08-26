@@ -1,4 +1,9 @@
+import { execFile } from "node:child_process"
+import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
 import { describe, expect, it, vi } from "vitest"
+
+const execFileAsync = promisify(execFile)
 
 vi.mock("@lyrashield/db", () => ({
   cancelScan: vi.fn(),
@@ -125,6 +130,43 @@ function deps(overrides: Partial<QueueOrphanFixtureDeps> = {}): QueueOrphanFixtu
     ...overrides,
   }
 }
+
+describe("queue orphan fixture CLI", () => {
+  it("starts through the documented CommonJS package CLI without a transform failure", async () => {
+    const workerRoot = fileURLToPath(new URL("../../", import.meta.url))
+    const result = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "src/operations/verify-queue-orphan-fixture.ts",
+        "--",
+        "--environment",
+        "test",
+      ],
+      {
+        cwd: workerRoot,
+        env: {
+          ...process.env,
+          DATABASE_URL: "postgresql://test:test@localhost:5432/test",
+          BETTER_AUTH_SECRET: "01234567890123456789012345678901",
+          BETTER_AUTH_URL: "http://localhost:3000",
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+        },
+      }
+    ).then(
+      () => ({ code: 0, stderr: "" }),
+      (error: Error & { code?: number; stderr?: string }) => ({
+        code: error.code,
+        stderr: String(error.stderr ?? ""),
+      })
+    )
+
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("queue orphan fixture requires --environment production")
+    expect(result.stderr).not.toContain("Top-level await is currently not supported")
+  }, 15_000)
+})
 
 describe("queue orphan fixture options", () => {
   it("requires production and the exact confirmation phrase", () => {
