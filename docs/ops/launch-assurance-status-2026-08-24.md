@@ -2,6 +2,8 @@
 
 This record separates code and local evidence from production and external evidence. It is a release-gate snapshot, not a launch approval, deployment record, certification, or claim of universal security.
 
+> Historical snapshot: superseded for current deployment and Standard-scan truth by [AGENTS.md](../../AGENTS.md), [PRD.md](../../PRD.md), and [codebase.md](../../codebase.md). On 2026-08-26, release run `32916256313` deployed product `7abd9baa`, worker digest `sha256:fd1888ccaedc9d9f2618398c1924571f23a03fed05efb6b772c922cf43d7cf01`, and engine `852b1ed7`. Standard scan `cmt9el7p7000001hdjnjo90wk` completed with sealed source/coverage/accounting receipts. Hard stops not explicitly closed by current truth documents remain open.
+
 ## Release dependency
 
 Product PRs #411–#424 merged through `80460f80d32f42e1a647eed180be6a3fa9f4bf51`. PRs #421–#424 added provider-environment deployment gates, hardened billing verification, short-lived Desktop sync sessions and output redaction, stronger platform-admin identity boundaries, Agent Plugin `0.1.18`, and build/runtime environment isolation. Required CI for `80460f80` is green. Engine PR #97 remains the pinned runtime `944a84f15f913909039c89146c25db650cd87137`; documentation PRs #98–#100 merged afterward without changing that pin. Marketplace PR #12 merged as `fb9758f`, CI run `32757331581` passed, and immutable `v0.1.18` is published. Its 26 generated artifact groups are byte-identical to product `80460f80`, and archive checksums were verified.

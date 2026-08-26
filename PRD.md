@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current source of truth: 2026-08-25. This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current source of truth: 2026-08-26. This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -319,22 +319,26 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
-### Standard/Luna acceptance — 2026-08-21
+### Standard/Luna acceptance — 2026-08-26
 
-- Scan ID: `cmt35aj1s000001hck9fmguzk`
+- Scan ID: `cmt9el7p7000001hdjnjo90wk`
 - Target: `ecryptoguru/OnboardingAI2@1689f3607d68764e09769535df8e368c4d5ad2fe`
 - Terminal state: `COMPLETED`
-- Duration: 11m 42s
-- Routing: 184 requests, all `azure_ai/gpt-5.6-luna` at medium reasoning; no Terra
-- Tokens: 8,227,004 input, 6,066,725 cached input, 30,844 output
-- Provider and billed cost: `$0.597148`, independently reconciled under the `$3.20` cap
-- Usage debit: 12 Standard agent-minutes
-- Results: 24 retained findings, 24 candidates, 24 verification receipts, 56 coverage receipts
+- Duration: 10m 9s
+- Routing: 189 requests, all `azure_ai/gpt-5.6-luna` at medium reasoning; no Terra
+- Tokens: 8,549,456 input, 6,535,778 cached input, 136,759 cache-write input, 32,092 output; no long-context bucket
+- Provider cost: `$0.57879951`; rate-card and billed cost: `$0.578800`, reconciled under the `$3.20` cap
+- Usage debit: 10 Standard agent-minutes from 596,659 ms wall time, 1× multiplier
+- Results: 25 retained findings; 17 `DETECTED`, 8 `INCONCLUSIVE`
 - Independent verification: zero findings
-- Limitation: AI App Security layer reached its 200-file bound
-- Stored manifest checksum: `5813c6dc06bcb89b2386cb80563a93e928be96bfe7371a85c930704127606dec`
+- Coverage: engine, SCA, secrets, agent configuration, ML supply chain, and AI App Security `COMPLETED`; URL not applicable
+- AI App Security discovery: 217/217 eligible files and 1,956,360 bytes scanned; zero skipped files or reached limits
+- Stored manifest v5 checksum: `ebfa3fb0ba19d97d8d9393432f8dbe37078b4bcf0367a7b91c21fe54a78e5687`
+- Execution identity: product `7abd9baa8943c8e25f954ad6e6d9bd2a6c84d6b7`, worker `sha256:fd1888ccaedc9d9f2618398c1924571f23a03fed05efb6b772c922cf43d7cf01`, engine `852b1ed7ff76d177cef4db5aa1cfbd3bbe6d2664`, sandbox `sha256:73067cefe2138c89c1f63abb597f006f66eae22dca332a6b01398d870a638dcf`; sandbox cleanup completed
 
 This proves bounded runtime, Luna routing, accounting, receipt persistence, and terminal completion for that target and revision. It does not prove universal coverage, finding correctness, or security.
+
+The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical evidence. Its 200-file AI App Security bound and 24 unverified findings are unchanged.
 
 ### AI App Security coverage remediation — 2026-08-21
 
@@ -342,22 +346,22 @@ This proves bounded runtime, Luna routing, accounting, receipt persistence, and 
 - File selection now prioritizes production/config sources, excludes generated artifacts, and uses mode caps of 200 for Quick/Safe, 500 for Standard, and 1,000 for Deep/Custom while retaining byte, time, walk-depth, and entry bounds.
 - Discovery records eligible, scanned, skipped, and reason counts plus a bounded skipped-path sample. These limits flow into scoring, coverage issues, dashboard disclosure, and an immutable `ai_app_security` family receipt; incomplete AI coverage cannot support a clean claim.
 - A 217-file regression fixture proves Quick remains honestly bounded at 200 while still scanning vulnerable production code, and Standard evaluates all 217 files.
-- Current production deployment: app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020` run product `8347fda923032960661079491a0a17956aebefd9`. Worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413` runs the same product with engine `944a84f15f913909039c89146c25db650cd87137`; release run `32738811470`, worker health, and `/api/ready/scans` passed.
-- Product `main` includes PR #426 billing-staging hardening and PR #432 Redis/egress efficiency work at `3629b442`. Those changes are not deployed. Release run `32755678337` built and pushed earlier images but failed the provider-mode guard before Azure login, migrations, revision creation, or runtime mutation because the protected Razorpay credential is Test Mode. Production remains on `8347fda9` with all Cloud and Local purchase admissions `off`.
+- Current production deployment: app `lyrashield-app--0000193`, scanner `lyrashield-scanner--0000174`, and egress proxy `lyrashield-egress-proxy--0000043` run product `7abd9baa8943c8e25f954ad6e6d9bd2a6c84d6b7` at 100% traffic. Release run `32916256313`, candidate/public smoke, worker promotion, post-scan Docker health, and `/api/ready/scans` passed.
+- Production includes PR #426 billing-staging hardening, PR #432 Redis/egress efficiency, and PR #450 secure scan-owned checkout recovery. All Cloud and Local purchase admissions remain `off`; no live purchase admission or provider-hosted checkout is proven by this release.
 - A billing-staging-only admission and deployment contract is implemented in code. It is bound to an explicit staging marker, isolated Azure origin, Sandbox/Test providers, an HttpOnly access session, exact-main-SHA images built in the staging registry, and separate `app_runtime_staging`/least-privilege `app_system_staging` database URLs. It cannot enable production admission, does not enable live billing, and is not runtime or hosted-checkout proof until the protected workflow and browser/provider evidence actually run.
 
-### Infrastructure evidence — 2026-08-21
+### Infrastructure evidence — 2026-08-26
 
-- Web revision: `lyrashield-app--0000170`, ready for scans.
-- Worker product revision: `8347fda923032960661079491a0a17956aebefd9`.
-- Worker digest: `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413`.
-- Engine revision: `944a84f15f913909039c89146c25db650cd87137`; engine version 1.2.1.
+- Web revision: `lyrashield-app--0000193`, ready for scans.
+- Worker product revision: `7abd9baa8943c8e25f954ad6e6d9bd2a6c84d6b7`.
+- Worker digest: `sha256:fd1888ccaedc9d9f2618398c1924571f23a03fed05efb6b772c922cf43d7cf01`.
+- Engine revision: `852b1ed7ff76d177cef4db5aa1cfbd3bbe6d2664`; engine version 1.2.1.
 - Upstash BullMQ `rediss://` returned `PONG`; queue was empty before acceptance and heartbeat was live.
 - Azure public Redis `6379` rule is deleted.
 - Legacy Redis container is stopped and restart-disabled, retained only for rollback.
 - Direct arbitrary public fetch denied; authenticated proxy public fetch allowed; loopback denied with `ssrf_blocked`.
-- Five-minute DNS-pin refresh stayed active through the paid scan without restarting the worker.
-- The merged Redis/egress efficiency code is not deployed. Its 30-day idle-command estimate falls from 324,019 to 132,495 commands (59.11%); this is a model, not live telemetry or production proof.
+- A changed OSV pin triggered the drain-safe path during the accepted scan. New admission and readiness paused, the paid job completed without interruption or replay, and the next timer restarted the exact worker digest. Docker health and scan readiness returned green. The temporary planned-drain `503` must be distinguished from unexpected worker failure in alerting.
+- Redis/egress efficiency code is deployed. Its 30-day idle-command estimate falls from 324,019 to 132,495 commands (59.11%); this remains a model until live command metrics and longer-window capacity evidence are retained.
 - Encrypted backup and isolated restore completed schema, RLS, audit-chain, and application-startup verification.
 
 ## 9. Release status

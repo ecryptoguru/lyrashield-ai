@@ -60,6 +60,13 @@ The scheduled `Production scan readiness` workflow probes `/api/ready/scans` eve
 five minutes. A non-200 result fails the workflow and emits an app `5xx`, which is
 routed by the existing one-minute `app-any-5xx` Azure Monitor alert.
 
+An intentional single-worker egress drain can also produce this readiness failure if a
+job claims after the active-job preflight. It remains a real new-admission outage and
+must be acknowledged and recovered; it is not evidence that the in-flight paid scan
+failed. Preserve the old/new firewall union, let that scan reach a terminal state, and
+never cancel, replay, or edit it merely to clear readiness. Require the exact replacement
+worker, queue/cost reconciliation, and readiness `200` before closing the gate.
+
 Before a controlled worker restart or failure injection, name the incident commander,
 record the founder go decision, enabled schedules, non-terminal scans, BullMQ
 waiting/delayed/prioritized/active counts, and terminal provider-cost uncertainty. Do not

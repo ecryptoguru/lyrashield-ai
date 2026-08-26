@@ -54,6 +54,16 @@ prunes expired members during heartbeat refresh. Loss of every live lease is cov
 `scan-readiness-unavailable`; no separate expired-lease rule is provisioned until a
 durable lease-expiry counter exists.
 
+A scheduled egress pin change may defer its restart while the single-concurrency worker
+has an active scan. The current refresh script preserves readiness and the validated
+old/new firewall union for that known-active case, then retries the token-bound drain
+when idle. A claim that races after preflight can still make scan readiness fail closed
+while the job drains. Acknowledge that transition; distinguish it from a crash using the
+pin-change, drain, active-scan, and terminal-cost logs; never suppress it blindly. Close
+the alert only after the in-flight scan reaches a non-replayed terminal state and the
+same product, engine, worker-image identities, healthy container, queue reconciliation,
+cost reconciliation, and readiness `200` are read back.
+
 Provider (Polar/Razorpay) readiness is **INCONCLUSIVE**: current logs are
 request-scoped prose that can include provider/catalog context, so there is no stable,
 secret-free global readiness-transition signal to alert on. A provider-readiness rule
