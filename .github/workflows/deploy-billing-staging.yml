@@ -683,7 +683,7 @@ jobs:
           recovery_job="lyrashield-stage-e2e-cleanup"
 
           wait_for_job() {
-            local job=$1 execution status
+            local job=$1 execution status container_name
             execution=$(az containerapp job start \
               --name "$job" --resource-group "$RESOURCE_GROUP" \
               --query name --output tsv)
@@ -694,7 +694,28 @@ jobs:
                 --query properties.status --output tsv)
               case "$status" in
                 Succeeded) return 0 ;;
-                Failed|Stopped) echo "::error::${job} ended with ${status}."; return 1 ;;
+                Failed|Stopped)
+                  echo "::error::${job} ended with ${status}."
+                  container_name=$(az containerapp job show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --query 'properties.template.containers[0].name' \
+                    --output tsv)
+                  az containerapp job execution show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --job-execution-name "$execution" \
+                    --query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}' \
+                    --output jsonc || true
+                  az containerapp job logs show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --execution "$execution" \
+                    --container "$container_name" \
+                    --tail 300 \
+                    --format text || true
+                  return 1
+                  ;;
               esac
               sleep 10
             done
@@ -956,7 +977,7 @@ jobs:
           purge_all_jobs
 
           wait_for_job() {
-            local job=$1 execution status
+            local job=$1 execution status container_name
             execution=$(az containerapp job start \
               --name "$job" --resource-group "$RESOURCE_GROUP" \
               --query name --output tsv)
@@ -967,7 +988,28 @@ jobs:
                 --query properties.status --output tsv)
               case "$status" in
                 Succeeded) return 0 ;;
-                Failed|Stopped) echo "::error::${job} ended with ${status}."; return 1 ;;
+                Failed|Stopped)
+                  echo "::error::${job} ended with ${status}."
+                  container_name=$(az containerapp job show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --query 'properties.template.containers[0].name' \
+                    --output tsv)
+                  az containerapp job execution show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --job-execution-name "$execution" \
+                    --query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}' \
+                    --output jsonc || true
+                  az containerapp job logs show \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --execution "$execution" \
+                    --container "$container_name" \
+                    --tail 300 \
+                    --format text || true
+                  return 1
+                  ;;
               esac
               sleep 10
             done

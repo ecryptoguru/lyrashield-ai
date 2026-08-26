@@ -1,4 +1,5 @@
 import { countDeadLetterArtifactDeletionTasks, getSystemPrisma } from "@lyrashield/db"
+import { logger } from "@lyrashield/logger"
 
 export const TERMINAL_COST_DISPOSITION_STAGE = "terminal_cost_operator_reconciled"
 export const TERMINAL_COST_DISPOSITION_RECEIPT_TYPE = "terminal_cost_operator_disposition_v1"
@@ -237,7 +238,12 @@ export async function collectOperationalHealthSnapshot(params: {
     evidenceFailureCount,
   ] = await Promise.all([
     prisma.webhookEventTrack.count({ where: { status: "dead_letter" } }),
-    countDeadLetterArtifactDeletionTasks(),
+    countDeadLetterArtifactDeletionTasks().catch((error) => {
+      logger.warn("Artifact deletion dead-letter count unavailable", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return undefined
+    }),
     findOldestTerminalUnreconciledCost(now),
     prisma.scan.count({
       where: {

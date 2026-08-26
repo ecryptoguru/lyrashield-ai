@@ -76,11 +76,6 @@ must_contain 'E2E_DIGEST: ${{ steps.build-e2e.outputs.digest }}'
 must_contain "Verify staging image provenance and owned job executables"
 must_contain '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 must_contain "Delete one-shot database jobs"
-must_contain 'az containerapp job execution show'
-must_contain 'az containerapp job logs show'
-must_contain "--query 'properties.template.containers[0].name'"
-must_contain '--container "$container_name"'
-must_contain '--tail 300'
 must_contain "az containerapp job delete"
 must_contain "lyrashield-stage-migrate"
 must_contain "lyrashield-stage-db-role"
@@ -119,6 +114,32 @@ must_not_contain "POLAR_BILLING_ADMISSION=public"
 must_not_contain "RAZORPAY_BILLING_ADMISSION=public"
 must_not_contain '!cancelled()'
 must_not_contain '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}'
+
+wait_helper_lines=$(grep -n '^          wait_for_job() {$' "$workflow" | cut -d: -f1)
+if [ "$(wc -l <<< "$wait_helper_lines" | tr -d ' ')" -ne 3 ]; then
+  echo "FAIL: expected exactly three wait_for_job helpers" >&2
+  exit 1
+fi
+wait_helper_index=0
+while IFS= read -r wait_helper_start; do
+  wait_helper_index=$((wait_helper_index + 1))
+  wait_helper_end=$(awk -v start="$wait_helper_start" 'NR > start && /^          }$/ { print NR; exit }' "$workflow")
+  wait_helper_block=$(sed -n "${wait_helper_start},${wait_helper_end}p" "$workflow")
+  for diagnostic in \
+    'local job=$1 execution status container_name' \
+    "--query 'properties.template.containers[0].name'" \
+    "--query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}'" \
+    '--output jsonc || true' \
+    'az containerapp job logs show' \
+    '--container "$container_name"' \
+    '--tail 300' \
+    '--format text || true'; do
+    if ! grep -Fq -- "$diagnostic" <<< "$wait_helper_block"; then
+      echo "FAIL: wait_for_job helper ${wait_helper_index} is missing ${diagnostic}" >&2
+      exit 1
+    fi
+  done
+done <<< "$wait_helper_lines"
 
 test -x "$migration_script"
 test -x "$role_script"
