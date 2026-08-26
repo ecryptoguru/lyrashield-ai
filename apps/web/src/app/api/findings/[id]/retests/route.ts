@@ -1,4 +1,10 @@
-import { createScan, getFinding, prisma, updateScanStatus } from "@lyrashield/db"
+import {
+  createScan,
+  getFinding,
+  prisma,
+  updateScanStatus,
+  WorkspaceScanConcurrencyLimitError,
+} from "@lyrashield/db"
 import { type ScanMode, resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -124,6 +130,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         determinismMode: retestProfile.determinismMode,
       })
     } catch (error) {
+      if (error instanceof WorkspaceScanConcurrencyLimitError) {
+        return apiError(
+          "SCAN_CONCURRENCY_LIMIT",
+          "This workspace is at its concurrent review limit. Wait for one to finish before retesting.",
+          409
+        )
+      }
       if (error instanceof Error && error.message === "Target already has an active scan") {
         return apiError(
           "RETEST_IN_PROGRESS",

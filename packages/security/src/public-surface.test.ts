@@ -473,6 +473,31 @@ describe("Standard web discovery", () => {
     expect(countIssues(collection, "LIMIT_REACHED")).toBeGreaterThanOrEqual(1)
   })
 
+  it("reserves in-flight document slots before concurrent fetches", async () => {
+    const seedUrl = "https://example.com/"
+    const links = Array.from({ length: 8 }, (_, index) => `<a href="/p${index}">p</a>`).join("")
+    const fetchFn = buildStandardFetch({
+      [seedUrl]: { html: links },
+      ...Object.fromEntries(
+        Array.from({ length: 8 }, (_, index) => [
+          `https://example.com/p${index}`,
+          { html: "<html></html>" },
+        ])
+      ),
+    })
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+
+    const collection = await collectPublicSurface({
+      seedUrl,
+      profile: { ...profile, maxDocuments: 2, maxAssets: 0, maxConcurrency: 4, maxDepth: 1 },
+      fetchFn,
+      resolver: defaultResolver(),
+    })
+
+    expect(collection.subjects.filter((subject) => subject.kind === "document")).toHaveLength(2)
+    expect(collection.truncated).toBe(true)
+  })
+
   it("reaches depth 2 when the document limit allows", async () => {
     const fetchFn = buildStandardFetch(graphBase)
     const profile = getUrlScanProfile("WEB_APP", "STANDARD")

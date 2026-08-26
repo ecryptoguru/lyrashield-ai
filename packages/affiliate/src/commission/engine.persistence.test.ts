@@ -11,6 +11,24 @@ vi.mock("@lyrashield/db", async () => {
     Prisma: { Decimal },
     getSystemPrisma: vi.fn(() => ({})),
     prisma: {
+      $transaction: vi.fn((callback) =>
+        callback({
+          conversion: {
+            create: ({ data }: { data: Record<string, unknown> }) => {
+              const conversion = { id: `conv_${state.conversions.length + 1}`, ...data }
+              state.conversions.push(conversion)
+              return conversion
+            },
+          },
+          commission: {
+            create: ({ data }: { data: Record<string, unknown> }) => {
+              const commission = { id: `comm_${state.commissions.length + 1}`, ...data }
+              state.commissions.push(commission)
+              return commission
+            },
+          },
+        })
+      ),
       conversion: {
         findFirst: vi.fn(({ where: { idempotencyKey } }) => {
           const conversion = state.conversions.find((row) => row.idempotencyKey === idempotencyKey)

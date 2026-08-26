@@ -84,6 +84,9 @@ const ignored = "fenced code"
     expect(html).toContain(
       '<link rel="canonical" href="https://lyrashieldai.com/blog/synthetic-security-guide">'
     )
+    expect(html).toContain(
+      '<meta name="lyrashield-build-revision" content="0123456789abcdef0123456789abcdef01234567">'
+    )
     expect(html).toContain('<meta property="og:type" content="article">')
     expect(html).toContain(
       '<meta property="og:image" content="http://localhost:4321/images/blog/library/authority-guide-01/og.jpg">'

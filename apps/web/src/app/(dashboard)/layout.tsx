@@ -101,7 +101,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </nav>
       <main
         id="main-content"
-        className="min-w-0 flex-1 overflow-x-hidden pt-[calc(4rem+env(safe-area-inset-top))] md:pt-0"
+        className="min-w-0 flex-1 overflow-x-hidden pt-[calc(4rem+env(safe-area-inset-top))] pb-[calc(4rem+env(safe-area-inset-bottom))] md:pt-0 md:pb-0"
         tabIndex={-1}
       >
         <div className="mx-auto w-full max-w-368 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>

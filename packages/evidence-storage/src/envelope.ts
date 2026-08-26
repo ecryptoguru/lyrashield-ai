@@ -157,6 +157,11 @@ function parseEnvelope(buffer: Buffer): { header: EnvelopeHeader; ciphertext: Bu
   return { header, ciphertext: buffer.subarray(headerEnd) }
 }
 
+/** Read the untrusted key selector before authentication so callers can resolve its KEK. */
+export function readEnvelopeKeyRef(buffer: Buffer): string {
+  return parseEnvelope(buffer).header.keyRef
+}
+
 /**
  * Structural verification that a buffer is a parseable envelope. Used at write
  * time so an unencrypted (or corrupted) body can never be persisted under an

@@ -48,6 +48,18 @@ describe("RLS helpers", () => {
       )
     })
 
+    it("passes transaction isolation options to Prisma", async () => {
+      const { prisma } = await import("./client")
+
+      await withWorkspaceRLS("ws-1", vi.fn().mockResolvedValue(undefined), {
+        isolationLevel: "Serializable",
+      })
+
+      expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        isolationLevel: "Serializable",
+      })
+    })
+
     it("propagates errors from the callback", async () => {
       const error = new Error("query failed")
       const callback = vi.fn().mockRejectedValue(error)
@@ -102,6 +114,7 @@ describe("RLS helpers", () => {
       "Notification",
       "Schedule",
       "BillingAccount",
+      "MinutePack",
       "Invitation",
       "WebhookEvent",
       "Retest",
@@ -138,7 +151,8 @@ describe("RLS helpers", () => {
       expect(modelSet.size).toBe(rlsSet.size)
     })
 
-    it("excludes WorkspaceMember from RLS (cross-workspace queries)", () => {
+    it("excludes identity tables needed for cross-workspace membership queries from RLS", () => {
+      expect(WORKSPACE_SCOPED_MODELS.has("Workspace")).toBe(false)
       expect(WORKSPACE_SCOPED_MODELS.has("WorkspaceMember")).toBe(false)
     })
 

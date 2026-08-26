@@ -8,7 +8,12 @@ import type {
   AiSecurityScoreSnapshot,
 } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
-import { DeterminismModeSchema, ScanIdSchema, type DeterminismMode } from "@lyrashield/types"
+import {
+  DeterminismModeSchema,
+  MAX_CONCURRENT_WORKSPACE_SCANS,
+  ScanIdSchema,
+  type DeterminismMode,
+} from "@lyrashield/types"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
 import { withWorkspaceRLS } from "./rls"
 import { getWorkspaceContext } from "./extension"
@@ -22,6 +27,13 @@ export interface CreateScanParams {
   createdById: string
   triggerType?: string
   determinismMode?: DeterminismMode
+}
+
+export class WorkspaceScanConcurrencyLimitError extends Error {
+  constructor() {
+    super(`Workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} active scans`)
+    this.name = "WorkspaceScanConcurrencyLimitError"
+  }
 }
 
 export interface ScanWithEvents extends Scan {
@@ -63,7 +75,21 @@ type ScanStatusMetadata = {
 export async function createScan(params: CreateScanParams): Promise<Scan> {
   const determinismMode = DeterminismModeSchema.parse(params.determinismMode ?? "default")
   const scan = await withWorkspaceRLS(params.workspaceId, async (tx) => {
+    // The workspace lock makes the shared concurrency cap atomic across manual,
+    // scheduled, retest, and agent-created scans on different targets.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`scan-admission:${params.workspaceId}`}, 0))`
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.targetId}))`
+
+    const activeWorkspaceScans = await tx.scan.count({
+      where: {
+        workspaceId: params.workspaceId,
+        status: { in: ACTIVE_SCAN_STATUSES },
+        deletedAt: null,
+      },
+    })
+    if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
+      throw new WorkspaceScanConcurrencyLimitError()
+    }
 
     const activeScans = await tx.scan.count({
       where: {

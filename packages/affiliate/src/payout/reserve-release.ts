@@ -63,7 +63,9 @@ export async function releaseReserveForAffiliate(
 
   for (const c of paidCommissions) {
     const alreadyPaid = c.payoutItems[0]?.amount ?? new Prisma.Decimal(0)
-    const reservedDelta = c.amount.minus(alreadyPaid)
+    const reservedDelta = c.amount
+      .minus(alreadyPaid)
+      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
     if (reservedDelta.lte(0)) {
       releaseItems.push({ commissionId: c.id, amount: new Prisma.Decimal(0) })
       continue

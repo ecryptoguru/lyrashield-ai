@@ -470,7 +470,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 
 - `ai-app-security.ts` ranks production/config sources ahead of tests and fixtures, excludes generated artifacts, and applies explicit mode caps: Quick/Safe 200, Standard 500, Deep/Custom 1,000.
 - Discovery produces structured eligible/scanned/skipped/byte counts, skip reasons, limit codes, and a bounded representative skipped-path sample.
-- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v5, preventing bounded AI coverage from becoming a complete clean claim.
+- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v5 and later, preventing bounded AI coverage from becoming a complete clean claim. Current manifest v6 also binds the intended terminal outcome so crash recovery preserves partial, failed, budget-stopped, and timed-out results; historical v5 manifests remain readable.
 - The scan-detail UI shows coverage counts and skipped-path samples instead of only the legacy one-line warning.
 - Regression coverage uses an exact 217-file repository: Quick scans 200 and reports 17 skipped while retaining vulnerable production code; Standard scans all 217. Generated directories are excluded.
 - PR #386's coverage remediation and PR #450's secure source-checkout recovery are deployed. Scan `cmt9el7p7000001hdjnjo90wk` runtime-proved complete 217-file Standard discovery and immutable source identity for one target/revision. Historical scan `cmt35aj1s000001hck9fmguzk` remains bounded and unchanged.

@@ -33,10 +33,20 @@ export function ScorecardControls({
   const [busy, setBusy] = useState(false)
   const [confirmation, setConfirmation] = useState<"publish" | "revoke" | null>(null)
   const confirmationRef = useRef<HTMLDivElement>(null)
+  const confirmationTriggerRef = useRef<HTMLButtonElement>(null)
+  const noticeRef = useRef<HTMLParagraphElement>(null)
   useEffect(() => {
     if (confirmation) confirmationRef.current?.focus()
   }, [confirmation])
+  useEffect(() => {
+    if (notice) noticeRef.current?.focus()
+  }, [notice])
   if (!canPublish) return null
+
+  const closeConfirmation = () => {
+    setConfirmation(null)
+    requestAnimationFrame(() => confirmationTriggerRef.current?.focus())
+  }
 
   const create = async (confirmed = false) => {
     if (["C", "D", "F"].includes(grade) && !confirmed) {
@@ -98,8 +108,7 @@ export function ScorecardControls({
         <div
           ref={confirmationRef}
           className="bg-muted/50 rounded-lg border p-3 text-sm"
-          role="alertdialog"
-          aria-modal="true"
+          role="group"
           aria-label={
             confirmation === "publish"
               ? "Confirm scorecard publication"
@@ -107,7 +116,7 @@ export function ScorecardControls({
           }
           tabIndex={-1}
           onKeyDown={(event) => {
-            if (event.key === "Escape" && !busy) setConfirmation(null)
+            if (event.key === "Escape" && !busy) closeConfirmation()
           }}
         >
           <p>
@@ -123,12 +132,7 @@ export function ScorecardControls({
             >
               {busy ? "Working…" : confirmation === "publish" ? "Publish" : "Revoke"}
             </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setConfirmation(null)}
-              disabled={busy}
-            >
+            <Button size="sm" variant="secondary" onClick={closeConfirmation} disabled={busy}>
               Cancel
             </Button>
           </div>
@@ -154,17 +158,28 @@ export function ScorecardControls({
             resolvedFindings={share.resolvedFindings}
             source="dashboard"
           />
-          <Button size="sm" variant="ghost" onClick={() => void revoke()} disabled={busy}>
+          <Button
+            ref={confirmationTriggerRef}
+            size="sm"
+            variant="ghost"
+            onClick={() => void revoke()}
+            disabled={busy}
+          >
             Revoke public scorecard
           </Button>
         </>
       ) : (
-        <Button size="sm" onClick={() => void create()} disabled={busy}>
+        <Button
+          ref={confirmationTriggerRef}
+          size="sm"
+          onClick={() => void create()}
+          disabled={busy}
+        >
           {busy ? "Publishing…" : "Create public scorecard"}
         </Button>
       )}
       {notice && (
-        <p className="text-muted-foreground text-sm" role="status">
+        <p ref={noticeRef} className="text-muted-foreground text-sm" role="status" tabIndex={-1}>
           {notice}
         </p>
       )}

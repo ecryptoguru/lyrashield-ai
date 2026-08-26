@@ -117,6 +117,9 @@ export async function requestPayout(params: {
           const releasePct = new Prisma.Decimal(100 - reservePct)
           itemAmount = c.amount.mul(releasePct).div(100)
         }
+        // Provider payout rails settle in currency minor units. Round each leg
+        // before summing so the persisted payout equals its payout items.
+        itemAmount = itemAmount.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
         totalAmount = totalAmount.add(itemAmount)
         items.push({ commissionId: c.id, amount: itemAmount })
       }

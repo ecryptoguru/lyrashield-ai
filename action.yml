@@ -1,5 +1,5 @@
 name: "LyraShield Security Scan"
-description: "One-step diff-aware security gate for AI-built apps: secret detection, dependency audit, and risky-pattern checks with SARIF output."
+description: "One-step diff-aware security gate for AI-built apps: secret detection and risky-pattern checks with SARIF output."
 author: "LyraShield AI"
 branding:
   icon: "shield"
@@ -25,9 +25,9 @@ inputs:
 
 # This is a lightweight, diff-scoped CI gate that runs entirely in the
 # customer's runner with the customer's GITHUB_TOKEN — it does not call the
-# hosted LyraShield engine. It uses gitleaks for secret detection plus a
-# dependency audit and a set of high-signal risky-pattern checks, and emits
-# SARIF. For the full agentic scan, connect the target in the LyraShield app
+# hosted LyraShield engine. It uses gitleaks for secret detection plus a set of
+# high-signal risky-pattern checks, and emits SARIF. For the full agentic scan,
+# connect the target in the LyraShield app
 # (or use the MCP server / REST API). All third-party actions are SHA-pinned
 # and the action requests no elevated permissions of its own; the calling job
 # controls the token scope (security-events: write is needed only to publish

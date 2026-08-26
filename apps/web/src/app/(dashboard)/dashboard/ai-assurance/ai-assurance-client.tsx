@@ -14,6 +14,7 @@ import {
   buttonVariants,
 } from "@lyrashield/ui"
 import type { PublicControlEvidenceItem } from "@/lib/ai-assurance"
+import { apiPost } from "@/lib/api-client"
 import { AssuranceInventory, type AssuranceInventoryProps } from "./assurance-inventory"
 
 interface TargetOption {
@@ -73,9 +74,11 @@ export function AiAssuranceClient({
   }
 
   async function readItem(response: Response): Promise<PublicControlEvidenceItem> {
-    const body = (await response.json()) as {
-      data?: PublicControlEvidenceItem
-      error?: { message?: string }
+    let body: { data?: PublicControlEvidenceItem; error?: { message?: string } }
+    try {
+      body = (await response.json()) as typeof body
+    } catch {
+      throw new Error("The artifact upload returned an invalid response")
     }
     if (!response.ok || !body.data) {
       throw new Error(body.error?.message ?? "The evidence update failed")
@@ -98,15 +101,7 @@ export function AiAssuranceClient({
       const endpoint = item.evidenceId
         ? `/api/ai-assurance/evidence/${encodeURIComponent(item.evidenceId)}/revise`
         : "/api/ai-assurance/evidence"
-      replaceItem(
-        await readItem(
-          await fetch(endpoint, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          })
-        )
-      )
+      replaceItem(await apiPost<PublicControlEvidenceItem>(endpoint, body))
       setEditingControlId(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The evidence update failed")
@@ -146,13 +141,20 @@ export function AiAssuranceClient({
                 "x-lyrashield-artifact-filename": encodeURIComponent(file.name),
               },
               body: file,
+              signal: AbortSignal.timeout(30_000),
             }
           )
         )
       }
       replaceItem(nextItem)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The artifact upload failed")
+      setError(
+        cause instanceof DOMException && cause.name === "TimeoutError"
+          ? "The artifact upload timed out"
+          : cause instanceof Error
+            ? cause.message
+            : "The artifact upload failed"
+      )
     } finally {
       setPendingControlId(null)
     }
@@ -164,12 +166,9 @@ export function AiAssuranceClient({
     setError(null)
     try {
       replaceItem(
-        await readItem(
-          await fetch(`/api/ai-assurance/evidence/${encodeURIComponent(item.evidenceId)}/review`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ workspaceId, versionId: item.versionId, status }),
-          })
+        await apiPost<PublicControlEvidenceItem>(
+          `/api/ai-assurance/evidence/${encodeURIComponent(item.evidenceId)}/review`,
+          { workspaceId, versionId: item.versionId, status }
         )
       )
       setEditingControlId(null)
@@ -187,13 +186,12 @@ export function AiAssuranceClient({
     try {
       const reason = String(formData.get("notApplicableReason") ?? "").trim()
       replaceItem(
-        await readItem(
-          await fetch("/api/ai-assurance/evidence/not-applicable", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ workspaceId, targetId, controlId: item.controlId, reason }),
-          })
-        )
+        await apiPost<PublicControlEvidenceItem>("/api/ai-assurance/evidence/not-applicable", {
+          workspaceId,
+          targetId,
+          controlId: item.controlId,
+          reason,
+        })
       )
       setEditingControlId(null)
     } catch (cause) {

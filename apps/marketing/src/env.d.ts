@@ -3,6 +3,7 @@
 
 declare const __MARKETING_INDEXABLE__: boolean
 declare const __MARKETING_X_URL__: string
+declare const __MARKETING_BUILD_REVISION__: string
 
 interface Window {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

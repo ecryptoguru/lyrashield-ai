@@ -10,6 +10,7 @@ vi.mock("next/cache", () => ({
 }))
 
 vi.mock("@lyrashield/db", () => ({
+  WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
   prisma: {
     target: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
@@ -62,7 +63,13 @@ vi.mock("@lyrashield/billing", () => ({
 }))
 
 import { POST, GET } from "./route"
-import { prisma, createScan, listScans, updateScanStatus } from "@lyrashield/db"
+import {
+  prisma,
+  createScan,
+  listScans,
+  updateScanStatus,
+  WorkspaceScanConcurrencyLimitError,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import {
   assertScanWorkerAvailable,
@@ -402,6 +409,25 @@ describe("POST /api/scans", () => {
     expect(res.status).toBe(503)
     expect((await res.json()).error.code).toBe("SCAN_SERVICE_UNAVAILABLE")
     expect(createScan).not.toHaveBeenCalled()
+  })
+
+  it("returns 409 when the transactional workspace scan cap wins a race", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1", type: "REPO" } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockRejectedValue(new WorkspaceScanConcurrencyLimitError())
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error.code).toBe("SCAN_CONCURRENCY_LIMIT")
+    expect(enqueueScanJob).not.toHaveBeenCalled()
   })
 
   it("returns 503 when enqueue fails", async () => {

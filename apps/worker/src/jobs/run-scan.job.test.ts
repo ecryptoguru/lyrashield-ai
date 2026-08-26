@@ -76,7 +76,12 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("@lyrashield/billing", () => ({
-  recordAgentMinutes: vi.fn().mockResolvedValue(undefined),
+  recordAgentMinutes: vi.fn().mockResolvedValue({
+    created: true,
+    minutes: 1,
+    idempotencyKey: "ws-1:scan-1:engine_run",
+    overageMinutes: 0,
+  }),
   getUsageBalance: vi.fn().mockResolvedValue({ totalRemaining: 100 }),
   enterGrace: vi.fn().mockResolvedValue({ shouldContinue: true }),
   debitOverage: vi.fn().mockResolvedValue(undefined),
@@ -92,6 +97,12 @@ vi.mock("../engine/runner", () => ({
         run_id: scanId,
         run_name: scanId,
         status: "completed",
+        model: "azure_ai/gpt-5.6-luna",
+        reasoning_effort: "medium",
+        delegate_model: "azure_ai/gpt-5.6-luna",
+        delegate_reasoning_effort: "medium",
+        model_routing_policy:
+          "coordinator=azure_ai/gpt-5.6-luna@medium;delegate=azure_ai/gpt-5.6-luna@medium;v=1",
         llm_usage: completeUsage,
       },
       summary: "Scan completed with 0 findings",
@@ -168,6 +179,7 @@ vi.mock("../engine/scanner-orchestrator", () => ({
 
 import {
   extractActualCostUsd,
+  engineRoutingCoverageIssue,
   extractUsageSummary,
   processScanJob,
   resolveScanRuntimeBudgetMs,
@@ -185,7 +197,7 @@ import {
   EvidenceStorageConfigurationError,
 } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
-import { recordAgentMinutes } from "@lyrashield/billing"
+import { debitOverage, recordAgentMinutes } from "@lyrashield/billing"
 import {
   completeScanWithScore,
   qualifyReferralForWorkspace,
@@ -389,6 +401,63 @@ it("extracts a privacy-bounded provider usage summary", () => {
   })
 })
 
+describe("engineRoutingCoverageIssue", () => {
+  const profile = {
+    model: "azure_ai/gpt-5.6-terra",
+    reasoningEffort: "medium" as const,
+    delegateModel: "azure_ai/gpt-5.6-luna",
+    delegateReasoningEffort: "high" as const,
+  }
+
+  it("blocks a routing receipt that differs from the worker profile", () => {
+    expect(
+      engineRoutingCoverageIssue(profile, {
+        run_id: "scan-1",
+        run_name: "scan-1",
+        start_time: "",
+        end_time: null,
+        status: "completed",
+        model: "azure_ai/gpt-5.6-luna",
+        reasoning_effort: "medium",
+        delegate_model: "azure_ai/gpt-5.6-luna",
+        delegate_reasoning_effort: "high",
+        model_routing_policy:
+          "coordinator=azure_ai/gpt-5.6-luna@medium;delegate=azure_ai/gpt-5.6-luna@high;v=1",
+      })
+    ).toMatchObject({ scanner: "engine", status: "partial", subject: "routing-receipt" })
+  })
+
+  it("accepts an exact routing receipt", () => {
+    expect(
+      engineRoutingCoverageIssue(profile, {
+        run_id: "scan-1",
+        run_name: "scan-1",
+        start_time: "",
+        end_time: null,
+        status: "completed",
+        model: profile.model,
+        reasoning_effort: profile.reasoningEffort,
+        delegate_model: profile.delegateModel,
+        delegate_reasoning_effort: profile.delegateReasoningEffort,
+        model_routing_policy:
+          "coordinator=azure_ai/gpt-5.6-terra@medium;delegate=azure_ai/gpt-5.6-luna@high;v=1",
+      })
+    ).toBeNull()
+  })
+
+  it("treats an incomplete routing receipt as partial coverage", () => {
+    expect(
+      engineRoutingCoverageIssue(profile, {
+        run_id: "scan-1",
+        run_name: "scan-1",
+        start_time: "",
+        end_time: null,
+        status: "completed",
+      })
+    ).toMatchObject({ scanner: "engine", status: "partial", subject: "routing-receipt" })
+  })
+})
+
 describe("processScanJob", () => {
   it("reserves the actual remaining scan time for deterministic scanners", () => {
     expect(resolveScannerPhaseTimeoutMs(15 * 60 * 1000, 7 * 60 * 1000 + 27 * 1000)).toBe(
@@ -549,6 +618,35 @@ describe("processScanJob", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("stops when the spend limit cannot cover every uncovered minute", async () => {
+    vi.mocked(recordAgentMinutes).mockResolvedValueOnce({
+      created: true,
+      minutes: 5,
+      idempotencyKey: "ws-1:scan-1:engine_run",
+      overageMinutes: 3,
+    })
+    vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
+      currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
+      currentPlan: "TEAM",
+      spendLimitCents: 100,
+    } as never)
+    vi.mocked(debitOverage).mockResolvedValueOnce({
+      debited: true,
+      minutes: 2,
+      estimatedCostCents: 30,
+    })
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "BUDGET_EXCEEDED",
+    })
+    expect(debitOverage).toHaveBeenCalledWith("ws-1", 3, "scan-1", "engine_overage")
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
+      errorCategory: "BUDGET_EXCEEDED",
+      errorMessage: "Agent-minute overage spend limit reached",
+    })
   })
 
   it("does not let a workspace policy upgrade the selected profile budget", async () => {
@@ -1113,6 +1211,10 @@ describe("processScanJob", () => {
         coverageIssues: [expect.objectContaining({ scanner: "engine", status: "bounded" })],
       })
     )
+    expect(completeRetestsForScan).toHaveBeenCalledWith({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+    })
   })
 
   it("reports a stalled engine distinctly from an elapsed-duration timeout", async () => {
@@ -1205,6 +1307,10 @@ describe("processScanJob", () => {
         coverageIssues: [expect.objectContaining({ scanner: "engine", status: "bounded" })],
       })
     )
+    expect(completeRetestsForScan).toHaveBeenCalledWith({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+    })
   })
 
   it("does not trip the budget backstop on a scan that stays under the cap", async () => {
@@ -1339,6 +1445,48 @@ describe("processScanJob", () => {
     expect(runEngine).not.toHaveBeenCalled()
     expect(runScannerOrchestrator).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ["PARTIAL", "VERIFYING", "CONTENT_FILTER_STOPPED"],
+    ["FAILED", "VERIFYING", "ENGINE_INCOMPLETE"],
+    ["STOPPED_BUDGET", "RUNNING", "BUDGET_EXCEEDED"],
+  ] as const)(
+    "restores a durable %s terminal outcome from %s without scoring",
+    async (status, pendingStatus, errorCategory) => {
+      vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+        status: pendingStatus,
+        summary: "Recovered terminal outcome",
+        actualCostCents: 12,
+        resultManifest: {
+          id: "manifest-1",
+          manifest: {
+            terminalOutcome: {
+              status,
+              errorCategory,
+              errorMessage: "Engine did not complete",
+            },
+          },
+        },
+      } as never)
+
+      await expect(processScanJob(mockJob)).resolves.toMatchObject({
+        status: "failed",
+        errorCategory,
+      })
+
+      expect(completeRetestsForScan).toHaveBeenCalledWith({
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+      })
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", status, {
+        errorCategory,
+        errorMessage: "Engine did not complete",
+        actualCostCents: 12,
+      })
+      expect(completeScanWithScore).not.toHaveBeenCalled()
+      expect(runEngine).not.toHaveBeenCalled()
+    }
+  )
 
   it("binds worker execution provenance into every result manifest", async () => {
     const mockProvenance = {

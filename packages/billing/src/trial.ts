@@ -6,10 +6,9 @@
  * with an upgrade CTA — data is preserved, scans are blocked.
  */
 
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
-import { grantMonthlyPool } from "./usage/grants"
 
 /** Trial duration in days. */
 export const TRIAL_DURATION_DAYS = 14
@@ -46,60 +45,63 @@ export interface TrialState {
  * Idempotent: if a trial has already started, this is a no-op.
  */
 export async function startTrial(
-  workspaceId: string
-): Promise<{ started: boolean; trialEndsAt: Date }> {
+  workspaceId: string,
+  userId: string
+): Promise<{ started: boolean; trialEndsAt: Date; alreadyUsed: boolean }> {
   const now = new Date()
   const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
 
-  // A-M01: Atomic conditional update — only sets trialStartedAt if it's still null.
-  // This prevents the TOCTOU race where two concurrent requests both read null
-  // and both proceed to grant trial minutes.
-  const result = await prisma.workspace.updateMany({
-    where: { id: workspaceId, trialStartedAt: null },
-    data: {
-      trialStartedAt: now,
-      plan: "FREE",
-      deepAllowed: false,
-    },
+  const result = await withWorkspaceRLS(workspaceId, async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`trial:${userId}`}, 0))`
+    const memberships = await tx.workspaceMember.findMany({
+      where: { userId },
+      select: { workspaceId: true },
+    })
+    const existing = await tx.workspace.findFirst({
+      where: {
+        id: { in: memberships.map((membership) => membership.workspaceId) },
+        trialStartedAt: { not: null },
+      },
+      select: { id: true, trialStartedAt: true },
+    })
+    if (existing?.trialStartedAt) {
+      return {
+        started: false,
+        alreadyUsed: existing.id !== workspaceId,
+        trialEndsAt: new Date(
+          existing.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
+        ),
+      }
+    }
+
+    const updated = await tx.workspace.updateMany({
+      where: { id: workspaceId, trialStartedAt: null },
+      data: { trialStartedAt: now, plan: "FREE", deepAllowed: false },
+    })
+    if (updated.count !== 1) throw new Error("Workspace not found")
+    await tx.billingAccount.upsert({
+      where: { workspaceId },
+      create: { workspaceId, status: "trialing", currentPlan: "FREE", trialEndsAt },
+      update: { status: "trialing", currentPlan: "FREE", trialEndsAt },
+    })
+    await tx.usageRecord.create({
+      data: {
+        workspaceId,
+        kind: "trial_grant",
+        quantity: TRIAL_AGENT_MINUTES,
+        idempotencyKey: `${workspaceId}:${now.toISOString()}:TRIAL`,
+        cycleStart: now,
+        metadata: { plan: "TRIAL", source: "trial", agentMinutes: TRIAL_AGENT_MINUTES },
+      },
+    })
+    return { started: true, alreadyUsed: false, trialEndsAt }
   })
 
-  if (result.count === 0) {
-    // Trial was already started (by this call or a concurrent one)
-    const workspace = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { trialStartedAt: true },
-    })
-    if (!workspace) {
-      throw new Error("Workspace not found")
-    }
-    const endsAt = workspace.trialStartedAt
-      ? new Date(workspace.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
-      : trialEndsAt
-    return { started: false, trialEndsAt: endsAt }
+  if (result.started) {
+    logger.info("Trial started", { workspaceId, trialEndsAt: result.trialEndsAt.toISOString() })
   }
 
-  // Update billing account
-  await prisma.billingAccount.upsert({
-    where: { workspaceId },
-    create: {
-      workspaceId,
-      status: "trialing",
-      currentPlan: "FREE",
-      trialEndsAt,
-    },
-    update: {
-      status: "trialing",
-      currentPlan: "FREE",
-      trialEndsAt,
-    },
-  })
-
-  // Grant 100 one-time trial minutes
-  await grantMonthlyPool(workspaceId, "TRIAL", now, "trial")
-
-  logger.info("Trial started", { workspaceId, trialEndsAt: trialEndsAt.toISOString() })
-
-  return { started: true, trialEndsAt }
+  return result
 }
 
 /**

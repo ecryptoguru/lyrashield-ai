@@ -114,6 +114,7 @@ export {
   cancelScan,
   withScanFinalizationClaim,
   removeScan,
+  WorkspaceScanConcurrencyLimitError,
   type CreateScanParams,
   type ScanWithEvents,
   type ListScansParams,

@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const getPolarClientMock = vi.hoisted(() => vi.fn(() => null as unknown))
+const getRazorpayClientMock = vi.hoisted(() => vi.fn(() => null as unknown))
+
 // Mock the billing module
 vi.mock("@lyrashield/billing", () => ({
-  getPolarClient: vi.fn(() => null),
-  getRazorpayClient: vi.fn(() => null),
+  getPolarClient: getPolarClientMock,
+  getRazorpayClient: getRazorpayClientMock,
   WEBHOOK_TRACK_MAX_ATTEMPTS: 5,
 }))
 
@@ -18,6 +21,7 @@ vi.mock("@lyrashield/db", () => ({
   prisma: {
     webhookEvent: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(() => Promise.resolve([])),
     },
     webhookEventTrack: {
@@ -42,6 +46,8 @@ import { runBillingReconciliation } from "./billing-reconciliation.job"
 describe("billing-reconciliation.job", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    getPolarClientMock.mockReturnValue(null)
+    getRazorpayClientMock.mockReturnValue(null)
     enqueueWebhookTrackRetryMock.mockResolvedValue("job_1")
   })
 
@@ -94,5 +100,52 @@ describe("billing-reconciliation.job", () => {
 
     expect(result.polarChecked).toBe(0)
     expect(result.razorpayChecked).toBe(0)
+  })
+
+  it("matches Polar order identity inside the signed webhook payload", async () => {
+    getPolarClientMock.mockReturnValue({
+      orders: { list: vi.fn().mockResolvedValueOnce({ result: [{ id: "ord_1" }] }) },
+    })
+    const { prisma } = await import("@lyrashield/db")
+    const findFirst = vi.mocked(prisma.webhookEvent.findFirst)
+    findFirst.mockResolvedValue({ id: "evt_1", processed: true } as never)
+
+    const result = await runBillingReconciliation()
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        provider: "polar",
+        eventType: "order.paid",
+        payload: { path: ["data", "id"], equals: "ord_1" },
+      },
+      select: { id: true, processed: true, eventType: true, payload: true },
+    })
+    expect(result).toMatchObject({ polarChecked: 1, driftAlerts: 0, replayed: 0 })
+  })
+
+  it("matches Razorpay payment identity inside the signed webhook payload", async () => {
+    getRazorpayClientMock.mockReturnValue({
+      payments: {
+        all: vi.fn().mockResolvedValueOnce({ items: [{ id: "pay_1", status: "captured" }] }),
+      },
+    })
+    const { prisma } = await import("@lyrashield/db")
+    const findFirst = vi.mocked(prisma.webhookEvent.findFirst)
+    findFirst.mockResolvedValue({ id: "evt_1", processed: true } as never)
+
+    const result = await runBillingReconciliation()
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        provider: "razorpay",
+        eventType: "payment.captured",
+        payload: {
+          path: ["payload", "payment", "entity", "id"],
+          equals: "pay_1",
+        },
+      },
+      select: { id: true, processed: true },
+    })
+    expect(result).toMatchObject({ razorpayChecked: 1, driftAlerts: 0, replayed: 0 })
   })
 })

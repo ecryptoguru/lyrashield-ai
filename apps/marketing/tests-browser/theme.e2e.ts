@@ -216,6 +216,24 @@ test("keeps mobile menu rows content-sized when the browser expands dialogs", as
   expect((await firstLink.boundingBox())!.height).toBeLessThanOrEqual(48)
 })
 
+test("supports standard keyboard navigation in the AI scanner tabs", async ({ page }) => {
+  await page.goto("/tools/ai-app-security-scanner")
+
+  const filesTab = page.getByRole("tab", { name: "Select files" })
+  const pasteTab = page.getByRole("tab", { name: "Paste code" })
+  await filesTab.focus()
+  await page.keyboard.press("ArrowRight")
+
+  await expect(pasteTab).toBeFocused()
+  await expect(pasteTab).toHaveAttribute("aria-selected", "true")
+  await expect(filesTab).toHaveAttribute("tabindex", "-1")
+  await expect(page.getByRole("tabpanel", { name: "Paste code" })).toBeVisible()
+
+  await page.keyboard.press("Home")
+  await expect(filesTab).toBeFocused()
+  await expect(filesTab).toHaveAttribute("aria-selected", "true")
+})
+
 test("keeps Free tools separate from the restored desktop Resources menu", async ({ page }) => {
   await page.setViewportSize({ width: 1159, height: 863 })
   await page.goto("/")

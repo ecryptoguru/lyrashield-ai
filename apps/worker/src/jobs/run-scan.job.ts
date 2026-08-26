@@ -2,7 +2,7 @@ import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
-import { recordAgentMinutes, getUsageBalance, enterGrace, debitOverage } from "@lyrashield/billing"
+import { recordAgentMinutes, enterGrace, debitOverage } from "@lyrashield/billing"
 import {
   buildVibeSecurityInstruction,
   summarizeVibeSecurityCoverage,
@@ -27,6 +27,7 @@ import {
   interpretExitCode,
   resolveEngineProfile,
   runEngineTriage,
+  type EngineProfile,
   type EngineRunResult,
 } from "../engine/runner"
 import { engineWorkspacePath } from "../engine/workspace-path"
@@ -55,6 +56,7 @@ import {
 } from "../engine/result-integrity"
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import { ScanJobDataSchema, type ScanJobData, type ScanJobResult } from "../types"
+import type { ScannerCoverageIssue } from "../engine/scanner-coverage"
 
 export function extractActualCostUsd(usage: Record<string, unknown> | undefined): number | null {
   if (!usage) return null
@@ -65,6 +67,74 @@ export function extractActualCostUsd(usage: Record<string, unknown> | undefined)
     }
   }
   return null
+}
+
+export function engineRoutingCoverageIssue(
+  profile: EngineProfile,
+  runRecord: EngineRunRecord | null
+): ScannerCoverageIssue | null {
+  if (!runRecord) return null
+  const expectedPolicy =
+    profile.model && profile.delegateModel
+      ? `coordinator=${profile.model}@${profile.reasoningEffort};delegate=${profile.delegateModel}@${profile.delegateReasoningEffort};v=1`
+      : null
+  const mismatches = [
+    profile.model !== undefined && runRecord.model !== profile.model ? "model" : null,
+    runRecord.reasoning_effort !== profile.reasoningEffort ? "reasoning_effort" : null,
+    profile.delegateModel !== undefined && runRecord.delegate_model !== profile.delegateModel
+      ? "delegate_model"
+      : null,
+    runRecord.delegate_reasoning_effort !== profile.delegateReasoningEffort
+      ? "delegate_reasoning_effort"
+      : null,
+    expectedPolicy !== null && runRecord.model_routing_policy !== expectedPolicy
+      ? "model_routing_policy"
+      : null,
+  ].filter((field): field is string => field !== null)
+
+  return mismatches.length === 0
+    ? null
+    : {
+        scanner: "engine",
+        status: "partial",
+        subject: "routing-receipt",
+        reason: `Engine routing receipt did not match the worker profile: ${mismatches.join(", ")}`,
+      }
+}
+
+type StoredTerminalOutcome = {
+  status: "COMPLETED" | "PARTIAL" | "FAILED" | "STOPPED_BUDGET"
+  errorCategory: string | null
+  errorMessage: string | null
+}
+
+function storedTerminalOutcome(manifest: unknown): StoredTerminalOutcome | null {
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) return null
+  const outcome = (manifest as { terminalOutcome?: unknown }).terminalOutcome
+  if (!outcome || typeof outcome !== "object" || Array.isArray(outcome)) return null
+  const record = outcome as Record<string, unknown>
+  if (!["COMPLETED", "PARTIAL", "FAILED", "STOPPED_BUDGET"].includes(String(record.status))) {
+    return null
+  }
+  if (
+    record.errorCategory !== null &&
+    record.errorCategory !== undefined &&
+    typeof record.errorCategory !== "string"
+  ) {
+    return null
+  }
+  if (
+    record.errorMessage !== null &&
+    record.errorMessage !== undefined &&
+    typeof record.errorMessage !== "string"
+  ) {
+    return null
+  }
+  return {
+    status: record.status as StoredTerminalOutcome["status"],
+    errorCategory: typeof record.errorCategory === "string" ? record.errorCategory : null,
+    errorMessage: typeof record.errorMessage === "string" ? record.errorMessage : null,
+  }
 }
 
 type UsageSummary = {
@@ -571,7 +641,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           errorCategory: true,
           errorMessage: true,
           actualCostCents: true,
-          resultManifest: { select: { id: true } },
+          resultManifest: { select: { id: true, manifest: true } },
           events: {
             where: { stage: "billable_boundary" },
             select: { id: true },
@@ -579,6 +649,29 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           },
         },
       })
+      const terminalOutcome = storedTerminalOutcome(pendingFinalization?.resultManifest?.manifest)
+      if (
+        pendingFinalization?.resultManifest &&
+        ["RUNNING", "VERIFYING"].includes(pendingFinalization.status) &&
+        terminalOutcome &&
+        terminalOutcome.status !== "COMPLETED"
+      ) {
+        await completeRetestsForScan({ scanId, workspaceId })
+        await updateScanStatus(scanId, terminalOutcome.status as ScanStatus, {
+          ...(terminalOutcome.errorCategory
+            ? { errorCategory: terminalOutcome.errorCategory }
+            : {}),
+          ...(terminalOutcome.errorMessage ? { errorMessage: terminalOutcome.errorMessage } : {}),
+          ...(pendingFinalization.actualCostCents !== null
+            ? { actualCostCents: pendingFinalization.actualCostCents }
+            : {}),
+        })
+        return {
+          status: "failed",
+          errorCategory: terminalOutcome.errorCategory ?? terminalOutcome.status,
+          errorMessage: terminalOutcome.errorMessage ?? "Scan did not complete successfully",
+        }
+      }
       if (pendingFinalization?.status === "VERIFYING" && pendingFinalization.resultManifest) {
         if (pendingFinalization.errorCategory === "BUDGET_EXCEEDED") {
           await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
@@ -927,6 +1020,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       const runRecord = engineResult.output.runRecord
+      const routingCoverageIssue =
+        target.type === "REPO" && engineProfile
+          ? engineRoutingCoverageIssue(engineProfile, runRecord)
+          : null
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const engineWorkObserved =
         target.type === "REPO" &&
@@ -945,15 +1042,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             where: { workspaceId },
             select: { currentPeriodStart: true },
           })
-          await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
+          const metering = await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
             mode,
             phase: "engine_run",
             cycleStart: billingAccount?.currentPeriodStart ?? undefined,
           })
 
-          // Check balance after metering — if exhausted, enter grace
-          const balance = await getUsageBalance(workspaceId)
-          if (balance.totalRemaining <= 0) {
+          if (metering.overageMinutes > 0) {
             // Check if overage is available (Team plan with spend limit)
             const acct = await prisma.billingAccount.findUnique({
               where: { workspaceId },
@@ -962,9 +1057,23 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             const overageAvailable = acct?.currentPlan === "TEAM" && (acct.spendLimitCents ?? 0) > 0
 
             if (overageAvailable) {
-              // Debit overage for the remaining engine time
-              const overageMinutes = Math.ceil(engineWallClockMs / 60_000)
-              await debitOverage(workspaceId, overageMinutes, scanId, "engine_overage")
+              const overage = await debitOverage(
+                workspaceId,
+                metering.overageMinutes,
+                scanId,
+                "engine_overage"
+              )
+              if (!overage.debited || overage.minutes !== metering.overageMinutes) {
+                await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+                  errorCategory: "BUDGET_EXCEEDED",
+                  errorMessage: "Agent-minute overage spend limit reached",
+                })
+                return {
+                  status: "failed",
+                  errorCategory: "BUDGET_EXCEEDED",
+                  errorMessage: "Agent-minute overage spend limit reached",
+                }
+              }
             } else {
               // Enter grace period (15min cap)
               const graceResult = await enterGrace(workspaceId, engineWallClockMs)
@@ -1004,8 +1113,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const engineExecution =
         engineWorkObserved && engineProfile && engineModel
           ? {
-              model: engineModel,
-              reasoningEffort: engineProfile.reasoningEffort,
+              model: runRecord?.model ?? "",
+              reasoningEffort: runRecord?.reasoning_effort ?? "",
               image: env.LYRASHIELD_IMAGE || null,
               ...(imageDigest(env.LYRASHIELD_IMAGE)
                 ? { imageDigest: imageDigest(env.LYRASHIELD_IMAGE) }
@@ -1072,7 +1181,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
           workerExecution,
+          terminalOutcome: {
+            status: "STOPPED_BUDGET",
+            errorCategory: "BUDGET_EXCEEDED",
+            errorMessage: budgetMessage,
+          },
         })
+        await completeRetestsForScan({ scanId, workspaceId })
         await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
           errorCategory: "BUDGET_EXCEEDED",
           errorMessage: budgetMessage,
@@ -1124,7 +1239,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
           workerExecution,
+          terminalOutcome: {
+            status: "FAILED",
+            errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
+            errorMessage: timeoutMessage,
+          },
         })
+        await completeRetestsForScan({ scanId, workspaceId })
         await updateScanStatus(scanId, "FAILED" as ScanStatus, {
           errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
           errorMessage: timeoutMessage,
@@ -1494,7 +1615,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           },
           sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
           engineFindingCount: orchestratorResult.engineFindings.length,
-          coverageIssues: orchestratorResult.coverageIssues,
+          coverageIssues: [
+            ...orchestratorResult.coverageIssues,
+            ...(routingCoverageIssue ? [routingCoverageIssue] : []),
+          ],
           aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
           matchedControlRanks: coverage.matchedControlRanks,
           urlExecution: orchestratorResult.urlExecution,
@@ -1506,6 +1630,19 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
           workerExecution,
+          terminalOutcome: engineTerminalError
+            ? {
+                status: engineTerminalError.status as "PARTIAL" | "FAILED" | "STOPPED_BUDGET",
+                errorCategory: engineTerminalError.errorCategory,
+                errorMessage: engineTerminalError.errorMessage,
+              }
+            : budgetExceeded
+              ? {
+                  status: "STOPPED_BUDGET",
+                  errorCategory: "BUDGET_EXCEEDED",
+                  errorMessage: "Protected run limit reached",
+                }
+              : { status: "COMPLETED", errorCategory: null, errorMessage: null },
         })
 
         await completeRetestsForScan({ scanId, workspaceId })

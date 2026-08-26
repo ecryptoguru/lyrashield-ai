@@ -18,14 +18,23 @@ export interface AuditLogChainFields {
   createdAt: Date
 }
 
-/**
- * Compute the hash for an audit log entry, chaining it to the previous entry's hash.
- * Uses SHA-256 over a canonical JSON string of the fields + prevHash.
- *
- * @returns The hex-encoded SHA-256 hash to store on the AuditLog record.
- */
-export function computeAuditHash(entry: AuditLogChainFields, prevHash: string | null): string {
-  const payload = {
+const AUDIT_HASH_V2_PREFIX = "v2:"
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value instanceof Date) return value.toISOString()
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, nested]) => [key, canonicalize(nested)])
+    )
+  }
+  return value
+}
+
+function auditPayload(entry: AuditLogChainFields, prevHash: string | null) {
+  return {
     id: entry.id,
     workspaceId: entry.workspaceId,
     actorUserId: entry.actorUserId,
@@ -38,9 +47,25 @@ export function computeAuditHash(entry: AuditLogChainFields, prevHash: string | 
     createdAt: entry.createdAt.toISOString(),
     prevHash: prevHash ?? null,
   }
+}
 
+function legacyAuditHash(entry: AuditLogChainFields, prevHash: string | null): string {
+  // Compatibility only: legacy hashes did not bind nested metadata. Existing
+  // chains remain readable, while every new record uses the v2 format below.
+  const payload = auditPayload(entry, prevHash)
   const json = JSON.stringify(payload, Object.keys(payload).sort())
   return createHash("sha256").update(json, "utf8").digest("hex")
+}
+
+/**
+ * Compute the hash for an audit log entry, chaining it to the previous entry's hash.
+ * Uses SHA-256 over a canonical JSON string of the fields + prevHash.
+ *
+ * @returns The versioned, hex-encoded SHA-256 hash to store on the AuditLog record.
+ */
+export function computeAuditHash(entry: AuditLogChainFields, prevHash: string | null): string {
+  const json = JSON.stringify(canonicalize(auditPayload(entry, prevHash)))
+  return `${AUDIT_HASH_V2_PREFIX}${createHash("sha256").update(json, "utf8").digest("hex")}`
 }
 
 /**
@@ -55,7 +80,9 @@ export function verifyAuditChain(
   for (const entry of entries) {
     if (entry.prevHash !== expectedPrevHash) return false
 
-    const computed = computeAuditHash(entry, entry.prevHash)
+    const computed: string = entry.hash?.startsWith(AUDIT_HASH_V2_PREFIX)
+      ? computeAuditHash(entry, entry.prevHash)
+      : legacyAuditHash(entry, entry.prevHash)
     if (entry.hash !== computed) return false
 
     expectedPrevHash = entry.hash

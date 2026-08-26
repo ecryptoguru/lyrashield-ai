@@ -16,6 +16,7 @@ vi.mock("@lyrashield/db", () => ({
     $transaction: transactionMock,
     auditLog: { create: vi.fn().mockResolvedValue({}) },
   },
+  withWorkspaceRLS: (_workspaceId: string, callback: unknown) => transactionMock(callback),
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

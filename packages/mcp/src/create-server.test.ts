@@ -152,12 +152,21 @@ describe("createLyraShieldServer (SDK integration)", () => {
 
   it("runs a mutating tool after elicitation approval", async () => {
     const fetchFn = fetchStub(() => ({ id: "scan-1", status: "QUEUED" }))
-    const client = await connect({ fetchFn, elicitation: () => true })
+    let approvalMessage = ""
+    const client = await connect({
+      fetchFn,
+      elicitation: (message) => {
+        approvalMessage = message
+        return true
+      },
+    })
     const res = (await client.callTool({
       name: "lyrashield_run_pr_scan",
       arguments: { workspaceId: "ws-1", targetId: "t-1" },
     })) as { isError?: boolean; content: Array<{ text: string }> }
     expect(res.isError).toBeFalsy()
+    expect(approvalMessage).toContain('"workspaceId": "ws-1"')
+    expect(approvalMessage).toContain('"targetId": "t-1"')
     expect(fetchFn).toHaveBeenCalledOnce()
     const body = JSON.parse(String((fetchFn as ReturnType<typeof vi.fn>).mock.calls[0][1].body))
     expect(body.goal).toBe("CHECK_PR")

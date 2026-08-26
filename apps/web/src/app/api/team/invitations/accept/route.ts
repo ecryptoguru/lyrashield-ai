@@ -110,36 +110,39 @@ export async function POST(request: Request) {
       )
     }
 
-    // Race-safe consume: only one concurrent accept can flip status pending →
-    // accepted; late arrivals resolve as already-joined.
-    const consumed = await getSystemPrisma().invitation.updateMany({
-      where: {
-        id: invitation.id,
-        status: "pending",
-        expiresAt: { gt: new Date() },
-      },
-      data: { status: "ACCEPTED", acceptedAt: new Date() },
-    })
-
-    // Membership idempotency: an existing row (e.g. re-invite after removal)
-    // is re-activated with the invited role rather than duplicated.
-    const existingMember = await getSystemPrisma().workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId: invitation.workspaceId,
-          userId: session.userId,
+    const joined = await getSystemPrisma().$transaction(async (tx) => {
+      const consumed = await tx.invitation.updateMany({
+        where: {
+          id: invitation.id,
+          status: "pending",
+          expiresAt: { gt: new Date() },
         },
-      },
-      select: { id: true, status: true },
-    })
-    if (existingMember) {
-      await getSystemPrisma().workspaceMember.update({
-        where: { id: existingMember.id },
-        data: { status: "active", role: invitation.role },
+        data: { status: "ACCEPTED", acceptedAt: new Date() },
       })
-    } else {
-      await getSystemPrisma().workspaceMember.create({
-        data: {
+
+      if (consumed.count !== 1) {
+        const existingMember = await tx.workspaceMember.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId: invitation.workspaceId,
+              userId: session.userId,
+            },
+          },
+          select: { status: true },
+        })
+        if (existingMember?.status === "active") return false
+        throw new Error("INVITATION_CONSUME_CONFLICT")
+      }
+
+      await tx.workspaceMember.upsert({
+        where: {
+          workspaceId_userId: {
+            workspaceId: invitation.workspaceId,
+            userId: session.userId,
+          },
+        },
+        update: { status: "active", role: invitation.role },
+        create: {
           workspaceId: invitation.workspaceId,
           userId: session.userId,
           role: invitation.role,
@@ -147,9 +150,10 @@ export async function POST(request: Request) {
           invitedEmail: invitation.email,
         },
       })
-    }
+      return true
+    })
 
-    if (consumed.count === 1) {
+    if (joined) {
       await prisma.auditLog.create({
         data: {
           workspaceId: invitation.workspaceId,
@@ -172,9 +176,12 @@ export async function POST(request: Request) {
       workspaceId: invitation.workspaceId,
       workspaceName: invitation.workspace.name,
       role: invitation.role,
-      alreadyMember: consumed.count === 0,
+      alreadyMember: !joined,
     })
   } catch (error) {
+    if (error instanceof Error && error.message === "INVITATION_CONSUME_CONFLICT") {
+      return apiError("INVITATION_NOT_FOUND", "This invitation is no longer valid", 409)
+    }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     logger.error("Failed to accept team invitation", { error: String(error) })

@@ -15,6 +15,7 @@ export default getViteConfig(
       define: {
         __MARKETING_INDEXABLE__: "true",
         __MARKETING_X_URL__: '""',
+        __MARKETING_BUILD_REVISION__: '"0123456789abcdef0123456789abcdef01234567"',
       },
     },
   }

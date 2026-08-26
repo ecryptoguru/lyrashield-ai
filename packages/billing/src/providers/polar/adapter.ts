@@ -132,7 +132,7 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         }
 
         const orderId = String(data.order_id ?? data.id ?? "")
-        await reverseRefund(workspaceId, orderId)
+        await reverseRefund(workspaceId, orderId, String(data.id ?? orderId))
 
         return { handled: true, action: "refund.reversed", workspaceId }
       }

@@ -4,6 +4,7 @@ import {
   EvidenceEnvelopeError,
   isEnvelope,
   openEnvelope,
+  readEnvelopeKeyRef,
   resolveEnvelopeKek,
   sealEnvelope,
   verifyEnvelopeShape,
@@ -19,6 +20,7 @@ describe("evidence envelope", () => {
 
     expect(isEnvelope(envelope)).toBe(true)
     expect(verifyEnvelopeShape(envelope)).toBe(true)
+    expect(readEnvelopeKeyRef(envelope)).toBe(ENVELOPE_KEY_REF)
     // The uploaded body must never contain the plaintext.
     expect(envelope.indexOf(plaintext)).toBe(-1)
 

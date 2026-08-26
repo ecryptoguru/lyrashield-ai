@@ -353,34 +353,7 @@ jobs:
             'prevHash', \"prevHash\", 'hash', hash
           ) ORDER BY \"workspaceId\", \"createdAt\", id), '[]'::json)::text FROM \"AuditLog\"" > "$RUNNER_TEMP/audit.json"
 
-          node - "$RUNNER_TEMP/audit.json" <<'NODE'
-          const { createHash } = require("node:crypto")
-          const fs = require("node:fs")
-          const entries = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
-          const previous = new Map()
-          for (const entry of entries) {
-            const prevHash = previous.get(entry.workspaceId) ?? null
-            if (entry.prevHash !== prevHash) throw new Error(`invalid previous audit hash for ${entry.id}`)
-            const payload = {
-              id: entry.id,
-              workspaceId: entry.workspaceId,
-              actorUserId: entry.actorUserId,
-              action: entry.action,
-              resourceType: entry.resourceType,
-              resourceId: entry.resourceId,
-              ipAddress: entry.ipAddress,
-              userAgent: entry.userAgent,
-              metadata: entry.metadata ?? null,
-              createdAt: new Date(entry.createdAt).toISOString(),
-              prevHash,
-            }
-            const hash = createHash("sha256")
-              .update(JSON.stringify(payload, Object.keys(payload).sort()), "utf8")
-              .digest("hex")
-            if (entry.hash !== hash) throw new Error(`invalid audit hash for ${entry.id}`)
-            previous.set(entry.workspaceId, hash)
-          }
-          NODE
+          pnpm --filter @lyrashield/db exec tsx scripts/verify-audit-chain-file.ts "$RUNNER_TEMP/audit.json"
 
       - name: Start the application against the restored database
         shell: bash

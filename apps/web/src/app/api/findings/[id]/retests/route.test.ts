@@ -16,6 +16,7 @@ const enqueueScanJob = vi.fn()
 const assertScanWorkerAvailable = vi.fn()
 const updateScanStatus = vi.fn()
 class ScanWorkerUnavailableError extends Error {}
+class WorkspaceScanConcurrencyLimitError extends Error {}
 const prisma = {
   scan: { findFirst: vi.fn(), update: vi.fn() },
   findingCandidate: { findMany: vi.fn() },
@@ -24,7 +25,13 @@ const prisma = {
   target: { findFirst: vi.fn() },
 }
 
-vi.mock("@lyrashield/db", () => ({ getFinding, createScan, updateScanStatus, prisma }))
+vi.mock("@lyrashield/db", () => ({
+  getFinding,
+  createScan,
+  updateScanStatus,
+  WorkspaceScanConcurrencyLimitError,
+  prisma,
+}))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { retest: { create: "retest:create" } } }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))

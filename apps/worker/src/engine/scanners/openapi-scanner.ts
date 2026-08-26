@@ -33,13 +33,14 @@ export type OpenApiScannerResult = {
 export type OpenApiSpec = {
   openapi?: string
   servers?: Array<{ url: string }>
+  security?: Array<Record<string, unknown>>
   paths?: Record<string, OpenApiPathItem>
   components?: unknown
 }
 
 type OpenApiPathItem = Partial<
   Record<"get" | "head" | "options" | "post" | "put" | "patch" | "delete", OpenApiOperation>
->
+> & { parameters?: OpenApiParameter[] }
 
 type OpenApiOperation = {
   operationId?: string
@@ -135,9 +136,22 @@ function resolveServer(spec: OpenApiSpec, targetUrl: string): string {
   return new URL(candidate, `${base.origin}/`).toString()
 }
 
-function operationHasAuth(operation: OpenApiOperation): boolean {
-  if (operation.security && operation.security.length > 0) return true
-  return false
+function operationHasAuth(
+  operation: OpenApiOperation,
+  rootSecurity: Array<Record<string, unknown>> | undefined
+): boolean {
+  const effectiveSecurity: unknown = operation.security ?? rootSecurity
+  if (effectiveSecurity === undefined) return false
+  if (!Array.isArray(effectiveSecurity)) return true
+  if (effectiveSecurity.length === 0) return false
+  if (
+    effectiveSecurity.some(
+      (requirement) => !requirement || typeof requirement !== "object" || Array.isArray(requirement)
+    )
+  ) {
+    return true
+  }
+  return effectiveSecurity.every((requirement) => Object.keys(requirement).length > 0)
 }
 
 function resolveLocalRef(spec: OpenApiSpec, ref: string): unknown {
@@ -154,22 +168,80 @@ function resolveLocalRef(spec: OpenApiSpec, ref: string): unknown {
   return current
 }
 
-function deepDeref(spec: OpenApiSpec, value: unknown): unknown {
+const MAX_REF_DEPTH = 32
+
+function deepDeref(
+  spec: OpenApiSpec,
+  value: unknown,
+  resolvingRefs = new Set<string>(),
+  objectPath = new WeakSet<object>(),
+  depth = 0
+): unknown {
+  if (depth >= MAX_REF_DEPTH) {
+    if (Array.isArray(value)) return []
+    if (value && typeof value === "object") {
+      return "$ref" in value && typeof value.$ref === "string" ? value : {}
+    }
+    return value
+  }
   if (Array.isArray(value)) {
-    return value.map((v) => deepDeref(spec, v))
+    if (objectPath.has(value)) return []
+    objectPath.add(value)
+    try {
+      return value.map((v) => deepDeref(spec, v, resolvingRefs, objectPath, depth + 1))
+    } finally {
+      objectPath.delete(value)
+    }
   }
   if (value && typeof value === "object") {
+    if (objectPath.has(value)) return {}
     if ("$ref" in value && typeof value.$ref === "string") {
+      if (resolvingRefs.has(value.$ref)) return value
       const resolved = resolveLocalRef(spec, value.$ref)
-      return resolved !== undefined ? deepDeref(spec, resolved) : value
+      if (resolved === undefined) return value
+      const nextRefs = new Set(resolvingRefs)
+      nextRefs.add(value.$ref)
+      return deepDeref(spec, resolved, nextRefs, objectPath, depth + 1)
     }
+    objectPath.add(value)
     const result: Record<string, unknown> = {}
-    for (const [key, v] of Object.entries(value)) {
-      result[key] = deepDeref(spec, v)
+    try {
+      for (const [key, v] of Object.entries(value)) {
+        result[key] = deepDeref(spec, v, resolvingRefs, objectPath, depth + 1)
+      }
+    } finally {
+      objectPath.delete(value)
     }
     return result
   }
   return value
+}
+
+function mergeParameters(
+  pathParameters: unknown,
+  operationParameters: unknown
+): OpenApiParameter[] {
+  const merged = new Map<string, OpenApiParameter>()
+  for (const parameter of [
+    ...normalizeParameters(pathParameters),
+    ...normalizeParameters(operationParameters),
+  ]) {
+    merged.set(`${parameter.in}:${parameter.name}`, parameter)
+  }
+  return [...merged.values()]
+}
+
+function normalizeParameters(value: unknown): OpenApiParameter[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((parameter): parameter is OpenApiParameter => {
+    if (!parameter || typeof parameter !== "object") return false
+    const candidate = parameter as Record<string, unknown>
+    return (
+      typeof candidate.name === "string" &&
+      typeof candidate.in === "string" &&
+      ["query", "path", "header", "cookie"].includes(candidate.in)
+    )
+  })
 }
 
 function getExampleValue(param: OpenApiParameter): string | undefined {
@@ -183,8 +255,9 @@ function getExampleValue(param: OpenApiParameter): string | undefined {
 }
 
 function operationRequiresParams(operation: OpenApiOperation): boolean {
-  if (!operation.parameters || operation.parameters.length === 0) return false
-  for (const param of operation.parameters) {
+  const parameters = normalizeParameters(operation.parameters)
+  if (parameters.length === 0) return false
+  for (const param of parameters) {
     if (param.in === "header" || param.in === "cookie") return true
     if (isSensitiveParamName(param.name)) return true
     if (param.in === "query" && param.required && getExampleValue(param) === undefined) return true
@@ -227,6 +300,14 @@ function buildOperationUrl(
         })
       }
     }
+  }
+
+  if (/\{[^}]+\}/.test(filledPath)) {
+    issues.push({
+      code: "PARAMETER_VALUE_UNAVAILABLE",
+      subject: redactUrlForLogs(`${base.replace(/\/$/, "")}${pathTemplate}`),
+      reason: "A path parameter has no usable documented value.",
+    })
   }
 
   const url = new URL(filledPath, `${base.replace(/\/$/, "")}/`)
@@ -570,7 +651,15 @@ export async function scanOpenApi(options: {
     for (const method of methods) {
       const operation = item[METHOD_TO_KEY[method]] ?? (method !== "GET" ? item.get : undefined)
       if (operation) {
-        candidates.push({ path, method, operation: deepDeref(spec, operation) as OpenApiOperation })
+        const resolvedOperation = deepDeref(spec, operation) as OpenApiOperation
+        candidates.push({
+          path,
+          method,
+          operation: {
+            ...resolvedOperation,
+            parameters: mergeParameters(item.parameters, resolvedOperation.parameters),
+          },
+        })
       }
     }
   }
@@ -603,7 +692,7 @@ export async function scanOpenApi(options: {
       break
     }
 
-    if (operationHasAuth(candidate.operation)) {
+    if (operationHasAuth(candidate.operation, spec.security)) {
       const url = new URL(candidate.path, baseServer).toString()
       const attempt: OpenApiOperationAttempt = {
         method: candidate.method,

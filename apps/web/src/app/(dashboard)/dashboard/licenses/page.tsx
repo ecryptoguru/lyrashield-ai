@@ -1,18 +1,17 @@
 import type { Metadata } from "next"
-import { prisma } from "@lyrashield/db"
-import { redirect } from "next/navigation"
+import { getSystemPrisma } from "@lyrashield/db"
+import { notFound } from "next/navigation"
 import { KeyRound } from "lucide-react"
-import { getCachedSession } from "@/lib/cache"
-import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { PageHeader } from "@/components/page-header"
 import { LicensesClient } from "./licenses-client"
 
 /**
- * Admin licenses dashboard — founder-only (OWNER role).
+ * Platform administrator licenses dashboard.
  *
  * Shows all issued licenses with search/filter by owner email. This is a
- * global admin view, not workspace-scoped: the founder can see every license
- * issued across the platform.
+ * global admin view, not workspace-scoped: an elevated platform administrator
+ * can see every license issued across the platform.
  */
 export const metadata: Metadata = {
   title: "Licenses",
@@ -23,15 +22,10 @@ export default async function LicensesPage({
 }: {
   searchParams: Promise<{ q?: string; status?: "active" | "revoked" }>
 }) {
-  const session = await getCachedSession()
-  if (!session) redirect("/sign-in")
-
-  // Founder-only gate: the user must be an OWNER on at least one workspace.
-  const ownerMembership = await prisma.workspaceMember.findFirst({
-    where: { userId: session.userId, role: "OWNER", status: "active" },
-  })
-  if (!ownerMembership) {
-    redirect("/dashboard")
+  try {
+    await requirePlatformAdminIdentity()
+  } catch {
+    notFound()
   }
 
   const params = await searchParams
@@ -43,7 +37,7 @@ export default async function LicensesPage({
     ...(query ? { ownerEmail: { contains: query, mode: "insensitive" as const } } : {}),
   }
 
-  const licenses = await prisma.license.findMany({
+  const licenses = await getSystemPrisma().license.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -81,11 +75,12 @@ export default async function LicensesPage({
         description="Admin view of all issued Local / Desktop licenses."
         icon={KeyRound}
       />
-      {initialData.length === 0 && !query ? (
-        <NoWorkspaceState icon={KeyRound} description="No licenses have been issued yet." />
-      ) : (
-        <LicensesClient initialData={initialData} query={query} statusFilter={statusFilter} />
-      )}
+      <LicensesClient
+        key={`${statusFilter}:${query}`}
+        initialData={initialData}
+        query={query}
+        statusFilter={statusFilter}
+      />
     </div>
   )
 }

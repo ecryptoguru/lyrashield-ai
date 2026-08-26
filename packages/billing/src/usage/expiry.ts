@@ -6,7 +6,7 @@
  * usage balance. The MinutePack row is NOT deleted — it remains for audit.
  */
 
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 
 export interface ExpirePacksResult {
@@ -23,31 +23,43 @@ export interface ExpirePacksResult {
  */
 export async function expirePacks(): Promise<ExpirePacksResult> {
   const now = new Date()
-
-  // Fetch the packs that will be expired so we can audit them
-  const packsToExpire = await prisma.minutePack.findMany({
-    where: {
-      deletedAt: null,
-      expiresAt: { lt: now },
-      remainingMinutes: { gt: 0 },
-    },
-    select: { id: true, workspaceId: true, remainingMinutes: true },
-  })
+  // Workspace itself is deliberately unscoped. Sweep its IDs, then bind each
+  // tenant transaction through FORCE RLS instead of broadening the privileged
+  // system client's license-only trust boundary.
+  const workspaces = await prisma.workspace.findMany({ select: { id: true } })
+  const packsToExpire: { id: string; workspaceId: string; remainingMinutes: number }[] = []
+  let expired = 0
+  for (const workspace of workspaces) {
+    const outcome = await withWorkspaceRLS(workspace.id, async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspace.id}, 0))`
+      const packs = await tx.minutePack.findMany({
+        where: {
+          workspaceId: workspace.id,
+          deletedAt: null,
+          expiresAt: { lt: now },
+          remainingMinutes: { gt: 0 },
+        },
+        select: { id: true, workspaceId: true, remainingMinutes: true },
+      })
+      if (packs.length === 0) return { packs, count: 0 }
+      const result = await tx.minutePack.updateMany({
+        where: {
+          workspaceId: workspace.id,
+          deletedAt: null,
+          expiresAt: { lt: now },
+          remainingMinutes: { gt: 0 },
+        },
+        data: { remainingMinutes: 0 },
+      })
+      return { packs, count: result.count }
+    })
+    packsToExpire.push(...outcome.packs)
+    expired += outcome.count
+  }
 
   if (packsToExpire.length === 0) {
     return { expired: 0 }
   }
-
-  const result = await prisma.minutePack.updateMany({
-    where: {
-      deletedAt: null,
-      expiresAt: { lt: now },
-      remainingMinutes: { gt: 0 },
-    },
-    data: {
-      remainingMinutes: 0,
-    },
-  })
 
   // A-L03: Create audit log entries for each expired pack
   for (const pack of packsToExpire) {
@@ -66,9 +78,9 @@ export async function expirePacks(): Promise<ExpirePacksResult> {
       })
   }
 
-  if (result.count > 0) {
-    logger.info("Expired minute packs", { count: result.count })
+  if (expired > 0) {
+    logger.info("Expired minute packs", { count: expired })
   }
 
-  return { expired: result.count }
+  return { expired }
 }

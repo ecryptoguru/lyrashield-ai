@@ -86,10 +86,26 @@ fn validate_azure_endpoint(endpoint: &str) -> Result<(), String> {
     if e.is_empty() {
         return Err("endpoint is empty".into());
     }
-    if !e.starts_with("https://") {
+    let url = reqwest::Url::parse(e).map_err(|_| "endpoint is not a valid URL".to_string())?;
+    if url.scheme() != "https" {
         return Err("endpoint must be https://".into());
     }
-    if !e.contains("openai.azure.com") && !e.contains("openai.azure.us") {
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(
+            "endpoint must not contain credentials, a custom port, query, or fragment".into(),
+        );
+    }
+    let host = url.host_str().unwrap_or_default();
+    let trusted_host = host
+        .strip_suffix(".openai.azure.com")
+        .or_else(|| host.strip_suffix(".openai.azure.us"))
+        .is_some_and(|resource| !resource.is_empty() && !resource.contains('.'));
+    if !trusted_host {
         return Err("endpoint must be an Azure OpenAI endpoint".into());
     }
     Ok(())
@@ -108,7 +124,7 @@ pub fn save_azure_credentials(api_key: &str, endpoint: &str) -> Result<(), Strin
     validate_azure_credentials(api_key, endpoint)?;
     let creds = serde_json::to_string(&AzureCredentials {
         api_key: api_key.to_string(),
-        endpoint: endpoint.to_string(),
+        endpoint: endpoint.trim().to_string(),
     })
     .map_err(|e| format!("failed to serialize azure creds: {}", e))?;
     let entry = Entry::new(KEYCHAIN_SERVICE, AZURE_ACCOUNT)
@@ -204,5 +220,11 @@ mod tests {
     fn endpoint_validation_rejects_non_https() {
         assert!(validate_azure_endpoint("http://bad").is_err());
         assert!(validate_azure_endpoint("https://my.openai.azure.com").is_ok());
+        assert!(validate_azure_endpoint("https://openai.azure.com").is_err());
+        assert!(validate_azure_endpoint("https://openai.azure.us").is_err());
+        assert!(validate_azure_endpoint("https://nested.my.openai.azure.com").is_err());
+        assert!(validate_azure_endpoint("https://openai.azure.com.attacker.example").is_err());
+        assert!(validate_azure_endpoint("https://attacker@my.openai.azure.com").is_err());
+        assert!(validate_azure_endpoint("https://my.openai.azure.com:8443").is_err());
     }
 }
