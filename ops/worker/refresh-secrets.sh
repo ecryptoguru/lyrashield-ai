@@ -91,7 +91,31 @@ write_secret S3_SECRET_KEY worker-r2-secret-key
 # the S3 block: evidence uploads fail closed without it. Generate once, store
 # durably (loss makes envelope-encrypted evidence unreadable) — see
 # packages/evidence-storage/scripts/generate-kek.mjs and PRODUCTION_DEPLOYMENT.
-write_secret LYRASHIELD_EVIDENCE_KEK worker-evidence-kek
+write_secret LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF worker-evidence-kek-active-ref
+evidence_kek_active_ref=$secret_value
+evidence_kek_prefix=envkeystore/lyrashield-evidence-kek/
+case "$evidence_kek_active_ref" in
+  "${evidence_kek_prefix}"v*) evidence_kek_version=${evidence_kek_active_ref#"$evidence_kek_prefix"} ;;
+  *)
+    echo "Evidence KEK active ref is not versioned" >&2
+    exit 1
+    ;;
+esac
+case "$evidence_kek_version" in
+  v[1-9]*) evidence_kek_digits=${evidence_kek_version#v} ;;
+  *)
+    echo "Evidence KEK active ref is not versioned" >&2
+    exit 1
+    ;;
+esac
+case "$evidence_kek_digits" in
+  ''|*[!0-9]*)
+    echo "Evidence KEK active ref is not versioned" >&2
+    exit 1
+    ;;
+esac
+write_secret LYRASHIELD_EVIDENCE_KEK "worker-evidence-kek-$evidence_kek_version"
+write_secret LYRASHIELD_EVIDENCE_KEK_KEYRING "worker-evidence-kek-keyring-$evidence_kek_version"
 # Production URL scans fail closed without the authenticated proxy. Requiring
 # both credentials here keeps a misconfigured worker out of service instead of
 # accepting jobs it cannot safely execute.

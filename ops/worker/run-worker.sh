@@ -69,17 +69,6 @@ is_64_hex "${worker_digest#sha256:}" || {
   echo "Worker image digest must be sha256:<64 hex>" >&2
   exit 1
 }
-app_revision=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
-engine_revision=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
-is_40_hex "$app_revision" || {
-  echo "Worker image app revision label must be a 40-character SHA" >&2
-  exit 1
-}
-is_40_hex "$engine_revision" || {
-  echo "Worker image engine revision label must be a 40-character SHA" >&2
-  exit 1
-}
-
 extract_env_value() {
   var="$1"
   file="$2"
@@ -138,6 +127,26 @@ for image in "$LYRASHIELD_WORKER_IMAGE" "$LYRASHIELD_SANDBOX_IMAGE"; do
     *) login_to_registry "$image"; logged_in="$logged_in $registry_host" ;;
   esac
 done
+
+# A newly promoted immutable digest may not exist in the VM's local Docker
+# cache. Pull only when absent so routine service restarts do not create
+# unnecessary registry traffic.
+for image in "$LYRASHIELD_WORKER_IMAGE" "$LYRASHIELD_SANDBOX_IMAGE"; do
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    docker pull "$image" >/dev/null
+  fi
+done
+
+app_revision=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+engine_revision=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
+is_40_hex "$app_revision" || {
+  echo "Worker image app revision label must be a 40-character SHA" >&2
+  exit 1
+}
+is_40_hex "$engine_revision" || {
+  echo "Worker image engine revision label must be a 40-character SHA" >&2
+  exit 1
+}
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"

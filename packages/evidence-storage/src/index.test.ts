@@ -397,4 +397,27 @@ describe("s3 envelope encryption", () => {
       delete process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING
     }
   })
+
+  it("fails readiness when rotation history is incomplete or reuses the active key", async () => {
+    const activeKek = Buffer.from(new Array(32).fill(4)).toString("base64")
+    process.env.LYRASHIELD_EVIDENCE_KEK = activeKek
+    process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF = "envkeystore/lyrashield-evidence-kek/v2"
+    process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING = "{}"
+    try {
+      vi.resetModules()
+      let mod = await import("./index")
+      expect(() => mod.assertEvidenceStorageConfigured()).toThrow("missing a prior version")
+
+      process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING = JSON.stringify({
+        "envkeystore/lyrashield-evidence-kek/v1": activeKek,
+      })
+      vi.resetModules()
+      mod = await import("./index")
+      expect(() => mod.assertEvidenceStorageConfigured()).toThrow("must differ")
+    } finally {
+      process.env.LYRASHIELD_EVIDENCE_KEK = Buffer.from(new Array(32).fill(3)).toString("base64")
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF
+      delete process.env.LYRASHIELD_EVIDENCE_KEK_KEYRING
+    }
+  })
 })

@@ -137,7 +137,13 @@ export function resolvePolarCatalogEvent(
   eventType: string,
   data: UnknownRecord
 ): CatalogResolution | null {
-  if (eventType === "refund.created" || eventType === "customer.state_changed") return null
+  if (
+    eventType === "refund.created" ||
+    eventType === "order.refunded" ||
+    eventType === "customer.state_changed"
+  ) {
+    return null
+  }
   const grantsEntitlement = eventType === "order.paid" || eventType.startsWith("subscription.")
   if (!grantsEntitlement) return null
 

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+vi.mock("@lyrashield/config", () => ({ env: {} }))
+
 // Mock reverseRefund so we can assert the refund.created path calls it.
 vi.mock("../../usage/refund", () => ({
   reverseRefund: vi.fn().mockResolvedValue({ reversed: true, minutesReversed: 100 }),
@@ -9,6 +11,10 @@ vi.mock("../../provider-catalog-validation", () => ({
 }))
 
 vi.mock("@lyrashield/pricing", () => ({
+  extractProductId: () => null,
+  isLocalSkuOrderPayload: () => false,
+  isMinutePackOrderPayload: (payload: Record<string, unknown>) =>
+    Boolean((payload.metadata as Record<string, unknown> | undefined)?.packId),
   MINUTE_PACK_MAP: {
     pack_100: { id: "pack_100", minutes: 100, priceUsd: 15 },
     pack_250: { id: "pack_250", minutes: 250, priceUsd: 30 },
@@ -31,16 +37,17 @@ import { isHandledPolarEvent } from "./webhooks"
 import { processPolarEvent } from "./adapter"
 import { reverseRefund } from "../../usage/refund"
 
-describe("Polar refund.created — FAIL-A2 unblock (refund reversal path)", () => {
+describe("Polar refund evidence", () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it("isHandledPolarEvent includes refund.created (was previously dead code)", () => {
+  it("handles refund rows and authoritative order refund events", () => {
     expect(isHandledPolarEvent("refund.created")).toBe(true)
+    expect(isHandledPolarEvent("order.refunded")).toBe(true)
   })
 
-  it("processPolarEvent routes refund.created to reverseRefund", async () => {
+  it("records refund.created without reversing entitlement", async () => {
     const result = await processPolarEvent({
       type: "refund.created",
       data: {
@@ -50,20 +57,60 @@ describe("Polar refund.created — FAIL-A2 unblock (refund reversal path)", () =
       },
     })
 
-    expect(result.handled).toBe(true)
-    expect(result.action).toBe("refund.reversed")
-    expect(reverseRefund).toHaveBeenCalledOnce()
-    expect(reverseRefund).toHaveBeenCalledWith("ws-1", "order-abc", "refund-1")
+    expect(result).toEqual({
+      handled: true,
+      action: "refund.created.recorded",
+      workspaceId: "ws-1",
+    })
+    expect(reverseRefund).not.toHaveBeenCalled()
   })
 
-  it("processPolarEvent returns not-handled when refund.created has no workspaceId", async () => {
+  it("reverses a minute pack only from a full order.refunded event", async () => {
     const result = await processPolarEvent({
-      type: "refund.created",
-      data: { id: "refund-2", order_id: "order-xyz", metadata: {} },
+      type: "order.refunded",
+      data: {
+        id: "order-xyz",
+        status: "refunded",
+        total_amount: 1500,
+        currency: "USD",
+        metadata: { workspaceId: "ws-1", packId: "pack_100" },
+      },
     })
 
-    expect(result.handled).toBe(false)
-    expect(result.action).toBe("refund.no_workspace")
+    expect(result.action).toBe("order.refunded.reversed")
+    expect(reverseRefund).toHaveBeenCalledWith("ws-1", "order-xyz", "order-xyz")
+  })
+
+  it("records partial order refunds without entitlement mutation", async () => {
+    const result = await processPolarEvent({
+      type: "order.refunded",
+      data: {
+        id: "order-partial",
+        status: "partially_refunded",
+        total_amount: 1500,
+        currency: "USD",
+        metadata: { workspaceId: "ws-1", packId: "pack_100" },
+      },
+    })
+
+    expect(result.action).toBe("order.refunded.not_full_recorded")
+    expect(reverseRefund).not.toHaveBeenCalled()
+  })
+
+  it("records a full subscription refund without touching minute-pack entitlement", async () => {
+    const result = await processPolarEvent({
+      type: "order.refunded",
+      data: {
+        id: "order-subscription",
+        status: "refunded",
+        total_amount: 4900,
+        currency: "USD",
+        subscription_id: "sub-1",
+        metadata: { workspaceId: "ws-1", planId: "individual_monthly" },
+      },
+    })
+
+    expect(result.action).toBe("order.refunded.full_recorded")
     expect(reverseRefund).not.toHaveBeenCalled()
   })
 

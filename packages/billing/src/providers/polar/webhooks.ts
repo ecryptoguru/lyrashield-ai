@@ -13,8 +13,8 @@
  * - subscription.revoked → syncSubscription (canceled)
  * - subscription.uncanceled → syncSubscription (reactivated)
  * - customer.state_changed → syncSubscription
- * - refund.created → reverseRefund (reverses minute-pack entitlement after a
- *   chargeback, legally required refund, or confirmed payment error)
+ * - refund.created → recorded without mutation
+ * - order.refunded → reverseRefund only when full and for a minute pack
  */
 
 import { createHmac } from "node:crypto"
@@ -137,6 +137,7 @@ export function isHandledPolarEvent(type: string): boolean {
     "subscription.uncanceled",
     "customer.state_changed",
     "refund.created",
+    "order.refunded",
   ]
   return handled.includes(type)
 }

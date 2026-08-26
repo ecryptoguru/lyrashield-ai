@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
+import { assertEvidenceStorageConfigured } from "@lyrashield/evidence-storage"
 import { getRedis } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 
@@ -13,9 +14,16 @@ export async function GET() {
   const redis = getRedis()
   if (!redis) {
     return NextResponse.json(
-      { status: "not_ready", checks: { database: false, redis: false } },
+      { status: "not_ready", checks: { database: false, redis: false, evidence: false } },
       { status: 503, headers: { "Cache-Control": "no-store" } }
     )
+  }
+
+  let evidence = true
+  try {
+    assertEvidenceStorageConfigured()
+  } catch {
+    evidence = false
   }
 
   const [database, redisCheck] = await Promise.allSettled([
@@ -25,8 +33,9 @@ export async function GET() {
   const checks = {
     database: database.status === "fulfilled",
     redis: redisCheck.status === "fulfilled",
+    evidence,
   }
-  const ready = checks.database && checks.redis
+  const ready = checks.database && checks.redis && checks.evidence
 
   if (!ready) logger.error("Readiness check failed", checks)
   return NextResponse.json(

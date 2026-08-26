@@ -30,6 +30,8 @@ export interface RefundPayload {
   refundId?: string | null
   /** Refund amount in major currency units. */
   refundAmount?: string
+  /** Refund currency; must match the original conversion. */
+  currency?: string
   /** Reason code. */
   reason: ClawbackReason
   /** Whether this is a chargeback (vs voluntary refund). */
@@ -78,6 +80,15 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
 
   const commission = conversion.commissions[0]!
   const originalAmount = commission.amount
+  if (reason === "REFUND") {
+    if (!payload.refundAmount || !payload.currency) {
+      throw new Error("affiliate_refund_money_mismatch")
+    }
+    const refundAmount = new Prisma.Decimal(payload.refundAmount)
+    if (payload.currency !== conversion.currency || !refundAmount.equals(conversion.grossAmount)) {
+      throw new Error("affiliate_refund_money_mismatch")
+    }
+  }
   const manualReview = originalAmount.gt(new Prisma.Decimal(CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD))
 
   // C-M11 / RISK-C3: Idempotency guard for clawback replay. If the commission

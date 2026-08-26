@@ -185,9 +185,7 @@ jobs:
 
       # Validates the exact immutable values the worker VM must inject into its
       # runtime environment (LYRASHIELD_PRODUCT_REVISION / _WORKER_IMAGE_DIGEST /
-      # _ENGINE_REVISION) and records them as the promotion record. This never
-      # promotes or restarts the worker VM; promotion remains the separate,
-      # reviewed runtime-config step on the VM.
+      # _ENGINE_REVISION) and records them for the guarded promotion below.
       - name: Validate worker provenance record
         if: steps.build-worker.outcome == 'success'
         shell: bash
@@ -218,15 +216,14 @@ jobs:
           echo "- LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- LYRASHIELD_WORKER_IMAGE_DIGEST=$digest" >> "$GITHUB_STEP_SUMMARY"
           echo "- LYRASHIELD_ENGINE_REVISION=${{ env.ENGINE_REVISION }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Promotion of the worker VM is NOT performed by this workflow." >> "$GITHUB_STEP_SUMMARY"
+          echo "The deploy job promotes this digest only after Container App smoke checks pass." >> "$GITHUB_STEP_SUMMARY"
 
   # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
   # remain immutable and deploy by verified digest. Multi-arch buildx pushes leave untagged manifests
   # per build (per-platform layers under the tagged manifest list), so versions accumulate
-  # faster than commits. Runs after `build` (not `deploy`) so cleanup happens even when the
-  # Azure deploy is skipped (e.g. Azure vars not yet configured) — images were still pushed
-  # to GHCR and must be garbage-collected. The freshly built image is always within the
-  # keep-n-tagged window so it is never the one being cleaned up.
+  # faster than commits. Cleanup runs only after the deploy job has promoted and verified
+  # the worker digest. This avoids registry eventual-consistency races deleting a candidate
+  # before the VM has pulled it.
   #
   # Uses dataaxiom/ghcr-cleanup-action rather than a raw "delete this version ID" call: it
   # resolves multi-arch manifest lists first and will not delete an untagged manifest that a
@@ -234,7 +231,8 @@ jobs:
   # pull of an image that still LOOKS tagged and valid.
   cleanup-old-images:
     name: Clean up superseded container images
-    needs: build
+    needs: [build, deploy]
+    if: needs.build.result == 'success' && needs.deploy.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       packages: write
@@ -502,25 +500,22 @@ jobs:
           echo "BullMQ TLS Redis credential present."
 
       - name: Verify evidence envelope key
+        id: verify-evidence-kek
         env:
           LYRASHIELD_EVIDENCE_KEK: ${{ secrets.LYRASHIELD_EVIDENCE_KEK }}
+          LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
+          LYRASHIELD_EVIDENCE_KEK_KEYRING: ${{ secrets.LYRASHIELD_EVIDENCE_KEK_KEYRING }}
         run: |
-          if [ -z "${LYRASHIELD_EVIDENCE_KEK}" ]; then
-            echo "::error::LYRASHIELD_EVIDENCE_KEK is not set. Evidence uploads fail closed without it (each artifact is client-side envelope-encrypted under this key-encryption key). Generate once with: node packages/evidence-storage/scripts/generate-kek.mjs — store the value durably (loss makes envelope-encrypted evidence unreadable), add it as the GitHub secret LYRASHIELD_EVIDENCE_KEK, and as worker-evidence-kek in Key Vault for the worker VM."
-            exit 1
-          fi
-          # Must be base64 for exactly 32 bytes (AES-256 KEK after HKDF).
-          decoded_bytes=$(printf '%s' "${LYRASHIELD_EVIDENCE_KEK}" | base64 -d 2>/dev/null | wc -c | tr -d ' ')
-          if [ "${decoded_bytes}" != "32" ]; then
-            echo "::error::LYRASHIELD_EVIDENCE_KEK must be base64 encoding exactly 32 bytes (got ${decoded_bytes}). Regenerate with: node packages/evidence-storage/scripts/generate-kek.mjs"
-            exit 1
-          fi
-          echo "Evidence envelope key present and valid."
+          node packages/evidence-storage/scripts/validate-kek-config.mjs
+          echo "version=${LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF##*/}" >> "$GITHUB_OUTPUT"
+          echo "Evidence envelope key configuration present and valid."
 
       - name: Sync evidence envelope key to app Container App
         id: sync-evidence-kek
         env:
           LYRASHIELD_EVIDENCE_KEK: ${{ secrets.LYRASHIELD_EVIDENCE_KEK }}
+          LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
+          LYRASHIELD_EVIDENCE_KEK_KEYRING: ${{ secrets.LYRASHIELD_EVIDENCE_KEK_KEYRING }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
         run: |
@@ -528,12 +523,28 @@ jobs:
           # artifacts); the scanner app does not and the worker VM receives the
           # key via Key Vault (ops/worker/refresh-secrets.sh).
           if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
-            if ! timeout --foreground 180s az containerapp secret set \
+            active_secret="lyrashield-evidence-kek-${{ steps.verify-evidence-kek.outputs.version }}"
+            keyring_secret="lyrashield-evidence-kek-keyring-${{ steps.verify-evidence-kek.outputs.version }}"
+            existing_secrets=$(timeout --foreground 180s az containerapp secret list \
               --only-show-errors \
               --name "$AZURE_APP_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
-              --secrets "lyrashield-evidence-kek=${LYRASHIELD_EVIDENCE_KEK}"; then
-              echo "::error::Failed to sync the evidence envelope key to ${AZURE_APP_CONTAINER_APP_NAME}."
+              --query '[].name' --output tsv)
+            active_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$active_secret" || true)
+            keyring_exists=$(printf '%s\n' "$existing_secrets" | grep -Fxc "$keyring_secret" || true)
+            if [ "$active_exists" = "1" ] && [ "$keyring_exists" = "1" ]; then
+              echo "Immutable evidence secrets already exist for ${{ steps.verify-evidence-kek.outputs.version }}; preserving them."
+            elif [ "$active_exists" != "0" ] || [ "$keyring_exists" != "0" ]; then
+              echo "::error::Evidence secret set for ${{ steps.verify-evidence-kek.outputs.version }} is incomplete; refusing to overwrite or repair immutable entries."
+              exit 1
+            elif ! timeout --foreground 180s az containerapp secret set \
+              --only-show-errors \
+              --name "$AZURE_APP_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets \
+                "${active_secret}=${LYRASHIELD_EVIDENCE_KEK}" \
+                "${keyring_secret}=${LYRASHIELD_EVIDENCE_KEK_KEYRING}"; then
+              echo "::error::Failed to create immutable evidence envelope key configuration for ${AZURE_APP_CONTAINER_APP_NAME}."
               exit 1
             fi
           fi
@@ -732,6 +743,8 @@ jobs:
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
+          LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
+          LYRASHIELD_EVIDENCE_KEK_VERSION: ${{ steps.verify-evidence-kek.outputs.version }}
           POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
@@ -786,7 +799,9 @@ jobs:
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
-              "LYRASHIELD_EVIDENCE_KEK=secretref:lyrashield-evidence-kek" \
+              "LYRASHIELD_EVIDENCE_KEK=secretref:lyrashield-evidence-kek-${LYRASHIELD_EVIDENCE_KEK_VERSION}" \
+              "LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF=${LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF}" \
+              "LYRASHIELD_EVIDENCE_KEK_KEYRING=secretref:lyrashield-evidence-kek-keyring-${LYRASHIELD_EVIDENCE_KEK_VERSION}" \
               "GITHUB_APP_ID=secretref:github-app-id" \
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
@@ -1190,6 +1205,27 @@ jobs:
           deactivate_superseded scanner "$SCANNER_NAME" "$SCANNER_CURRENT" "$SCANNER_ROLLBACK" || CLEANUP_FAILED=1
           deactivate_superseded egress-proxy "$EGRESS_NAME" "$EGRESS_CURRENT" "$EGRESS_ROLLBACK" || CLEANUP_FAILED=1
           exit "$CLEANUP_FAILED"
+
+      - name: Promote verified worker digest on VM
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          WORKER_IMAGE: ${{ needs.build.outputs.worker_image }}
+          WORKER_DIGEST: ${{ needs.build.outputs.worker_digest }}
+        run: |
+          source ops/deployment/azure-vm-run-command.sh
+          payload=$(base64 --wrap=0 .github/scripts/promote-worker-vm.sh)
+          worker_ref="${WORKER_IMAGE%@*}@${WORKER_DIGEST}"
+          export AZURE_VM_RUN_COMMAND_TIMEOUT_SECONDS=1800
+          result=$(azure_vm_run_command_with_retry \
+            --name "$WORKER_VM_NAME" \
+            --resource-group "$RG" \
+            --command-id RunShellScript \
+            --scripts "printf '%s' '$payload' | base64 -d | sh -s -- '$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
+            --query 'value[0].message' \
+            --output tsv)
+          printf '%s\n' "$result"
+          grep -q "Worker promotion passed for ${WORKER_DIGEST}" <<< "$result"
 
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.

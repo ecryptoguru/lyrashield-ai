@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const queryRaw = vi.fn()
 const ping = vi.fn()
+const assertEvidenceStorageConfigured = vi.fn()
 const getRedis = vi.fn(() => ({ ping }))
 
 vi.mock("@lyrashield/db", () => ({ prisma: { $queryRaw: queryRaw } }))
+vi.mock("@lyrashield/evidence-storage", () => ({ assertEvidenceStorageConfigured }))
 vi.mock("@lyrashield/integrations", () => ({ getRedis }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
 

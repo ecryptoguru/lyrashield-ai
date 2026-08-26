@@ -253,7 +253,7 @@ rule.
 8. The stale-resource reaper is enabled with a conservative age threshold. It must be able to read active scan state, skip every active scan and running container, and report each cleanup result.
 9. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
 10. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. CISA KEV enrichment uses the authenticated proxy; FIRST EPSS remains a direct bounded HTTPS endpoint because its batched query-string protocol is not accepted by that proxy.
-11. `.github/workflows/deploy-azure.yml` pins the exact reviewed engine commit. PR CI proves that the pin is merged into engine `main`, its named engine checks passed, and the worker contract is compatible. The main deployment repeats provenance and contract checks, builds and pushes the SHA-only worker candidate, pulls its exact digest, and verifies the app and engine OCI labels. Promote that verified digest by updating the worker VM runtime configuration, retaining the prior digest for rollback, restarting the systemd worker service, and reconciling the configured/running digest, OCI labels, Docker health, and `/api/ready/scans`. This prevents silent updates without preventing future releases. Advance the engine pin only after the engine change is merged and green; never point it at a branch or mutable tag.
+11. `.github/workflows/deploy-azure.yml` pins the exact reviewed engine commit. PR CI proves that the pin is merged into engine `main`, its named engine checks passed, and the worker contract is compatible. The main deployment repeats provenance and contract checks, builds and pushes the SHA-only worker candidate, verifies its exact digest and OCI labels, then automatically promotes it only after the Container App rollout passes. Promotion stops admission, proves the database and queues are idle, pre-pulls the digest before registry cleanup, retains the prior configuration for rollback, restarts the systemd worker, reconciles configured/running provenance and Docker health, checks `/api/ready/scans`, and resumes admission. Advance the engine pin only after the engine change is merged and green; never point it at a branch or mutable tag.
 
 ### Evidence envelope key provisioning (LYRASHIELD_EVIDENCE_KEK)
 
@@ -267,11 +267,17 @@ one-time secret:
    there is no recovery path. Rotating to a new KEK only affects NEW artifacts;
    existing envelopes record the key ref they were sealed under.
 3. **Provision**:
-   - GitHub secret `LYRASHIELD_EVIDENCE_KEK` — the deploy workflow validates it
-     (present + base64-decodes to exactly 32 bytes), syncs it to the app
-     Container App as `lyrashield-evidence-kek`, and wires the env secretref.
-   - Key Vault secret `worker-evidence-kek` — the worker VM picks it up via
-     `ops/worker/refresh-secrets.sh` (required entry, not optional).
+   - GitHub variable `LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF` and secrets
+     `LYRASHIELD_EVIDENCE_KEK` and `LYRASHIELD_EVIDENCE_KEK_KEYRING` — the
+     deploy workflow validates the
+     canonical 32-byte keys and strictly increasing `vN` reference, then injects
+     the active ref and new immutable Container App secrets
+     `lyrashield-evidence-kek-vN` and `lyrashield-evidence-kek-keyring-vN`.
+     Deploying `vN` never overwrites the fixed legacy secret or an older `vN`.
+   - Key Vault secret `worker-evidence-kek-active-ref` plus immutable
+     `worker-evidence-kek-vN` and `worker-evidence-kek-keyring-vN` secrets — the
+     worker VM reads the active ref first, derives `vN`, and writes the coherent
+     set atomically via `ops/worker/refresh-secrets.sh`. Every entry is required.
 4. **Never** commit the value, paste it into tickets/chats/logs, or reuse
    another secret for it.
 
@@ -283,6 +289,19 @@ reference. Provision the same three values to every evidence reader and writer
 before emitting envelopes under the new reference. Removing a historical entry
 makes the evidence written under that reference unreadable, so removal requires
 separate retention, backup, and restore evidence.
+
+After every rotation and before removing any historical key, verify one exact
+retained evidence record written under each retained reference. This command
+prints only a fixed success marker; it never prints artifact content, storage
+URI, key material, or configuration:
+
+```sh
+pnpm --filter @lyrashield/worker verify:retained-evidence -- \
+  --evidence-id <exact-evidence-id> \
+  --workspace-id <exact-workspace-id> \
+  --expected-key-ref <exact-versioned-key-ref> \
+  --expected-checksum <exact-lowercase-sha256>
+```
 
 ## Full-scan resource checklist
 

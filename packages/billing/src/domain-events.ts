@@ -4,11 +4,9 @@
  * Single normalizer for Polar and Razorpay webhook payloads → a discriminated
  * union consumed by the webhook track executor and the affiliate dispatcher.
  *
- * Fixes finding 18A: both providers emit `refund.created`, which now maps to
- * `refund_completed` — the affiliate clawback path fires from real webhooks
- * (the old string matching on `order.refunded`/`chargeback.created` matched
- * nothing either provider actually sends; `chargeback.created` is still mapped
- * for providers that do emit it).
+ * Refunds become `refund_completed` only when provider-specific evidence proves
+ * a cumulative full refund. Partial and ambiguous events remain non-mutating
+ * entitlement transitions.
  *
  * Kind describes the payment shape; productKind describes the catalog class:
  * - kind "local_purchase_paid" = any one-time paid event (Local SKU purchase,
@@ -24,6 +22,7 @@ import {
   extractProductId,
 } from "@lyrashield/pricing"
 import { parseLocalProductIds } from "./license-fulfillment"
+import { classifyProviderRefundEvidence } from "./refund-evidence"
 
 export type BillingProviderName = "polar" | "razorpay"
 
@@ -96,8 +95,9 @@ export type NormalizedBillingEvent =
   | RefundCompletedEvent
   | EntitlementTransitionedEvent
 
-/** Raw types that carry a completed money reversal. */
-const REFUND_RAW_TYPES = new Set(["refund.created", "order.refunded", "chargeback.created"])
+/** Raw types that may carry refund evidence. */
+const REFUND_RAW_TYPES = new Set(["refund.created", "order.refunded"])
+const CHARGEBACK_RAW_TYPE = "chargeback.created"
 
 /** Raw types that are paid (money-in) events. */
 const PAID_RAW_TYPES = new Set([
@@ -231,7 +231,8 @@ function roundDivide(value: bigint, divisor: bigint): bigint {
 function canonicalMoney(
   provider: BillingProviderName,
   facts: ProviderFacts,
-  eventType: string
+  eventType: string,
+  fullRefundAmountMinor: bigint | null
 ): CanonicalMoney | null {
   const entity = facts.entity
   const currency = currencyCode(
@@ -240,9 +241,22 @@ function canonicalMoney(
   if (!currency) return null
 
   if (REFUND_RAW_TYPES.has(eventType)) {
-    const refundMinor = minorInteger(facts.refundEntity.amount)
+    const refundMinor = fullRefundAmountMinor
     if (refundMinor === null) return null
     const amount = formatScaled4(minorToScaled4(refundMinor))
+    return {
+      currency,
+      grossAmount: amount,
+      discountAmount: "0.0000",
+      taxAmount: "0.0000",
+      commissionableAmount: amount,
+    }
+  }
+
+  if (eventType === CHARGEBACK_RAW_TYPE) {
+    const amountMinor = minorInteger(facts.refundEntity.amount)
+    if (amountMinor === null) return null
+    const amount = formatScaled4(minorToScaled4(amountMinor))
     return {
       currency,
       grossAmount: amount,
@@ -326,6 +340,9 @@ export function normalizeProviderEvent(input: {
 }): NormalizedBillingEvent {
   const { provider, eventType, payload, deliveryId } = input
   const facts = extractFacts(provider, payload)
+  const refundEvidence = REFUND_RAW_TYPES.has(eventType)
+    ? classifyProviderRefundEvidence({ provider, eventType, payload })
+    : null
 
   const hasSubscriptionContext =
     provider === "polar"
@@ -340,34 +357,42 @@ export function normalizeProviderEvent(input: {
     // Razorpay charges have no order — the payment id keeps fulfillment
     // idempotent per cycle.
     orderId:
+      refundEvidence?.orderId ??
       str(facts.entity.order_id) ??
       str(facts.orderEntity.id) ??
       str(facts.paymentEntity.order_id) ??
       str(facts.metaBag?.orderId) ??
       str(facts.paymentEntity.id),
-    paymentId: str(facts.paymentEntity.id),
+    paymentId: refundEvidence?.paymentId ?? str(facts.paymentEntity.id),
     subscriptionId:
       str(facts.subscriptionEntity.id) ??
       str(facts.entity.subscription_id) ??
       str(facts.metaBag?.subscriptionId),
-    refundId: REFUND_RAW_TYPES.has(eventType)
-      ? (str(facts.refundEntity.id) ?? str(facts.entity.id))
-      : null,
-    workspaceId: str(facts.metaBag?.workspaceId),
+    refundId:
+      refundEvidence?.refundId ??
+      (eventType === CHARGEBACK_RAW_TYPE
+        ? (str(facts.refundEntity.id) ?? str(facts.entity.id))
+        : null),
+    workspaceId: refundEvidence?.workspaceId ?? str(facts.metaBag?.workspaceId),
     customerId:
       idOf(facts.entity.customer) ??
       str(facts.entity.customer_id) ??
       str(facts.entity.customerId) ??
       str(facts.metaBag?.customerId),
-    productKind: detectProductKind(facts, hasSubscriptionContext),
+    productKind: refundEvidence?.purchaseKind ?? detectProductKind(facts, hasSubscriptionContext),
     occurredAt: facts.occurredAt,
     rawType: eventType,
     entity: facts.entity,
-    money: canonicalMoney(provider, facts, eventType),
+    money: canonicalMoney(
+      provider,
+      facts,
+      eventType,
+      refundEvidence?.classification === "full" ? refundEvidence.amountMinor : null
+    ),
     metadata: facts.metaBag,
   }
 
-  if (REFUND_RAW_TYPES.has(eventType)) {
+  if (refundEvidence?.classification === "full" || eventType === CHARGEBACK_RAW_TYPE) {
     return { kind: "refund_completed", ...base }
   }
 

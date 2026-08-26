@@ -37,7 +37,7 @@ jobs:
       KEY_VAULT_NAME: ${{ vars.LYRASHIELD_KEY_VAULT_NAME }}
       LICENSE_SIGNING_KEY_ID: ${{ vars.LICENSE_SIGNING_KEY_ID }}
       DATABASE_HOST: ${{ vars.STAGING_DATABASE_HOST }}
-      DATABASE_SERVER: lyrashield-billing-staging-db
+      DATABASE_SERVER: ${{ vars.STAGING_DATABASE_SERVER }}
       DATABASE_NAME: ${{ vars.STAGING_DATABASE_NAME }}
       DATABASE_ADMIN_USER: ${{ vars.STAGING_DATABASE_ADMIN_USER }}
       PLATFORM_ADMIN_EMAILS: ${{ vars.PLATFORM_ADMIN_EMAILS }}
@@ -105,7 +105,7 @@ jobs:
           [[ "${PULL_IDENTITY_ID,,}" == *"/resourcegroups/lyrashieldai-billing-staging/"* ]]
           [[ "${APP_IDENTITY_ID,,}" == *"/resourcegroups/lyrashieldai-billing-staging/"* ]]
           [ "$KEY_VAULT_NAME" = "lyrashieldbillingstage" ]
-          [ "$DATABASE_SERVER" = "lyrashield-billing-staging-db" ]
+          [ "$DATABASE_SERVER" = "lyrashield-billing-stage-pg" ]
           [ "$DATABASE_HOST" = "${DATABASE_SERVER}.postgres.database.azure.com" ]
           case "$BILLING_STAGING_REGION" in usd|inr) ;; *) exit 1 ;; esac
           [[ "$REDIS_HOST" =~ ^lyrashield-billing-redis\.internal\..+\.azurecontainerapps\.io$ ]]

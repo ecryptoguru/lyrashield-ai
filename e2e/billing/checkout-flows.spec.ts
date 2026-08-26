@@ -251,17 +251,24 @@ test.describe("Polar Sandbox billing proof", () => {
       where: { affiliateId, conversion: { externalId: orderId } },
     })
     expect(commission.status).toBe("PENDING")
+    const refundAuditBefore = await prisma.auditLog.count({
+      where: { workspaceId: actors.workspaceId, action: "billing.refund_reversed" },
+    })
 
     const refundEventId = `polar-affiliate-refund-${Date.now()}`
     await expect(
       await postPolarWebhook(actors.ownerRequest, refundEventId, {
-        type: "refund.created",
+        type: "order.refunded",
         data: {
-          id: refundEventId,
-          order_id: orderId,
-          amount: 9900,
+          id: orderId,
+          status: "refunded",
+          total_amount: 9900,
           currency: "USD",
-          metadata: { workspaceId: actors.workspaceId },
+          metadata: {
+            workspaceId: actors.workspaceId,
+            planId: "individual_monthly",
+            isFirstPayment: true,
+          },
         },
       })
     ).toBeOK()
@@ -277,7 +284,7 @@ test.describe("Polar Sandbox billing proof", () => {
       await prisma.auditLog.count({
         where: { workspaceId: actors.workspaceId, action: "billing.refund_reversed" },
       })
-    ).toBeGreaterThan(0)
+    ).toBe(refundAuditBefore)
   })
 
   test("Local individual_launch fulfills one signed license", async () => {

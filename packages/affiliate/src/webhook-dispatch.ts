@@ -4,10 +4,8 @@
  * Consumes the structural subset of @lyrashield/billing's NormalizedBillingEvent
  * (no package dependency — structural typing keeps the boundary clean).
  *
- * Finding 18A fix: refunds are keyed off the normalized `refund_completed`
- * kind, so `refund.created` — the raw type BOTH providers actually emit — now
- * fires the clawback path. The previous string matching (`order.refunded` /
- * `chargeback.created`) matched no real delivery.
+ * Refunds are keyed off the normalized `refund_completed` kind, which billing
+ * emits only from provider-proven cumulative full-refund evidence.
  *
  * C2 exclusion preserved exactly: minute packs are never commissionable.
  */
@@ -62,7 +60,7 @@ export async function dispatch(
   logger.info("Affiliate webhook dispatch", { provider, kind: kind, rawType })
 
   try {
-    // Money reversal → clawback (both providers emit `refund.created`).
+    // Provider-proven full money reversal → clawback.
     if (kind === "refund_completed") {
       if (!input.money) throw new Error("affiliate_money_evidence_unavailable")
       const reason: ClawbackReason = rawType === "chargeback.created" ? "CHARGEBACK" : "REFUND"
@@ -261,6 +259,7 @@ function mapRefundPayload(
     externalId,
     refundId: refundId ?? null,
     refundAmount: money.grossAmount,
+    currency: money.currency,
     reason,
     isChargeback: reason === "CHARGEBACK",
   }
