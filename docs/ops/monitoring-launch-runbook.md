@@ -106,6 +106,22 @@ output (plus `az monitor metrics alert list`, `az monitor scheduled-query list`,
 `az monitor action-group show`) with release evidence. Send one Azure test notification
 and retain the named acknowledgment before enabling paid admission.
 
+## Terminal-cost disposition
+
+Do not clear `terminal-cost-unreconciled` from missing application logs. For a
+historical scan, retain a JSON evidence file from the exact Azure OpenAI account whose
+`AzureOpenAIRequests` total is zero for a window covering the stored scan start and end
+(with no more than five minutes of buffer per side). Zero provider requests is the
+basis for zero provider cost. Bind the evidence SHA-256, exact Cognitive Services
+account resource ID, UTC window, and query timestamp into the reviewed receipt.
+
+Set `TERMINAL_COST_AZURE_RESOURCE_ID` to that exact account resource ID and run
+`pnpm --filter @lyrashield/worker review:terminal-cost-disposition` without `--apply`
+first. Apply only after the receipt, evidence-file digests, unchanged database state,
+and an approved verified MFA-enabled platform operator all pass preflight. The command
+is limited to the two known historical scan IDs, appends idempotent scan/audit receipts,
+and never invents usage or edits money columns.
+
 ## Redis and egress candidate gate
 
 Before staging the worker Redis/egress candidate, retain a live Redis command-metric

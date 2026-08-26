@@ -356,9 +356,9 @@ revision and its one previous rollback revision for app, scanner, and egress
 proxy. Cleanup refuses to touch any traffic-serving revision and fails if the
 expected current or rollback revision is missing.
 
-### Worker-only configuration
+### Database boundaries and worker-only configuration
 
-The production worker also requires the restricted runtime database URL and the separate privileged ownership-check URL. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. It also requires the authenticated egress-proxy URL and secret so a worker cannot accept production URL jobs without the safe fetch boundary. Do not set `DATABASE_SYSTEM_URL` on production web or Lite Scanner processes. The only web exception is the isolated billing-staging workflow, which constructs `DATABASE_SYSTEM_URL` for the no-membership/NOREPLICATION `app_system_staging` role limited to exact license operations; it never binds the PostgreSQL admin URL, and it keeps ordinary staging app traffic on `app_runtime_staging` with RLS enforced.
+The production worker requires the restricted runtime database URL and a separate system URL for reviewed cross-workspace ownership and recovery operations. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. The production web app also requires its separately provisioned system connection for explicitly reviewed global boundaries such as public share-token resolution, invitation acceptance, license operations, and platform administration; never point it at the ordinary runtime role or expose it to the Lite Scanner. Keep the system role non-superuser, non-replicating, and no broader than those reviewed operations. Billing staging instead binds its no-membership/NOREPLICATION `app_system_staging` role limited to exact license operations and keeps ordinary traffic on `app_runtime_staging` with RLS enforced. The worker also requires the authenticated egress-proxy URL and secret so it cannot accept production URL jobs without the safe fetch boundary.
 
 ```bash
 DATABASE_URL="postgresql://..." # worker-database-url; RLS-restricted runtime role
@@ -528,12 +528,12 @@ Alert when scan readiness remains 503 beyond the deployment window, no worker he
 
 Use a founder-approved test workspace and a real eligible Standard/Deep score snapshot. Do not expose a private customer target for launch QA.
 
-1. Publish a scorecard and verify the public page uses only the frozen allowlist: grade, scope line, scan date, score model version, and resolved-findings count. Confirm the page is `noindex` and links the public methodology.
-2. Inspect canonical, Open Graph, and Twitter tags. Fetch both grade/fixes variants in wide (1200×630), square (1080×1080), and portrait (1080×1350) formats. Verify the SVG badge is script-free and short-cacheable.
+1. Publish a scorecard and verify the public page uses exactly the frozen seven-field allowlist: `grade`, `scope`, `scannedAt`, `modelVersion`, `resolvedFindings`, `releaseVerdict`, and `verdictVersion`. Confirm the page is `noindex` and links the public methodology.
+2. Inspect canonical, Open Graph, and Twitter tags. Fetch both grade/fixes variants in wide (1200×630), square (1080×1080), and portrait (1080×1350) formats. Verify the SVG badge is script-free and returns `Cache-Control: no-store`.
 3. Exercise native sharing where supported plus LinkedIn, X, Bluesky, WhatsApp, Reddit, email, copy, download, README badge, and Open. Each generated scorecard URL must retain `ref` and add only an allowlisted source/UTM value.
 4. Open the public CTA in a fresh browser, create a new test account, and complete onboarding. Verify referral code and source survive their separate HttpOnly cookies, self/old-account attribution is rejected, and no reward is issued before the first real completed scan.
 5. Verify event privacy and counting: crawler/image/badge fetches do not increment human views; same-session/day reloads deduplicate; DNT/GPC suppress client capture; stored events contain no target, repository, finding, raw IP, user-agent, or caption fields.
-6. Revoke the share. The page, all image formats, and badge must return 404. Publish a newer eligible snapshot and verify the older still-public card shows only the boolean supersession notice, never the newer grade.
+6. While the first share remains public, persist a newer eligible snapshot for the same target and verify the older card shows only the boolean supersession notice, never the newer grade, scan, findings, or date. Then revoke the first share and require the page, all image formats, badge, and event endpoint to return 404. Publish the newer snapshot only if an active final card is required.
 7. Validate at least the major launch channels against the real HTTPS URL. Social caches are independent deployment state; use official cache refresh/debug tools when available and retain screenshots/results with the release evidence.
 
 Monitor only coarse funnel stages: deduplicated scorecard view, share-button handoff, new-account attribution, and first-scan qualification. Do not label handoffs as impressions or conversions, and do not export referral/session identifiers to third-party analytics.
