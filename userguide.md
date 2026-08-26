@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last verified against the application code and open-registration deployment: 2026-08-10
+Last verified against the application code and open-registration deployment: 2026-08-26
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -38,7 +38,7 @@ The Lite Check can:
 
 It does not authenticate, exploit, fuzz, brute-force, enumerate a database, actively test row-level security, crawl arbitrary paths, or fetch exposed environment-file paths. It is separate from the authenticated full-scan pipeline and does not produce the official LyraShield Score.
 
-After a result, users can choose **Sign in** to continue to the authenticated app, create an account, or inspect the synthetic sample report. The result keeps its passive-check limitations visible even when all five surface checks look OK.
+After a result, users can choose **Sign in** to continue to the authenticated app or create an account. The result keeps its passive-check limitations visible even when all five surface checks look OK.
 
 Before submitting a target, confirm that you own it or are authorized to test it and accept the displayed terms. Bare domains are normalized to HTTPS. URLs containing credentials, query strings, fragments, private addresses, or unsupported protocols are rejected.
 
@@ -55,9 +55,9 @@ The public Tools area provides six utilities whose inputs remain in the browser:
 
 These utilities provide guidance and local analysis; they do not create authenticated scan evidence or an official score.
 
-### 2.3 Public methodology and sample report
+### 2.3 Public methodology
 
-Use the public methodology page to understand scoring, evidence states, and limitations. The sample report is illustrative and must not be treated as a result for your application.
+Use the public methodology page to understand scoring, evidence states, and limitations.
 
 ## 3. Account access
 
@@ -412,7 +412,7 @@ The server checks permissions for every protected API action. A visible page doe
 
 Platform administration is not a workspace role. The hidden **Platform Admin** destination is server-rendered only for `ecryptoguru@gmail.com` and `ankit@lyrashieldai.com` after each account is email-verified, assigned `PLATFORM_OPERATOR`, enrolled in TOTP, and signed in through a recently TOTP-verified browser session. API keys, bearer tokens, and ordinary Owner/Admin membership cannot grant access; other users receive not found.
 
-The current console shows bounded platform health plus paginated users, workspaces, scans, platform-audit entries, and affiliate review. It does not show customer source, scan payloads, secrets, or model cost. Affiliate changes remain disabled until every write uses the one-time elevation and atomic platform-audit transaction. Operators should follow [`docs/ops/platform-admin-runbook.md`](docs/ops/platform-admin-runbook.md); code availability does not prove production provisioning or authenticated browser access.
+The current console shows bounded platform health plus paginated users, workspaces, scans, platform-audit entries, and affiliate review. It does not show customer source, scan payloads, secrets, or model cost. Affiliate changes remain disabled until every write uses the one-time elevation and atomic platform-audit transaction. Exact-two provisioning and fresh browser proof for both operators passed on 2026-08-26; operators should follow [`docs/ops/platform-admin-runbook.md`](docs/ops/platform-admin-runbook.md) and repeat that proof after any future apply.
 
 ## 20. Integrations
 
@@ -604,9 +604,9 @@ For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai
 
 The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role, and repository scan admission fails closed when the worker heartbeat is absent. Production Standard scan `cmt9el7p7000001hdjnjo90wk` completed with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned, and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Terra run remains a separate gate.
 
-The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Broad full-scan availability still requires production proof for private evidence persistence, application-level readiness/queue/provider alerts, capacity evidence, failure recovery, and each additional review profile claimed. No recovery or RPO/RTO claim is made.
+The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized Luna/Terra deployments, actionable Azure alerts, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health, and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment, and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
 
-Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. Local signed-webhook and replay coverage exists, and isolated Polar Sandbox/Razorpay Test Mode deployment support is implemented; provider-hosted checkout, cancellation, refund, license, and 100-replay receipts still require the restricted staging run. All production Polar/Razorpay Cloud and Local purchase admissions remain `off`; the deployed scan stack does not activate live checkout. Live paid activation, production desktop distribution/signing proof, payout API provisioning, and the public affiliate opening remain controlled release gates.
+Billing, Local/Desktop licensing, and the affiliate application/ledger are implemented. Razorpay Live is activated with the matching INR Cloud catalog and an enabled production webhook; Polar Live has its private Cloud/pack/Local catalog and lifecycle webhook. Isolated Polar Sandbox/Razorpay Test Mode deployment support is implemented, but provider-hosted checkout, cancellation, refund, license, and 100-replay receipts still require the restricted staging run. All production Polar/Razorpay Cloud and Local purchase admissions remain `off`; no live checkout or payment was exercised. Production desktop distribution proof, payout API provisioning, and the public affiliate opening remain controlled release gates.
 
 Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 

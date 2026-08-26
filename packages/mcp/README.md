@@ -115,9 +115,11 @@ package-conformance, or retained runtime evidence. Presence in the registry mean
 render or guide that client's current config shape; it does not claim that every client release
 completed an authenticated runtime matrix.
 
-- Agent Plugin package-conformance: Claude Code, Cursor, OpenAI Codex, and Kiro.
-- Experimental Agent Plugin paths: VS Code and GitHub Copilot; use their supported config/install
-  paths until retained runtime receipts exist.
+- Preferred Agent Plugin installs: Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro.
+  Package-conformance checks cover the four generated shims; GitHub Copilot uses the portable root
+  manifest and remains `EXPERIMENTAL` until a retained client-runtime receipt exists.
+- VS Code's reserved Agent Plugin entry is experimental and not preferred. Use its verified
+  `.vscode/mcp.json` path.
 - Config or guided setup: Windsurf, VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
   Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity,
   PiCode, OpenClaw, Hermes, and Devin, subject to each registry entry's support tier.

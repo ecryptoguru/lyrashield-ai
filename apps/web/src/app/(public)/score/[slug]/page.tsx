@@ -13,7 +13,8 @@ import { ThemeToggle } from "@/components/theme-toggle"
 export const dynamic = "force-dynamic"
 
 const getScorecard = cache(getPublicScorecard)
-const appOrigin = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001"
+const appOrigin = () =>
+  process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001"
 const REFERRAL_SOURCE_SET = new Set<string>(REFERRAL_SOURCES)
 
 /**

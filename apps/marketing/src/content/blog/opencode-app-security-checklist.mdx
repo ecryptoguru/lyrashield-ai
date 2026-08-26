@@ -11,7 +11,7 @@ faq:
   - q: How does OpenCode handle MCP servers securely
     a: OpenCode reads MCP config as JSON and spawns local servers via stdio or connects to remote with TLS and Bearer auth. Lock it by allow listing only required tools, disabling code mode when unused, and storing tokens in env vars not in JSON.
   - q: Do I need LyraShield to use OpenCode safely
-    a: You can ship safer code with disciplined review and open source scanners. LyraShield is designed to add agent native verification with SCA and secrets checks plus a diff aware gate on the roadmap.
+    a: You can ship safer code with disciplined review and open source scanners. LyraShield adds agent-native verification, SCA and secret checks, plus a shipped diff-aware GitHub Action gate.
   - q: What is the fastest win for OpenCode security
     a: Rotate leaked secrets, enforce branch protection with SARIF upload, and restrict MCP tool permissions to read only where possible to reduce blast radius.
   - q: Where does OpenCode store MCP server config?
@@ -112,8 +112,5 @@ LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](
 The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 LyraShield sits after your OpenCode drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval, and retest runs the same scanners on the fix commit to confirm remediation.
-
-Ready to apply this checklist beyond this tool. Run the interactive version at [AI app security checklist](/tools/ai-app-security-checklist) and create an account at [https://lyrashieldai.com](https://lyrashieldai.com) to get started with the MCP server and GitHub Action.
-e same scanners on the fix commit to confirm remediation.
 
 Ready to apply this checklist beyond this tool. Run the interactive version at [AI app security checklist](/tools/ai-app-security-checklist) and create an account at [https://lyrashieldai.com](https://lyrashieldai.com) to get started with the MCP server and GitHub Action.

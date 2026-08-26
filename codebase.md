@@ -52,7 +52,7 @@ Version rules:
 | `apps/web`              | Authenticated Next.js app, REST APIs, public reports/scorecards, OAuth/MCP endpoints, billing, licenses, affiliates, sync |
 | `apps/worker`           | BullMQ worker, preflight, schedules, deterministic scanners, engine runner, evidence/results, accounting                  |
 | `apps/desktop`          | Tauri Local/Desktop app, license verification, BYOK keychain, local scans, sync, updater                                  |
-| `apps/marketing`        | Astro/Cloudflare marketing, blog, public tools, waitlist/referrals, Lite Scanner frontend                                 |
+| `apps/marketing`        | Astro/Cloudflare marketing, blog, public tools, product-updates/referrals, Lite Scanner frontend                          |
 | `apps/marketing-motion` | Deterministic Three.js marketing media production                                                                         |
 
 ### Shared packages
@@ -365,7 +365,7 @@ Trust-boundary rules:
 ### Web and worker
 
 - Auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, OAuth provider values, trusted origins.
-- Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, and a separately scoped `DATABASE_SYSTEM_URL` where a verified cross-workspace path requires it. Production web does not receive the system URL; isolated billing staging receives `app_system_staging`, limited to license tables, while ordinary app traffic stays on the RLS-bound `app_runtime_staging` URL.
+- Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, and a separately scoped `DATABASE_SYSTEM_URL` where a verified cross-workspace path requires it. Production app and worker each receive separately provisioned, bounded system credentials for reviewed global operations; Lite Scanner receives none. Billing staging uses `app_system_staging` only for license operations, while ordinary traffic uses RLS-bound `app_runtime_staging`.
 - Queue: `REDIS_URL`; production BullMQ requires authenticated `rediss://`.
 - Rate limit: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` only.
 - Engine: `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LYRASHIELD_LLM`, Azure API values.
@@ -429,15 +429,15 @@ Current command output is authoritative; never copy historical test counts forwa
 - Upstash TLS TCP Redis for BullMQ.
 - dedicated Azure worker VM running immutable digest.
 - worker-only authenticated egress proxy.
-- S3/R2-compatible evidence layer; full production private-evidence proof remains a gate.
+- S3/R2-compatible evidence layer; the 2026-08-26 production round-trip and missing-KEK fail-closed probes passed.
 
 ### Current worker proof
 
-- Product revision: `7abd9baa8943c8e25f954ad6e6d9bd2a6c84d6b7`.
+- Product revision: `16a1fb7014ce3cbf9e56b69bff5074a5d0d8e0dd`.
 - Engine revision: `852b1ed7ff76d177cef4db5aa1cfbd3bbe6d2664`.
-- Worker digest: `sha256:fd1888ccaedc9d9f2618398c1924571f23a03fed05efb6b772c922cf43d7cf01`.
+- Worker digest: `sha256:cb0f836eb54825517e900468a87c6d09b5e9df636121b49d8683b1766849fceb`.
 - Sandbox digest: `sha256:73067cefe2138c89c1f63abb597f006f66eae22dca332a6b01398d870a638dcf`.
-- Container Apps: app `lyrashield-app--0000193`, scanner `lyrashield-scanner--0000174`, and egress proxy `lyrashield-egress-proxy--0000043` at 100% traffic; release run `32916256313`, candidate/public smoke, and post-scan readiness passed.
+- Container Apps: app `lyrashield-app--0000195`, scanner `lyrashield-scanner--0000176`, and egress proxy `lyrashield-egress-proxy--0000045` at 100% traffic; CI `32966602739`, release `32967467190`, candidate/public smoke, and post-recovery readiness passed.
 - BullMQ Redis: TLS/authenticated `PONG`, live heartbeat, empty queue before acceptance.
 - Azure public `6379`: removed.
 - Legacy Redis: stopped, restart-disabled, rollback-only.
@@ -445,7 +445,10 @@ Current command output is authoritative; never copy historical test counts forwa
 - DNS refresh timer: an OSV pin change exercised the planned-drain path during the current Standard scan. The scan completed without interruption or replay; the next timer restarted the exact worker digest and readiness recovered. The temporary `503` was a real new-admission outage and remains alertable.
 - Redis/egress efficiency code is deployed. Live command metrics and longer-window capacity evidence remain required.
 - Backup/restore: encrypted backup, isolated restore, schema/RLS/audit/app startup verified.
-- Production includes PR #426 billing-staging hardening, PR #432 Redis/egress efficiency, and PR #450 secure scan-owned checkout recovery. Purchase admissions remain `off`; deployment does not prove live provider activation or hosted checkout.
+- Production evidence storage passed encrypted round-trip, checksum, isolation, tamper-denial, cleanup, and missing-KEK fail-closed probes. Managed-identity license signing passed Key Vault retrieval, denied-identity, in-memory sign/verify, Desktop fingerprint parity, and missing-secret tests; this does not claim non-exportable remote signing.
+- Both administrators acknowledged the Azure test notification. The controlled orphan drill failed synthetic scan `cmta574d50004fef1nbydufai` as `QUEUE_ORPHANED` without execution or replay, then restored the exact worker and reconciled both queues to zero.
+- Exact-two preflight `32925726620` and apply `32925979621` passed. Both operators then completed independent Google-plus-TOTP browser proof across every bounded admin destination; unauthenticated, bearer-only, and workspace-header-only requests remained denied.
+- Production includes PR #426 billing-staging hardening, PR #432 Redis/egress efficiency, and PR #450 secure scan-owned checkout recovery. Purchase admissions remain `off`. Provider catalog/webhook readiness was observed separately on 2026-08-26; deployment still does not prove hosted checkout or entitlement/usage events.
 - Billing staging is a distinct code-only deployment surface: `.github/workflows/deploy-billing-staging.yml` builds `runner` and `workspace-builder` from the dispatched main SHA into the isolated ACR, deploys only immutable digests, invokes image-owned migration/role scripts as exact Container Apps Job commands, and cleans up the jobs. The web proxy gates ordinary staging routes with an opaque HttpOnly same-origin access session while leaving exact health/readiness and signature-validating billing webhook ingress reachable. `BILLING_STAGING_ADMISSION=restricted` requires staging marker/origin plus Sandbox/Test modes and all production admissions off; no execution or live billing proof is implied.
 
 ### Current Standard scan proof
@@ -536,5 +539,6 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 - **2026-08-18 to 08-20:** Sprint 10 billing/usage, Local/Desktop/licenses/sync, affiliates/payout ledger, plugin v0.1.17, operations runbooks.
 - **2026-08-21:** backup/restore proof, worker egress proxy, Upstash TLS BullMQ cutover, public `6379` removal, restart-safe DNS refresh, immutable worker promotion, current Standard/Luna production acceptance, and AI App Security coverage/evidence remediation.
 - **2026-08-24 to 08-25:** current assurance hardening (PRs #428–#430): nonnegative policy budget constraint, explainable finding priority, immutable retest validation bound to stored manifests, raw evidence-storage URI removal, worker execution provenance in manifest v5 with production fail-closed readiness, actionable Azure alert provisioning with readback, and a bounded host-side dry-run-first launch-assurance orchestrator.
+- **2026-08-26:** exact-two administrator provisioning/browser proof, evidence-storage and Key Vault signing proofs, operator alert acknowledgment, terminal-cost disposition, controlled queue-orphan recovery, current exact-SHA deployment, and temporary public-scorecard verification/revocation. The scorecard pass found and fixed a shared-image canonical-origin regression; deployment readback remains pending.
 
 PR history remains in Git and GitHub. Use `git log`, PRs, migrations, and executable tests for forensic detail; this guide retains only current architecture and durable decisions.

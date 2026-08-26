@@ -6,7 +6,7 @@ LyraShield AI master business & monetization plan (Aug 2026): one app with Local
 
 **The company in one sentence:** LyraShield AI is an agent-native application-security product for AI-built software, sold as **one app with two modes** — a **Local mode** (runs on the user's machine on the user's own AI — zero COGS to us) and a **Cloud mode** (hosted SaaS platform) — sharing one engine, one account, one brand.
 
-**Current state (updated 2026-08-26):** the product is in **open beta** with open registration. Cloud billing, Local/Desktop licensing, and the affiliate ledger are implemented. Local signed-webhook and replay tests are retained, and restricted Polar Sandbox/Razorpay Test Mode staging support is implemented, but provider-hosted end-to-end receipts have not yet been captured. All production Polar/Razorpay Cloud and Local purchase admissions remain `off`; the current scan deployment does not activate live checkout. Live paid activation, production desktop signing/distribution proof, payout API provisioning, and tax-form operations remain release gates.
+**Current state (updated 2026-08-26):** the product is in **open beta** with open registration. Cloud billing, Local/Desktop licensing, and the affiliate ledger are implemented. Razorpay Live is activated with six matching INR Cloud plans and an enabled production webhook; Polar Live has a production token, fifteen private catalog products, and an enabled lifecycle webhook. Restricted Polar Sandbox/Razorpay Test Mode provider-hosted end-to-end receipts have not yet been captured. All production Polar/Razorpay Cloud and Local purchase admissions remain `off`; no live checkout or payment was exercised. Production desktop distribution proof, provider entitlement/usage receipts, payout API provisioning, and tax-form operations remain release gates.
 
 **The monetization strategy (all founder-confirmed):**
 
@@ -36,11 +36,11 @@ LyraShield AI master business & monetization plan (Aug 2026): one app with Local
 
 ### What's live today (the foundation we monetize)
 
-- **Cloud app:** open registration, dashboard, findings, fix proposals, retests, reports, launch-readiness, score/scorecard/referral, MCP server, CLI (24 agents), GitHub Action (diff-aware gate, account-less).
-- **Free surface:** Lite Check (`/scan`) + 6 browser-local tools (incl. AI App Security scanner) + methodology + sample report.
+- **Cloud app:** open registration, dashboard, findings, fix proposals, retests, reports, launch-readiness, score/scorecard/referral, MCP server, CLI, 30 registry entries representing 26 preferred client surfaces, and the account-less diff-aware GitHub Action.
+- **Free surface:** Lite Check (`/scan`) + 6 browser-local tools (incl. AI App Security scanner) + methodology.
 - **Content engine:** 161 authority articles + 13 /compare pages.
 - **Engine:** GPT-5.6 Terra/Luna routing, ChatGPT-subscription auth, Docker-sandboxed, telemetry off.
-- **Commercial release gates:** live paid-provider activation, production desktop signing/distribution proof, payout APIs, and tax-form operations.
+- **Commercial release gates:** restricted provider transaction proof, founder-approved production purchase admission, production Desktop signing/distribution proof, payout APIs, and tax-form operations.
 
 ## Monetization architecture — two modes, one account, separate purchases
 
@@ -163,12 +163,12 @@ Since there's **no free product tier**, the free surface is the entire acquisiti
 - **6 browser-local tools** (`/tools`) — launch checklist, headers/CORS checker, secret scanner, Supabase RLS helper, JWT inspector, **AI App Security scanner**. Inputs never leave the browser.
 - **GitHub Action** — account-less diff-aware CI gate (secret + risky-pattern, SARIF) running in the user's own runner. Zero our cost, lives in the dev workflow.
 - **Content/SEO engine** — 161 authority articles + 13 `/compare` pages (the organic/GEO moat).
-- **Methodology + sample report** — trust/turn transparency.
+- **Methodology** — trust and result-interpretation transparency.
 
 **Funnel mechanics:**
 
 - Every free surface routes to **Create free account** (the trial) and, for local-curious visitors, to the **Local license**.
-- **Tag the attribution:** `free-tools → signup → trial → paid` and `free-tools → Local purchase`, so we know which tool/article/comparison actually converts. (Existing waitlist/referral attribution + the affiliate system give us the plumbing.)
+- **Tag the attribution:** `free-tools → signup → trial → paid` and `free-tools → Local purchase`, so we know which tool/article/comparison actually converts. (Existing product-updates/referral attribution and the affiliate system provide the plumbing.)
 - The free tools give **real value but no official score / no full loop** — that boundary (already in the product) is the honest upsell: "want the verified finding → fix → retest → report loop and the dashboard? Start a trial / get Local."
 
 **This funnel has near-zero marginal cost** (static tools, content, the user's own runner for the Action) — it's the most capital-efficient acquisition we have, and it's already built.
@@ -179,8 +179,8 @@ Since there's **no free product tier**, the free surface is the entire acquisiti
 
 **Phase 0 — monetization plumbing (implemented; production activation pending):**
 
-- **Track A:** Cloud billing (Polar + Razorpay, plans, metering, gating, billing page, trial logic, email verification) is implemented and test-configured; live provider activation and event-backed entitlement/metering proof remain.
-- **Track B:** Local-mode packaging (BYOK ChatGPT/Azure configuration, desktop GUI, license/activation/update server, optional cloud sync) is implemented; production signing, distribution, and activation proof remain.
+- **Track A:** Cloud billing (Polar + Razorpay, plans, metering, gating, billing page, trial logic, email verification) is implemented. Live catalogs and webhooks are configured with every purchase admission off; restricted provider-hosted staging and event-backed entitlement/metering proof remain.
+- **Track B:** Local-mode packaging (BYOK ChatGPT/Azure configuration, desktop GUI, license/activation/update server, optional cloud sync) is implemented; Desktop code signing/notarization, distribution, and activation proof remain.
 - **Both harden the shared engine.** Neither blocks the other.
 
 **Phase 1 — open paid Cloud:**

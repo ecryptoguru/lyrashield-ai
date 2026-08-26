@@ -9,7 +9,7 @@
 - The Next.js web application and BullMQ worker need managed PostgreSQL and Redis.
 - The worker runs the `lyrashield` CLI and may launch a sandbox. Its host and Docker access are high-risk infrastructure.
 - The Astro marketing site is an independent Cloudflare Worker with D1 and Cloudflare Rate Limits.
-- Public scorecard pages, social card images, SVG badges, referral capture, and privacy-safe funnel events are served by the Next.js app origin, not the marketing Worker.
+- Public scorecard pages, social card images, SVG badges, referral capture, and privacy-safe funnel events are served by the Next.js app origin, not the marketing Worker. Server-rendered scorecard metadata must derive its public origin from runtime `BETTER_AUTH_URL`; the shared image may have a scanner-specific `NEXT_PUBLIC_APP_URL` baked at build time.
 - S3-compatible evidence storage is mandatory for scans that may produce PoC/code-location artifacts. Email, GitHub OAuth/App integration, and monitoring providers use separate credentials.
 
 ## Production gates and current status
@@ -239,8 +239,7 @@ rule.
 - Set any `GITHUB_APP_*` env var from workflow `vars` (non-secret) — they must come through `secrets` + `secretref:`.
 - Add broader GitHub App permissions (e.g. `Administration`, `Organization`, `Checks: Write`) until the first flow that requires them lands and the extra permission is reviewed as part of that PR's threat model.
 
-**Cleanup (auditor).** The two audit accounts created during the live repro:
-`devagent-uxaudit2+20260730@fusionwaveai.com` and `devagent-uxaudit3+20260730@fusionwaveai.com` are now bricked in onboarding (workspace created, GitHub step unreachable at the time). Purge them after F1 lands (same as the earlier test waitlist row cleanup).
+**Outstanding audit-account hygiene.** Verify whether `devagent-uxaudit2+20260730@fusionwaveai.com` and `devagent-uxaudit3+20260730@fusionwaveai.com` still exist. If present, purge them only through the RLS-safe account-deletion path; never delete their rows directly.
 
 ## Release prerequisites
 
@@ -349,6 +348,8 @@ RAZORPAY_BILLING_ADMISSION="off"
 RAZORPAY_LOCAL_BILLING_ADMISSION="off"
 BILLING_CANARY_WORKSPACE_IDS=""
 ```
+
+`BETTER_AUTH_URL` is the server-owned authenticated application origin and is also the canonical source for public scorecard metadata. Keep it set to the app origin on both app and Lite Scanner revisions. `NEXT_PUBLIC_APP_URL` remains surface-specific and may be baked into the shared image, so it must not override scorecard canonical or social-card URLs.
 
 After candidate and public smoke checks pass, deployment deactivates every
 superseded active Container App revision while retaining exactly the promoted
@@ -547,13 +548,13 @@ The product is now live in open beta with open registration; the snapshot below 
 - `https://lyrashieldai.com` is live on the `lyrashield-marketing` Worker. The apex and `www` custom domains are attached.
 - Production D1, Rate Limit, and KV bindings are provisioned; migrations `0001`–`0003` are applied remotely; `WAITLIST_IP_SALT` is stored as a Worker secret.
 - `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. The marketing, methodology, browser-local tools, and passive `/scan` surface are indexable. `/terms` remains page-scoped `noindex` and excluded from the sitemap.
-- Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, waitlist behavior, representative Lighthouse/Brave rendering, the permanent path/query-preserving `www`-to-apex redirect, and a production browser Lite Check pass.
+- Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, product-updates subscription behavior, representative Lighthouse/Brave rendering, the permanent path/query-preserving `www`-to-apex redirect, and a production browser Lite Check pass.
 - Production sets `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` together because the separately protected scanner API and monitored abuse workflow are live. Keep all three configured as one availability gate. `PUBLIC_APP_URL` is set to the authenticated app origin so marketing CTAs can link to open sign-up and sign-in.
 
 Before deploying the Cloudflare marketing Worker:
 
 1. Replace the D1 database ID and Rate Limit namespace placeholder in `apps/marketing/wrangler.jsonc`.
-2. Apply all D1 migrations in `apps/marketing/migrations/` (including `0003_waitlist_referrals.sql`, which adds the waitlist referral columns) with `wrangler d1 migrations apply` before serving traffic. The waitlist API remains available for the homepage referral flow if configured.
+2. Apply all D1 migrations in `apps/marketing/migrations/` (including `0003_waitlist_referrals.sql`, which adds the internally named referral columns) with `wrangler d1 migrations apply` before serving traffic. The `/api/waitlist` route remains the internal backend for the optional product-updates/referral flow.
 3. Set `WAITLIST_IP_SALT` with `wrangler secret put`; do not retain the example value.
 4. Build with the intended public origins. `PUBLIC_INDEXABLE=true` is rejected unless `PUBLIC_SITE_URL` is public HTTPS.
 5. Deploy using Astro's generated configuration:
@@ -566,7 +567,7 @@ Before deploying the Cloudflare marketing Worker:
    pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
    ```
 
-6. On the live domain, verify waitlist submission, queue position, Copy/LinkedIn/X/WhatsApp referral actions, referral-count movement, canonical URL, Open Graph image, JSON-LD, `robots.txt`, sitemap, app-header links, and HTTPS redirect. Confirm analytics contain only the allowlisted share channel. Do not enable indexing until visual QA and founder approval are complete.
+6. On the live domain, verify optional product-updates submission, Copy/LinkedIn/X/WhatsApp referral actions, referral-count movement, canonical URL, Open Graph image, JSON-LD, `robots.txt`, sitemap, app-header links, and HTTPS redirect. Confirm no queue-position or waitlist-status copy is exposed and analytics contain only the allowlisted share channel.
 
 ## Do not claim as verified
 
