@@ -53,6 +53,8 @@ systemctl enable --now lyrashield-worker-egress-refresh.timer
 systemctl enable --now lyrashield-worker.service
 ```
 
+On a pin change, the refresh script first checks the single-concurrency worker's active-job marker. If a scan is active, it keeps the validated old/new firewall union and pending marker without pausing the worker or removing readiness; the next idle timer run performs the token-bound drain challenge and restart. If work starts after that preflight, the challenge still pauses new claims and waits for the in-flight job, so paid work is never interrupted or replayed. Treat any resulting scan-readiness `503` as a real, alertable admission outage until the exact replacement worker registers.
+
 Do not place secrets in the runtime configuration. `refresh-secrets.sh` owns the exact Key Vault-to-environment mapping and fails closed when a required secret is absent or empty. The Key Vault must contain both `worker-database-url` (the RLS-restricted runtime role) and `worker-database-system-url` (the privileged ownership-check role), the BullMQ TLS endpoint as `worker-redis-url`, and both authenticated egress-proxy secrets. `run-worker.sh` initializes the host-visible shared run root through a networkless one-shot container, then starts the application as the image's non-root user.
 
 Keep `LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED=1`. The defaults run every 15 minutes and consider only resources at least 24 hours old. The reaper selects containers by the `strix-run-id` label and directories under the fixed checkout/run roots, skips running containers and scans in `QUEUED`, `PREFLIGHT`, `RUNNING`, or `VERIFYING`, and fails safe when scan ownership cannot be read. `REQUIRES_APPROVAL` occurs before worker execution and owns no checkout, run directory, or sandbox container. Do not replace the reaper with `docker system prune` or broad filesystem deletion.
@@ -74,7 +76,7 @@ Before enabling scan admission:
 
 Inspect `/run/lyrashield-egress-hosts` only as root when diagnosing endpoint drift. Every line must contain an approved hostname, one public IPv4 address, and its TCP port. Never hand-edit the file or add an unreviewed destination.
 
-Run `sh ops/worker/refresh-egress.test.sh` on Linux to verify DNS rotation, atomic pin replacement, active-scan restart deferral, and the idle pending restart.
+Run `sh ops/worker/refresh-egress.test.sh` on Linux to verify DNS rotation, atomic pin replacement, active-scan deferral without readiness loss, the idle challenge, and the pending restart.
 
 ## URL-scan egress proxy
 

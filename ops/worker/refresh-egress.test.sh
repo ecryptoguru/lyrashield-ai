@@ -204,6 +204,17 @@ test ! -s "$systemctl_capture"
 printf '%s\n' "proxy.test 9.9.9.9 443" >"$pin_file"
 : >"$systemctl_capture"
 rm -f "$restart_pending_file" "$drain_request_capture" "$planned_restart_capture"
+run_refresh 1 0 0 "$first_output" "$error_output"
+test ! -s "$systemctl_capture"
+test -e "$restart_pending_file"
+test ! -e "$drain_request_capture"
+test ! -e "$planned_restart_capture"
+grep -q '^proxy.test 9.9.9.9 443$' "$pin_file"
+grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT' "$iptables_capture"
+grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT' "$iptables_capture"
+grep -Fqx 'Worker egress restart deferred; active scan remains healthy' "$first_output"
+
+rm -f "$restart_pending_file" "$drain_request_capture" "$planned_restart_capture"
 export BECOME_ACTIVE_ON_DRAIN=1
 run_refresh 0 0 0 "$first_output" "$error_output"
 unset BECOME_ACTIVE_ON_DRAIN

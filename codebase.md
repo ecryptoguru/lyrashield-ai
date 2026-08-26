@@ -1,6 +1,6 @@
 # LyraShield AI — Codebase Guide
 
-> Current implementation map: 2026-08-25. Read [AGENTS.md](./AGENTS.md) first for the immediate handoff and rules; use [PRD.md](./PRD.md) for product scope and release gates. Running code, Prisma schema, migrations, CI, and live evidence override this guide.
+> Current implementation map: 2026-08-26. Read [AGENTS.md](./AGENTS.md) first for the immediate handoff and rules; use [PRD.md](./PRD.md) for product scope and release gates. Running code, Prisma schema, migrations, CI, and live evidence override this guide.
 
 ## 1. System overview
 
@@ -433,31 +433,33 @@ Current command output is authoritative; never copy historical test counts forwa
 
 ### Current worker proof
 
-- Product revision: `8347fda923032960661079491a0a17956aebefd9`.
-- Engine revision: `944a84f15f913909039c89146c25db650cd87137`.
-- Worker digest: `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413`.
-- Container Apps: app `lyrashield-app--0000170`, scanner `lyrashield-scanner--0000151`, and egress proxy `lyrashield-egress-proxy--0000020` at 100% traffic; release run `32738811470` and public readiness passed.
+- Product revision: `7abd9baa8943c8e25f954ad6e6d9bd2a6c84d6b7`.
+- Engine revision: `852b1ed7ff76d177cef4db5aa1cfbd3bbe6d2664`.
+- Worker digest: `sha256:fd1888ccaedc9d9f2618398c1924571f23a03fed05efb6b772c922cf43d7cf01`.
+- Sandbox digest: `sha256:73067cefe2138c89c1f63abb597f006f66eae22dca332a6b01398d870a638dcf`.
+- Container Apps: app `lyrashield-app--0000193`, scanner `lyrashield-scanner--0000174`, and egress proxy `lyrashield-egress-proxy--0000043` at 100% traffic; release run `32916256313`, candidate/public smoke, and post-scan readiness passed.
 - BullMQ Redis: TLS/authenticated `PONG`, live heartbeat, empty queue before acceptance.
 - Azure public `6379`: removed.
 - Legacy Redis: stopped, restart-disabled, rollback-only.
 - Egress: direct public denied, proxy public allowed, loopback denied `ssrf_blocked`.
-- DNS refresh timer: active during Standard scan; no worker restart.
-- The merged Redis/egress efficiency code described above is not part of this deployed-worker proof. Live command metrics and a staged worker-first rollout remain required.
+- DNS refresh timer: an OSV pin change exercised the planned-drain path during the current Standard scan. The scan completed without interruption or replay; the next timer restarted the exact worker digest and readiness recovered. The temporary `503` was a real new-admission outage and remains alertable.
+- Redis/egress efficiency code is deployed. Live command metrics and longer-window capacity evidence remain required.
 - Backup/restore: encrypted backup, isolated restore, schema/RLS/audit/app startup verified.
-- Code ahead of production: product `main` includes PR #426 billing-staging hardening and PR #432 Redis/egress efficiency work at `3629b442`. Those changes are not deployed. Release `32755678337` pushed earlier images but failed the production provider-mode guard before Azure login, migrations, revision creation, or runtime mutation. Production remains on the exact worker proof above with purchase admissions `off`.
+- Production includes PR #426 billing-staging hardening, PR #432 Redis/egress efficiency, and PR #450 secure scan-owned checkout recovery. Purchase admissions remain `off`; deployment does not prove live provider activation or hosted checkout.
 - Billing staging is a distinct code-only deployment surface: `.github/workflows/deploy-billing-staging.yml` builds `runner` and `workspace-builder` from the dispatched main SHA into the isolated ACR, deploys only immutable digests, invokes image-owned migration/role scripts as exact Container Apps Job commands, and cleans up the jobs. The web proxy gates ordinary staging routes with an opaque HttpOnly same-origin access session while leaving exact health/readiness and signature-validating billing webhook ingress reachable. `BILLING_STAGING_ADMISSION=restricted` requires staging marker/origin plus Sandbox/Test modes and all production admissions off; no execution or live billing proof is implied.
 
 ### Current Standard scan proof
 
-- Scan `cmt35aj1s000001hck9fmguzk`.
+- Scan `cmt9el7p7000001hdjnjo90wk`.
 - `OnboardingAI2` revision `1689f3607d68764e09769535df8e368c4d5ad2fe`.
-- Completed in 11m 42s.
-- 184 Luna/medium requests; no Terra.
-- 8,227,004 input, 6,066,725 cached input, 30,844 output tokens.
-- `$0.597148` provider and billed cost under `$3.20` cap.
-- 24 findings/candidates/verification receipts, 56 coverage receipts, zero independently verified.
-- AI App Security reached 200-file bound.
-- 12 agent-minutes debited.
+- Completed in 10m 9s.
+- 189 Luna/medium requests; no Terra.
+- 8,549,456 input, 6,535,778 cached input, 136,759 cache-write input, and 32,092 output tokens; no long-context bucket.
+- Raw provider cost `$0.57879951`; stored provider and billed cost `$0.578800` under the `$3.20` cap; per-request model buckets matched the engine total.
+- 25 retained findings, zero independently verified. Seventeen remain `DETECTED`; eight remain `INCONCLUSIVE`.
+- Manifest v5 checksum `ebfa3fb0ba19d97d8d9393432f8dbe37078b4bcf0367a7b91c21fe54a78e5687` binds the exact source revision and product/worker/engine/sandbox identities; `sourceCheckoutAvailable=true` and sandbox cleanup completed.
+- Engine, SCA, secrets, agent configuration, ML supply chain, and AI App Security family receipts completed; URL was not applicable. AI App Security scanned 217/217 eligible files and 1,956,360 bytes with zero skips or reached limits.
+- 10 agent-minutes debited from 596,659 ms engine wall time at the Standard 1× multiplier.
 
 This is target/revision-scoped runtime and accounting proof, not a security guarantee.
 
@@ -468,7 +470,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 - `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v5, preventing bounded AI coverage from becoming a complete clean claim.
 - The scan-detail UI shows coverage counts and skipped-path samples instead of only the legacy one-line warning.
 - Regression coverage uses an exact 217-file repository: Quick scans 200 and reports 17 skipped while retaining vulnerable production code; Standard scans all 217. Generated directories are excluded.
-- PR #386 merged as `8ee6fd5`; its coverage remediation remains in the current product. Production now runs product `8347fda9` at app revision `lyrashield-app--0000170` and worker digest `sha256:6f73ad5e1125fffd8b4eec85103d14b49eb0c6a1765cab29a1a5edb3d7a17413`. The prior acceptance scan remains historically bounded and unchanged.
+- PR #386's coverage remediation and PR #450's secure source-checkout recovery are deployed. Scan `cmt9el7p7000001hdjnjo90wk` runtime-proved complete 217-file Standard discovery and immutable source identity for one target/revision. Historical scan `cmt35aj1s000001hck9fmguzk` remains bounded and unchanged.
 
 ## 12. Key files
 

@@ -13,6 +13,7 @@ restart_pending_file="${LYRASHIELD_EGRESS_RESTART_PENDING_FILE:-/run/lyrashield-
 drain_request_path="/tmp/lyrashield-worker-egress-drain-request"
 drain_ready_path="/tmp/lyrashield-worker-egress-drain-ready"
 planned_restart_path="/tmp/lyrashield-worker-planned-restart"
+active_job_path="/tmp/lyrashield-worker-active"
 drain_wait_attempts="${LYRASHIELD_EGRESS_DRAIN_WAIT_ATTEMPTS:-20}"
 
 case "$drain_wait_attempts" in
@@ -242,6 +243,7 @@ pins_changed=0
 defer_pin_change=0
 needs_restart=0
 worker_running=0
+worker_active=0
 drain_ready=0
 if [ "$refresh_pins" = "1" ]; then
   LC_ALL=C sort -u "$temporary_pins" -o "$temporary_pins"
@@ -305,38 +307,46 @@ if [ "$needs_restart" = "1" ] && docker exec lyrashield-worker true 2>/dev/null;
     exit 1
   fi
 
-  drain_token=$(read_worker_marker "$drain_request_path")
-  if [ -z "$drain_token" ]; then
-    drain_token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
-    if [ "${#drain_token}" -ne 64 ]; then
-      echo "Could not create worker egress drain challenge" >&2
-      exit 1
-    fi
-    if ! docker exec lyrashield-worker sh -c \
-      'umask 077; printf "%s\n" "$1" > /tmp/lyrashield-worker-egress-drain-request' \
-      sh "$drain_token" >/dev/null 2>&1; then
-      drain_token=""
-    fi
+  # An active single-concurrency worker cannot safely restart yet. Keep the
+  # validated old/new union and pending marker, but do not pause claims or
+  # remove readiness. The next idle timer run still performs the challenge,
+  # closing the race where work starts after this preflight.
+  if docker exec lyrashield-worker test -s "$active_job_path" 2>/dev/null; then
+    worker_active=1
   else
-    if [ "${#drain_token}" -ne 64 ]; then
-      echo "Worker egress drain challenge is invalid" >&2
-      exit 1
-    fi
-    case "$drain_token" in
-      *[!a-f0-9]*) echo "Worker egress drain challenge is invalid" >&2; exit 1 ;;
-    esac
-  fi
-
-  if [ -n "$drain_token" ]; then
-    drain_attempt=0
-    while [ "$drain_attempt" -lt "$drain_wait_attempts" ]; do
-      if [ "$(read_worker_marker "$drain_ready_path")" = "$drain_token" ]; then
-        drain_ready=1
-        break
+    drain_token=$(read_worker_marker "$drain_request_path")
+    if [ -z "$drain_token" ]; then
+      drain_token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+      if [ "${#drain_token}" -ne 64 ]; then
+        echo "Could not create worker egress drain challenge" >&2
+        exit 1
       fi
-      drain_attempt=$((drain_attempt + 1))
-      sleep 1
-    done
+      if ! docker exec lyrashield-worker sh -c \
+        'umask 077; printf "%s\n" "$1" > /tmp/lyrashield-worker-egress-drain-request' \
+        sh "$drain_token" >/dev/null 2>&1; then
+        drain_token=""
+      fi
+    else
+      if [ "${#drain_token}" -ne 64 ]; then
+        echo "Worker egress drain challenge is invalid" >&2
+        exit 1
+      fi
+      case "$drain_token" in
+        *[!a-f0-9]*) echo "Worker egress drain challenge is invalid" >&2; exit 1 ;;
+      esac
+    fi
+
+    if [ -n "$drain_token" ]; then
+      drain_attempt=0
+      while [ "$drain_attempt" -lt "$drain_wait_attempts" ]; do
+        if [ "$(read_worker_marker "$drain_ready_path")" = "$drain_token" ]; then
+          drain_ready=1
+          break
+        fi
+        drain_attempt=$((drain_attempt + 1))
+        sleep 1
+      done
+    fi
   fi
 
   cp "$temporary_rules" "$temporary_union_rules"
@@ -381,7 +391,11 @@ if [ "$pins_changed" = "1" ]; then
 fi
 if [ "$needs_restart" = "1" ]; then
   if [ "$defer_pin_change" = "1" ]; then
-    echo "Worker egress restart deferred; drain handshake is not ready"
+    if [ "$worker_active" = "1" ]; then
+      echo "Worker egress restart deferred; active scan remains healthy"
+    else
+      echo "Worker egress restart deferred; drain handshake is not ready"
+    fi
   elif systemctl --no-block try-restart lyrashield-worker.service; then
     rm -f "$restart_pending_file"
   else

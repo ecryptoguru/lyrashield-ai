@@ -6,7 +6,7 @@ LyraShield AI master business & monetization plan (Aug 2026): one app with Local
 
 **The company in one sentence:** LyraShield AI is an agent-native application-security product for AI-built software, sold as **one app with two modes** — a **Local mode** (runs on the user's machine on the user's own AI — zero COGS to us) and a **Cloud mode** (hosted SaaS platform) — sharing one engine, one account, one brand.
 
-**Current state (updated 2026-08-25):** the product is in **open beta** with open registration. Cloud billing, Local/Desktop licensing, and the affiliate ledger are implemented. Local signed-webhook and replay tests are retained, and restricted Polar Sandbox/Razorpay Test Mode staging support is implemented, but provider-hosted end-to-end receipts have not yet been captured. Live paid activation, production desktop signing/distribution proof, payout API provisioning, and tax-form operations remain release gates.
+**Current state (updated 2026-08-26):** the product is in **open beta** with open registration. Cloud billing, Local/Desktop licensing, and the affiliate ledger are implemented. Local signed-webhook and replay tests are retained, and restricted Polar Sandbox/Razorpay Test Mode staging support is implemented, but provider-hosted end-to-end receipts have not yet been captured. All production Polar/Razorpay Cloud and Local purchase admissions remain `off`; the current scan deployment does not activate live checkout. Live paid activation, production desktop signing/distribution proof, payout API provisioning, and tax-form operations remain release gates.
 
 **The monetization strategy (all founder-confirmed):**
 
