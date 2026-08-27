@@ -295,6 +295,7 @@ jobs:
           bash .github/scripts/tests/test-promote-worker-vm.sh
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
+          sh ops/worker/refresh-secrets.test.sh
 
       - name: Test worker stop provenance
         if: needs.changes.outputs.docs-only != 'true'
