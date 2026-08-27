@@ -149,6 +149,32 @@ wait_for_provisioning() {
 
 wait_for_provisioning
 
+wait_for_secret_persistence() {
+  local configured_secrets secret_name secrets_ready
+
+  [ "$(jq 'length' <<< "$secrets")" -gt 0 ] || return 0
+  for _ in {1..60}; do
+    configured_secrets=" $(az containerapp job secret list \
+      --name "$job_name" \
+      --resource-group "$RESOURCE_GROUP" \
+      --query '[].name' --output tsv | tr '\t\r\n' '   ') "
+    secrets_ready=true
+    while IFS= read -r secret_name; do
+      [[ "$configured_secrets" == *" ${secret_name} "* ]] || {
+        secrets_ready=false
+        break
+      }
+    done < <(jq -r '.[].name' <<< "$secrets")
+    $secrets_ready && return 0
+    sleep 5
+  done
+
+  echo "Timed out persisting secrets for Container Apps job ${job_name}." >&2
+  return 1
+}
+
+wait_for_secret_persistence
+
 patch=$(jq -n \
   --arg image "$image" \
   --arg name "$job_name" \

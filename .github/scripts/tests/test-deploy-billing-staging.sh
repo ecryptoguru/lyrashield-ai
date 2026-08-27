@@ -254,6 +254,7 @@ trap 'rm -rf "$mock_dir"' EXIT
 mock_body_prefix="$mock_dir/body"
 mock_args_prefix="$mock_dir/args"
 printf '0' > "$mock_dir/call-count"
+: > "$mock_dir/call-log"
 cat > "$mock_dir/az" <<'MOCK_AZ'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -264,8 +265,13 @@ case " $* " in
   *" rest "*)
     call_number=$(($(cat "$MOCK_CALL_COUNT_PATH") + 1))
     printf '%s' "$call_number" > "$MOCK_CALL_COUNT_PATH"
+    printf '%s\n' rest >> "$MOCK_CALL_LOG_PATH"
     printf '%s\n' "$*" > "${MOCK_ARGS_PREFIX}.${call_number}.txt"
     cat > "${MOCK_BODY_PREFIX}.${call_number}.json"
+    ;;
+  *" containerapp job secret list "*)
+    printf '%s\n' secret-list >> "$MOCK_CALL_LOG_PATH"
+    printf '%s\n' 'database-admin-url-lyra-stage-atomic-test'
     ;;
   *" containerapp job show "*) printf '%s\n' 'Succeeded' ;;
   *) printf 'unexpected az call: %s\n' "$*" >&2; exit 1 ;;
@@ -277,6 +283,7 @@ PATH="$mock_dir:$PATH" \
   MOCK_BODY_PREFIX="$mock_body_prefix" \
   MOCK_ARGS_PREFIX="$mock_args_prefix" \
   MOCK_CALL_COUNT_PATH="$mock_dir/call-count" \
+  MOCK_CALL_LOG_PATH="$mock_dir/call-log" \
   RESOURCE_GROUP='billing-stage-rg' \
   CONTAINER_ENVIRONMENT='stage-env' \
   REGISTRY='stage.azurecr.io' \
@@ -313,6 +320,10 @@ for mock_args in "$mock_args_prefix".*.txt; do
 done
 if [ "$(cat "$mock_dir/call-count")" != '2' ]; then
   echo "FAIL: atomic job helper must persist secrets before binding secret references" >&2
+  exit 1
+fi
+if [ "$(tr '\n' ' ' < "$mock_dir/call-log")" != 'rest secret-list rest ' ]; then
+  echo "FAIL: atomic job helper must read back secrets before binding secret references" >&2
   exit 1
 fi
 grep -Fq 'NOINHERIT NOREPLICATION BYPASSRLS' "$e2e_role_script"
