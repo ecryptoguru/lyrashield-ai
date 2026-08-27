@@ -70,6 +70,7 @@ function newTask() {
       workspaceId: `workspace-${id}`,
       kind: "EVIDENCE",
       storageUri: `s3://evidence/evidence/workspace-${id}/receipt.enc`,
+      nextAttemptAt: new Date(0),
     },
   })
 }
