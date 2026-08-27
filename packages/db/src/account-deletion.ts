@@ -3,6 +3,7 @@ import { prisma } from "./client"
 import { computeAuditHash } from "./audit-hash"
 import type { AuditLog } from "./generated/prisma"
 import { ACTIVE_SCAN_STATUSES, lockWorkspaceScanAdmission } from "./scan-service"
+import { runWithDatabaseRLSContext } from "./scoping"
 
 const DELETED_USER = "deleted-user"
 
@@ -302,6 +303,7 @@ export async function deleteUserAccount(
         WHERE "referredUserId" = ${userId}
           AND "status" IN ('REWARDED'::"ReferralStatus", 'REJECTED'::"ReferralStatus")`,
       // ScorecardEvent contains only a privacy-safe visitor hash, never a user identifier.
+      tx.notificationPreference.deleteMany({ where: { userId } }),
       tx.workspaceMember.updateMany({
         where: { invitedById: userId },
         data: { invitedById: null },
@@ -314,77 +316,154 @@ export async function deleteUserAccount(
       await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
 
-      // Every workspace-owned mutation carries an explicit tenant predicate
-      // and runs only after its matching transaction-local RLS context is set.
-      await tx.project.updateMany({
-        where: { workspaceId, ownerUserId: userId },
-        data: { ownerUserId: null },
-      })
-      await tx.credentialSet.updateMany({
-        where: { workspaceId, createdById: userId },
-        data: { createdById: DELETED_USER },
-      })
-      await tx.scan.updateMany({
-        where: { workspaceId, createdById: userId },
-        data: { createdById: DELETED_USER },
-      })
-      await tx.apiKey.updateMany({
-        where: { workspaceId, createdById: userId },
-        data: { createdById: DELETED_USER },
-      })
-      await tx.finding.updateMany({
-        where: { workspaceId, ownerUserId: userId },
-        data: { ownerUserId: null },
-      })
-      await tx.report.updateMany({
-        where: { workspaceId, createdById: userId },
-        data: { createdById: DELETED_USER },
-      })
-      await tx.notification.updateMany({
-        where: { workspaceId, userId },
-        data: { userId: null },
-      })
-      await tx.schedule.updateMany({
-        where: { workspaceId, createdById: userId },
-        data: { createdById: DELETED_USER },
-      })
-      // ScorecardShare is a child table (RLS via snapshot.workspaceId).
-      // Must be updated inside the per-workspace RLS context.
-      await tx.scorecardShare.updateMany({
-        where: { createdById: userId, snapshot: { workspaceId } },
-        data: { createdById: DELETED_USER },
-      })
-      await tx.invitation.updateMany({
-        where: { workspaceId, invitedById: userId },
-        data: { invitedById: DELETED_USER },
-      })
-      await tx.agentApproval.updateMany({
-        where: { workspaceId, requestedById: userId },
-        data: { requestedById: DELETED_USER },
-      })
-      await tx.agentApproval.updateMany({
-        where: { workspaceId, approvedById: userId },
-        data: { approvedById: null },
-      })
-      // The chain rebuild must observe anonymized attribution and must remain
-      // serialized with concurrent audit creation for this workspace.
-      await tx.auditLog.updateMany({
-        where: { workspaceId, actorUserId: userId },
-        data: { actorUserId: null },
-      })
-      const entries = await tx.$queryRaw<AuditLog[]>`
+      await runWithDatabaseRLSContext(workspaceId, async () => {
+        // Every workspace-owned mutation carries an explicit tenant predicate
+        // and runs only after its matching transaction-local RLS context is set.
+        await tx.project.updateMany({
+          where: { workspaceId, ownerUserId: userId },
+          data: { ownerUserId: null },
+        })
+        await tx.credentialSet.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.scan.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.apiKey.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.finding.updateMany({
+          where: { workspaceId, ownerUserId: userId },
+          data: { ownerUserId: null },
+        })
+        await tx.report.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.notification.updateMany({
+          where: { workspaceId, userId },
+          data: { userId: null },
+        })
+        await tx.schedule.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        // ScorecardShare is a child table (RLS via snapshot.workspaceId).
+        // Must be updated inside the per-workspace RLS context.
+        await tx.scorecardShare.updateMany({
+          where: { createdById: userId, snapshot: { workspaceId } },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.invitation.updateMany({
+          where: { workspaceId, invitedById: userId },
+          data: { invitedById: DELETED_USER },
+        })
+        await tx.agentApproval.updateMany({
+          where: { workspaceId, requestedById: userId },
+          data: { requestedById: DELETED_USER },
+        })
+        await tx.agentApproval.updateMany({
+          where: { workspaceId, approvedById: userId },
+          data: { approvedById: null },
+        })
+        await tx.targetDomainVerification.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.liveAiSafetySettings.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.liveAiSafetyPlan.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.liveAiSafetyPlan.updateMany({
+          where: { workspaceId, approvedById: userId },
+          data: { approvedById: null },
+        })
+        await tx.aiSystemProfile.updateMany({
+          where: { workspaceId, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.aiSystemProfile.updateMany({
+          where: { workspaceId, updatedById: userId },
+          data: { updatedById: DELETED_USER },
+        })
+        await tx.aiSystemProfileVersion.updateMany({
+          where: { aiSystemProfile: { workspaceId }, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.threatModelVersion.updateMany({
+          where: { threatModel: { workspaceId }, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.controlEvidenceVersion.updateMany({
+          where: { evidence: { workspaceId }, createdById: userId },
+          data: { createdById: DELETED_USER },
+        })
+        await tx.controlEvidenceVersion.updateMany({
+          where: { evidence: { workspaceId }, reviewedById: userId },
+          data: { reviewedById: null },
+        })
+        // The chain rebuild must observe anonymized attribution and must remain
+        // serialized with concurrent audit creation for this workspace.
+        await tx.auditLog.updateMany({
+          where: { workspaceId, actorUserId: userId },
+          data: { actorUserId: null },
+        })
+        const entries = await tx.$queryRaw<AuditLog[]>`
         SELECT * FROM "AuditLog"
         WHERE "workspaceId" = ${workspaceId}
         ORDER BY "createdAt" ASC, id ASC`
-      let prevHash: string | null = null
-      for (const entry of entries) {
-        const hash = computeAuditHash(entry, prevHash)
-        await tx.$executeRaw`
+        let prevHash: string | null = null
+        for (const entry of entries) {
+          const hash = computeAuditHash(entry, prevHash)
+          await tx.$executeRaw`
           UPDATE "AuditLog"
           SET "prevHash" = ${prevHash}, "hash" = ${hash}
           WHERE id = ${entry.id} AND "workspaceId" = ${workspaceId}`
-        prevHash = hash
-      }
+          prevHash = hash
+        }
+
+        // Append the deletion receipt before committing. A post-commit audit
+        // failure would otherwise report a 500 after the account was already gone.
+        const auditId = createId()
+        const lastCreatedAt = entries.at(-1)?.createdAt
+        const requestedCreatedAt = new Date()
+        const auditCreatedAt =
+          lastCreatedAt && requestedCreatedAt <= lastCreatedAt
+            ? new Date(lastCreatedAt.getTime() + 1)
+            : requestedCreatedAt
+        const auditMetadata = { attribution: "anonymized" }
+        const auditHash = computeAuditHash(
+          {
+            id: auditId,
+            workspaceId,
+            actorUserId: null,
+            action: "account.deleted",
+            resourceType: "user",
+            resourceId: null,
+            ipAddress: null,
+            userAgent: null,
+            metadata: auditMetadata,
+            createdAt: auditCreatedAt,
+          },
+          prevHash
+        )
+        await tx.$executeRaw`
+        INSERT INTO "AuditLog" (
+          id, "workspaceId", "actorUserId", action, "resourceType", "resourceId",
+          "ipAddress", "userAgent", metadata, "prevHash", hash, "createdAt"
+        ) VALUES (
+          ${auditId}, ${workspaceId}, NULL, 'account.deleted', 'user', NULL,
+          NULL, NULL, ${JSON.stringify(auditMetadata)}::jsonb, ${prevHash}, ${auditHash},
+          ${auditCreatedAt}
+        )`
+      })
     }
 
     // Physically delete sole-owner/sole-member workspaces. The database cascade
@@ -414,17 +493,6 @@ export async function deleteUserAccount(
 
     return taskIds
   })
-
-  for (const workspaceId of retainedWorkspaceIds) {
-    await prisma.auditLog.create({
-      data: {
-        workspaceId,
-        action: "account.deleted",
-        resourceType: "user",
-        metadata: { attribution: "anonymized" },
-      },
-    })
-  }
 
   return { workspaceIds: retainedWorkspaceIds, artifactDeletionTaskIds }
 }
