@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test"
 import { getSystemPrisma } from "@lyrashield/db"
-import { billingQuoteNotes, cancelRazorpaySubscription } from "@lyrashield/billing"
+import {
+  billingQuoteNotes,
+  cancelRazorpayPaymentLink,
+  cancelRazorpaySubscription,
+} from "@lyrashield/billing"
 import { expectViewerBillingDenied, provisionBillingActors, type BillingActors } from "./fixtures"
 import {
   assertSingleProcessedEffect,
@@ -50,21 +54,43 @@ test.describe("Razorpay Test Mode billing proof", () => {
   test.describe.configure({ mode: "serial" })
   let actors: BillingActors
   const hostedSubscriptionIds: string[] = []
+  const hostedPaymentLinkIds: string[] = []
 
   test.beforeAll(async ({ browser }, testInfo) => {
+    testInfo.setTimeout(120_000)
     actors = await provisionBillingActors(browser, String(testInfo.project.use.baseURL))
   })
 
-  test.afterAll(async () => {
+  test.afterAll(async ({ browser: _browser }, testInfo) => {
+    testInfo.setTimeout(120_000)
     const cleanupFailures: string[] = []
-    for (const subscriptionId of hostedSubscriptionIds) {
-      if (!(await cancelRazorpaySubscription(subscriptionId))) {
-        cleanupFailures.push(subscriptionId)
+    let actorCleanupError: unknown
+    try {
+      for (const subscriptionId of hostedSubscriptionIds) {
+        if (!(await cancelRazorpaySubscription(subscriptionId))) {
+          cleanupFailures.push(subscriptionId)
+        }
+      }
+      for (const paymentLinkId of hostedPaymentLinkIds) {
+        if (!(await cancelRazorpayPaymentLink(paymentLinkId))) {
+          cleanupFailures.push(paymentLinkId)
+        }
+      }
+    } finally {
+      try {
+        await actors?.cleanup()
+      } catch (error) {
+        actorCleanupError = error
       }
     }
-    await actors?.cleanup()
+    const cleanupErrors = actorCleanupError ? [actorCleanupError] : []
     if (cleanupFailures.length > 0) {
-      throw new Error(`Razorpay Test subscriptions were not canceled: ${cleanupFailures.join(",")}`)
+      cleanupErrors.push(
+        new Error(`Razorpay Test objects were not canceled: ${cleanupFailures.join(",")}`)
+      )
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(cleanupErrors, "Razorpay Test cleanup failed")
     }
   })
 
@@ -80,11 +106,12 @@ test.describe("Razorpay Test Mode billing proof", () => {
         })
         await expect(response).toBeOK()
         const body = await response.json()
+        expect(body.data.subscriptionId).toEqual(expect.any(String))
+        hostedSubscriptionIds.push(body.data.subscriptionId as string)
         expect(body).toMatchObject({
           success: true,
           data: { provider: "razorpay", subscriptionId: expect.any(String), keyId },
         })
-        hostedSubscriptionIds.push(body.data.subscriptionId as string)
       })
     }
   }
@@ -188,9 +215,12 @@ test.describe("Razorpay Test Mode billing proof", () => {
         data: { workspaceId: actors.workspaceId, pack: packId },
       })
       await expect(checkout).toBeOK()
-      expect(await checkout.json()).toMatchObject({
+      const checkoutBody = await checkout.json()
+      expect(checkoutBody.data.id).toEqual(expect.any(String))
+      hostedPaymentLinkIds.push(checkoutBody.data.id as string)
+      expect(checkoutBody).toMatchObject({
         success: true,
-        data: { provider: "razorpay", url: expect.any(String) },
+        data: { provider: "razorpay", url: expect.any(String), id: expect.any(String) },
       })
 
       const before = await prisma.commission.count()

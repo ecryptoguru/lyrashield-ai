@@ -131,6 +131,7 @@ export {
   createRazorpaySubscription,
   getRazorpaySubscriptionCycleCount,
   createRazorpayPaymentLink,
+  cancelRazorpayPaymentLink,
   cancelRazorpaySubscription,
   getRazorpaySubscription,
 } from "./providers/razorpay/client"

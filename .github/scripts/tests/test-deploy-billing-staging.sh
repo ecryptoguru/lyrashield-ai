@@ -49,6 +49,7 @@ must_contain 'RAZORPAY_LOCAL_BILLING_ADMISSION=off'
 must_contain 'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
 must_contain 'BILLING_STAGING_ADMISSION=restricted'
 must_contain 'BILLING_STAGING_ACCESS_TOKEN=secretref:billing-staging-access'
+must_contain 'RATE_LIMIT_AUTH_MAX=1000'
 must_contain 'BILLING_STAGING_REGION=${BILLING_STAGING_REGION}'
 must_contain '[ "$REDIS_HOST" = "lyrashield-billing-redis" ]'
 must_contain 'Ensure isolated staging Redis TCP ingress'
@@ -178,6 +179,13 @@ must_not_contain "POLAR_BILLING_ADMISSION=public"
 must_not_contain "RAZORPAY_BILLING_ADMISSION=public"
 must_not_contain '!cancelled()'
 must_not_contain '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}'
+must_contain 'LAST_JOB_EXECUTION="$execution"'
+must_contain '/app/e2e/billing/run-staging-proof.sh 1800'
+must_contain 'Successful billing proof logs did not contain a Playwright pass count.'
+must_contain '### Billing staging proof passed'
+must_contain 'E2E digest:'
+must_contain 'Region/provider:'
+must_contain 'Playwright result:'
 
 wait_helper_lines=$(grep -n '^          wait_for_job() {$' "$workflow" | cut -d: -f1)
 if [ "$(wc -l <<< "$wait_helper_lines" | tr -d ' ')" -ne 3 ]; then

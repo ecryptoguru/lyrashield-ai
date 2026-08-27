@@ -147,6 +147,25 @@ export async function cancelRazorpaySubscription(subscriptionId: string): Promis
 }
 
 /**
+ * Cancel a Razorpay payment link.
+ */
+export async function cancelRazorpayPaymentLink(paymentLinkId: string): Promise<boolean> {
+  const client = getRazorpayClient()
+  if (!client) return false
+
+  try {
+    await client.paymentLink.cancel(paymentLinkId)
+    return true
+  } catch (error) {
+    logger.error("Failed to cancel Razorpay payment link", {
+      paymentLinkId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
+/**
  * Fetch a Razorpay subscription by ID.
  */
 export async function getRazorpaySubscription(
