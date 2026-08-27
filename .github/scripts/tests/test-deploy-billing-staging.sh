@@ -108,7 +108,7 @@ must_contain 'E2E_ROLE_ACTION=drop'
 must_contain 'Recover and remove disposable E2E database access'
 must_contain "if: \${{ always() && steps.azure-login.outcome == 'success' }}"
 must_contain 'lyrashield-stage-e2e-cleanup'
-must_contain 'az containerapp job secret remove'
+must_not_contain 'az containerapp job secret remove'
 must_contain 'az containerapp job stop'
 must_contain 'Timed out stopping active executions'
 must_contain 'Timed out applying the secret-bearing template for ${job}'
@@ -386,11 +386,10 @@ if [ -z "$stale_drop_line" ] || [ -z "$new_password_line" ] || [ "$stale_drop_li
 fi
 cleanup_block=$(sed -n '/- name: Recover and remove disposable E2E database access/,$p' "$workflow")
 cleanup_stop_line=$(grep -n 'stop_job_executions "$job"' <<< "$cleanup_block" | head -1 | cut -d: -f1)
-cleanup_secret_line=$(grep -n 'az containerapp job secret remove' <<< "$cleanup_block" | head -1 | cut -d: -f1)
 cleanup_delete_line=$(grep -n 'az containerapp job delete' <<< "$cleanup_block" | head -1 | cut -d: -f1)
-if [ -z "$cleanup_stop_line" ] || [ -z "$cleanup_secret_line" ] || [ -z "$cleanup_delete_line" ] || \
-  [ "$cleanup_stop_line" -ge "$cleanup_secret_line" ] || [ "$cleanup_secret_line" -ge "$cleanup_delete_line" ]; then
-  echo "FAIL: always cleanup must stop executions before removing secrets and deleting jobs" >&2
+if [ -z "$cleanup_stop_line" ] || [ -z "$cleanup_delete_line" ] || \
+  [ "$cleanup_stop_line" -ge "$cleanup_delete_line" ]; then
+  echo "FAIL: always cleanup must stop executions before deleting jobs" >&2
   exit 1
 fi
 proof_env_block=$(sed -n '/proof_env=(/,/create-billing-staging-job.sh/p' "$workflow")
