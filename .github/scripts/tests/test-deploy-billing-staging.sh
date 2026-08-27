@@ -82,7 +82,7 @@ must_contain '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 must_contain "Delete one-shot database jobs"
 must_contain "az containerapp job delete"
 must_contain "lyrashield-stage-migrate"
-must_contain "lyrashield-stage-migration-recovery"
+must_contain "lyra-stage-migration-recovery"
 must_contain "lyrashield-stage-db-role"
 must_contain "/app/packages/db/scripts/run-billing-staging-migrations.sh"
 must_contain "/app/packages/db/scripts/recover-billing-staging-migration.mjs"
@@ -113,6 +113,25 @@ must_not_contain 'STAGING_WEB_DIGEST'
 must_not_contain 'STAGING_MIGRATION_DIGEST'
 must_not_contain 'STAGING_IMAGE_SHA'
 must_not_contain "--args"
+
+# Azure Container App Job names must be lower-case, use only hyphens, and be
+# shorter than 32 characters. Keep every ephemeral staging job deployable.
+for job in \
+  lyra-stage-migration-recovery \
+  lyrashield-stage-migrate \
+  lyrashield-stage-db-role \
+  lyrashield-stage-e2e-role \
+  lyrashield-stage-billing-proof \
+  lyrashield-stage-e2e-cleanup; do
+  [[ "$job" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ ]] || {
+    echo "FAIL: invalid Container App Job name $job" >&2
+    exit 1
+  }
+  [ "${#job}" -lt 32 ] || {
+    echo "FAIL: Container App Job name is too long: $job" >&2
+    exit 1
+  }
+done
 must_not_contain "--command /bin/sh"
 must_not_contain "ROLE_SCRIPT="
 must_not_contain "DATABASE_SYSTEM_URL=secretref:database-admin-url"
