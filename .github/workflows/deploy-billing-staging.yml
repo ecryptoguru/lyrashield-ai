@@ -364,7 +364,7 @@ jobs:
         run: |
           set -euo pipefail
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
-          recovery_job="lyrashield-stage-migration-recovery"
+          recovery_job="lyra-stage-migration-recovery"
           migration_job="lyrashield-stage-migrate"
           role_job="lyrashield-stage-db-role"
 
@@ -537,7 +537,7 @@ jobs:
             fi
           }
 
-          purge_job lyrashield-stage-migration-recovery database-admin-url
+          purge_job lyra-stage-migration-recovery database-admin-url
           purge_job lyrashield-stage-migrate database-admin-url
           purge_job lyrashield-stage-db-role database-admin-url runtime-password system-password
 
