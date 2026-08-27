@@ -110,7 +110,7 @@ must_contain 'lyrashield-stage-e2e-cleanup'
 must_contain 'az containerapp job secret remove'
 must_contain 'az containerapp job stop'
 must_contain 'Timed out stopping active executions'
-must_contain 'Timed out provisioning ${job}'
+must_contain 'Timed out applying the secret-bearing template for ${job}'
 must_contain 'TRUSTED_PROXY_IP_HEADER=x-forwarded-for'
 must_contain 'LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0'
 must_contain 'PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS}'
@@ -166,6 +166,12 @@ while IFS= read -r wait_helper_start; do
   wait_helper_block=$(sed -n "${wait_helper_start},${wait_helper_end}p" "$workflow")
   for diagnostic in \
     'local job=$1 execution status container_name' \
+    'az containerapp job secret list' \
+    "--query 'properties.template.containers[].env[].secretRef'" \
+    'for expected_setting in "$@"' \
+    'configured_secrets" == *" ${expected_setting} "*' \
+    'template_secret_refs" == *" ${expected_setting} "*' \
+    "--query \"properties.template.containers[0].env[?name=='\${expected_name}'].value | [0]\"" \
     "--query 'properties.template.containers[0].name'" \
     "--query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}'" \
     '--output jsonc || true' \

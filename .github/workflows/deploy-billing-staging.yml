@@ -422,12 +422,41 @@ jobs:
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
+            local configured_secrets template_secret_refs expected_setting expected_name expected_value actual_value template_ready
+            shift
+            template_ready=false
             for _ in {1..60}; do
               provisioning_state=$(az containerapp job show \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
                 --query properties.provisioningState --output tsv)
               case "$provisioning_state" in
-                Succeeded) break ;;
+                Succeeded)
+                  configured_secrets=" $(az containerapp job secret list \
+                    --name "$job" --resource-group "$RESOURCE_GROUP" \
+                    --query '[].name' --output tsv 2>/dev/null | tr '\t\r\n' '   ' || true) "
+                  template_secret_refs=" $(az containerapp job show \
+                    --name "$job" --resource-group "$RESOURCE_GROUP" \
+                    --query 'properties.template.containers[].env[].secretRef' \
+                    --output tsv 2>/dev/null | tr '\t\r\n' '   ' || true) "
+                  template_ready=true
+                  for expected_setting in "$@"; do
+                    if [[ "$expected_setting" == *=* ]]; then
+                      expected_name=${expected_setting%%=*}
+                      expected_value=${expected_setting#*=}
+                      actual_value=$(az containerapp job show \
+                        --name "$job" --resource-group "$RESOURCE_GROUP" \
+                        --query "properties.template.containers[0].env[?name=='${expected_name}'].value | [0]" \
+                        --output tsv 2>/dev/null || true)
+                      [ "$actual_value" = "$expected_value" ] && continue
+                    elif [[ "$configured_secrets" == *" ${expected_setting} "* && \
+                      "$template_secret_refs" == *" ${expected_setting} "* ]]; then
+                      continue
+                    fi
+                    template_ready=false
+                    break
+                  done
+                  $template_ready && break
+                  ;;
                 Failed)
                   echo "::error::${job} failed to provision."
                   return 1
@@ -435,8 +464,8 @@ jobs:
               esac
               sleep 5
             done
-            if [ "$provisioning_state" != "Succeeded" ]; then
-              echo "::error::Timed out provisioning ${job}."
+            if [ "$provisioning_state" != "Succeeded" ] || ! $template_ready; then
+              echo "::error::Timed out applying the secret-bearing template for ${job}."
               return 1
             fi
             execution=$(az containerapp job start \
@@ -524,7 +553,8 @@ jobs:
                 'DATABASE_ADMIN_URL=secretref:database-admin-url' \
                 "BILLING_STAGING_RECOVER_MIGRATION=${RECOVER_STALE_MIGRATION}" \
               --output none
-            wait_for_job "$recovery_job"
+            wait_for_job "$recovery_job" database-admin-url \
+              "BILLING_STAGING_RECOVER_MIGRATION=${RECOVER_STALE_MIGRATION}"
           fi
 
           create_job "$migration_job" /app/packages/db/scripts/run-billing-staging-migrations.sh
@@ -535,7 +565,7 @@ jobs:
             --name "$migration_job" --resource-group "$RESOURCE_GROUP" \
             --set-env-vars 'DATABASE_ADMIN_URL=secretref:database-admin-url' \
             --output none
-          wait_for_job "$migration_job"
+          wait_for_job "$migration_job" database-admin-url
 
           create_job "$role_job" /app/packages/db/scripts/provision-billing-staging-roles.mjs
           az containerapp job secret set \
@@ -552,7 +582,7 @@ jobs:
               'RUNTIME_PASSWORD=secretref:runtime-password' \
               'SYSTEM_PASSWORD=secretref:system-password' \
             --output none
-          wait_for_job "$role_job"
+          wait_for_job "$role_job" database-admin-url runtime-password system-password
 
       - name: Delete one-shot database jobs
         if: ${{ always() && steps.azure-login.outcome == 'success' }}
@@ -774,12 +804,41 @@ jobs:
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
+            local configured_secrets template_secret_refs expected_setting expected_name expected_value actual_value template_ready
+            shift
+            template_ready=false
             for _ in {1..60}; do
               provisioning_state=$(az containerapp job show \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
                 --query properties.provisioningState --output tsv)
               case "$provisioning_state" in
-                Succeeded) break ;;
+                Succeeded)
+                  configured_secrets=" $(az containerapp job secret list \
+                    --name "$job" --resource-group "$RESOURCE_GROUP" \
+                    --query '[].name' --output tsv 2>/dev/null | tr '\t\r\n' '   ' || true) "
+                  template_secret_refs=" $(az containerapp job show \
+                    --name "$job" --resource-group "$RESOURCE_GROUP" \
+                    --query 'properties.template.containers[].env[].secretRef' \
+                    --output tsv 2>/dev/null | tr '\t\r\n' '   ' || true) "
+                  template_ready=true
+                  for expected_setting in "$@"; do
+                    if [[ "$expected_setting" == *=* ]]; then
+                      expected_name=${expected_setting%%=*}
+                      expected_value=${expected_setting#*=}
+                      actual_value=$(az containerapp job show \
+                        --name "$job" --resource-group "$RESOURCE_GROUP" \
+                        --query "properties.template.containers[0].env[?name=='${expected_name}'].value | [0]" \
+                        --output tsv 2>/dev/null || true)
+                      [ "$actual_value" = "$expected_value" ] && continue
+                    elif [[ "$configured_secrets" == *" ${expected_setting} "* && \
+                      "$template_secret_refs" == *" ${expected_setting} "* ]]; then
+                      continue
+                    fi
+                    template_ready=false
+                    break
+                  done
+                  $template_ready && break
+                  ;;
                 Failed)
                   echo "::error::${job} failed to provision."
                   return 1
@@ -787,8 +846,8 @@ jobs:
               esac
               sleep 5
             done
-            if [ "$provisioning_state" != "Succeeded" ]; then
-              echo "::error::Timed out provisioning ${job}."
+            if [ "$provisioning_state" != "Succeeded" ] || ! $template_ready; then
+              echo "::error::Timed out applying the secret-bearing template for ${job}."
               return 1
             fi
             execution=$(az containerapp job start \
@@ -869,7 +928,7 @@ jobs:
                 az containerapp job update \
                   --name "$role_job" --resource-group "$RESOURCE_GROUP" \
                   --set-env-vars 'E2E_ROLE_ACTION=drop' --output none
-                if ! wait_for_job "$role_job"; then
+                if ! wait_for_job "$role_job" database-admin-url e2e-password E2E_ROLE_ACTION=drop; then
                   outcome=1
                 elif stop_job_executions "$role_job"; then
                   az containerapp job delete --name "$role_job" --resource-group "$RESOURCE_GROUP" --yes --output none
@@ -904,7 +963,7 @@ jobs:
               'DATABASE_ADMIN_URL=secretref:database-admin-url' \
               'E2E_ROLE_ACTION=drop' \
             --output none
-          wait_for_job "$recovery_job"
+          wait_for_job "$recovery_job" database-admin-url E2E_ROLE_ACTION=drop
           stop_job_executions "$recovery_job"
           az containerapp job secret remove \
             --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
@@ -938,7 +997,7 @@ jobs:
               'E2E_PASSWORD=secretref:e2e-password' \
               'E2E_ROLE_ACTION=provision' \
             --output none
-          wait_for_job "$role_job"
+          wait_for_job "$role_job" database-admin-url e2e-password E2E_ROLE_ACTION=provision
 
           expected_base_host=${APP_URL#https://}
           proof_secrets=(
@@ -1001,7 +1060,10 @@ jobs:
           az containerapp job update \
             --name "$proof_job" --resource-group "$RESOURCE_GROUP" \
             --set-env-vars "${proof_env[@]}" --output none
-          wait_for_job "$proof_job"
+          wait_for_job "$proof_job" \
+            e2e-database-url staging-access better-auth-secret internal-api-key \
+            polar-access-token polar-webhook razorpay-key-id razorpay-key-secret razorpay-webhook \
+            "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}" "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"
 
       - name: Recover and remove disposable E2E database access
         if: ${{ always() && steps.azure-login.outcome == 'success' }}
@@ -1075,12 +1137,41 @@ jobs:
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
+            local configured_secrets template_secret_refs expected_setting expected_name expected_value actual_value template_ready
+            shift
+            template_ready=false
             for _ in {1..60}; do
               provisioning_state=$(az containerapp job show \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
                 --query properties.provisioningState --output tsv)
               case "$provisioning_state" in
-                Succeeded) break ;;
+                Succeeded)
+                  configured_secrets=" $(az containerapp job secret list \
+                    --name "$job" --resource-group "$RESOURCE_GROUP" \
+                    --query '[].name' --output tsv 2>/dev/null | tr '\t\r\n' '   ' || true) "
+                  template_secret_refs=" $(az containerapp job show \
+                    --name "$job" --resource-group "$RESOURCE_GROUP" \
+                    --query 'properties.template.containers[].env[].secretRef' \
+                    --output tsv 2>/dev/null | tr '\t\r\n' '   ' || true) "
+                  template_ready=true
+                  for expected_setting in "$@"; do
+                    if [[ "$expected_setting" == *=* ]]; then
+                      expected_name=${expected_setting%%=*}
+                      expected_value=${expected_setting#*=}
+                      actual_value=$(az containerapp job show \
+                        --name "$job" --resource-group "$RESOURCE_GROUP" \
+                        --query "properties.template.containers[0].env[?name=='${expected_name}'].value | [0]" \
+                        --output tsv 2>/dev/null || true)
+                      [ "$actual_value" = "$expected_value" ] && continue
+                    elif [[ "$configured_secrets" == *" ${expected_setting} "* && \
+                      "$template_secret_refs" == *" ${expected_setting} "* ]]; then
+                      continue
+                    fi
+                    template_ready=false
+                    break
+                  done
+                  $template_ready && break
+                  ;;
                 Failed)
                   echo "::error::${job} failed to provision."
                   return 1
@@ -1088,8 +1179,8 @@ jobs:
               esac
               sleep 5
             done
-            if [ "$provisioning_state" != "Succeeded" ]; then
-              echo "::error::Timed out provisioning ${job}."
+            if [ "$provisioning_state" != "Succeeded" ] || ! $template_ready; then
+              echo "::error::Timed out applying the secret-bearing template for ${job}."
               return 1
             fi
             execution=$(az containerapp job start \
@@ -1145,5 +1236,5 @@ jobs:
               'DATABASE_ADMIN_URL=secretref:database-admin-url' \
               'E2E_ROLE_ACTION=drop' \
             --output none
-          wait_for_job "$recovery_job"
+          wait_for_job "$recovery_job" database-admin-url E2E_ROLE_ACTION=drop
           purge_job "$recovery_job" database-admin-url
