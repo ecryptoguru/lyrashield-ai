@@ -46,7 +46,10 @@ case "$command:$unit" in
   start:lyrashield-worker-egress-refresh.timer)
     printf 1 > "$MOCK_TIMER_ACTIVE" ;;
   restart:lyrashield-worker.service)
-    printf 1 > "$MOCK_SERVICE_ACTIVE" ;;
+    printf 1 > "$MOCK_SERVICE_ACTIVE"
+    if [ -n "${MOCK_REPLACEMENT_STOP:-}" ] && [ -s "$MOCK_ADMISSION_STOP" ]; then
+      printf '%s' "$MOCK_REPLACEMENT_STOP" > "$MOCK_ADMISSION_STOP"
+    fi ;;
   reset-failed:lyrashield-worker.service) ;;
   *) echo "unexpected systemctl call: $command $unit" >&2; exit 1 ;;
 esac
@@ -59,11 +62,32 @@ case "$1:$2" in
   inspect:lyrashield-worker)
     case "$*" in
       *State.Health*) printf 'healthy\n' ;;
-      *Config.Image*) printf '%s\n' "$MOCK_TARGET" ;;
+      *Config.Image*)
+        if [ "${MOCK_FAIL_IMAGE_CHECK:-0}" = 1 ]; then
+          printf '%s\n' 'ghcr.io/example/worker@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+        else
+          printf '%s\n' "$MOCK_TARGET"
+        fi ;;
       *) exit 1 ;;
     esac ;;
   exec:-w)
     case "$*" in
+      *'redis.call("GET"'*)
+        for argument in "$@"; do expected_stop=$argument; done
+        if [ "$(cat "$MOCK_ADMISSION_STOP")" = "$expected_stop" ]; then
+          : > "$MOCK_ADMISSION_STOP"
+          printf '1\n'
+        else
+          printf '0\n'
+        fi ;;
+      *'redis.call("EXISTS"'*)
+        if [ -s "$MOCK_ADMISSION_STOP" ]; then
+          printf '0\n'
+        else
+          promotion_stop='{"operator":"github-actions","reason":"worker-promotion"}'
+          printf '%s' "$promotion_stop" > "$MOCK_ADMISSION_STOP"
+          printf '1\n%s\n' "$promotion_stop"
+        fi ;;
       *getSystemPrisma*) printf '%s\n' '{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}' ;;
       *) : ;;
     esac ;;
@@ -98,7 +122,8 @@ MOCK
 
 run_case() {
   local name=$1 timer_active=$2 service_enabled=$3 timer_enabled=$4 expected=$5
-  local service_active=${6:-1}
+  local service_active=${6:-1} existing_stop=${7:-} fail_image_check=${8:-0}
+  local replacement_stop=${9:-}
   local case_dir="$tmp/$name"
   mkdir -p "$case_dir"
   write_mocks "$case_dir"
@@ -106,6 +131,7 @@ run_case() {
   printf '%s' "$timer_active" > "$case_dir/timer-active"
   printf '%s' "$service_enabled" > "$case_dir/service-enabled"
   printf '%s' "$timer_enabled" > "$case_dir/timer-enabled"
+  printf '%s' "$existing_stop" > "$case_dir/admission-stop"
   printf 'LYRASHIELD_WORKER_IMAGE=%s\nGHCR_USERNAME=test-user\n' "$target" > "$case_dir/runtime.conf"
   printf 'GHCR_TOKEN=test-token\n' > "$case_dir/worker.env"
 
@@ -119,6 +145,9 @@ run_case() {
       MOCK_TIMER_ACTIVE="$case_dir/timer-active" \
       MOCK_SERVICE_ENABLED="$case_dir/service-enabled" \
       MOCK_TIMER_ENABLED="$case_dir/timer-enabled" \
+      MOCK_ADMISSION_STOP="$case_dir/admission-stop" \
+      MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
+      MOCK_REPLACEMENT_STOP="$replacement_stop" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
       sh "$script" "$target" "$app_revision" "$engine_revision" 2>&1
@@ -138,11 +167,24 @@ run_case() {
       exit 1
     fi
   fi
+  if [ -n "$replacement_stop" ]; then
+    [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
+    grep -Fq 'Newer scan admission stop preserved' <<< "$output"
+  elif [ -n "$existing_stop" ]; then
+    [ "$(cat "$case_dir/admission-stop")" = "$existing_stop" ]
+    grep -Fq 'Existing scan admission stop preserved' <<< "$output"
+  else
+    [ ! -s "$case_dir/admission-stop" ]
+  fi
 }
 
 run_case healthy 1 1 1 success
 run_case repairs-inactive-timer 0 1 1 success
 run_case repairs-disabled-units 1 0 0 success
 run_case repairs-inactive-service 1 1 1 success 0
+run_case preserves-existing-stop 1 1 1 success 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}'
+run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
+run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1
+run_case preserves-existing-stop-on-rollback 1 1 1 failure 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}' 1
 
 echo "Worker promotion systemd proof passed."
