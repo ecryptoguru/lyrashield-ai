@@ -416,9 +416,10 @@ jobs:
         run: |
           set -euo pipefail
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
-          recovery_job="lyra-stage-migration-recovery"
-          migration_job="lyrashield-stage-migrate"
-          role_job="lyrashield-stage-db-role"
+          job_suffix=${GITHUB_RUN_ID: -10}
+          recovery_job="lyra-mig-recover-${job_suffix}"
+          migration_job="lyra-migrate-${job_suffix}"
+          role_job="lyra-db-role-${job_suffix}"
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
@@ -611,6 +612,11 @@ jobs:
             fi
           }
 
+          job_suffix=${GITHUB_RUN_ID: -10}
+          purge_job "lyra-mig-recover-${job_suffix}" database-admin-url
+          purge_job "lyra-migrate-${job_suffix}" database-admin-url
+          purge_job "lyra-db-role-${job_suffix}" database-admin-url runtime-password system-password
+          # Remove pre-run-id jobs left by cancelled historical runs.
           purge_job lyra-stage-migration-recovery database-admin-url
           purge_job lyrashield-stage-migrate database-admin-url
           purge_job lyrashield-stage-db-role database-admin-url runtime-password system-password
@@ -782,9 +788,10 @@ jobs:
           set -euo pipefail
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
           e2e_image="${REGISTRY}/lyrashield-billing-e2e@${E2E_DIGEST}"
-          role_job="lyrashield-stage-e2e-role"
-          proof_job="lyrashield-stage-billing-proof"
-          recovery_job="lyrashield-stage-e2e-cleanup"
+          job_suffix=${GITHUB_RUN_ID: -10}
+          role_job="lyra-e2e-role-${job_suffix}"
+          proof_job="lyra-bill-proof-${job_suffix}"
+          recovery_job="lyra-e2e-pre-${job_suffix}"
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
@@ -925,7 +932,9 @@ jobs:
           }
           trap cleanup EXIT
 
-          for stale_job in "$proof_job" "$role_job" "$recovery_job"; do
+          for stale_job in \
+            "$proof_job" "$role_job" "$recovery_job" \
+            lyrashield-stage-billing-proof lyrashield-stage-e2e-role lyrashield-stage-e2e-cleanup; do
             if az containerapp job show --name "$stale_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
               stop_job_executions "$stale_job"
               az containerapp job delete \
@@ -1044,9 +1053,11 @@ jobs:
           set -euo pipefail
           [ -n "${MIGRATION_DIGEST:-}" ] || exit 0
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
-          role_job="lyrashield-stage-e2e-role"
-          proof_job="lyrashield-stage-billing-proof"
-          recovery_job="lyrashield-stage-e2e-cleanup"
+          job_suffix=${GITHUB_RUN_ID: -10}
+          role_job="lyra-e2e-role-${job_suffix}"
+          proof_job="lyra-bill-proof-${job_suffix}"
+          preflight_job="lyra-e2e-pre-${job_suffix}"
+          recovery_job="lyra-e2e-post-${job_suffix}"
 
           stop_job_executions() {
             local job=$1 active
@@ -1091,7 +1102,13 @@ jobs:
               e2e-database-url staging-access better-auth-secret internal-api-key \
               polar-access-token polar-webhook razorpay-key-id razorpay-key-secret razorpay-webhook || outcome=1
             purge_job "$role_job" database-admin-url e2e-password || outcome=1
+            purge_job "$preflight_job" database-admin-url || outcome=1
             purge_job "$recovery_job" database-admin-url || outcome=1
+            purge_job lyrashield-stage-billing-proof \
+              e2e-database-url staging-access better-auth-secret internal-api-key \
+              polar-access-token polar-webhook razorpay-key-id razorpay-key-secret razorpay-webhook || outcome=1
+            purge_job lyrashield-stage-e2e-role database-admin-url e2e-password || outcome=1
+            purge_job lyrashield-stage-e2e-cleanup database-admin-url || outcome=1
             return "$outcome"
           }
 

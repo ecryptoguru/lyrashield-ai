@@ -130,6 +130,13 @@ must_not_contain "--args"
 # Azure Container App Job names must be lower-case, use only hyphens, and be
 # shorter than 32 characters. Keep every ephemeral staging job deployable.
 for job in \
+  lyra-mig-recover-1234567890 \
+  lyra-migrate-1234567890 \
+  lyra-db-role-1234567890 \
+  lyra-e2e-role-1234567890 \
+  lyra-bill-proof-1234567890 \
+  lyra-e2e-pre-1234567890 \
+  lyra-e2e-post-1234567890 \
   lyra-stage-migration-recovery \
   lyrashield-stage-migrate \
   lyrashield-stage-db-role \
@@ -145,6 +152,12 @@ for job in \
     exit 1
   }
 done
+if [ "$(grep -Fc 'job_suffix=${GITHUB_RUN_ID: -10}' "$workflow")" -ne 4 ]; then
+  echo "FAIL: every one-shot job step must derive the same run-scoped suffix" >&2
+  exit 1
+fi
+must_contain 'recovery_job="lyra-e2e-pre-${job_suffix}"'
+must_contain 'recovery_job="lyra-e2e-post-${job_suffix}"'
 must_not_contain "--command /bin/sh"
 must_not_contain "az containerapp job create"
 must_not_contain "az containerapp job secret set"
