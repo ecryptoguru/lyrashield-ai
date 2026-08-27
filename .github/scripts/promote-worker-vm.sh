@@ -35,17 +35,28 @@ old_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$config")
 backup="${config}.rollback-${expected_app}"
 timer_was_active=0
 systemctl is-active --quiet "$timer" && timer_was_active=1
-admission_stopped=0
+admission_stop_owned=0
+admission_stop_value=
 config_changed=0
 promotion_complete=0
 
 redis_eval() {
-  docker exec -w /app/apps/worker "$container" node --input-type=module -e "$1"
+  code=$1
+  shift
+  docker exec -w /app/apps/worker "$container" node --input-type=module -e "$code" "$@"
 }
 
 resume_admission() {
-  redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); await redis.del("lyrashield:scan-admission:stopped"); await redis.quit();'
-  admission_stopped=0
+  # JavaScript template literal is passed verbatim to the container.
+  # shellcheck disable=SC2016
+  removed=$(redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); const removed=await redis.eval(`if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end return 0`,1,"lyrashield:scan-admission:stopped",process.argv[1]); console.log(removed); await redis.quit();' "$admission_stop_value")
+  case "$removed" in
+    0) echo "Newer scan admission stop preserved" ;;
+    1) ;;
+    *) echo "Worker promotion could not safely resume scan admission" >&2; return 1 ;;
+  esac
+  admission_stop_owned=0
+  admission_stop_value=
 }
 
 wait_healthy() {
@@ -69,10 +80,10 @@ rollback() {
       cp -p "$backup" "$config"
       systemctl reset-failed "$service" || true
       systemctl restart "$service" || true
-      if wait_healthy && [ "$admission_stopped" -eq 1 ]; then
+      if wait_healthy && [ "$admission_stop_owned" -eq 1 ]; then
         resume_admission || true
       fi
-    elif [ "$admission_stopped" -eq 1 ]; then
+    elif [ "$admission_stop_owned" -eq 1 ]; then
       resume_admission || true
     fi
     restore_timer || true
@@ -95,8 +106,16 @@ systemctl is-active --quiet lyrashield-worker-egress-refresh.service && {
 }
 wait_healthy
 
-redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); await redis.set("lyrashield:scan-admission:stopped",JSON.stringify({operator:"github-actions",reason:"worker-promotion",at:new Date().toISOString()})); await redis.quit();'
-admission_stopped=1
+# JavaScript template literal is passed verbatim to the container.
+# shellcheck disable=SC2016
+admission_stop_claim=$(redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); const key="lyrashield:scan-admission:stopped"; const value=JSON.stringify({operator:"github-actions",reason:"worker-promotion",at:new Date().toISOString()}); const claimed=await redis.eval(`if redis.call("EXISTS", KEYS[1]) == 1 then return 0 end redis.call("SET", KEYS[1], ARGV[1]) return 1`,1,key,value); console.log(claimed); if (claimed === 1) console.log(value); await redis.quit();')
+admission_stop_owned=$(printf '%s\n' "$admission_stop_claim" | sed -n '1p')
+admission_stop_value=$(printf '%s\n' "$admission_stop_claim" | sed -n '2p')
+case "$admission_stop_owned" in
+  0) echo "Existing scan admission stop preserved" ;;
+  1) [ -n "$admission_stop_value" ] || { echo "Worker promotion admission receipt is missing" >&2; exit 1; } ;;
+  *) echo "Worker promotion could not establish scan admission ownership" >&2; exit 1 ;;
+esac
 
 preflight=$(docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e 'const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); }')
 expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
@@ -144,7 +163,9 @@ systemctl is-active --quiet "$timer"
 systemctl is-enabled --quiet "$timer"
 echo "Worker service state: active enabled"
 echo "Worker egress refresh timer state: active enabled"
-resume_admission
+if [ "$admission_stop_owned" -eq 1 ]; then
+  resume_admission
+fi
 promotion_complete=1
 trap - EXIT HUP INT TERM
 echo "Worker promotion passed for ${target##*@}"
