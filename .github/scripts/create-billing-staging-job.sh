@@ -10,6 +10,8 @@ job_name=$1
 image=$2
 command=$3
 replica_timeout=$4
+secret_specs=${JOB_SECRET_SPECS:-}
+env_specs=${JOB_ENV_SPECS:-}
 
 : "${RESOURCE_GROUP:?RESOURCE_GROUP is required}"
 : "${CONTAINER_ENVIRONMENT:?CONTAINER_ENVIRONMENT is required}"
@@ -20,6 +22,37 @@ replica_timeout=$4
 [[ "$job_name" =~ ^[a-z][a-z0-9-]{0,30}[a-z0-9]$ ]]
 [[ "$image" == "${REGISTRY}/"*"@sha256:"* ]]
 [[ "$replica_timeout" =~ ^[1-9][0-9]*$ ]]
+
+secrets='[]'
+while IFS='=' read -r secret_name value_variable; do
+  [ -n "$secret_name" ] || continue
+  [[ "$secret_name" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ ]]
+  [[ "$value_variable" =~ ^[A-Z][A-Z0-9_]*$ ]]
+  secret_value=${!value_variable:?}
+  secrets=$(jq -c \
+    --arg name "$secret_name" \
+    --arg value "$secret_value" \
+    '. + [{name: $name, value: $value}]' <<< "$secrets")
+done <<< "$secret_specs"
+
+container_env='[]'
+while IFS='=' read -r env_name env_value; do
+  [ -n "$env_name" ] || continue
+  [[ "$env_name" =~ ^[A-Z][A-Z0-9_]*$ ]]
+  if [[ "$env_value" == secretref:* ]]; then
+    secret_ref=${env_value#secretref:}
+    jq -e --arg name "$secret_ref" 'any(.name == $name)' <<< "$secrets" >/dev/null
+    container_env=$(jq -c \
+      --arg name "$env_name" \
+      --arg secret_ref "$secret_ref" \
+      '. + [{name: $name, secretRef: $secret_ref}]' <<< "$container_env")
+  else
+    container_env=$(jq -c \
+      --arg name "$env_name" \
+      --arg value "$env_value" \
+      '. + [{name: $name, value: $value}]' <<< "$container_env")
+  fi
+done <<< "$env_specs"
 
 subscription_id=$(az account show --query id --output tsv)
 environment_id=$(az containerapp env show \
@@ -43,6 +76,8 @@ body=$(jq -n \
   --arg image "$image" \
   --arg name "$job_name" \
   --arg command "$command" \
+  --argjson secrets "$secrets" \
+  --argjson container_env "$container_env" \
   --argjson timeout "$replica_timeout" \
   --arg source_sha "$IMAGE_SHA" \
   '{
@@ -59,19 +94,20 @@ body=$(jq -n \
         replicaTimeout: $timeout,
         replicaRetryLimit: 0,
         manualTriggerConfig: {parallelism: 1, replicaCompletionCount: 1},
-        registries: [{server: $registry, identity: $identity}]
+        registries: [{server: $registry, identity: $identity}],
+        secrets: $secrets
       },
       template: {
-        containers: [{name: $name, image: $image, command: [$command]}]
+        containers: [{name: $name, image: $image, command: [$command], env: $container_env}]
       }
     }
   }')
 
-az rest \
+printf '%s' "$body" | az rest \
   --method put \
   --url "$job_url" \
   --headers 'Content-Type=application/json' \
-  --body "$body" \
+  --body @- \
   --output none
 
 for _ in {1..60}; do

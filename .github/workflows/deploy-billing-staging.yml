@@ -543,45 +543,29 @@ jobs:
           }
 
           if [ "$RECOVER_STALE_MIGRATION" != "none" ]; then
-            create_job "$recovery_job" /app/packages/db/scripts/recover-billing-staging-migration.mjs
-            az containerapp job secret set \
-              --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
-              --secrets "database-admin-url=${DATABASE_ADMIN_URL}" --output none
-            az containerapp job update \
-              --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
-              --set-env-vars \
+            JOB_SECRET_SPECS='database-admin-url=DATABASE_ADMIN_URL' \
+              JOB_ENV_SPECS=$(printf '%s\n' \
                 'DATABASE_ADMIN_URL=secretref:database-admin-url' \
-                "BILLING_STAGING_RECOVER_MIGRATION=${RECOVER_STALE_MIGRATION}" \
-              --output none
+                "BILLING_STAGING_RECOVER_MIGRATION=${RECOVER_STALE_MIGRATION}") \
+              create_job "$recovery_job" /app/packages/db/scripts/recover-billing-staging-migration.mjs
             wait_for_job "$recovery_job" database-admin-url \
               "BILLING_STAGING_RECOVER_MIGRATION=${RECOVER_STALE_MIGRATION}"
           fi
 
-          create_job "$migration_job" /app/packages/db/scripts/run-billing-staging-migrations.sh
-          az containerapp job secret set \
-            --name "$migration_job" --resource-group "$RESOURCE_GROUP" \
-            --secrets "database-admin-url=${DATABASE_ADMIN_URL}" --output none
-          az containerapp job update \
-            --name "$migration_job" --resource-group "$RESOURCE_GROUP" \
-            --set-env-vars 'DATABASE_ADMIN_URL=secretref:database-admin-url' \
-            --output none
+          JOB_SECRET_SPECS='database-admin-url=DATABASE_ADMIN_URL' \
+            JOB_ENV_SPECS='DATABASE_ADMIN_URL=secretref:database-admin-url' \
+            create_job "$migration_job" /app/packages/db/scripts/run-billing-staging-migrations.sh
           wait_for_job "$migration_job" database-admin-url
 
-          create_job "$role_job" /app/packages/db/scripts/provision-billing-staging-roles.mjs
-          az containerapp job secret set \
-            --name "$role_job" --resource-group "$RESOURCE_GROUP" \
-            --secrets \
-              "database-admin-url=${DATABASE_ADMIN_URL}" \
-              "runtime-password=${RUNTIME_PASSWORD}" \
-              "system-password=${SYSTEM_PASSWORD}" \
-            --output none
-          az containerapp job update \
-            --name "$role_job" --resource-group "$RESOURCE_GROUP" \
-            --set-env-vars \
+          JOB_SECRET_SPECS=$(printf '%s\n' \
+              'database-admin-url=DATABASE_ADMIN_URL' \
+              'runtime-password=RUNTIME_PASSWORD' \
+              'system-password=SYSTEM_PASSWORD') \
+            JOB_ENV_SPECS=$(printf '%s\n' \
               'DATABASE_ADMIN_URL=secretref:database-admin-url' \
               'RUNTIME_PASSWORD=secretref:runtime-password' \
-              'SYSTEM_PASSWORD=secretref:system-password' \
-            --output none
+              'SYSTEM_PASSWORD=secretref:system-password') \
+            create_job "$role_job" /app/packages/db/scripts/provision-billing-staging-roles.mjs
           wait_for_job "$role_job" database-admin-url runtime-password system-password
 
       - name: Delete one-shot database jobs
@@ -951,18 +935,13 @@ jobs:
 
           # A previous runner may have disappeared after creating the database
           # role. Drop that stale role before minting a new credential.
-          .github/scripts/create-billing-staging-job.sh \
+          JOB_SECRET_SPECS='database-admin-url=DATABASE_ADMIN_URL' \
+            JOB_ENV_SPECS=$(printf '%s\n' \
+              'DATABASE_ADMIN_URL=secretref:database-admin-url' \
+              'E2E_ROLE_ACTION=drop') \
+            .github/scripts/create-billing-staging-job.sh \
             "$recovery_job" "$migration_image" \
             /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs 1200
-          az containerapp job secret set \
-            --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
-            --secrets "database-admin-url=${DATABASE_ADMIN_URL}" --output none
-          az containerapp job update \
-            --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
-            --set-env-vars \
-              'DATABASE_ADMIN_URL=secretref:database-admin-url' \
-              'E2E_ROLE_ACTION=drop' \
-            --output none
           wait_for_job "$recovery_job" database-admin-url E2E_ROLE_ACTION=drop
           stop_job_executions "$recovery_job"
           az containerapp job secret remove \
@@ -981,36 +960,30 @@ jobs:
           echo "::add-mask::${e2e_password}"
           echo "::add-mask::${e2e_database_url}"
 
-          .github/scripts/create-billing-staging-job.sh \
-            "$role_job" "$migration_image" \
-            /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs 1200
-          az containerapp job secret set \
-            --name "$role_job" --resource-group "$RESOURCE_GROUP" \
-            --secrets \
-              "database-admin-url=${DATABASE_ADMIN_URL}" \
-              "e2e-password=${e2e_password}" \
-            --output none
-          az containerapp job update \
-            --name "$role_job" --resource-group "$RESOURCE_GROUP" \
-            --set-env-vars \
+          E2E_JOB_PASSWORD="$e2e_password" \
+            JOB_SECRET_SPECS=$(printf '%s\n' \
+              'database-admin-url=DATABASE_ADMIN_URL' \
+              'e2e-password=E2E_JOB_PASSWORD') \
+            JOB_ENV_SPECS=$(printf '%s\n' \
               'DATABASE_ADMIN_URL=secretref:database-admin-url' \
               'E2E_PASSWORD=secretref:e2e-password' \
-              'E2E_ROLE_ACTION=provision' \
-            --output none
+              'E2E_ROLE_ACTION=provision') \
+            .github/scripts/create-billing-staging-job.sh \
+            "$role_job" "$migration_image" \
+            /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs 1200
           wait_for_job "$role_job" database-admin-url e2e-password E2E_ROLE_ACTION=provision
 
           expected_base_host=${APP_URL#https://}
-          proof_secrets=(
-            "e2e-database-url=${e2e_database_url}"
-            "staging-access=${STAGING_ACCESS_TOKEN}"
-            "better-auth-secret=${BETTER_AUTH_SECRET}"
-            "internal-api-key=${INTERNAL_API_KEY}"
-            "polar-access-token=${POLAR_ACCESS_TOKEN}"
-            "polar-webhook=${POLAR_WEBHOOK_SECRET}"
-            "razorpay-key-id=${RAZORPAY_KEY_ID}"
-            "razorpay-key-secret=${RAZORPAY_KEY_SECRET}"
-            "razorpay-webhook=${RAZORPAY_WEBHOOK_SECRET}"
-          )
+          proof_secret_specs=$(printf '%s\n' \
+            'e2e-database-url=E2E_JOB_DATABASE_URL' \
+            'staging-access=STAGING_ACCESS_TOKEN' \
+            'better-auth-secret=BETTER_AUTH_SECRET' \
+            'internal-api-key=INTERNAL_API_KEY' \
+            'polar-access-token=POLAR_ACCESS_TOKEN' \
+            'polar-webhook=POLAR_WEBHOOK_SECRET' \
+            'razorpay-key-id=RAZORPAY_KEY_ID' \
+            'razorpay-key-secret=RAZORPAY_KEY_SECRET' \
+            'razorpay-webhook=RAZORPAY_WEBHOOK_SECRET')
           proof_env=(
             'NODE_ENV=production'
             'CI=1'
@@ -1052,14 +1025,11 @@ jobs:
             "RAZORPAY_PLAN_IDS=${RAZORPAY_PLAN_IDS}"
             "BILLING_USD_INR_RATE=${BILLING_USD_INR_RATE}"
           )
-          .github/scripts/create-billing-staging-job.sh \
+          E2E_JOB_DATABASE_URL="$e2e_database_url" \
+            JOB_SECRET_SPECS="$proof_secret_specs" \
+            JOB_ENV_SPECS=$(printf '%s\n' "${proof_env[@]}") \
+            .github/scripts/create-billing-staging-job.sh \
             "$proof_job" "$e2e_image" /app/e2e/billing/run-staging-proof.sh 3600
-          az containerapp job secret set \
-            --name "$proof_job" --resource-group "$RESOURCE_GROUP" \
-            --secrets "${proof_secrets[@]}" --output none
-          az containerapp job update \
-            --name "$proof_job" --resource-group "$RESOURCE_GROUP" \
-            --set-env-vars "${proof_env[@]}" --output none
           wait_for_job "$proof_job" \
             e2e-database-url staging-access better-auth-secret internal-api-key \
             polar-access-token polar-webhook razorpay-key-id razorpay-key-secret razorpay-webhook \
@@ -1224,17 +1194,12 @@ jobs:
 
           # This fresh admin-only job is independent of the proof job and can
           # recover after cancellation. The next run repeats it before provision.
-          .github/scripts/create-billing-staging-job.sh \
+          JOB_SECRET_SPECS='database-admin-url=DATABASE_ADMIN_URL' \
+            JOB_ENV_SPECS=$(printf '%s\n' \
+              'DATABASE_ADMIN_URL=secretref:database-admin-url' \
+              'E2E_ROLE_ACTION=drop') \
+            .github/scripts/create-billing-staging-job.sh \
             "$recovery_job" "$migration_image" \
             /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs 1200
-          az containerapp job secret set \
-            --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
-            --secrets "database-admin-url=${DATABASE_ADMIN_URL}" --output none
-          az containerapp job update \
-            --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
-            --set-env-vars \
-              'DATABASE_ADMIN_URL=secretref:database-admin-url' \
-              'E2E_ROLE_ACTION=drop' \
-            --output none
           wait_for_job "$recovery_job" database-admin-url E2E_ROLE_ACTION=drop
           purge_job "$recovery_job" database-admin-url
