@@ -77,6 +77,12 @@ must_contain "app_runtime_staging"
 must_contain "app_system_staging"
 must_contain "access-restriction list"
 must_contain "application-level staging gate"
+must_contain 'access_status=$(curl --silent --show-error --output /dev/null --dump-header "$access_headers"'
+must_contain '--form-string "token=${STAGING_ACCESS_TOKEN}"'
+must_contain 'Restricted staging access handshake failed with HTTP ${access_status}.'
+must_contain 'set-cookie: __Host-lyrashield-billing-staging='
+must_contain 'grep -Fqi '\''httponly'\'' "$access_headers"'
+must_contain 'grep -Fqi '\''secure'\'' "$access_headers"'
 must_contain "Checkout exact main revision"
 must_contain 'ref: ${{ github.sha }}'
 must_contain "Build and push exact-SHA staging web image"
@@ -437,6 +443,11 @@ grep -Fq 'secure: true' "$access_route"
 grep -Fq 'sameSite: "lax"' "$access_route"
 grep -Fq 'page.goto("/staging/access")' "$e2e_fixture"
 grep -Fq 'getByLabel("Staging access code")' "$e2e_fixture"
+grep -Fq 'const stagingAccessToken = process.env.BILLING_E2E_STAGING_ACCESS_TOKEN' "$e2e_fixture"
+if grep -Fq 'BILLING_E2E_STAGING_ACCESS_TOKEN?.trim()' "$e2e_fixture"; then
+  echo "FAIL: staging access token must remain byte-for-byte intact" >&2
+  exit 1
+fi
 if grep -Fq 'extraHTTPHeaders' "$e2e_fixture"; then
   echo "FAIL: staging access must not persist as a browser-wide header" >&2
   exit 1

@@ -136,7 +136,9 @@ export async function provisionBillingActors(
   const ownerEmail = `billing-owner-${suffix}@example.com`
   const viewerEmail = `billing-viewer-${suffix}@example.com`
   const workspaceName = `Billing E2E ${suffix}`
-  const stagingAccessToken = process.env.BILLING_E2E_STAGING_ACCESS_TOKEN?.trim()
+  // Access tokens are opaque credentials. Preserve every byte so the browser
+  // submits the same value injected into the staged application.
+  const stagingAccessToken = process.env.BILLING_E2E_STAGING_ACCESS_TOKEN
 
   let ownerRequest: APIRequestContext | null = null
   let viewerRequest: APIRequestContext | null = null

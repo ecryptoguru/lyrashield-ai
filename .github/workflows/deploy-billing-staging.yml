@@ -757,6 +757,21 @@ jobs:
             sleep 10
           done
           curl --fail --silent --show-error --max-time 10 "${APP_URL}/api/ready" >/dev/null
+          access_headers=$(mktemp)
+          trap 'rm -f "$access_headers"' EXIT
+          access_status=$(curl --silent --show-error --output /dev/null --dump-header "$access_headers" \
+            --write-out '%{http_code}' --max-time 10 --request POST \
+            --header "Origin: ${APP_URL}" \
+            --form-string "token=${STAGING_ACCESS_TOKEN}" \
+            "${APP_URL}/api/staging/access")
+          [ "$access_status" = "303" ] || {
+            echo "::error::Restricted staging access handshake failed with HTTP ${access_status}."
+            exit 1
+          }
+          grep -Fqi "location: ${APP_URL}/sign-up" "$access_headers"
+          grep -Fqi 'set-cookie: __Host-lyrashield-billing-staging=' "$access_headers"
+          grep -Fqi 'httponly' "$access_headers"
+          grep -Fqi 'secure' "$access_headers"
           [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "${APP_URL}/sign-up")" = "404" ]
           [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "${APP_URL}/staging/access")" = "200" ]
           [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 --request POST "${APP_URL}/billing/webhook")" = "400" ]
