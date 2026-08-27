@@ -30,6 +30,7 @@ test.describe("Polar Sandbox billing proof", () => {
   let affiliateId: string
 
   test.beforeAll(async ({ browser }, testInfo) => {
+    testInfo.setTimeout(120_000)
     actors = await provisionBillingActors(browser, String(testInfo.project.use.baseURL))
     const activeProgram = await prisma.affiliateProgram.findFirst({ where: { active: true } })
     if (!activeProgram) {

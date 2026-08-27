@@ -822,6 +822,7 @@ jobs:
           role_job="lyra-e2e-role-${job_suffix}"
           proof_job="lyra-bill-proof-${job_suffix}"
           recovery_job="lyra-e2e-pre-${job_suffix}"
+          LAST_JOB_EXECUTION=""
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
@@ -875,7 +876,7 @@ jobs:
               return 1
             fi
             execution=$(.github/scripts/start-billing-staging-job.sh "$job" "$RESOURCE_GROUP")
-            for _ in {1..150}; do
+            for _ in {1..180}; do
               if ! status=$(az containerapp job execution show \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
                 --job-execution-name "$execution" \
@@ -885,7 +886,10 @@ jobs:
                 continue
               fi
               case "$status" in
-                Succeeded) return 0 ;;
+                Succeeded)
+                  LAST_JOB_EXECUTION="$execution"
+                  return 0
+                  ;;
                 Failed|Stopped)
                   echo "::error::${job} ended with ${status}."
                   container_name=$(az containerapp job show \
@@ -1070,11 +1074,41 @@ jobs:
             JOB_SECRET_SPECS="$proof_secret_specs" \
             JOB_ENV_SPECS=$(printf '%s\n' "${proof_env[@]}") \
             .github/scripts/create-billing-staging-job.sh \
-            "$proof_job" "$e2e_image" /app/e2e/billing/run-staging-proof.sh 3600
+            "$proof_job" "$e2e_image" /app/e2e/billing/run-staging-proof.sh 1800
           wait_for_job "$proof_job" \
             e2e-database-url staging-access better-auth-secret internal-api-key \
             polar-access-token polar-webhook razorpay-key-id razorpay-key-secret razorpay-webhook \
             "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}" "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"
+
+          proof_container=$(az containerapp job show \
+            --name "$proof_job" --resource-group "$RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].name' --output tsv)
+          proof_log=$(mktemp)
+          az containerapp job logs show \
+            --name "$proof_job" --resource-group "$RESOURCE_GROUP" \
+            --execution "$LAST_JOB_EXECUTION" --container "$proof_container" \
+            --tail 300 --format text | tee "$proof_log"
+          passed_count=$(grep -Eo '[0-9]+ passed' "$proof_log" | tail -1 | cut -d' ' -f1 || true)
+          skipped_count=$(grep -Eo '[0-9]+ skipped' "$proof_log" | tail -1 | cut -d' ' -f1 || true)
+          rm -f "$proof_log"
+          [ -n "$passed_count" ] || {
+            echo "::error::Successful billing proof logs did not contain a Playwright pass count."
+            exit 1
+          }
+          skipped_count=${skipped_count:-0}
+          if [ "$BILLING_STAGING_REGION" = "usd" ]; then
+            provider_mode="Polar Sandbox"
+          else
+            provider_mode="Razorpay Test Mode"
+          fi
+          {
+            echo "### Billing staging proof passed"
+            echo "- Source SHA: \`${IMAGE_SHA}\`"
+            echo "- E2E digest: \`${E2E_DIGEST}\`"
+            echo "- Region/provider: \`${BILLING_STAGING_REGION}\` / ${provider_mode}"
+            echo "- Playwright result: ${passed_count} passed, ${skipped_count} skipped"
+            echo "- Production admission modes remained \`off\`."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Recover and remove disposable E2E database access
         if: ${{ always() && steps.azure-login.outcome == 'success' }}
