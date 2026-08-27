@@ -474,11 +474,15 @@ jobs:
             fi
             execution=$(.github/scripts/start-billing-staging-job.sh "$job" "$RESOURCE_GROUP")
             for _ in {1..150}; do
-              status=$(az containerapp job execution show \
+              if ! status=$(az containerapp job execution show \
                 --name "$job" \
                 --resource-group "$RESOURCE_GROUP" \
                 --job-execution-name "$execution" \
-                --query properties.status --output tsv)
+                --query properties.status --output tsv 2>/dev/null); then
+                # Azure can accept a job start before its execution is queryable.
+                sleep 10
+                continue
+              fi
               case "$status" in
                 Succeeded) return 0 ;;
                 Failed|Stopped)
@@ -842,10 +846,14 @@ jobs:
             fi
             execution=$(.github/scripts/start-billing-staging-job.sh "$job" "$RESOURCE_GROUP")
             for _ in {1..150}; do
-              status=$(az containerapp job execution show \
+              if ! status=$(az containerapp job execution show \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
                 --job-execution-name "$execution" \
-                --query properties.status --output tsv)
+                --query properties.status --output tsv 2>/dev/null); then
+                # Azure can accept a job start before its execution is queryable.
+                sleep 10
+                continue
+              fi
               case "$status" in
                 Succeeded) return 0 ;;
                 Failed|Stopped)
@@ -1163,10 +1171,14 @@ jobs:
             fi
             execution=$(.github/scripts/start-billing-staging-job.sh "$job" "$RESOURCE_GROUP")
             for _ in {1..150}; do
-              status=$(az containerapp job execution show \
+              if ! status=$(az containerapp job execution show \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
                 --job-execution-name "$execution" \
-                --query properties.status --output tsv)
+                --query properties.status --output tsv 2>/dev/null); then
+                # Azure can accept a job start before its execution is queryable.
+                sleep 10
+                continue
+              fi
               case "$status" in
                 Succeeded) return 0 ;;
                 Failed|Stopped)

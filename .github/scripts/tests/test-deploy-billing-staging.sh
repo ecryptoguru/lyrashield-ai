@@ -189,6 +189,9 @@ while IFS= read -r wait_helper_start; do
     'template_secret_refs" == *" ${expected_secret} "*' \
     "--query \"properties.template.containers[0].env[?name=='\${expected_name}'].value | [0]\"" \
     "--query 'properties.template.containers[0].name'" \
+    'if ! status=$(az containerapp job execution show' \
+    '--query properties.status --output tsv 2>/dev/null); then' \
+    'Azure can accept a job start before its execution is queryable.' \
     "--query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}'" \
     '--output jsonc || true' \
     'az containerapp job logs show' \
