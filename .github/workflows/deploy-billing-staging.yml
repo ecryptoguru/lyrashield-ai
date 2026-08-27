@@ -670,6 +670,8 @@ jobs:
             'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
             'BILLING_STAGING_ADMISSION=restricted'
             'BILLING_STAGING_ACCESS_TOKEN=secretref:billing-staging-access'
+            # Two real browser actors each sign up, sign out, and sign in during proof.
+            'RATE_LIMIT_AUTH_MAX=1000'
             "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}"
             'REDIS_URL=secretref:redis-url'
             "BETTER_AUTH_URL=${APP_URL}"
