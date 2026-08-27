@@ -583,45 +583,19 @@ jobs:
             exit 0
           fi
 
-          read_secret() {
-            timeout --foreground 180s az keyvault secret show \
-              --vault-name "$AZURE_KEY_VAULT_NAME" \
-              --name "$1" \
-              --query value \
-              --output tsv
-          }
-
-          S3_ENDPOINT=$(read_secret worker-r2-endpoint)
-          S3_BUCKET=$(read_secret worker-r2-bucket)
-          S3_ACCESS_KEY=$(read_secret worker-r2-access-key)
-          S3_SECRET_KEY=$(read_secret worker-r2-secret-key)
-          for value in "$S3_ENDPOINT" "$S3_BUCKET" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"; do
-            if [ -z "$value" ]; then
-              echo "::error::Evidence storage credential is absent or empty."
-              exit 1
-            fi
-            echo "::add-mask::$value"
-          done
-          export S3_ENDPOINT S3_BUCKET
-          node -e '
-            const endpoint = new URL(process.env.S3_ENDPOINT);
-            if (endpoint.protocol !== "https:" || !endpoint.hostname || !process.env.S3_BUCKET) process.exit(1);
-          ' || {
-            echo "::error::Evidence storage endpoint or bucket is invalid."
-            exit 1
-          }
+          vault_base="https://${AZURE_KEY_VAULT_NAME}.vault.azure.net/secrets"
 
           timeout --foreground 180s az containerapp secret set \
             --only-show-errors \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --secrets \
-              "evidence-s3-endpoint=${S3_ENDPOINT}" \
-              "evidence-s3-bucket=${S3_BUCKET}" \
-              "evidence-s3-access=${S3_ACCESS_KEY}" \
-              "evidence-s3-secret=${S3_SECRET_KEY}" \
+              "evidence-s3-endpoint=keyvaultref:${vault_base}/worker-r2-endpoint,identityref:system" \
+              "evidence-s3-bucket=keyvaultref:${vault_base}/worker-r2-bucket,identityref:system" \
+              "evidence-s3-access=keyvaultref:${vault_base}/worker-r2-access-key,identityref:system" \
+              "evidence-s3-secret=keyvaultref:${vault_base}/worker-r2-secret-key,identityref:system" \
             --output none
-          echo "Evidence storage credentials synced to the app Container App."
+          echo "Evidence storage Key Vault references synced to the app Container App."
 
       # secretref: below requires the Container App to already define secrets named
       # upstash-redis-rest-url / upstash-redis-rest-token. Nothing provisioned those, so the

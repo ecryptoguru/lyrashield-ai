@@ -262,6 +262,10 @@ describe("worker Docker runtime", () => {
   })
 
   it("binds evidence storage only to the web app runtime", () => {
+    const evidenceSync = deployWorkflow.slice(
+      deployWorkflow.indexOf("- name: Sync evidence storage credentials to app Container App"),
+      deployWorkflow.indexOf("- name: Sync Upstash secrets to Container Apps")
+    )
     const appDeployment = deployWorkflow.slice(
       deployWorkflow.indexOf("- name: Deploy app Container App"),
       deployWorkflow.indexOf("- name: Deploy scanner Container App")
@@ -271,14 +275,15 @@ describe("worker Docker runtime", () => {
       deployWorkflow.indexOf("- name: Deploy egress-proxy Container App")
     )
 
-    for (const secret of [
-      "worker-r2-endpoint",
-      "worker-r2-bucket",
-      "worker-r2-access-key",
-      "worker-r2-secret-key",
+    for (const binding of [
+      "evidence-s3-endpoint=keyvaultref:${vault_base}/worker-r2-endpoint,identityref:system",
+      "evidence-s3-bucket=keyvaultref:${vault_base}/worker-r2-bucket,identityref:system",
+      "evidence-s3-access=keyvaultref:${vault_base}/worker-r2-access-key,identityref:system",
+      "evidence-s3-secret=keyvaultref:${vault_base}/worker-r2-secret-key,identityref:system",
     ]) {
-      expect(deployWorkflow).toContain(`read_secret ${secret}`)
+      expect(evidenceSync).toContain(binding)
     }
+    expect(evidenceSync).not.toContain("az keyvault secret show")
     for (const binding of [
       '"S3_ENDPOINT=secretref:evidence-s3-endpoint"',
       '"S3_BUCKET=secretref:evidence-s3-bucket"',
