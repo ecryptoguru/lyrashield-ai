@@ -67,6 +67,21 @@ async function provision(client, adminUrl) {
     [password, validUntil]
   )
   await client.query(statement.rows[0].sql)
+  await client.query(
+    `DO $revoke_memberships$
+       DECLARE membership record;
+       BEGIN
+         FOR membership IN
+           SELECT granted_role.rolname AS granted_role, member_role.rolname AS member_role
+             FROM pg_auth_members AS grant_record
+             JOIN pg_roles AS member_role ON member_role.oid = grant_record.member
+             JOIN pg_roles AS granted_role ON granted_role.oid = grant_record.roleid
+            WHERE member_role.rolname = '${E2E_ROLE}' OR granted_role.rolname = '${E2E_ROLE}'
+         LOOP
+           EXECUTE format('REVOKE %I FROM %I', membership.granted_role, membership.member_role);
+         END LOOP;
+       END $revoke_memberships$;`
+  )
   await client.query(`DO $grant$ BEGIN
     EXECUTE format('GRANT CONNECT ON DATABASE %I TO ${E2E_ROLE}', current_database());
   END $grant$;`)
