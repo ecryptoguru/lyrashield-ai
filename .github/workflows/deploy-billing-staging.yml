@@ -747,15 +747,28 @@ jobs:
           deployed_image=$(az containerapp show \
             --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
             --query 'properties.template.containers[0].image' --output tsv)
+          target_revision=$(az containerapp show \
+            --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
+            --query properties.latestRevisionName --output tsv)
           [ "https://${fqdn}" = "$APP_URL" ]
           [ "$deployed_image" = "$web_image" ]
+          [ -n "$target_revision" ]
 
           for _ in {1..30}; do
-            if curl --fail --silent --show-error --max-time 10 "${APP_URL}/api/ready" >/dev/null; then
+            revision_state=$(az containerapp revision show \
+              --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
+              --revision "$target_revision" \
+              --query "join('|', [properties.provisioningState, properties.healthState, to_string(properties.trafficWeight), properties.template.containers[0].image])" \
+              --output tsv 2>/dev/null || true)
+            if [ "$revision_state" = "Provisioned|Healthy|100|${web_image}" ]; then
               break
             fi
             sleep 10
           done
+          [ "$revision_state" = "Provisioned|Healthy|100|${web_image}" ] || {
+            echo "::error::Billing staging revision ${target_revision} did not become healthy at 100% traffic."
+            exit 1
+          }
           curl --fail --silent --show-error --max-time 10 "${APP_URL}/api/ready" >/dev/null
           access_headers=$(mktemp)
           trap 'rm -f "$access_headers"' EXIT
