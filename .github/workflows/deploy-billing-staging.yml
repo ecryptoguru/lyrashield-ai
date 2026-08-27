@@ -224,6 +224,36 @@ jobs:
             exit 1
           }
 
+      - name: Allow required staging database extensions
+        shell: bash
+        run: |
+          set -euo pipefail
+          current=$(az postgres flexible-server parameter show \
+            --resource-group "$RESOURCE_GROUP" \
+            --server-name "$DATABASE_SERVER" \
+            --name azure.extensions \
+            --query value --output tsv)
+          case ",${current,,}," in
+            *,pgcrypto,*) ;;
+            *)
+              az postgres flexible-server parameter set \
+                --resource-group "$RESOURCE_GROUP" \
+                --server-name "$DATABASE_SERVER" \
+                --name azure.extensions \
+                --value "${current:+${current},}pgcrypto" \
+                --output none
+              ;;
+          esac
+          actual=$(az postgres flexible-server parameter show \
+            --resource-group "$RESOURCE_GROUP" \
+            --server-name "$DATABASE_SERVER" \
+            --name azure.extensions \
+            --query value --output tsv)
+          case ",${actual,,}," in
+            *,pgcrypto,*) ;;
+            *) echo "::error::pgcrypto is not allow-listed on isolated billing staging."; exit 1 ;;
+          esac
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
