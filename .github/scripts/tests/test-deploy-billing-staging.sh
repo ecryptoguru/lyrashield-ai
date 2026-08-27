@@ -183,8 +183,9 @@ while IFS= read -r wait_helper_start; do
     'az containerapp job secret list' \
     "--query 'properties.template.containers[].env[].secretRef'" \
     'for expected_setting in "$@"' \
-    'configured_secrets" == *" ${expected_setting} "*' \
-    'template_secret_refs" == *" ${expected_setting} "*' \
+    "printf -v expected_secret '%s-%s' \"\$expected_setting\" \"\$job\"" \
+    'configured_secrets" == *" ${expected_secret} "*' \
+    'template_secret_refs" == *" ${expected_secret} "*' \
     "--query \"properties.template.containers[0].env[?name=='\${expected_name}'].value | [0]\"" \
     "--query 'properties.template.containers[0].name'" \
     "--query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}'" \
@@ -287,9 +288,9 @@ PATH="$mock_dir:$PATH" \
     1200
 
 jq -e '
-  .properties.configuration.secrets == [{name: "database-admin-url", value: "test-secret-value"}] and
+  .properties.configuration.secrets == [{name: "database-admin-url-lyra-stage-atomic-test", value: "test-secret-value"}] and
   .properties.template.containers[0].env == [
-    {name: "DATABASE_ADMIN_URL", secretRef: "database-admin-url"},
+    {name: "DATABASE_ADMIN_URL", secretRef: "database-admin-url-lyra-stage-atomic-test"},
     {name: "E2E_ROLE_ACTION", value: "drop"}
   ]
 ' "$mock_body" >/dev/null
