@@ -52,6 +52,10 @@ must_contain 'DATABASE_SERVER: ${{ vars.STAGING_DATABASE_SERVER }}'
 must_contain '[ "$DATABASE_SERVER" = "lyrashield-billing-stage-pg" ]'
 must_contain 'az postgres flexible-server show'
 must_contain 'Microsoft.DBforPostgreSQL/flexibleServers/${DATABASE_SERVER}'
+must_contain 'Allow required staging database extensions'
+must_contain '--name azure.extensions'
+must_contain '--value "${current:+${current},}pgcrypto"'
+must_contain 'pgcrypto is not allow-listed on isolated billing staging.'
 must_contain 'actual_database_host'
 must_contain 'pull_principal_id=$(az identity show'
 must_contain '--assignee-object-id "$pull_principal_id"'
@@ -177,6 +181,10 @@ grep -Fq 'await import("../../packages/config/src/index.ts")' "$e2e_config_smoke
 grep -Fq 'pnpm --filter @lyrashield/db exec prisma migrate deploy 2>&1' "$migration_script"
 grep -Fq 'BILLING_STAGING_RECOVER_MIGRATION' "$recovery_script"
 grep -Fq 'staging schema contains migration effects; refusing to rewrite migration history' "$recovery_script"
+grep -Fq 'billing_staging_migration_partial_state_reverted' "$recovery_script"
+grep -Fq 'DROP TABLE "AiSystemProfileVersion"' "$recovery_script"
+grep -Fq 'ALTER TABLE "AiSystemProfile" DROP COLUMN "currentVersionId"' "$recovery_script"
+grep -Fq 'NOT EXISTS (SELECT 1 FROM pg_extension' "$recovery_script"
 grep -Fq '"--rolled-back",' "$recovery_script"
 grep -Fq 'billing_staging_migration_failed exit_code=${migration_status}' "$migration_script"
 grep -Fq 'pnpm --filter @lyrashield/db exec prisma migrate status 2>&1 || true' "$migration_script"

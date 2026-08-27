@@ -12,7 +12,7 @@ function required(name) {
   return value
 }
 
-async function verifyStaleRecord(client) {
+async function prepareStaleRecordRollback(client) {
   const migration = await client.query(
     `SELECT finished_at, rolled_back_at, applied_steps_count
        FROM "_prisma_migrations"
@@ -39,15 +39,68 @@ async function verifyStaleRecord(client) {
        ) AS has_current_version_id,
        to_regclass('public."AiSystemProfileVersion"') IS NOT NULL AS has_version_table`
   )
+  if (!schema.rows[0].has_profile_table) {
+    throw new Error(
+      "staging schema contains migration effects; refusing to rewrite migration history"
+    )
+  }
+
+  if (!schema.rows[0].has_current_version_id && !schema.rows[0].has_version_table) {
+    return
+  }
+
+  if (!schema.rows[0].has_current_version_id || !schema.rows[0].has_version_table) {
+    throw new Error(
+      "staging schema contains migration effects; refusing to rewrite migration history"
+    )
+  }
+
+  const partial = await client.query(
+    `SELECT
+       (SELECT COUNT(*)::integer FROM "AiSystemProfileVersion") AS version_rows,
+       (SELECT COUNT(*)::integer FROM "AiSystemProfile" WHERE "currentVersionId" IS NOT NULL) AS linked_profiles,
+       to_regclass('public."AiSystemProfile_currentVersionId_key"') IS NOT NULL AS has_profile_index,
+       to_regclass('public."AiSystemProfileVersion_aiSystemProfileId_version_key"') IS NOT NULL AS has_version_index,
+       NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto') AS pgcrypto_missing,
+       NOT EXISTS (
+         SELECT 1 FROM pg_constraint
+          WHERE conname IN (
+            'AiSystemProfileVersion_aiSystemProfileId_fkey',
+            'AiSystemProfile_currentVersionId_fkey'
+          )
+       ) AS foreign_keys_missing,
+       NOT EXISTS (
+         SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public' AND tablename = 'AiSystemProfileVersion'
+       ) AS policy_missing`
+  )
+  const state = partial.rows[0]
   if (
-    !schema.rows[0].has_profile_table ||
-    schema.rows[0].has_current_version_id ||
-    schema.rows[0].has_version_table
+    Number(state.version_rows) !== 0 ||
+    Number(state.linked_profiles) !== 0 ||
+    !state.has_profile_index ||
+    !state.has_version_index ||
+    !state.pgcrypto_missing ||
+    !state.foreign_keys_missing ||
+    !state.policy_missing
   ) {
     throw new Error(
       "staging schema contains migration effects; refusing to rewrite migration history"
     )
   }
+
+  await client.query("BEGIN")
+  try {
+    await client.query('DROP TABLE "AiSystemProfileVersion"')
+    await client.query('ALTER TABLE "AiSystemProfile" DROP COLUMN "currentVersionId"')
+    await client.query("COMMIT")
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  }
+  console.log(
+    `billing_staging_migration_partial_state_reverted migration=${MIGRATION} reason=pgcrypto_allowlist`
+  )
 }
 
 async function recover() {
@@ -59,7 +112,7 @@ async function recover() {
   const client = new Client({ connectionString: adminUrl })
   await client.connect()
   try {
-    await verifyStaleRecord(client)
+    await prepareStaleRecordRollback(client)
   } finally {
     await client.end()
   }
