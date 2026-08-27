@@ -183,7 +183,7 @@ while IFS= read -r wait_helper_start; do
     'az containerapp job secret list' \
     "--query 'properties.template.containers[].env[].secretRef'" \
     'for expected_setting in "$@"' \
-    'expected_secret="${expected_setting}-${job}"' \
+    "printf -v expected_secret '%s-%s' \"\$expected_setting\" \"\$job\"" \
     'configured_secrets" == *" ${expected_secret} "*' \
     'template_secret_refs" == *" ${expected_secret} "*' \
     "--query \"properties.template.containers[0].env[?name=='\${expected_name}'].value | [0]\"" \

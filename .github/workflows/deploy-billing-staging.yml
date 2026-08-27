@@ -450,7 +450,7 @@ jobs:
                         --output tsv 2>/dev/null || true)
                       [ "$actual_value" = "$expected_value" ] && continue
                     else
-                      expected_secret="${expected_setting}-${job}"
+                      printf -v expected_secret '%s-%s' "$expected_setting" "$job"
                       if [[ "$configured_secrets" == *" ${expected_secret} "* && \
                         "$template_secret_refs" == *" ${expected_secret} "* ]]; then
                         continue
@@ -831,7 +831,7 @@ jobs:
                         --output tsv 2>/dev/null || true)
                       [ "$actual_value" = "$expected_value" ] && continue
                     else
-                      expected_secret="${expected_setting}-${job}"
+                      printf -v expected_secret '%s-%s' "$expected_setting" "$job"
                       if [[ "$configured_secrets" == *" ${expected_secret} "* && \
                         "$template_secret_refs" == *" ${expected_secret} "* ]]; then
                         continue
@@ -1169,7 +1169,7 @@ jobs:
                         --output tsv 2>/dev/null || true)
                       [ "$actual_value" = "$expected_value" ] && continue
                     else
-                      expected_secret="${expected_setting}-${job}"
+                      printf -v expected_secret '%s-%s' "$expected_setting" "$job"
                       if [[ "$configured_secrets" == *" ${expected_secret} "* && \
                         "$template_secret_refs" == *" ${expected_secret} "* ]]; then
                         continue
