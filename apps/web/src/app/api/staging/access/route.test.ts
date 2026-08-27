@@ -12,10 +12,13 @@ vi.mock("@/lib/billing-staging-access", () => ({
 
 import { POST } from "./route"
 
-function request(origin = "https://stage.example") {
+function request(
+  origin = "https://stage.example",
+  url = "https://stage.example/api/staging/access"
+) {
   const body = new FormData()
   body.set("token", "secret-access-code")
-  return new Request("https://stage.example/api/staging/access", {
+  return new Request(url, {
     method: "POST",
     headers: { origin },
     body,
@@ -40,6 +43,13 @@ describe("POST /api/staging/access", () => {
     expect(cookie).toContain("SameSite=lax")
     expect(cookie).toContain("Path=/")
     expect(cookie).not.toContain("secret-access-code")
+  })
+
+  it("redirects to the configured public origin behind a reverse proxy", async () => {
+    const response = await POST(
+      request("https://stage.example", "https://0.0.0.0:3000/api/staging/access")
+    )
+    expect(response.headers.get("location")).toBe("https://stage.example/sign-up")
   })
 
   it("rejects cross-origin, invalid, and non-staging requests", async () => {

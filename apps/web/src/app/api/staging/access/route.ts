@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
   const value = createBillingStagingAccessCookieValue()
   if (!value) return new NextResponse(null, { status: 403 })
-  const response = NextResponse.redirect(new URL("/sign-up", request.url), 303)
+  const response = NextResponse.redirect(new URL("/sign-up", expectedOrigin), 303)
   response.cookies.set(BILLING_STAGING_ACCESS_COOKIE, value, {
     httpOnly: true,
     secure: true,
