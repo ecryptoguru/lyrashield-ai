@@ -421,7 +421,24 @@ jobs:
           role_job="lyrashield-stage-db-role"
 
           wait_for_job() {
-            local job=$1 execution status container_name
+            local job=$1 execution status container_name provisioning_state
+            for _ in {1..60}; do
+              provisioning_state=$(az containerapp job show \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --query properties.provisioningState --output tsv)
+              case "$provisioning_state" in
+                Succeeded) break ;;
+                Failed)
+                  echo "::error::${job} failed to provision."
+                  return 1
+                  ;;
+              esac
+              sleep 5
+            done
+            if [ "$provisioning_state" != "Succeeded" ]; then
+              echo "::error::Timed out provisioning ${job}."
+              return 1
+            fi
             execution=$(az containerapp job start \
               --name "$job" \
               --resource-group "$RESOURCE_GROUP" \
@@ -756,7 +773,24 @@ jobs:
           recovery_job="lyrashield-stage-e2e-cleanup"
 
           wait_for_job() {
-            local job=$1 execution status container_name
+            local job=$1 execution status container_name provisioning_state
+            for _ in {1..60}; do
+              provisioning_state=$(az containerapp job show \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --query properties.provisioningState --output tsv)
+              case "$provisioning_state" in
+                Succeeded) break ;;
+                Failed)
+                  echo "::error::${job} failed to provision."
+                  return 1
+                  ;;
+              esac
+              sleep 5
+            done
+            if [ "$provisioning_state" != "Succeeded" ]; then
+              echo "::error::Timed out provisioning ${job}."
+              return 1
+            fi
             execution=$(az containerapp job start \
               --name "$job" --resource-group "$RESOURCE_GROUP" \
               --query name --output tsv)
@@ -1040,7 +1074,24 @@ jobs:
           purge_all_jobs
 
           wait_for_job() {
-            local job=$1 execution status container_name
+            local job=$1 execution status container_name provisioning_state
+            for _ in {1..60}; do
+              provisioning_state=$(az containerapp job show \
+                --name "$job" --resource-group "$RESOURCE_GROUP" \
+                --query properties.provisioningState --output tsv)
+              case "$provisioning_state" in
+                Succeeded) break ;;
+                Failed)
+                  echo "::error::${job} failed to provision."
+                  return 1
+                  ;;
+              esac
+              sleep 5
+            done
+            if [ "$provisioning_state" != "Succeeded" ]; then
+              echo "::error::Timed out provisioning ${job}."
+              return 1
+            fi
             execution=$(az containerapp job start \
               --name "$job" --resource-group "$RESOURCE_GROUP" \
               --query name --output tsv)

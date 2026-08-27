@@ -110,6 +110,7 @@ must_contain 'lyrashield-stage-e2e-cleanup'
 must_contain 'az containerapp job secret remove'
 must_contain 'az containerapp job stop'
 must_contain 'Timed out stopping active executions'
+must_contain 'Timed out provisioning ${job}'
 must_contain 'TRUSTED_PROXY_IP_HEADER=x-forwarded-for'
 must_contain 'LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0'
 must_contain 'PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS}'
@@ -297,6 +298,13 @@ grep -Fq 'page.goto("/staging/access")' "$e2e_fixture"
 grep -Fq 'getByLabel("Staging access code")' "$e2e_fixture"
 if grep -Fq 'extraHTTPHeaders' "$e2e_fixture"; then
   echo "FAIL: staging access must not persist as a browser-wide header" >&2
+  exit 1
+fi
+
+job_start_count=$(grep -Fc 'execution=$(az containerapp job start' "$workflow")
+job_provision_wait_count=$(grep -Fc 'provisioning_state=$(az containerapp job show' "$workflow")
+if [ "$job_start_count" -ne "$job_provision_wait_count" ]; then
+  echo "FAIL: every Container Apps job start must wait for provisioning" >&2
   exit 1
 fi
 
