@@ -64,6 +64,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
   test.afterAll(async ({ browser: _browser }, testInfo) => {
     testInfo.setTimeout(120_000)
     const cleanupFailures: string[] = []
+    let actorCleanupError: unknown
     try {
       for (const subscriptionId of hostedSubscriptionIds) {
         if (!(await cancelRazorpaySubscription(subscriptionId))) {
@@ -76,10 +77,20 @@ test.describe("Razorpay Test Mode billing proof", () => {
         }
       }
     } finally {
-      await actors?.cleanup()
+      try {
+        await actors?.cleanup()
+      } catch (error) {
+        actorCleanupError = error
+      }
     }
+    const cleanupErrors = actorCleanupError ? [actorCleanupError] : []
     if (cleanupFailures.length > 0) {
-      throw new Error(`Razorpay Test objects were not canceled: ${cleanupFailures.join(",")}`)
+      cleanupErrors.push(
+        new Error(`Razorpay Test objects were not canceled: ${cleanupFailures.join(",")}`)
+      )
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(cleanupErrors, "Razorpay Test cleanup failed")
     }
   })
 
