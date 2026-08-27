@@ -67,11 +67,20 @@ async function assertRestrictedRole(client, role) {
        FROM pg_auth_members AS membership
        JOIN pg_roles AS member_role ON member_role.oid = membership.member
        JOIN pg_roles AS granted_role ON granted_role.oid = membership.roleid
-      WHERE member_role.rolname = $1 OR granted_role.rolname = $1`,
+      WHERE member_role.rolname = $1
+         OR (
+           granted_role.rolname = $1
+           AND NOT (
+             member_role.rolname = current_user
+             AND membership.admin_option
+             AND NOT membership.inherit_option
+             AND NOT membership.set_option
+           )
+         )`,
     [role]
   )
   if (memberships.rowCount !== 0) {
-    throw new Error(`${role} must not have role memberships`)
+    throw new Error(`${role} has unexpected role memberships`)
   }
 }
 
