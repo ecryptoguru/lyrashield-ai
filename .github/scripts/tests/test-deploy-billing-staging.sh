@@ -9,6 +9,7 @@ migration_script="$repo/packages/db/scripts/run-billing-staging-migrations.sh"
 recovery_script="$repo/packages/db/scripts/recover-billing-staging-migration.mjs"
 role_script="$repo/packages/db/scripts/provision-billing-staging-roles.mjs"
 e2e_role_script="$repo/packages/db/scripts/manage-billing-staging-e2e-role.mjs"
+job_creator="$repo/.github/scripts/create-billing-staging-job.sh"
 e2e_runner="$repo/e2e/billing/run-staging-proof.sh"
 e2e_config_smoke="$repo/e2e/billing/verify-staging-config.sh"
 e2e_razorpay="$repo/e2e/billing/razorpay-upi-cap-fallback.spec.ts"
@@ -91,6 +92,7 @@ must_contain "Verify staging image provenance and owned job executables"
 must_contain '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 must_contain "Delete one-shot database jobs"
 must_contain "az containerapp job delete"
+must_contain ".github/scripts/create-billing-staging-job.sh"
 must_contain "lyrashield-stage-migrate"
 must_contain "lyra-stage-migration-recovery"
 must_contain "lyrashield-stage-db-role"
@@ -143,6 +145,7 @@ for job in \
   }
 done
 must_not_contain "--command /bin/sh"
+must_not_contain "az containerapp job create"
 must_not_contain "ROLE_SCRIPT="
 must_not_contain "DATABASE_SYSTEM_URL=secretref:database-admin-url"
 must_not_contain "POLAR_BILLING_ADMISSION=public"
@@ -180,6 +183,7 @@ test -x "$migration_script"
 test -x "$recovery_script"
 test -x "$role_script"
 test -x "$e2e_role_script"
+test -x "$job_creator"
 test -x "$e2e_runner"
 test -x "$e2e_config_smoke"
 grep -Fq '/app/e2e/billing/verify-staging-config.sh' "$e2e_runner"
@@ -210,6 +214,13 @@ grep -Fq 'privileges do not match the exact license-table contract' "$role_scrip
 grep -Fq '"License:DELETE"' "$role_script"
 grep -Fq '"LicenseKey:UPDATE"' "$role_script"
 grep -Fq 'const E2E_ROLE = "billing_e2e_staging"' "$e2e_role_script"
+grep -Fq 'api-version=2025-01-01' "$job_creator"
+grep -Fq 'registries: [{server: $registry, identity: $identity}]' "$job_creator"
+grep -Fq 'az rest' "$job_creator"
+if grep -Fq 'role assignment create' "$job_creator"; then
+  echo "FAIL: staging job creation must not require role-assignment writes" >&2
+  exit 1
+fi
 grep -Fq 'NOINHERIT NOREPLICATION BYPASSRLS' "$e2e_role_script"
 grep -Fq 'VALID UNTIL %L' "$e2e_role_script"
 grep -Fq 'E2E_ROLE_TTL_MS = 2 * 60 * 60 * 1_000' "$e2e_role_script"
@@ -243,7 +254,7 @@ if [ -z "$cleanup_stop_line" ] || [ -z "$cleanup_secret_line" ] || [ -z "$cleanu
   echo "FAIL: always cleanup must stop executions before removing secrets and deleting jobs" >&2
   exit 1
 fi
-proof_env_block=$(sed -n '/proof_env=(/,/az containerapp job create/p' "$workflow")
+proof_env_block=$(sed -n '/proof_env=(/,/create-billing-staging-job.sh/p' "$workflow")
 for required_job_env in \
   'NODE_ENV=production' \
   'TRUSTED_PROXY_IP_HEADER=x-forwarded-for' \
