@@ -472,10 +472,7 @@ jobs:
               echo "::error::Timed out applying the secret-bearing template for ${job}."
               return 1
             fi
-            execution=$(az containerapp job start \
-              --name "$job" \
-              --resource-group "$RESOURCE_GROUP" \
-              --query name --output tsv)
+            execution=$(.github/scripts/start-billing-staging-job.sh "$job" "$RESOURCE_GROUP")
             for _ in {1..150}; do
               status=$(az containerapp job execution show \
                 --name "$job" \
@@ -853,9 +850,7 @@ jobs:
               echo "::error::Timed out applying the secret-bearing template for ${job}."
               return 1
             fi
-            execution=$(az containerapp job start \
-              --name "$job" --resource-group "$RESOURCE_GROUP" \
-              --query name --output tsv)
+            execution=$(.github/scripts/start-billing-staging-job.sh "$job" "$RESOURCE_GROUP")
             for _ in {1..150}; do
               status=$(az containerapp job execution show \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
@@ -1191,9 +1186,7 @@ jobs:
               echo "::error::Timed out applying the secret-bearing template for ${job}."
               return 1
             fi
-            execution=$(az containerapp job start \
-              --name "$job" --resource-group "$RESOURCE_GROUP" \
-              --query name --output tsv)
+            execution=$(.github/scripts/start-billing-staging-job.sh "$job" "$RESOURCE_GROUP")
             for _ in {1..150}; do
               status=$(az containerapp job execution show \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
