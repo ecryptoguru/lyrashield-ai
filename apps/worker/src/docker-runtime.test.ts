@@ -261,6 +261,37 @@ describe("worker Docker runtime", () => {
     expect(deployWorkflow).toContain("Immutable evidence keyring secret already exists")
   })
 
+  it("binds evidence storage only to the web app runtime", () => {
+    const appDeployment = deployWorkflow.slice(
+      deployWorkflow.indexOf("- name: Deploy app Container App"),
+      deployWorkflow.indexOf("- name: Deploy scanner Container App")
+    )
+    const scannerDeployment = deployWorkflow.slice(
+      deployWorkflow.indexOf("- name: Deploy scanner Container App"),
+      deployWorkflow.indexOf("- name: Deploy egress-proxy Container App")
+    )
+
+    for (const secret of [
+      "worker-r2-endpoint",
+      "worker-r2-bucket",
+      "worker-r2-access-key",
+      "worker-r2-secret-key",
+    ]) {
+      expect(deployWorkflow).toContain(`read_secret ${secret}`)
+    }
+    for (const binding of [
+      '"S3_ENDPOINT=secretref:evidence-s3-endpoint"',
+      '"S3_BUCKET=secretref:evidence-s3-bucket"',
+      '"S3_ACCESS_KEY=secretref:evidence-s3-access"',
+      '"S3_SECRET_KEY=secretref:evidence-s3-secret"',
+      '"S3_REGION=auto"',
+    ]) {
+      expect(appDeployment).toContain(binding)
+      expect(scannerDeployment).not.toContain(binding)
+    }
+    expect(scannerDeployment).not.toContain("LYRASHIELD_EVIDENCE_KEK")
+  })
+
   it("shares engine work and temp paths with the host Docker daemon", () => {
     expect(workerRunner).toContain("worker_shared_root=/var/lib/lyrashield/worker")
     expect(workerRunner).toContain('--env LYRASHIELD_ENGINE_WORK_ROOT="$worker_shared_root"')

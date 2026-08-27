@@ -484,6 +484,10 @@ S3_BUCKET="lyrashield-evidence"
 S3_ACCESS_KEY="..."
 S3_SECRET_KEY="..."
 S3_REGION="auto"
+# The deploy workflow reads the existing worker-r2-* values from Key Vault and
+# copies them into app-only Container App secret references. The scanner never
+# receives evidence storage credentials. Key Vault remains the shared source of
+# truth for the app and worker; this sync does not rotate or rewrite it.
 # Evidence envelope key (REQUIRED with the S3 block — uploads fail closed without it).
 # Base64 of exactly 32 bytes. Generate ONCE and store durably before provisioning:
 #   node packages/evidence-storage/scripts/generate-kek.mjs

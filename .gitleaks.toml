@@ -14,6 +14,8 @@ paths = [
 ]
 regexes = [
   '''secretAccessKey:\s*env\.S3_SECRET_KEY''',
+  # Azure Container Apps secret reference name, never the bucket value.
+  '''S3_BUCKET=secretref:evidence-s3-bucket''',
   '''dummy-ci-only-secret-not-a-real-credential''',
   # Synthetic service_role JWT used only by the URL scanner regression fixture.
   '''eyJhbGciOiJIUzI1NiJ9\.eyJyb2xlIjoic2VydmljZV9yb2xlIn0\.signature123''',
