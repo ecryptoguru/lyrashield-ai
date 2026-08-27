@@ -24,15 +24,23 @@ env_specs=${JOB_ENV_SPECS:-}
 [[ "$replica_timeout" =~ ^[1-9][0-9]*$ ]]
 
 secrets='[]'
+secret_refs='{}'
 while IFS='=' read -r secret_name value_variable; do
   [ -n "$secret_name" ] || continue
   [[ "$secret_name" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ ]]
   [[ "$value_variable" =~ ^[A-Z][A-Z0-9_]*$ ]]
+  # Execution admission can retain a deleted job's logical secret alias. Bind
+  # the physical alias to this immutable one-shot job resource.
+  physical_secret_name="${secret_name}-${job_name}"
   secret_value=${!value_variable:?}
   secrets=$(jq -c \
-    --arg name "$secret_name" \
+    --arg name "$physical_secret_name" \
     --arg value "$secret_value" \
     '. + [{name: $name, value: $value}]' <<< "$secrets")
+  secret_refs=$(jq -c \
+    --arg logical_name "$secret_name" \
+    --arg physical_name "$physical_secret_name" \
+    '. + {($logical_name): $physical_name}' <<< "$secret_refs")
 done <<< "$secret_specs"
 
 container_env='[]'
@@ -40,8 +48,10 @@ while IFS='=' read -r env_name env_value; do
   [ -n "$env_name" ] || continue
   [[ "$env_name" =~ ^[A-Z][A-Z0-9_]*$ ]]
   if [[ "$env_value" == secretref:* ]]; then
-    secret_ref=${env_value#secretref:}
-    jq -e --arg name "$secret_ref" 'any(.name == $name)' <<< "$secrets" >/dev/null
+    logical_secret_ref=${env_value#secretref:}
+    secret_ref=$(jq -er \
+      --arg name "$logical_secret_ref" \
+      '.[$name]' <<< "$secret_refs")
     container_env=$(jq -c \
       --arg name "$env_name" \
       --arg secret_ref "$secret_ref" \

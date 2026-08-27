@@ -423,7 +423,7 @@ jobs:
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
-            local configured_secrets template_secret_refs expected_setting expected_name expected_value actual_value template_ready
+            local configured_secrets template_secret_refs expected_setting expected_secret expected_name expected_value actual_value template_ready
             shift
             template_ready=false
             for _ in {1..60}; do
@@ -449,9 +449,12 @@ jobs:
                         --query "properties.template.containers[0].env[?name=='${expected_name}'].value | [0]" \
                         --output tsv 2>/dev/null || true)
                       [ "$actual_value" = "$expected_value" ] && continue
-                    elif [[ "$configured_secrets" == *" ${expected_setting} "* && \
-                      "$template_secret_refs" == *" ${expected_setting} "* ]]; then
-                      continue
+                    else
+                      expected_secret="${expected_setting}-${job}"
+                      if [[ "$configured_secrets" == *" ${expected_secret} "* && \
+                        "$template_secret_refs" == *" ${expected_secret} "* ]]; then
+                        continue
+                      fi
                     fi
                     template_ready=false
                     break
@@ -598,12 +601,18 @@ jobs:
 
           purge_job() {
             local job=$1
+            local secret_name
+            local -a secret_names
             shift
             if az containerapp job show --name "$job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
               stop_job_executions "$job"
+              secret_names=()
+              for secret_name in "$@"; do
+                secret_names+=("$secret_name" "${secret_name}-${job}")
+              done
               az containerapp job secret remove \
                 --name "$job" --resource-group "$RESOURCE_GROUP" \
-                --secret-names "$@" --yes --output none || true
+                --secret-names "${secret_names[@]}" --yes --output none || true
               az containerapp job delete \
                 --name "$job" \
                 --resource-group "$RESOURCE_GROUP" \
@@ -795,7 +804,7 @@ jobs:
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
-            local configured_secrets template_secret_refs expected_setting expected_name expected_value actual_value template_ready
+            local configured_secrets template_secret_refs expected_setting expected_secret expected_name expected_value actual_value template_ready
             shift
             template_ready=false
             for _ in {1..60}; do
@@ -821,9 +830,12 @@ jobs:
                         --query "properties.template.containers[0].env[?name=='${expected_name}'].value | [0]" \
                         --output tsv 2>/dev/null || true)
                       [ "$actual_value" = "$expected_value" ] && continue
-                    elif [[ "$configured_secrets" == *" ${expected_setting} "* && \
-                      "$template_secret_refs" == *" ${expected_setting} "* ]]; then
-                      continue
+                    else
+                      expected_secret="${expected_setting}-${job}"
+                      if [[ "$configured_secrets" == *" ${expected_secret} "* && \
+                        "$template_secret_refs" == *" ${expected_secret} "* ]]; then
+                        continue
+                      fi
                     fi
                     template_ready=false
                     break
@@ -955,7 +967,7 @@ jobs:
           stop_job_executions "$recovery_job"
           az containerapp job secret remove \
             --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
-            --secret-names database-admin-url --yes --output none
+            --secret-names "database-admin-url-${recovery_job}" --yes --output none
           az containerapp job delete \
             --name "$recovery_job" --resource-group "$RESOURCE_GROUP" --yes --output none
 
@@ -1083,13 +1095,19 @@ jobs:
 
           purge_job() {
             local job=$1
+            local secret_name
+            local -a secret_names
             shift
             if az containerapp job show --name "$job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
               stop_job_executions "$job" || return 1
               if [ "$#" -gt 0 ]; then
+                secret_names=()
+                for secret_name in "$@"; do
+                  secret_names+=("$secret_name" "${secret_name}-${job}")
+                done
                 az containerapp job secret remove \
                   --name "$job" --resource-group "$RESOURCE_GROUP" \
-                  --secret-names "$@" --yes --output none || true
+                  --secret-names "${secret_names[@]}" --yes --output none || true
               fi
               az containerapp job delete \
                 --name "$job" --resource-group "$RESOURCE_GROUP" --yes --output none
@@ -1124,7 +1142,7 @@ jobs:
 
           wait_for_job() {
             local job=$1 execution status container_name provisioning_state
-            local configured_secrets template_secret_refs expected_setting expected_name expected_value actual_value template_ready
+            local configured_secrets template_secret_refs expected_setting expected_secret expected_name expected_value actual_value template_ready
             shift
             template_ready=false
             for _ in {1..60}; do
@@ -1150,9 +1168,12 @@ jobs:
                         --query "properties.template.containers[0].env[?name=='${expected_name}'].value | [0]" \
                         --output tsv 2>/dev/null || true)
                       [ "$actual_value" = "$expected_value" ] && continue
-                    elif [[ "$configured_secrets" == *" ${expected_setting} "* && \
-                      "$template_secret_refs" == *" ${expected_setting} "* ]]; then
-                      continue
+                    else
+                      expected_secret="${expected_setting}-${job}"
+                      if [[ "$configured_secrets" == *" ${expected_secret} "* && \
+                        "$template_secret_refs" == *" ${expected_secret} "* ]]; then
+                        continue
+                      fi
                     fi
                     template_ready=false
                     break
