@@ -122,7 +122,7 @@ jobs:
           esac
           [ "$DATABASE_HOST" = "${DATABASE_SERVER}.postgres.database.azure.com" ]
           case "$BILLING_STAGING_REGION" in usd|inr) ;; *) exit 1 ;; esac
-          [[ "$REDIS_HOST" =~ ^lyrashield-billing-redis\.internal\..+\.azurecontainerapps\.io$ ]]
+          [ "$REDIS_HOST" = "lyrashield-billing-redis" ]
           [ "${#STAGING_ACCESS_TOKEN}" -ge 32 ]
 
           for admission in \
@@ -223,6 +223,28 @@ jobs:
             echo "::error::Pull identity must have exactly one AcrPull assignment at the isolated staging registry scope."
             exit 1
           }
+
+      - name: Ensure isolated staging Redis TCP ingress
+        shell: bash
+        run: |
+          set -euo pipefail
+          redis_app="$REDIS_HOST"
+          az containerapp ingress enable \
+            --name "$redis_app" --resource-group "$RESOURCE_GROUP" \
+            --type internal --transport tcp --target-port 6379 --exposed-port 6379 \
+            --output none
+          redis_ingress=$(az containerapp show \
+            --name "$redis_app" --resource-group "$RESOURCE_GROUP" \
+            --query 'properties.configuration.ingress' --output json)
+          node -e '
+            const ingress = JSON.parse(process.argv[1]);
+            if (
+              ingress.external !== false ||
+              String(ingress.transport).toLowerCase() !== "tcp" ||
+              ingress.targetPort !== 6379 ||
+              ingress.exposedPort !== 6379
+            ) process.exit(1);
+          ' "$redis_ingress"
 
       - name: Allow required staging database extensions
         shell: bash
