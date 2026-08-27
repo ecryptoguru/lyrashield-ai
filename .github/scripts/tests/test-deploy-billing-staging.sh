@@ -77,6 +77,10 @@ must_contain "app_runtime_staging"
 must_contain "app_system_staging"
 must_contain "access-restriction list"
 must_contain "application-level staging gate"
+must_contain 'target_revision=$(az containerapp show'
+must_contain '--revision "$target_revision"'
+must_contain "properties.provisioningState, properties.healthState, to_string(properties.trafficWeight), properties.template.containers[0].image"
+must_contain 'Billing staging revision ${target_revision} did not become healthy at 100% traffic.'
 must_contain 'access_status=$(curl --silent --show-error --output /dev/null --dump-header "$access_headers"'
 must_contain '--form-string "token=${STAGING_ACCESS_TOKEN}"'
 must_contain 'Restricted staging access handshake failed with HTTP ${access_status}.'
