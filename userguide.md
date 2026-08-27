@@ -515,7 +515,7 @@ The Settings page displays:
 
 The current settings surface reports retention and telemetry configuration but does not provide self-service editors for every field.
 
-To delete your account, enter the exact confirmation text `DELETE`. Deletion is blocked when you are the sole owner of a workspace because removing the account would orphan it. Transfer or add ownership first. Deletion anonymizes retained attribution where required and preserves audit-chain integrity.
+To delete your account without destroying a workspace, enter the exact confirmation text `DELETE`. If deletion will also destroy sole-owner/sole-member workspaces, enter the sorted workspace-name list shown by the confirmation prompt instead. Deletion is blocked when you are the sole owner of a workspace with other active members because removing the account would orphan it. Transfer or add ownership first. Deletion anonymizes retained attribution where required and preserves audit-chain integrity.
 
 ## 22. CLI, MCP, and agent workflows
 

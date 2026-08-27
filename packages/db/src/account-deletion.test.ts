@@ -20,6 +20,8 @@ const rewardedUserId = `delete-rewarded-${suffix}`
 const richUserId = `rich-user-${suffix}`
 const activeUserId = `active-user-${suffix}`
 const legacyUserId = `legacy-user-${suffix}`
+const auditFailureUserId = `audit-failure-user-${suffix}`
+const auditFailureOwnerId = `audit-failure-owner-${suffix}`
 
 const deletableWorkspaceId = `deletable-ws-${suffix}`
 const retainWorkspaceId = `retain-ws-${suffix}`
@@ -28,6 +30,7 @@ const soloWorkspaceId = `solo-ws-${suffix}`
 const richWorkspaceId = `rich-ws-${suffix}`
 const activeWorkspaceId = `active-ws-${suffix}`
 const legacyWorkspaceId = `legacy-ws-${suffix}`
+const auditFailureWorkspaceId = `audit-failure-ws-${suffix}`
 
 const deletableWorkspaceName = `Deletable ${suffix}`
 const retainWorkspaceName = `Retention ${suffix}`
@@ -36,11 +39,16 @@ const soloWorkspaceName = `Solo ${suffix}`
 const richWorkspaceName = `Rich ${suffix}`
 const activeWorkspaceName = `Active ${suffix}`
 const legacyWorkspaceName = `Legacy ${suffix}`
+const auditFailureWorkspaceName = "Account deletion audit rollback fixture"
 
 const referralCode = `234567${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
 const rewardedReferralCode = `765432${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
 
 async function cleanup() {
+  await prisma.$executeRaw`DROP TRIGGER IF EXISTS test_reject_account_deleted ON "AuditLog"`.catch(
+    () => {}
+  )
+  await prisma.$executeRaw`DROP FUNCTION IF EXISTS test_reject_account_deleted()`.catch(() => {})
   for (const workspaceId of [
     deletableWorkspaceId,
     retainWorkspaceId,
@@ -49,6 +57,7 @@ async function cleanup() {
     richWorkspaceId,
     activeWorkspaceId,
     legacyWorkspaceId,
+    auditFailureWorkspaceId,
   ]) {
     await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`.catch(
       () => {}
@@ -67,6 +76,8 @@ async function cleanup() {
           richUserId,
           activeUserId,
           legacyUserId,
+          auditFailureUserId,
+          auditFailureOwnerId,
         ],
       },
     },
@@ -97,6 +108,16 @@ describe("account deletion", () => {
         { id: richUserId, name: "Rich", email: `${richUserId}@example.com` },
         { id: activeUserId, name: "Active", email: `${activeUserId}@example.com` },
         { id: legacyUserId, name: "Legacy", email: `${legacyUserId}@example.com` },
+        {
+          id: auditFailureUserId,
+          name: "Audit failure",
+          email: `${auditFailureUserId}@example.com`,
+        },
+        {
+          id: auditFailureOwnerId,
+          name: "Audit failure owner",
+          email: `${auditFailureOwnerId}@example.com`,
+        },
       ],
     })
     await prisma.workspace.createMany({
@@ -108,6 +129,11 @@ describe("account deletion", () => {
         { id: richWorkspaceId, name: richWorkspaceName, slug: richWorkspaceId },
         { id: activeWorkspaceId, name: activeWorkspaceName, slug: activeWorkspaceId },
         { id: legacyWorkspaceId, name: legacyWorkspaceName, slug: legacyWorkspaceId },
+        {
+          id: auditFailureWorkspaceId,
+          name: auditFailureWorkspaceName,
+          slug: auditFailureWorkspaceId,
+        },
       ],
     })
     await prisma.workspaceMember.createMany({
@@ -126,6 +152,18 @@ describe("account deletion", () => {
         { workspaceId: richWorkspaceId, userId: richUserId, role: "OWNER", status: "active" },
         { workspaceId: activeWorkspaceId, userId: activeUserId, role: "OWNER", status: "active" },
         { workspaceId: legacyWorkspaceId, userId: legacyUserId, role: "OWNER", status: "active" },
+        {
+          workspaceId: auditFailureWorkspaceId,
+          userId: auditFailureUserId,
+          role: "OWNER",
+          status: "active",
+        },
+        {
+          workspaceId: auditFailureWorkspaceId,
+          userId: auditFailureOwnerId,
+          role: "OWNER",
+          status: "active",
+        },
       ],
     })
   })
@@ -360,6 +398,64 @@ describe("account deletion", () => {
     await deleteUserAccount(legacyUserId, legacyWorkspaceName)
   })
 
+  it("rolls back account deletion when the retained-workspace audit receipt fails", async () => {
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: auditFailureWorkspaceId,
+        actorUserId: auditFailureUserId,
+        action: "privacy.audit-failure-fixture",
+        resourceType: "user",
+      },
+    })
+    await prisma.$executeRaw`DROP TRIGGER IF EXISTS test_reject_account_deleted ON "AuditLog"`
+    await prisma.$executeRaw`DROP FUNCTION IF EXISTS test_reject_account_deleted()`
+    await prisma.$executeRaw`
+      CREATE FUNCTION test_reject_account_deleted()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF NEW.action = 'account.deleted' AND EXISTS (
+          SELECT 1 FROM "Workspace"
+          WHERE id = NEW."workspaceId"
+            AND name = 'Account deletion audit rollback fixture'
+        ) THEN
+          RAISE EXCEPTION 'account deletion audit fixture failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql`
+    await prisma.$executeRaw`
+      CREATE TRIGGER test_reject_account_deleted
+      BEFORE INSERT ON "AuditLog"
+      FOR EACH ROW EXECUTE FUNCTION test_reject_account_deleted()`
+
+    try {
+      await expect(deleteUserAccount(auditFailureUserId, "DELETE")).rejects.toThrow(
+        "account deletion audit fixture failure"
+      )
+    } finally {
+      await prisma.$executeRaw`DROP TRIGGER IF EXISTS test_reject_account_deleted ON "AuditLog"`
+      await prisma.$executeRaw`DROP FUNCTION IF EXISTS test_reject_account_deleted()`
+    }
+
+    expect(await prisma.user.findUnique({ where: { id: auditFailureUserId } })).not.toBeNull()
+    expect(
+      await prisma.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: auditFailureWorkspaceId,
+            userId: auditFailureUserId,
+          },
+        },
+      })
+    ).not.toBeNull()
+    const entries = await prisma.auditLog.findMany({
+      where: { workspaceId: auditFailureWorkspaceId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    })
+    expect(entries.some((entry) => entry.action === "account.deleted")).toBe(false)
+    expect(verifyAuditChain(entries)).toBe(true)
+  })
+
   it("anonymizes attribution in a co-owned workspace and keeps the audit chain", async () => {
     await prisma.project.create({
       data: { workspaceId: retainWorkspaceId, name: "Owned project", ownerUserId: otherOwnerId },
@@ -412,6 +508,95 @@ describe("account deletion", () => {
         resourceType: "user",
       },
     })
+    await prisma.notificationPreference.create({
+      data: { userId: otherOwnerId },
+    })
+    const domainVerification = await prisma.targetDomainVerification.create({
+      data: {
+        workspaceId: retainWorkspaceId,
+        domain: `deletion-${suffix}.example.com`,
+        method: "DNS_TXT",
+        expiresAt: new Date(Date.now() + 86400000),
+        createdById: otherOwnerId,
+      },
+    })
+    const liveSettings = await prisma.liveAiSafetySettings.create({
+      data: {
+        workspaceId: retainWorkspaceId,
+        incidentContact: `${otherOwnerId}@example.com`,
+        createdById: otherOwnerId,
+      },
+    })
+    const livePlan = await prisma.liveAiSafetyPlan.create({
+      data: {
+        workspaceId: retainWorkspaceId,
+        targetId: target.id,
+        domainVerificationId: domainVerification.id,
+        endpointUrl: "https://deletion.example.com/safety",
+        approvedHost: "deletion.example.com",
+        authMode: "NONE",
+        incidentContact: `${otherOwnerId}@example.com`,
+        maxRequests: 1,
+        maxDurationSeconds: 60,
+        maxResponseBytes: 1024,
+        rawSampleStorage: "none",
+        cases: [],
+        approvedById: otherOwnerId,
+        createdById: otherOwnerId,
+      },
+    })
+    const aiProfile = await prisma.aiSystemProfile.create({
+      data: {
+        workspaceId: retainWorkspaceId,
+        targetId: target.id,
+        profile: {},
+        createdById: otherOwnerId,
+        updatedById: otherOwnerId,
+        versions: {
+          create: {
+            version: 1,
+            profile: {},
+            checksum: `profile-${suffix}`,
+            createdById: otherOwnerId,
+          },
+        },
+      },
+      include: { versions: true },
+    })
+    const threatModel = await prisma.threatModel.create({
+      data: {
+        workspaceId: retainWorkspaceId,
+        targetId: target.id,
+        versions: {
+          create: {
+            version: 1,
+            content: {},
+            checksum: `threat-${suffix}`,
+            createdById: otherOwnerId,
+          },
+        },
+      },
+      include: { versions: true },
+    })
+    const controlEvidence = await prisma.controlEvidence.create({
+      data: {
+        workspaceId: retainWorkspaceId,
+        targetId: target.id,
+        controlId: `control-${suffix}`,
+        versions: {
+          create: {
+            version: 1,
+            status: "ACCEPTED",
+            attestation: "Account deletion regression fixture",
+            reviewedById: otherOwnerId,
+            artifactManifest: [],
+            checksum: `control-${suffix}`,
+            createdById: otherOwnerId,
+          },
+        },
+      },
+      include: { versions: true },
+    })
 
     const rewardedCode = await prisma.referralCode.create({
       data: { userId: rewardedUserId, code: rewardedReferralCode },
@@ -462,6 +647,34 @@ describe("account deletion", () => {
     ).toMatchObject({
       createdById: "deleted-user",
     })
+    expect(
+      await prisma.notificationPreference.findUnique({ where: { userId: otherOwnerId } })
+    ).toBeNull()
+    expect(
+      await prisma.targetDomainVerification.findUnique({ where: { id: domainVerification.id } })
+    ).toMatchObject({ createdById: "deleted-user" })
+    expect(
+      await prisma.liveAiSafetySettings.findUnique({ where: { id: liveSettings.id } })
+    ).toMatchObject({ createdById: "deleted-user" })
+    expect(await prisma.liveAiSafetyPlan.findUnique({ where: { id: livePlan.id } })).toMatchObject({
+      createdById: "deleted-user",
+      approvedById: null,
+    })
+    expect(await prisma.aiSystemProfile.findUnique({ where: { id: aiProfile.id } })).toMatchObject({
+      createdById: "deleted-user",
+      updatedById: "deleted-user",
+    })
+    expect(
+      await prisma.aiSystemProfileVersion.findUnique({ where: { id: aiProfile.versions[0]!.id } })
+    ).toMatchObject({ createdById: "deleted-user" })
+    expect(
+      await prisma.threatModelVersion.findUnique({ where: { id: threatModel.versions[0]!.id } })
+    ).toMatchObject({ createdById: "deleted-user" })
+    expect(
+      await prisma.controlEvidenceVersion.findUnique({
+        where: { id: controlEvidence.versions[0]!.id },
+      })
+    ).toMatchObject({ createdById: "deleted-user", reviewedById: null })
     const entries = await prisma.auditLog.findMany({
       where: { workspaceId: retainWorkspaceId },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
