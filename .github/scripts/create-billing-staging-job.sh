@@ -44,6 +44,7 @@ while IFS='=' read -r secret_name value_variable; do
 done <<< "$secret_specs"
 
 container_env='[]'
+initial_container_env='[]'
 while IFS='=' read -r env_name env_value; do
   [ -n "$env_name" ] || continue
   [[ "$env_name" =~ ^[A-Z][A-Z0-9_]*$ ]]
@@ -61,6 +62,10 @@ while IFS='=' read -r env_name env_value; do
       --arg name "$env_name" \
       --arg value "$env_value" \
       '. + [{name: $name, value: $value}]' <<< "$container_env")
+    initial_container_env=$(jq -c \
+      --arg name "$env_name" \
+      --arg value "$env_value" \
+      '. + [{name: $name, value: $value}]' <<< "$initial_container_env")
   fi
 done <<< "$env_specs"
 
@@ -78,6 +83,8 @@ job_url="https://management.azure.com/subscriptions/${subscription_id}/resourceG
 # The Container Apps CLI attempts to create AcrPull even when the exact role
 # already exists. Use the ARM job contract directly so least-privilege deploy
 # identities never need Microsoft.Authorization/roleAssignments/write.
+# Azure Jobs validates secret references before secrets included in the same
+# create request are materialized. Persist the secrets first, then bind them.
 body=$(jq -n \
   --arg location "$location" \
   --arg identity "$PULL_IDENTITY_ID" \
@@ -87,7 +94,7 @@ body=$(jq -n \
   --arg name "$job_name" \
   --arg command "$command" \
   --argjson secrets "$secrets" \
-  --argjson container_env "$container_env" \
+  --argjson container_env "$initial_container_env" \
   --argjson timeout "$replica_timeout" \
   --arg source_sha "$IMAGE_SHA" \
   '{
@@ -120,20 +127,40 @@ printf '%s' "$body" | az rest \
   --body @- \
   --output none
 
-for _ in {1..60}; do
-  provisioning_state=$(az containerapp job show \
-    --name "$job_name" \
-    --resource-group "$RESOURCE_GROUP" \
-    --query properties.provisioningState --output tsv)
-  case "$provisioning_state" in
-    Succeeded) exit 0 ;;
-    Failed)
-      echo "Container Apps job ${job_name} failed to provision." >&2
-      exit 1
-      ;;
-  esac
-  sleep 5
-done
+wait_for_provisioning() {
+  for _ in {1..60}; do
+    provisioning_state=$(az containerapp job show \
+      --name "$job_name" \
+      --resource-group "$RESOURCE_GROUP" \
+      --query properties.provisioningState --output tsv)
+    case "$provisioning_state" in
+      Succeeded) return 0 ;;
+      Failed)
+        echo "Container Apps job ${job_name} failed to provision." >&2
+        return 1
+        ;;
+    esac
+    sleep 5
+  done
 
-echo "Timed out provisioning Container Apps job ${job_name}." >&2
-exit 1
+  echo "Timed out provisioning Container Apps job ${job_name}." >&2
+  return 1
+}
+
+wait_for_provisioning
+
+patch=$(jq -n \
+  --arg image "$image" \
+  --arg name "$job_name" \
+  --arg command "$command" \
+  --argjson container_env "$container_env" \
+  '{properties: {template: {containers: [{name: $name, image: $image, command: [$command], env: $container_env}]}}}')
+
+printf '%s' "$patch" | az rest \
+  --method patch \
+  --url "$job_url" \
+  --headers 'Content-Type=application/json' \
+  --body @- \
+  --output none
+
+wait_for_provisioning

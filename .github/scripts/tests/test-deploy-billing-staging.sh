@@ -251,8 +251,9 @@ fi
 
 mock_dir=$(mktemp -d)
 trap 'rm -rf "$mock_dir"' EXIT
-mock_body="$mock_dir/body.json"
-mock_args="$mock_dir/args.txt"
+mock_body_prefix="$mock_dir/body"
+mock_args_prefix="$mock_dir/args"
+printf '0' > "$mock_dir/call-count"
 cat > "$mock_dir/az" <<'MOCK_AZ'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -261,8 +262,10 @@ case " $* " in
   *" containerapp env show "*" --query id "*) printf '%s\n' '/subscriptions/test/resourceGroups/stage/providers/Microsoft.App/managedEnvironments/stage' ;;
   *" containerapp env show "*" --query location "*) printf '%s\n' 'centralindia' ;;
   *" rest "*)
-    printf '%s\n' "$*" > "$MOCK_ARGS_PATH"
-    cat > "$MOCK_BODY_PATH"
+    call_number=$(($(cat "$MOCK_CALL_COUNT_PATH") + 1))
+    printf '%s' "$call_number" > "$MOCK_CALL_COUNT_PATH"
+    printf '%s\n' "$*" > "${MOCK_ARGS_PREFIX}.${call_number}.txt"
+    cat > "${MOCK_BODY_PREFIX}.${call_number}.json"
     ;;
   *" containerapp job show "*) printf '%s\n' 'Succeeded' ;;
   *) printf 'unexpected az call: %s\n' "$*" >&2; exit 1 ;;
@@ -271,8 +274,9 @@ MOCK_AZ
 chmod +x "$mock_dir/az"
 
 PATH="$mock_dir:$PATH" \
-  MOCK_BODY_PATH="$mock_body" \
-  MOCK_ARGS_PATH="$mock_args" \
+  MOCK_BODY_PREFIX="$mock_body_prefix" \
+  MOCK_ARGS_PREFIX="$mock_args_prefix" \
+  MOCK_CALL_COUNT_PATH="$mock_dir/call-count" \
   RESOURCE_GROUP='billing-stage-rg' \
   CONTAINER_ENVIRONMENT='stage-env' \
   REGISTRY='stage.azurecr.io' \
@@ -290,13 +294,25 @@ PATH="$mock_dir:$PATH" \
 jq -e '
   .properties.configuration.secrets == [{name: "database-admin-url-lyra-stage-atomic-test", value: "test-secret-value"}] and
   .properties.template.containers[0].env == [
-    {name: "DATABASE_ADMIN_URL", secretRef: "database-admin-url-lyra-stage-atomic-test"},
     {name: "E2E_ROLE_ACTION", value: "drop"}
   ]
-' "$mock_body" >/dev/null
-grep -Fq -- '--body @-' "$mock_args"
-if grep -Fq 'test-secret-value' "$mock_args"; then
-  echo "FAIL: atomic job helper exposed a secret in Azure CLI arguments" >&2
+' "$mock_body_prefix.1.json" >/dev/null
+jq -e '
+  .properties.template.containers[0].env == [
+    {name: "DATABASE_ADMIN_URL", secretRef: "database-admin-url-lyra-stage-atomic-test"},
+    {name: "E2E_ROLE_ACTION", value: "drop"}
+  ] and
+  (.properties.configuration? | not)
+' "$mock_body_prefix.2.json" >/dev/null
+for mock_args in "$mock_args_prefix".*.txt; do
+  grep -Fq -- '--body @-' "$mock_args"
+  if grep -Fq 'test-secret-value' "$mock_args"; then
+    echo "FAIL: atomic job helper exposed a secret in Azure CLI arguments" >&2
+    exit 1
+  fi
+done
+if [ "$(cat "$mock_dir/call-count")" != '2' ]; then
+  echo "FAIL: atomic job helper must persist secrets before binding secret references" >&2
   exit 1
 fi
 grep -Fq 'NOINHERIT NOREPLICATION BYPASSRLS' "$e2e_role_script"
