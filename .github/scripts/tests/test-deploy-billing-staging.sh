@@ -10,6 +10,7 @@ recovery_script="$repo/packages/db/scripts/recover-billing-staging-migration.mjs
 role_script="$repo/packages/db/scripts/provision-billing-staging-roles.mjs"
 e2e_role_script="$repo/packages/db/scripts/manage-billing-staging-e2e-role.mjs"
 job_creator="$repo/.github/scripts/create-billing-staging-job.sh"
+job_starter="$repo/.github/scripts/start-billing-staging-job.sh"
 e2e_runner="$repo/e2e/billing/run-staging-proof.sh"
 e2e_config_smoke="$repo/e2e/billing/verify-staging-config.sh"
 e2e_razorpay="$repo/e2e/billing/razorpay-upi-cap-fallback.spec.ts"
@@ -206,6 +207,7 @@ test -x "$recovery_script"
 test -x "$role_script"
 test -x "$e2e_role_script"
 test -x "$job_creator"
+test -x "$job_starter"
 test -x "$e2e_runner"
 test -x "$e2e_config_smoke"
 grep -Fq '/app/e2e/billing/verify-staging-config.sh' "$e2e_runner"
@@ -326,6 +328,38 @@ if [ "$(tr '\n' ' ' < "$mock_dir/call-log")" != 'rest secret-list rest ' ]; then
   echo "FAIL: atomic job helper must read back secrets before binding secret references" >&2
   exit 1
 fi
+
+retry_mock_dir=$(mktemp -d)
+(
+  trap 'rm -rf "$retry_mock_dir"' EXIT
+  cat > "$retry_mock_dir/az" <<'MOCK_AZ_RETRY'
+#!/usr/bin/env bash
+set -euo pipefail
+case " $* " in
+  *" containerapp job start "*)
+    attempt=$(($(cat "$RETRY_START_COUNT") + 1))
+    printf '%s' "$attempt" > "$RETRY_START_COUNT"
+    if [ "$attempt" -eq 1 ]; then
+      echo "ERROR: (ContainerAppSecretRefNotFound) transient control-plane propagation" >&2
+      exit 1
+    fi
+    printf '%s\n' 'lyra-stage-atomic-test-retry'
+    ;;
+  *) printf 'unexpected az call: %s\n' "$*" >&2; exit 1 ;;
+esac
+MOCK_AZ_RETRY
+  cat > "$retry_mock_dir/sleep" <<'MOCK_SLEEP'
+#!/usr/bin/env bash
+exit 0
+MOCK_SLEEP
+  chmod +x "$retry_mock_dir/az" "$retry_mock_dir/sleep"
+  printf '0' > "$retry_mock_dir/start-count"
+  execution=$(PATH="$retry_mock_dir:$PATH" RETRY_START_COUNT="$retry_mock_dir/start-count" \
+    "$job_starter" 'lyra-stage-atomic-test' 'billing-stage-rg')
+  [ "$execution" = 'lyra-stage-atomic-test-retry' ]
+  [ "$(cat "$retry_mock_dir/start-count")" = '2' ]
+)
+
 grep -Fq 'NOINHERIT NOREPLICATION BYPASSRLS' "$e2e_role_script"
 grep -Fq 'VALID UNTIL %L' "$e2e_role_script"
 grep -Fq 'E2E_ROLE_TTL_MS = 2 * 60 * 60 * 1_000' "$e2e_role_script"
@@ -405,7 +439,7 @@ if grep -Fq 'extraHTTPHeaders' "$e2e_fixture"; then
   exit 1
 fi
 
-job_start_count=$(grep -Fc 'execution=$(az containerapp job start' "$workflow")
+job_start_count=$(grep -Fc 'execution=$(.github/scripts/start-billing-staging-job.sh "$job" "$RESOURCE_GROUP")' "$workflow")
 job_provision_wait_count=$(grep -Fc 'provisioning_state=$(az containerapp job show' "$workflow")
 if [ "$job_start_count" -ne "$job_provision_wait_count" ]; then
   echo "FAIL: every Container Apps job start must wait for provisioning" >&2
