@@ -2,6 +2,15 @@ name: Deploy billing staging
 
 on:
   workflow_dispatch:
+    inputs:
+      recover_stale_migration:
+        description: "Recover the one schema-checked stale staging migration record before deploy"
+        required: false
+        type: choice
+        default: none
+        options:
+          - none
+          - 20260814020000_ai_system_profile_versions
 
 concurrency:
   group: deploy-billing-staging
@@ -49,6 +58,7 @@ jobs:
       RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
       BILLING_USD_INR_RATE: ${{ vars.BILLING_USD_INR_RATE }}
       BILLING_STAGING_REGION: ${{ vars.STAGING_BILLING_REGION }}
+      RECOVER_STALE_MIGRATION: ${{ inputs.recover_stale_migration || 'none' }}
     steps:
       - name: Checkout exact main revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,6 +116,10 @@ jobs:
           [[ "${APP_IDENTITY_ID,,}" == *"/resourcegroups/lyrashieldai-billing-staging/"* ]]
           [ "$KEY_VAULT_NAME" = "lyrashieldbillingstage" ]
           [ "$DATABASE_SERVER" = "lyrashield-billing-stage-pg" ]
+          case "$RECOVER_STALE_MIGRATION" in
+            none|20260814020000_ai_system_profile_versions) ;;
+            *) echo "::error::Unsupported staging migration recovery request."; exit 1 ;;
+          esac
           [ "$DATABASE_HOST" = "${DATABASE_SERVER}.postgres.database.azure.com" ]
           case "$BILLING_STAGING_REGION" in usd|inr) ;; *) exit 1 ;; esac
           [[ "$REDIS_HOST" =~ ^lyrashield-billing-redis\.internal\..+\.azurecontainerapps\.io$ ]]
@@ -350,6 +364,7 @@ jobs:
         run: |
           set -euo pipefail
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
+          recovery_job="lyrashield-stage-migration-recovery"
           migration_job="lyrashield-stage-migrate"
           role_job="lyrashield-stage-db-role"
 
@@ -438,6 +453,20 @@ jobs:
               --output none
           }
 
+          if [ "$RECOVER_STALE_MIGRATION" != "none" ]; then
+            create_job "$recovery_job" /app/packages/db/scripts/recover-billing-staging-migration.mjs
+            az containerapp job secret set \
+              --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
+              --secrets "database-admin-url=${DATABASE_ADMIN_URL}" --output none
+            az containerapp job update \
+              --name "$recovery_job" --resource-group "$RESOURCE_GROUP" \
+              --set-env-vars \
+                'DATABASE_ADMIN_URL=secretref:database-admin-url' \
+                "BILLING_STAGING_RECOVER_MIGRATION=${RECOVER_STALE_MIGRATION}" \
+              --output none
+            wait_for_job "$recovery_job"
+          fi
+
           create_job "$migration_job" /app/packages/db/scripts/run-billing-staging-migrations.sh
           az containerapp job secret set \
             --name "$migration_job" --resource-group "$RESOURCE_GROUP" \
@@ -508,6 +537,7 @@ jobs:
             fi
           }
 
+          purge_job lyrashield-stage-migration-recovery database-admin-url
           purge_job lyrashield-stage-migrate database-admin-url
           purge_job lyrashield-stage-db-role database-admin-url runtime-password system-password
 
