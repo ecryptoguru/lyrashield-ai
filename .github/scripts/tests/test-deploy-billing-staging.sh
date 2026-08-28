@@ -434,10 +434,20 @@ if grep -Fq 'BILLING_E2E_DATABASE_URL' <<< "$app_runtime_block"; then
 fi
 grep -Fq "retry_containerapp_write()" <<< "$app_runtime_block"
 grep -Fq "(ConflictingConcurrentWriteNotAllowed)" <<< "$app_runtime_block"
-if [ "$(grep -Fc 'retry_containerapp_write "billing staging' <<< "$app_runtime_block")" -ne 4 ]; then
-  echo "FAIL: every existing billing staging Container App write must use bounded conflict retry" >&2
-  exit 1
-fi
+for retried_write in \
+  'billing staging identity assignment|az containerapp identity assign' \
+  'billing staging registry configuration|az containerapp registry set' \
+  'billing staging secret configuration|az containerapp secret set' \
+  'billing staging revision update|az containerapp update'; do
+  IFS='|' read -r label command <<< "$retried_write"
+  if ! awk -v retry="retry_containerapp_write \"$label\"" -v command="$command" '
+    index($0, retry) { getline; found = index($0, command) }
+    END { exit found ? 0 : 1 }
+  ' <<< "$app_runtime_block"; then
+    echo "FAIL: $command must use bounded conflict retry" >&2
+    exit 1
+  fi
+done
 if grep -Eq 'console\.(log|error).*PASSWORD|console\.(log|error).*password' "$role_script"; then
   echo "FAIL: role script may log a password" >&2
   exit 1
