@@ -398,28 +398,32 @@ export default async function DashboardPage() {
           </div>
           {recentScans.length > 0 ? (
             <div className="divide-y">
-              {recentScans.map((scan) => (
-                <Link
-                  key={scan.id}
-                  href={`/dashboard/scans/${scan.id}`}
-                  className="hover:bg-accent/60 flex min-h-16 items-center gap-3 px-5 py-3 transition-colors sm:px-6"
-                >
-                  <span className="bg-primary/8 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
-                    <Activity className="size-4" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {scan.target?.name ?? "Workspace scan"}
+              {recentScans.map((scan) => {
+                const presentation = getScanPresentation(scan.status, {
+                  errorCategory: scan.errorCategory,
+                  errorMessage: scan.errorMessage,
+                })
+                return (
+                  <Link
+                    key={scan.id}
+                    href={`/dashboard/scans/${scan.id}`}
+                    className="hover:bg-accent/60 flex min-h-16 items-center gap-3 px-5 py-3 transition-colors sm:px-6"
+                  >
+                    <span className="bg-primary/8 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                      <Activity className="size-4" aria-hidden="true" />
                     </span>
-                    <span className="text-muted-foreground block text-xs">
-                      {formatDate(scan.createdAt)} · {scan._count.findings} findings
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {scan.target?.name ?? "Workspace scan"}
+                      </span>
+                      <span className="text-muted-foreground block text-xs">
+                        {formatDate(scan.createdAt)} · {scan._count.findings} findings
+                      </span>
                     </span>
-                  </span>
-                  <Badge variant={getScanPresentation(scan.status).badgeVariant}>
-                    {getScanPresentation(scan.status).label}
-                  </Badge>
-                </Link>
-              ))}
+                    <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>
+                  </Link>
+                )
+              })}
             </div>
           ) : (
             <div className="px-5 py-6 sm:px-6">

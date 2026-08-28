@@ -1,3 +1,5 @@
+import { isAgentMinutesExhaustedError } from "@lyrashield/types"
+
 type ScanStatus =
   | "QUEUED"
   | "PREFLIGHT"
@@ -20,6 +22,12 @@ export interface ScanPresentation {
   badgeVariant: BadgeVariant
   assuranceAvailable: boolean
   showFailureDetails: boolean
+  recoveryAction?: "usage"
+}
+
+interface ScanPresentationContext {
+  errorCategory?: string | null
+  errorMessage?: string | null
 }
 
 const ACTIVE_STATUSES = new Set<ScanStatus>([
@@ -34,7 +42,10 @@ export function isActiveScan(status: ScanStatus) {
   return ACTIVE_STATUSES.has(status)
 }
 
-export function getScanPresentation(status: ScanStatus): ScanPresentation {
+export function getScanPresentation(
+  status: ScanStatus,
+  context: ScanPresentationContext = {}
+): ScanPresentation {
   switch (status) {
     case "COMPLETED":
       return {
@@ -67,6 +78,18 @@ export function getScanPresentation(status: ScanStatus): ScanPresentation {
         showFailureDetails: true,
       }
     case "STOPPED_BUDGET":
+      if (isAgentMinutesExhaustedError(context.errorCategory, context.errorMessage)) {
+        return {
+          label: "Minutes exhausted",
+          headline: "Scan stopped because workspace minutes ran out",
+          description:
+            "No complete assurance result was produced. Review workspace usage before starting another model-backed scan.",
+          badgeVariant: "warning",
+          assuranceAvailable: false,
+          showFailureDetails: true,
+          recoveryAction: "usage",
+        }
+      }
       return {
         label: "Stopped by budget",
         headline: "Scan stopped at its budget limit",

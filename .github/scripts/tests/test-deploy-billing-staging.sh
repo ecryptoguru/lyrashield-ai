@@ -115,6 +115,7 @@ must_contain "/app/packages/db/scripts/manage-billing-staging-e2e-role.mjs"
 must_contain "/app/e2e/billing/run-staging-proof.sh"
 must_contain "/app/e2e/billing/verify-staging-config.sh"
 must_contain 'BILLING_E2E_DATABASE_URL=secretref:e2e-database-url'
+must_contain 'url.searchParams.set("sslmode", "verify-full")'
 must_contain 'E2E_ROLE_ACTION=drop'
 must_contain 'Recover and remove disposable E2E database access'
 must_contain "if: \${{ always() && steps.azure-login.outcome == 'success' }}"

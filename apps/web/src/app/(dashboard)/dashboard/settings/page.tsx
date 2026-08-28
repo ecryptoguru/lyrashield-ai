@@ -3,7 +3,7 @@ import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
 import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@lyrashield/ui"
-import { prisma, getAccountDeletionPlan } from "@lyrashield/db"
+import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { DeleteAccount } from "./delete-account"
 import { ConnectedAccounts } from "./connected-accounts"
@@ -41,42 +41,38 @@ export default async function SettingsPage() {
         <div className="mt-6">
           <TwoFactorSecurity enabled={Boolean(accountSecurity?.twoFactorEnabled)} />
         </div>
+        <div className="mt-6">
+          <DeleteAccount />
+        </div>
       </div>
     )
   }
 
-  const [
-    workspace,
-    integrationCount,
-    unreadNotifications,
-    enabledSchedules,
-    membership,
-    deletionPlan,
-  ] = await Promise.all([
-    prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: {
-        name: true,
-        plan: true,
-        retentionDays: true,
-        _count: {
-          select: {
-            members: true,
+  const [workspace, integrationCount, unreadNotifications, enabledSchedules, membership] =
+    await Promise.all([
+      prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: {
+          name: true,
+          plan: true,
+          retentionDays: true,
+          _count: {
+            select: {
+              members: true,
+            },
           },
         },
-      },
-    }),
-    prisma.integration.count({ where: { workspaceId, deletedAt: null } }),
-    prisma.notification.count({
-      where: { workspaceId, status: { not: "read" }, deletedAt: null },
-    }),
-    prisma.schedule.count({ where: { workspaceId, enabled: true, deletedAt: null } }),
-    prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: session.userId } },
-      select: { role: true, status: true },
-    }),
-    getAccountDeletionPlan(session.userId),
-  ])
+      }),
+      prisma.integration.count({ where: { workspaceId, deletedAt: null } }),
+      prisma.notification.count({
+        where: { workspaceId, status: { not: "read" }, deletedAt: null },
+      }),
+      prisma.schedule.count({ where: { workspaceId, enabled: true, deletedAt: null } }),
+      prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: session.userId } },
+        select: { role: true, status: true },
+      }),
+    ])
 
   const canManageApiKeys =
     membership?.status === "active" && ["OWNER", "ADMIN"].includes(membership.role)
@@ -117,12 +113,12 @@ export default async function SettingsPage() {
 
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader>
-          <CardTitle as="h2">Production beta</CardTitle>
+          <CardTitle as="h2">Open beta</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-sm leading-6">
-            Access is limited while we validate the production service. Scan results are scoped
-            evidence, not a security guarantee. For beta support, reply to your invitation email.
+            Registration is open while we validate the production service. Scan results are scoped
+            evidence, not a security guarantee.
           </p>
         </CardContent>
       </Card>
@@ -154,7 +150,7 @@ export default async function SettingsPage() {
         />
       </div>
 
-      <DeleteAccount plan={deletionPlan} />
+      <DeleteAccount />
     </div>
   )
 }

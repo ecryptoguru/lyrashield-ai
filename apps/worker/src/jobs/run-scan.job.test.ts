@@ -197,7 +197,12 @@ import {
   EvidenceStorageConfigurationError,
 } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
-import { debitOverage, recordAgentMinutes } from "@lyrashield/billing"
+import { debitOverage, enterGrace, recordAgentMinutes } from "@lyrashield/billing"
+import {
+  AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+  AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
+  AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
+} from "@lyrashield/types"
 import {
   completeScanWithScore,
   qualifyReferralForWorkspace,
@@ -515,6 +520,11 @@ describe("processScanJob", () => {
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
     vi.mocked(prisma.scan.update).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(prisma.scan.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
+      currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
+      currentPlan: "STARTER",
+      spendLimitCents: 0,
+    } as never)
     vi.mocked(runScannerOrchestrator).mockResolvedValue({
       allFindings: [],
       engineFindings: [],
@@ -640,13 +650,78 @@ describe("processScanJob", () => {
 
     await expect(processScanJob(mockJob)).resolves.toMatchObject({
       status: "failed",
-      errorCategory: "BUDGET_EXCEEDED",
+      errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
     })
     expect(debitOverage).toHaveBeenCalledWith("ws-1", 3, "scan-1", "engine_overage")
-    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
-      errorCategory: "BUDGET_EXCEEDED",
-      errorMessage: "Agent-minute overage spend limit reached",
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: expect.objectContaining({ llmRequestCount: 1, llmInputTokens: 1_000 }),
     })
+    expect(runScannerOrchestrator).toHaveBeenCalledOnce()
+    expect(persistFindings).toHaveBeenCalledOnce()
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalOutcome: {
+          status: "STOPPED_BUDGET",
+          errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+          errorMessage: AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
+        },
+      })
+    )
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "STOPPED_BUDGET",
+      expect.objectContaining({
+        errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+        errorMessage: AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
+      })
+    )
+    expect(completeScanWithScore).not.toHaveBeenCalled()
+  })
+
+  it("persists provider usage and deterministic receipts when minute grace is exhausted", async () => {
+    vi.mocked(recordAgentMinutes).mockResolvedValueOnce({
+      created: true,
+      minutes: 15,
+      idempotencyKey: "ws-1:scan-1:engine_run",
+      overageMinutes: 15,
+    })
+    vi.mocked(enterGrace).mockResolvedValueOnce({ shouldContinue: false })
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+      errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
+    })
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: expect.objectContaining({
+        llmRequestCount: 1,
+        llmInputTokens: 1_000,
+        llmCachedInputTokens: 0,
+        llmOutputTokens: 100,
+      }),
+    })
+    expect(runScannerOrchestrator).toHaveBeenCalledOnce()
+    expect(persistFindings).toHaveBeenCalledOnce()
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalOutcome: {
+          status: "STOPPED_BUDGET",
+          errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+          errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
+        },
+      })
+    )
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "STOPPED_BUDGET",
+      expect.objectContaining({
+        errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+        errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
+      })
+    )
+    expect(completeScanWithScore).not.toHaveBeenCalled()
   })
 
   it("does not let a workspace policy upgrade the selected profile budget", async () => {
@@ -1450,6 +1525,7 @@ describe("processScanJob", () => {
     ["PARTIAL", "VERIFYING", "CONTENT_FILTER_STOPPED"],
     ["FAILED", "VERIFYING", "ENGINE_INCOMPLETE"],
     ["STOPPED_BUDGET", "RUNNING", "BUDGET_EXCEEDED"],
+    ["STOPPED_BUDGET", "VERIFYING", AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY],
   ] as const)(
     "restores a durable %s terminal outcome from %s without scoring",
     async (status, pendingStatus, errorCategory) => {

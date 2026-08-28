@@ -231,6 +231,25 @@ describe("worker Docker runtime", () => {
     expect(workerPromoter).not.toContain("docker container prune")
     expect(workerPromoter).not.toContain("docker volume prune")
     expect(workerPromoter).toContain('docker pull "$target"')
+    expect(workerPromoter).toContain(
+      'docker cp "$asset_container:/opt/lyrashield-worker-host/." "$asset_stage"'
+    )
+    expect(workerPromoter).toContain(
+      'asset_stage=$(mktemp -d "$promotion_state_dir/worker-host-assets.XXXXXX")'
+    )
+    expect(workerPromoter).toContain(
+      'host_backup=$(mktemp -d "$promotion_state_dir/worker-host-backup.XXXXXX")'
+    )
+    expect(workerPromoter).toContain(
+      "promotion_state_dir=${LYRASHIELD_WORKER_PROMOTION_STATE_DIR:-/var/lib/lyrashield}"
+    )
+    expect(workerPromoter).not.toContain("/var/lib/lyrashield/worker/host-assets")
+    expect(workerPromoter).not.toContain("/var/lib/lyrashield/worker/host-backup")
+    expect(workerPromoter).toContain('[ -L "$asset_stage/$asset" ]')
+    expect(workerPromoter).toContain(
+      'install -m 0755 "$asset_stage/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets"'
+    )
+    expect(workerPromoter).toContain("restore_host_assets")
     expect(workerPromoter).toContain("Worker promotion requires empty scan and webhook queues")
     expect(workerPromoter).toContain('cp -p "$backup" "$config"')
     expect(workerPromoter).toContain("LYRASHIELD_WORKER_IMAGE_DIGEST")
@@ -250,6 +269,11 @@ describe("worker Docker runtime", () => {
   })
 
   it("refreshes the complete evidence key rotation set before worker startup", () => {
+    expect(dockerfile).toContain(
+      "COPY ops/worker/refresh-secrets.sh /opt/lyrashield-worker-host/refresh-secrets.sh"
+    )
+    expect(imageVerifier).toContain("/opt/lyrashield-worker-host/$asset")
+    expect(imageVerifier).toContain('test ! -L "/opt/lyrashield-worker-host/$asset"')
     expect(workerSecretRefresh).toContain("read_secret_optional worker-evidence-kek-config-ref")
     expect(workerSecretRefresh).toContain(
       'write_secret LYRASHIELD_EVIDENCE_KEK "$evidence_kek_secret_name"'

@@ -9,6 +9,16 @@ environment_file=${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}
 container=lyrashield-worker
 timer=lyrashield-worker-egress-refresh.timer
 service=lyrashield-worker.service
+promotion_state_dir=${LYRASHIELD_WORKER_PROMOTION_STATE_DIR:-/var/lib/lyrashield}
+host_libexec_dir=${LYRASHIELD_WORKER_HOST_LIBEXEC_DIR:-/usr/local/libexec}
+systemd_dir=${LYRASHIELD_WORKER_SYSTEMD_DIR:-/etc/systemd/system}
+
+for directory in "$promotion_state_dir" "$host_libexec_dir" "$systemd_dir"; do
+  case "$directory" in
+    /*) ;;
+    *) echo "Worker promotion paths must be absolute" >&2; exit 1 ;;
+  esac
+done
 
 case "$target" in
   *@sha256:????????????????????????????????????????????????????????????????) ;;
@@ -38,7 +48,11 @@ systemctl is-active --quiet "$timer" && timer_was_active=1
 admission_stop_owned=0
 admission_stop_value=
 config_changed=0
+host_assets_changed=0
 promotion_complete=0
+asset_container=
+asset_stage=
+host_backup=
 
 redis_eval() {
   code=$1
@@ -72,10 +86,41 @@ restore_timer() {
   [ "$timer_was_active" -eq 0 ] || systemctl start "$timer"
 }
 
+restore_host_assets() {
+  restore_failed=0
+  install -m 0755 "$host_backup/run-worker.sh" "$host_libexec_dir/lyrashield-run-worker" || restore_failed=1
+  install -m 0755 "$host_backup/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets" || restore_failed=1
+  install -m 0755 "$host_backup/refresh-egress.sh" "$host_libexec_dir/lyrashield-refresh-egress" || restore_failed=1
+  install -m 0755 "$host_backup/capture-stop-provenance.sh" "$host_libexec_dir/lyrashield-capture-worker-stop-provenance" || restore_failed=1
+  install -m 0644 "$host_backup/lyrashield-worker.service" "$systemd_dir/lyrashield-worker.service" || restore_failed=1
+  install -m 0644 "$host_backup/lyrashield-worker-secrets.service" "$systemd_dir/lyrashield-worker-secrets.service" || restore_failed=1
+  install -m 0644 "$host_backup/lyrashield-worker-egress.service" "$systemd_dir/lyrashield-worker-egress.service" || restore_failed=1
+  install -m 0644 "$host_backup/lyrashield-worker-egress-refresh.service" "$systemd_dir/lyrashield-worker-egress-refresh.service" || restore_failed=1
+  install -m 0644 "$host_backup/lyrashield-worker-egress-refresh.timer" "$systemd_dir/lyrashield-worker-egress-refresh.timer" || restore_failed=1
+  systemctl daemon-reload || restore_failed=1
+  [ "$restore_failed" -eq 0 ] || return 1
+  host_assets_changed=0
+}
+
+cleanup_host_assets() {
+  if [ -n "$asset_container" ]; then
+    docker rm --force "$asset_container" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$asset_stage" ]; then
+    rm -rf "$asset_stage"
+  fi
+  if [ -n "$host_backup" ]; then
+    rm -rf "$host_backup"
+  fi
+}
+
 rollback() {
   status=$?
   trap - EXIT HUP INT TERM
   if [ "$promotion_complete" -ne 1 ]; then
+    if [ "$host_assets_changed" -eq 1 ]; then
+      restore_host_assets || echo "Worker host asset rollback failed" >&2
+    fi
     if [ "$config_changed" -eq 1 ]; then
       cp -p "$backup" "$config"
       systemctl reset-failed "$service" || true
@@ -89,6 +134,7 @@ rollback() {
     restore_timer || true
     echo "Worker promotion failed; prior digest restored" >&2
   fi
+  cleanup_host_assets
   exit "$status"
 }
 trap rollback EXIT HUP INT TERM
@@ -151,6 +197,53 @@ engine_label=$(docker image inspect "$target" --format '{{index .Config.Labels "
 [ "$app_label" = "$expected_app" ]
 [ "$engine_label" = "$expected_engine" ]
 
+# Host scripts and units are release assets bound to the same reviewed image
+# digest as the worker. Installing them here prevents VM bootstrap drift from
+# silently omitting new fail-closed configuration before the service restart.
+asset_stage=$(mktemp -d "$promotion_state_dir/worker-host-assets.XXXXXX")
+asset_container=$(docker create "$target")
+docker cp "$asset_container:/opt/lyrashield-worker-host/." "$asset_stage"
+docker rm "$asset_container" >/dev/null
+asset_container=
+for asset in \
+  run-worker.sh \
+  refresh-secrets.sh \
+  refresh-egress.sh \
+  capture-stop-provenance.sh \
+  lyrashield-worker.service \
+  lyrashield-worker-secrets.service \
+  lyrashield-worker-egress.service \
+  lyrashield-worker-egress-refresh.service \
+  lyrashield-worker-egress-refresh.timer
+do
+  if [ ! -f "$asset_stage/$asset" ] || [ -L "$asset_stage/$asset" ]; then
+    echo "Worker image is missing host asset: $asset" >&2
+    exit 1
+  fi
+done
+
+host_backup=$(mktemp -d "$promotion_state_dir/worker-host-backup.XXXXXX")
+cp -p "$host_libexec_dir/lyrashield-run-worker" "$host_backup/run-worker.sh"
+cp -p "$host_libexec_dir/lyrashield-refresh-secrets" "$host_backup/refresh-secrets.sh"
+cp -p "$host_libexec_dir/lyrashield-refresh-egress" "$host_backup/refresh-egress.sh"
+cp -p "$host_libexec_dir/lyrashield-capture-worker-stop-provenance" "$host_backup/capture-stop-provenance.sh"
+cp -p "$systemd_dir/lyrashield-worker.service" "$host_backup/lyrashield-worker.service"
+cp -p "$systemd_dir/lyrashield-worker-secrets.service" "$host_backup/lyrashield-worker-secrets.service"
+cp -p "$systemd_dir/lyrashield-worker-egress.service" "$host_backup/lyrashield-worker-egress.service"
+cp -p "$systemd_dir/lyrashield-worker-egress-refresh.service" "$host_backup/lyrashield-worker-egress-refresh.service"
+cp -p "$systemd_dir/lyrashield-worker-egress-refresh.timer" "$host_backup/lyrashield-worker-egress-refresh.timer"
+host_assets_changed=1
+install -m 0755 "$asset_stage/run-worker.sh" "$host_libexec_dir/lyrashield-run-worker"
+install -m 0755 "$asset_stage/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets"
+install -m 0755 "$asset_stage/refresh-egress.sh" "$host_libexec_dir/lyrashield-refresh-egress"
+install -m 0755 "$asset_stage/capture-stop-provenance.sh" "$host_libexec_dir/lyrashield-capture-worker-stop-provenance"
+install -m 0644 "$asset_stage/lyrashield-worker.service" "$systemd_dir/lyrashield-worker.service"
+install -m 0644 "$asset_stage/lyrashield-worker-secrets.service" "$systemd_dir/lyrashield-worker-secrets.service"
+install -m 0644 "$asset_stage/lyrashield-worker-egress.service" "$systemd_dir/lyrashield-worker-egress.service"
+install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.service" "$systemd_dir/lyrashield-worker-egress-refresh.service"
+install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.timer" "$systemd_dir/lyrashield-worker-egress-refresh.timer"
+systemctl daemon-reload
+
 cp -p "$config" "$backup"
 temporary=$(mktemp "${config}.XXXXXX")
 awk -v image="$target" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } { print } END { if (!found) exit 1 }' "$config" > "$temporary"
@@ -184,4 +277,5 @@ if [ "$admission_stop_owned" -eq 1 ]; then
 fi
 promotion_complete=1
 trap - EXIT HUP INT TERM
+cleanup_host_assets
 echo "Worker promotion passed for ${target##*@}"

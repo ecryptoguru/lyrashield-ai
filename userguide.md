@@ -515,7 +515,7 @@ The Settings page displays:
 
 The current settings surface reports retention and telemetry configuration but does not provide self-service editors for every field.
 
-To delete your account without destroying a workspace, enter the exact confirmation text `DELETE`. If deletion will also destroy sole-owner/sole-member workspaces, enter the sorted workspace-name list shown by the confirmation prompt instead. Deletion is blocked when you are the sole owner of a workspace with other active members because removing the account would orphan it. Transfer or add ownership first. Deletion anonymizes retained attribution where required and preserves audit-chain integrity.
+Account deletion is reviewed before removal so billing, audit, security-evidence, and workspace-ownership records are handled safely. Select **Request account deletion** and email `support@lyrashieldai.com` from your account address. The automated deletion API remains fail-closed until the applicable retention periods and anonymization contract are approved.
 
 ## 22. CLI, MCP, and agent workflows
 

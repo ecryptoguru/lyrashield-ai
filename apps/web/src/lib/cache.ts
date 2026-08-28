@@ -155,6 +155,8 @@ export const getCachedDashboardAggregates = unstable_cache(
           createdAt: true,
           status: true,
           mode: true,
+          errorCategory: true,
+          errorMessage: true,
           target: { select: { name: true, type: true } },
           _count: { select: { findings: { where: { deletedAt: null } } } },
         },

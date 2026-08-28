@@ -74,7 +74,7 @@ test.describe("Polar Sandbox billing proof", () => {
     const context = await browser.newContext({ baseURL, storageState: actors.ownerStorageState })
     const page = await context.newPage()
     try {
-      await page.route("https://**/*", async (route) => {
+      await page.route("**/*", async (route) => {
         if (new URL(route.request().url()).origin === new URL(baseURL).origin) {
           await route.continue()
         } else {
@@ -87,14 +87,21 @@ test.describe("Polar Sandbox billing proof", () => {
           response.request().method() === "POST" &&
           new URL(response.url()).pathname === "/api/billing/topup"
       )
-      await page.getByRole("button", { name: "Buy Minute Pack" }).click()
-      const response = await responsePromise
+      const checkoutNavigationPromise = page.waitForRequest(
+        (request) =>
+          request.isNavigationRequest() && new URL(request.url()).origin !== new URL(baseURL).origin
+      )
+      const [response, checkoutNavigation] = await Promise.all([
+        responsePromise,
+        checkoutNavigationPromise,
+        page.getByRole("button", { name: "Buy Minute Pack" }).click(),
+      ])
       expect(response.ok()).toBe(true)
       expect(response.request().headers()["x-lyrashield-billing-staging-access"]).toBeUndefined()
-      expect(await response.json()).toMatchObject({
-        success: true,
-        data: { provider: "polar", url: expect.stringMatching(/^https:\/\//) },
-      })
+      // The direct pack cases below validate the provider payload. This UI proof
+      // binds the successful POST to the browser's real hosted-checkout redirect
+      // without reading a CDP response body after navigation has started.
+      expect(new URL(checkoutNavigation.url()).protocol).toBe("https:")
     } finally {
       await context.close()
     }
@@ -172,6 +179,10 @@ test.describe("Polar Sandbox billing proof", () => {
         data: { workspaceId: actors.workspaceId, pack: packId },
       })
       await expect(checkout).toBeOK()
+      expect(await checkout.json()).toMatchObject({
+        success: true,
+        data: { provider: "polar", url: expect.stringMatching(/^https:\/\//) },
+      })
       const before = await prisma.commission.count()
       const orderId = `polar-${packId}-${Date.now()}`
       const eventId = `polar-${packId}-event-${Date.now()}`
