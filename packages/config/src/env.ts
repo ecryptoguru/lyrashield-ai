@@ -301,6 +301,19 @@ const envSchema = z
     BILLING_STAGING_ADMISSION: z.enum(["off", "restricted"]).default("off"),
     BILLING_STAGING_ACCESS_TOKEN: z.string().min(32).optional().or(z.literal("")),
     BILLING_STAGING_REGION: z.enum(["usd", "inr"]).optional().or(z.literal("")),
+    // App-only Cloudflare Authenticated Origin Pull enforcement. The proxy
+    // validates the Envoy XFCC certificate before it exposes country routing.
+    CLOUDFLARE_ORIGIN_MTLS: z.enum(["off", "required"]).default("off"),
+    CLOUDFLARE_AOP_CERT_SHA256: z
+      .string()
+      .regex(/^[a-fA-F0-9]{64}$/)
+      .optional()
+      .or(z.literal("")),
+    DEPLOY_PROBE_CERT_SHA256: z
+      .string()
+      .regex(/^[a-fA-F0-9]{64}$/)
+      .optional()
+      .or(z.literal("")),
     BILLING_GEO_IP_HEADER: z
       .string()
       .optional()
@@ -501,6 +514,18 @@ const envSchema = z
   .superRefine((val, ctx) => {
     const message = billingStagingConfigError(val)
     if (message) ctx.addIssue({ code: "custom", path: ["BILLING_STAGING_ADMISSION"], message })
+    if (
+      val.CLOUDFLARE_ORIGIN_MTLS === "required" &&
+      (!/^[a-fA-F0-9]{64}$/.test(val.CLOUDFLARE_AOP_CERT_SHA256 ?? "") ||
+        !/^[a-fA-F0-9]{64}$/.test(val.DEPLOY_PROBE_CERT_SHA256 ?? ""))
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["CLOUDFLARE_AOP_CERT_SHA256"],
+        message:
+          "required Cloudflare origin mTLS needs AOP and deployment probe SHA-256 fingerprints",
+      })
+    }
   })
 
 export type Env = z.infer<typeof envSchema>

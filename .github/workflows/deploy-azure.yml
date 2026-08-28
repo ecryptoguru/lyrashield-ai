@@ -27,13 +27,15 @@ env:
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
   REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}
   PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
-  # Purchase admission stays closed during provider verification. Provider
-  # credentials and catalog IDs are still bound so signed test/live webhooks,
-  # reconciliation, and a later reviewed admission change use one revision.
-  POLAR_BILLING_ADMISSION: "off"
+  # Cloud modes are protected azure-production variables. Local purchases stay
+  # hard-off independently of Cloud launch state.
+  POLAR_BILLING_ADMISSION: ${{ vars.POLAR_BILLING_ADMISSION || 'off' }}
   POLAR_LOCAL_BILLING_ADMISSION: "off"
-  RAZORPAY_BILLING_ADMISSION: "off"
+  RAZORPAY_BILLING_ADMISSION: ${{ vars.RAZORPAY_BILLING_ADMISSION || 'off' }}
   RAZORPAY_LOCAL_BILLING_ADMISSION: "off"
+  BILLING_CANARY_WORKSPACE_IDS: ${{ vars.BILLING_CANARY_WORKSPACE_IDS || '' }}
+  CLOUDFLARE_ORIGIN_MTLS: ${{ vars.CLOUDFLARE_ORIGIN_MTLS || 'off' }}
+  CLOUDFLARE_AOP_CERT_SHA256: ${{ vars.CLOUDFLARE_AOP_CERT_SHA256 || '' }}
 
 jobs:
   build:
@@ -304,6 +306,11 @@ jobs:
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
           RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
+          POLAR_BILLING_ADMISSION: ${{ env.POLAR_BILLING_ADMISSION }}
+          RAZORPAY_BILLING_ADMISSION: ${{ env.RAZORPAY_BILLING_ADMISSION }}
+          BILLING_CANARY_WORKSPACE_IDS: ${{ env.BILLING_CANARY_WORKSPACE_IDS }}
+          CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
+          CLOUDFLARE_AOP_CERT_SHA256: ${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}
         run: |
           if [ "${POLAR_ENVIRONMENT}" != "production" ]; then
             echo "::error::azure-production requires POLAR_ENVIRONMENT=production; Sandbox belongs only in isolated staging."
@@ -337,8 +344,25 @@ jobs:
                 throw new Error(`${name} must be a non-empty JSON object`);
               }
             }
+            for (const name of ["POLAR_PRODUCT_IDS", "RAZORPAY_PLAN_IDS"]) {
+              const value = JSON.parse(process.env[name]);
+              for (const key of ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual", "pack_100", "pack_250", "pack_500"]) {
+                if (!(key in value)) throw new Error(`${name} is missing ${key}`);
+              }
+            }
+            const modes = [process.env.POLAR_BILLING_ADMISSION, process.env.RAZORPAY_BILLING_ADMISSION];
+            if (!modes.every((mode) => ["off", "canary", "public"].includes(mode))) throw new Error("Cloud billing mode is invalid");
+            if (modes[0] !== modes[1]) throw new Error("Polar and Razorpay Cloud admissions must move jointly");
+            const allowlist = process.env.BILLING_CANARY_WORKSPACE_IDS.split(",").filter(Boolean);
+            if (modes[0] === "canary" && (!allowlist.length || !allowlist.every((id) => /^[A-Za-z0-9_-]{1,191}$/.test(id)))) {
+              throw new Error("Canary admission requires valid workspace IDs");
+            }
+            if (modes[0] !== "canary" && allowlist.length) throw new Error("Only canary admission may set a workspace allowlist");
+            if (process.env.CLOUDFLARE_ORIGIN_MTLS === "required" && !/^[a-fA-F0-9]{64}$/.test(process.env.CLOUDFLARE_AOP_CERT_SHA256)) {
+              throw new Error("Required Cloudflare origin mTLS needs a certificate fingerprint");
+            }
           '
-          echo "Billing provider configuration is complete; all purchase admissions remain off."
+          echo "Billing provider and protected admission configuration is valid."
 
       - name: Log in to Azure
         uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
@@ -816,6 +840,22 @@ jobs:
           if [ "$EMAIL_VERIFICATION_REQUIRED" = "1" ]; then
             EMAIL_ENV=("BREVO_API_KEY=secretref:brevo-api-key")
           fi
+          probe_dir=$(mktemp -d)
+          trap 'rm -rf "$probe_dir"' EXIT
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -subj "/CN=lyrashield-deploy-probe" \
+            -keyout "$probe_dir/key.pem" -out "$probe_dir/cert.pem" >/dev/null 2>&1
+          DEPLOY_PROBE_CERT_SHA256=$(openssl x509 -in "$probe_dir/cert.pem" -outform DER | sha256sum | cut -d' ' -f1)
+          case "${{ env.CLOUDFLARE_ORIGIN_MTLS }}" in
+            off) CLIENT_CERT_MODE=ignore ;;
+            required) CLIENT_CERT_MODE=require ;;
+            *) echo "::error::Invalid CLOUDFLARE_ORIGIN_MTLS mode."; exit 1 ;;
+          esac
+          az containerapp ingress update \
+            --name "$AZURE_APP_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --client-certificate-mode "$CLIENT_CERT_MODE" \
+            --output none
           az containerapp update \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -830,6 +870,9 @@ jobs:
               "BILLING_STAGING_ADMISSION=off" \
               "BILLING_STAGING_ACCESS_TOKEN=" \
               "BILLING_STAGING_REGION=" \
+              "CLOUDFLARE_ORIGIN_MTLS=${{ env.CLOUDFLARE_ORIGIN_MTLS }}" \
+              "CLOUDFLARE_AOP_CERT_SHA256=${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}" \
+              "DEPLOY_PROBE_CERT_SHA256=${DEPLOY_PROBE_CERT_SHA256}" \
               "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}" \
               "POLAR_ACCESS_TOKEN=secretref:polar-access-token" \
               "POLAR_ORG_ID=${POLAR_ORG_ID}" \
@@ -844,7 +887,7 @@ jobs:
               "RAZORPAY_PLAN_IDS=${RAZORPAY_PLAN_IDS}" \
               "RAZORPAY_BILLING_ADMISSION=${{ env.RAZORPAY_BILLING_ADMISSION }}" \
               "RAZORPAY_LOCAL_BILLING_ADMISSION=${{ env.RAZORPAY_LOCAL_BILLING_ADMISSION }}" \
-              "BILLING_CANARY_WORKSPACE_IDS=" \
+              "BILLING_CANARY_WORKSPACE_IDS=${{ env.BILLING_CANARY_WORKSPACE_IDS }}" \
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
@@ -877,6 +920,23 @@ jobs:
           if [ -z "$CANDIDATE_REVISION" ] || [ -z "$CANDIDATE_FQDN" ]; then
             echo "::error::Azure did not return the app candidate revision and FQDN. Production traffic was not changed."
             exit 1
+          fi
+          if [ "${{ env.CLOUDFLARE_ORIGIN_MTLS }}" = "required" ]; then
+            for path in /api/ready /api/ready/evidence; do
+              for attempt in $(seq 1 24); do
+                if curl --fail --silent --show-error --max-time 10 \
+                  --cert "$probe_dir/cert.pem" --key "$probe_dir/key.pem" \
+                  -H "Host: app.lyrashieldai.com" "https://${CANDIDATE_FQDN}${path}"; then
+                  break
+                fi
+                if [ "$attempt" = "24" ]; then
+                  echo "::error::mTLS deployment probe failed for ${path}. Production traffic was not changed."
+                  exit 1
+                fi
+                sleep 5
+              done
+            done
+            echo "mTLS candidate probe passed with ephemeral certificate fingerprint only."
           fi
           echo "revision=$CANDIDATE_REVISION" >> "$GITHUB_OUTPUT"
           echo "fqdn=$CANDIDATE_FQDN" >> "$GITHUB_OUTPUT"
@@ -920,6 +980,9 @@ jobs:
               "RAZORPAY_BILLING_ADMISSION=${{ env.RAZORPAY_BILLING_ADMISSION }}" \
               "RAZORPAY_LOCAL_BILLING_ADMISSION=${{ env.RAZORPAY_LOCAL_BILLING_ADMISSION }}" \
               "BILLING_CANARY_WORKSPACE_IDS=" \
+              "CLOUDFLARE_ORIGIN_MTLS=off" \
+              "CLOUDFLARE_AOP_CERT_SHA256=" \
+              "DEPLOY_PROBE_CERT_SHA256=" \
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
@@ -993,6 +1056,7 @@ jobs:
           SCANNER_FQDN: ${{ steps.deploy-scanner.outputs.fqdn }}
           EGRESS_FQDN: ${{ steps.deploy-egress-proxy.outputs.fqdn }}
           EGRESS_REVISION: ${{ steps.deploy-egress-proxy.outputs.revision }}
+          CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
         run: |
           source ops/deployment/azure-vm-run-command.sh
           smoke_candidate() {
@@ -1068,11 +1132,18 @@ jobs:
             echo "::error::egress-proxy candidate health failed after one bounded revision restart. Production traffic was not changed."
             return 1
           }
-          smoke_candidate app "$APP_NAME" "$APP_REVISION" "$APP_FQDN" /api/ready & APP_SMOKE_PID=$!
+          if [ "$CLOUDFLARE_ORIGIN_MTLS" = "required" ]; then
+            APP_SMOKE_PID=""
+            echo "App mTLS candidate readiness already passed with ephemeral client certificate."
+          else
+            smoke_candidate app "$APP_NAME" "$APP_REVISION" "$APP_FQDN" /api/ready & APP_SMOKE_PID=$!
+          fi
           smoke_candidate scanner "$SCANNER_NAME" "$SCANNER_REVISION" "$SCANNER_FQDN" /api/ready & SCANNER_SMOKE_PID=$!
           smoke_egress_candidate & EGRESS_SMOKE_PID=$!
           CANDIDATE_SMOKE_FAILED=0
-          if wait "$APP_SMOKE_PID"; then
+          if [ -z "$APP_SMOKE_PID" ]; then
+            :
+          elif wait "$APP_SMOKE_PID"; then
             if [ -n "$APP_FQDN" ] && ! curl --fail --silent --show-error --max-time 5 "https://${APP_FQDN}/api/ready/evidence"; then
               echo "::error::app candidate evidence configuration is not ready. Production traffic was not changed."
               CANDIDATE_SMOKE_FAILED=1

@@ -1,0 +1,53 @@
+name: Configure Cloud billing admission
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Joint Polar and Razorpay Cloud admission mode
+        required: true
+        type: choice
+        options: [off, canary, public]
+      canary_workspace_ids:
+        description: Comma-separated workspace IDs; required only for canary
+        required: false
+        type: string
+      source_sha:
+        description: Exact deployed product SHA
+        required: true
+        type: string
+      web_image_digest:
+        description: Exact deployed web image reference with digest
+        required: true
+        type: string
+
+concurrency:
+  group: configure-cloud-billing-admission
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-24.04
+    environment: azure-production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - run: az extension add --name containerapp --yes --only-show-errors
+      - name: Apply joint Cloud admission without rebuilding
+        env:
+          GH_TOKEN: ${{ secrets.ADMISSION_CONFIG_TOKEN }}
+          CLOUD_BILLING_MODE: ${{ inputs.mode }}
+          BILLING_CANARY_WORKSPACE_IDS: ${{ inputs.canary_workspace_ids }}
+          DEPLOY_SHA: ${{ inputs.source_sha }}
+          WEB_IMAGE_DIGEST: ${{ inputs.web_image_digest }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/configure-cloud-billing-admission.sh

@@ -24,7 +24,6 @@ esac
 # does not satisfy the same validated runtime configuration as the staged app.
 /app/e2e/billing/verify-staging-config.sh
 
-exec pnpm exec playwright test \
-  e2e/billing/checkout-flows.spec.ts \
-  e2e/billing/razorpay-upi-cap-fallback.spec.ts \
-  --project=chromium
+# Hosted test payments must be completed at the provider. Synthetic signed
+# webhook posts remain local contract coverage and never become staging proof.
+exec /app/e2e/billing/verify-provider-receipt.sh

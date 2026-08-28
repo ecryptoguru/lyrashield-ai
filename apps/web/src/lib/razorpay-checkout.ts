@@ -19,7 +19,11 @@ function loadCheckoutScript(): Promise<void> {
     script.src = RAZORPAY_CHECKOUT_URL
     script.async = true
     script.onload = () => resolve()
-    script.onerror = () => reject(new Error("Unable to load Razorpay checkout."))
+    script.onerror = () => {
+      checkoutScript = undefined
+      script.remove()
+      reject(new Error("Unable to load Razorpay checkout."))
+    }
     document.head.appendChild(script)
   })
 
@@ -30,15 +34,30 @@ export async function openRazorpaySubscriptionCheckout(params: {
   keyId: string
   subscriptionId: string
   onAuthorized: () => void
+  onDismiss?: () => void
 }): Promise<void> {
   await loadCheckoutScript()
-  if (!window.Razorpay) throw new Error("Razorpay checkout did not initialize.")
+  if (!window.Razorpay) {
+    checkoutScript = undefined
+    throw new Error("Razorpay checkout did not initialize.")
+  }
 
-  new window.Razorpay({
-    key: params.keyId,
-    name: "LyraShield AI",
-    description: "Cloud subscription",
-    subscription_id: params.subscriptionId,
-    handler: params.onAuthorized,
-  }).open()
+  await new Promise<void>((resolve) => {
+    new window.Razorpay!({
+      key: params.keyId,
+      name: "LyraShield AI",
+      description: "Cloud subscription",
+      subscription_id: params.subscriptionId,
+      handler: () => {
+        params.onAuthorized()
+        resolve()
+      },
+      modal: {
+        ondismiss: () => {
+          params.onDismiss?.()
+          resolve()
+        },
+      },
+    }).open()
+  })
 }

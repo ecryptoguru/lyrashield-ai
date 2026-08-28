@@ -36,6 +36,12 @@ function spoofedIndiaRequest() {
   })
 }
 
+function trustedIndiaRequest() {
+  return new Request("https://app.lyrashieldai.com/billing/checkout", {
+    headers: { "x-lyrashield-trusted-country": "IN" },
+  })
+}
+
 describe("billing provider region resolution", () => {
   beforeEach(() => {
     mocks.deploymentEnvironment = "production"
@@ -74,6 +80,14 @@ describe("billing provider region resolution", () => {
     mocks.stagingRegion = "inr"
 
     expect(resolveProvider(new Request("https://app.lyrashieldai.com"), true)).toEqual({
+      provider: "polar",
+      region: "usd",
+    })
+  })
+
+  it("uses only the proxy-authenticated India country marker in production", () => {
+    expect(resolveProvider(trustedIndiaRequest())).toEqual({ provider: "razorpay", region: "inr" })
+    expect(resolveProvider(new Request("https://app.lyrashieldai.com"))).toEqual({
       provider: "polar",
       region: "usd",
     })

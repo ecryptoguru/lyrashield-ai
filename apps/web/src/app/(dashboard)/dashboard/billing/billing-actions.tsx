@@ -48,6 +48,7 @@ export function BillingActions({
           keyId: data.data.keyId,
           subscriptionId: data.data.subscriptionId,
           onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
+          onDismiss: () => setLoading(null),
         })
       } else {
         setError("Unable to start checkout. Please try again.")

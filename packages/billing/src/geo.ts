@@ -2,8 +2,8 @@
  * GeoIP routing for payment providers.
  *
  * Determines whether a workspace should use Polar (USD, global) or
- * Razorpay (INR, India). Production remains USD until an authenticated
- * ingress-owned country signal exists; client request headers are not one.
+ * Razorpay (INR, India). The app proxy accepts country only after validating
+ * Cloudflare Authenticated Origin Pulls, then writes its private header.
  *
  * Isolated billing staging may select an explicit server-side region only
  * after the request proves its restricted staging session.
@@ -22,7 +22,7 @@ const DEFAULT_GEO_IP_HEADER = "cf-connecting-ip"
  * evidence of region. Direct Azure ingress does not currently strip and
  * replace a country signal, so normal requests fail closed to USD.
  */
-export function resolveRegion(_request: Request, restrictedStagingAccess = false): BillingRegion {
+export function resolveRegion(request: Request, restrictedStagingAccess = false): BillingRegion {
   if (
     restrictedStagingAccess &&
     env.BILLING_STAGING_ADMISSION === "restricted" &&
@@ -31,6 +31,7 @@ export function resolveRegion(_request: Request, restrictedStagingAccess = false
   ) {
     return env.BILLING_STAGING_REGION
   }
+  if (request.headers.get("x-lyrashield-trusted-country") === "IN") return "inr"
   return "usd"
 }
 
@@ -44,9 +45,9 @@ export function regionToProvider(region: BillingRegion): BillingProvider {
 /**
  * Resolve the provider and region from a request.
  *
- * A-L04: The client-supplied region override has been removed to prevent
- * currency arbitrage. The region is determined solely by a validated,
- * session-bound staging override or the fail-closed USD default.
+ * A-L04: Client-controlled region and forwarding headers are ignored. The
+ * region is determined only by proxy-authenticated country or a validated,
+ * session-bound staging override.
  *
  * @param request - The incoming HTTP request
  */

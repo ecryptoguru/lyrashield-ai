@@ -13,6 +13,7 @@ job_creator="$repo/.github/scripts/create-billing-staging-job.sh"
 job_starter="$repo/.github/scripts/start-billing-staging-job.sh"
 e2e_runner="$repo/e2e/billing/run-staging-proof.sh"
 e2e_config_smoke="$repo/e2e/billing/verify-staging-config.sh"
+receipt_verifier="$repo/e2e/billing/verify-provider-receipt.sh"
 e2e_razorpay="$repo/e2e/billing/razorpay-upi-cap-fallback.spec.ts"
 geo_router="$repo/packages/billing/src/geo.ts"
 playwright_config="$repo/playwright.config.ts"
@@ -185,11 +186,12 @@ must_contain 'LAST_JOB_EXECUTION="$execution"'
 must_contain 'JOB_REPLICA_RETRY_LIMIT=1'
 must_contain '"$warm_job" "$e2e_image" /bin/true 300'
 must_contain '/app/e2e/billing/run-staging-proof.sh 1800'
-must_contain 'Successful billing proof logs did not contain a Playwright pass count.'
+must_contain 'if: inputs.verify_provider_receipt'
+must_contain 'Successful billing proof logs did not contain a provider-delivered receipt marker.'
 must_contain '### Billing staging proof passed'
 must_contain 'E2E digest:'
 must_contain 'Region/provider:'
-must_contain 'Playwright result:'
+must_contain 'Receipt verifier: provider-delivered webhook and app effect confirmed'
 
 wait_helper_lines=$(grep -n '^          wait_for_job() {$' "$workflow" | cut -d: -f1)
 if [ "$(wc -l <<< "$wait_helper_lines" | tr -d ' ')" -ne 3 ]; then
@@ -237,7 +239,9 @@ test -x "$job_creator"
 test -x "$job_starter"
 test -x "$e2e_runner"
 test -x "$e2e_config_smoke"
+test -x "$receipt_verifier"
 grep -Fq '/app/e2e/billing/verify-staging-config.sh' "$e2e_runner"
+grep -Fq '/app/e2e/billing/verify-provider-receipt.sh' "$e2e_runner"
 grep -Fq 'await import("../../packages/config/src/index.ts")' "$e2e_config_smoke"
 grep -Fq 'pnpm --filter @lyrashield/db exec prisma migrate deploy 2>&1' "$migration_script"
 grep -Fq 'BILLING_STAGING_RECOVER_MIGRATION' "$recovery_script"

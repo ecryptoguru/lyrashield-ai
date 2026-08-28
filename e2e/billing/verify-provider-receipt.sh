@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+: "${BILLING_RECEIPT_PROVIDER:?BILLING_RECEIPT_PROVIDER is required}"
+: "${BILLING_RECEIPT_EVENT_ID:?BILLING_RECEIPT_EVENT_ID is required}"
+: "${BILLING_RECEIPT_WORKSPACE_ID:?BILLING_RECEIPT_WORKSPACE_ID is required}"
+: "${BILLING_RECEIPT_KIND:?BILLING_RECEIPT_KIND is required}"
+: "${BILLING_RECEIPT_OBJECT_ID:?BILLING_RECEIPT_OBJECT_ID is required}"
+
+exec pnpm exec tsx e2e/billing/verify-provider-receipt.ts
