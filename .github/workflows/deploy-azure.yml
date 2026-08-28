@@ -344,11 +344,15 @@ jobs:
                 throw new Error(`${name} must be a non-empty JSON object`);
               }
             }
-            for (const name of ["POLAR_PRODUCT_IDS", "RAZORPAY_PLAN_IDS"]) {
+            const requiredCatalogKeys = {
+              POLAR_PRODUCT_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual", "pack_100", "pack_250", "pack_500"],
+              // Razorpay packs are quote-signed payment links, not plans. Their
+              // prices and identity come from MINUTE_PACK_MAP and webhook notes.
+              RAZORPAY_PLAN_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual"],
+            };
+            for (const [name, keys] of Object.entries(requiredCatalogKeys)) {
               const value = JSON.parse(process.env[name]);
-              for (const key of ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual", "pack_100", "pack_250", "pack_500"]) {
-                if (!(key in value)) throw new Error(`${name} is missing ${key}`);
-              }
+              for (const key of keys) if (!(key in value)) throw new Error(`${name} is missing ${key}`);
             }
             const modes = [process.env.POLAR_BILLING_ADMISSION, process.env.RAZORPAY_BILLING_ADMISSION];
             if (!modes.every((mode) => ["off", "canary", "public"].includes(mode))) throw new Error("Cloud billing mode is invalid");
