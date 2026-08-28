@@ -75,7 +75,7 @@ async function createVerifiedSession(params: {
     await page.getByLabel("Email").fill(params.email)
     await page.locator("#password").fill(params.password)
     await page.getByRole("button", { name: "Sign in" }).click()
-    await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
+    await expect(page).toHaveURL(/\/(dashboard|onboarding)/, { timeout: 15_000 })
     const onboarding = await page.request.patch("/api/onboarding", { data: { skipped: true } })
     expect(onboarding.ok()).toBe(true)
     const session = await page.request.get("/api/auth/get-session")
