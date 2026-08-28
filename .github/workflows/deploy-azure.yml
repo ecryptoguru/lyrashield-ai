@@ -860,21 +860,34 @@ jobs:
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --query id \
             --output tsv)
+          PREVIOUS_CLIENT_CERT_MODE=$(az rest \
+            --method get \
+            --url "${CONTAINER_APP_RESOURCE_ID}?api-version=2025-01-01" \
+            --query 'properties.configuration.ingress.clientCertificateMode' \
+            --output tsv)
+          PREVIOUS_CLIENT_CERT_MODE=${PREVIOUS_CLIENT_CERT_MODE:-Ignore}
+          echo "previous_client_cert_mode=${PREVIOUS_CLIENT_CERT_MODE}" >> "$GITHUB_OUTPUT"
           printf '%s' "$(jq -nc --arg mode "$CLIENT_CERT_MODE" '{properties: {configuration: {ingress: {clientCertificateMode: $mode}}}}')" | az rest \
             --method patch \
             --url "${CONTAINER_APP_RESOURCE_ID}?api-version=2025-01-01" \
             --headers 'Content-Type=application/json' \
             --body @- \
             --output none
-          APPLIED_CLIENT_CERT_MODE=$(az rest \
-            --method get \
-            --url "${CONTAINER_APP_RESOURCE_ID}?api-version=2025-01-01" \
-            --query 'properties.configuration.ingress.clientCertificateMode' \
-            --output tsv)
-          if [ "${APPLIED_CLIENT_CERT_MODE,,}" != "${CLIENT_CERT_MODE,,}" ]; then
-            echo "::error::Container Apps client certificate mode readback did not match the protected configuration."
-            exit 1
-          fi
+          for attempt in $(seq 1 24); do
+            APPLIED_CLIENT_CERT_MODE=$(az rest \
+              --method get \
+              --url "${CONTAINER_APP_RESOURCE_ID}?api-version=2025-01-01" \
+              --query 'properties.configuration.ingress.clientCertificateMode' \
+              --output tsv)
+            if [ "${APPLIED_CLIENT_CERT_MODE,,}" = "${CLIENT_CERT_MODE,,}" ]; then
+              break
+            fi
+            if [ "$attempt" = "24" ]; then
+              echo "::error::Container Apps client certificate mode readback did not match the protected configuration."
+              exit 1
+            fi
+            sleep 5
+          done
           az containerapp update \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -1462,3 +1475,95 @@ jobs:
             echo "::error::One or more previous revisions did not recover. Manual recovery required."
             exit 1
           fi
+
+      - name: Restore prior ingress mode after failed rollout
+        if: >
+          failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
+          (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
+          steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          PREVIOUS_CLIENT_CERT_MODE: ${{ steps.deploy-app.outputs.previous_client_cert_mode }}
+        run: |
+          case "$PREVIOUS_CLIENT_CERT_MODE" in
+            Ignore|Require) ;;
+            *) echo "::error::Refusing to restore an unexpected Container Apps client certificate mode."; exit 1 ;;
+          esac
+          APP_RESOURCE_ID=$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query id \
+            --output tsv)
+          printf '%s' "$(jq -nc --arg mode "$PREVIOUS_CLIENT_CERT_MODE" '{properties: {configuration: {ingress: {clientCertificateMode: $mode}}}}')" | az rest \
+            --method patch \
+            --url "${APP_RESOURCE_ID}?api-version=2025-01-01" \
+            --headers 'Content-Type=application/json' \
+            --body @- \
+            --output none
+          for attempt in $(seq 1 24); do
+            restored_mode=$(az rest \
+              --method get \
+              --url "${APP_RESOURCE_ID}?api-version=2025-01-01" \
+              --query 'properties.configuration.ingress.clientCertificateMode' \
+              --output tsv)
+            if [ "${restored_mode,,}" = "${PREVIOUS_CLIENT_CERT_MODE,,}" ]; then
+              exit 0
+            fi
+            if [ "$attempt" = "24" ]; then
+              break
+            fi
+            sleep 5
+          done
+          echo "::error::Previous Container Apps client certificate mode did not recover after rollout failure."
+          exit 1
+
+      - name: Deactivate zero-traffic candidates after failed rollout
+        if: >
+          failure() &&
+          (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
+          steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_CANDIDATE: ${{ steps.deploy-app.outputs.revision }}
+          APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_CANDIDATE: ${{ steps.deploy-scanner.outputs.revision }}
+          SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_CANDIDATE: ${{ steps.deploy-egress-proxy.outputs.revision }}
+          EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
+        run: |
+          deactivate_candidate() {
+            local label="$1"
+            local name="$2"
+            local candidate="$3"
+            local previous="$4"
+            if [ -z "$name" ] || [ -z "$candidate" ] || [ "$candidate" = "$previous" ]; then return 0; fi
+            local weight
+            weight=$(az containerapp ingress traffic show \
+              --name "$name" \
+              --resource-group "$RG" \
+              --query "[?revisionName == '${candidate}'].weight | [0]" \
+              --output tsv)
+            if [ -n "$weight" ] && [ "$weight" != "0" ]; then
+              echo "::error::${label} candidate ${candidate} still serves ${weight}% traffic; refusing to deactivate it."
+              return 1
+            fi
+            if [ "$(az containerapp revision show --name "$name" --resource-group "$RG" --revision "$candidate" --query properties.active --output tsv)" = "true" ]; then
+              az containerapp revision deactivate \
+                --name "$name" \
+                --resource-group "$RG" \
+                --revision "$candidate" \
+                --output none
+              echo "Deactivated zero-traffic ${label} candidate ${candidate}."
+            fi
+          }
+          CLEANUP_FAILED=0
+          deactivate_candidate app "$APP_NAME" "$APP_CANDIDATE" "$APP_PREVIOUS" || CLEANUP_FAILED=1
+          deactivate_candidate scanner "$SCANNER_NAME" "$SCANNER_CANDIDATE" "$SCANNER_PREVIOUS" || CLEANUP_FAILED=1
+          deactivate_candidate egress-proxy "$EGRESS_NAME" "$EGRESS_CANDIDATE" "$EGRESS_PREVIOUS" || CLEANUP_FAILED=1
+          exit "$CLEANUP_FAILED"
