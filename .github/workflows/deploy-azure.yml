@@ -888,7 +888,26 @@ jobs:
             fi
             sleep 5
           done
-          az containerapp update \
+          retry_app_update() {
+            local attempt output
+            for attempt in $(seq 1 24); do
+              if output=$("$@" 2>&1); then
+                printf '%s\n' "$output"
+                return 0
+              fi
+              if ! grep -Fq 'ContainerAppOperationInProgress' <<< "$output"; then
+                printf '%s\n' "$output" >&2
+                return 1
+              fi
+              if [ "$attempt" = "24" ]; then
+                printf '%s\n' "$output" >&2
+                echo "::error::Container Apps operation did not release before the candidate update."
+                return 1
+              fi
+              sleep 5
+            done
+          }
+          retry_app_update az containerapp update \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --image "${IMAGE}" \
