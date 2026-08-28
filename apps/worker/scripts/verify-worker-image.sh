@@ -45,6 +45,21 @@ docker run --rm --entrypoint sh "$image" -c '
   test ! -e /opt/lyrashield-venv/src
   test ! -e /app/.env
 
+  for asset in \
+    run-worker.sh \
+    refresh-secrets.sh \
+    refresh-egress.sh \
+    capture-stop-provenance.sh \
+    lyrashield-worker.service \
+    lyrashield-worker-secrets.service \
+    lyrashield-worker-egress.service \
+    lyrashield-worker-egress-refresh.service \
+    lyrashield-worker-egress-refresh.timer
+  do
+    test -f "/opt/lyrashield-worker-host/$asset"
+    test ! -L "/opt/lyrashield-worker-host/$asset"
+  done
+
   if find /app /opt/lyrashield-venv -type f -name .env -print -quit | grep -q .; then
     echo "worker image contains an environment file" >&2
     exit 1

@@ -767,7 +767,10 @@ export function ScansClient({
       ) : (
         <div className="space-y-3">
           {scans.map((scan) => {
-            const presentation = getScanPresentation(scan.status)
+            const presentation = getScanPresentation(scan.status, {
+              errorCategory: scan.errorCategory,
+              errorMessage: scan.errorMessage,
+            })
             return (
               <Card key={scan.id} className="p-4">
                 <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">

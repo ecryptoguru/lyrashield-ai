@@ -19,7 +19,26 @@ import {
   CreateRepoTargetSchema,
   CreateUrlTargetSchema,
   PatchRepoRefSchema,
+  AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+  AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
+  AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
+  isAgentMinutesExhaustedError,
 } from "./index"
+
+describe("isAgentMinutesExhaustedError", () => {
+  it("recognizes current and legacy minute-exhaustion outcomes without matching generic budgets", () => {
+    expect(isAgentMinutesExhaustedError(AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY)).toBe(true)
+    expect(
+      isAgentMinutesExhaustedError("BUDGET_EXCEEDED", AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE)
+    ).toBe(true)
+    expect(
+      isAgentMinutesExhaustedError("BUDGET_EXCEEDED", AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE)
+    ).toBe(true)
+    expect(isAgentMinutesExhaustedError("BUDGET_EXCEEDED", "Protected run limit reached")).toBe(
+      false
+    )
+  })
+})
 
 describe("OnboardingStepSchema", () => {
   it("accepts all 7 valid step values", () => {

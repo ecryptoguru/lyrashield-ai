@@ -310,7 +310,10 @@ export function ScanDetailClient({
   const [refreshError, setRefreshError] = useState(false)
   const isActive = isActiveScan(scan.status)
   const elapsedTime = useElapsedTime(isActive ? scan.startedAt : null)
-  const presentation = getScanPresentation(scan.status)
+  const presentation = getScanPresentation(scan.status, {
+    errorCategory: scan.errorCategory,
+    errorMessage: scan.errorMessage,
+  })
   const etagRef = useRef<string | undefined>(undefined)
   const prevStatusRef = useRef(initialScan.status)
 
@@ -329,9 +332,12 @@ export function ScanDetailClient({
             // a scan with more findings than that would be announced with the
             // page size as if it were the total.
             "Scan completed — findings are ready to review"
-          : getScanPresentation(scan.status).headline,
+          : getScanPresentation(scan.status, {
+              errorCategory: scan.errorCategory,
+              errorMessage: scan.errorMessage,
+            }).headline,
     })
-  }, [scan.status])
+  }, [scan.errorCategory, scan.errorMessage, scan.status])
 
   // Auto-dismiss the completion banner after 6s; the outcome stays visible in
   // the status badge and stat grid.
@@ -759,7 +765,14 @@ export function ScanDetailClient({
             >
               <p className="font-semibold">{presentation.headline}</p>
               <p className="text-foreground/80 mt-1">{presentation.description}</p>
-              {scan.target && (
+              {presentation.recoveryAction === "usage" ? (
+                <Link
+                  href="/dashboard/billing"
+                  className={buttonVariants({ variant: "outline", className: "mt-3" })}
+                >
+                  Review usage
+                </Link>
+              ) : scan.target ? (
                 <Link
                   href={scanRecoveryHref({
                     targetId: scan.target.id,
@@ -770,15 +783,20 @@ export function ScanDetailClient({
                 >
                   Start a new scan
                 </Link>
-              )}
+              ) : null}
               {scan.errorMessage && (
                 <details className="text-foreground mt-3">
                   <summary className="cursor-pointer font-medium">Failure details</summary>
                   <p className="mt-2 wrap-break-word">
-                    {scan.errorCategory ? `${safeApiErrorMessage(scan.errorCategory)}: ` : ""}
-                    {scan.status === "STOPPED_BUDGET" || scan.errorCategory === "BUDGET_EXCEEDED"
-                      ? "The protected run limit was reached."
-                      : safeApiErrorMessage(scan.errorMessage)}
+                    {presentation.recoveryAction === "usage"
+                      ? "Workspace minutes and grace were exhausted."
+                      : [
+                          scan.errorCategory ? `${safeApiErrorMessage(scan.errorCategory)}: ` : "",
+                          scan.status === "STOPPED_BUDGET" ||
+                          scan.errorCategory === "BUDGET_EXCEEDED"
+                            ? "The protected run limit was reached."
+                            : safeApiErrorMessage(scan.errorMessage),
+                        ].join("")}
                   </p>
                 </details>
               )}

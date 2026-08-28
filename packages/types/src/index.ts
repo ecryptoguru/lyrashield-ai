@@ -62,6 +62,21 @@ export const ScanStatusSchema = z.enum([
   "STOPPED_BUDGET",
   "TIMED_OUT",
 ])
+export const AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY = "AGENT_MINUTES_EXHAUSTED"
+export const AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE =
+  "Agent-minute balance exhausted and grace period exceeded"
+export const AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE = "Agent-minute overage spend limit reached"
+
+export function isAgentMinutesExhaustedError(
+  errorCategory?: string | null,
+  errorMessage?: string | null
+): boolean {
+  return (
+    errorCategory === AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY ||
+    errorMessage === AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE ||
+    errorMessage === AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE
+  )
+}
 export const FindingSeveritySchema = z.enum(["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"])
 export const FindingStatusSchema = z.enum([
   "OPEN",

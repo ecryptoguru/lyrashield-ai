@@ -340,7 +340,7 @@ Hosted OAuth is read-only by default. Write scope still requires permission and 
 The web app currently contains 108 route-handler files. Grouped surfaces:
 
 - auth, OAuth metadata/consent/device approval, MCP;
-- workspaces, onboarding, team, account deletion;
+- workspaces, onboarding, team, and reviewed account-deletion requests;
 - projects, targets, GitHub installation/repositories/webhooks;
 - scans, readiness, events, cancellation, findings, retests, fix proposals;
 - reports, scorecards, cards, badges, referrals, launch readiness;

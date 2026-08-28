@@ -1000,6 +1000,7 @@ jobs:
             const url = new URL(process.env.DATABASE_ADMIN_URL);
             url.username = "billing_e2e_staging";
             url.password = process.env.E2E_PASSWORD;
+            url.searchParams.set("sslmode", "verify-full");
             process.stdout.write(url.toString());
           ')
           echo "::add-mask::${e2e_password}"

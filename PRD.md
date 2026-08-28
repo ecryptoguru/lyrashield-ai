@@ -60,7 +60,7 @@ LyraShield AI is live in open beta with open registration at `https://app.lyrash
 
 Implemented:
 
-- Better Auth email/password, GitHub OAuth, optional Google OAuth, email verification, sessions, account deletion, and anonymization.
+- Better Auth email/password, GitHub OAuth, optional Google OAuth, email verification, sessions, and reviewed account-deletion requests. Automated destructive deletion remains fail-closed until billing, audit, evidence, and legal-retention rules are approved.
 - Workspaces, memberships, invitations, roles, projects, repository/URL/API targets, onboarding, and active-workspace persistence.
 - BullMQ scan admission, queueing, preflight, target serialization, lifecycle events, cancellation, orphan reconciliation, schedules, and fail-closed worker readiness.
 - Host-visible worker/engine temporary paths for Docker sandbox source mounts; pre-provider

@@ -19,7 +19,14 @@ import {
   withScanFinalizationClaim,
   type ScanStatus,
 } from "@lyrashield/db"
-import { resolveScanProfile, resolveTargetScanMode, type UrlScanProfile } from "@lyrashield/types"
+import {
+  AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+  AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
+  AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
+  resolveScanProfile,
+  resolveTargetScanMode,
+  type UrlScanProfile,
+} from "@lyrashield/types"
 import { runPreflight } from "./preflight.job"
 import {
   runEngine,
@@ -1036,6 +1043,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Deep/Custom scans consume 3× minutes (applied inside recordAgentMinutes).
       const engineWallClockMs =
         engineStartedAtMs === null ? 0 : Math.max(1, Date.now() - engineStartedAtMs)
+      let agentMinuteTerminalError: {
+        status: ScanStatus
+        errorCategory: string
+        errorMessage: string
+      } | null = null
       if (engineWorkObserved) {
         try {
           const billingAccount = await prisma.billingAccount.findUnique({
@@ -1064,29 +1076,22 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 "engine_overage"
               )
               if (!overage.debited || overage.minutes !== metering.overageMinutes) {
-                await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-                  errorCategory: "BUDGET_EXCEEDED",
-                  errorMessage: "Agent-minute overage spend limit reached",
-                })
-                return {
-                  status: "failed",
-                  errorCategory: "BUDGET_EXCEEDED",
-                  errorMessage: "Agent-minute overage spend limit reached",
+                agentMinuteTerminalError = {
+                  status: "STOPPED_BUDGET" as ScanStatus,
+                  errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+                  errorMessage: AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
                 }
               }
             } else {
               // Enter grace period (15min cap)
               const graceResult = await enterGrace(workspaceId, engineWallClockMs)
               if (!graceResult.shouldContinue) {
-                // Grace exceeded — stop the scan
-                await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-                  errorCategory: "BUDGET_EXCEEDED",
-                  errorMessage: "Agent-minute balance exhausted and grace period exceeded",
-                })
-                return {
-                  status: "failed",
-                  errorCategory: "BUDGET_EXCEEDED",
-                  errorMessage: "Agent-minute balance exhausted and grace period exceeded",
+                // Preserve provider usage, deterministic receipts, and findings before
+                // sealing the terminal entitlement outcome below.
+                agentMinuteTerminalError = {
+                  status: "STOPPED_BUDGET" as ScanStatus,
+                  errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+                  errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
                 }
               }
             }
@@ -1276,9 +1281,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         status: ScanStatus
         errorCategory: string
         errorMessage: string
-      } | null = null
+      } | null = agentMinuteTerminalError
 
-      if (target.type === "REPO" && exitInterpretation.status === "FAILED") {
+      if (
+        !engineTerminalError &&
+        target.type === "REPO" &&
+        exitInterpretation.status === "FAILED"
+      ) {
         const stoppedForBudget = exitInterpretation.category === "BUDGET_EXCEEDED"
         engineTerminalError = {
           status: (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
@@ -1303,6 +1312,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         }
       } else if (
+        !engineTerminalError &&
         target.type === "REPO" &&
         (!engineResult.output.findingsComplete ||
           !runRecord ||
@@ -1400,7 +1410,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           }
         | undefined
       const triageInput = buildEngineTriageInput(aiSecuritySignals, engineResult.sourceRevision)
-      const triageFeatureEnabled = env.LYRASHIELD_AI_TRIAGE_ENABLED === "1"
+      const triageFeatureEnabled =
+        !agentMinuteTerminalError && env.LYRASHIELD_AI_TRIAGE_ENABLED === "1"
       const workspacePlan =
         triageFeatureEnabled && triageInput
           ? await prisma.workspace

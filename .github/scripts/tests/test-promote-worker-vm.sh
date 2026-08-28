@@ -13,7 +13,38 @@ engine_revision=$(printf 'c%.0s' {1..40})
 
 write_mocks() {
   local case_dir=$1
-  mkdir -p "$case_dir/bin"
+  mkdir -p "$case_dir/bin" "$case_dir/image-assets" "$case_dir/host/libexec" "$case_dir/host/systemd" "$case_dir/promotion"
+  for asset in \
+    run-worker.sh \
+    refresh-secrets.sh \
+    refresh-egress.sh \
+    capture-stop-provenance.sh \
+    lyrashield-worker.service \
+    lyrashield-worker-secrets.service \
+    lyrashield-worker-egress.service \
+    lyrashield-worker-egress-refresh.service \
+    lyrashield-worker-egress-refresh.timer
+  do
+    printf 'image asset: %s\n' "$asset" > "$case_dir/image-assets/$asset"
+  done
+  local host_script
+  for host_script in \
+    lyrashield-run-worker \
+    lyrashield-refresh-secrets \
+    lyrashield-refresh-egress \
+    lyrashield-capture-worker-stop-provenance
+  do
+    printf 'installed script: %s\n' "$host_script" > "$case_dir/host/libexec/$host_script"
+  done
+  for unit in \
+    lyrashield-worker.service \
+    lyrashield-worker-secrets.service \
+    lyrashield-worker-egress.service \
+    lyrashield-worker-egress-refresh.service \
+    lyrashield-worker-egress-refresh.timer
+  do
+    printf 'installed unit: %s\n' "$unit" > "$case_dir/host/systemd/$unit"
+  done
 
   cat > "$case_dir/bin/systemctl" <<'MOCK'
 #!/bin/sh
@@ -51,6 +82,7 @@ case "$command:$unit" in
       printf '%s' "$MOCK_REPLACEMENT_STOP" > "$MOCK_ADMISSION_STOP"
     fi ;;
   reset-failed:lyrashield-worker.service) ;;
+  daemon-reload:) ;;
   *) echo "unexpected systemctl call: $command $unit" >&2; exit 1 ;;
 esac
 MOCK
@@ -101,6 +133,9 @@ case "$1:$2" in
       *) exit 1 ;;
     esac ;;
   login:*|pull:*) : ;;
+  create:*) printf 'asset-container\n' ;;
+  cp:*) cp -R "$MOCK_IMAGE_ASSETS/." "$3" ;;
+  rm:*) : ;;
   info:--format) printf '/\n' ;;
   image:prune) : ;;
   image:inspect)
@@ -159,11 +194,15 @@ run_case() {
       MOCK_TIMER_ENABLED="$case_dir/timer-enabled" \
       MOCK_ADMISSION_STOP="$case_dir/admission-stop" \
       MOCK_DOCKER_LOG="$case_dir/docker.log" \
+      MOCK_IMAGE_ASSETS="$case_dir/image-assets" \
       MOCK_FREE_BYTES="$free_bytes" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
       MOCK_REPLACEMENT_STOP="$replacement_stop" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
+      LYRASHIELD_WORKER_PROMOTION_STATE_DIR="$case_dir/promotion" \
+      LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$case_dir/host/libexec" \
+      LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
       sh "$script" "$target" "$app_revision" "$engine_revision" 2>&1
   )
   status=$?
