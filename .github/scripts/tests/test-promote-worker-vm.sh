@@ -58,10 +58,12 @@ MOCK
   cat > "$case_dir/bin/docker" <<'MOCK'
 #!/bin/sh
 set -eu
+printf '%s\n' "$*" >> "$MOCK_DOCKER_LOG"
 case "$1:$2" in
   inspect:lyrashield-worker)
     case "$*" in
       *State.Health*) printf 'healthy\n' ;;
+      *'{{.Image}}'*) printf '%s\n' 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' ;;
       *Config.Image*)
         if [ "${MOCK_FAIL_IMAGE_CHECK:-0}" = 1 ]; then
           printf '%s\n' 'ghcr.io/example/worker@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
@@ -99,8 +101,11 @@ case "$1:$2" in
       *) exit 1 ;;
     esac ;;
   login:*|pull:*) : ;;
+  info:--format) printf '/\n' ;;
+  image:prune) : ;;
   image:inspect)
     case "$*" in
+      *'{{.Size}}'*) printf '1000\n' ;;
       *org.opencontainers.image.revision*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *io.lyrashield.engine.revision*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
       *) exit 1 ;;
@@ -113,6 +118,11 @@ MOCK
 #!/bin/sh
 exit 0
 MOCK
+cat > "$case_dir/bin/df" <<'MOCK'
+#!/bin/sh
+printf '%s\n' 'Filesystem 1-blocks Used Available Capacity Mounted on'
+printf '/dev/mock 10000000000 1000 %s 1%% /\n' "$MOCK_FREE_BYTES"
+MOCK
   cat > "$case_dir/bin/chown" <<'MOCK'
 #!/bin/sh
 exit 0
@@ -124,6 +134,7 @@ run_case() {
   local name=$1 timer_active=$2 service_enabled=$3 timer_enabled=$4 expected=$5
   local service_active=${6:-1} existing_stop=${7:-} fail_image_check=${8:-0}
   local replacement_stop=${9:-}
+  local free_bytes=${10:-9999999000}
   local case_dir="$tmp/$name"
   mkdir -p "$case_dir"
   write_mocks "$case_dir"
@@ -132,6 +143,7 @@ run_case() {
   printf '%s' "$service_enabled" > "$case_dir/service-enabled"
   printf '%s' "$timer_enabled" > "$case_dir/timer-enabled"
   printf '%s' "$existing_stop" > "$case_dir/admission-stop"
+  : > "$case_dir/docker.log"
   printf 'LYRASHIELD_WORKER_IMAGE=%s\nGHCR_USERNAME=test-user\n' "$target" > "$case_dir/runtime.conf"
   printf 'GHCR_TOKEN=test-token\n' > "$case_dir/worker.env"
 
@@ -146,6 +158,8 @@ run_case() {
       MOCK_SERVICE_ENABLED="$case_dir/service-enabled" \
       MOCK_TIMER_ENABLED="$case_dir/timer-enabled" \
       MOCK_ADMISSION_STOP="$case_dir/admission-stop" \
+      MOCK_DOCKER_LOG="$case_dir/docker.log" \
+      MOCK_FREE_BYTES="$free_bytes" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
       MOCK_REPLACEMENT_STOP="$replacement_stop" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
@@ -166,7 +180,11 @@ run_case() {
       echo "failed promotion emitted a success marker" >&2
       exit 1
     fi
+    if [ "$name" = insufficient-disk ]; then
+      grep -Fq 'Worker image pull requires' <<< "$output"
+    fi
   fi
+  grep -Fq 'image prune --all --force' "$case_dir/docker.log"
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
     grep -Fq 'Newer scan admission stop preserved' <<< "$output"
@@ -186,5 +204,6 @@ run_case preserves-existing-stop 1 1 1 success 1 '{"operator":"on-call","reason"
 run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1
 run_case preserves-existing-stop-on-rollback 1 1 1 failure 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}' 1
+run_case insufficient-disk 1 1 1 failure 1 '' 0 '' 1000
 
 echo "Worker promotion systemd proof passed."
