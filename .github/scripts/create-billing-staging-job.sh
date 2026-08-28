@@ -10,6 +10,7 @@ job_name=$1
 image=$2
 command=$3
 replica_timeout=$4
+replica_retry_limit=${JOB_REPLICA_RETRY_LIMIT:-0}
 secret_specs=${JOB_SECRET_SPECS:-}
 env_specs=${JOB_ENV_SPECS:-}
 
@@ -22,6 +23,7 @@ env_specs=${JOB_ENV_SPECS:-}
 [[ "$job_name" =~ ^[a-z][a-z0-9-]{0,30}[a-z0-9]$ ]]
 [[ "$image" == "${REGISTRY}/"*"@sha256:"* ]]
 [[ "$replica_timeout" =~ ^[1-9][0-9]*$ ]]
+[[ "$replica_retry_limit" =~ ^[01]$ ]]
 
 secrets='[]'
 secret_refs='{}'
@@ -96,6 +98,7 @@ body=$(jq -n \
   --argjson secrets "$secrets" \
   --argjson container_env "$initial_container_env" \
   --argjson timeout "$replica_timeout" \
+  --argjson replica_retry_limit "$replica_retry_limit" \
   --arg source_sha "$IMAGE_SHA" \
   '{
     location: $location,
@@ -109,7 +112,7 @@ body=$(jq -n \
       configuration: {
         triggerType: "Manual",
         replicaTimeout: $timeout,
-        replicaRetryLimit: 0,
+        replicaRetryLimit: $replica_retry_limit,
         manualTriggerConfig: {parallelism: 1, replicaCompletionCount: 1},
         registries: [{server: $registry, identity: $identity}],
         secrets: $secrets
