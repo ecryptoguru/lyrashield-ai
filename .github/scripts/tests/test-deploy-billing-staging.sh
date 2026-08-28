@@ -438,6 +438,9 @@ for required_job_env in \
   fi
 done
 grep -Fq '"BILLING_STAGING_REGION="' "$production_workflow"
+grep -Fq 'POLAR_PRODUCT_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual", "pack_100", "pack_250", "pack_500"]' "$production_workflow"
+grep -Fq 'RAZORPAY_PLAN_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual"]' "$production_workflow"
+grep -Fq 'Razorpay packs are quote-signed payment links, not plans.' "$production_workflow"
 app_runtime_block=$(sed -n '/- name: Create or update public disposable staging app/,/- name: Run proof with disposable E2E evidence role/p' "$workflow")
 if grep -Fq 'BILLING_E2E_DATABASE_URL' <<< "$app_runtime_block"; then
   echo "FAIL: disposable E2E database credential must not be bound to the web app" >&2
