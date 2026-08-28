@@ -124,6 +124,22 @@ expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized"
   exit 1
 }
 
+# Keep the running worker image for rollback while reclaiming superseded release
+# images before Docker needs space for both compressed and extracted target layers.
+docker_root=$(docker info --format '{{.DockerRootDir}}')
+current_image_id=$(docker inspect "$container" --format '{{.Image}}')
+current_image_size=$(docker image inspect "$current_image_id" --format '{{.Size}}')
+required_free=$((current_image_size * 3 + 2147483648))
+free_before=$(df -P -B1 "$docker_root" | awk 'NR == 2 { print $4 }')
+docker image prune --all --force >/dev/null
+free_after=$(df -P -B1 "$docker_root" | awk 'NR == 2 { print $4 }')
+reclaimed=$((free_after - free_before))
+echo "Worker image cleanup reclaimed ${reclaimed} bytes; ${free_after} bytes available"
+[ "$free_after" -ge "$required_free" ] || {
+  echo "Worker image pull requires ${required_free} free bytes; found ${free_after}" >&2
+  exit 1
+}
+
 ghcr_username=$(sed -n 's/^GHCR_USERNAME=//p' "$config" | head -n 1)
 ghcr_token=$(sed -n 's/^GHCR_TOKEN=//p' "$environment_file" | head -n 1)
 [ -n "$ghcr_username" ]
