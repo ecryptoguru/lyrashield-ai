@@ -453,6 +453,18 @@ grep -Fq 'clientCertificateMode: $mode' "$production_workflow"
 grep -Fq 'api-version=2025-01-01' "$production_workflow"
 grep -Fq 'APPLIED_CLIENT_CERT_MODE=$(az rest' "$production_workflow"
 grep -Fq 'Container Apps client certificate mode readback did not match the protected configuration.' "$production_workflow"
+grep -Fq 'previous_client_cert_mode=${PREVIOUS_CLIENT_CERT_MODE}' "$production_workflow"
+mtls_patch_block=$(sed -n '/CONTAINER_APP_RESOURCE_ID=$(az containerapp show/,/az containerapp update/p' "$production_workflow")
+grep -Fq 'for attempt in $(seq 1 24); do' <<< "$mtls_patch_block"
+grep -Fq 'if [ "$attempt" = "24" ]; then' <<< "$mtls_patch_block"
+grep -Fq 'sleep 5' <<< "$mtls_patch_block"
+grep -Fq 'Restore prior ingress mode after failed rollout' "$production_workflow"
+grep -Fq "failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&" "$production_workflow"
+grep -Fq "steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')" "$production_workflow"
+grep -Fq 'Previous Container Apps client certificate mode did not recover after rollout failure.' "$production_workflow"
+grep -Fq 'Deactivate zero-traffic candidates after failed rollout' "$production_workflow"
+grep -Fq 'candidate ${candidate} still serves ${weight}% traffic; refusing to deactivate it.' "$production_workflow"
+grep -Fq 'Deactivated zero-traffic ${label} candidate ${candidate}.' "$production_workflow"
 grep -Fq 'if: steps.sync-upstash.outcome == '\''success'\'' && steps.sync-github-app.outcome == '\''success'\'' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != '\''' "$production_workflow"
 app_runtime_block=$(sed -n '/- name: Create or update public disposable staging app/,/- name: Run proof with disposable E2E evidence role/p' "$workflow")
 if grep -Fq 'BILLING_E2E_DATABASE_URL' <<< "$app_runtime_block"; then
