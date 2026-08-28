@@ -150,6 +150,7 @@ for job in \
   lyra-bill-proof-1234567890 \
   lyra-e2e-pre-1234567890 \
   lyra-e2e-post-1234567890 \
+  lyra-e2e-warm-1234567890 \
   lyra-stage-migration-recovery \
   lyrashield-stage-migrate \
   lyrashield-stage-db-role \
@@ -181,6 +182,8 @@ must_not_contain "RAZORPAY_BILLING_ADMISSION=public"
 must_not_contain '!cancelled()'
 must_not_contain '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}'
 must_contain 'LAST_JOB_EXECUTION="$execution"'
+must_contain 'JOB_REPLICA_RETRY_LIMIT=1'
+must_contain '"$warm_job" "$e2e_image" /bin/true 300'
 must_contain '/app/e2e/billing/run-staging-proof.sh 1800'
 must_contain 'Successful billing proof logs did not contain a Playwright pass count.'
 must_contain '### Billing staging proof passed'
@@ -213,6 +216,8 @@ while IFS= read -r wait_helper_start; do
     'Azure can accept a job start before its execution is queryable.' \
     "--query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}'" \
     '--output jsonc || true' \
+    'az containerapp job replica list' \
+    '--execution "$execution"' \
     'az containerapp job logs show' \
     '--container "$container_name"' \
     '--tail 300' \
@@ -313,6 +318,7 @@ PATH="$mock_dir:$PATH" \
   REGISTRY='stage.azurecr.io' \
   PULL_IDENTITY_ID='/subscriptions/test/resourceGroups/stage/providers/Microsoft.ManagedIdentity/userAssignedIdentities/pull' \
   IMAGE_SHA='0123456789abcdef0123456789abcdef01234567' \
+  JOB_REPLICA_RETRY_LIMIT=1 \
   DATABASE_ADMIN_URL='test-secret-value' \
   JOB_SECRET_SPECS='database-admin-url=DATABASE_ADMIN_URL' \
   JOB_ENV_SPECS=$'DATABASE_ADMIN_URL=secretref:database-admin-url\nE2E_ROLE_ACTION=drop' \
@@ -324,6 +330,7 @@ PATH="$mock_dir:$PATH" \
 
 jq -e '
   .properties.configuration.secrets == [{name: "database-admin-url-lyra-stage-atomic-test", value: "test-secret-value"}] and
+  .properties.configuration.replicaRetryLimit == 1 and
   .properties.template.containers[0].env == [
     {name: "E2E_ROLE_ACTION", value: "drop"}
   ]

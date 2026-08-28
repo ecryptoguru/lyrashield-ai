@@ -498,6 +498,11 @@ jobs:
                     --job-execution-name "$execution" \
                     --query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}' \
                     --output jsonc || true
+                  az containerapp job replica list \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --execution "$execution" \
+                    --output jsonc || true
                   az containerapp job logs show \
                     --name "$job" \
                     --resource-group "$RESOURCE_GROUP" \
@@ -847,6 +852,7 @@ jobs:
           role_job="lyra-e2e-role-${job_suffix}"
           proof_job="lyra-bill-proof-${job_suffix}"
           recovery_job="lyra-e2e-pre-${job_suffix}"
+          warm_job="lyra-e2e-warm-${job_suffix}"
           LAST_JOB_EXECUTION=""
 
           wait_for_job() {
@@ -928,6 +934,11 @@ jobs:
                     --job-execution-name "$execution" \
                     --query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}' \
                     --output jsonc || true
+                  az containerapp job replica list \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --execution "$execution" \
+                    --output jsonc || true
                   az containerapp job logs show \
                     --name "$job" \
                     --resource-group "$RESOURCE_GROUP" \
@@ -976,6 +987,13 @@ jobs:
                 outcome=1
               fi
             fi
+            if az containerapp job show --name "$warm_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+              if stop_job_executions "$warm_job"; then
+                az containerapp job delete --name "$warm_job" --resource-group "$RESOURCE_GROUP" --yes --output none
+              else
+                outcome=1
+              fi
+            fi
             if az containerapp job show --name "$role_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
               if ! stop_job_executions "$role_job"; then
                 outcome=1
@@ -997,7 +1015,7 @@ jobs:
           trap cleanup EXIT
 
           for stale_job in \
-            "$proof_job" "$role_job" "$recovery_job" \
+            "$proof_job" "$role_job" "$recovery_job" "$warm_job" \
             lyrashield-stage-billing-proof lyrashield-stage-e2e-role lyrashield-stage-e2e-cleanup; do
             if az containerapp job show --name "$stale_job" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
               stop_job_executions "$stale_job"
@@ -1019,6 +1037,16 @@ jobs:
           stop_job_executions "$recovery_job"
           az containerapp job delete \
             --name "$recovery_job" --resource-group "$RESOURCE_GROUP" --yes --output none
+
+          # A credential-free image start can absorb a transient Azure
+          # placement failure. The provider-capable proof remains single-attempt.
+          JOB_REPLICA_RETRY_LIMIT=1 \
+            .github/scripts/create-billing-staging-job.sh \
+            "$warm_job" "$e2e_image" /bin/true 300
+          wait_for_job "$warm_job"
+          stop_job_executions "$warm_job"
+          az containerapp job delete \
+            --name "$warm_job" --resource-group "$RESOURCE_GROUP" --yes --output none
 
           e2e_password=$(openssl rand -hex 32)
           e2e_database_url=$(E2E_PASSWORD="$e2e_password" node -e '
@@ -1150,6 +1178,7 @@ jobs:
           proof_job="lyra-bill-proof-${job_suffix}"
           preflight_job="lyra-e2e-pre-${job_suffix}"
           recovery_job="lyra-e2e-post-${job_suffix}"
+          warm_job="lyra-e2e-warm-${job_suffix}"
 
           stop_job_executions() {
             local job=$1 active
@@ -1190,6 +1219,7 @@ jobs:
             purge_job "$role_job" database-admin-url e2e-password || outcome=1
             purge_job "$preflight_job" database-admin-url || outcome=1
             purge_job "$recovery_job" database-admin-url || outcome=1
+            purge_job "$warm_job" || outcome=1
             purge_job lyrashield-stage-billing-proof \
               e2e-database-url staging-access better-auth-secret internal-api-key \
               polar-access-token polar-webhook razorpay-key-id razorpay-key-secret razorpay-webhook || outcome=1
@@ -1283,6 +1313,11 @@ jobs:
                     --resource-group "$RESOURCE_GROUP" \
                     --job-execution-name "$execution" \
                     --query '{name:name,status:properties.status,startTime:properties.startTime,endTime:properties.endTime}' \
+                    --output jsonc || true
+                  az containerapp job replica list \
+                    --name "$job" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --execution "$execution" \
                     --output jsonc || true
                   az containerapp job logs show \
                     --name "$job" \
