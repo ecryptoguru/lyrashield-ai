@@ -441,6 +441,19 @@ grep -Fq '"BILLING_STAGING_REGION="' "$production_workflow"
 grep -Fq 'POLAR_PRODUCT_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual", "pack_100", "pack_250", "pack_500"]' "$production_workflow"
 grep -Fq 'RAZORPAY_PLAN_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual"]' "$production_workflow"
 grep -Fq 'Razorpay packs are quote-signed payment links, not plans.' "$production_workflow"
+if grep -Fq -- '--client-certificate-mode' "$production_workflow"; then
+  echo "FAIL: deploy workflow must not use unsupported Container Apps client-certificate CLI arguments" >&2
+  exit 1
+fi
+grep -Fq 'off) CLIENT_CERT_MODE=Ignore ;;' "$production_workflow"
+grep -Fq 'required) CLIENT_CERT_MODE=Require ;;' "$production_workflow"
+grep -Fq 'CONTAINER_APP_RESOURCE_ID=$(az containerapp show' "$production_workflow"
+grep -Fq -- '--method patch' "$production_workflow"
+grep -Fq 'clientCertificateMode: $mode' "$production_workflow"
+grep -Fq 'api-version=2025-01-01' "$production_workflow"
+grep -Fq 'APPLIED_CLIENT_CERT_MODE=$(az rest' "$production_workflow"
+grep -Fq 'Container Apps client certificate mode readback did not match the protected configuration.' "$production_workflow"
+grep -Fq 'if: steps.sync-upstash.outcome == '\''success'\'' && steps.sync-github-app.outcome == '\''success'\'' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != '\''' "$production_workflow"
 app_runtime_block=$(sed -n '/- name: Create or update public disposable staging app/,/- name: Run proof with disposable E2E evidence role/p' "$workflow")
 if grep -Fq 'BILLING_E2E_DATABASE_URL' <<< "$app_runtime_block"; then
   echo "FAIL: disposable E2E database credential must not be bound to the web app" >&2

@@ -851,15 +851,30 @@ jobs:
             -keyout "$probe_dir/key.pem" -out "$probe_dir/cert.pem" >/dev/null 2>&1
           DEPLOY_PROBE_CERT_SHA256=$(openssl x509 -in "$probe_dir/cert.pem" -outform DER | sha256sum | cut -d' ' -f1)
           case "${{ env.CLOUDFLARE_ORIGIN_MTLS }}" in
-            off) CLIENT_CERT_MODE=ignore ;;
-            required) CLIENT_CERT_MODE=require ;;
+            off) CLIENT_CERT_MODE=Ignore ;;
+            required) CLIENT_CERT_MODE=Require ;;
             *) echo "::error::Invalid CLOUDFLARE_ORIGIN_MTLS mode."; exit 1 ;;
           esac
-          az containerapp ingress update \
+          CONTAINER_APP_RESOURCE_ID=$(az containerapp show \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
-            --client-certificate-mode "$CLIENT_CERT_MODE" \
+            --query id \
+            --output tsv)
+          printf '%s' "$(jq -nc --arg mode "$CLIENT_CERT_MODE" '{properties: {configuration: {ingress: {clientCertificateMode: $mode}}}}')" | az rest \
+            --method patch \
+            --url "${CONTAINER_APP_RESOURCE_ID}?api-version=2025-01-01" \
+            --headers 'Content-Type=application/json' \
+            --body @- \
             --output none
+          APPLIED_CLIENT_CERT_MODE=$(az rest \
+            --method get \
+            --url "${CONTAINER_APP_RESOURCE_ID}?api-version=2025-01-01" \
+            --query 'properties.configuration.ingress.clientCertificateMode' \
+            --output tsv)
+          if [ "${APPLIED_CLIENT_CERT_MODE,,}" != "${CLIENT_CERT_MODE,,}" ]; then
+            echo "::error::Container Apps client certificate mode readback did not match the protected configuration."
+            exit 1
+          fi
           az containerapp update \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -947,7 +962,7 @@ jobs:
 
       - name: Deploy scanner Container App
         id: deploy-scanner
-        if: always() && steps.sync-upstash.outcome == 'success' && steps.sync-github-app.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        if: steps.sync-upstash.outcome == 'success' && steps.sync-github-app.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
         env:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
