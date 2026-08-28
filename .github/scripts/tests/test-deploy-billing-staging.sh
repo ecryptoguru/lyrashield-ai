@@ -432,6 +432,12 @@ if grep -Fq 'BILLING_E2E_DATABASE_URL' <<< "$app_runtime_block"; then
   echo "FAIL: disposable E2E database credential must not be bound to the web app" >&2
   exit 1
 fi
+grep -Fq "retry_containerapp_write()" <<< "$app_runtime_block"
+grep -Fq "(ConflictingConcurrentWriteNotAllowed)" <<< "$app_runtime_block"
+if [ "$(grep -Fc 'retry_containerapp_write "billing staging' <<< "$app_runtime_block")" -ne 4 ]; then
+  echo "FAIL: every existing billing staging Container App write must use bounded conflict retry" >&2
+  exit 1
+fi
 if grep -Eq 'console\.(log|error).*PASSWORD|console\.(log|error).*password' "$role_script"; then
   echo "FAIL: role script may log a password" >&2
   exit 1

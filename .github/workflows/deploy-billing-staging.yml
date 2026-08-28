@@ -649,6 +649,27 @@ jobs:
           echo "::add-mask::${redis_url}"
           echo "::add-mask::${system_database_url}"
 
+          retry_containerapp_write() {
+            local label=$1
+            shift
+            local attempt output status wait_seconds
+            for attempt in {1..5}; do
+              if output=$("$@" 2>&1); then
+                [ -z "$output" ] || printf '%s\n' "$output" >&2
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$output" >&2
+              if ! grep -Fq '(ConflictingConcurrentWriteNotAllowed)' <<< "$output" || [ "$attempt" -eq 5 ]; then
+                return "$status"
+              fi
+              wait_seconds=$((attempt * 5))
+              echo "::warning::Azure rejected ${label} with a concurrent-write conflict; retrying after ${wait_seconds}s."
+              sleep "$wait_seconds"
+            done
+          }
+
           secrets=(
             "database-url=${DATABASE_URL}"
             "database-system-url=${system_database_url}"
@@ -705,16 +726,20 @@ jobs:
           )
 
           if az containerapp show --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
-            az containerapp identity assign \
+            retry_containerapp_write "billing staging identity assignment" \
+              az containerapp identity assign \
               --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
               --user-assigned "$PULL_IDENTITY_ID" "$APP_IDENTITY_ID" --output none
-            az containerapp registry set \
+            retry_containerapp_write "billing staging registry configuration" \
+              az containerapp registry set \
               --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
               --server "$REGISTRY" --identity "$PULL_IDENTITY_ID" --output none
-            az containerapp secret set \
+            retry_containerapp_write "billing staging secret configuration" \
+              az containerapp secret set \
               --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
               --secrets "${secrets[@]}" --output none
-            az containerapp update \
+            retry_containerapp_write "billing staging revision update" \
+              az containerapp update \
               --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
               --image "$web_image" --min-replicas 1 --max-replicas 1 \
               --set-env-vars "${env_vars[@]}" \
