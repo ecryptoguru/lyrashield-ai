@@ -10,6 +10,7 @@ import {
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
 import { hasBillingStagingAccess } from "@/lib/billing-staging-access"
 import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
+import { assessAppOrigin, isAppHost, trustedAppCountry } from "@/lib/app-origin"
 
 // This is the Next.js 16 middleware entry. Next.js detects `proxy.ts` as the
 // proxy/middleware file; do not create a separate `middleware.ts` or the build
@@ -233,6 +234,24 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)
 
+  // Only Cloudflare's app hostname is configured with per-host Authenticated
+  // Origin Pulls. Reject direct Azure traffic before any Redis-backed limiter;
+  // do not let a caller manufacture either the client certificate or country.
+  if (isAppHost(request)) {
+    const originTrust = await assessAppOrigin(request)
+    if (originTrust === "untrusted") {
+      const response = new NextResponse(null, { status: 404 })
+      response.headers.set("Cache-Control", "private, no-store")
+      response.headers.set("Content-Security-Policy", csp)
+      return response
+    }
+    const country = originTrust === "cloudflare" ? trustedAppCountry(request) : null
+    requestHeaders.delete("cf-ipcountry")
+    requestHeaders.delete("x-forwarded-client-cert")
+    requestHeaders.delete("x-lyrashield-country")
+    if (country) requestHeaders.set("x-lyrashield-trusted-country", country)
+  }
+
   // The disposable billing-staging app keeps external ingress only because
   // sandbox/test providers must deliver signed webhooks. Protect every other
   // application route with a short-lived, HttpOnly same-origin session.
@@ -414,5 +433,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/:path*"],
 }

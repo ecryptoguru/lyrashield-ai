@@ -14,12 +14,17 @@ import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 import { headers } from "next/headers"
 import { getRequestBillingAdmission, resolveRequestBillingProvider } from "@/lib/billing-admission"
+import { BillingReturnNotice } from "./billing-return-notice"
 
 export const metadata: Metadata = {
   title: "Billing",
 }
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ checkout?: string; topup?: string }>
+}) {
   const session = await getCachedSession()
   if (!session) return null
 
@@ -48,6 +53,7 @@ export default async function BillingPage() {
     headers: requestHeaders,
   })
   const { provider: checkoutProvider } = resolveRequestBillingProvider(billingRequest)
+  const returns = await searchParams
   const purchasesAvailable = getRequestBillingAdmission(
     checkoutProvider,
     workspaceId,
@@ -87,6 +93,11 @@ export default async function BillingPage() {
       />
 
       <div className="space-y-6">
+        <BillingReturnNotice
+          checkout={returns.checkout}
+          topup={returns.topup}
+          provider={checkoutProvider}
+        />
         {canManageBilling && !purchasesAvailable && (
           <div
             role="status"

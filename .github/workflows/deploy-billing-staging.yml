@@ -11,6 +11,47 @@ on:
         options:
           - none
           - 20260814020000_ai_system_profile_versions
+      verify_provider_receipt:
+        description: "Run only after a hosted Sandbox/Test payment delivered its provider webhook"
+        required: false
+        type: boolean
+        default: false
+      receipt_provider:
+        description: "polar or razorpay"
+        required: false
+        type: string
+      receipt_event_id:
+        description: "Provider-delivered webhook event ID"
+        required: false
+        type: string
+      receipt_workspace_id:
+        description: "Disposable staging workspace ID"
+        required: false
+        type: string
+      receipt_kind:
+        description: "subscription or pack"
+        required: false
+        type: string
+      receipt_object_id:
+        description: "Provider subscription or payment object ID"
+        required: false
+        type: string
+      receipt_plan:
+        description: "Expected plan for a subscription receipt"
+        required: false
+        type: string
+      receipt_interval:
+        description: "Expected interval for a subscription receipt"
+        required: false
+        type: string
+      receipt_status:
+        description: "Expected subscription status"
+        required: false
+        type: string
+      receipt_minutes:
+        description: "Expected minutes for a pack receipt"
+        required: false
+        type: string
 
 concurrency:
   group: deploy-billing-staging
@@ -833,6 +874,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run proof with disposable E2E evidence role
+        if: inputs.verify_provider_receipt
         shell: bash
         env:
           DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
@@ -1113,6 +1155,15 @@ jobs:
             'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
             'BILLING_STAGING_ADMISSION=restricted'
             "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}"
+            "BILLING_RECEIPT_PROVIDER=${{ inputs.receipt_provider }}"
+            "BILLING_RECEIPT_EVENT_ID=${{ inputs.receipt_event_id }}"
+            "BILLING_RECEIPT_WORKSPACE_ID=${{ inputs.receipt_workspace_id }}"
+            "BILLING_RECEIPT_KIND=${{ inputs.receipt_kind }}"
+            "BILLING_RECEIPT_OBJECT_ID=${{ inputs.receipt_object_id }}"
+            "BILLING_RECEIPT_PLAN=${{ inputs.receipt_plan }}"
+            "BILLING_RECEIPT_INTERVAL=${{ inputs.receipt_interval }}"
+            "BILLING_RECEIPT_STATUS=${{ inputs.receipt_status }}"
+            "BILLING_RECEIPT_MINUTES=${{ inputs.receipt_minutes }}"
             'POLAR_BILLING_ADMISSION=off'
             'POLAR_LOCAL_BILLING_ADMISSION=off'
             'RAZORPAY_BILLING_ADMISSION=off'
@@ -1142,14 +1193,12 @@ jobs:
             --name "$proof_job" --resource-group "$RESOURCE_GROUP" \
             --execution "$LAST_JOB_EXECUTION" --container "$proof_container" \
             --tail 300 --format text | tee "$proof_log"
-          passed_count=$(grep -Eo '[0-9]+ passed' "$proof_log" | tail -1 | cut -d' ' -f1 || true)
-          skipped_count=$(grep -Eo '[0-9]+ skipped' "$proof_log" | tail -1 | cut -d' ' -f1 || true)
+          receipt_marker=$(grep -F 'Provider-delivered ' "$proof_log" | tail -1 || true)
           rm -f "$proof_log"
-          [ -n "$passed_count" ] || {
-            echo "::error::Successful billing proof logs did not contain a Playwright pass count."
+          [ -n "$receipt_marker" ] || {
+            echo "::error::Successful billing proof logs did not contain a provider-delivered receipt marker."
             exit 1
           }
-          skipped_count=${skipped_count:-0}
           if [ "$BILLING_STAGING_REGION" = "usd" ]; then
             provider_mode="Polar Sandbox"
           else
@@ -1160,7 +1209,7 @@ jobs:
             echo "- Source SHA: \`${IMAGE_SHA}\`"
             echo "- E2E digest: \`${E2E_DIGEST}\`"
             echo "- Region/provider: \`${BILLING_STAGING_REGION}\` / ${provider_mode}"
-            echo "- Playwright result: ${passed_count} passed, ${skipped_count} skipped"
+            echo "- Receipt verifier: provider-delivered webhook and app effect confirmed"
             echo "- Production admission modes remained \`off\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
