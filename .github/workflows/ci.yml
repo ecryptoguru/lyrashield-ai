@@ -79,6 +79,10 @@ jobs:
         shell: bash
         run: bash .github/scripts/tests/test-classify-paths.sh
 
+      - name: Test Action WebMCP coverage fixture
+        shell: bash
+        run: bash .github/scripts/tests/test-action-webmcp-guard.sh
+
       - name: Classify changed files
         id: classify
         shell: bash
