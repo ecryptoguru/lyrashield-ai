@@ -159,6 +159,12 @@ assert_eq "unknown: shared fallback" "true" "$(get_field "$out" "shared")"
 assert_eq "unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
 
+# --- Test 15: an unknown path remains fail-closed in a mixed change set ---
+out=$(run_classify $'apps/web/src/app/page.tsx\ninfra/new-runtime-input.txt')
+assert_eq "mixed unknown: shared fallback" "true" "$(get_field "$out" "shared")"
+assert_eq "mixed unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
+assert_eq "mixed unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
+
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then
   exit 1

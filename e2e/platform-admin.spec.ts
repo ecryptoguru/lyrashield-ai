@@ -100,7 +100,11 @@ test("admin enrollment, deny-by-default, TOTP sign-in, and console work end to e
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Sign in" }).click()
   await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
-  await expect(page.getByRole("heading", { name: "Welcome to LyraShield" })).toBeVisible()
+  if (new URL(page.url()).pathname === "/onboarding") {
+    await expect(page.getByRole("heading", { name: "Welcome to LyraShield" })).toBeVisible()
+  } else {
+    await expect(page.getByRole("heading", { name: "What needs your attention?" })).toBeVisible()
+  }
 
   const onboardingResponse = await page.request.patch("/api/onboarding", {
     data: { skipped: true },

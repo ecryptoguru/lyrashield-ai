@@ -43,20 +43,27 @@ azure_deploy=false
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
-  if ! echo "$f" | grep -qE "$docs_pattern"; then
+  path_classified=false
+  if echo "$f" | grep -qE "$docs_pattern"; then
+    path_classified=true
+  else
     docs_only=false
   fi
   if echo "$f" | grep -qE "$marketing_pattern"; then
     marketing=true
+    path_classified=true
   fi
   if echo "$f" | grep -qE "$app_pattern"; then
     app=true
+    path_classified=true
   fi
   if echo "$f" | grep -qE "$desktop_pattern"; then
     desktop=true
+    path_classified=true
   fi
   if echo "$f" | grep -qE "$shared_pattern"; then
     shared=true
+    path_classified=true
   fi
   if echo "$f" | grep -qE "$marketing_deploy_pattern"; then
     marketing_deploy=true
@@ -64,20 +71,15 @@ while IFS= read -r f; do
   if echo "$f" | grep -qE "$azure_deploy_pattern"; then
     azure_deploy=true
   fi
+  if [[ "$path_classified" == "false" ]]; then
+    shared=true
+    unknown=true
+  fi
 done
 
-# Fail-closed fallback: if a change matched none of the four buckets, treat it
-# as shared so CI still runs. Without this, an uncovered path (e.g. a new root
-# config file, an ops/ script, an e2E/ fixture, or run-all-tests.mjs itself)
-# classifies as all-false — which preserves the main lint/typecheck/test/build
-# job (it gates on docs-only != 'true') but silently skips BOTH deploy jobs and
-# the engine-worker-contract gate (they need marketing|shared or app|shared).
-# Routing unknowns to shared is the safe direction: it over-runs CI rather than
-# under-deploying. (Deep Review v13, P1-7.)
-if [[ "$docs_only" == "false" && "$marketing" == "false" && "$app" == "false" && "$desktop" == "false" && "$shared" == "false" ]]; then
-  shared=true
-  unknown=true
-fi
+# Fail closed per path: an uncovered file mixed with recognized files must not
+# inherit their narrower deployment routing. Treat it as shared and deploy both
+# artifacts until it receives an explicit category.
 
 # Azure owns the app, worker, and shared runtime dependencies. Marketing and
 # desktop have their own delivery paths; docs-only changes need no deployment.
