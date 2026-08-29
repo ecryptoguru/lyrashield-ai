@@ -2,8 +2,8 @@ import { createHmac } from "node:crypto"
 import { describe, expect, it, vi } from "vitest"
 
 const testWebhook = vi.hoisted(() => {
-  const secret = "whsec_polar-secret-must-remain-literal"
-  return { key: Buffer.from(secret, "utf8"), secret }
+  const endpointSecret = "whsec_polar-secret-must-remain-literal"
+  return { key: Buffer.from(endpointSecret, "utf8"), secret: endpointSecret }
 })
 
 vi.mock("@lyrashield/config", () => ({
