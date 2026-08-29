@@ -82,7 +82,7 @@ export default async function BillingPage({
   const plan = billingAccount?.currentPlan ?? "FREE"
   const cloudPlan = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
-  const isTeam = plan === "TEAM"
+  const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
 
   return (
     <div>
@@ -288,8 +288,8 @@ export default async function BillingPage({
           </CardContent>
         </Card>
 
-        {/* Team Spend Limit */}
-        {isTeam && canManageBilling && (
+        {/* Launch Assurance Spend Limit */}
+        {isLaunchAssurance && canManageBilling && (
           <Card>
             <CardHeader>
               <CardTitle>Overage Spend Limit</CardTitle>
