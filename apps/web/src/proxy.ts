@@ -249,6 +249,7 @@ export async function proxy(request: NextRequest) {
     requestHeaders.delete("cf-ipcountry")
     requestHeaders.delete("x-forwarded-client-cert")
     requestHeaders.delete("x-lyrashield-country")
+    requestHeaders.delete("x-lyrashield-trusted-country")
     if (country) requestHeaders.set("x-lyrashield-trusted-country", country)
   }
 

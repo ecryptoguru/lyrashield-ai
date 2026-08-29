@@ -72,5 +72,25 @@ describe("app origin proxy boundary", () => {
 
     expect(response.status).toBe(200)
     expect(rateLimit.checkApiRateLimit).toHaveBeenCalledOnce()
+    expect(response.headers.get("x-middleware-request-x-lyrashield-trusted-country")).toBe("IN")
+  })
+
+  it("replaces a caller-supplied internal country with Cloudflare's country", async () => {
+    process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
+    process.env.CLOUDFLARE_AOP_CERT_SHA256 = fingerprint
+    process.env.DEPLOY_PROBE_CERT_SHA256 = "f".repeat(64)
+
+    const response = await proxy(
+      new NextRequest("https://app.lyrashieldai.com/api/billing/topup", {
+        headers: {
+          "cf-ipcountry": "US",
+          "x-lyrashield-trusted-country": "IN",
+          "x-forwarded-client-cert": `Cert="${certificate.replace(/\n/g, "\\n")}"`,
+        },
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("x-middleware-request-x-lyrashield-trusted-country")).toBe("US")
   })
 })
