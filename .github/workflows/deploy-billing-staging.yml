@@ -32,6 +32,10 @@ on:
         description: "subscription or pack"
         required: false
         type: string
+      receipt_phase:
+        description: "Marker-safe lifecycle phase, such as purchase, cancellation, partial_refund, full_refund, replay, or cleanup"
+        required: false
+        type: string
       receipt_object_id:
         description: "Provider subscription or payment object ID"
         required: false
@@ -50,6 +54,30 @@ on:
         type: string
       receipt_minutes:
         description: "Expected minutes for a pack receipt"
+        required: false
+        type: string
+      receipt_remaining_minutes:
+        description: "Expected remaining minutes after purchase/refund"
+        required: false
+        type: string
+      receipt_commission_count:
+        description: "Expected commissions bound to the provider object (default 0)"
+        required: false
+        type: string
+      receipt_commission_status:
+        description: "Expected commission status when count is non-zero"
+        required: false
+        type: string
+      receipt_audit_action:
+        description: "Expected workspace audit action bound to the provider object"
+        required: false
+        type: string
+      receipt_audit_resource_id:
+        description: "Audit resource ID when it differs from the provider object"
+        required: false
+        type: string
+      receipt_audit_count:
+        description: "Expected matching audit rows (required with an audit action)"
         required: false
         type: string
 
@@ -833,6 +861,7 @@ jobs:
           [ "https://${fqdn}" = "$APP_URL" ]
           [ "$deployed_image" = "$web_image" ]
           [ -n "$target_revision" ]
+          echo "STAGING_REVISION=${target_revision}" >> "$GITHUB_ENV"
 
           for _ in {1..30}; do
             revision_state=$(az containerapp revision show \
@@ -1166,11 +1195,23 @@ jobs:
             "BILLING_RECEIPT_EVENT_ID=${{ inputs.receipt_event_id }}"
             "BILLING_RECEIPT_WORKSPACE_ID=${{ inputs.receipt_workspace_id }}"
             "BILLING_RECEIPT_KIND=${{ inputs.receipt_kind }}"
+            "BILLING_RECEIPT_PHASE=${{ inputs.receipt_phase || 'purchase' }}"
             "BILLING_RECEIPT_OBJECT_ID=${{ inputs.receipt_object_id }}"
             "BILLING_RECEIPT_PLAN=${{ inputs.receipt_plan }}"
             "BILLING_RECEIPT_INTERVAL=${{ inputs.receipt_interval }}"
             "BILLING_RECEIPT_STATUS=${{ inputs.receipt_status }}"
             "BILLING_RECEIPT_MINUTES=${{ inputs.receipt_minutes }}"
+            "BILLING_RECEIPT_REMAINING_MINUTES=${{ inputs.receipt_remaining_minutes }}"
+            "BILLING_RECEIPT_COMMISSION_COUNT=${{ inputs.receipt_commission_count }}"
+            "BILLING_RECEIPT_COMMISSION_STATUS=${{ inputs.receipt_commission_status }}"
+            "BILLING_RECEIPT_AUDIT_ACTION=${{ inputs.receipt_audit_action }}"
+            "BILLING_RECEIPT_AUDIT_RESOURCE_ID=${{ inputs.receipt_audit_resource_id }}"
+            "BILLING_RECEIPT_AUDIT_COUNT=${{ inputs.receipt_audit_count }}"
+            "BILLING_RECEIPT_SOURCE_SHA=${IMAGE_SHA}"
+            "BILLING_RECEIPT_WEB_DIGEST=${WEB_DIGEST}"
+            "BILLING_RECEIPT_MIGRATION_DIGEST=${MIGRATION_DIGEST}"
+            "BILLING_RECEIPT_E2E_DIGEST=${E2E_DIGEST}"
+            "BILLING_RECEIPT_REVISION=${STAGING_REVISION}"
             'POLAR_BILLING_ADMISSION=off'
             'POLAR_LOCAL_BILLING_ADMISSION=off'
             'RAZORPAY_BILLING_ADMISSION=off'
@@ -1201,8 +1242,23 @@ jobs:
             --execution "$LAST_JOB_EXECUTION" --container "$proof_container" \
             --tail 300 --format text | tee "$proof_log"
           receipt_marker=$(grep -F 'Provider-delivered ' "$proof_log" | tail -1 || true)
+          artifact_marker=$(grep -F 'Provider-receipt-artifact-v1 ' "$proof_log" | tail -1 || true)
+          artifact_path="${RUNNER_TEMP}/billing-provider-receipt.json"
+          printf '%s' "${artifact_marker#*Provider-receipt-artifact-v1 }" | base64 --decode > "$artifact_path"
+          jq -e '.schemaVersion == 1 and .workflowCleanupResult == "pending" and (.artifactChecksum | test("^[0-9a-f]{64}$"))' "$artifact_path" >/dev/null
+          node -e '
+            const fs = require("node:fs");
+            const { createHash } = require("node:crypto");
+            const path = process.argv[1];
+            const receipt = JSON.parse(fs.readFileSync(path, "utf8"));
+            const expected = receipt.artifactChecksum;
+            delete receipt.artifactChecksum;
+            const actual = createHash("sha256").update(JSON.stringify(receipt)).digest("hex");
+            if (actual !== expected) throw new Error("Provider receipt artifact checksum mismatch");
+          ' "$artifact_path"
+          echo "RECEIPT_ARTIFACT_PATH=${artifact_path}" >> "$GITHUB_ENV"
           rm -f "$proof_log"
-          [ -n "$receipt_marker" ] || {
+          [ -n "$receipt_marker" ] && [ -n "$artifact_marker" ] || {
             echo "::error::Successful billing proof logs did not contain a provider-delivered receipt marker."
             exit 1
           }
@@ -1221,6 +1277,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Recover and remove disposable E2E database access
+        id: cleanup-e2e
         if: ${{ always() && steps.azure-login.outcome == 'success' }}
         shell: bash
         env:
@@ -1402,3 +1459,30 @@ jobs:
             /app/packages/db/scripts/manage-billing-staging-e2e-role.mjs 1200
           wait_for_job "$recovery_job" database-admin-url E2E_ROLE_ACTION=drop
           purge_job "$recovery_job" database-admin-url
+
+      - name: Finalize redacted provider receipt
+        if: inputs.verify_provider_receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("node:fs");
+            const { createHash } = require("node:crypto");
+            const path = process.argv[1];
+            const receipt = JSON.parse(fs.readFileSync(path, "utf8"));
+            receipt.workflowCleanupResult = "passed";
+            delete receipt.artifactChecksum;
+            receipt.artifactChecksum = createHash("sha256")
+              .update(JSON.stringify(receipt))
+              .digest("hex");
+            fs.writeFileSync(path, JSON.stringify(receipt) + "\n", { mode: 0o600 });
+          ' "$RECEIPT_ARTIFACT_PATH"
+
+      - name: Upload redacted provider receipt
+        if: inputs.verify_provider_receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: billing-provider-receipt-${{ github.run_id }}
+          path: ${{ env.RECEIPT_ARTIFACT_PATH }}
+          if-no-files-found: error
+          retention-days: 90
