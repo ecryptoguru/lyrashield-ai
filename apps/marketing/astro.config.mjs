@@ -97,6 +97,19 @@ function contentLastmod() {
     }
   }
 
+  // WebMCP pillar page.
+  const webmcpPath = new URL("./src/pages/webmcp.astro", import.meta.url)
+  try {
+    const content = readFileSync(webmcpPath, "utf8")
+    const match = content.match(
+      /(?:const\s+reviewed|dateModified)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/
+    )
+    if (match) {
+      const date = new Date(match[1])
+      if (!Number.isNaN(date.valueOf())) map.set("/webmcp", date)
+    }
+  } catch {}
+
   return map
 }
 

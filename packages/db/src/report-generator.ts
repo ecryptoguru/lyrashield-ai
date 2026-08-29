@@ -9,13 +9,24 @@ import { getAiSecurityScoreSnapshot } from "./ai-security-score-service"
 import { getAiSystemProfile } from "./ai-system-profile-service"
 import { getThreatModel } from "./threat-model-service"
 import { VIBE_SECURITY_CONTROLS } from "@lyrashield/security"
+import {
+  WEBMCP_CONTROLS,
+  WEBMCP_CONTROL_IDS,
+  type WebMcpControlId,
+  type WebMcpCoverageReceipt,
+  type WebMcpSeverity,
+} from "@lyrashield/security/webmcp"
 
 const CONTROL_TITLE_BY_ID: Record<string, string> = Object.fromEntries(
   VIBE_SECURITY_CONTROLS.map((control) => [`vibe-${control.rank}`, control.title])
 )
 
+const WEBMCP_CONTROL_ID_BY_TITLE = new Map(
+  WEBMCP_CONTROLS.map((control) => [control.title, control.id] as const)
+)
+
 export interface ReportData {
-  version?: 2
+  version?: 2 | 3
   audience?: "developer" | "executive" | "compliance"
   title: string
   type: string
@@ -121,6 +132,288 @@ export interface ReportData {
     generatedAt: Date
     methodologyWording: string[]
   }
+  webMcpAssurance?: ReportWebMcpAssurance
+}
+
+export interface ReportWebMcpAssurance extends WebMcpCoverageReceipt {
+  coverageState: "COMPLETE" | "INCONCLUSIVE"
+  toolCounts: {
+    byKind: Record<string, number>
+    byBehavior: Record<string, number>
+  }
+  exposurePosture: {
+    dynamic: number
+    wildcard: number
+    explicitSelf: number
+    explicitTrusted: number
+    missingOrUnknown: number
+  }
+  confirmationPosture: {
+    mutationTools: number
+    unconfirmedMutations: number
+  }
+  findingsByControl: Record<WebMcpControlId, number>
+  findingsBySeverity: Record<WebMcpSeverity, number>
+  representativeRemediation: Array<{
+    controlId: WebMcpControlId
+    severity: WebMcpSeverity
+    text: string
+  }>
+  methodology: string[]
+}
+
+const WEBMCP_SCAN_LIMITS = new Set([
+  "max_files",
+  "max_file_bytes",
+  "max_total_bytes",
+  "max_definitions",
+  "max_wall_time_ms",
+  "max_walk_entries",
+  "max_walk_depth",
+  "unsupported_language",
+])
+
+function nonnegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+}
+
+function numberRecord(
+  value: unknown,
+  expectedKeys: readonly string[]
+): Record<string, number> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const entries = Object.entries(value)
+  if (
+    entries.length !== expectedKeys.length ||
+    entries.some(([key, count]) => !expectedKeys.includes(key) || !nonnegativeNumber(count)) ||
+    expectedKeys.some((key) => !Object.prototype.hasOwnProperty.call(value, key))
+  ) {
+    return null
+  }
+  return Object.fromEntries(entries) as Record<string, number>
+}
+
+const WEBMCP_KIND_KEYS = ["imperative", "declarative"] as const
+const WEBMCP_BEHAVIOR_KEYS = ["read", "ui-only", "mutation", "unknown"] as const
+const WEBMCP_EXPOSURE_KEYS = [
+  "dynamic",
+  "wildcard",
+  "explicitSelf",
+  "explicitTrusted",
+  "missingOrUnknown",
+] as const
+const WEBMCP_CONFIRMATION_KEYS = ["mutationTools", "unconfirmedMutations"] as const
+const WEBMCP_SEVERITY_KEYS = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as const
+
+function parseSourceSelection(value: unknown): WebMcpCoverageReceipt["sourceSelection"] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  const counts = ["eligibleFiles", "selectedFiles", "skippedFiles"] as const
+  if (counts.some((key) => !nonnegativeNumber(raw[key]))) return null
+  if (raw.scannedBytes !== undefined && !nonnegativeNumber(raw.scannedBytes)) return null
+  const skippedByReason = numberRecord(raw.skippedByReason, [
+    "fileLimit",
+    "totalByteLimit",
+    "oversized",
+    "unreadable",
+  ])
+  const limits = numberRecord(raw.limits, [
+    "maxFiles",
+    "maxFileBytes",
+    "maxTotalBytes",
+    "maxWalkEntries",
+    "maxWalkDepth",
+  ])
+  const limitsReached = Array.isArray(raw.limitsReached)
+    ? raw.limitsReached.filter(
+        (limit): limit is WebMcpCoverageReceipt["limitsReached"][number] =>
+          typeof limit === "string" && WEBMCP_SCAN_LIMITS.has(limit)
+      )
+    : null
+  if (
+    !skippedByReason ||
+    !limits ||
+    !limitsReached ||
+    limitsReached.length !== (raw.limitsReached as unknown[]).length ||
+    limitsReached.length > WEBMCP_SCAN_LIMITS.size ||
+    new Set(limitsReached).size !== limitsReached.length
+  ) {
+    return null
+  }
+  const eligibleFiles = raw.eligibleFiles as number
+  const selectedFiles = raw.selectedFiles as number
+  const skippedFiles = raw.skippedFiles as number
+  if (selectedFiles > eligibleFiles || skippedFiles !== eligibleFiles - selectedFiles) return null
+  if (Object.values(skippedByReason).reduce((sum, count) => sum + count, 0) !== skippedFiles) {
+    return null
+  }
+  return {
+    eligibleFiles,
+    selectedFiles,
+    skippedFiles,
+    ...(raw.scannedBytes === undefined ? {} : { scannedBytes: raw.scannedBytes as number }),
+    skippedByReason: skippedByReason as NonNullable<
+      WebMcpCoverageReceipt["sourceSelection"]
+    >["skippedByReason"],
+    limits: limits as NonNullable<WebMcpCoverageReceipt["sourceSelection"]>["limits"],
+    limitsReached,
+  }
+}
+
+export function parseWebMcpAssurance(value: unknown): ReportWebMcpAssurance | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  const numericKeys = [
+    "eligibleFiles",
+    "scannedFiles",
+    "scannedBytes",
+    "toolDefinitionsFound",
+    "toolDefinitionsAssessed",
+    "incompleteDefinitions",
+    "imperativeDefinitions",
+    "declarativeDefinitions",
+  ] as const
+  if (numericKeys.some((key) => !nonnegativeNumber(raw[key]))) return null
+  if (
+    raw.version !== "webmcp-assurance/1" ||
+    typeof raw.detectorVersion !== "string" ||
+    raw.detectorVersion.length === 0 ||
+    raw.detectorVersion.length > 64 ||
+    !/^[a-f0-9]{64}$/i.test(String(raw.inventoryChecksum))
+  ) {
+    return null
+  }
+  if (
+    !Array.isArray(raw.limitsReached) ||
+    raw.limitsReached.length > WEBMCP_SCAN_LIMITS.size ||
+    new Set(raw.limitsReached).size !== raw.limitsReached.length ||
+    raw.limitsReached.some(
+      (limit) => typeof limit !== "string" || !WEBMCP_SCAN_LIMITS.has(limit)
+    ) ||
+    !Array.isArray(raw.methodology) ||
+    raw.methodology.length > 10 ||
+    raw.methodology.some(
+      (item) => typeof item !== "string" || item.length === 0 || item.length > 240
+    )
+  ) {
+    return null
+  }
+  const toolCounts = raw.toolCounts as Record<string, unknown> | undefined
+  const byKind = numberRecord(toolCounts?.byKind, WEBMCP_KIND_KEYS)
+  const byBehavior = numberRecord(toolCounts?.byBehavior, WEBMCP_BEHAVIOR_KEYS)
+  const exposurePosture = numberRecord(raw.exposurePosture, WEBMCP_EXPOSURE_KEYS)
+  const confirmationPosture = numberRecord(raw.confirmationPosture, WEBMCP_CONFIRMATION_KEYS)
+  if (!byKind || !byBehavior || !exposurePosture || !confirmationPosture) return null
+  const findingsByControl =
+    raw.findingsByControl === undefined
+      ? Object.fromEntries(WEBMCP_CONTROL_IDS.map((controlId) => [controlId, 0]))
+      : numberRecord(raw.findingsByControl, WEBMCP_CONTROL_IDS)
+  const findingsBySeverity =
+    raw.findingsBySeverity === undefined
+      ? Object.fromEntries(WEBMCP_SEVERITY_KEYS.map((severity) => [severity, 0]))
+      : numberRecord(raw.findingsBySeverity, WEBMCP_SEVERITY_KEYS)
+  const representativeRemediation =
+    raw.representativeRemediation === undefined
+      ? []
+      : parseRepresentativeRemediation(raw.representativeRemediation)
+  if (!findingsByControl || !findingsBySeverity || !representativeRemediation) return null
+  const sourceSelection =
+    raw.sourceSelection === undefined ? undefined : parseSourceSelection(raw.sourceSelection)
+  if (raw.sourceSelection !== undefined && !sourceSelection) return null
+  if (
+    (raw.scannedFiles as number) > (raw.eligibleFiles as number) ||
+    (raw.toolDefinitionsAssessed as number) > (raw.toolDefinitionsFound as number) ||
+    (sourceSelection &&
+      ((raw.eligibleFiles as number) > sourceSelection.selectedFiles ||
+        (sourceSelection.scannedBytes !== undefined &&
+          (raw.scannedBytes as number) > sourceSelection.scannedBytes)))
+  ) {
+    return null
+  }
+  const coverageState =
+    raw.coverageState === "COMPLETE" &&
+    sourceSelection?.skippedFiles === 0 &&
+    sourceSelection.limitsReached.length === 0 &&
+    (raw.limitsReached as unknown[]).length === 0 &&
+    (raw.incompleteDefinitions as number) === 0 &&
+    (raw.scannedFiles as number) === (raw.eligibleFiles as number) &&
+    (raw.toolDefinitionsAssessed as number) === (raw.toolDefinitionsFound as number)
+      ? "COMPLETE"
+      : "INCONCLUSIVE"
+
+  return {
+    version: raw.version,
+    detectorVersion: raw.detectorVersion,
+    coverageState,
+    eligibleFiles: raw.eligibleFiles as number,
+    scannedFiles: raw.scannedFiles as number,
+    scannedBytes: raw.scannedBytes as number,
+    toolDefinitionsFound: raw.toolDefinitionsFound as number,
+    toolDefinitionsAssessed: raw.toolDefinitionsAssessed as number,
+    incompleteDefinitions: raw.incompleteDefinitions as number,
+    imperativeDefinitions: raw.imperativeDefinitions as number,
+    declarativeDefinitions: raw.declarativeDefinitions as number,
+    limitsReached: raw.limitsReached as WebMcpCoverageReceipt["limitsReached"],
+    inventoryChecksum: String(raw.inventoryChecksum),
+    ...(sourceSelection ? { sourceSelection } : {}),
+    toolCounts: { byKind, byBehavior },
+    exposurePosture: exposurePosture as ReportWebMcpAssurance["exposurePosture"],
+    confirmationPosture: confirmationPosture as ReportWebMcpAssurance["confirmationPosture"],
+    findingsByControl: findingsByControl as ReportWebMcpAssurance["findingsByControl"],
+    findingsBySeverity: findingsBySeverity as ReportWebMcpAssurance["findingsBySeverity"],
+    representativeRemediation,
+    methodology: raw.methodology as string[],
+  }
+}
+
+function webMcpFindingIdentity(finding: {
+  title: string
+  candidates?: Array<{ payload: unknown }>
+}): WebMcpControlId | null {
+  const candidates = finding.candidates ?? []
+  for (const candidate of candidates) {
+    if (
+      !candidate.payload ||
+      typeof candidate.payload !== "object" ||
+      Array.isArray(candidate.payload)
+    )
+      continue
+    const payload = candidate.payload as Record<string, unknown>
+    if (
+      payload.findingClass === "webmcp_tool_surface" &&
+      WEBMCP_CONTROL_IDS.includes(payload.id as WebMcpControlId)
+    ) {
+      return payload.id as WebMcpControlId
+    }
+  }
+  return candidates.length === 0 ? (WEBMCP_CONTROL_ID_BY_TITLE.get(finding.title) ?? null) : null
+}
+
+function parseRepresentativeRemediation(
+  value: unknown
+): ReportWebMcpAssurance["representativeRemediation"] | null {
+  if (!Array.isArray(value) || value.length > 5) return null
+  const parsed: ReportWebMcpAssurance["representativeRemediation"] = []
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null
+    const raw = item as Record<string, unknown>
+    if (
+      Object.keys(raw).some((key) => !["controlId", "severity", "text"].includes(key)) ||
+      !WEBMCP_CONTROL_IDS.includes(raw.controlId as WebMcpControlId) ||
+      !WEBMCP_SEVERITY_KEYS.includes(raw.severity as WebMcpSeverity) ||
+      typeof raw.text !== "string" ||
+      raw.text.length === 0 ||
+      raw.text.length > 240
+    ) {
+      return null
+    }
+    parsed.push({
+      controlId: raw.controlId as WebMcpControlId,
+      severity: raw.severity as WebMcpSeverity,
+      text: raw.text,
+    })
+  }
+  return parsed
 }
 
 export async function gatherReportData(
@@ -135,6 +428,7 @@ export async function gatherReportData(
 
   let scanInfo: ReportData["scanInfo"] = null
   let targetId: string | null = null
+  let webMcpCoverage: ReportWebMcpAssurance | undefined = undefined
   let scanWhere: { workspaceId: string; deletedAt: null; scanId?: string }
 
   if (scanId) {
@@ -151,6 +445,16 @@ export async function gatherReportData(
       targetId = scan.targetId
       const manifestRecord = scan.resultManifest?.manifest as
         { urlExecution?: NonNullable<ReportData["scanInfo"]>["urlExecution"] } | undefined
+      const manifestCoverage = (
+        scan.resultManifest?.manifest as
+          | { coverage?: Array<{ scanner?: string; metadata?: { webMcpCoverage?: unknown } }> }
+          | undefined
+      )?.coverage
+      const aiAppReceipt = manifestCoverage?.find(
+        (receipt) => receipt.scanner === "ai_app_security"
+      )
+      const rawWebMcp = aiAppReceipt?.metadata?.webMcpCoverage
+      webMcpCoverage = parseWebMcpAssurance(rawWebMcp) ?? undefined
       scanInfo = {
         scanId: scan.id,
         status: scan.status,
@@ -200,6 +504,10 @@ export async function gatherReportData(
       exploitability: true,
       recommendedFix: true,
       firstSeenAt: true,
+      candidates: {
+        where: { scannerSource: "ai_app_security" },
+        select: { payload: true },
+      },
       fixProposals: { select: { id: true, status: true } },
       retests: { select: { id: true, status: true }, orderBy: { createdAt: "desc" }, take: 1 },
     },
@@ -222,6 +530,45 @@ export async function gatherReportData(
     const bRank = severityRank[b.severity] ?? 0
     return bRank - aRank
   })
+
+  const webMcpFindingsByControl = Object.fromEntries(
+    WEBMCP_CONTROL_IDS.map((controlId) => [controlId, 0])
+  ) as ReportWebMcpAssurance["findingsByControl"]
+  const webMcpFindingsBySeverity = Object.fromEntries(
+    WEBMCP_SEVERITY_KEYS.map((severity) => [severity, 0])
+  ) as ReportWebMcpAssurance["findingsBySeverity"]
+  const representativeRemediation: ReportWebMcpAssurance["representativeRemediation"] = []
+  for (const finding of sortedFindings) {
+    const controlId = webMcpFindingIdentity(finding)
+    if (!controlId) continue
+    const severity = WEBMCP_SEVERITY_KEYS.includes(finding.severity as WebMcpSeverity)
+      ? (finding.severity as WebMcpSeverity)
+      : "INFO"
+    webMcpFindingsByControl[controlId]++
+    webMcpFindingsBySeverity[severity]++
+    const remediation = finding.recommendedFix?.trim()
+    if (
+      remediation &&
+      representativeRemediation.length < 5 &&
+      !representativeRemediation.some((item) => item.controlId === controlId)
+    ) {
+      representativeRemediation.push({ controlId, severity, text: remediation.slice(0, 240) })
+    }
+  }
+  const webMcpAssurance = webMcpCoverage
+    ? {
+        ...webMcpCoverage,
+        findingsByControl: webMcpFindingsByControl,
+        findingsBySeverity: webMcpFindingsBySeverity,
+        representativeRemediation,
+        methodology: [
+          ...webMcpCoverage.methodology,
+          findingsTruncated
+            ? "WebMCP finding aggregates cover only the bounded 500-finding report snapshot."
+            : "WebMCP finding aggregates cover all retained findings in this report snapshot.",
+        ],
+      }
+    : undefined
 
   const bySeverity: Record<string, number> = {}
   const byStatus: Record<string, number> = {}
@@ -402,7 +749,7 @@ export async function gatherReportData(
   }
 
   return {
-    version: 2,
+    version: 3,
     audience,
     title: scanInfo ? `Security Report — ${scanInfo.targetName}` : "Security Report",
     type: audience,
@@ -434,6 +781,7 @@ export async function gatherReportData(
     fixedCount,
     retestSummary: retestCounts,
     generatedAt: new Date(),
+    webMcpAssurance,
     assurance: {
       verdict,
       score: currentScore?.score ?? null,
@@ -597,6 +945,37 @@ export function generateReportHTML(data: ReportData): string {
         .join("")}</ul></div>`
     : ""
 
+  const webMcpAssuranceSection = data.webMcpAssurance
+    ? `<div class="section"><h2>WebMCP Tool Surface</h2>
+        <p style="color:#4b5563;font-size:13px;margin-bottom:12px;">
+          Coverage state: <strong>${escapeHtml(data.webMcpAssurance.coverageState)}</strong>.
+          ${data.webMcpAssurance.toolDefinitionsAssessed} of ${data.webMcpAssurance.toolDefinitionsFound} tool definition(s) assessed.
+          ${data.webMcpAssurance.incompleteDefinitions > 0 ? `${data.webMcpAssurance.incompleteDefinitions} incomplete.` : ""}
+        </p>
+        <table style="margin-bottom:16px;">
+          <tr><td style="font-weight:600;padding:4px 0;width:180px;">Detector</td><td style="padding:4px 0;font-family:monospace;font-size:12px;">${escapeHtml(data.webMcpAssurance.detectorVersion)}</td></tr>
+          <tr><td style="font-weight:600;padding:4px 0;">Inventory checksum</td><td style="padding:4px 0;font-family:monospace;font-size:12px;word-break:break-all;">${escapeHtml(data.webMcpAssurance.inventoryChecksum)}</td></tr>
+          <tr><td style="font-weight:600;padding:4px 0;">Source coverage</td><td style="padding:4px 0;">${data.webMcpAssurance.scannedFiles} of ${data.webMcpAssurance.eligibleFiles} eligible files · ${data.webMcpAssurance.scannedBytes} bytes</td></tr>
+          ${data.webMcpAssurance.sourceSelection ? `<tr><td style="font-weight:600;padding:4px 0;">Repository selection</td><td style="padding:4px 0;">${data.webMcpAssurance.sourceSelection.selectedFiles} of ${data.webMcpAssurance.sourceSelection.eligibleFiles} eligible files selected · ${data.webMcpAssurance.sourceSelection.skippedFiles} skipped${data.webMcpAssurance.sourceSelection.scannedBytes === undefined ? "" : ` · ${data.webMcpAssurance.sourceSelection.scannedBytes} admitted bytes`}</td></tr><tr><td style="font-weight:600;padding:4px 0;">Selection limits</td><td style="padding:4px 0;">${data.webMcpAssurance.sourceSelection.limits.maxFiles} files · ${data.webMcpAssurance.sourceSelection.limits.maxFileBytes} bytes/file · ${data.webMcpAssurance.sourceSelection.limits.maxTotalBytes} total bytes</td></tr>` : `<tr><td style="font-weight:600;padding:4px 0;">Repository selection</td><td style="padding:4px 0;">Legacy receipt — completeness unavailable</td></tr>`}
+        </table>
+        <div class="visual-grid">
+          <div class="section" style="margin-bottom:0;"><h3>Tool Kinds</h3>${renderMetricBars(data.webMcpAssurance.toolCounts.byKind)}</div>
+          <div class="section" style="margin-bottom:0;"><h3>Tool Behaviors</h3>${renderMetricBars(data.webMcpAssurance.toolCounts.byBehavior)}</div>
+        </div>
+        <div class="visual-grid" style="margin-top:16px;">
+          <div class="section" style="margin-bottom:0;"><h3>Exposure Posture</h3>${renderMetricBars(data.webMcpAssurance.exposurePosture)}</div>
+          <div class="section" style="margin-bottom:0;"><h3>Confirmation Posture</h3>${renderMetricBars(data.webMcpAssurance.confirmationPosture)}</div>
+        </div>
+        <div class="visual-grid" style="margin-top:16px;">
+          <div class="section" style="margin-bottom:0;"><h3>WebMCP Findings by Control</h3>${renderMetricBars(data.webMcpAssurance.findingsByControl)}</div>
+          <div class="section" style="margin-bottom:0;"><h3>WebMCP Findings by Severity</h3>${renderMetricBars(data.webMcpAssurance.findingsBySeverity)}</div>
+        </div>
+        ${data.webMcpAssurance.representativeRemediation.length > 0 ? `<h3 style="margin-top:16px;">Representative remediation</h3><ul class="methodology">${data.webMcpAssurance.representativeRemediation.map((item) => `<li><strong>${escapeHtml(item.controlId)} · ${escapeHtml(item.severity)}</strong> — ${escapeHtml(item.text)}</li>`).join("")}</ul>` : ""}
+        ${data.webMcpAssurance.limitsReached.length > 0 ? `<p style="color:#ea580c;font-size:12px;margin-top:12px;">Coverage limited: ${escapeHtml(data.webMcpAssurance.limitsReached.join(", "))}</p>` : ""}
+        <ul class="methodology">${data.webMcpAssurance.methodology.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      </div>`
+    : ""
+
   const urlExecution = data.scanInfo?.urlExecution
   const urlExecutionSection = urlExecution
     ? `<div class="section"><h2>URL Execution Scope</h2>
@@ -701,6 +1080,8 @@ export function generateReportHTML(data: ReportData): string {
     ${urlExecutionSection}
 
     ${aiAppSecuritySection}
+
+    ${webMcpAssuranceSection}
 
     ${aiAssuranceSection}
 

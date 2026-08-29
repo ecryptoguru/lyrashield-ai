@@ -40,7 +40,12 @@ vi.mock("./threat-model-service", () => ({
 }))
 
 import { prisma } from "./client"
-import { gatherReportData, generateReportHTML } from "./report-generator"
+import {
+  gatherReportData,
+  generateReportHTML,
+  parseWebMcpAssurance,
+  type ReportWebMcpAssurance,
+} from "./report-generator"
 
 const mockPrisma = prisma as unknown as {
   workspace: { findFirst: ReturnType<typeof vi.fn> }
@@ -49,7 +54,128 @@ const mockPrisma = prisma as unknown as {
   scoreSnapshot: { findMany: ReturnType<typeof vi.fn> }
 }
 
+const validWebMcpReceipt: ReportWebMcpAssurance = {
+  version: "webmcp-assurance/1",
+  detectorVersion: "webmcp-assurance/1",
+  coverageState: "COMPLETE",
+  eligibleFiles: 4,
+  scannedFiles: 4,
+  scannedBytes: 4096,
+  toolDefinitionsFound: 3,
+  toolDefinitionsAssessed: 3,
+  incompleteDefinitions: 0,
+  imperativeDefinitions: 2,
+  declarativeDefinitions: 1,
+  limitsReached: [],
+  inventoryChecksum: "a".repeat(64),
+  sourceSelection: {
+    eligibleFiles: 4,
+    selectedFiles: 4,
+    skippedFiles: 0,
+    scannedBytes: 4096,
+    skippedByReason: { fileLimit: 0, totalByteLimit: 0, oversized: 0, unreadable: 0 },
+    limits: {
+      maxFiles: 200,
+      maxFileBytes: 1048576,
+      maxTotalBytes: 10485760,
+      maxWalkEntries: 50000,
+      maxWalkDepth: 40,
+    },
+    limitsReached: [],
+  },
+  toolCounts: {
+    byKind: { imperative: 2, declarative: 1 },
+    byBehavior: { read: 1, "ui-only": 0, mutation: 2, unknown: 0 },
+  },
+  exposurePosture: {
+    dynamic: 0,
+    wildcard: 1,
+    explicitSelf: 1,
+    explicitTrusted: 0,
+    missingOrUnknown: 1,
+  },
+  confirmationPosture: { mutationTools: 2, unconfirmedMutations: 1 },
+  findingsByControl: {
+    "WEBMCP-01": 0,
+    "WEBMCP-02": 0,
+    "WEBMCP-03": 1,
+    "WEBMCP-04": 0,
+    "WEBMCP-05": 0,
+    "WEBMCP-06": 0,
+    "WEBMCP-07": 0,
+    "WEBMCP-08": 0,
+    "WEBMCP-09": 0,
+    "WEBMCP-10": 0,
+  },
+  findingsBySeverity: { CRITICAL: 0, HIGH: 1, MEDIUM: 0, LOW: 0, INFO: 0 },
+  representativeRemediation: [
+    { controlId: "WEBMCP-03", severity: "HIGH", text: "Constrain tool exposure." },
+  ],
+  methodology: ["Bounded deterministic source analysis."],
+}
+
 describe("report-generator", () => {
+  it("rejects malformed WebMCP manifest metadata", () => {
+    expect(
+      parseWebMcpAssurance({
+        version: "webmcp-assurance/1",
+        detectorVersion: "webmcp-assurance/1",
+        eligibleFiles: -1,
+        inventoryChecksum: "not-a-checksum",
+      })
+    ).toBeNull()
+  })
+
+  it("treats legacy and bounded WebMCP receipts as inconclusive", () => {
+    const legacy: Record<string, unknown> = { ...validWebMcpReceipt }
+    delete legacy.sourceSelection
+    delete legacy.coverageState
+    expect(parseWebMcpAssurance(legacy)?.coverageState).toBe("INCONCLUSIVE")
+
+    const bounded = {
+      ...validWebMcpReceipt,
+      sourceSelection: {
+        ...validWebMcpReceipt.sourceSelection,
+        eligibleFiles: 5,
+        selectedFiles: 4,
+        skippedFiles: 1,
+        skippedByReason: {
+          ...validWebMcpReceipt.sourceSelection.skippedByReason,
+          fileLimit: 1,
+        },
+        limitsReached: ["max_files"],
+      },
+      limitsReached: ["max_files"],
+    }
+    expect(parseWebMcpAssurance(bounded)?.coverageState).toBe("INCONCLUSIVE")
+  })
+
+  it("rejects inconsistent WebMCP source-selection receipts", () => {
+    expect(
+      parseWebMcpAssurance({
+        ...validWebMcpReceipt,
+        sourceSelection: { ...validWebMcpReceipt.sourceSelection, skippedFiles: 2 },
+      })
+    ).toBeNull()
+  })
+
+  it("rejects non-allowlisted WebMCP report aggregates", () => {
+    expect(
+      parseWebMcpAssurance({
+        ...validWebMcpReceipt,
+        findingsBySeverity: { ...validWebMcpReceipt.findingsBySeverity, UNKNOWN: 1 },
+      })
+    ).toBeNull()
+    expect(
+      parseWebMcpAssurance({
+        ...validWebMcpReceipt,
+        representativeRemediation: [
+          { controlId: "WEBMCP-03", severity: "HIGH", text: "x".repeat(241) },
+        ],
+      })
+    ).toBeNull()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockPrisma.scoreSnapshot.findMany.mockResolvedValue([])
@@ -66,7 +192,7 @@ describe("report-generator", () => {
       expect(data.scanInfo).toBeNull()
       expect(data.totalFindings).toBe(0)
       expect(data.findings).toHaveLength(0)
-      expect(data.version).toBe(2)
+      expect(data.version).toBe(3)
       expect(data.assurance?.verdict).toBe("NOT_EVALUATED")
     })
 
@@ -80,7 +206,7 @@ describe("report-generator", () => {
         startedAt: new Date("2026-01-01"),
         endedAt: new Date("2026-01-02"),
         targetId: "target-1",
-        resultManifest: { checksum: "manifest-checksum" },
+        resultManifest: { checksum: "manifest-checksum", manifest: { version: 5 } },
         coverageReceipts: [
           { controlId: "engine", status: "COMPLETED" },
           { controlId: "vibe-03", status: "COMPLETED" },
@@ -149,6 +275,68 @@ describe("report-generator", () => {
       expect(data.aiAssurance).toBeDefined()
       expect(data.aiAssurance?.controls).toHaveLength(7)
       expect(data.aiAssurance?.controls.every((c) => c.state === "EVIDENCE_REQUIRED")).toBe(true)
+      expect(data.webMcpAssurance).toBeUndefined()
+    })
+
+    it("freezes allowlisted WebMCP finding aggregates and bounded remediation", async () => {
+      const manifestReceipt: Partial<ReportWebMcpAssurance> = { ...validWebMcpReceipt }
+      delete manifestReceipt.findingsByControl
+      delete manifestReceipt.findingsBySeverity
+      delete manifestReceipt.representativeRemediation
+      mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
+      mockPrisma.scan.findFirst.mockResolvedValue({
+        id: "scan-webmcp",
+        status: "completed",
+        summary: "WebMCP scan",
+        target: { name: "Private repository", type: "REPO", url: null },
+        startedAt: new Date("2026-08-29"),
+        endedAt: new Date("2026-08-29"),
+        targetId: "target-1",
+        resultManifest: {
+          checksum: "manifest-v6-checksum",
+          manifest: {
+            version: 6,
+            coverage: [
+              { scanner: "ai_app_security", metadata: { webMcpCoverage: manifestReceipt } },
+            ],
+          },
+        },
+        coverageReceipts: [],
+      })
+      mockPrisma.finding.findMany.mockResolvedValue([
+        {
+          id: "finding-webmcp-03",
+          title: "Unsafe or dynamic cross-origin tool exposure",
+          severity: "HIGH",
+          status: "OPEN",
+          verified: false,
+          verificationStatus: "DETECTED",
+          confidence: "high",
+          cwe: "CWE-942",
+          cvssScore: null,
+          category: "Security Configuration",
+          summary: "Wildcard exposure detected.",
+          exploitability: null,
+          recommendedFix: "Constrain exposedTo to an explicit origin allowlist.",
+          firstSeenAt: new Date("2026-08-29"),
+          candidates: [{ payload: { id: "WEBMCP-03", findingClass: "webmcp_tool_surface" } }],
+          fixProposals: [],
+          retests: [],
+        },
+      ])
+
+      const data = await gatherReportData("ws-1", "scan-webmcp")
+
+      expect(data.scanInfo?.manifestChecksum).toBe("manifest-v6-checksum")
+      expect(data.webMcpAssurance?.findingsByControl["WEBMCP-03"]).toBe(1)
+      expect(data.webMcpAssurance?.findingsBySeverity.HIGH).toBe(1)
+      expect(data.webMcpAssurance?.representativeRemediation).toEqual([
+        {
+          controlId: "WEBMCP-03",
+          severity: "HIGH",
+          text: "Constrain exposedTo to an explicit origin allowlist.",
+        },
+      ])
     })
 
     it("freezes AI assurance state without exposing private artifact storage URIs", async () => {
@@ -394,6 +582,37 @@ describe("report-generator", () => {
       expect(html).toContain("Expanded Surface Review · 10 pages · 7 assets · GET")
       expect(html).toContain("Coverage limited: LIMIT_REACHED")
       expect(html).toContain("non-mutating review did not authenticate")
+    })
+
+    it("renders versioned WebMCP coverage and checksum without raw source", () => {
+      const html = generateReportHTML({
+        title: "WebMCP Report",
+        type: "developer",
+        workspaceName: "Test Workspace",
+        scanInfo: null,
+        findings: [],
+        findingsBySeverity: {},
+        totalFindings: 0,
+        verifiedCount: 0,
+        fixedCount: 0,
+        retestSummary: { passed: 0, failed: 0, pending: 0 },
+        findingsTruncated: false,
+        generatedAt: new Date("2026-08-29"),
+        webMcpAssurance: validWebMcpReceipt,
+      })
+
+      expect(html).toContain("WebMCP Tool Surface")
+      expect(html).toContain("webmcp-assurance/1")
+      expect(html).toContain("4096 bytes")
+      expect(html).toContain("Coverage state: <strong>COMPLETE</strong>")
+      expect(html).toContain("4 of 4 eligible files selected")
+      expect(html).toContain("4096 admitted bytes")
+      expect(html).toContain("WebMCP Findings by Control")
+      expect(html).toContain("WebMCP Findings by Severity")
+      expect(html).toContain("Representative remediation")
+      expect(html).toContain("Constrain tool exposure.")
+      expect(html).toContain("a".repeat(64))
+      expect(html).not.toContain("registerTool")
     })
 
     it("generates HTML with no findings", () => {

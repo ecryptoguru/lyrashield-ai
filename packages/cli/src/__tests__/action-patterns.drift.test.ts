@@ -23,7 +23,10 @@
 import { describe, expect, it } from "vitest"
 import { readFile, readdir } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
+import { execFileSync } from "node:child_process"
 import { RISKY_PATTERNS } from "../diff-core.js"
+import { WEBMCP_CONTROLS, WEBMCP_CONTROLS_BY_ID } from "@lyrashield/security/webmcp"
+import type { WebMcpControlId } from "@lyrashield/security/webmcp"
 
 interface ActionCheck {
   ruleId: string
@@ -54,25 +57,82 @@ async function extractActionChecks(): Promise<ActionCheck[]> {
   for (let i = 0; i < lines.length; i++) {
     const grepMatch = lines[i]?.match(/^\s*if grep -q(i?)E '(.*)' <<< "\$ADDED"; then\s*$/)
     if (!grepMatch) continue
+    if (grepMatch[2]?.includes("modelContext[.]registerTool")) continue
     const addMatch = lines[i + 1]?.match(
       /^\s*add_result "([a-z0-9-]+)" "(error|warning)" "([^"]*)" "\$file"; ISSUES=1; ISSUES_SEVERITY=\$\(bump_severity "\$ISSUES_SEVERITY" "([A-Z]+)"\)\s*$/
     )
     if (!addMatch) {
+      // WebMCP checks use the same `if grep ... then` shape but a different
+      // add_result pattern; they are guarded in their own drift suite.
+      if (lines[i + 1]?.includes('"WEBMCP-')) continue
       throw new Error(
         `action.yml risky-pattern check at line ${i + 1} does not have the expected add_result/` +
           `bump_severity continuation on the next line — update this drift guard alongside the action.`
       )
     }
+    const ruleId = addMatch[1] ?? ""
+    // WebMCP checks are extracted and tested separately; they do not live in
+    // the RISKY_PATTERNS table.
+    if (ruleId.startsWith("WEBMCP-")) continue
     checks.push({
       caseInsensitive: grepMatch[1] === "i",
       pattern: bashPatternToJs(grepMatch[2] ?? ""),
-      ruleId: addMatch[1] ?? "",
+      ruleId,
       level: addMatch[2] ?? "",
       message: addMatch[3] ?? "",
       severity: addMatch[4] ?? "",
     })
   }
   return checks
+}
+
+interface WebMcpActionCheck {
+  ruleId: string
+  level: string
+  message: string
+  severity: string
+}
+
+async function extractWebMcpActionChecks(): Promise<WebMcpActionCheck[]> {
+  const actionPath = fileURLToPath(new URL("../../../../action.yml", import.meta.url))
+  const yml = await readFile(actionPath, "utf-8")
+  const checks: WebMcpActionCheck[] = []
+  const pattern =
+    /^\s*add_result "(WEBMCP-[0-9]{2})" "(error|warning)" "([^"]*)" "\$file"; ISSUES=1; ISSUES_SEVERITY=\$\(bump_severity "\$ISSUES_SEVERITY" "([A-Z]+)"\)\s*$/
+  for (const line of yml.split("\n")) {
+    const match = line.match(pattern)
+    if (!match) continue
+    checks.push({
+      ruleId: match[1] ?? "",
+      level: match[2] ?? "",
+      message: match[3] ?? "",
+      severity: match[4] ?? "",
+    })
+  }
+  return checks
+}
+
+async function runWebMcpActionFixture(added: string): Promise<string[]> {
+  const actionPath = fileURLToPath(new URL("../../../../action.yml", import.meta.url))
+  const lines = (await readFile(actionPath, "utf-8")).split("\n")
+  const start = lines.findIndex((line) =>
+    line.includes("modelContext[.]registerTool|<form[^>]+toolname")
+  )
+  const end = lines.findIndex(
+    (line, index) => index > start && line.trim() === "fi" && lines[index - 1]?.trim() === "fi"
+  )
+  if (start < 0 || end < 0) throw new Error("Could not extract WebMCP action checks")
+
+  const script = `
+add_result() { printf '%s\\n' "$1"; }
+bump_severity() { printf '%s\\n' "$2"; }
+${lines.slice(start, end + 1).join("\n")}
+`
+  const output = execFileSync("bash", ["-c", script], {
+    encoding: "utf-8",
+    env: { ...process.env, ADDED: added },
+  })
+  return output.split("\n").filter(Boolean)
 }
 
 describe("action.yml risky-pattern drift guard (source of truth: src/diff-core.ts)", () => {
@@ -132,6 +192,58 @@ describe("action.yml risky-pattern drift guard (source of truth: src/diff-core.t
   })
 })
 
+describe("action.yml WebMCP drift guard (source of truth: @lyrashield/security/webmcp)", () => {
+  it("detects declarative auto-submit mutations but not review-before-submit forms", async () => {
+    const detected = await runWebMcpActionFixture(
+      '<form toolname="delete_account" method="post" toolautosubmit></form>'
+    )
+    const reviewed = await runWebMcpActionFixture(
+      '<form toolname="delete_account" method="post"></form>'
+    )
+
+    expect(detected).toContain("WEBMCP-05")
+    expect(reviewed).not.toContain("WEBMCP-05")
+  })
+
+  it("includes the required high-confidence WebMCP subset", async () => {
+    const checks = await extractWebMcpActionChecks()
+    const ruleIds = checks.map((c) => c.ruleId).sort()
+    // The self-contained Bash subset covers: name/description, description
+    // mismatch, exposure, and confirmation boundaries.
+    expect(ruleIds).toEqual(["WEBMCP-01", "WEBMCP-03", "WEBMCP-05", "WEBMCP-10"].sort())
+  })
+
+  it("keeps every WebMCP action rule aligned with shared control metadata", async () => {
+    const checks = await extractWebMcpActionChecks()
+    for (const check of checks) {
+      const control = WEBMCP_CONTROLS_BY_ID[check.ruleId as keyof typeof WEBMCP_CONTROLS_BY_ID]
+      expect(
+        control,
+        `action rule "${check.ruleId}" must match a shared WebMCP control`
+      ).toBeDefined()
+      expect(check.severity, `severity drift for "${check.ruleId}"`).toBe(control.severity)
+      const expectedLevel =
+        control.severity === "CRITICAL" || control.severity === "HIGH" ? "error" : "warning"
+      expect(check.level, `SARIF level drift for "${check.ruleId}"`).toBe(expectedLevel)
+      expect(
+        check.message,
+        `message should reference the changed file for "${check.ruleId}"`
+      ).toContain("$file")
+    }
+  })
+
+  it("only contains WebMCP rule IDs that are in the shared control list", async () => {
+    const checks = await extractWebMcpActionChecks()
+    const validIds = new Set(WEBMCP_CONTROLS.map((c) => c.id))
+    for (const check of checks) {
+      expect(
+        validIds.has(check.ruleId as WebMcpControlId),
+        `unknown WebMCP rule "${check.ruleId}" in action.yml`
+      ).toBe(true)
+    }
+  })
+})
+
 describe("action.yml v2 scan-mode contract", () => {
   it("rejects reserved DEEP mode instead of running SAFE-equivalent coverage", async () => {
     const actionPath = fileURLToPath(new URL("../../../../action.yml", import.meta.url))
@@ -159,5 +271,18 @@ describe("action.yml v2 scan-mode contract", () => {
       'git tag -fa v2 -m "Update v2 tag to ${HEAD_SHA}" "$HEAD_SHA"'
     )
     expect(releaseWorkflow).toContain("git push origin v2 --force")
+  })
+})
+
+describe("action.yml WebMCP coverage guard", () => {
+  it("reads final WebMCP files and fails closed for changed mutation behavior", async () => {
+    const actionPath = fileURLToPath(new URL("../../../../action.yml", import.meta.url))
+    const yml = await readFile(actionPath, "utf-8")
+
+    expect(yml).toContain('git diff --name-only -z "$BASE" "$HEAD"')
+    expect(yml).toContain("read -r -d '' file")
+    expect(yml).toContain('git show "$HEAD_SHA:$file" 2>/dev/null || true')
+    expect(yml).toContain('"WEBMCP-COVERAGE-INCOMPLETE" "error"')
+    expect(yml).toContain("run lyrashield check-diff for full analyzer coverage")
   })
 })

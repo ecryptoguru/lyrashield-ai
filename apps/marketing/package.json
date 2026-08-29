@@ -51,6 +51,7 @@
     "@types/node": "^24.0.0",
     "tsx": "^4.23.12",
     "typescript": "^6.0.0",
+    "webmcp-types": "^0.1.5",
     "wrangler": "^4.125.0"
   },
   "engines": {

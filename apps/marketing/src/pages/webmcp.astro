@@ -1,0 +1,267 @@
+---
+/// <reference types="webmcp-types" />
+
+import Base from "@layouts/Base.astro"
+import { WEBMCP_CONTROLS } from "../../../../packages/security/src/webmcp/controls"
+import { WEBMCP_DETECTOR_VERSION } from "../../../../packages/security/src/webmcp/types"
+
+const appUrl =
+  (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://app.lyrashieldai.com"
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/webmcp", origin).toString()
+const checkerUrl = new URL("/tools/webmcp-security-checker", origin).toString()
+const controlsUrl = new URL("/webmcp-controls.json", origin).toString()
+const reviewed = "2026-08-29"
+
+const title = "WebMCP Assurance — Definition, Risks, and 10 Security Controls"
+const description =
+  "What WebMCP is, why browser-native agent tools need review, the 10 WebMCP assurance controls, and how to check your source locally before release."
+
+const severityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 } as const
+const controls = [...WEBMCP_CONTROLS].sort(
+  (a, b) => severityOrder[a.severity] - severityOrder[b.severity]
+)
+
+const faq = [
+  {
+    q: "What is WebMCP?",
+    a: "WebMCP is an emerging browser protocol that lets a web page register tools for an AI agent through document.modelContext.registerTool or declarative form attributes. It is experimental and not yet supported in every browser.",
+  },
+  {
+    q: "Does WebMCP improve search rankings?",
+    a: "No. WebMCP may help an agent understand what your page can do, but it is not a ranking, indexing, or citation guarantee.",
+  },
+  {
+    q: "What does the free checker do?",
+    a: "It analyzes selected source files or pasted code entirely in your browser for 10 WebMCP controls, prepares a bounded rewrite diff, and exports JSON, Markdown, or SARIF. Nothing is uploaded.",
+  },
+  {
+    q: "Can the tool rewrite my repository automatically?",
+    a: "No. The lab applies rewrites only in memory so you can review them. Repository-level fix proposals require an authenticated account and explicit approval.",
+  },
+]
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title,
+    description,
+    url: canonical,
+    dateModified: reviewed,
+    isPartOf: { "@id": `${origin}/#website` },
+    publisher: { "@id": `${origin}/#organization` },
+    about: ["WebMCP", "browser agent tools", "web application security", "AI agent safety"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: reviewed,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: `WebMCP controls (${WEBMCP_DETECTOR_VERSION})`,
+    numberOfItems: controls.length,
+    itemListElement: controls.map((control, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: control.id,
+      description: control.title,
+      url: `${canonical}#${control.id.toLowerCase()}`,
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "WebMCP Assurance", item: canonical },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:py-20">
+    <header data-reveal-group>
+      <p class="font-mono text-xs font-semibold uppercase tracking-[.18em] text-accent" data-reveal>WebMCP Assurance</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>{title}</h1>
+      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>{description}</p>
+      <div class="mt-8 flex flex-wrap gap-3" data-reveal>
+        <a href={checkerUrl} class="lift inline-flex min-h-12 items-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open the free WebMCP Security Checker</a>
+        <a href={`${appUrl}/sign-up?source=webmcp`} class="lift inline-flex min-h-12 items-center rounded-lg border border-border bg-bg-raised px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free LyraShield AI account</a>
+      </div>
+    </header>
+
+    <section class="mt-16" data-reveal="scale">
+      <h2 class="text-2xl font-semibold text-text">What is WebMCP?</h2>
+      <p class="mt-4 leading-7 text-text-muted">
+        WebMCP is an emerging browser protocol that lets a web page expose JavaScript functions or declarative form tools to an AI agent. The page can register a tool with <code class="rounded bg-bg-raised px-1 py-0.5 font-mono text-sm text-text">document.modelContext.registerTool()</code> or mark up a form with <code class="rounded bg-bg-raised px-1 py-0.5 font-mono text-sm text-text">toolname</code>, <code class="rounded bg-bg-raised px-1 py-0.5 font-mono text-sm text-text">tooldescription</code>, and <code class="rounded bg-bg-raised px-1 py-0.5 font-mono text-sm text-text">toolautosubmit</code>. When the protocol is available, the agent can discover and call those tools directly from the page.
+      </p>
+      <p class="mt-4 leading-7 text-text-muted">
+        This is different from a coding-agent MCP server. WebMCP is scoped to the current browser origin and the tools the page chooses to register. It is also experimental: support, behavior, and security boundaries may change as the protocol evolves.
+      </p>
+    </section>
+
+    <section class="mt-16" data-reveal="scale">
+      <h2 class="text-2xl font-semibold text-text">Why WebMCP tools need review</h2>
+      <p class="mt-4 leading-7 text-text-muted">
+        A browser tool can read data, trigger UI changes, or start network requests. If the tool annotations do not match the implementation, an agent may call a durable mutation thinking it is read-only, send data to an unexpected origin, or skip a confirmation step. Because the tools are exposed to the page origin, misconfigured headers or cross-origin iframes can widen that surface.
+      </p>
+      <p class="mt-4 leading-7 text-text-muted">
+        LyraShield's approach is to treat WebMCP as part of the release surface: discover the registered tools, check their behavior against the 10 controls, prepare a bounded diff, and rerun the check before applying anything. No tool is automatically trusted just because it has a clean schema.
+      </p>
+    </section>
+
+    <section class="mt-16" data-reveal="scale">
+      <div class="mb-6 flex items-center justify-between gap-3">
+        <h2 class="text-2xl font-semibold text-text">The 10 WebMCP controls</h2>
+        <a href={controlsUrl} class="text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Machine-readable registry</a>
+      </div>
+      <p class="leading-7 text-text-muted">Each control has a stable ID, severity, and evidence state. A result is a signal for review, not a claim that the condition is exploitable. The registry is versioned as {WEBMCP_DETECTOR_VERSION}.</p>
+      <div class="mt-6 divide-y divide-border rounded-xl border border-border bg-bg-raised">
+        {controls.map((control) => (
+          <article id={control.id.toLowerCase()} class="p-4" data-reveal>
+            <div class="flex items-start justify-between gap-3">
+              <h3 class="text-lg font-semibold text-text">{control.id} · {control.title}</h3>
+              <span class="rounded border border-border bg-bg px-2 py-0.5 text-xs font-semibold text-text-muted">{control.severity}</span>
+            </div>
+            <p class="mt-2 text-sm leading-6 text-text-muted">{control.description}</p>
+            <p class="mt-2 text-sm text-text-muted"><span class="font-medium text-text">Negative evidence:</span> {control.negativeEvidence}</p>
+            <p class="mt-2 text-sm text-text-muted"><span class="font-medium text-text">What to do:</span> {control.remediationTemplate}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-16" data-reveal="scale">
+      <h2 class="text-2xl font-semibold text-text">Methodology</h2>
+      <ol class="mt-4 space-y-3 text-text-muted">
+        <li class="flex gap-3"><span class="font-mono text-sm text-accent">1</span><span><strong class="text-text">Discover</strong> imperative <code class="rounded bg-bg-raised px-1 font-mono text-xs">registerTool</code> calls and declarative forms with tool attributes, plus header and config exposure.</span></li>
+        <li class="flex gap-3"><span class="font-mono text-sm text-accent">2</span><span><strong class="text-text">Normalize</strong> each tool surface into a stable model with annotations, schema, behavior, network methods, and source range.</span></li>
+        <li class="flex gap-3"><span class="font-mono text-sm text-accent">3</span><span><strong class="text-text">Evaluate</strong> each control and emit an evidence state: DETECTED, NO_FINDING, INCONCLUSIVE, or NOT_ASSESSED.</span></li>
+        <li class="flex gap-3"><span class="font-mono text-sm text-accent">4</span><span><strong class="text-text">Prepare</strong> a bounded, non-overlapping rewrite diff for supported findings and show it for review.</span></li>
+        <li class="flex gap-3"><span class="font-mono text-sm text-accent">5</span><span><strong class="text-text">Rerun</strong> the check after applying the diff in memory before any real repository change.</span></li>
+      </ol>
+    </section>
+
+    <section class="mt-16" data-reveal="scale">
+      <h2 class="text-2xl font-semibold text-text">CLI and CI</h2>
+      <p class="mt-4 leading-7 text-text-muted">The LyraShield CLI can include WebMCP findings in <code class="rounded bg-bg-raised px-1 py-0.5 font-mono text-sm text-code">lyrashield check-diff</code>. You can fail a gate on HIGH or CRITICAL findings and export SARIF for GitHub Advanced Security. The GitHub Action uses the same gate and posts findings as annotations.</p>
+      <div class="mt-6 grid gap-4 sm:grid-cols-2">
+        <a href="/docs/integrations/github-action" class="lift rounded-xl border border-border bg-bg-raised p-5 transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <h3 class="font-semibold text-text">GitHub Action setup</h3>
+          <p class="mt-2 text-sm text-text-muted">Add the composite action to a workflow and gate pull requests on HIGH findings.</p>
+        </a>
+        <a href="/docs/integrations/devin-cli" class="lift rounded-xl border border-border bg-bg-raised p-5 transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <h3 class="font-semibold text-text">CLI setup</h3>
+          <p class="mt-2 text-sm text-text-muted">Run <code class="rounded bg-bg px-1 font-mono text-xs">lyrashield check-diff</code> locally and review the SARIF output.</p>
+        </a>
+      </div>
+    </section>
+
+    <section class="mt-16" data-reveal="scale">
+      <h2 class="text-2xl font-semibold text-text">Limitations</h2>
+      <ul class="mt-4 space-y-3 text-text-muted">
+        <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-text-muted" aria-hidden="true"></span><span>Static discovery cannot resolve dynamic behavior, runtime values, or server-side context.</span></li>
+        <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-text-muted" aria-hidden="true"></span><span>A NO_FINDING for a control only means the specific syntactic condition was not observed, not that the whole application is secure.</span></li>
+        <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-text-muted" aria-hidden="true"></span><span>WebMCP is experimental. Browsers that do not support it cannot execute the registered tools even if the page registers them.</span></li>
+        <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-text-muted" aria-hidden="true"></span><span>The free checker does not upload source, but it also does not replace a full repository scan, retest, or evidence-backed report.</span></li>
+      </ul>
+    </section>
+
+    <section class="mt-16" data-reveal="scale" aria-labelledby="webmcp-faq-heading">
+      <h2 id="webmcp-faq-heading" class="text-2xl font-semibold text-text">Questions</h2>
+      <div class="mt-6 divide-y divide-border rounded-xl border border-border bg-bg-raised">
+        {faq.map((item, i) => (
+          <details class="p-4" data-question-id={`webmcp-faq-${i + 1}`}>
+            <summary class="cursor-pointer font-medium text-text">{item.q}</summary>
+            <p class="mt-3 text-sm leading-6 text-text-muted">{item.a}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-16" data-reveal="scale">
+      <h2 class="text-2xl font-semibold text-text">Try the checker</h2>
+      <p class="mt-4 leading-7 text-text-muted">Open the WebMCP Security Checker, load the unsafe sample, and review the 10 controls without creating an account. The check runs in your browser and nothing is uploaded.</p>
+      <a href={checkerUrl} class="lift mt-6 inline-flex min-h-12 items-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open the WebMCP Security Checker</a>
+    </section>
+  </section>
+
+  <script>
+    import { WEBMCP_CONTROLS_BY_ID } from "../../../../packages/security/src/webmcp/controls"
+
+    const explainContent: Record<string, string> = {
+      definition:
+        "WebMCP is an emerging browser protocol that lets a web page register tools for an AI agent via document.modelContext.registerTool or declarative form attributes. It is experimental and scoped to the current page origin.",
+      risks:
+        "A WebMCP tool can read data, start network requests, or trigger durable mutations. Risks include annotation/behavior mismatch, unsafe cross-origin exposure, missing confirmation boundaries, weak schemas, and missing cancellation or cleanup.",
+      controls:
+        `LyraShield WebMCP Assurance defines 10 controls: ${WEBMCP_CONTROLS_BY_ID["WEBMCP-01"].title}, ${WEBMCP_CONTROLS_BY_ID["WEBMCP-02"].title}, and eight more. Each control returns DETECTED, NO_FINDING, INCONCLUSIVE, or NOT_ASSESSED.`,
+      methodology:
+        "Discover tool definitions and header exposure, normalize each tool surface, evaluate the 10 controls, prepare a bounded rewrite diff, and rerun the check in memory before any repository change.",
+      limitations:
+        "Static discovery cannot resolve dynamic behavior or server-side context. A clear result does not prove an application is secure. WebMCP is experimental and not every browser supports it.",
+      cli:
+        "Run lyrashield check-diff to include WebMCP findings, gate on HIGH, and export SARIF. The GitHub Action posts the same findings as annotations.",
+    }
+
+    const modelContext = document.modelContext
+    if (modelContext) {
+      const controller = new AbortController()
+      modelContext
+        .registerTool(
+          {
+            name: "explain_webmcp_assurance",
+            title: "Explain WebMCP assurance",
+            description:
+              "Returns bounded public text about a published WebMCP assurance topic. Does not access user data, analytics, or dynamic model output.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                topic: {
+                  type: "string",
+                  description: "Published topic to explain.",
+                  enum: ["definition", "risks", "controls", "methodology", "limitations", "cli"],
+                },
+              },
+            },
+            annotations: { readOnlyHint: true, untrustedContentHint: false },
+            execute: async (input: Record<string, unknown>, _options: WebMCP.ToolExecuteCallbackOptions) => {
+              const topic = input.topic as string | undefined
+              const text = topic ? explainContent[topic] : undefined
+              if (!text) {
+                return {
+                  error: `Unknown topic. Valid topics: ${Object.keys(explainContent).join(", ")}.`,
+                }
+              }
+              return { topic, text: text.slice(0, 800) }
+            },
+          },
+          { signal: controller.signal }
+        )
+        .catch(() => {
+          // WebMCP may not be supported; the page is fully usable without it.
+        })
+      window.addEventListener("beforeunload", () => controller.abort())
+    }
+  </script>
+</Base>

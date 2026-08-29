@@ -87,7 +87,7 @@ runs:
         echo "fail_on_severity=$SEVERITY" >> "$GITHUB_OUTPUT"
         echo "base_sha=$BASE" >> "$GITHUB_OUTPUT"
         echo "head_sha=$HEAD" >> "$GITHUB_OUTPUT"
-        git diff --name-only "$BASE" "$HEAD" > "$RUNNER_TEMP/changed_files.txt"
+        git diff --name-only -z "$BASE" "$HEAD" > "$RUNNER_TEMP/changed_files.txt"
 
     - name: Secret scan (gitleaks)
       id: secrets
@@ -156,7 +156,7 @@ runs:
         ISSUES=0
         ISSUES_SEVERITY="NONE"
         # Track the most severe issue found across all changed files.
-        while IFS= read -r file; do
+        while IFS= read -r -d '' file; do
           [ -f "$file" ] || continue
           ADDED="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- "$file" | grep -v '^+++' | sed -n 's/^+//p' || true)"
           if grep -qiE '(password|secret|api_key|apikey|token)[[:space:]]*[=:][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
@@ -170,6 +170,38 @@ runs:
           fi
           if grep -qiE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
             add_result "eval-exec" "error" "Use of eval/exec in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "HIGH")
+          fi
+
+          # The self-contained Action cannot safely derive WebMCP control flow.
+          # Read the final file so edits limited to an existing handler still
+          # receive a fail-closed result. Arbitrary confirmation text is not
+          # evidence of a visible confirmation boundary; use the CLI's full
+          # structural analyzer for complete WebMCP coverage.
+          FINAL_CONTENT="$(git show "$HEAD_SHA:$file" 2>/dev/null || true)"
+          if grep -qiE 'document[[:space:]]*\.[[:space:]]*modelContext[[:space:]]*\.[[:space:]]*registerTool[[:space:]]*\(|<form[^>]*(toolname|tool-name)[[:space:]]*=' <<< "$FINAL_CONTENT" &&
+            grep -qiE "(method[[:space:]]*:[[:space:]]*[\"'](POST|PUT|PATCH|DELETE)[\"']|\.(post|put|patch|delete)[[:space:]]*\(|<form[^>]*method[[:space:]]*=[[:space:]]*[\"'](post|put|patch|delete)[\"'])" <<< "$ADDED"; then
+            add_result "WEBMCP-COVERAGE-INCOMPLETE" "error" "Changed WebMCP mutation behavior in $file cannot be structurally assessed by this self-contained Action; run lyrashield check-diff for full analyzer coverage" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "HIGH")
+          fi
+
+          # WebMCP high-confidence local checks. Source of truth for rule IDs
+          # and severities is @lyrashield/security/webmcp (controls.ts); the
+          # Bash mirror here is guarded by
+          # packages/cli/src/__tests__/action-patterns.drift.test.ts.
+          # These patterns intentionally inspect only added lines and are tuned
+          # for low false-positive rate on common tool-definition shapes.
+          if grep -qiE 'modelContext[.]registerTool|<form[^>]+toolname[[:space:]]*=' <<< "$ADDED"; then
+          if grep -qiE 'name[[:space:]]*:[[:space:]]*["'"'"'][^"'"'"']+["'"'"']' <<< "$ADDED" && grep -qiE 'description[[:space:]]*:[[:space:]]*["'"'"']{2}|description[[:space:]]*:[[:space:]]*null' <<< "$ADDED"; then
+            add_result "WEBMCP-10" "warning" "WebMCP tool may have an empty or missing description in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "MEDIUM")
+          fi
+          if grep -qiE 'readOnlyHint[[:space:]]*:[[:space:]]*true' <<< "$ADDED" && grep -qiE '(write|delete|update|create|save|remove|modify|persist)' <<< "$ADDED"; then
+            add_result "WEBMCP-01" "error" "WebMCP tool annotation/behavior mismatch in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "HIGH")
+          fi
+          if grep -qiE 'exposedTo[[:space:]]*:[[:space:]]*["'"'"']?\*["'"'"']?' <<< "$ADDED" || grep -qiE 'target[[:space:]]*=[[:space:]]*["'"'"']?\*["'"'"']?' <<< "$ADDED"; then
+            add_result "WEBMCP-03" "error" "WebMCP tool may expose surface to a wildcard or dynamic origin in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "HIGH")
+          fi
+          if { grep -qiE 'method[[:space:]]*:[[:space:]]*["'"'"']?(POST|PUT|PATCH|DELETE)' <<< "$ADDED" || grep -qiE 'behavior[[:space:]]*:[[:space:]]*["'"'"']?mutation' <<< "$ADDED" || { grep -qiE '<form[^>]+toolname[[:space:]]*=' <<< "$ADDED" && grep -qiE 'method[[:space:]]*=[[:space:]]*["'"'"']?(POST|PUT|PATCH|DELETE)' <<< "$ADDED" && grep -qiE 'toolautosubmit([[:space:]]|=|>)' <<< "$ADDED"; }; } && ! grep -qiE 'confirm|dialog|prompt' <<< "$ADDED"; then
+            add_result "WEBMCP-05" "error" "WebMCP durable mutation may lack a confirmation boundary in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "CRITICAL")
+          fi
           fi
         done < "$RUNNER_TEMP/changed_files.txt"
 

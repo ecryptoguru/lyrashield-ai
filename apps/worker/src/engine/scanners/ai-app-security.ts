@@ -15,6 +15,15 @@ import {
   type AISecuritySignalState,
 } from "@lyrashield/security/ai-security"
 import { scanAiDataExposure, type AiDataExposureFinding } from "@lyrashield/security"
+import { discoverWebMcpTools } from "@lyrashield/security/webmcp/discover"
+import { evaluateWebMcpSurface } from "@lyrashield/security/webmcp"
+import {
+  WEBMCP_CONTROLS_BY_ID,
+  type WebMcpBehavior,
+  type WebMcpCoverageReceipt as SecurityWebMcpCoverageReceipt,
+  type WebMcpDefinitionKind,
+  type WebMcpSignal,
+} from "@lyrashield/security/webmcp"
 import {
   queryOsvWithCache,
   type AdvisoryBatchResult,
@@ -35,12 +44,33 @@ export interface AiAppSecurityScanConfig {
   mode?: string
 }
 
+export interface WebMcpCoverageReceipt extends SecurityWebMcpCoverageReceipt {
+  toolCounts: {
+    byKind: Record<WebMcpDefinitionKind, number>
+    byBehavior: Record<WebMcpBehavior, number>
+  }
+  exposurePosture: {
+    dynamic: number
+    wildcard: number
+    explicitSelf: number
+    explicitTrusted: number
+    missingOrUnknown: number
+  }
+  confirmationPosture: {
+    mutationTools: number
+    unconfirmedMutations: number
+  }
+  methodology: string[]
+}
+
 export interface AiAppSecurityScanResult {
   findings: EngineVulnerability[]
   aiScanResult: AIScanResult
   ai03AdvisoryFresh: boolean
   ai03Coverage: Ai03CoverageReceipt
   discovery: AiAppSecurityDiscoveryReceipt
+  webMcpFindings: EngineVulnerability[]
+  webMcpCoverage: WebMcpCoverageReceipt | null
 }
 
 export interface AiAppSecurityDiscoveryReceipt {
@@ -80,12 +110,19 @@ const SUPPORTED_EXTENSIONS = new Set([
   ".jsx",
   ".ts",
   ".tsx",
+  ".mjs",
+  ".cjs",
+  ".astro",
+  ".html",
+  ".htm",
   ".py",
   ".json",
   ".toml",
   ".yaml",
   ".yml",
 ])
+
+const WEBMCP_CONFIG_FILES = new Set(["_headers", ".htaccess", "nginx.conf", "vercel.json"])
 
 const IGNORED_DIRECTORIES = new Set([
   "node_modules",
@@ -193,6 +230,13 @@ function toLanguage(extension: string): AIScanFile["language"] {
       return "typescript"
     case ".tsx":
       return "tsx"
+    case ".mjs":
+    case ".cjs":
+      return "javascript"
+    case ".astro":
+    case ".html":
+    case ".htm":
+      return "unknown"
     case ".py":
       return "python"
     case ".json":
@@ -274,7 +318,7 @@ async function collectSourceFiles(
 
       if (!entry.isFile()) continue
       const extension = fullPath.slice(fullPath.lastIndexOf("."))
-      if (!SUPPORTED_EXTENSIONS.has(extension)) continue
+      if (!SUPPORTED_EXTENSIONS.has(extension) && !WEBMCP_CONFIG_FILES.has(entry.name)) continue
       try {
         const stats = await lstat(fullPath)
         if (!stats.isFile()) continue
@@ -647,7 +691,7 @@ function toEngineVulnerability(
 
   return {
     id: signal.controlId,
-    title: control?.title ?? `${signal.controlId}: ${signal.state}`,
+    title: `${signal.controlId}: ${control?.title ?? signal.state}`,
     severity: signal.severity,
     timestamp: new Date().toISOString(),
     description: control?.description,
@@ -681,6 +725,240 @@ function toAiDataExposureVulnerability(
       },
     ],
     scannerSource: "ai_app_security" as const,
+  }
+}
+
+function toWebMcpEngineVulnerability(signal: WebMcpSignal): EngineVulnerability {
+  const control = WEBMCP_CONTROLS_BY_ID[signal.controlId]
+  const remediation =
+    signal.remediation ??
+    control?.remediationTemplate ??
+    "Review the WebMCP tool surface and remediate."
+  const evidence = signal.snippet
+    ? `${signal.file}:${signal.line}: ${signal.snippet}`
+    : `${signal.file}${signal.line ? `:${signal.line}` : ""}`
+
+  return {
+    id: signal.controlId,
+    title: control?.title ?? `${signal.controlId}: ${signal.state}`,
+    severity: signal.severity,
+    timestamp: new Date().toISOString(),
+    target: signal.file,
+    cwe: "CWE-749",
+    finding_class: "webmcp_tool_surface",
+    description: control?.description,
+    evidence,
+    technical_analysis: `${signal.controlId} (${signal.ruleId}) is ${signal.state} in ${signal.file}${signal.line ? ` at line ${signal.line}` : ""}. ${remediation}`,
+    remediation_steps: remediation,
+    code_locations:
+      signal.file && signal.line
+        ? [
+            {
+              file: signal.file,
+              start_line: signal.line,
+              end_line: signal.endLine ?? signal.line,
+              snippet: signal.snippet,
+            },
+          ]
+        : undefined,
+    scannerSource: "ai_app_security" as const,
+  }
+}
+
+function buildWebMcpCoverageReceipt(
+  files: AIScanFile[],
+  inventory: import("@lyrashield/security/webmcp").WebMcpToolInventory,
+  signals: WebMcpSignal[],
+  discovery: AiAppSecurityDiscoveryReceipt
+): WebMcpCoverageReceipt {
+  const definitions = inventory.definitions
+  const kindCounts: Record<WebMcpDefinitionKind, number> = {
+    imperative: definitions.filter((d) => d.kind === "imperative").length,
+    declarative: definitions.filter((d) => d.kind === "declarative").length,
+  }
+  const behaviorCounts: Record<WebMcpBehavior, number> = {
+    read: 0,
+    "ui-only": 0,
+    mutation: 0,
+    unknown: 0,
+  }
+  for (const d of definitions) {
+    behaviorCounts[d.behavior]++
+  }
+
+  const posture = {
+    dynamic: 0,
+    wildcard: 0,
+    explicitSelf: 0,
+    explicitTrusted: 0,
+    missingOrUnknown: 0,
+  }
+  for (const d of definitions) {
+    if (d.exposedTo === "dynamic") {
+      posture.dynamic++
+    } else if (Array.isArray(d.exposedTo)) {
+      const hasWildcard = d.exposedTo.some((o) => o === "*" || o.includes("*"))
+      const hasSelf = d.exposedTo.some((o) => o.includes("self"))
+      if (hasWildcard) {
+        posture.wildcard++
+      } else if (hasSelf) {
+        posture.explicitSelf++
+      } else if (d.exposedTo.length > 0) {
+        posture.explicitTrusted++
+      } else {
+        posture.missingOrUnknown++
+      }
+    } else {
+      posture.missingOrUnknown++
+    }
+  }
+
+  const confirmation = {
+    mutationTools: definitions.filter((d) => d.behavior === "mutation").length,
+    unconfirmedMutations: signals.filter(
+      (s) => s.controlId === "WEBMCP-05" && s.state === "DETECTED"
+    ).length,
+  }
+
+  const structurallyIncomplete = definitions.filter(
+    (d) =>
+      d.name === null ||
+      d.behavior === "unknown" ||
+      d.inputSchema.type === "unknown" ||
+      d.inputSchema.type === "any"
+  ).length
+  const incompleteDefinitions = Math.max(inventory.incompleteDefinitions, structurallyIncomplete)
+
+  const eligibleFiles = Math.max(0, files.length - inventory.unsupportedFiles.length)
+  const scannedFiles = Math.max(0, eligibleFiles - inventory.truncatedFiles.length)
+  const unscannedPaths = new Set([...inventory.unsupportedFiles, ...inventory.truncatedFiles])
+  const limitsReached = [...new Set([...discovery.limitsReached, ...inventory.limitsReached])]
+  const coverageState =
+    discovery.skippedFiles === 0 &&
+    incompleteDefinitions === 0 &&
+    inventory.truncatedFiles.length === 0 &&
+    limitsReached.length === 0
+      ? "COMPLETE"
+      : "INCONCLUSIVE"
+
+  return {
+    version: "webmcp-assurance/1",
+    detectorVersion: inventory.detectorVersion,
+    coverageState,
+    eligibleFiles,
+    scannedFiles,
+    scannedBytes: files.reduce(
+      (total, file) => total + (unscannedPaths.has(file.path) ? 0 : file.size),
+      0
+    ),
+    toolDefinitionsFound: definitions.length,
+    toolDefinitionsAssessed: Math.max(0, definitions.length - structurallyIncomplete),
+    incompleteDefinitions,
+    imperativeDefinitions: kindCounts.imperative,
+    declarativeDefinitions: kindCounts.declarative,
+    limitsReached,
+    inventoryChecksum: inventory.checksum,
+    sourceSelection: {
+      eligibleFiles: discovery.eligibleFiles,
+      selectedFiles: discovery.scannedFiles,
+      skippedFiles: discovery.skippedFiles,
+      scannedBytes: discovery.scannedBytes,
+      skippedByReason: { ...discovery.skippedByReason },
+      limits: {
+        maxFiles: discovery.maxFiles,
+        maxFileBytes: MAX_FILE_BYTES,
+        maxTotalBytes: MAX_TOTAL_BYTES,
+        maxWalkEntries: MAX_WALK_ENTRIES,
+        maxWalkDepth: MAX_WALK_DEPTH,
+      },
+      limitsReached: [...discovery.limitsReached],
+    },
+    toolCounts: {
+      byKind: kindCounts,
+      byBehavior: behaviorCounts,
+    },
+    exposurePosture: posture,
+    confirmationPosture: confirmation,
+    methodology: [
+      "WebMCP discovery runs over the same source files as AI App Security.",
+      "The receipt contains bounded metadata only: no raw source, schemas, or workspace identifiers.",
+      `WebMCP received ${discovery.scannedFiles} of ${discovery.eligibleFiles} repository-eligible files from outer source selection.`,
+      `${eligibleFiles} selected file(s) were eligible for WebMCP analysis; unsupported source languages were excluded from the WebMCP scope.`,
+      coverageState === "INCONCLUSIVE"
+        ? "Coverage is INCONCLUSIVE because source selection or WebMCP discovery was incomplete."
+        : "Outer source selection and WebMCP discovery completed without recorded limits.",
+      incompleteDefinitions > 0
+        ? `${incompleteDefinitions} tool definition(s) were incomplete and could not be fully assessed.`
+        : "All discovered tool definitions had enough static structure to be assessed.",
+    ],
+  }
+}
+
+async function runWebMcpScan(
+  files: AIScanFile[],
+  discovery: AiAppSecurityDiscoveryReceipt,
+  coverageIssues: ScannerCoverageIssue[],
+  signal?: AbortSignal
+): Promise<{ findings: EngineVulnerability[]; coverage: WebMcpCoverageReceipt | null }> {
+  const scanFiles: import("@lyrashield/security/webmcp").WebMcpScanFile[] = files.map((file) => ({
+    ...file,
+    truncated: false,
+  }))
+
+  try {
+    const { inventory, context } = await discoverWebMcpTools(scanFiles, {
+      limits: {
+        maxFiles: 1_000,
+        maxFileBytes: MAX_FILE_BYTES,
+        maxTotalBytes: MAX_TOTAL_BYTES,
+        maxWallTimeMs: MAX_WALL_TIME_MS,
+        maxDefinitions: 500,
+      },
+      signal,
+    })
+
+    const signals = evaluateWebMcpSurface(scanFiles, inventory, context)
+    const webMcpFindings: EngineVulnerability[] = []
+    for (const signal of signals) {
+      if (signal.state === "DETECTED") {
+        webMcpFindings.push(toWebMcpEngineVulnerability(signal))
+      }
+    }
+
+    if (inventory.limitsReached.length > 0) {
+      recordCoverageIssue(coverageIssues, {
+        scanner: "ai_app_security",
+        status: "bounded",
+        reason: `WebMCP discovery reached its limit: ${inventory.limitsReached.join(", ")}`,
+        metadata: { webMcpLimits: inventory.limitsReached },
+      })
+    }
+
+    if (inventory.incompleteDefinitions > 0 || inventory.truncatedFiles.length > 0) {
+      recordCoverageIssue(coverageIssues, {
+        scanner: "ai_app_security",
+        status: "partial",
+        reason: "WebMCP discovery could not fully assess every eligible definition",
+        metadata: {
+          incompleteDefinitions: inventory.incompleteDefinitions,
+          truncatedFiles: inventory.truncatedFiles.length,
+        },
+      })
+    }
+
+    const coverage = buildWebMcpCoverageReceipt(files, inventory, signals, discovery)
+    return { findings: webMcpFindings, coverage }
+  } catch (err) {
+    logger.warn("WebMCP scan failed", {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    recordCoverageIssue(coverageIssues, {
+      scanner: "ai_app_security",
+      status: "partial",
+      reason: "WebMCP discovery or evaluation failed",
+      metadata: { error: err instanceof Error ? err.message : String(err) },
+    })
+    return { findings: [], coverage: null }
   }
 }
 
@@ -755,6 +1033,8 @@ export async function scanAiAppSecurity({
         unresolvedReasons: ["No supported source files found"],
       },
       discovery,
+      webMcpFindings: [],
+      webMcpCoverage: null,
     }
   }
 
@@ -784,6 +1064,14 @@ export async function scanAiAppSecurity({
       findings.push(toAiDataExposureVulnerability(exposure, file.path))
     }
   }
+
+  const { findings: webMcpFindings, coverage: webMcpCoverage } = await runWebMcpScan(
+    files,
+    discovery,
+    coverageIssues,
+    signal
+  )
+  findings.push(...webMcpFindings)
 
   throwIfAborted(signal)
   let dependencyResolution: DependencyResolution
@@ -927,5 +1215,7 @@ export async function scanAiAppSecurity({
     ai03AdvisoryFresh: ai03Coverage.fresh,
     ai03Coverage,
     discovery,
+    webMcpFindings,
+    webMcpCoverage,
   }
 }

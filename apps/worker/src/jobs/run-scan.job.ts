@@ -1631,6 +1631,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ...(routingCoverageIssue ? [routingCoverageIssue] : []),
           ],
           aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
+          webMcpCoverage: orchestratorResult.webMcpCoverage,
           matchedControlRanks: coverage.matchedControlRanks,
           urlExecution: orchestratorResult.urlExecution,
           engineExecution,

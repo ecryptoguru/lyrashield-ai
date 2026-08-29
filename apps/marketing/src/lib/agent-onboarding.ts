@@ -83,6 +83,30 @@ export const agentOnboarding = {
   clientGroups: buildClientGroups(clients),
 } as const
 
+function renderWebMcpSection(origin: string): string {
+  const pages = [
+    { label: "WebMCP Assurance guide", url: `${origin}/webmcp` },
+    { label: "WebMCP Security Checker", url: `${origin}/tools/webmcp-security-checker` },
+    { label: "WebMCP controls registry", url: `${origin}/webmcp-controls.json` },
+  ]
+  return [
+    "## WebMCP Assurance (public, browser-local)",
+    "",
+    "WebMCP is a browser-native model-context surface. The public pages below are read-only and run entirely in the browser; they do not create a workspace authorization channel.",
+    "",
+    ...pages.map(({ label, url }) => `- [${label}](${url})`),
+    "",
+    "Available public tools:",
+    "",
+    "- `analyze_webmcp_source` — analyze source files or pasted code for 10 WebMCP controls.",
+    "- `prepare_webmcp_rewrite` — prepare a bounded, reviewable rewrite diff from the same analysis.",
+    "- `explain_webmcp_assurance` — page-scoped, read-only explanation of published WebMCP topics on /webmcp.",
+    "",
+    "The checker never auto-merges changes. Rewrites are applied only in memory for review; nothing is uploaded.",
+    "",
+  ].join("\n")
+}
+
 export function renderAgentOnboardingMarkdown(origin: string): string {
   const clientSections = agentOnboarding.clientGroups
     .map((group) =>
@@ -110,6 +134,7 @@ export function renderAgentOnboardingMarkdown(origin: string): string {
     "",
     `Read the [Agent Plugin guide](${origin}/docs/integrations/agent-plugins).`,
     "",
+    renderWebMcpSection(origin),
     `## Supported coding agents (${agentOnboarding.clients.length})`,
     "",
     clientSections,

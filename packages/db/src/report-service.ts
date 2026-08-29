@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "crypto"
 const SHARE_TOKEN_PATTERN = /^[a-f0-9]{64}$/i
 import { logger } from "@lyrashield/logger"
 import type { Report } from "./generated/prisma"
-import { gatherReportData } from "./report-generator"
+import { gatherReportData, parseWebMcpAssurance } from "./report-generator"
 import { getSystemPrisma } from "./system-client"
 import { withWorkspaceRLS } from "./rls"
 
@@ -47,6 +47,41 @@ export interface ShareableReport {
     ageBuckets: Record<string, number>
     scoreTrend: Array<{ score: number; grade: string; computedAt: string }>
     priorityActions: Array<{ label: string; detail: string; severity: string }>
+    methodology: string[]
+  } | null
+  webMcpAssurance?: {
+    version: string
+    detectorVersion: string
+    coverageState: "COMPLETE" | "INCONCLUSIVE"
+    eligibleFiles: number
+    scannedFiles: number
+    scannedBytes: number
+    inventoryChecksum: string
+    toolDefinitionsFound: number
+    toolDefinitionsAssessed: number
+    incompleteDefinitions: number
+    imperativeDefinitions: number
+    declarativeDefinitions: number
+    limitsReached: string[]
+    sourceSelection?: {
+      eligibleFiles: number
+      selectedFiles: number
+      skippedFiles: number
+      scannedBytes?: number
+      skippedByReason: Record<string, number>
+      limits: Record<string, number>
+      limitsReached: string[]
+    }
+    toolCounts: { byKind: Record<string, number>; byBehavior: Record<string, number> }
+    exposurePosture: Record<string, number>
+    confirmationPosture: Record<string, number>
+    findingsByControl: Record<string, number>
+    findingsBySeverity: Record<string, number>
+    representativeRemediation: Array<{
+      controlId: string
+      severity: string
+      text: string
+    }>
     methodology: string[]
   } | null
 }
@@ -124,6 +159,12 @@ function getSnapshotAssurance(contentJson: unknown): ShareableReport["assurance"
       ? value.methodology.filter((item): item is string => typeof item === "string")
       : [],
   }
+}
+
+function getSnapshotWebMcpAssurance(contentJson: unknown): ShareableReport["webMcpAssurance"] {
+  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return null
+  const snapshot = contentJson as Record<string, unknown>
+  return parseWebMcpAssurance(snapshot.webMcpAssurance)
 }
 
 function getSnapshotScanSummary(contentJson: unknown): ShareableReport["scanSummary"] | undefined {
@@ -312,6 +353,7 @@ export async function getShareableReport(
     createdAt: report.createdAt,
     scanSummary,
     assurance: getSnapshotAssurance(report.contentJson),
+    webMcpAssurance: getSnapshotWebMcpAssurance(report.contentJson),
   }
 }
 

@@ -1,5 +1,5 @@
 import minimist from "minimist"
-import { resolveDiffRange, runRiskyPatternChecks, buildSarif } from "../diff-core.js"
+import { resolveDiffRange, runDiffChecks, buildSarif } from "../diff-core.js"
 import type { Output } from "../output.js"
 
 export async function handleCheckDiff(args: string[], output: Output): Promise<number> {
@@ -15,7 +15,7 @@ export async function handleCheckDiff(args: string[], output: Output): Promise<n
   )
 
   try {
-    const findings = await runRiskyPatternChecks(base, head)
+    const findings = await runDiffChecks(base, head)
     const labelled = findings.map((f) => ({ ...f, advisory: true }))
 
     if (parsed.sarif) {
@@ -26,7 +26,14 @@ export async function handleCheckDiff(args: string[], output: Output): Promise<n
           level: f.level,
           message: { text: f.message },
           locations: f.file
-            ? [{ physicalLocation: { artifactLocation: { uri: f.file } } }]
+            ? [
+                {
+                  physicalLocation: {
+                    artifactLocation: { uri: f.file },
+                    region: f.line ? { startLine: f.line } : undefined,
+                  },
+                },
+              ]
             : undefined,
         }))
       )

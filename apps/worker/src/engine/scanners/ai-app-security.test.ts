@@ -178,6 +178,19 @@ describe("scanAiAppSecurity", () => {
       )
     ).toBe(true)
     expect(quick.aiScanResult.coverage.limitsReached).toContain("max_files")
+    expect(quick.webMcpCoverage).toMatchObject({
+      coverageState: "INCONCLUSIVE",
+      eligibleFiles: 200,
+      sourceSelection: {
+        eligibleFiles: 217,
+        selectedFiles: 200,
+        skippedFiles: 17,
+        skippedByReason: { fileLimit: 17 },
+        limits: { maxFiles: 200 },
+        limitsReached: ["max_files"],
+      },
+    })
+    expect(quick.webMcpCoverage?.limitsReached).toContain("max_files")
     expect(quickCoverage).toContainEqual(
       expect.objectContaining({
         scanner: "ai_app_security",
@@ -202,6 +215,15 @@ describe("scanAiAppSecurity", () => {
       skippedFiles: 0,
     })
     expect(standard.aiScanResult.coverage.limitsReached).not.toContain("max_files")
+    expect(standard.webMcpCoverage).toMatchObject({
+      coverageState: "COMPLETE",
+      sourceSelection: {
+        eligibleFiles: 217,
+        selectedFiles: 217,
+        skippedFiles: 0,
+        limitsReached: [],
+      },
+    })
     expect(standardCoverage.some((issue) => issue.status === "bounded")).toBe(false)
   })
 
@@ -227,6 +249,91 @@ describe("scanAiAppSecurity", () => {
       scannedFiles: 1,
       skippedFiles: 0,
     })
+  })
+
+  it("includes HTML, Astro, module, and WebMCP header sources", async () => {
+    await writeFile(
+      join(tempDir, "tool.html"),
+      `<form toolname="delete_account" tooldescription="Delete account" method="post" toolautosubmit></form>`
+    )
+    await writeFile(
+      join(tempDir, "tool.astro"),
+      `<script>document.modelContext.registerTool({ name: "remove", inputSchema: { type: "object", properties: {} }, execute: () => fetch("/x", { method: "DELETE" }) }, { exposedTo: ["*"] })</script>`
+    )
+    await writeFile(
+      join(tempDir, "tool.mjs"),
+      `document.modelContext.registerTool({ name: "read", inputSchema: { type: "object", properties: {} }, execute: () => ({ ok: true }) })`
+    )
+    await writeFile(join(tempDir, "_headers"), "Permissions-Policy: tools=(*)")
+
+    const result = await scanAiAppSecurity({
+      repoPath: tempDir,
+      workspaceDir: tempDir,
+      coverageIssues: [],
+    })
+
+    expect(result.discovery.eligibleFiles).toBe(4)
+    expect(result.webMcpCoverage).toMatchObject({
+      coverageState: "COMPLETE",
+      eligibleFiles: 4,
+      scannedFiles: 4,
+      toolDefinitionsFound: 3,
+      imperativeDefinitions: 2,
+      declarativeDefinitions: 1,
+      sourceSelection: {
+        eligibleFiles: 4,
+        selectedFiles: 4,
+        skippedFiles: 0,
+      },
+    })
+    expect(result.webMcpCoverage?.scannedBytes).toBeGreaterThan(0)
+    expect(result.webMcpFindings.map((finding) => finding.id)).toEqual(
+      expect.arrayContaining(["WEBMCP-03", "WEBMCP-04", "WEBMCP-05"])
+    )
+  })
+
+  it("records incomplete WebMCP discovery as partial coverage", async () => {
+    await writeFile(join(tempDir, "dynamic.ts"), "document.modelContext.registerTool(buildTool())")
+    const coverage: import("../scanner-coverage").ScannerCoverageIssue[] = []
+
+    const result = await scanAiAppSecurity({
+      repoPath: tempDir,
+      workspaceDir: tempDir,
+      coverageIssues: coverage,
+    })
+
+    expect(result.webMcpCoverage?.incompleteDefinitions).toBe(1)
+    expect(result.webMcpCoverage?.coverageState).toBe("INCONCLUSIVE")
+    expect(coverage).toContainEqual(
+      expect.objectContaining({ scanner: "ai_app_security", status: "partial" })
+    )
+  })
+
+  it("counts only WebMCP-scannable files in receipt bytes", async () => {
+    const webMcpSource = `document.modelContext.registerTool({ name: "read", inputSchema: { type: "object", properties: {} }, execute: () => ({ ok: true }) })`
+    const unsupportedSource = "print('not a WebMCP source')"
+    await writeFile(join(tempDir, "tool.ts"), webMcpSource)
+    await writeFile(join(tempDir, "other.py"), unsupportedSource)
+
+    const result = await scanAiAppSecurity({
+      repoPath: tempDir,
+      workspaceDir: tempDir,
+      coverageIssues: [],
+    })
+
+    expect(result.webMcpCoverage).toMatchObject({
+      coverageState: "COMPLETE",
+      eligibleFiles: 1,
+      scannedFiles: 1,
+      scannedBytes: Buffer.byteLength(webMcpSource),
+      sourceSelection: {
+        eligibleFiles: 2,
+        selectedFiles: 2,
+        skippedFiles: 0,
+        scannedBytes: Buffer.byteLength(webMcpSource) + Buffer.byteLength(unsupportedSource),
+      },
+    })
+    expect(result.webMcpCoverage?.limitsReached).not.toContain("unsupported_language")
   })
 
   it("aborts when the signal is already aborted", async () => {
