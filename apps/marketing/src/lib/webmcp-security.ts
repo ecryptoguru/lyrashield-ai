@@ -747,7 +747,7 @@ export function registerWebMcpTools(
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       execute: async (
         input: Record<string, unknown>,
-        options: WebMCP.ToolExecuteCallbackOptions
+        options: WebMCP.ToolExecuteCallbackOptions | undefined
       ) => {
         if (Object.keys(input).some((key) => key !== "source")) {
           return { error: "Unknown input parameter." }
@@ -762,8 +762,8 @@ export function registerWebMcpTools(
         if (state.files.length === 0 && source !== "unsafe_sample") {
           return { error: "No source loaded. Paste or select files first." }
         }
-        await state.analyze(options.signal)
-        if (options.signal.aborted) return { error: "Analysis cancelled.", cancelled: true }
+        await state.analyze(options?.signal)
+        if (options?.signal?.aborted) return { error: "Analysis cancelled.", cancelled: true }
         if (state.error) return { error: state.error }
         return {
           summary: state.coverage
@@ -790,7 +790,7 @@ export function registerWebMcpTools(
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       execute: async (
         input: Record<string, unknown>,
-        options: WebMCP.ToolExecuteCallbackOptions
+        options: WebMCP.ToolExecuteCallbackOptions | undefined
       ) => {
         if (Object.keys(input).some((key) => key !== "controlId")) {
           return { error: "Unknown input parameter." }
@@ -808,8 +808,8 @@ export function registerWebMcpTools(
         }
         state.selectedControlIds.clear()
         state.selectedControlIds.add(controlId)
-        await state.prepareRewrite(options.signal)
-        if (options.signal.aborted)
+        await state.prepareRewrite(options?.signal)
+        if (options?.signal?.aborted)
           return { error: "Rewrite preparation cancelled.", cancelled: true }
         return {
           controlId,
@@ -844,7 +844,7 @@ export function registerWebMcpTools(
         } catch (error) {
           onActivity?.({
             toolName: tool.name,
-            status: options.signal.aborted ? "cancelled" : "failed",
+            status: options?.signal?.aborted ? "cancelled" : "failed",
             startedAt,
             endedAt: new Date().toISOString(),
           })
