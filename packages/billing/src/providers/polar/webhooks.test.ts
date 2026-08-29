@@ -72,4 +72,24 @@ describe("validatePolarWebhook", () => {
       env.POLAR_WEBHOOK_SECRET = originalSecret
     }
   })
+
+  it("accepts unpadded Base64URL Standard Webhooks signatures", () => {
+    const id = "msg_polar_base64url"
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const body = '{"type":"order.paid","data":{"id":"ord_3"}}'
+    const signature = createHmac("sha256", testWebhook.key)
+      .update(`${id}.${timestamp}.${body}`)
+      .digest("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "")
+
+    expect(
+      validatePolarWebhook(body, {
+        "webhook-id": id,
+        "webhook-timestamp": timestamp,
+        "webhook-signature": `v1,${signature}`,
+      })
+    ).toMatchObject({ type: "order.paid" })
+  })
 })
