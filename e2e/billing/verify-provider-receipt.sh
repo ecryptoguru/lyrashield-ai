@@ -6,5 +6,11 @@ set -eu
 : "${BILLING_RECEIPT_WORKSPACE_ID:?BILLING_RECEIPT_WORKSPACE_ID is required}"
 : "${BILLING_RECEIPT_KIND:?BILLING_RECEIPT_KIND is required}"
 : "${BILLING_RECEIPT_OBJECT_ID:?BILLING_RECEIPT_OBJECT_ID is required}"
+: "${BILLING_RECEIPT_SOURCE_SHA:?BILLING_RECEIPT_SOURCE_SHA is required}"
+: "${BILLING_RECEIPT_WEB_DIGEST:?BILLING_RECEIPT_WEB_DIGEST is required}"
+: "${BILLING_RECEIPT_MIGRATION_DIGEST:?BILLING_RECEIPT_MIGRATION_DIGEST is required}"
+: "${BILLING_RECEIPT_E2E_DIGEST:?BILLING_RECEIPT_E2E_DIGEST is required}"
+: "${BILLING_RECEIPT_REVISION:?BILLING_RECEIPT_REVISION is required}"
 
-exec pnpm exec tsx e2e/billing/verify-provider-receipt.ts
+repo=$(unset CDPATH; cd -- "$(dirname -- "$0")/../.." && pwd)
+exec pnpm --filter @lyrashield/db exec tsx "$repo/e2e/billing/verify-provider-receipt.ts"
