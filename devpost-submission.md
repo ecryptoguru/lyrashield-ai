@@ -89,7 +89,7 @@ TODO — publish a public YouTube video under three minutes with audio. Required
 
 ## Submission Readiness Notes
 
-- Use the existing Devpost pre-draft project ID `1405030`; it is not submitted and currently has no public content.
+- The Devpost draft project is [LyraShield AI — WebMCP Assurance](https://devpost.com/software/lyrashield-ai-webmcp-assurance) (ID `1405030`). Its factual title, description, links, and technology list are populated; it is not published or submitted.
 - Required submission form answers include submitter type, country, app status, live URL, public repo, supported agents/clients tested, AI tools used, learning level, and career-value confirmation.
 - Live Devpost requirements also require a public video under three minutes and a public repository URL.
 - The native public-lab inspector and deployed revision are complete. Do not mark judge account, authenticated-dashboard proof, video, or final Devpost form answers complete until their receipts exist.
