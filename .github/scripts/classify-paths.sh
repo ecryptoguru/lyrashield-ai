@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Path classifier for CI change detection.
 #
-# Reads file paths from stdin (one per line) and outputs five boolean outputs
+# Reads file paths from stdin (one per line) and outputs six boolean outputs
 # to GITHUB_OUTPUT (or stdout when run outside a workflow):
 #   docs-only  — every changed file is a docs/config/agent-rules file
 #   marketing  — at least one file is under apps/marketing or apps/marketing-motion
 #   app        — at least one file is under apps/web or apps/worker
 #   desktop    — at least one file is under apps/desktop
 #   shared     — at least one file is in a shared location (packages/, root config, .github/)
+#   azure-deploy — app or shared change requiring an Azure production release
 #
 # Extracted from .github/workflows/ci.yml by Deep Review v12 (P1-5) so the
 # classifier logic is testable independently of the workflow runtime.
@@ -62,16 +63,25 @@ if [[ "$docs_only" == "false" && "$marketing" == "false" && "$app" == "false" &&
   shared=true
 fi
 
+# Azure owns the app, worker, and shared runtime dependencies. Marketing and
+# desktop have their own delivery paths; docs-only changes need no deployment.
+azure_deploy=false
+if [[ "$app" == "true" || "$shared" == "true" ]]; then
+  azure_deploy=true
+fi
+
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
   echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
   echo "app=$app" >> "$GITHUB_OUTPUT"
   echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
   echo "shared=$shared" >> "$GITHUB_OUTPUT"
+  echo "azure-deploy=$azure_deploy" >> "$GITHUB_OUTPUT"
 else
   echo "docs-only=$docs_only"
   echo "marketing=$marketing"
   echo "app=$app"
   echo "desktop=$desktop"
   echo "shared=$shared"
+  echo "azure-deploy=$azure_deploy"
 fi

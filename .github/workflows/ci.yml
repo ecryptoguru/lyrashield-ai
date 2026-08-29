@@ -59,6 +59,7 @@ jobs:
       app: ${{ steps.classify.outputs.app }}
       desktop: ${{ steps.classify.outputs.desktop }}
       shared: ${{ steps.classify.outputs.shared }}
+      azure-deploy: ${{ steps.classify.outputs.azure-deploy }}
     steps:
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -108,6 +109,22 @@ jobs:
           # so it is testable independently of the workflow runtime.
           # See .github/scripts/tests/test-classify-paths.sh.
           printf '%s\n' "$files" | bash .github/scripts/classify-paths.sh
+
+      - name: Save production release routing decision
+        shell: bash
+        run: |
+          mkdir -p ci-routing
+          printf '%s\n' '${{ steps.classify.outputs.azure-deploy }}' > ci-routing/azure-deploy
+
+      # workflow_run events cannot read job outputs. This artifact preserves the
+      # exact push/PR diff decision for the production-release workflow.
+      - name: Upload production release routing decision
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-routing
+          path: ci-routing/azure-deploy
+          if-no-files-found: error
+          retention-days: 1
 
   lint-and-typecheck:
     name: Lint, Typecheck, Test & Build
@@ -180,9 +197,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.ref }}-${{ github.sha }}
+          key: turbo-${{ runner.os }}-${{ github.base_ref || github.ref_name }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-${{ github.ref }}-
+            turbo-${{ runner.os }}-${{ github.base_ref || github.ref_name }}-
             turbo-${{ runner.os }}-main-
 
       - name: Install dependencies
@@ -190,20 +207,20 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm db:generate
 
       - name: Validate billing staging workflow contract
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         shell: bash
         run: bash .github/scripts/tests/test-deploy-billing-staging.sh
 
       - name: Create shadow database
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'
 
       - name: Migration drift check
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: |
           pnpm --filter @lyrashield/db exec prisma migrate diff \
             --from-migrations ./prisma/migrations \
@@ -211,7 +228,7 @@ jobs:
             --exit-code
 
       - name: Run database migrations
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
 
       # Real-Postgres invariant proof, not an application-level mock: a
@@ -219,7 +236,7 @@ jobs:
       # named constraint, while NULL, zero, and a positive decimal remain valid.
       # All rows are created inside one transaction and rolled back.
       - name: Assert policy budgets are nonnegative
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         shell: bash
         run: |
           docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
@@ -232,7 +249,7 @@ jobs:
             -c "ROLLBACK"
 
       - name: Use a restricted RLS runtime role
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         shell: bash
         run: |
           docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
@@ -245,16 +262,24 @@ jobs:
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
 
       - name: Lint
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm lint
+
+      - name: Lint marketing
+        if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm --filter @lyrashield/marketing lint
 
       - name: Format check
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm format:check
 
       - name: Typecheck
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm typecheck
+
+      - name: Typecheck marketing
+        if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm --filter @lyrashield/marketing typecheck
 
       # Deterministic, offline blog gates. These ran only by hand before, which is
       # how an unterminated code span reached the build stage: MDX compiled the
@@ -262,35 +287,49 @@ jobs:
       # name in the error. blog:check-links is deliberately NOT gated here — it
       # calls ~50 third-party URLs and would make merges depend on their uptime.
       - name: Validate blog content
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate
 
       - name: Validate blog images
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate:images
 
       - name: Validate blog MDX
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate:mdx
 
       - name: Validate blog offline gates
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate:offline
 
       - name: Validate compare content
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm --filter @lyrashield/marketing compare:validate
 
-      - name: Test
-        if: needs.changes.outputs.docs-only != 'true'
-        run: pnpm test
+      - name: Test affected suites
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        env:
+          APP_CHANGED: ${{ needs.changes.outputs.app }}
+          MARKETING_CHANGED: ${{ needs.changes.outputs.marketing }}
+          SHARED_CHANGED: ${{ needs.changes.outputs.shared }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          suites=()
+          if [ "$APP_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
+            suites+=(core)
+          fi
+          if [ "$MARKETING_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
+            suites+=(marketing motion)
+          fi
+          LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
       - name: Test worker egress pin rotation
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: sh ops/worker/refresh-egress.test.sh
 
       - name: Test Azure deployment and alert operations
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: |
           bash .github/scripts/tests/test-promote-worker-vm.sh
           sh ops/deployment/azure-vm-run-command.test.sh
@@ -298,12 +337,16 @@ jobs:
           sh ops/worker/refresh-secrets.test.sh
 
       - name: Test worker stop provenance
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: sh ops/worker/capture-stop-provenance.test.sh
 
-      - name: Build
-        if: needs.changes.outputs.docs-only != 'true'
+      - name: Build app and shared packages
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm build
+
+      - name: Build marketing
+        if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm --filter @lyrashield/marketing build
 
       # Cache the Playwright browser binary so the install step does not
       # re-download chromium on every run. Keyed on the @playwright/test
@@ -312,7 +355,7 @@ jobs:
       # what makes the install step reliably fit its timeout. Added after the
       # step timed out at 8 minutes three runs in a row (2026-08-19/20).
       - name: Cache Playwright browser
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
@@ -323,17 +366,17 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Install Playwright browser
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         timeout-minutes: 15
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Marketing browser E2E
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         timeout-minutes: 10
         run: pnpm --filter @lyrashield/marketing test:browser
 
       - name: Browser E2E
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         timeout-minutes: 15
         # DATABASE_URL: the NOBYPASSRLS runtime role — the app under test runs
         # with RLS enforced, so e2e exercises the real RLS posture.
