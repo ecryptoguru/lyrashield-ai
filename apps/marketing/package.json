@@ -24,9 +24,9 @@
     "blog:check-links": "node scripts/check-external-blog-links.mjs"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^14.2.2",
-    "@astrojs/markdown-satteri": "^0.3.6",
-    "@astrojs/mdx": "^7.0.6",
+    "@astrojs/cloudflare": "^14.2.5",
+    "@astrojs/markdown-satteri": "^0.3.8",
+    "@astrojs/mdx": "^7.0.8",
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.3",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
@@ -39,8 +39,8 @@
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
-    "astro": "^7.2.3",
-    "posthog-js": "^1.418.1",
+    "astro": "^7.2.7",
+    "posthog-js": "^1.419.4",
     "tailwindcss": "^4.3.3",
     "zod": "^4.4.3"
   },

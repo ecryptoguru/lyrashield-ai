@@ -37,7 +37,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@noble/hashes": "2.2.0",
+    "@noble/hashes": "2.3.0",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "parse5": "^7.2.1",
