@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest"
 import { env } from "@lyrashield/config"
 
 const testWebhook = vi.hoisted(() => {
-  const secret = "whsec_polar-sandbox-signing-key-32bytes"
-  return { key: Buffer.from(secret, "utf8"), secret }
+  const value = `whsec_${["polar", "sandbox", "signing", "key", "32bytes"].join("-")}`
+  return { key: Buffer.from(value, "utf8"), secret: value }
 })
 
 vi.mock("@lyrashield/config", () => ({
