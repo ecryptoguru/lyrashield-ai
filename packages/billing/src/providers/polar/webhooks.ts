@@ -81,7 +81,7 @@ export function validatePolarWebhook(
   const encodedKey = secret.slice("whsec_".length)
   // Standard Webhooks uses unpadded base64 keys. A remainder of one is the
   // only impossible unpadded-base64 length; Buffer accepts the other forms.
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encodedKey) || encodedKey.length % 4 === 1) {
+  if (!isBase64(encodedKey)) {
     throw new WebhookAuthError("not_configured", "Invalid POLAR_WEBHOOK_SECRET")
   }
   const signingKey = Buffer.from(encodedKey, "base64")
@@ -91,9 +91,13 @@ export function validatePolarWebhook(
 
   // The signature header may contain multiple signatures (space-separated, prefixed with "v1,")
   const signatures = signature
-    .split(" ")
+    .trim()
+    .split(/\s+/)
     .flatMap((value) => (value.startsWith("v1,") ? [value.slice(3)] : []))
-  const isValid = signatures.some((sig) => timingSafeEqual(sig, expectedSig))
+  const isValid = signatures.some((sig) => {
+    const canonicalSignature = canonicalBase64(sig)
+    return canonicalSignature !== null && timingSafeEqual(canonicalSignature, expectedSig)
+  })
 
   if (!isValid) {
     throw new WebhookAuthError("invalid_signature", "Invalid webhook signature")
@@ -119,6 +123,16 @@ function getWebhookHeader(
   name: "id" | "timestamp" | "signature"
 ): string {
   return getHeader(headers, `webhook-${name}`) || getHeader(headers, `webhooks-${name}`)
+}
+
+function isBase64(value: string): boolean {
+  return /^[A-Za-z0-9+/_-]+={0,2}$/.test(value) && value.length % 4 !== 1
+}
+
+function canonicalBase64(value: string): string | null {
+  if (!isBase64(value)) return null
+  const decoded = Buffer.from(value, "base64")
+  return decoded.length === 0 ? null : decoded.toString("base64")
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
