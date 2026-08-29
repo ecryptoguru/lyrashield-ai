@@ -24,7 +24,7 @@ import {
 const CheckoutSchema = z
   .object({
     workspaceId: z.string().min(1),
-    plan: z.enum(["STARTER", "PRO", "TEAM"]),
+    plan: z.enum(["STARTER", "PRO", "LAUNCH_ASSURANCE"]),
     interval: z.enum(["monthly", "annual"]),
     promoCode: z.string().max(100).optional(),
   })

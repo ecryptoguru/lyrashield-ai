@@ -32,7 +32,7 @@ export interface EntitlementResult {
  * Assert that a scan with the given mode is allowed for this workspace.
  *
  * Rules:
- * - DEEP/CUSTOM scans require a plan with deepAllowed=true (PRO, TEAM, AGENCY)
+ * - DEEP/CUSTOM scans require a plan with deepAllowed=true (PRO and above)
  * - TRIAL and STARTER plans cannot run DEEP/CUSTOM scans
  * - The workspace must have remaining agent-minutes > 0
  * - Trial workspaces may scan any target already admitted to the workspace
@@ -112,7 +112,7 @@ export async function assertScanAllowed(
   // Check usage balance
   const balance = await getUsageBalance(workspaceId)
   if (balance.totalRemaining <= 0) {
-    // Check if overage is available (Team plan with spend limit)
+    // Check if overage is available (Launch Assurance plan with spend limit)
     const billingAccount = await prisma.billingAccount.findUnique({
       where: { workspaceId },
       select: {
@@ -122,7 +122,7 @@ export async function assertScanAllowed(
       },
     })
     const overagePlanEligible =
-      billingAccount?.currentPlan === "TEAM" && (billingAccount.spendLimitCents ?? 0) > 0
+      billingAccount?.currentPlan === "LAUNCH_ASSURANCE" && (billingAccount.spendLimitCents ?? 0) > 0
 
     if (overagePlanEligible) {
       // S14: Also verify remaining overage spend budget > 0.
@@ -211,12 +211,17 @@ export async function assertTargetAllowed(workspaceId: string): Promise<TargetAl
     where: { workspaceId, deletedAt: null },
   })
 
-  // Enforce hard cap for trial; advisory for paid plans
-  if (isTrial && targetCount >= targetCap) {
+  // Hard cap for every plan. Workspaces already over their cap (e.g. after a
+  // downgrade) keep all existing targets readable and scannable — only new
+  // additions are blocked, and no target is ever silently deleted.
+  if (targetCount >= targetCap) {
+    const message = isTrial
+      ? `Your trial allows up to ${targetCap} targets. Upgrade for more.`
+      : `Your plan allows up to ${targetCap} protected targets. Remove a target or upgrade to add more.`
     return {
       allowed: false,
       code: "TARGET_LIMIT_REACHED",
-      message: `Your trial allows up to ${targetCap} targets. Upgrade for more.`,
+      message,
       targetsUsed: targetCount,
       targetCap,
     }

@@ -23,7 +23,7 @@ beforeEach(() => {
     $executeRaw: executeRawMock,
     billingAccount: {
       findUnique: vi.fn().mockResolvedValue({
-        currentPlan: "TEAM",
+        currentPlan: "LAUNCH_ASSURANCE",
         spendLimitCents: 100,
         currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
       }),

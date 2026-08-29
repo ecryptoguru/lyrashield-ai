@@ -7,7 +7,7 @@ import { openRazorpaySubscriptionCheckout } from "@/lib/razorpay-checkout"
 
 interface BillingActionsProps {
   plan: string
-  isTeam: boolean
+  isLaunchAssurance: boolean
   workspaceId: string
   purchasesAvailable: boolean
 }
@@ -21,7 +21,7 @@ interface BillingActionsProps {
  */
 export function BillingActions({
   plan,
-  isTeam: _isTeam,
+  isLaunchAssurance: _isLaunchAssurance,
   workspaceId,
   purchasesAvailable,
 }: BillingActionsProps) {
@@ -91,11 +91,13 @@ export function BillingActions({
         <div className="flex gap-2">
           {purchasesAvailable && (
             <button
-              onClick={() => handleCheckout("TEAM", "monthly")}
-              disabled={loading === "checkout-TEAM"}
+              onClick={() => handleCheckout("LAUNCH_ASSURANCE", "monthly")}
+              disabled={loading === "checkout-LAUNCH_ASSURANCE"}
               className={buttonVariants({ variant: "default", size: "sm" })}
             >
-              {loading === "checkout-TEAM" ? "Loading..." : "Upgrade to Team"}
+              {loading === "checkout-LAUNCH_ASSURANCE"
+                ? "Loading..."
+                : "Upgrade to Launch Assurance"}
             </button>
           )}
           <a
@@ -109,7 +111,7 @@ export function BillingActions({
     )
   }
 
-  // Team plan
+  // Launch Assurance plan
   return (
     <div className="flex gap-2">
       <a

@@ -274,7 +274,9 @@ describe("shouldRecordAgentMinutes", () => {
     ).toBe(false)
   })
 
-  it("bills a failed engine only when provider usage is affirmative", () => {
+  it("never bills a failed scan, even with affirmative provider usage", () => {
+    // Founder-confirmed 2026-08-29: failed scans are not billed at all,
+    // regardless of how much provider work completed before the failure.
     expect(
       shouldRecordAgentMinutes("scan-1", "FAILED", {
         run_id: "scan-1",
@@ -282,6 +284,25 @@ describe("shouldRecordAgentMinutes", () => {
         status: "failed",
         llm_usage: { request_count: 1 },
       } as never)
+    ).toBe(false)
+  })
+
+  it("bills a cancelled scan for elapsed time when provider usage is affirmative", () => {
+    // Founder-confirmed 2026-08-29: cancelled scans bill the period actually
+    // used (no 1-minute floor), so engine work observed before the cancel is
+    // still billed at the elapsed-time rate.
+    expect(
+      shouldRecordAgentMinutes(
+        "scan-1",
+        "FAILED",
+        {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "failed",
+          llm_usage: { request_count: 1 },
+        } as never,
+        { cancelled: true }
+      )
     ).toBe(true)
   })
 

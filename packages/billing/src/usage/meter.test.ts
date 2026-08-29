@@ -244,3 +244,56 @@ describe("recordAgentMinutes pack debits", () => {
     expect(packs[0]?.remainingMinutes).toBe(17)
   })
 })
+
+describe("recordAgentMinutes billing-outcome rules (founder-confirmed 2026-08-29)", () => {
+  it("never bills a failed scan, regardless of elapsed time", async () => {
+    configureDatabase(600)
+    const result = await recordAgentMinutes("ws_1", "scan_fail", 15 * 60_000, {
+      phase: "engine_run",
+      cycleStart,
+      outcome: "failed",
+    })
+
+    expect(result).toMatchObject({ created: false, minutes: 0, overageMinutes: 0 })
+    // No UsageRecord written and no transaction opened.
+    expect(usageRecords.filter((r) => r.kind === "agent_minutes")).toHaveLength(0)
+    expect(transactionMock).not.toHaveBeenCalled()
+  })
+
+  it("applies the 1-minute floor to a completed scan", async () => {
+    configureDatabase(600)
+    const result = await recordAgentMinutes("ws_1", "scan_done", 20_000, {
+      phase: "engine_run",
+      cycleStart,
+      outcome: "completed",
+    })
+
+    expect(result.created).toBe(true)
+    expect(result.minutes).toBe(1) // floor: 20s rounds up to a full minute
+  })
+
+  it("bills a cancelled scan at elapsed ceiling WITHOUT forcing value via the floor", async () => {
+    configureDatabase(600)
+    // 3 minutes 20 seconds elapsed -> ceil = 4 whole minutes, no separate floor.
+    const result = await recordAgentMinutes("ws_1", "scan_cancel", 3 * 60_000 + 20_000, {
+      phase: "engine_run",
+      cycleStart,
+      outcome: "cancelled",
+    })
+
+    expect(result.created).toBe(true)
+    expect(result.minutes).toBe(4)
+  })
+
+  it("bills a cancelled scan 0 when no time elapsed", async () => {
+    configureDatabase(600)
+    const result = await recordAgentMinutes("ws_1", "scan_cancel_zero", 0, {
+      phase: "engine_run",
+      cycleStart,
+      outcome: "cancelled",
+    })
+
+    expect(result).toMatchObject({ created: false, minutes: 0, overageMinutes: 0 })
+    expect(transactionMock).not.toHaveBeenCalled()
+  })
+})

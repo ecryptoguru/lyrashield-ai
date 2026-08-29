@@ -38,7 +38,7 @@ function hasPrismaCode(error: unknown, code: string): boolean {
 /**
  * Debit overage minutes for a workspace.
  *
- * Only Team plan workspaces with a spend limit > 0 are eligible.
+ * Only Launch Assurance plan workspaces with a spend limit > 0 are eligible.
  * The spend limit is checked against the cumulative overage cost
  * for the current billing cycle.
  *
@@ -74,7 +74,7 @@ export async function debitOverage(
             where: { workspaceId },
             select: { currentPlan: true, spendLimitCents: true, currentPeriodStart: true },
           })
-          if (!billingAccount || billingAccount.currentPlan !== "TEAM")
+          if (!billingAccount || billingAccount.currentPlan !== "LAUNCH_ASSURANCE")
             throw new Error("overage_not_available")
           if (!billingAccount.spendLimitCents || billingAccount.spendLimitCents <= 0)
             throw new Error("no_spend_limit")

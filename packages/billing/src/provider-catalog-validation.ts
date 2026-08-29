@@ -77,7 +77,7 @@ function configuredProviderKey(
 }
 
 function parsePlanKey(key: string): { plan: CloudPlanId; interval: BillingInterval } | null {
-  const match = /^(starter|pro|team)_(monthly|annual)$/.exec(key)
+  const match = /^(starter|pro|launch_assurance)_(monthly|annual)$/.exec(key)
   if (!match) return null
   return { plan: match[1]!.toUpperCase() as CloudPlanId, interval: match[2] as BillingInterval }
 }

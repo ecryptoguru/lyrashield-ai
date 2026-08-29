@@ -181,6 +181,7 @@ describe("Enum parity (Zod vs Prisma)", () => {
       "STARTER",
       "PRO",
       "TEAM",
+      "LAUNCH_ASSURANCE",
       "AGENCY",
       "BUSINESS",
       "ENTERPRISE",
