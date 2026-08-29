@@ -235,7 +235,18 @@ const copyButtonClass =
     }
   }
 
+  function keepFocusedTabVisible(tab: HTMLElement) {
+    const headerBottom = document.querySelector("body > header")?.getBoundingClientRect().bottom ?? 0
+    const { top, bottom } = tab.getBoundingClientRect()
+    if (top < headerBottom || bottom > innerHeight) {
+      window.scrollBy({ top: top - headerBottom - 8, behavior: "auto" })
+    }
+  }
+
   for (const tab of sectionTabs) {
+    tab.addEventListener("focus", () =>
+      requestAnimationFrame(() => requestAnimationFrame(() => keepFocusedTabVisible(tab)))
+    )
     tab.addEventListener("click", () => {
       const value = tab.dataset.tab
       if (value) switchSectionTab(value as Tab)
