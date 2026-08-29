@@ -96,18 +96,11 @@ export async function getPolarPortalUrl(params: { customerId: string }): Promise
   if (!client) return null
 
   try {
-    // Polar customer portal API
-    const portal = await (
-      client as unknown as {
-        customerPortal: {
-          sessions: { create: (params: { customerId: string }) => Promise<{ url: string }> }
-        }
-      }
-    ).customerPortal.sessions.create({
+    const session = await client.customerSessions.create({
       customerId: params.customerId,
     })
 
-    return portal.url
+    return session.customerPortalUrl
   } catch (error) {
     logger.error("Failed to get Polar portal URL", {
       error: error instanceof Error ? error.message : String(error),
