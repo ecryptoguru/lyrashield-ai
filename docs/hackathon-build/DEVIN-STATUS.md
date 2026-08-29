@@ -5,20 +5,21 @@
 This update supersedes the historical implementation notes below.
 
 - PR 1, [#497](https://github.com/ecryptoguru/lyrashield-ai/pull/497), merged to `main` as `8e1861fd41566fa2b0f8bffe7a89fd375d25cb34`. Its exact final source commit `dff576636a84b6f0d2833d2139e231c424638eca` had a complete post-fix security diff scan with zero findings. Hosted CI passed format, lint, typecheck, tests, browser E2E, SCA/secret scanning, Action diff-gate, engine contract, and RLS reproduction.
-- PR 2 is now isolated on `codex/webmcp-dashboard`, based on merged `main`. It contains dashboard-native tools, visible activity receipts, the final evaluation documents, and submission material. Focused dashboard verification currently passes: 30 tests, typecheck, lint, and `git diff --check`. The local production build compiles; its dummy database credentials only fail during page-data collection, so hosted CI remains the authoritative build evidence.
-- The remaining external gates are exact-SHA Cloudflare deployment, live header/privacy/SEO readback, a headed supported-client native WebMCP inspector run, an ordinary isolated judge account, evaluation recordings, and Devpost draft/video assets. No production purchase admission changes are in scope.
+- PR 2, [#498](https://github.com/ecryptoguru/lyrashield-ai/pull/498), merged as squash commit `dfe3df0eee09b6d85daa1c50b2a33f7bb05af242`. Its hosted CI and post-fix security diff scan passed. It contains dashboard-native tools, visible activity receipts, the final evaluation documents, and submission material.
+- PR 3, [#499](https://github.com/ecryptoguru/lyrashield-ai/pull/499), fixed Chrome callback compatibility and merged as squash commit `60eceeb249a16439951605ad6c10ae2f8d6e695d`. Hosted CI run `33229378214` and production release run `33229692568` passed. Marketing returned the exact revision marker, the app and scan-readiness endpoints were healthy, and the public lab, pillar, policy, privacy, and discovery surfaces returned the expected security headers and SEO metadata.
+- A headed supported Chrome client registered and invoked the two live public-lab tools. `analyze_webmcp_source` returned the bounded unsafe-sample summary; `prepare_webmcp_rewrite` returned `applyRequiredHumanReview: true`; the public pillar exposed only its read-only explainer. The human lab flow, including review-required rewrite, Apply/Undo, and a 390 px mobile layout, was rechecked without horizontal overflow.
+- Remaining external gates: an ordinary isolated judge account using normal registration and email verification, authenticated dashboard proof, recording/public video, and completed Devpost fields. No production purchase admission changes are in scope.
 - The public lab's dedicated TypeScript/parse5 Worker remains approximately 1.03 MiB compressed. It is excluded from the initial page bundle and loads only after analysis begins; that is a documented performance ceiling, not a hidden claim.
 
 ## Current state
 
-| Field                 | Value                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------- |
-| Worktree              | `/Users/defiankit/Desktop/lyrashield-ai-webmcp-hackathon`                                    |
-| Branch                | `codex/webmcp-dashboard`                                                                     |
-| Base (origin/main)    | `8e1861fd41566fa2b0f8bffe7a89fd375d25cb34`                                                   |
-| HEAD                  | Dashboard/docs work in progress on the merged PR 1 base                                      |
-| Original checkout     | `/Users/defiankit/Desktop/lyrashield-ai` on `codex/scorecard-origin-launch-docs` (preserved) |
-| Active checklist item | PR 2 verification and delivery; post-merge deployment and live evidence remain.              |
+| Field             | Value                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| Published `main`  | `60eceeb249a16439951605ad6c10ae2f8d6e695d`                                            |
+| Delivery evidence | CI `33229378214`; Azure release `33229692568`; exact marketing revision marker        |
+| Public proof      | Lab and pillar native tools, headers, privacy, SEO, app/scan readiness                |
+| Remaining proof   | Normal isolated judge account, authenticated dashboard, recording, Devpost form/video |
+| Parser ceiling    | ~1.03 MiB compressed, lazy-loaded only after local analysis begins                    |
 
 ## Integrator update — 2026-08-29
 
@@ -31,7 +32,7 @@ This section supersedes the historical subagent notes below.
 - Main interactive lab chunk is about 8.5 KiB compressed. Dedicated lazy TypeScript/parse5 Worker is about 1.03 MiB compressed, above the original 250 KiB target; this is the remaining local performance gap.
 - Codex Security diff scan `27660256-e772-42ab-9daf-581f98cc3a1c` reviewed all 63 changed items and retained 10 medium findings. The implementation pass fixed the source-disclosure, DOM-XSS, header-shape/evidence, cancellation, indirection, recursion, Action, CLI fail-open, and repository-receipt issues; a second focused review also corrected parser boundaries, runtime input validation, async registration, output bounds, keyboard behavior, and report compatibility.
 - Final focused verification passed: security 227 tests; worker/report 56 tests; dashboard 30 tests; public lab 14 tests; CLI 95 tests plus build; all affected package typechecks/lints; marketing and web production builds; and `git diff --check`. A headless mobile browser smoke also proved 7 detections, one verified HTML rewrite to 6, restoration to 7 through Undo, no non-GET requests, no browser errors, and no horizontal overflow. The generic security package test script still assumes repository-root CWD for one legacy workflow test, so the complete security source suite is run from the repository root.
-- Historical note: the preceding implementation work had not yet been committed, pushed, reviewed, merged, deployed, or tested through a native WebMCP inspector. PR 1 is now merged; PR 2 delivery, deployment, and live exact-SHA proof remain outstanding.
+- Historical note: the preceding implementation work predated all three merged PRs. Use the release update above for current state.
 
 ## Baseline commands run
 
