@@ -198,7 +198,8 @@ describe("public WebMCP Security Lab", () => {
       expect(tool).toBeDefined()
       const result = await tool!.execute(
         { controlId: "WEBMCP-03" },
-        { signal: new AbortController().signal }
+        // Chrome 151 invokes WebMCP callbacks without the optional options object.
+        undefined as unknown as WebMCP.ToolExecuteCallbackOptions
       )
       const serialized = JSON.stringify(result)
       expect(serialized).not.toContain(sensitiveSource)
