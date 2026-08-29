@@ -124,6 +124,7 @@ jobs:
           RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_WEBHOOK_PREVIOUS_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_PREVIOUS_SECRET }}
         run: |
           set -euo pipefail
           required=(
@@ -681,6 +682,7 @@ jobs:
           RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_WEBHOOK_PREVIOUS_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_PREVIOUS_SECRET }}
         run: |
           set -euo pipefail
           web_image="${REGISTRY}/lyrashield-web@${WEB_DIGEST}"
@@ -770,6 +772,11 @@ jobs:
             'LICENSE_SIGNING_PUBLIC_KEY_SECRET_NAME=license-signing-public-key'
             'LICENSE_PUBLISHED_BUILD=0.1.0'
           )
+
+          if [ -n "${RAZORPAY_WEBHOOK_PREVIOUS_SECRET:-}" ]; then
+            secrets+=("razorpay-webhook-previous=${RAZORPAY_WEBHOOK_PREVIOUS_SECRET}")
+            env_vars+=('RAZORPAY_WEBHOOK_PREVIOUS_SECRET=secretref:razorpay-webhook-previous')
+          fi
 
           if az containerapp show --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
             retry_containerapp_write "billing staging identity assignment" \
