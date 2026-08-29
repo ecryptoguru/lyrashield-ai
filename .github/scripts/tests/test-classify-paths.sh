@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test harness for .github/scripts/classify-paths.sh
 #
-# Exercises the path classifier with known inputs and asserts the four
+# Exercises the path classifier with known inputs and asserts the routing
 # boolean outputs. Run with: bash .github/scripts/tests/test-classify-paths.sh
 #
 # Added by Deep Review v12 (P1-5): the CI-skip classifier was introduced in
@@ -49,6 +49,7 @@ assert_eq "docs-only: all .md files" "true" "$(get_field "$out" "docs-only")"
 assert_eq "docs-only: marketing" "false" "$(get_field "$out" "marketing")"
 assert_eq "docs-only: app" "false" "$(get_field "$out" "app")"
 assert_eq "docs-only: shared" "false" "$(get_field "$out" "shared")"
+assert_eq "docs-only: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 2: app changes trigger full CI ---
 out=$(run_classify $'apps/web/src/app/page.tsx\napps/worker/src/jobs/run-scan.job.ts')
@@ -56,18 +57,21 @@ assert_eq "app: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "app: app" "true" "$(get_field "$out" "app")"
 assert_eq "app: marketing" "false" "$(get_field "$out" "marketing")"
 assert_eq "app: shared" "false" "$(get_field "$out" "shared")"
+assert_eq "app: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 3: marketing changes trigger marketing deploy ---
 out=$(run_classify $'apps/marketing/src/pages/index.astro\napps/marketing-motion/src/scene.ts')
 assert_eq "marketing: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "marketing: marketing" "true" "$(get_field "$out" "marketing")"
 assert_eq "marketing: app" "false" "$(get_field "$out" "app")"
+assert_eq "marketing: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 4: shared package changes trigger full CI ---
 out=$(run_classify $'packages/db/src/scan-service.ts\npackages/auth/src/auth.ts')
 assert_eq "shared: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "shared: shared" "true" "$(get_field "$out" "shared")"
 assert_eq "shared: app" "false" "$(get_field "$out" "app")"
+assert_eq "shared: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 5: mixed docs + app → NOT docs-only ---
 out=$(run_classify $'AGENTS.md\napps/web/src/app/page.tsx')
@@ -133,6 +137,7 @@ assert_eq "desktop: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "desktop: desktop" "true" "$(get_field "$out" "desktop")"
 assert_eq "desktop: app" "false" "$(get_field "$out" "app")"
 assert_eq "desktop: shared" "false" "$(get_field "$out" "shared")"
+assert_eq "desktop: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then
