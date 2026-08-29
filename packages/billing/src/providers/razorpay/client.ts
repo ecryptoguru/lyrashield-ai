@@ -51,7 +51,7 @@ export function getRazorpayClient(): Razorpay | null {
 export async function createRazorpaySubscription(params: {
   planId: string
   customerId?: string
-  totalCount?: number
+  totalCount: number
   notes?: Record<string, string>
 }): Promise<string | null> {
   const client = getRazorpayClient()
@@ -62,7 +62,8 @@ export async function createRazorpaySubscription(params: {
       plan_id: params.planId,
       customer_notify: 1,
       quantity: 1,
-      total_count: params.totalCount ?? 12,
+      total_count: params.totalCount,
+      ...(params.customerId ? { customer_id: params.customerId } : {}),
       notes: params.notes ?? {},
     })
 
