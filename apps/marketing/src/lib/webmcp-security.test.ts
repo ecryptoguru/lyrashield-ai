@@ -31,6 +31,21 @@ describe("public WebMCP Security Lab", () => {
     expect(source).not.toContain("fail_on: HIGH")
   })
 
+  it("keeps a keyboard-focused section tab clear of the sticky header", () => {
+    // Test-only path is fixed relative to this module.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const source = readFileSync(
+      new URL("../components/tools/WebMcpSecurityLab.astro", import.meta.url),
+      "utf8"
+    )
+    expect(source).toContain(
+      'document.querySelector("body > header")?.getBoundingClientRect().bottom'
+    )
+    expect(source).toContain(
+      "requestAnimationFrame(() => requestAnimationFrame(() => keepFocusedTabVisible(tab)))"
+    )
+  })
+
   it("discovers both declarative and imperative tools in the unsafe sample", async () => {
     const file = pastedCodeForWebMcp(UNSAFE_EXAMPLE, ".html")
     const { inventory, context } = await discoverWebMcpTools([file])
