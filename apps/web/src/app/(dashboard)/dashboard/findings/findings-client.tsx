@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useFindingsWebMcp } from "./findings-webmcp"
 import { z } from "zod"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import Link from "next/link"
@@ -206,7 +207,7 @@ function extractEpssPercentage(technicalDetail?: string | null): string | undefi
 // FindingsClient
 // ---------------------------------------------------------------------------
 
-type SortMode = "priority" | "severity" | "newest"
+export type SortMode = "priority" | "severity" | "newest"
 
 export function FindingsClient({
   workspaceId,
@@ -255,6 +256,23 @@ export function FindingsClient({
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
+    workspaceId,
+    findings,
+    nextCursor,
+    filter,
+    sortMode,
+    initialData,
+    initialNextCursor,
+    setFilter,
+    setSortMode,
+    setFindings,
+    setNextCursor,
+    setSelectedFinding,
+    setError,
+    updateQueryParams,
+  })
 
   const handleFilterChange = useCallback(
     async (newFilter: string) => {
@@ -362,6 +380,17 @@ export function FindingsClient({
           </select>
         </div>
       </div>
+
+      {hasWebMcpUndo && (
+        <Card className="mb-4 flex items-center gap-3 p-3" role="status">
+          <span className="text-muted-foreground text-sm">
+            Browser agent changed the visible filter or sort.
+          </span>
+          <Button type="button" size="sm" variant="outline" onClick={undoWebMcpChange}>
+            Undo
+          </Button>
+        </Card>
+      )}
 
       {error && (
         <Card className="border-destructive/50 mb-4 p-4">

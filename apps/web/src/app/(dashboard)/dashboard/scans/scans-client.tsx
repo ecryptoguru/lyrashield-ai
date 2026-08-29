@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useScansWebMcp } from "./scans-webmcp"
 import Link from "next/link"
 import {
   Radar,
@@ -86,7 +87,7 @@ interface ScanItem {
   createdAt: string
 }
 
-interface TargetItem {
+export interface TargetItem {
   id: string
   name: string
   type: string
@@ -180,6 +181,16 @@ export function ScansClient({
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
   const [pollStale, setPollStale] = useState(false)
+
+  useScansWebMcp({
+    workspaceId,
+    targets,
+    selectedPreset,
+    setSelectedTarget,
+    setSelectedPreset,
+    setShowCreate,
+    setModeResetNotice,
+  })
   const scansRef = useRef(scans)
   const firstPageIdsRef = useRef(new Set(initialData.map((scan) => scan.id)))
   const firstPageHasMoreRef = useRef(initialNextCursor !== null)

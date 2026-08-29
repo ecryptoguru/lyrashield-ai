@@ -12,6 +12,7 @@ import {
   getCachedUnreadNotifications,
   getCachedPendingApprovals,
 } from "@/lib/cache"
+import { WebMcpReceiptProvider } from "@/components/webmcp/webmcp-receipt-provider"
 import type { MemberRole } from "@lyrashield/db"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { getPlatformAdminNavigationState } from "@lyrashield/auth/server"
@@ -104,7 +105,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         className="min-w-0 flex-1 overflow-x-hidden pt-[calc(4rem+env(safe-area-inset-top))] pb-[calc(4rem+env(safe-area-inset-bottom))] md:pt-0 md:pb-0"
         tabIndex={-1}
       >
-        <div className="mx-auto w-full max-w-368 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
+        <div className="mx-auto w-full max-w-368 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <WebMcpReceiptProvider>{children}</WebMcpReceiptProvider>
+        </div>
       </main>
       <BottomNav
         unreadNotifications={unreadNotifications}

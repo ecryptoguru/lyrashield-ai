@@ -8,12 +8,13 @@ const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 // Content-Security-Policy is set per-request in proxy.ts with a nonce
 // (see PRD PART B §B13.7 R-A). These are the static security headers.
 const securityHeaders = [
+  { key: "Origin-Agent-Cluster", value: "?1" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+    value: "tools=(self), camera=(), microphone=(), geolocation=(), browsing-topics=()",
   },
   { key: "X-DNS-Prefetch-Control", value: "off" },
 ]
