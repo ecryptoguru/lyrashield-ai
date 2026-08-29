@@ -79,7 +79,9 @@ export function validatePolarWebhook(
     throw new WebhookAuthError("not_configured", "Invalid POLAR_WEBHOOK_SECRET")
   }
   const encodedKey = secret.slice("whsec_".length)
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encodedKey) || encodedKey.length % 4 !== 0) {
+  // Standard Webhooks uses unpadded base64 keys. A remainder of one is the
+  // only impossible unpadded-base64 length; Buffer accepts the other forms.
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encodedKey) || encodedKey.length % 4 === 1) {
     throw new WebhookAuthError("not_configured", "Invalid POLAR_WEBHOOK_SECRET")
   }
   const signingKey = Buffer.from(encodedKey, "base64")
