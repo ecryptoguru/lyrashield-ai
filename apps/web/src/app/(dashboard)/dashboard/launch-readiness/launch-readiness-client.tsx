@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import { useLaunchReadinessWebMcp } from "./launch-readiness-webmcp"
 import {
   Rocket,
   ShieldCheck,
@@ -17,7 +18,7 @@ import { z } from "zod"
 import { apiGet } from "@/lib/api-client"
 import { ScoreGauge } from "@/components/security-visuals"
 
-interface LaunchReadinessReport {
+export interface LaunchReadinessReport {
   verdict: "NOT_EVALUATED" | "INCONCLUSIVE" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
   score: number | null
   summary: string
@@ -133,6 +134,8 @@ export function LaunchReadinessClient({
   const [report, setReport] = useState<LaunchReadinessReport>(initialReport)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useLaunchReadinessWebMcp({ workspaceId, onReport: setReport })
 
   const loadReport = useCallback(
     (signal?: AbortSignal, options?: { silent?: boolean }) => {
