@@ -28,10 +28,10 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.3.2",
+    "eslint-config-next": "^16.3.3",
     "eslint-plugin-security": "^4.0.1",
     "prettier": "^3.9.6",
-    "turbo": "^2.10.11",
+    "turbo": "^2.10.12",
     "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@11.6.0",
