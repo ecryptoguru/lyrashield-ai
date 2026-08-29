@@ -72,8 +72,36 @@ test("admin enrollment, deny-by-default, TOTP sign-in, and console work end to e
   await page.getByLabel("Email").fill(adminEmail)
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Create account" }).click()
+  await expect(page).toHaveURL(/\/onboarding$/)
+  await expect(page.getByRole("heading", { name: "Welcome to LyraShield" })).toBeVisible()
   await expect.poll(() => prisma.user.findUnique({ where: { email: adminEmail } })).not.toBeNull()
+  await expect
+    .poll(() =>
+      prisma.account.count({
+        where: {
+          user: { email: adminEmail },
+          providerId: "credential",
+          issuer: "local:credential",
+        },
+      })
+    )
+    .toBe(1)
   await prisma.user.update({ where: { email: adminEmail }, data: { emailVerified: true } })
+
+  // Credential sign-up may complete before its browser session is available to
+  // page.request. Re-authenticate before using an authenticated API route.
+  const initialSignOutResponse = await page.request.post("/api/auth/sign-out", {
+    data: {},
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+  })
+  await expect(initialSignOutResponse).toBeOK()
+  await page.goto("/sign-in")
+  await page.getByLabel("Email").fill(adminEmail)
+  await page.locator("#password").fill(password)
+  await page.getByRole("button", { name: "Sign in" }).click()
+  await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
+  await expect(page.getByRole("heading", { name: "Welcome to LyraShield" })).toBeVisible()
+
   const onboardingResponse = await page.request.patch("/api/onboarding", {
     data: { skipped: true },
     headers: { "x-forwarded-for": forwardedFor },
