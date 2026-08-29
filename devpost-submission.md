@@ -26,7 +26,7 @@ WebMCP is the browser-native agent interface. The product uses deterministic ana
 
 ## How We Used Codex
 
-Codex was used as the engineering collaborator for design review, implementation, tests, adversarial security review, CI diagnosis, and release evidence preparation. The build used bounded parallel work across the analyzer, public tool, worker/report pipeline, CLI/Action gate, and dashboard tools. Merged PR 1 received focused review, local checks, a post-fix security diff scan, and hosted CI. PR 2 must receive the same hosted evidence before this draft is submitted.
+Codex was used as the engineering collaborator for design review, implementation, tests, adversarial security review, CI diagnosis, and release evidence preparation. The build used bounded parallel work across the analyzer, public tool, worker/report pipeline, CLI/Action gate, and dashboard tools. PRs [#497](https://github.com/ecryptoguru/lyrashield-ai/pull/497), [#498](https://github.com/ecryptoguru/lyrashield-ai/pull/498), and [#499](https://github.com/ecryptoguru/lyrashield-ai/pull/499) received focused review, post-fix security checks, and hosted CI. The published revision is `60eceeb249a16439951605ad6c10ae2f8d6e695d`; it has separate successful production-release evidence.
 
 ## Key Features
 
@@ -66,7 +66,7 @@ Authenticated dashboard path is pending an ordinary isolated judge account. Cred
 
 - WebMCP pillar: `https://lyrashieldai.com/webmcp`
 - Free Security Lab: `https://lyrashieldai.com/tools/webmcp-security-checker`
-- Status: replace these with exact-SHA live proof after the merged release deploys.
+- Published revision: `60eceeb249a16439951605ad6c10ae2f8d6e695d`. The live marketing response carries this exact revision marker; `https://app.lyrashieldai.com/api/ready` and `https://app.lyrashieldai.com/api/ready/scans` were healthy after release.
 
 ## Public Repository Link
 
@@ -92,7 +92,7 @@ TODO — publish a public YouTube video under three minutes with audio. Required
 - Use the existing Devpost pre-draft project ID `1405030`; it is not submitted and currently has no public content.
 - Required submission form answers include submitter type, country, app status, live URL, public repo, supported agents/clients tested, AI tools used, learning level, and career-value confirmation.
 - Live Devpost requirements also require a public video under three minutes and a public repository URL.
-- Do not mark native inspector, deployed revision, judge account, video, or final Devpost form answers complete until their receipts exist.
+- The native public-lab inspector and deployed revision are complete. Do not mark judge account, authenticated-dashboard proof, video, or final Devpost form answers complete until their receipts exist.
 
 ## Known Limitations
 
