@@ -57,7 +57,7 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
-import { assertScanAllowed } from "./entitlements"
+import { assertScanAllowed, assertTargetAllowed } from "./entitlements"
 import { prisma } from "@lyrashield/db"
 import { getUsageBalance } from "./usage/balance"
 import { getTrialState } from "./trial"
