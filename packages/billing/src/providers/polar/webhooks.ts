@@ -35,7 +35,8 @@ export interface PolarWebhookEvent {
  * Headers:
  * - webhook-id: unique event ID (legacy `webhooks-*` aliases are accepted)
  * - webhook-timestamp: Unix timestamp in seconds
- * - webhook-signature: base64 HMAC-SHA256 of `{id}.{timestamp}.{body}`
+ * - webhook-signature: base64 HMAC-SHA256 of `{id}.{timestamp}.{body}` using
+ *   the raw endpoint secret, matching Polar's SDK contract
  *
  * @returns The parsed event, or throws if validation fails.
  */
@@ -73,20 +74,12 @@ export function validatePolarWebhook(
 
   // Verify signature: HMAC-SHA256 of `{id}.{timestamp}.{body}`
   const signedPayload = `${eventId}.${timestamp}.${body}`
-  // Standard Webhooks endpoint secrets are `whsec_` plus base64 key bytes.
-  // Using the displayed string as UTF-8 makes every real delivery fail 401.
+  // Polar's SDK signs with the displayed endpoint secret as UTF-8 key material.
+  // `whsec_` is a provider marker here, not a Base64-encoded HMAC key.
   if (!secret.startsWith("whsec_")) {
     throw new WebhookAuthError("not_configured", "Invalid POLAR_WEBHOOK_SECRET")
   }
-  const encodedKey = secret.slice("whsec_".length)
-  // Standard Webhooks uses unpadded base64 keys. A remainder of one is the
-  // only impossible unpadded-base64 length; Buffer accepts the other forms.
-  if (!isBase64(encodedKey)) {
-    throw new WebhookAuthError("not_configured", "Invalid POLAR_WEBHOOK_SECRET")
-  }
-  const signingKey = Buffer.from(encodedKey, "base64")
-  if (signingKey.length === 0)
-    throw new WebhookAuthError("not_configured", "Invalid POLAR_WEBHOOK_SECRET")
+  const signingKey = Buffer.from(secret, "utf8")
   const expectedSig = createHmac("sha256", signingKey).update(signedPayload).digest("base64")
 
   // The signature header may contain multiple signatures (space-separated, prefixed with "v1,")
