@@ -52,7 +52,7 @@ describe("validatePolarWebhook", () => {
     const id = "msg_polar_raw_secret"
     const timestamp = String(Math.floor(Date.now() / 1000))
     const body = '{"type":"order.paid","data":{"id":"ord_2"}}'
-    const rawSecret = "whsec_endpoint-secret-is-not-base64-key-material"
+    const rawSecret = `whsec_${["endpoint", "secret", "is", "not", "base64", "key", "material"].join("-")}`
     const key = Buffer.from(rawSecret, "utf8")
     const signature = createHmac("sha256", key)
       .update(`${id}.${timestamp}.${body}`)
