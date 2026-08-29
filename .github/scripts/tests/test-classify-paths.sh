@@ -49,6 +49,7 @@ assert_eq "docs-only: all .md files" "true" "$(get_field "$out" "docs-only")"
 assert_eq "docs-only: marketing" "false" "$(get_field "$out" "marketing")"
 assert_eq "docs-only: app" "false" "$(get_field "$out" "app")"
 assert_eq "docs-only: shared" "false" "$(get_field "$out" "shared")"
+assert_eq "docs-only: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "docs-only: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 2: app changes trigger full CI ---
@@ -57,6 +58,7 @@ assert_eq "app: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "app: app" "true" "$(get_field "$out" "app")"
 assert_eq "app: marketing" "false" "$(get_field "$out" "marketing")"
 assert_eq "app: shared" "false" "$(get_field "$out" "shared")"
+assert_eq "app: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "app: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 3: marketing changes trigger marketing deploy ---
@@ -64,6 +66,7 @@ out=$(run_classify $'apps/marketing/src/pages/index.astro\napps/marketing-motion
 assert_eq "marketing: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "marketing: marketing" "true" "$(get_field "$out" "marketing")"
 assert_eq "marketing: app" "false" "$(get_field "$out" "app")"
+assert_eq "marketing: marketing deploy" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "marketing: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 4: shared package changes trigger full CI ---
@@ -71,6 +74,7 @@ out=$(run_classify $'packages/db/src/scan-service.ts\npackages/auth/src/auth.ts'
 assert_eq "shared: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "shared: shared" "true" "$(get_field "$out" "shared")"
 assert_eq "shared: app" "false" "$(get_field "$out" "app")"
+assert_eq "shared: marketing deploy" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "shared: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 5: mixed docs + app → NOT docs-only ---
@@ -82,6 +86,8 @@ assert_eq "mixed: app" "true" "$(get_field "$out" "app")"
 out=$(run_classify $'.github/workflows/ci.yml')
 assert_eq "github: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "github: shared" "true" "$(get_field "$out" "shared")"
+assert_eq "github: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+assert_eq "github: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 7: an uncovered path falls back to shared (fail-closed, v13 P1-7) ---
 # ops/, e2e/, root tooling, and new root configs must not silently skip deploys.
@@ -93,14 +99,19 @@ assert_eq "ops: shared (fallback)" "true" "$(get_field "$out" "shared")"
 
 out=$(run_classify $'e2e/visual/home.spec.ts')
 assert_eq "e2e: shared (fallback)" "true" "$(get_field "$out" "shared")"
+assert_eq "e2e: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+assert_eq "e2e: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 out=$(run_classify $'run-all-tests.mjs')
 assert_eq "run-all-tests: shared (fallback)" "true" "$(get_field "$out" "shared")"
+assert_eq "run-all-tests: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+assert_eq "run-all-tests: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 8: ops/ is also matched directly by shared_pattern now ---
 out=$(run_classify $'ops/worker/refresh-egress.sh\napps/web/src/app/page.tsx')
 assert_eq "ops+app: app" "true" "$(get_field "$out" "app")"
 assert_eq "ops+app: shared" "true" "$(get_field "$out" "shared")"
+assert_eq "ops+app: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 7: agent config dirs are docs-only ---
 out=$(run_classify $'.devin/rules/AGENTS.md\n.claude/skills/foo/SKILL.md')
@@ -123,6 +134,8 @@ assert_eq "docker: shared" "true" "$(get_field "$out" "shared")"
 out=$(run_classify $'Dockerfile')
 assert_eq "dockerfile: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "dockerfile: shared" "true" "$(get_field "$out" "shared")"
+assert_eq "dockerfile: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+assert_eq "dockerfile: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 12: app + marketing + shared in one push ---
 out=$(run_classify $'apps/web/src/app/page.tsx\napps/marketing/src/pages/index.astro\npackages/ui/src/button.tsx')
@@ -137,7 +150,20 @@ assert_eq "desktop: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "desktop: desktop" "true" "$(get_field "$out" "desktop")"
 assert_eq "desktop: app" "false" "$(get_field "$out" "app")"
 assert_eq "desktop: shared" "false" "$(get_field "$out" "shared")"
+assert_eq "desktop: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "desktop: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+
+# --- Test 14: an uncovered path is fail-closed for both deployments ---
+out=$(run_classify $'infra/new-runtime-input.txt')
+assert_eq "unknown: shared fallback" "true" "$(get_field "$out" "shared")"
+assert_eq "unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
+assert_eq "unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
+
+# --- Test 15: an unknown path remains fail-closed in a mixed change set ---
+out=$(run_classify $'apps/web/src/app/page.tsx\ninfra/new-runtime-input.txt')
+assert_eq "mixed unknown: shared fallback" "true" "$(get_field "$out" "shared")"
+assert_eq "mixed unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
+assert_eq "mixed unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
 
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then
