@@ -122,7 +122,8 @@ export async function assertScanAllowed(
       },
     })
     const overagePlanEligible =
-      billingAccount?.currentPlan === "LAUNCH_ASSURANCE" && (billingAccount.spendLimitCents ?? 0) > 0
+      billingAccount?.currentPlan === "LAUNCH_ASSURANCE" &&
+      (billingAccount.spendLimitCents ?? 0) > 0
 
     if (overagePlanEligible) {
       // S14: Also verify remaining overage spend budget > 0.

@@ -115,9 +115,7 @@ export async function recordAgentMinutes(
   //   distinction that matters is that a cancelled scan is not forced up to a
   //   minimum — only genuinely elapsed whole minutes are billed.
   const rawMinutes =
-    opts.outcome === "cancelled"
-      ? Math.ceil(ms / 60_000)
-      : Math.max(1, Math.ceil(ms / 60_000))
+    opts.outcome === "cancelled" ? Math.ceil(ms / 60_000) : Math.max(1, Math.ceil(ms / 60_000))
 
   // Deep/Custom scans consume 3× minutes
   const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"

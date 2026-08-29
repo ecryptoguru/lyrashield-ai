@@ -327,4 +327,3 @@ export default async function BillingPage({
     </div>
   )
 }
-

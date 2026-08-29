@@ -660,7 +660,7 @@ describe("processScanJob", () => {
     })
     vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
       currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
-      currentPlan: "TEAM",
+      currentPlan: "LAUNCH_ASSURANCE",
       spendLimitCents: 100,
     } as never)
     vi.mocked(debitOverage).mockResolvedValueOnce({
@@ -1214,7 +1214,7 @@ describe("processScanJob", () => {
     )
   })
 
-  it("meters a failed engine when provider usage is affirmative", async () => {
+  it("never bills a failed engine even when provider usage is affirmative", async () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 1,
       output: {
@@ -1233,7 +1233,9 @@ describe("processScanJob", () => {
 
     await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
 
-    expect(recordAgentMinutes).toHaveBeenCalledOnce()
+    // Founder-confirmed 2026-08-29: failed scans are not billed at all,
+    // regardless of provider work completed before the failure.
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
   })
 
   it("stops without overwriting a cancellation reported by the engine", async () => {
