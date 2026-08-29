@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest"
 import { env } from "@lyrashield/config"
 
 const testWebhook = vi.hoisted(() => {
-  const key = Buffer.from("polar-sandbox-signing-key-32bytes", "utf8")
-  return { key, secret: `whsec_${key.toString("base64")}` }
+  const secret = "whsec_polar-sandbox-signing-key-32bytes"
+  return { key: Buffer.from(secret, "utf8"), secret }
 })
 
 vi.mock("@lyrashield/config", () => ({
@@ -14,7 +14,7 @@ vi.mock("@lyrashield/config", () => ({
 import { validatePolarWebhook } from "./webhooks"
 
 describe("validatePolarWebhook", () => {
-  it("validates Standard Webhooks headers, an encoded endpoint secret, and a seconds timestamp", () => {
+  it("validates Standard Webhooks headers, Polar's raw endpoint secret, and a seconds timestamp", () => {
     const id = "msg_polar_smoke"
     const timestamp = String(Math.floor(Date.now() / 1000))
     const body = '{"type":"subscription.active","data":{"id":"sub_1"}}'
@@ -48,18 +48,18 @@ describe("validatePolarWebhook", () => {
     ).toMatchObject({ type: "order.paid" })
   })
 
-  it("accepts an unpadded Standard Webhooks endpoint secret", () => {
-    const id = "msg_polar_unpadded"
+  it("uses the displayed whsec_ secret as raw HMAC key material", () => {
+    const id = "msg_polar_raw_secret"
     const timestamp = String(Math.floor(Date.now() / 1000))
     const body = '{"type":"order.paid","data":{"id":"ord_2"}}'
-    const key = Buffer.from("unpadded-polar-sandbox-key-32bytes", "utf8")
-    const unpaddedSecret = `whsec_${key.toString("base64").replace(/=+$/, "")}`
+    const rawSecret = "whsec_endpoint-secret-is-not-base64-key-material"
+    const key = Buffer.from(rawSecret, "utf8")
     const signature = createHmac("sha256", key)
       .update(`${id}.${timestamp}.${body}`)
       .digest("base64")
 
     const originalSecret = env.POLAR_WEBHOOK_SECRET
-    env.POLAR_WEBHOOK_SECRET = unpaddedSecret
+    env.POLAR_WEBHOOK_SECRET = rawSecret
     try {
       expect(
         validatePolarWebhook(body, {
