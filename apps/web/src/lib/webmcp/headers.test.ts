@@ -13,5 +13,8 @@ describe("WebMCP dashboard hardening headers", () => {
     )
     expect(config).not.toContain("tools=(*)")
     expect(config).toContain('{ key: "Origin-Agent-Cluster", value: "?1" }')
+    expect(config).toContain(
+      'key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload"'
+    )
   })
 })
