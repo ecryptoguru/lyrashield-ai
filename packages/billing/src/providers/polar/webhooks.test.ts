@@ -2,8 +2,8 @@ import { createHmac } from "node:crypto"
 import { describe, expect, it, vi } from "vitest"
 
 const testWebhook = vi.hoisted(() => {
-  const endpointSecret = "whsec_polar-secret-must-remain-literal"
-  return { key: Buffer.from(endpointSecret, "utf8"), secret: endpointSecret }
+  const key = Buffer.from("polar-sandbox-signing-key-32bytes", "utf8")
+  return { key, secret: `whsec_${key.toString("base64")}` }
 })
 
 vi.mock("@lyrashield/config", () => ({
@@ -13,7 +13,7 @@ vi.mock("@lyrashield/config", () => ({
 import { validatePolarWebhook } from "./webhooks"
 
 describe("validatePolarWebhook", () => {
-  it("validates Standard Webhooks headers, a literal endpoint secret, and a seconds timestamp", () => {
+  it("validates Standard Webhooks headers, an encoded endpoint secret, and a seconds timestamp", () => {
     const id = "msg_polar_smoke"
     const timestamp = String(Math.floor(Date.now() / 1000))
     const body = '{"type":"subscription.active","data":{"id":"sub_1"}}'
