@@ -44,9 +44,15 @@ function reject(): never {
 function configuredProviderKey(
   raw: string | undefined,
   providerId: string,
-  name: string
+  name: string,
+  options: { optional?: boolean } = {}
 ): string | null {
-  if (!raw) throw new ProviderCatalogConfigError(name)
+  // Local products are optional: Cloud-only installs deliberately leave this
+  // map blank. The Cloud map remains required for entitlement-bearing events.
+  if (!raw) {
+    if (options.optional) return null
+    throw new ProviderCatalogConfigError(name)
+  }
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -154,7 +160,8 @@ export function resolvePolarCatalogEvent(
   const localKey = configuredProviderKey(
     env.POLAR_LOCAL_PRODUCT_IDS,
     providerId,
-    "POLAR_LOCAL_PRODUCT_IDS"
+    "POLAR_LOCAL_PRODUCT_IDS",
+    { optional: true }
   )
   if (cloudKey && localKey) {
     throw new ProviderCatalogConfigError("Polar product maps")
