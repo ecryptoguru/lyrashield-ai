@@ -10,9 +10,14 @@
  * - payment.captured → creditTopUp (for one-time pack purchases)
  * - subscription.activated → syncSubscription
  * - subscription.charged → syncSubscription + grantMonthlyPool
+ * - subscription.authenticated → receipt only (no entitlement)
+ * - subscription.halted → syncSubscription (past_due)
  * - subscription.cancelled → syncSubscription (canceled)
  * - subscription.paused → syncSubscription (paused)
  * - subscription.pending → syncSubscription (past_due)
+ * - subscription.resumed → syncSubscription (active)
+ * - subscription.completed → end paid access
+ * - subscription.updated → receipt only (no inferred state)
  * - refund.created → reverseRefund only with cumulative full-refund evidence
  */
 
@@ -191,11 +196,16 @@ export function isHandledRazorpayEvent(event: string): boolean {
   const handled = [
     "payment.captured",
     "payment_link.paid",
+    "subscription.authenticated",
     "subscription.activated",
     "subscription.charged",
-    "subscription.cancelled",
-    "subscription.paused",
     "subscription.pending",
+    "subscription.halted",
+    "subscription.paused",
+    "subscription.resumed",
+    "subscription.cancelled",
+    "subscription.completed",
+    "subscription.updated",
     "refund.created",
   ]
   return handled.includes(event)
