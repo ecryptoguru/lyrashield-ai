@@ -175,6 +175,38 @@ export const tools = [
       },
     ],
   },
+  {
+    slug: "webmcp-security-checker",
+    title: "WebMCP Security Checker",
+    seoTitle: "WebMCP Security Checker | LyraShield AI",
+    description:
+      "Check browser-registered WebMCP tools locally for unsafe exposure, missing confirmation, weak schemas, and 7 more assurance controls.",
+    summary:
+      "This browser-local analyzer reviews WebMCP tool definitions in selected source files or pasted code for 10 assurance controls, prepares a visible rewrite diff, and exports the result to JSON, Markdown, or SARIF.",
+    privacy: "Files and pasted code never leave your device.",
+    category: "Protect data and access",
+    checks: [
+      "Imperative document.modelContext.registerTool and declarative form tool annotations",
+      "Cross-origin exposure, Permissions-Policy headers, and origin isolation",
+      "Durable mutations, unbounded contracts, cancellation, cleanup, and bounded rewrite diffs",
+    ],
+    limitations: [
+      "It analyzes the files you select or paste; dynamic runtime behavior and server-side context stay out of scope",
+      "Static discovery can miss obfuscated or framework-wrapped tool registrations",
+      "A clear result does not prove the whole application is secure; review the output before acting",
+    ],
+    updatedDate: "2026-08-29",
+    references: [
+      {
+        label: "WebMCP overview",
+        url: "https://developer.chrome.com/docs/ai/webmcp",
+      },
+      {
+        label: "WebMCP secure tools",
+        url: "https://developer.chrome.com/docs/ai/webmcp/secure-tools",
+      },
+    ],
+  },
 ] as const
 
 export type Tool = (typeof tools)[number]

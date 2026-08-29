@@ -439,7 +439,7 @@ describe("result integrity", () => {
         data: expect.objectContaining({
           manifest: expect.objectContaining({
             coverage: expect.any(Array),
-            scannerContractVersion: "2026-08-21",
+            scannerContractVersion: "2026-08-29",
             engineExecution: expect.objectContaining({
               model: "azure_ai/gpt-5.6-luna",
               imageDigest: "sha256:abc",

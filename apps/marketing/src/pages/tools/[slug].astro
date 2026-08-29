@@ -1,6 +1,7 @@
 ---
 import ToolLayout from "@layouts/ToolLayout.astro"
 import AiAppSecurityScanner from "@components/tools/AiAppSecurityScanner.astro"
+import WebMcpSecurityLab from "@components/tools/WebMcpSecurityLab.astro"
 import { tools } from "../../lib/tools"
 import { LAUNCH_CHECKLIST_VERSION, LAUNCH_CHECKS } from "../../lib/tool-checks"
 
@@ -76,6 +77,7 @@ const labelClass = "block text-sm font-medium text-text"
     </>
   )}
   {tool.slug === "ai-app-security-scanner" && <AiAppSecurityScanner />}
+  {tool.slug === "webmcp-security-checker" && <WebMcpSecurityLab />}
 </ToolLayout>
 
 <script>

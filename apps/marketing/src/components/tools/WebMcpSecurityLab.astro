@@ -1,0 +1,715 @@
+---
+const dashboardOrigin = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || "https://app.lyrashieldai.com"
+const signupUrl = `${dashboardOrigin}/sign-up?source=webmcp-security-checker`
+
+const labelClass = "block text-sm font-medium text-text"
+const fieldClass =
+  "mt-3 w-full rounded-xl border border-border bg-bg p-3 font-mono text-sm text-text shadow-sm transition-colors placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+const buttonClass =
+  "lift mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
+const secondaryButtonClass =
+  "lift mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-bg-raised px-4 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+const mutedText = "mt-3 text-sm text-text-muted"
+const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-sm text-text-muted"
+const tabClass =
+  "webmcp-tab flex-1 rounded-md px-2 py-2 text-xs font-medium text-text-muted transition-colors sm:px-3 sm:text-sm"
+const panelClass = "webmcp-panel"
+const copyButtonClass =
+  "inline-flex min-h-9 items-center rounded-lg border border-border px-3 text-xs font-semibold text-text-muted transition-colors hover:border-accent hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+---
+
+<div class="space-y-5">
+  <div id="webmcp-tabs" class="flex flex-wrap gap-1 rounded-lg border border-border p-1" role="tablist" aria-label="WebMCP Security Lab sections">
+    <button type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="webmcp-panel-check" id="webmcp-tab-check" class={tabClass} data-tab="check">Check</button>
+    <button type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="webmcp-panel-inventory" id="webmcp-tab-inventory" class={tabClass} data-tab="inventory">Inventory</button>
+    <button type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="webmcp-panel-findings" id="webmcp-tab-findings" class={tabClass} data-tab="findings">Findings</button>
+    <button type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="webmcp-panel-rewrite" id="webmcp-tab-rewrite" class={tabClass} data-tab="rewrite">Rewrite</button>
+    <button type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="webmcp-panel-export" id="webmcp-tab-export" class={tabClass} data-tab="export">Export</button>
+    <button type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="webmcp-panel-ci" id="webmcp-tab-ci" class={tabClass} data-tab="ci">CI setup</button>
+  </div>
+
+  <div id="webmcp-panel-check" role="tabpanel" aria-labelledby="webmcp-tab-check" class={panelClass}>
+    <div class="flex gap-2 rounded-lg border border-border p-1" role="tablist" aria-label="Input source">
+      <button type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="webmcp-files-panel" id="webmcp-files-tab" class="webmcp-input-tab flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors" data-tab="files">Select files</button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="webmcp-paste-panel" id="webmcp-paste-tab" class="webmcp-input-tab flex-1 rounded-md px-3 py-2 text-sm font-medium text-text-muted transition-colors" data-tab="paste">Paste code</button>
+    </div>
+
+    <div id="webmcp-files-panel" role="tabpanel" aria-labelledby="webmcp-files-tab" class="webmcp-input-panel mt-4">
+      <label class={labelClass} for="webmcp-files">Choose source files to check locally</label>
+      <input id="webmcp-files" type="file" multiple accept=".js,.jsx,.ts,.tsx,.mjs,.cjs,.astro,.html,.htm" class="mt-3 block w-full cursor-pointer rounded-xl border border-dashed border-border bg-bg p-4 text-sm text-text-muted transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:font-semibold file:text-bg hover:file:opacity-90" />
+      <p class={mutedText}>At most 20 files, 1 MiB each, 5 MiB total. Unsupported files are rejected.</p>
+    </div>
+
+    <div id="webmcp-paste-panel" role="tabpanel" aria-labelledby="webmcp-paste-tab" class="webmcp-input-panel mt-4 hidden">
+      <label class={labelClass} for="webmcp-paste">Paste HTML, Astro, TypeScript, or JavaScript</label>
+      <textarea id="webmcp-paste" rows={10} class={fieldClass} placeholder="<!-- paste a WebMCP tool definition, form, or header config -->"></textarea>
+      <p class={mutedText}>Pasted code is analyzed in your browser and is not uploaded.</p>
+    </div>
+
+    <div class="mt-4 flex flex-wrap gap-3">
+      <button id="webmcp-run" class={buttonClass} type="button">Check locally</button>
+      <button id="webmcp-cancel" class={`${secondaryButtonClass} hidden`} type="button">Cancel</button>
+      <button id="webmcp-load-unsafe" class={secondaryButtonClass} type="button">Load unsafe sample</button>
+      <button id="webmcp-load-safe" class={secondaryButtonClass} type="button">Load safe sample</button>
+    </div>
+
+    <output id="webmcp-result" class="mt-6 block" aria-live="polite">
+      <p class={warningText}>Results appear here. Everything runs locally — nothing is uploaded.</p>
+    </output>
+  </div>
+
+  <div id="webmcp-panel-inventory" role="tabpanel" aria-labelledby="webmcp-tab-inventory" class={`${panelClass} hidden`}>
+    <h3 class="text-lg font-semibold text-text">Tool inventory</h3>
+    <div id="webmcp-inventory-content" class="mt-4 text-sm text-text-muted"></div>
+  </div>
+
+  <div id="webmcp-panel-findings" role="tabpanel" aria-labelledby="webmcp-tab-findings" class={`${panelClass} hidden`}>
+    <h3 class="text-lg font-semibold text-text">Findings by control</h3>
+    <div id="webmcp-findings-content" class="mt-4"></div>
+  </div>
+
+  <div id="webmcp-panel-rewrite" role="tabpanel" aria-labelledby="webmcp-tab-rewrite" class={`${panelClass} hidden`}>
+    <h3 class="text-lg font-semibold text-text">Rewrite</h3>
+    <p class={mutedText}>Select detected findings and prepare a bounded diff. Review before applying; the change stays in memory until you rerun.</p>
+    <div id="webmcp-rewrite-content" class="mt-4"></div>
+  </div>
+
+  <div id="webmcp-panel-export" role="tabpanel" aria-labelledby="webmcp-tab-export" class={`${panelClass} hidden`}>
+    <h3 class="text-lg font-semibold text-text">Export</h3>
+    <p class={mutedText}>Download the current result as JSON, Markdown, or SARIF. The export stays on your device.</p>
+    <div class="mt-4 flex flex-wrap gap-3">
+      <button id="webmcp-export-json" class={secondaryButtonClass} type="button">Export JSON</button>
+      <button id="webmcp-export-md" class={secondaryButtonClass} type="button">Export Markdown</button>
+      <button id="webmcp-export-sarif" class={secondaryButtonClass} type="button">Export SARIF</button>
+    </div>
+    <pre id="webmcp-export-preview" class="mt-4 hidden overflow-x-auto rounded border border-border bg-bg-raised p-3 font-mono text-xs text-text"></pre>
+  </div>
+
+  <div id="webmcp-panel-ci" role="tabpanel" aria-labelledby="webmcp-tab-ci" class={`${panelClass} hidden`}>
+    <h3 class="text-lg font-semibold text-text">CI setup</h3>
+    <p class={mutedText}>Run the same bounded checks on your repository with the LyraShield CLI or GitHub Action. Results are local to the CI runner.</p>
+    <div class="mt-4 space-y-4">
+      <div>
+        <div class="mb-2 flex items-center justify-between">
+          <span class="text-sm font-medium text-text">CLI check</span>
+          <button type="button" class={copyButtonClass} data-copy-target="webmcp-cli-snippet">Copy</button>
+        </div>
+        <pre id="webmcp-cli-snippet" class="overflow-x-auto rounded border border-border bg-bg-raised p-3 font-mono text-xs text-text">npx lyrashield gate --fail-on HIGH</pre>
+      </div>
+      <div>
+        <div class="mb-2 flex items-center justify-between">
+          <span class="text-sm font-medium text-text">GitHub Action step</span>
+          <button type="button" class={copyButtonClass} data-copy-target="webmcp-action-snippet">Copy</button>
+        </div>
+        <pre id="webmcp-action-snippet" class="overflow-x-auto rounded border border-border bg-bg-raised p-3 font-mono text-xs text-text">- uses: ecryptoguru/lyrashield-ai@v2
+  with:
+    fail_on_severity: HIGH</pre>
+      </div>
+      <p class={mutedText}>For setup details, read the <a href="/docs/integrations/github-action" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">GitHub Action integration guide</a>.</p>
+    </div>
+  </div>
+
+  <div class="mt-5 flex items-center gap-3 rounded-lg border border-border bg-bg-raised px-4 py-3 text-sm text-text-muted" aria-live="polite" data-testid="webmcp-privacy">
+    <svg viewBox="0 0 24 24" class="size-4 shrink-0 text-accent" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.2 7.7 8 9 4.8-1.3 8-4.5 8-9V6l-8-3Z"/></svg>
+    <span><strong class="text-text">Local analysis:</strong> Files and pasted code never leave your device. In supported browsers, an agent may invoke the page tools; only bounded summaries and rewrite metadata are returned.</span>
+  </div>
+
+  <div id="webmcp-webmcp-status" class="hidden items-center gap-2 rounded-lg border border-border bg-bg-raised px-4 py-3 text-sm text-text-muted" aria-live="polite">
+    <span class="inline-block size-2 rounded-full bg-accent" aria-hidden="true"></span>
+    <span>WebMCP ready: this page exposes <code class="rounded bg-bg px-1 font-mono text-xs">analyze_webmcp_source</code> and <code class="rounded bg-bg px-1 font-mono text-xs">prepare_webmcp_rewrite</code> to the browser agent.</span>
+  </div>
+
+  <div id="webmcp-agent-activity" class="hidden rounded-lg border border-border bg-bg-raised px-4 py-3 text-sm text-text-muted" aria-live="polite"></div>
+
+  <a
+    id="webmcp-cta"
+    href={signupUrl}
+    data-cta-id="webmcp-security-checker-signup"
+    class="lift mt-5 hidden min-h-11 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+  >
+    Create account and scan the complete repository
+  </a>
+</div>
+
+<style>
+  .webmcp-tab[aria-selected="true"] {
+    background-color: var(--bg);
+    color: var(--text);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+  .webmcp-input-tab[aria-selected="true"] {
+    background-color: var(--bg);
+    color: var(--text);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+</style>
+
+<script>
+  import {
+    buildSummary,
+    exportWebMcpJson,
+    exportWebMcpMarkdown,
+    exportWebMcpSarif,
+    pastedCodeForWebMcp,
+    readFilesForWebMcp,
+    registerWebMcpTools,
+    SAFE_EXAMPLE,
+    UNSAFE_EXAMPLE,
+    toUiSignals,
+    WebMcpAnalyzerState,
+  } from "../../lib/webmcp-security"
+  import { WEBMCP_CONTROLS_BY_ID } from "@lyrashield/security/webmcp"
+  import type { WebMcpControlId } from "@lyrashield/security/webmcp"
+  import WebMcpAnalyzerWorker from "../../lib/webmcp-analyzer.worker?worker"
+
+  type Tab = "check" | "inventory" | "findings" | "rewrite" | "export" | "ci"
+  let activeTab: Tab = "check"
+  let activeInputTab: "files" | "paste" = "files"
+
+  const state = new WebMcpAnalyzerState(() => new WebMcpAnalyzerWorker())
+  state.onChange = render
+
+  const buttonClass =
+    "lift mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
+  const secondaryButtonClass =
+    "lift mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-bg-raised px-4 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+
+  const sectionTabs = document.querySelectorAll<HTMLButtonElement>(".webmcp-tab")
+  const sectionPanels = document.querySelectorAll<HTMLElement>(".webmcp-panel")
+  const inputTabs = document.querySelectorAll<HTMLButtonElement>(".webmcp-input-tab")
+  const inputPanels = document.querySelectorAll<HTMLElement>(".webmcp-input-panel")
+
+  const filesInput = document.querySelector<HTMLInputElement>("#webmcp-files")
+  const pasteInput = document.querySelector<HTMLTextAreaElement>("#webmcp-paste")
+  const runButton = document.querySelector<HTMLButtonElement>("#webmcp-run")
+  const cancelButton = document.querySelector<HTMLButtonElement>("#webmcp-cancel")
+  const loadUnsafeButton = document.querySelector<HTMLButtonElement>("#webmcp-load-unsafe")
+  const loadSafeButton = document.querySelector<HTMLButtonElement>("#webmcp-load-safe")
+  const resultOutput = document.querySelector<HTMLOutputElement>("#webmcp-result")
+  const inventoryContent = document.querySelector<HTMLDivElement>("#webmcp-inventory-content")
+  const findingsContent = document.querySelector<HTMLDivElement>("#webmcp-findings-content")
+  const rewriteContent = document.querySelector<HTMLDivElement>("#webmcp-rewrite-content")
+  const exportPreview = document.querySelector<HTMLPreElement>("#webmcp-export-preview")
+  const webmcpStatus = document.querySelector<HTMLDivElement>("#webmcp-webmcp-status")
+  const agentActivity = document.querySelector<HTMLDivElement>("#webmcp-agent-activity")
+  const cta = document.querySelector<HTMLAnchorElement>("#webmcp-cta")
+  let activeOperation: AbortController | null = null
+
+  async function runOperation(operation: (signal: AbortSignal) => Promise<void>) {
+    activeOperation?.abort()
+    const controller = new AbortController()
+    activeOperation = controller
+    try {
+      await operation(controller.signal)
+    } finally {
+      if (activeOperation === controller) activeOperation = null
+      render()
+    }
+  }
+
+  function switchSectionTab(tab: Tab) {
+    activeTab = tab
+    for (const t of sectionTabs) {
+      const selected = t.dataset.tab === tab
+      t.setAttribute("aria-selected", String(selected))
+      t.tabIndex = selected ? 0 : -1
+      t.classList.toggle("text-text-muted", !selected)
+    }
+    for (const p of sectionPanels) {
+      const target = p.id === `webmcp-panel-${tab}`
+      p.classList.toggle("hidden", !target)
+    }
+  }
+
+  function switchInputTab(tab: "files" | "paste") {
+    activeInputTab = tab
+    for (const t of inputTabs) {
+      const selected = t.dataset.tab === tab
+      t.setAttribute("aria-selected", String(selected))
+      t.tabIndex = selected ? 0 : -1
+      t.classList.toggle("text-text-muted", !selected)
+    }
+    for (const p of inputPanels) {
+      const target = p.id === (tab === "files" ? "webmcp-files-panel" : "webmcp-paste-panel")
+      p.classList.toggle("hidden", !target)
+    }
+  }
+
+  for (const tab of sectionTabs) {
+    tab.addEventListener("click", () => {
+      const value = tab.dataset.tab
+      if (value) switchSectionTab(value as Tab)
+    })
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+      event.preventDefault()
+      const current = [...sectionTabs].indexOf(tab)
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? sectionTabs.length - 1
+            : (current + (event.key === "ArrowRight" ? 1 : -1) + sectionTabs.length) % sectionTabs.length
+      const nextTab = sectionTabs[next]
+      const value = nextTab?.dataset.tab
+      if (nextTab && value) {
+        switchSectionTab(value as Tab)
+        nextTab.focus()
+      }
+    })
+  }
+
+  for (const tab of inputTabs) {
+    tab.addEventListener("click", () => {
+      const value = tab.dataset.tab
+      if (value === "files" || value === "paste") switchInputTab(value)
+    })
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return
+      event.preventDefault()
+      const current = [...inputTabs].indexOf(tab)
+      const next = (current + (event.key === "ArrowRight" ? 1 : -1) + inputTabs.length) % inputTabs.length
+      const nextTab = inputTabs[next]
+      const value = nextTab?.dataset.tab
+      if (nextTab && (value === "files" || value === "paste")) {
+        switchInputTab(value)
+        nextTab.focus()
+      }
+    })
+  }
+
+  function escapeHtml(input: string): string {
+    return input
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;")
+  }
+
+  function renderBadge(state: string): string {
+    const styles: Record<string, string> = {
+      DETECTED: "bg-danger/10 text-danger border-danger/20",
+      NO_FINDING: "bg-success/10 text-success border-success/20",
+      INCONCLUSIVE: "bg-warning/10 text-warning border-warning/20",
+      NOT_ASSESSED: "bg-text-muted/10 text-text-muted border-text-muted/20",
+    }
+    const style = styles[state] ?? styles.INCONCLUSIVE
+    return `<span class="rounded border px-2 py-0.5 text-xs font-semibold ${style}">${state.replace(/_/g, " ")}</span>`
+  }
+
+  function renderEmpty() {
+    if (!resultOutput) return
+    resultOutput.innerHTML =
+      '<p class="mt-3 rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-sm text-text-muted">Results appear here. Everything runs locally — nothing is uploaded.</p>'
+  }
+
+  function renderSummary() {
+    if (!resultOutput || !state.coverage) return
+
+    const summary = buildSummary({ coverage: state.coverage })
+    const wrap = document.createElement("div")
+    wrap.className = "space-y-5"
+
+    const head = document.createElement("div")
+    head.className = "mb-3 flex items-center justify-between gap-3"
+    const label = document.createElement("p")
+    label.className = "font-mono text-xs uppercase tracking-[.14em] text-text-muted"
+    label.textContent = `Evidence states · ${summary.detected} detected · ${summary.noFinding} no finding · ${summary.inconclusive} inconclusive · ${summary.notAssessed} not assessed`
+    head.appendChild(label)
+
+    const copy = document.createElement("button")
+    copy.type = "button"
+    copy.className =
+      "inline-flex min-h-9 items-center rounded-lg border border-border px-3 text-xs font-semibold text-text-muted transition-colors hover:border-accent hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    copy.textContent = "Copy"
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(exportWebMcpMarkdown(state))
+        copy.textContent = "Copied"
+      } catch {
+        copy.textContent = "Copy failed"
+      }
+      setTimeout(() => (copy.textContent = "Copy"), 1500)
+    })
+    head.appendChild(copy)
+    wrap.appendChild(head)
+
+    for (const control of summary.controls) {
+      const section = document.createElement("section")
+      section.className = "rounded-xl border border-border bg-bg p-4"
+
+      const title = document.createElement("div")
+      title.className = "flex items-center justify-between gap-3"
+      title.innerHTML = `<h3 class="text-sm font-semibold text-text">${escapeHtml(control.id)} · ${escapeHtml(control.title)}</h3>${renderBadge(control.state)}`
+      section.appendChild(title)
+
+      const controlSignals = toUiSignals({ signals: state.signals }).filter((s) => s.controlId === control.id)
+      if (controlSignals.length > 0) {
+        const list = document.createElement("ul")
+        list.className = "mt-3 space-y-3"
+        for (const signal of controlSignals) {
+          const item = document.createElement("li")
+          item.className = "text-sm text-text-muted"
+          const fileLine = signal.file && signal.line ? `<span class="font-mono text-xs text-text-muted">${escapeHtml(signal.file)}:${signal.line}</span>` : ""
+          const snippet = signal.snippet ? `<pre class="mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text">${escapeHtml(signal.snippet)}</pre>` : ""
+          item.innerHTML = `${renderBadge(signal.state)} <span class="ml-1 font-medium text-text">${escapeHtml(signal.severity)}</span>${fileLine ? ` · ${fileLine}` : ""}<p class="mt-1 text-text">${escapeHtml(signal.remediation)}</p>${snippet}`
+          list.appendChild(item)
+        }
+        section.appendChild(list)
+      }
+
+      wrap.appendChild(section)
+    }
+
+    const note = document.createElement("p")
+    note.className = "mt-4 text-sm text-text-muted"
+    note.innerHTML =
+      'This is a local static check, not a security guarantee. For repository-wide review, retest, evidence, and reporting, <a href="https://app.lyrashieldai.com/sign-up?source=webmcp-security-checker" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">create an open-beta account</a>.'
+    wrap.appendChild(note)
+
+    resultOutput.replaceChildren(wrap)
+
+    if (cta) {
+      cta.classList.remove("hidden")
+      cta.classList.add("inline-flex")
+    }
+  }
+
+  function renderInventory() {
+    if (!inventoryContent) return
+    if (!state.inventory || state.inventory.definitions.length === 0) {
+      inventoryContent.innerHTML = '<p class="text-text-muted">No tool definitions discovered yet. Run a check or load a sample.</p>'
+      return
+    }
+
+    const table = document.createElement("div")
+    table.className = "divide-y divide-border rounded-xl border border-border bg-bg"
+    for (const tool of state.inventory.definitions) {
+      const row = document.createElement("div")
+      row.className = "grid gap-2 p-3 sm:grid-cols-[1fr_auto]"
+      const meta = document.createElement("div")
+      meta.innerHTML = `<p class="font-medium text-text">${escapeHtml(tool.name ?? "(dynamic)")} · ${escapeHtml(tool.title ?? "")}</p><p class="text-text-muted">${escapeHtml(tool.description ?? "")}</p>`
+      const chips = document.createElement("div")
+      chips.className = "flex flex-wrap gap-2 text-xs"
+      chips.innerHTML = `
+        <span class="rounded border border-border bg-bg-raised px-2 py-1">${escapeHtml(tool.kind)}</span>
+        <span class="rounded border border-border bg-bg-raised px-2 py-1">${escapeHtml(tool.behavior)}</span>
+        <span class="rounded border border-border bg-bg-raised px-2 py-1">${escapeHtml(tool.inputSchema.type)}</span>
+      `
+      row.appendChild(meta)
+      row.appendChild(chips)
+      table.appendChild(row)
+    }
+    inventoryContent.replaceChildren(table)
+  }
+
+  function renderFindings() {
+    if (!findingsContent) return
+    if (!state.coverage) {
+      findingsContent.innerHTML = '<p class="text-text-muted">Run a check to see findings.</p>'
+      return
+    }
+
+    const summary = buildSummary({ coverage: state.coverage })
+    const wrap = document.createElement("div")
+    wrap.className = "space-y-4"
+
+    for (const control of summary.controls) {
+      const signals = toUiSignals({ signals: state.signals }).filter((s) => s.controlId === control.id)
+      const section = document.createElement("section")
+      section.className = "rounded-xl border border-border bg-bg p-4"
+      section.innerHTML = `<div class="flex items-center justify-between gap-3"><h4 class="font-semibold text-text">${escapeHtml(control.id)} · ${escapeHtml(control.title)}</h4>${renderBadge(control.state)}</div>`
+      if (signals.length > 0) {
+        const list = document.createElement("ul")
+        list.className = "mt-3 space-y-2"
+        for (const signal of signals) {
+          const li = document.createElement("li")
+          li.className = "text-sm text-text-muted"
+          const location = signal.file && signal.line ? `${escapeHtml(signal.file)}:${signal.line}` : ""
+          li.innerHTML = `${renderBadge(signal.state)} <span class="font-medium text-text">${escapeHtml(signal.severity)}</span> ${location}<p class="mt-1">${escapeHtml(signal.remediation)}</p>`
+          if (signal.snippet) {
+            const snippet = document.createElement("pre")
+            snippet.className = "mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text"
+            snippet.textContent = signal.snippet
+            li.appendChild(snippet)
+          }
+          list.appendChild(li)
+        }
+        section.appendChild(list)
+      }
+      wrap.appendChild(section)
+    }
+
+    findingsContent.replaceChildren(wrap)
+  }
+
+  function renderRewrite() {
+    if (!rewriteContent) return
+    const detected = state.signals.filter((s) => s.state === "DETECTED")
+
+    if (detected.length === 0 && !state.canUndo) {
+      rewriteContent.innerHTML = '<p class="text-text-muted">No DETECTED findings to rewrite. Run a check first.</p>'
+      return
+    }
+
+    const wrap = document.createElement("div")
+    wrap.className = "space-y-4"
+
+    if (detected.length > 0) {
+      const list = document.createElement("div")
+      list.className = "space-y-2"
+      const controls = new Set<string>()
+      for (const signal of detected) {
+        if (controls.has(signal.controlId)) continue
+        controls.add(signal.controlId)
+        const label = document.createElement("label")
+        label.className = "flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-bg p-3 text-sm text-text"
+        const checkbox = document.createElement("input")
+        checkbox.type = "checkbox"
+        checkbox.value = signal.controlId
+        checkbox.checked = state.selectedControlIds.has(signal.controlId as WebMcpControlId)
+        checkbox.className = "mt-1 size-4 accent-accent"
+        checkbox.addEventListener("change", () => {
+          state.toggleControl(signal.controlId as WebMcpControlId)
+        })
+        label.appendChild(checkbox)
+        const span = document.createElement("span")
+        span.innerHTML = `${escapeHtml(signal.controlId)} · ${escapeHtml(WEBMCP_CONTROLS_BY_ID[signal.controlId]?.title ?? signal.controlId)}`
+        label.appendChild(span)
+        list.appendChild(label)
+      }
+      wrap.appendChild(list)
+
+      const prepareButton = document.createElement("button")
+      prepareButton.type = "button"
+      prepareButton.className =
+        "lift inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      prepareButton.textContent = state.busy ? "Preparing…" : "Prepare rewrite"
+      prepareButton.disabled = state.busy
+      prepareButton.addEventListener("click", () =>
+        runOperation((signal) => state.prepareRewrite(signal))
+      )
+      wrap.appendChild(prepareButton)
+    }
+
+    const actions = document.createElement("div")
+    actions.className = "flex flex-wrap gap-3"
+
+    if (state.rewritePlan) {
+      const summary = document.createElement("div")
+      summary.className = "rounded-lg border border-border bg-bg-raised p-3 text-sm text-text-muted"
+      summary.innerHTML = `
+        <p>Addressed: ${state.rewritePlan.addressed.join(", ") || "none"}</p>
+        <p>Unresolved: ${state.rewritePlan.unresolved.join(", ") || "none"}</p>
+        ${state.rewritePlan.warnings.length ? `<p class="mt-1 text-warning">${state.rewritePlan.warnings.map(escapeHtml).join("; ")}</p>` : ""}
+      `
+      wrap.appendChild(summary)
+
+      const diff = state.getRewriteDiff()
+      if (diff) {
+        const diffBlock = document.createElement("pre")
+        diffBlock.className = "overflow-x-auto rounded border border-border bg-bg-raised p-3 font-mono text-xs text-text"
+        diffBlock.textContent = diff
+        wrap.appendChild(diffBlock)
+
+        const copy = document.createElement("button")
+        copy.type = "button"
+        copy.className =
+          "inline-flex min-h-9 items-center rounded-lg border border-border px-3 text-xs font-semibold text-text-muted transition-colors hover:border-accent hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        copy.textContent = "Copy diff"
+        copy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(diff)
+            copy.textContent = "Copied"
+          } catch {
+            copy.textContent = "Copy failed"
+          }
+          setTimeout(() => (copy.textContent = "Copy diff"), 1500)
+        })
+        wrap.appendChild(copy)
+      }
+
+      if (state.rewritePlan.edits.length > 0) {
+        const apply = document.createElement("button")
+        apply.type = "button"
+        apply.className = buttonClass
+        apply.textContent = "Apply in memory and rerun"
+        apply.disabled = state.busy
+        apply.addEventListener("click", () =>
+          runOperation(async (signal) => {
+            await state.applyRewrite(signal)
+            if (pasteInput && state.files.length === 1) {
+              pasteInput.value = state.files[0]?.content ?? ""
+            }
+          })
+        )
+        actions.appendChild(apply)
+      }
+    }
+
+    if (state.canUndo) {
+      const undo = document.createElement("button")
+      undo.type = "button"
+      undo.className = secondaryButtonClass
+      undo.textContent = "Undo"
+      undo.disabled = state.busy
+      undo.addEventListener("click", () =>
+        runOperation(async (signal) => {
+          await state.undoRewrite(signal)
+          if (pasteInput && state.files.length === 1) {
+            pasteInput.value = state.files[0]?.content ?? ""
+          }
+        })
+      )
+      actions.appendChild(undo)
+    }
+
+    const rerun = document.createElement("button")
+    rerun.type = "button"
+    rerun.className = secondaryButtonClass
+    rerun.textContent = "Rerun"
+    rerun.disabled = state.busy
+    rerun.addEventListener("click", () => runOperation((signal) => state.rerun(signal)))
+    actions.appendChild(rerun)
+
+    wrap.appendChild(actions)
+
+    rewriteContent.replaceChildren(wrap)
+  }
+
+  function render() {
+    if (state.busy) {
+      if (resultOutput) {
+        resultOutput.innerHTML =
+          '<p class="mt-3 rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-sm text-text-muted">Analyzing…</p>'
+      }
+    } else if (state.error) {
+      if (resultOutput) {
+        resultOutput.innerHTML = `<p class="mt-3 rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-sm text-text-muted">${escapeHtml(state.error)}</p>`
+      }
+    } else if (state.coverage) {
+      renderSummary()
+    } else {
+      renderEmpty()
+    }
+
+    renderInventory()
+    renderFindings()
+    renderRewrite()
+    cancelButton?.classList.toggle("hidden", !state.busy)
+  }
+
+  runButton?.addEventListener("click", async () => {
+    try {
+      const files =
+        activeInputTab === "files"
+          ? await readFilesForWebMcp([...(filesInput?.files ?? [])])
+          : [pastedCodeForWebMcp(pasteInput?.value ?? "")]
+      state.setFiles(files)
+      await runOperation((signal) => state.analyze(signal))
+      if (activeTab !== "check") switchSectionTab("check")
+    } catch (error) {
+      state.setError(error instanceof Error ? error.message : String(error))
+    }
+  })
+
+  loadUnsafeButton?.addEventListener("click", async () => {
+    state.loadUnsafeSample()
+    if (pasteInput) pasteInput.value = UNSAFE_EXAMPLE
+    switchInputTab("paste")
+    await runOperation((signal) => state.analyze(signal))
+  })
+
+  loadSafeButton?.addEventListener("click", async () => {
+    state.loadSafeSample()
+    if (pasteInput) pasteInput.value = SAFE_EXAMPLE
+    switchInputTab("paste")
+    await runOperation((signal) => state.analyze(signal))
+  })
+
+  cancelButton?.addEventListener("click", () => activeOperation?.abort())
+
+  document.querySelector<HTMLButtonElement>("#webmcp-export-json")?.addEventListener("click", () => {
+    const blob = new Blob([exportWebMcpJson(state)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `webmcp-check-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    if (exportPreview) {
+      exportPreview.textContent = exportWebMcpJson(state).slice(0, 2000) + (exportWebMcpJson(state).length > 2000 ? "\n…" : "")
+      exportPreview.classList.remove("hidden")
+    }
+  })
+
+  document.querySelector<HTMLButtonElement>("#webmcp-export-md")?.addEventListener("click", () => {
+    const blob = new Blob([exportWebMcpMarkdown(state)], { type: "text/markdown" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `webmcp-check-${new Date().toISOString().slice(0, 10)}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+    if (exportPreview) {
+      exportPreview.textContent = exportWebMcpMarkdown(state).slice(0, 2000) + (exportWebMcpMarkdown(state).length > 2000 ? "\n…" : "")
+      exportPreview.classList.remove("hidden")
+    }
+  })
+
+  document.querySelector<HTMLButtonElement>("#webmcp-export-sarif")?.addEventListener("click", () => {
+    const blob = new Blob([exportWebMcpSarif(state)], { type: "application/sarif+json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `webmcp-check-${new Date().toISOString().slice(0, 10)}.sarif.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    if (exportPreview) {
+      exportPreview.textContent = exportWebMcpSarif(state).slice(0, 2000) + (exportWebMcpSarif(state).length > 2000 ? "\n…" : "")
+      exportPreview.classList.remove("hidden")
+    }
+  })
+
+  for (const copy of document.querySelectorAll<HTMLButtonElement>("[data-copy-target]")) {
+    copy.addEventListener("click", async () => {
+      const targetId = copy.dataset.copyTarget
+      const target = targetId ? document.getElementById(targetId) : null
+      if (!target) return
+      try {
+        await navigator.clipboard.writeText(target.textContent ?? "")
+        copy.textContent = "Copied"
+      } catch {
+        copy.textContent = "Copy failed"
+      }
+      setTimeout(() => (copy.textContent = "Copy"), 1500)
+    })
+  }
+
+  // WebMCP registration after user interaction is not required to use the lab,
+  // but it makes the two read-only tools available to a supporting browser.
+  const webMcpController = new AbortController()
+  const registrations = registerWebMcpTools(state, webMcpController.signal, (activity) => {
+    if (!agentActivity) return
+    const ended = activity.endedAt ? ` · ${new Date(activity.endedAt).toLocaleTimeString()}` : ""
+    agentActivity.textContent = `Agent activity · ${activity.toolName} · ${activity.status}${ended}`
+    agentActivity.classList.remove("hidden")
+  })
+  if (registrations && webmcpStatus) {
+    Promise.all(registrations)
+      .then(() => {
+        webmcpStatus.classList.remove("hidden")
+        webmcpStatus.classList.add("flex")
+      })
+      .catch(() => {
+        // WebMCP may not be supported in this browser; the human UI still works.
+      })
+    window.addEventListener("beforeunload", () => webMcpController.abort())
+  }
+
+  state.loadUnsafeSample()
+  if (pasteInput) pasteInput.value = UNSAFE_EXAMPLE
+  switchInputTab("paste")
+  render()
+</script>

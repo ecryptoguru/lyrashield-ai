@@ -97,3 +97,6 @@ extracted-engine/
 .planning/
 .superpowers/
 docs/superpowers/
+
+# Local Devpost plugin/session state; submission evidence belongs in docs.
+.devpost-hackathon-state.json

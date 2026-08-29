@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import { loadDefaultProject } from "../projects.js"
-import { resolveDiffRange, runRiskyPatternChecks, buildSarif, rankSeverity } from "../diff-core.js"
+import { resolveDiffRange, runDiffChecks, buildSarif, rankSeverity } from "../diff-core.js"
 import type { Output } from "../output.js"
 import { listAll, FindingSchema } from "@lyrashield/sdk"
 
@@ -35,10 +35,12 @@ export async function handleGate(args: string[], output: Output): Promise<number
     severity: string
     message: string
     file?: string
+    line?: number
     level: string
+    coverageIncomplete?: true
   }[] = []
   try {
-    localFindings = await runRiskyPatternChecks(base, head)
+    localFindings = await runDiffChecks(base, head)
   } catch (err) {
     hadError = true
     output.warn(`Could not run diff checks: ${err instanceof Error ? err.message : String(err)}`)
@@ -92,7 +94,9 @@ export async function handleGate(args: string[], output: Output): Promise<number
     severity: string
     message: string
     file?: string
+    line?: number
     level: string
+    coverageIncomplete?: true
   }[] = [
     ...localFindings,
     ...apiFindings.map((f) => ({
@@ -101,10 +105,12 @@ export async function handleGate(args: string[], output: Output): Promise<number
       severity: f.severity,
       message: f.message ?? "Open finding",
       file: undefined as string | undefined,
+      line: undefined as number | undefined,
     })),
   ]
 
   const atOrAbove = allFindings.filter((f) => rankSeverity(f.severity) >= thresholdRank)
+  const incompleteCoverage = localFindings.filter((finding) => finding.coverageIncomplete)
 
   if (parsed.sarif) {
     const sarif = buildSarif(
@@ -113,7 +119,14 @@ export async function handleGate(args: string[], output: Output): Promise<number
         level: f.level,
         message: { text: f.message },
         locations: f.file
-          ? [{ physicalLocation: { artifactLocation: { uri: f.file } } }]
+          ? [
+              {
+                physicalLocation: {
+                  artifactLocation: { uri: f.file },
+                  region: f.line ? { startLine: f.line } : undefined,
+                },
+              },
+            ]
           : undefined,
       }))
     )
@@ -121,7 +134,7 @@ export async function handleGate(args: string[], output: Output): Promise<number
     await writeFile(parsed.sarif as string, JSON.stringify(sarif, null, 2), "utf-8")
   }
 
-  const failed = hadError || atOrAbove.length > 0
+  const failed = hadError || incompleteCoverage.length > 0 || atOrAbove.length > 0
 
   if (output.json) {
     output.result({ threshold, findings: allFindings, failed })
@@ -129,11 +142,18 @@ export async function handleGate(args: string[], output: Output): Promise<number
     if (failed) {
       if (hadError) {
         output.error("Gate failed: could not complete the security check", 1)
+      } else if (incompleteCoverage.length > 0) {
+        output.error("Gate failed: WebMCP diff coverage was incomplete", 1)
       } else {
         output.error(`Gate failed: ${atOrAbove.length} finding(s) at or above ${threshold}`, 1)
       }
       for (const f of atOrAbove) {
         output.log(`[${f.severity}] ${f.ruleId}: ${f.message}`)
+      }
+      if (thresholdRank > rankSeverity("HIGH")) {
+        for (const finding of incompleteCoverage) {
+          output.log(`[${finding.severity}] ${finding.ruleId}: ${finding.message}`)
+        }
       }
     } else {
       output.log(`Gate passed: no findings at or above ${threshold}`)

@@ -181,7 +181,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
   systemTheme.addEventListener("change", () => {
     if (document.documentElement.dataset.themePreference === "system") applyTheme("system")
   })
-  addEventListener("storage", (event) => {
+  addEventListener("storage", (event: StorageEvent) => {
     if (event.key !== "lyrashield-theme") return
     const next = preferences.includes(event.newValue as ThemePreference)
       ? (event.newValue as ThemePreference)
@@ -238,7 +238,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         menu.close()
       })
 
-      addEventListener("keydown", (event) => {
+      addEventListener("keydown", (event: KeyboardEvent) => {
         if (event.key === "Escape" && menu.open) menu.close()
       })
 

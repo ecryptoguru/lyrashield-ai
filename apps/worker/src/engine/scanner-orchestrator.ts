@@ -18,6 +18,7 @@ import {
   scanAiAppSecurity,
   type AiAppSecurityDiscoveryReceipt,
   type AiAppSecurityScanResult,
+  type WebMcpCoverageReceipt,
 } from "./scanners/ai-app-security"
 import type { UrlScanProfile, UrlExecutionSummary } from "@lyrashield/types"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
@@ -68,6 +69,7 @@ export interface ScannerOrchestratorResult {
   agentConfigFindings: NormalizedFinding[]
   mlSupplyChainFindings: NormalizedFinding[]
   aiAppSecurityFindings: NormalizedFinding[]
+  webMcpFindings: NormalizedFinding[]
   coverageIssues: ScannerCoverageIssue[]
   stats: ReturnType<typeof getFindingStats>
   filteredFalsePositives: number
@@ -77,6 +79,7 @@ export interface ScannerOrchestratorResult {
   ai03AdvisoryFresh?: boolean
   ai03Coverage?: AiAppSecurityScanResult["ai03Coverage"]
   aiAppSecurityDiscovery?: AiAppSecurityDiscoveryReceipt
+  webMcpCoverage?: WebMcpCoverageReceipt | null
 }
 
 async function withScannerPhaseTimeout<T>(
@@ -517,6 +520,8 @@ export async function runScannerOrchestrator(
                 },
                 limitsReached: [],
               },
+              webMcpFindings: [],
+              webMcpCoverage: null,
             } as AiAppSecurityScanResult),
         hasSourceCheckout
           ? runMlSupplyChainScan(scanId, absWorkspace, coverageIssues, signal)
@@ -541,6 +546,7 @@ export async function runScannerOrchestrator(
   let ai03AdvisoryFresh: boolean | undefined
   let ai03Coverage: AiAppSecurityScanResult["ai03Coverage"] | undefined
   let aiAppSecurityDiscovery: AiAppSecurityDiscoveryReceipt | undefined
+  let webMcpCoverage: WebMcpCoverageReceipt | null | undefined
   for (let index = 0; index < scannerResults.length; index++) {
     const result = scannerResults[index]
     const value =
@@ -561,6 +567,7 @@ export async function runScannerOrchestrator(
         ai03AdvisoryFresh = value.ai03AdvisoryFresh
         ai03Coverage = value.ai03Coverage
         aiAppSecurityDiscovery = value.discovery
+        webMcpCoverage = value.webMcpCoverage
       }
     } else if (Array.isArray(value)) {
       rawFindings.push(value)
@@ -647,6 +654,12 @@ export async function runScannerOrchestrator(
     (aiAppSecurityNormalized.length - aiAppSecurityFiltered.length) +
     (mlSupplyChainNormalized.length - mlSupplyChainFiltered.length)
 
+  const webMcpFindings = aiAppSecurityFiltered.filter(
+    (f) =>
+      (f.scannerSource === "ai_app_security" && f.finding_class === "webmcp_tool_surface") ||
+      f.id?.startsWith("WEBMCP-")
+  )
+
   // Merge all findings, deduping across sources by dedupeKey.
   // When two sources produce the same dedupeKey, keep the one with higher
   // severity (then higher confidence as tiebreaker).
@@ -697,6 +710,7 @@ export async function runScannerOrchestrator(
     url: urlFiltered.length,
     agentConfig: agentConfigFiltered.length,
     aiAppSecurity: aiAppSecurityFiltered.length,
+    webMcp: webMcpFindings.length,
     mlSupplyChain: mlSupplyChainFiltered.length,
     falsePositivesFiltered: filteredFalsePositives,
     stats,
@@ -711,6 +725,7 @@ export async function runScannerOrchestrator(
     agentConfigFindings: agentConfigFiltered,
     aiAppSecurityFindings: aiAppSecurityFiltered,
     mlSupplyChainFindings: mlSupplyChainFiltered,
+    webMcpFindings,
     coverageIssues,
     stats,
     filteredFalsePositives,
@@ -720,5 +735,6 @@ export async function runScannerOrchestrator(
     ai03AdvisoryFresh,
     ai03Coverage,
     aiAppSecurityDiscovery,
+    webMcpCoverage,
   }
 }

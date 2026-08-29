@@ -21,6 +21,8 @@ describe("Cloudflare marketing security headers", () => {
     expect(headers).toContain("X-Content-Type-Options: nosniff")
     expect(headers).toContain("Referrer-Policy: strict-origin-when-cross-origin")
     expect(headers).toContain("Permissions-Policy:")
+    expect(headers).toContain("tools=(self)")
+    expect(headers).toContain("Origin-Agent-Cluster: ?1")
   })
 
   it("applies the same defensive policy and no-store indexing boundary to Worker API responses", () => {

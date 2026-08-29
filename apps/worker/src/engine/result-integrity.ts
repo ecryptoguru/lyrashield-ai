@@ -5,7 +5,10 @@ import type { UrlExecutionSummary } from "@lyrashield/types"
 import type { EngineVulnerability } from "./output-parser"
 import type { NormalizedFinding } from "./normalizer"
 import type { ScannerCoverageIssue } from "./scanner-coverage"
-import type { AiAppSecurityDiscoveryReceipt } from "./scanners/ai-app-security"
+import type {
+  AiAppSecurityDiscoveryReceipt,
+  WebMcpCoverageReceipt,
+} from "./scanners/ai-app-security"
 
 type ResultTarget = {
   id: string
@@ -22,6 +25,7 @@ type ResultManifestInput = {
   engineFindingCount: number
   coverageIssues: ScannerCoverageIssue[]
   aiAppSecurityDiscovery?: AiAppSecurityDiscoveryReceipt
+  webMcpCoverage?: WebMcpCoverageReceipt | null
   matchedControlRanks?: number[]
   urlExecution?: UrlExecutionSummary
   engineExecution?: {
@@ -62,7 +66,7 @@ type ResultManifestInput = {
 type FindingInput = EngineVulnerability | NormalizedFinding
 
 const MANIFEST_VERSION = 6
-const SCANNER_CONTRACT_VERSION = "2026-08-21"
+const SCANNER_CONTRACT_VERSION = "2026-08-29"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
 
@@ -210,7 +214,10 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
         metadata: {
           sourceCheckoutAvailable: input.sourceCheckoutAvailable,
           ...(scanner === "ai_app_security"
-            ? { discovery: input.aiAppSecurityDiscovery ?? null }
+            ? {
+                discovery: input.aiAppSecurityDiscovery ?? null,
+                webMcpCoverage: input.webMcpCoverage ?? null,
+              }
             : {}),
           ...status.metadata,
         },

@@ -107,7 +107,7 @@ describe("marketing SEO metadata", () => {
   it("updates llms.txt freshness only through its manual content date", () => {
     const llms = source("../pages/llms.txt.ts")
 
-    expect(llms).toContain('const LLMS_TXT_CONTENT_DATE = "2026-08-24"')
+    expect(llms).toContain('const LLMS_TXT_CONTENT_DATE = "2026-08-29"')
     expect(llms).toContain("Bump this by hand only when a section's CONTENT changes")
     expect(llms).not.toMatch(/LLMS_TXT_CONTENT_DATE\s*=\s*new Date/)
   })

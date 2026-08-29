@@ -14,19 +14,38 @@
       "types": "./src/ai-security/index.ts",
       "import": "./src/ai-security/index.ts",
       "default": "./src/ai-security/index.ts"
+    },
+    "./webmcp": {
+      "types": "./src/webmcp/index.ts",
+      "import": "./src/webmcp/index.ts",
+      "default": "./src/webmcp/index.ts"
+    },
+    "./webmcp/discover": {
+      "types": "./src/webmcp/discover.ts",
+      "import": "./src/webmcp/discover.ts",
+      "default": "./src/webmcp/discover.ts"
+    },
+    "./webmcp/rewrite": {
+      "types": "./src/webmcp/rewrite.ts",
+      "import": "./src/webmcp/rewrite.ts",
+      "default": "./src/webmcp/rewrite.ts"
     }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --max-warnings 0"
+    "lint": "eslint src --max-warnings 0",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@noble/hashes": "2.2.0",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
+    "parse5": "^7.2.1",
+    "typescript": "^6.0.0",
     "undici": "8.10.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "typescript": "^6.0.0"
+    "webmcp-types": "^0.1.5"
   }
 }

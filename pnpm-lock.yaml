@@ -181,6 +181,9 @@ importers:
       typescript:
         specifier: ^6.0.0
         version: 6.0.3
+      webmcp-types:
+        specifier: ^0.1.5
+        version: 0.1.5
       wrangler:
         specifier: ^4.125.0
         version: 4.125.0(@cloudflare/workers-types@5.20260823.1)(@types/node@24.13.3)
@@ -477,7 +480,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/agent-registry:
     dependencies:
@@ -602,6 +605,9 @@ importers:
       '@iarna/toml':
         specifier: ^2.2.5
         version: 2.2.5
+      '@lyrashield/security':
+        specifier: workspace:*
+        version: link:../security
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
@@ -898,7 +904,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/security:
     dependencies:
@@ -908,6 +914,15 @@ importers:
       '@lyrashield/types':
         specifier: workspace:*
         version: link:../types
+      '@noble/hashes':
+        specifier: 2.2.0
+        version: 2.2.0
+      parse5:
+        specifier: ^7.2.1
+        version: 7.3.0
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
       undici:
         specifier: '>=8.10.0'
         version: 8.10.0
@@ -915,9 +930,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
-      typescript:
-        specifier: ^6.0.0
-        version: 6.0.3
+      webmcp-types:
+        specifier: ^0.1.5
+        version: 0.1.5
 
   packages/types:
     dependencies:
@@ -7911,6 +7926,9 @@ packages:
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
+
+  webmcp-types@0.1.5:
+    resolution: {integrity: sha512-QAfuzNJ+hiY2JLpPbD/6xZruLQlsqtWUDqQCRruqD0dbtZHDg6IUZ2K0zctlRokwuscGlr47i6hKv8mQPSQLhw==}
 
   webpack-sources@3.5.1:
     resolution: {integrity: sha512-jyuiGJdtvY434z5bUZrjz67v76/ePNvFZTp9Mdz29IlH4+GPsgyGjiv0fKI+M7BdkU6ADjulUcKAd3tUK3WlEw==}
@@ -15747,6 +15765,8 @@ snapshots:
   web-vitals@6.0.0: {}
 
   webidl-conversions@3.0.1: {}
+
+  webmcp-types@0.1.5: {}
 
   webpack-sources@3.5.1: {}
 
