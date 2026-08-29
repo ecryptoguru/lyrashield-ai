@@ -294,6 +294,9 @@ const envSchema = z
     RAZORPAY_KEY_ID: z.string().optional().or(z.literal("")),
     RAZORPAY_KEY_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
+    // Retain only during a controlled webhook-secret rotation so Razorpay can
+    // redeliver events signed with the immediately previous secret.
+    RAZORPAY_WEBHOOK_PREVIOUS_SECRET: z.string().optional().or(z.literal("")),
     RAZORPAY_PLAN_IDS: z.string().optional().or(z.literal("")),
     RAZORPAY_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
     RAZORPAY_LOCAL_BILLING_ADMISSION: z.enum(["off", "public"]).default("off"),

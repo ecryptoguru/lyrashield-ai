@@ -91,8 +91,10 @@ const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000
  * @returns The parsed event, or throws if validation fails.
  */
 export function validateRazorpayWebhook(body: string, signature: string): RazorpayWebhookEvent {
-  const secret = env.RAZORPAY_WEBHOOK_SECRET
-  if (!secret) {
+  const secrets = [env.RAZORPAY_WEBHOOK_SECRET, env.RAZORPAY_WEBHOOK_PREVIOUS_SECRET].filter(
+    (secret): secret is string => Boolean(secret)
+  )
+  if (secrets.length === 0) {
     throw new WebhookAuthError("not_configured", "RAZORPAY_WEBHOOK_SECRET is not configured")
   }
 
@@ -101,9 +103,13 @@ export function validateRazorpayWebhook(body: string, signature: string): Razorp
   }
 
   // HMAC-SHA256 of the raw body
-  const expectedSig = createHmac("sha256", secret).update(body).digest("hex")
-
-  if (!timingSafeEqual(signature, expectedSig)) {
+  // Razorpay retries an event after a webhook-secret rotation with the old
+  // signing secret. Keep exactly one previous secret during that retry window.
+  const isValid = secrets.some((secret) => {
+    const expectedSig = createHmac("sha256", secret).update(body).digest("hex")
+    return timingSafeEqual(signature, expectedSig)
+  })
+  if (!isValid) {
     throw new WebhookAuthError("invalid_signature", "Invalid Razorpay webhook signature")
   }
 

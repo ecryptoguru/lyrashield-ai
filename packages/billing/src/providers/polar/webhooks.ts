@@ -74,11 +74,10 @@ export function validatePolarWebhook(
 
   // Verify signature: HMAC-SHA256 of `{id}.{timestamp}.{body}`
   const signedPayload = `${eventId}.${timestamp}.${body}`
-  // Polar's SDK signs with the displayed endpoint secret as UTF-8 key material.
-  // `whsec_` is a provider marker here, not a Base64-encoded HMAC key.
-  if (!secret.startsWith("whsec_")) {
-    throw new WebhookAuthError("not_configured", "Invalid POLAR_WEBHOOK_SECRET")
-  }
+  // Polar's SDK base64-encodes the configured secret before handing it to
+  // Standard Webhooks, which then verifies with the original UTF-8 bytes.
+  // Endpoint secrets may be provider-generated or operator-set; no prefix is
+  // part of the signing contract.
   const signingKey = Buffer.from(secret, "utf8")
   const expectedSig = createHmac("sha256", signingKey).update(signedPayload).digest("base64")
 
