@@ -84,7 +84,7 @@ must_contain '--revision "$target_revision"'
 must_contain "properties.provisioningState, properties.healthState, to_string(properties.trafficWeight), properties.template.containers[0].image"
 must_contain 'Billing staging revision ${target_revision} did not become healthy at 100% traffic.'
 must_contain 'access_status=$(curl --silent --show-error --output /dev/null --dump-header "$access_headers"'
-must_contain '--form-string "token=${STAGING_ACCESS_TOKEN}"'
+must_contain '--data-urlencode "token=${STAGING_ACCESS_TOKEN}"'
 must_contain 'Restricted staging access handshake failed with HTTP ${access_status}.'
 must_contain 'set-cookie: __Host-lyrashield-billing-staging='
 must_contain 'grep -Fqi '\''httponly'\'' "$access_headers"'
