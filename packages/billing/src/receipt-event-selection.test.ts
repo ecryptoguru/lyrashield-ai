@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { selectRazorpaySubscriptionReceiptEvent } from "./receipt-event-selection"
+import {
+  selectRazorpaySubscriptionCancellationEvent,
+  selectRazorpaySubscriptionReceiptEvent,
+} from "./receipt-event-selection"
 
 const eventFor = (
   subscriptionId: string,
@@ -42,5 +45,34 @@ describe("selectRazorpaySubscriptionReceiptEvent", () => {
     ).toThrow(
       "could not resolve one Razorpay subscription receipt event (charges 2, activations 0)"
     )
+  })
+})
+
+describe("selectRazorpaySubscriptionCancellationEvent", () => {
+  it("selects one exact provider-delivered cancellation", () => {
+    expect(
+      selectRazorpaySubscriptionCancellationEvent(
+        [
+          eventFor("sub_other", "other", "subscription.cancelled"),
+          eventFor("sub_target", "target", "subscription.cancelled"),
+        ],
+        "sub_target"
+      )
+    ).toEqual({ externalId: "target", eventType: "subscription.cancelled" })
+  })
+
+  it("fails closed when the cancellation is absent or ambiguous", () => {
+    expect(() => selectRazorpaySubscriptionCancellationEvent([], "sub_target")).toThrow(
+      "could not resolve one Razorpay subscription cancellation event (cancellations 0)"
+    )
+    expect(() =>
+      selectRazorpaySubscriptionCancellationEvent(
+        [
+          eventFor("sub_target", "first", "subscription.cancelled"),
+          eventFor("sub_target", "second", "subscription.cancelled"),
+        ],
+        "sub_target"
+      )
+    ).toThrow("could not resolve one Razorpay subscription cancellation event (cancellations 2)")
   })
 })

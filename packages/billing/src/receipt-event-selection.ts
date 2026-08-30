@@ -39,3 +39,21 @@ export function selectRazorpaySubscriptionReceiptEvent(
     )
   }
 }
+
+/** Resolve one provider-delivered cancellation for the exact subscription. */
+export function selectRazorpaySubscriptionCancellationEvent(
+  candidates: WebhookEventCandidate[],
+  subscriptionId: string
+): { externalId: string; eventType: "subscription.cancelled" } {
+  const cancellations = candidates.filter(
+    (candidate) =>
+      candidate.eventType === "subscription.cancelled" &&
+      subscriptionIdFromPayload(candidate.payload) === subscriptionId
+  )
+  if (cancellations.length !== 1) {
+    throw new Error(
+      `Provider receipt could not resolve one Razorpay subscription cancellation event (cancellations ${cancellations.length})`
+    )
+  }
+  return { externalId: cancellations[0]!.externalId, eventType: "subscription.cancelled" }
+}
