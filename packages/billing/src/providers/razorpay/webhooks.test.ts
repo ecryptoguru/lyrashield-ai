@@ -73,6 +73,19 @@ describe("validateRazorpayWebhook", () => {
     )
   })
 
+  it("rejects a signed payload beyond the allowed provider clock skew", () => {
+    const payload = JSON.stringify({
+      event: "payment.captured",
+      created_at: Math.floor(Date.now() / 1000) + 6 * 60,
+      payload: { payment: { entity: { id: "pay_future", amount: 100, currency: "INR" } } },
+    })
+    const signature = createHmac("sha256", secrets.current).update(payload).digest("hex")
+
+    expect(() => validateRazorpayWebhook(payload, signature)).toThrow(
+      "Razorpay webhook timestamp is in the future"
+    )
+  })
+
   it("rejects an unrelated secret", () => {
     const payload = body()
     const signature = createHmac("sha256", "test-unrelated-webhook-secret")

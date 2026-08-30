@@ -81,6 +81,7 @@ export interface RazorpayWebhookEvent {
 }
 
 const MAX_PROVIDER_REPLAY_AGE_MS = 15 * 24 * 60 * 60 * 1000
+const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000
 
 /**
  * Validate a Razorpay webhook signature.
@@ -132,7 +133,11 @@ export function validateRazorpayWebhook(body: string, signature: string): Razorp
   if (typeof createdAt !== "number" || !Number.isSafeInteger(createdAt) || createdAt <= 0) {
     throw new WebhookPayloadError("Razorpay webhook missing valid created_at")
   }
-  if (Date.now() - createdAt * 1000 > MAX_PROVIDER_REPLAY_AGE_MS) {
+  const eventAgeMs = Date.now() - createdAt * 1000
+  if (eventAgeMs < -MAX_PROVIDER_CLOCK_SKEW_MS) {
+    throw new WebhookAuthError("stale_timestamp", "Razorpay webhook timestamp is in the future")
+  }
+  if (eventAgeMs > MAX_PROVIDER_REPLAY_AGE_MS) {
     throw new WebhookAuthError("stale_timestamp", "Razorpay webhook exceeds replay window")
   }
 
