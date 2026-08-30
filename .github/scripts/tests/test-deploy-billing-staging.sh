@@ -188,6 +188,7 @@ must_not_contain "DATABASE_SYSTEM_URL=secretref:database-admin-url"
   exit 1
 }
 grep -Fq 'pnpm --filter @lyrashield/db exec tsx' "$razorpay_checkout_preparer"
+grep -Fq 'PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH' "$repo/e2e/billing/prepare-razorpay-checkout.ts"
 must_not_contain "POLAR_BILLING_ADMISSION=public"
 must_not_contain "RAZORPAY_BILLING_ADMISSION=public"
 must_not_contain '!cancelled()'
