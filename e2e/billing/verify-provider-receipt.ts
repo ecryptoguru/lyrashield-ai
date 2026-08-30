@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto"
 import { getSystemPrisma } from "../../packages/db/src/index"
-import { selectRazorpaySubscriptionReceiptEvent } from "../../packages/billing/src/receipt-event-selection"
+import {
+  selectRazorpaySubscriptionCancellationEvent,
+  selectRazorpaySubscriptionReceiptEvent,
+} from "../../packages/billing/src/receipt-event-selection"
 
 const provider = process.env.BILLING_RECEIPT_PROVIDER
 let eventId = process.env.BILLING_RECEIPT_EVENT_ID
@@ -10,6 +13,10 @@ const objectId = process.env.BILLING_RECEIPT_OBJECT_ID
 const phase = process.env.BILLING_RECEIPT_PHASE ?? "purchase"
 const resolveRazorpaySubscriptionCharge =
   process.env.BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CHARGE === "true"
+const resolveRazorpaySubscriptionCancellation =
+  process.env.BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CANCELLATION === "true"
+const resolveRazorpaySubscriptionEvent =
+  resolveRazorpaySubscriptionCharge || resolveRazorpaySubscriptionCancellation
 
 const parseExpectedCount = (name: string, fallback?: number) => {
   const raw = process.env[name]
@@ -32,11 +39,11 @@ const immutable = {
 
 if (
   !["polar", "razorpay"].includes(provider ?? "") ||
-  (!resolveRazorpaySubscriptionCharge && !eventId) ||
+  (!resolveRazorpaySubscriptionEvent && !eventId) ||
   !workspaceId ||
   !["subscription", "pack"].includes(kind ?? "") ||
   !objectId ||
-  (!resolveRazorpaySubscriptionCharge && !/^[A-Za-z0-9_:-]{1,191}$/.test(eventId ?? "")) ||
+  (!resolveRazorpaySubscriptionEvent && !/^[A-Za-z0-9_:-]{1,191}$/.test(eventId ?? "")) ||
   !/^[A-Za-z0-9_:-]{1,191}$/.test(objectId) ||
   !/^[a-z][a-z0-9_-]{1,63}$/.test(phase) ||
   !/^[0-9a-f]{40}$/.test(immutable.sourceSha) ||
@@ -49,11 +56,14 @@ if (
     "Provider receipt verifier requires valid provider, event, workspace, kind, and object IDs"
   )
 }
+if (resolveRazorpaySubscriptionCharge && resolveRazorpaySubscriptionCancellation) {
+  throw new Error("Select only one Razorpay subscription receipt resolver")
+}
 
 const prisma = getSystemPrisma()
 const verifiedProvider = provider as "polar" | "razorpay"
 let resolvedEventType: string | null = null
-if (resolveRazorpaySubscriptionCharge) {
+if (resolveRazorpaySubscriptionEvent) {
   if (verifiedProvider !== "razorpay" || kind !== "subscription") {
     throw new Error("Automatic receipt event resolution is limited to Razorpay subscriptions")
   }
@@ -61,12 +71,16 @@ if (resolveRazorpaySubscriptionCharge) {
     where: {
       provider: verifiedProvider,
       workspaceId,
-      eventType: { in: ["subscription.charged", "subscription.activated"] },
+      eventType: resolveRazorpaySubscriptionCancellation
+        ? "subscription.cancelled"
+        : { in: ["subscription.charged", "subscription.activated"] },
       processed: true,
     },
     select: { externalId: true, eventType: true, payload: true },
   })
-  const selected = selectRazorpaySubscriptionReceiptEvent(candidates, objectId)
+  const selected = resolveRazorpaySubscriptionCancellation
+    ? selectRazorpaySubscriptionCancellationEvent(candidates, objectId)
+    : selectRazorpaySubscriptionReceiptEvent(candidates, objectId)
   eventId = selected.externalId
   resolvedEventType = selected.eventType
 }
