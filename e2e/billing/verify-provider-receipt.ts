@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { getSystemPrisma } from "../../packages/db/src/index"
-import { selectRazorpaySubscriptionChargeEvent } from "../../packages/billing/src/receipt-event-selection"
+import { selectRazorpaySubscriptionReceiptEvent } from "../../packages/billing/src/receipt-event-selection"
 
 const provider = process.env.BILLING_RECEIPT_PROVIDER
 let eventId = process.env.BILLING_RECEIPT_EVENT_ID
@@ -52,6 +52,7 @@ if (
 
 const prisma = getSystemPrisma()
 const verifiedProvider = provider as "polar" | "razorpay"
+let resolvedEventType: string | null = null
 if (resolveRazorpaySubscriptionCharge) {
   if (verifiedProvider !== "razorpay" || kind !== "subscription") {
     throw new Error("Automatic receipt event resolution is limited to Razorpay subscriptions")
@@ -60,12 +61,14 @@ if (resolveRazorpaySubscriptionCharge) {
     where: {
       provider: verifiedProvider,
       workspaceId,
-      eventType: "subscription.charged",
+      eventType: { in: ["subscription.charged", "subscription.activated"] },
       processed: true,
     },
-    select: { externalId: true, payload: true },
+    select: { externalId: true, eventType: true, payload: true },
   })
-  eventId = selectRazorpaySubscriptionChargeEvent(candidates, objectId)
+  const selected = selectRazorpaySubscriptionReceiptEvent(candidates, objectId)
+  eventId = selected.externalId
+  resolvedEventType = selected.eventType
 }
 const event = await prisma.webhookEvent.findUnique({
   where: { provider_externalId: { provider: verifiedProvider, externalId: eventId } },
@@ -207,6 +210,7 @@ const receipt = {
   provider: verifiedProvider,
   testEnvironment: verifiedProvider === "polar" ? "sandbox" : "test_mode",
   lifecyclePhase: phase,
+  eventType: resolvedEventType ?? event.eventType,
   kind,
   identitySource: event.identitySource ?? "unknown",
   identities: {
