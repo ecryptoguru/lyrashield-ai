@@ -188,6 +188,22 @@ must_contain '"$warm_job" "$e2e_image" /bin/true 300'
 must_contain '/app/e2e/billing/run-staging-proof.sh 1800'
 must_contain 'if: inputs.verify_provider_receipt'
 must_contain 'Successful billing proof logs did not contain a provider-delivered receipt marker.'
+must_contain 'Provider-receipt-artifact-v1 '
+must_contain 'BILLING_RECEIPT_SOURCE_SHA=${IMAGE_SHA}'
+must_contain 'BILLING_RECEIPT_WEB_DIGEST=${WEB_DIGEST}'
+must_contain 'BILLING_RECEIPT_MIGRATION_DIGEST=${MIGRATION_DIGEST}'
+must_contain 'BILLING_RECEIPT_E2E_DIGEST=${E2E_DIGEST}'
+must_contain 'BILLING_RECEIPT_REVISION=${STAGING_REVISION}'
+must_contain 'BILLING_RECEIPT_REMAINING_MINUTES=${{ inputs.receipt_remaining_minutes }}'
+must_contain 'BILLING_RECEIPT_COMMISSION_COUNT=${{ inputs.receipt_commission_count }}'
+must_contain 'BILLING_RECEIPT_COMMISSION_STATUS=${{ inputs.receipt_commission_status }}'
+must_contain 'BILLING_RECEIPT_AUDIT_ACTION=${{ inputs.receipt_audit_action }}'
+must_contain 'BILLING_RECEIPT_AUDIT_RESOURCE_ID=${{ inputs.receipt_audit_resource_id }}'
+must_contain 'BILLING_RECEIPT_AUDIT_COUNT=${{ inputs.receipt_audit_count }}'
+must_contain 'Provider receipt artifact checksum mismatch'
+must_contain 'workflowCleanupResult = "passed"'
+must_contain 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+must_contain 'retention-days: 90'
 must_contain '### Billing staging proof passed'
 must_contain 'E2E digest:'
 must_contain 'Region/provider:'
@@ -242,6 +258,7 @@ test -x "$e2e_config_smoke"
 test -x "$receipt_verifier"
 grep -Fq '/app/e2e/billing/verify-staging-config.sh' "$e2e_runner"
 grep -Fq '/app/e2e/billing/verify-provider-receipt.sh' "$e2e_runner"
+grep -Fq 'pnpm --filter @lyrashield/db exec tsx' "$receipt_verifier"
 grep -Fq 'await import("../../packages/config/src/index.ts")' "$e2e_config_smoke"
 grep -Fq 'pnpm --filter @lyrashield/db exec prisma migrate deploy 2>&1' "$migration_script"
 grep -Fq 'BILLING_STAGING_RECOVER_MIGRATION' "$recovery_script"

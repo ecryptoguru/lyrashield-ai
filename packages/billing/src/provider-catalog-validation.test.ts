@@ -37,6 +37,7 @@ describe("provider catalog entitlement validation", () => {
       pack_500: "polar-pack-500",
       pro_monthly: "polar-pro-monthly",
     })
+    envState.POLAR_LOCAL_PRODUCT_IDS = JSON.stringify({ individual_launch: "polar-local-launch" })
     envState.RAZORPAY_PLAN_IDS = JSON.stringify({ team_annual: "plan-team-annual" })
   })
 
@@ -50,6 +51,18 @@ describe("provider catalog entitlement validation", () => {
         metadata: { packId: "pack_500" },
       })
     ).toEqual({ kind: "pack", packId: "pack_500" })
+  })
+
+  it("accepts Cloud-only Polar installations with no Local product map", () => {
+    envState.POLAR_LOCAL_PRODUCT_IDS = ""
+    expect(
+      resolvePolarCatalogEvent("order.paid", {
+        product_id: "polar-pack-100",
+        currency: "USD",
+        subtotal_amount: 1500,
+        metadata: { packId: "pack_100" },
+      })
+    ).toEqual({ kind: "pack", packId: "pack_100" })
   })
 
   it("rejects Polar metadata escalation and underpayment", () => {

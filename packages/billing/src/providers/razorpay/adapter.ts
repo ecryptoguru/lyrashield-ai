@@ -5,15 +5,20 @@
  * - payment.captured → creditTopUp (minute pack purchase)
  * - subscription.activated → syncSubscription (active)
  * - subscription.charged → syncSubscription (active) + grantMonthlyPool
+ * - subscription.authenticated → durable receipt only; no entitlement
+ * - subscription.halted → syncSubscription (past_due)
  * - subscription.cancelled → syncSubscription (canceled)
  * - subscription.paused → syncSubscription (paused)
  * - subscription.pending → syncSubscription (past_due)
+ * - subscription.resumed → syncSubscription (active)
+ * - subscription.completed → downgradeToFree (ended; no paid access)
+ * - subscription.updated → validate receipt/binding only; no inferred state
  * - refund.created → reverseRefund only for a proven full minute-pack refund
  */
 
 import { logger } from "@lyrashield/logger"
 import type { RazorpayWebhookEvent } from "./webhooks"
-import { syncSubscription, type SubscriptionStatus } from "../../sync"
+import { downgradeToFree, syncSubscription, type SubscriptionStatus } from "../../sync"
 import { creditTopUp } from "../../usage/packs"
 import { reverseRefund } from "../../usage/refund"
 import { MINUTE_PACK_MAP } from "@lyrashield/pricing"
@@ -78,11 +83,16 @@ export async function processRazorpayEvent(
         return { handled: true, action: "payment.captured.credited", workspaceId }
       }
 
+      case "subscription.authenticated":
       case "subscription.activated":
       case "subscription.charged":
-      case "subscription.cancelled":
+      case "subscription.pending":
+      case "subscription.halted":
       case "subscription.paused":
-      case "subscription.pending": {
+      case "subscription.resumed":
+      case "subscription.cancelled":
+      case "subscription.completed":
+      case "subscription.updated": {
         const subscription = event.payload.subscription?.entity
         if (!subscription) {
           return { handled: false, action: "subscription.no_data", workspaceId: null }
@@ -103,6 +113,21 @@ export async function processRazorpayEvent(
           event as unknown as Record<string, unknown>
         )
         if (catalog?.kind !== "plan") throw new Error("razorpay_subscription_catalog_mismatch")
+
+        // These deliveries are evidence-bearing but must not create or alter
+        // entitlement: authentication has not charged the customer and
+        // `updated` has no unambiguous lifecycle meaning.
+        if (
+          event.event === "subscription.authenticated" ||
+          event.event === "subscription.updated"
+        ) {
+          return { handled: true, action: `${event.event}.recorded`, workspaceId }
+        }
+
+        if (event.event === "subscription.completed") {
+          await downgradeToFree(workspaceId, "subscription.completed")
+          return { handled: true, action: "subscription.ended", workspaceId }
+        }
         const status = mapRazorpaySubscriptionStatus(event.event, subscription.status)
 
         const periodStart = subscription.current_start
@@ -178,17 +203,19 @@ function mapRazorpaySubscriptionStatus(eventType: string, rawStatus: string): Su
   switch (eventType) {
     case "subscription.activated":
     case "subscription.charged":
+    case "subscription.resumed":
       return "active"
     case "subscription.cancelled":
       return "canceled"
     case "subscription.paused":
       return "paused"
     case "subscription.pending":
+    case "subscription.halted":
       return "past_due"
     default:
-      if (rawStatus === "active" || rawStatus === "created" || rawStatus === "authenticated") {
-        return "active"
-      }
+      // No unknown lifecycle event may grant entitlement. Callers handle
+      // receipt-only event types before reaching this guard.
+      void rawStatus
       return "past_due"
   }
 }

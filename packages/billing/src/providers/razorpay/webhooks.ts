@@ -10,9 +10,14 @@
  * - payment.captured → creditTopUp (for one-time pack purchases)
  * - subscription.activated → syncSubscription
  * - subscription.charged → syncSubscription + grantMonthlyPool
+ * - subscription.authenticated → receipt only (no entitlement)
+ * - subscription.halted → syncSubscription (past_due)
  * - subscription.cancelled → syncSubscription (canceled)
  * - subscription.paused → syncSubscription (paused)
  * - subscription.pending → syncSubscription (past_due)
+ * - subscription.resumed → syncSubscription (active)
+ * - subscription.completed → end paid access
+ * - subscription.updated → receipt only (no inferred state)
  * - refund.created → reverseRefund only with cumulative full-refund evidence
  */
 
@@ -91,8 +96,10 @@ const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000
  * @returns The parsed event, or throws if validation fails.
  */
 export function validateRazorpayWebhook(body: string, signature: string): RazorpayWebhookEvent {
-  const secret = env.RAZORPAY_WEBHOOK_SECRET
-  if (!secret) {
+  const secrets = [env.RAZORPAY_WEBHOOK_SECRET, env.RAZORPAY_WEBHOOK_PREVIOUS_SECRET].filter(
+    (secret): secret is string => Boolean(secret)
+  )
+  if (secrets.length === 0) {
     throw new WebhookAuthError("not_configured", "RAZORPAY_WEBHOOK_SECRET is not configured")
   }
 
@@ -101,9 +108,13 @@ export function validateRazorpayWebhook(body: string, signature: string): Razorp
   }
 
   // HMAC-SHA256 of the raw body
-  const expectedSig = createHmac("sha256", secret).update(body).digest("hex")
-
-  if (!timingSafeEqual(signature, expectedSig)) {
+  // Razorpay retries an event after a webhook-secret rotation with the old
+  // signing secret. Keep exactly one previous secret during that retry window.
+  const isValid = secrets.some((secret) => {
+    const expectedSig = createHmac("sha256", secret).update(body).digest("hex")
+    return timingSafeEqual(signature, expectedSig)
+  })
+  if (!isValid) {
     throw new WebhookAuthError("invalid_signature", "Invalid Razorpay webhook signature")
   }
 
@@ -185,11 +196,16 @@ export function isHandledRazorpayEvent(event: string): boolean {
   const handled = [
     "payment.captured",
     "payment_link.paid",
+    "subscription.authenticated",
     "subscription.activated",
     "subscription.charged",
-    "subscription.cancelled",
-    "subscription.paused",
     "subscription.pending",
+    "subscription.halted",
+    "subscription.paused",
+    "subscription.resumed",
+    "subscription.cancelled",
+    "subscription.completed",
+    "subscription.updated",
     "refund.created",
   ]
   return handled.includes(event)
