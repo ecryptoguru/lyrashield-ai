@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto"
 import { getSystemPrisma } from "../../packages/db/src/index"
+import { selectRazorpaySubscriptionChargeEvent } from "../../packages/billing/src/receipt-event-selection"
 
 const provider = process.env.BILLING_RECEIPT_PROVIDER
-const eventId = process.env.BILLING_RECEIPT_EVENT_ID
+let eventId = process.env.BILLING_RECEIPT_EVENT_ID
 const workspaceId = process.env.BILLING_RECEIPT_WORKSPACE_ID
 const kind = process.env.BILLING_RECEIPT_KIND
 const objectId = process.env.BILLING_RECEIPT_OBJECT_ID
 const phase = process.env.BILLING_RECEIPT_PHASE ?? "purchase"
+const resolveRazorpaySubscriptionCharge =
+  process.env.BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CHARGE === "true"
 
 const parseExpectedCount = (name: string, fallback?: number) => {
   const raw = process.env[name]
@@ -29,11 +32,11 @@ const immutable = {
 
 if (
   !["polar", "razorpay"].includes(provider ?? "") ||
-  !eventId ||
+  (!resolveRazorpaySubscriptionCharge && !eventId) ||
   !workspaceId ||
   !["subscription", "pack"].includes(kind ?? "") ||
   !objectId ||
-  !/^[A-Za-z0-9_:-]{1,191}$/.test(eventId) ||
+  (!resolveRazorpaySubscriptionCharge && !/^[A-Za-z0-9_:-]{1,191}$/.test(eventId ?? "")) ||
   !/^[A-Za-z0-9_:-]{1,191}$/.test(objectId) ||
   !/^[a-z][a-z0-9_-]{1,63}$/.test(phase) ||
   !/^[0-9a-f]{40}$/.test(immutable.sourceSha) ||
@@ -49,6 +52,21 @@ if (
 
 const prisma = getSystemPrisma()
 const verifiedProvider = provider as "polar" | "razorpay"
+if (resolveRazorpaySubscriptionCharge) {
+  if (verifiedProvider !== "razorpay" || kind !== "subscription") {
+    throw new Error("Automatic receipt event resolution is limited to Razorpay subscriptions")
+  }
+  const candidates = await prisma.webhookEvent.findMany({
+    where: {
+      provider: verifiedProvider,
+      workspaceId,
+      eventType: "subscription.charged",
+      processed: true,
+    },
+    select: { externalId: true, payload: true },
+  })
+  eventId = selectRazorpaySubscriptionChargeEvent(candidates, objectId)
+}
 const event = await prisma.webhookEvent.findUnique({
   where: { provider_externalId: { provider: verifiedProvider, externalId: eventId } },
 })

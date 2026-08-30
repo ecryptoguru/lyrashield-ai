@@ -12,6 +12,7 @@ e2e_role_script="$repo/packages/db/scripts/manage-billing-staging-e2e-role.mjs"
 job_creator="$repo/.github/scripts/create-billing-staging-job.sh"
 job_starter="$repo/.github/scripts/start-billing-staging-job.sh"
 e2e_runner="$repo/e2e/billing/run-staging-proof.sh"
+razorpay_checkout_preparer="$repo/e2e/billing/prepare-razorpay-checkout.sh"
 e2e_config_smoke="$repo/e2e/billing/verify-staging-config.sh"
 receipt_verifier="$repo/e2e/billing/verify-provider-receipt.sh"
 e2e_razorpay="$repo/e2e/billing/razorpay-upi-cap-fallback.spec.ts"
@@ -39,6 +40,7 @@ must_not_contain() {
 must_contain "environment:"
 must_contain "name: billing-staging"
 must_contain "recover_stale_migration:"
+must_contain "prepare_razorpay_checkout:"
 must_contain "20260814020000_ai_system_profile_versions"
 must_contain "RECOVER_STALE_MIGRATION: \${{ inputs.recover_stale_migration || 'none' }}"
 must_contain "if: github.ref == 'refs/heads/main'"
@@ -114,6 +116,8 @@ must_contain "/app/packages/db/scripts/recover-billing-staging-migration.mjs"
 must_contain "/app/packages/db/scripts/provision-billing-staging-roles.mjs"
 must_contain "/app/packages/db/scripts/manage-billing-staging-e2e-role.mjs"
 must_contain "/app/e2e/billing/run-staging-proof.sh"
+must_contain "/app/e2e/billing/prepare-razorpay-checkout.sh"
+must_contain "Razorpay-checkout-v1"
 must_contain "/app/e2e/billing/verify-staging-config.sh"
 must_contain 'BILLING_E2E_DATABASE_URL=secretref:e2e-database-url'
 must_contain 'url.searchParams.set("sslmode", "verify-full")'
@@ -178,6 +182,13 @@ must_not_contain "az containerapp job create"
 must_not_contain "az containerapp job secret set"
 must_not_contain "ROLE_SCRIPT="
 must_not_contain "DATABASE_SYSTEM_URL=secretref:database-admin-url"
+
+[ -x "$razorpay_checkout_preparer" ] || {
+  echo "FAIL: Razorpay checkout preparer must be executable" >&2
+  exit 1
+}
+grep -Fq 'pnpm --filter @lyrashield/db exec tsx' "$razorpay_checkout_preparer"
+grep -Fq 'PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH' "$repo/e2e/billing/prepare-razorpay-checkout.ts"
 must_not_contain "POLAR_BILLING_ADMISSION=public"
 must_not_contain "RAZORPAY_BILLING_ADMISSION=public"
 must_not_contain '!cancelled()'
@@ -185,7 +196,9 @@ must_not_contain '{{ index .Config.Labels \"org.opencontainers.image.revision\" 
 must_contain 'LAST_JOB_EXECUTION="$execution"'
 must_contain 'JOB_REPLICA_RETRY_LIMIT=1'
 must_contain '"$warm_job" "$e2e_image" /bin/true 300'
-must_contain '/app/e2e/billing/run-staging-proof.sh 1800'
+must_contain 'proof_command=/app/e2e/billing/run-staging-proof.sh'
+must_contain '"$proof_job" "$e2e_image" "$proof_command" 1800'
+must_contain 'Provider receipt verification and Razorpay checkout preparation cannot run together.'
 must_contain 'if: inputs.verify_provider_receipt'
 must_contain 'Successful billing proof logs did not contain a provider-delivered receipt marker.'
 must_contain 'Provider-receipt-artifact-v1 '
@@ -207,6 +220,7 @@ must_contain 'retention-days: 90'
 must_contain '### Billing staging proof passed'
 must_contain 'E2E digest:'
 must_contain 'Region/provider:'
+must_contain 'Checkout preparation: no provider-delivered receipt verified yet.'
 must_contain 'Receipt verifier: provider-delivered webhook and app effect confirmed'
 
 wait_helper_lines=$(grep -n '^          wait_for_job() {$' "$workflow" | cut -d: -f1)
@@ -259,6 +273,8 @@ test -x "$receipt_verifier"
 grep -Fq '/app/e2e/billing/verify-staging-config.sh' "$e2e_runner"
 grep -Fq '/app/e2e/billing/verify-provider-receipt.sh' "$e2e_runner"
 grep -Fq 'pnpm --filter @lyrashield/db exec tsx' "$receipt_verifier"
+grep -Fq 'BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CHARGE:-false' "$receipt_verifier"
+grep -Fq 'BILLING_RECEIPT_EVENT_ID:?BILLING_RECEIPT_EVENT_ID is required' "$receipt_verifier"
 grep -Fq 'await import("../../packages/config/src/index.ts")' "$e2e_config_smoke"
 grep -Fq 'pnpm --filter @lyrashield/db exec prisma migrate deploy 2>&1' "$migration_script"
 grep -Fq 'BILLING_STAGING_RECOVER_MIGRATION' "$recovery_script"
