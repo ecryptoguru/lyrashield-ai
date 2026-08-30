@@ -1298,7 +1298,11 @@ jobs:
             echo "- Source SHA: \`${IMAGE_SHA}\`"
             echo "- E2E digest: \`${E2E_DIGEST}\`"
             echo "- Region/provider: \`${BILLING_STAGING_REGION}\` / ${provider_mode}"
-            echo "- Receipt verifier: provider-delivered webhook and app effect confirmed"
+            if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
+              echo "- Checkout preparation: no provider-delivered receipt verified yet."
+            else
+              echo "- Receipt verifier: provider-delivered webhook and app effect confirmed"
+            fi
             echo "- Production admission modes remained \`off\`."
           } >> "$GITHUB_STEP_SUMMARY"
 

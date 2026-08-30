@@ -217,6 +217,7 @@ must_contain 'retention-days: 90'
 must_contain '### Billing staging proof passed'
 must_contain 'E2E digest:'
 must_contain 'Region/provider:'
+must_contain 'Checkout preparation: no provider-delivered receipt verified yet.'
 must_contain 'Receipt verifier: provider-delivered webhook and app effect confirmed'
 
 wait_helper_lines=$(grep -n '^          wait_for_job() {$' "$workflow" | cut -d: -f1)
