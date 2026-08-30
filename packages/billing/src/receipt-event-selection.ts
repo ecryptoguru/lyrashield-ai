@@ -11,6 +11,12 @@ function subscriptionIdFromPayload(payload: unknown): string | null {
   return typeof subscription?.id === "string" ? subscription.id : null
 }
 
+function polarSubscriptionIdFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null
+  const id = (payload as { data?: { id?: unknown } }).data?.id
+  return typeof id === "string" ? id : null
+}
+
 /**
  * Prefer the one processed Razorpay charge for a hosted subscription. Test
  * subscriptions can instead deliver only one activation webhook; accept that
@@ -56,4 +62,67 @@ export function selectRazorpaySubscriptionCancellationEvent(
     )
   }
   return { externalId: cancellations[0]!.externalId, eventType: "subscription.cancelled" }
+}
+
+/** Prefer one active Polar subscription receipt, falling back to creation. */
+export function selectPolarSubscriptionReceiptEvent(
+  candidates: WebhookEventCandidate[],
+  subscriptionId: string
+): { externalId: string; eventType: "subscription.active" | "subscription.created" } {
+  const matches = candidates.filter(
+    (candidate) => polarSubscriptionIdFromPayload(candidate.payload) === subscriptionId
+  )
+  const active = matches.filter((candidate) => candidate.eventType === "subscription.active")
+  if (active.length === 1) {
+    return { externalId: active[0]!.externalId, eventType: "subscription.active" }
+  }
+  const created = matches.filter((candidate) => candidate.eventType === "subscription.created")
+  if (active.length === 0 && created.length === 1) {
+    return { externalId: created[0]!.externalId, eventType: "subscription.created" }
+  }
+  throw new Error(
+    `Provider receipt could not resolve one Polar subscription receipt event (active ${active.length}, created ${created.length})`
+  )
+}
+
+/** Resolve one provider-delivered Polar cancellation for the exact subscription. */
+export function selectPolarSubscriptionCancellationEvent(
+  candidates: WebhookEventCandidate[],
+  subscriptionId: string
+): { externalId: string; eventType: "subscription.canceled" | "subscription.revoked" } {
+  const matches = candidates.filter(
+    (candidate) =>
+      ["subscription.canceled", "subscription.revoked"].includes(candidate.eventType) &&
+      polarSubscriptionIdFromPayload(candidate.payload) === subscriptionId
+  )
+  const revoked = matches.filter((candidate) => candidate.eventType === "subscription.revoked")
+  if (revoked.length === 1) {
+    return { externalId: revoked[0]!.externalId, eventType: "subscription.revoked" }
+  }
+  const canceled = matches.filter((candidate) => candidate.eventType === "subscription.canceled")
+  if (revoked.length === 0 && canceled.length === 1) {
+    return { externalId: canceled[0]!.externalId, eventType: "subscription.canceled" }
+  }
+  throw new Error(
+    `Provider receipt could not resolve one Polar subscription cancellation event (revoked ${revoked.length}, canceled ${canceled.length})`
+  )
+}
+
+export function isProviderSubscriptionLifecycleReceipt(params: {
+  provider: "polar" | "razorpay"
+  phase: string
+  eventType: string
+  status: string
+  canceledAt: boolean
+}): boolean {
+  if (params.phase === "purchase") {
+    return params.provider === "razorpay"
+      ? ["subscription.charged", "subscription.activated"].includes(params.eventType)
+      : ["subscription.active", "subscription.created"].includes(params.eventType)
+  }
+  if (params.phase !== "cancellation") return true
+  return params.provider === "razorpay"
+    ? params.eventType === "subscription.cancelled" && params.status === "canceled"
+    : ["subscription.canceled", "subscription.revoked"].includes(params.eventType) &&
+        (params.status === "canceled" || params.canceledAt)
 }

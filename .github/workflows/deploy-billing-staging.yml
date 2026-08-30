@@ -39,6 +39,16 @@ on:
         required: false
         type: boolean
         default: false
+      receipt_resolve_polar_subscription_purchase:
+        description: "Resolve one processed Polar subscription.active or subscription.created event"
+        required: false
+        type: boolean
+        default: false
+      receipt_resolve_polar_subscription_cancellation:
+        description: "Resolve exactly one processed Polar subscription.canceled or subscription.revoked event"
+        required: false
+        type: boolean
+        default: false
       receipt_workspace_id:
         description: "Disposable staging workspace ID"
         required: false
@@ -1216,6 +1226,8 @@ jobs:
             "BILLING_RECEIPT_EVENT_ID=${{ inputs.receipt_event_id }}"
             "BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CHARGE=${{ inputs.receipt_resolve_razorpay_subscription_charge }}"
             "BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CANCELLATION=${{ inputs.receipt_resolve_razorpay_subscription_cancellation }}"
+            "BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_PURCHASE=${{ inputs.receipt_resolve_polar_subscription_purchase }}"
+            "BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_CANCELLATION=${{ inputs.receipt_resolve_polar_subscription_cancellation }}"
             "BILLING_RECEIPT_WORKSPACE_ID=${{ inputs.receipt_workspace_id }}"
             "BILLING_RECEIPT_KIND=${{ inputs.receipt_kind }}"
             "BILLING_RECEIPT_PHASE=${{ inputs.receipt_phase || 'purchase' }}"
