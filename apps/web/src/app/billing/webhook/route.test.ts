@@ -18,6 +18,7 @@ vi.mock("@lyrashield/db", () => ({
     webhookEvent: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
   // license-fulfillment (billing module graph) resolves the system client lazily
@@ -360,6 +361,67 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
         }),
       })
     )
+  })
+
+  it("persists a Polar delivery's normalized workspace binding", async () => {
+    const workspaceId = "workspace_polar_receipt"
+    const event = {
+      type: "subscription.canceled",
+      data: {
+        id: "sub_POLAR_1",
+        metadata: { workspaceId },
+      },
+    }
+    validatePolarMock.mockReturnValue(event)
+
+    const response = await POST(
+      new Request("http://localhost/billing/webhook", {
+        method: "POST",
+        body: JSON.stringify(event),
+        headers: { "webhook-id": "polar_delivery_1", "webhook-signature": "valid-sig" },
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockPrisma.webhookEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          provider: "polar",
+          externalId: "polar_delivery_1",
+          workspaceId,
+        }),
+      })
+    )
+  })
+
+  it("repairs a legacy processed Polar delivery with its workspace binding", async () => {
+    const workspaceId = "workspace_polar_receipt"
+    const event = {
+      type: "subscription.canceled",
+      data: { id: "sub_POLAR_1", metadata: { workspaceId } },
+    }
+    validatePolarMock.mockReturnValue(event)
+    mockPrisma.webhookEvent.create.mockRejectedValue({ code: "P2002" })
+    mockPrisma.webhookEvent.findUnique.mockResolvedValue({
+      id: "evt_legacy_polar",
+      workspaceId: null,
+      processed: true,
+      createdAt: new Date(0),
+    })
+
+    const response = await POST(
+      new Request("http://localhost/billing/webhook", {
+        method: "POST",
+        body: JSON.stringify(event),
+        headers: { "webhook-id": "polar_delivery_legacy", "webhook-signature": "valid-sig" },
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockPrisma.webhookEvent.updateMany).toHaveBeenCalledWith({
+      where: { id: "evt_legacy_polar", workspaceId: null },
+      data: { workspaceId },
+    })
   })
 })
 
