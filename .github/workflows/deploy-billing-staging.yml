@@ -490,6 +490,11 @@ jobs:
           SYSTEM_PASSWORD: ${{ secrets.STAGING_DATABASE_SYSTEM_PASSWORD }}
         run: |
           set -euo pipefail
+          if [ "${{ inputs.verify_provider_receipt }}" = "true" ] && \
+            [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
+            echo "::error::Provider receipt verification and Razorpay checkout preparation cannot run together."
+            exit 1
+          fi
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
           job_suffix=${GITHUB_RUN_ID: -10}
           recovery_job="lyra-mig-recover-${job_suffix}"
