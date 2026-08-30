@@ -22,7 +22,9 @@ export function selectRazorpaySubscriptionChargeEvent(
     (candidate) => subscriptionIdFromPayload(candidate.payload) === subscriptionId
   )
   if (matches.length !== 1) {
-    throw new Error("Provider receipt could not resolve one Razorpay subscription charge event")
+    throw new Error(
+      `Provider receipt could not resolve one Razorpay subscription charge event (found ${matches.length})`
+    )
   }
   return matches[0]!.externalId
 }
