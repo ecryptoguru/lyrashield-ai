@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { selectRazorpaySubscriptionReceiptEvent } from "./receipt-event-selection"
 
-const eventFor = (subscriptionId: string, externalId: string, eventType = "subscription.charged") => ({
+const eventFor = (
+  subscriptionId: string,
+  externalId: string,
+  eventType = "subscription.charged"
+) => ({
   externalId,
   eventType,
   payload: { payload: { subscription: { entity: { id: subscriptionId } } } },
@@ -35,6 +39,8 @@ describe("selectRazorpaySubscriptionReceiptEvent", () => {
         [eventFor("sub_target", "first"), eventFor("sub_target", "second")],
         "sub_target"
       )
-    ).toThrow("could not resolve one Razorpay subscription receipt event (charges 2, activations 0)")
+    ).toThrow(
+      "could not resolve one Razorpay subscription receipt event (charges 2, activations 0)"
+    )
   })
 })
