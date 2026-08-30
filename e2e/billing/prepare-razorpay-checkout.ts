@@ -11,7 +11,10 @@ if (
   throw new Error("Razorpay Test checkout preparation requires isolated INR staging")
 }
 
-const browser = await chromium.launch({ headless: true })
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+})
 let actors: Awaited<ReturnType<typeof provisionBillingActors>> | undefined
 
 try {
