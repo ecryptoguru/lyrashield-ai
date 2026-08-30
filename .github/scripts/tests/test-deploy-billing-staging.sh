@@ -187,6 +187,7 @@ must_not_contain "DATABASE_SYSTEM_URL=secretref:database-admin-url"
   echo "FAIL: Razorpay checkout preparer must be executable" >&2
   exit 1
 }
+grep -Fq 'pnpm --filter @lyrashield/db exec tsx' "$razorpay_checkout_preparer"
 must_not_contain "POLAR_BILLING_ADMISSION=public"
 must_not_contain "RAZORPAY_BILLING_ADMISSION=public"
 must_not_contain '!cancelled()'

@@ -1,6 +1,6 @@
 import type { APIRequestContext, Browser, BrowserContext } from "@playwright/test"
 import { expect, request as playwrightRequest } from "@playwright/test"
-import { deleteUserAccount, getSystemPrisma } from "@lyrashield/db"
+import { deleteUserAccount, getSystemPrisma } from "../../packages/db/src/index"
 import { assertSafeBillingE2EBaseUrl } from "./base-url-safety"
 
 const DISPOSABLE_CONFIRMATION = "DELETE DISPOSABLE BILLING DATA"
