@@ -196,6 +196,13 @@ export async function POST(request: Request) {
     )
   }
 
+  const normalized = normalizeProviderEvent({
+    provider,
+    eventType,
+    payload,
+    deliveryId: externalId,
+  })
+
   // ── Phase 2: claim via unique constraint (concurrency arbiter) ────────────
   let claimedEventId: string | null = null
   try {
@@ -204,12 +211,13 @@ export async function POST(request: Request) {
       externalId,
       identitySource,
       eventType,
-      payload
+      payload,
+      normalized.workspaceId
     )
     if (!inserted) {
       const existingEvent = await prisma.webhookEvent.findUnique({
         where: { provider_externalId: { provider, externalId } },
-        select: { id: true, processed: true, createdAt: true },
+        select: { id: true, workspaceId: true, processed: true, createdAt: true },
       })
       if (!existingEvent) {
         // Row vanished between the P2002 and this lookup (practically
@@ -220,6 +228,12 @@ export async function POST(request: Request) {
           externalId,
         })
       } else if (existingEvent.processed) {
+        if (!existingEvent.workspaceId && normalized.workspaceId) {
+          await prisma.webhookEvent.updateMany({
+            where: { id: existingEvent.id, workspaceId: null },
+            data: { workspaceId: normalized.workspaceId },
+          })
+        }
         // Exact replay of an already-processed event — acknowledge immediately.
         // Zero extra side effects: every applicable track is already succeeded.
         logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
@@ -255,12 +269,6 @@ export async function POST(request: Request) {
     }
 
     // ── Phase 3: durable required tracks (billing/license/affiliate) ─────────
-    const normalized = normalizeProviderEvent({
-      provider,
-      eventType,
-      payload,
-      deliveryId: externalId,
-    })
     const summary = await runApplicableTracks({
       webhookEventId: claimedEventId,
       event: normalized,
@@ -338,7 +346,8 @@ async function insertWebhookEvent(
   externalId: string,
   identitySource: "delivery" | "derived",
   eventType: string,
-  payload: unknown
+  payload: unknown,
+  workspaceId: string | null
 ): Promise<{ id: string } | null> {
   try {
     const created = await prisma.webhookEvent.create({
@@ -347,6 +356,7 @@ async function insertWebhookEvent(
         externalId,
         eventType,
         payload: payload as Record<string, unknown>,
+        workspaceId,
         processed: false,
         identitySource,
       },
