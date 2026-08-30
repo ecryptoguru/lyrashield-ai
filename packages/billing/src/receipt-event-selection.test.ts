@@ -18,13 +18,13 @@ describe("selectRazorpaySubscriptionChargeEvent", () => {
 
   it("fails closed when the provider delivery is absent or ambiguous", () => {
     expect(() => selectRazorpaySubscriptionChargeEvent([], "sub_target")).toThrow(
-      "could not resolve one Razorpay subscription charge event"
+      "could not resolve one Razorpay subscription charge event (found 0)"
     )
     expect(() =>
       selectRazorpaySubscriptionChargeEvent(
         [eventFor("sub_target", "first"), eventFor("sub_target", "second")],
         "sub_target"
       )
-    ).toThrow("could not resolve one Razorpay subscription charge event")
+    ).toThrow("could not resolve one Razorpay subscription charge event (found 2)")
   })
 })
