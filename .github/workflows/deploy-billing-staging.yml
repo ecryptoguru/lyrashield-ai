@@ -16,6 +16,11 @@ on:
         required: false
         type: boolean
         default: false
+      prepare_razorpay_checkout:
+        description: "Create one disposable Razorpay Test subscription checkout in isolated INR staging"
+        required: false
+        type: boolean
+        default: false
       receipt_provider:
         description: "polar or razorpay"
         required: false
@@ -910,7 +915,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run proof with disposable E2E evidence role
-        if: inputs.verify_provider_receipt
+        if: inputs.verify_provider_receipt || inputs.prepare_razorpay_checkout
         shell: bash
         env:
           DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
@@ -1191,6 +1196,7 @@ jobs:
             'LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging'
             'BILLING_STAGING_ADMISSION=restricted'
             "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}"
+            "PREPARE_RAZORPAY_CHECKOUT=${{ inputs.prepare_razorpay_checkout }}"
             "BILLING_RECEIPT_PROVIDER=${{ inputs.receipt_provider }}"
             "BILLING_RECEIPT_EVENT_ID=${{ inputs.receipt_event_id }}"
             "BILLING_RECEIPT_WORKSPACE_ID=${{ inputs.receipt_workspace_id }}"
@@ -1223,11 +1229,20 @@ jobs:
             "RAZORPAY_PLAN_IDS=${RAZORPAY_PLAN_IDS}"
             "BILLING_USD_INR_RATE=${BILLING_USD_INR_RATE}"
           )
+          proof_command=/app/e2e/billing/run-staging-proof.sh
+          if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
+            [ "$BILLING_STAGING_REGION" = "inr" ] || {
+              echo "::error::Razorpay Test checkout preparation requires INR staging."
+              exit 1
+            }
+            proof_command=/app/e2e/billing/prepare-razorpay-checkout.sh
+          fi
+
           E2E_JOB_DATABASE_URL="$e2e_database_url" \
             JOB_SECRET_SPECS="$proof_secret_specs" \
             JOB_ENV_SPECS=$(printf '%s\n' "${proof_env[@]}") \
             .github/scripts/create-billing-staging-job.sh \
-            "$proof_job" "$e2e_image" /app/e2e/billing/run-staging-proof.sh 1800
+            "$proof_job" "$e2e_image" "$proof_command" 1800
           wait_for_job "$proof_job" \
             e2e-database-url staging-access better-auth-secret internal-api-key \
             polar-access-token polar-webhook razorpay-key-id razorpay-key-secret razorpay-webhook \
@@ -1241,12 +1256,20 @@ jobs:
             --name "$proof_job" --resource-group "$RESOURCE_GROUP" \
             --execution "$LAST_JOB_EXECUTION" --container "$proof_container" \
             --tail 300 --format text | tee "$proof_log"
-          receipt_marker=$(grep -F 'Provider-delivered ' "$proof_log" | tail -1 || true)
-          artifact_marker=$(grep -F 'Provider-receipt-artifact-v1 ' "$proof_log" | tail -1 || true)
-          artifact_path="${RUNNER_TEMP}/billing-provider-receipt.json"
-          printf '%s' "${artifact_marker#*Provider-receipt-artifact-v1 }" | base64 --decode > "$artifact_path"
-          jq -e '.schemaVersion == 1 and .workflowCleanupResult == "pending" and (.artifactChecksum | test("^[0-9a-f]{64}$"))' "$artifact_path" >/dev/null
-          node -e '
+          if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
+            checkout_marker=$(grep -F 'Razorpay-checkout-v1 ' "$proof_log" | tail -1 || true)
+            [ -n "$checkout_marker" ] || {
+              echo "::error::Razorpay Test checkout preparation produced no checkout marker."
+              exit 1
+            }
+            echo "Razorpay Test checkout prepared for controlled browser payment." >> "$GITHUB_STEP_SUMMARY"
+          else
+            receipt_marker=$(grep -F 'Provider-delivered ' "$proof_log" | tail -1 || true)
+            artifact_marker=$(grep -F 'Provider-receipt-artifact-v1 ' "$proof_log" | tail -1 || true)
+            artifact_path="${RUNNER_TEMP}/billing-provider-receipt.json"
+            printf '%s' "${artifact_marker#*Provider-receipt-artifact-v1 }" | base64 --decode > "$artifact_path"
+            jq -e '.schemaVersion == 1 and .workflowCleanupResult == "pending" and (.artifactChecksum | test("^[0-9a-f]{64}$"))' "$artifact_path" >/dev/null
+            node -e '
             const fs = require("node:fs");
             const { createHash } = require("node:crypto");
             const path = process.argv[1];
@@ -1255,14 +1278,17 @@ jobs:
             delete receipt.artifactChecksum;
             const actual = createHash("sha256").update(JSON.stringify(receipt)).digest("hex");
             if (actual !== expected) throw new Error("Provider receipt artifact checksum mismatch");
-          ' "$artifact_path"
-          echo "RECEIPT_ARTIFACT_PATH=${artifact_path}" >> "$GITHUB_ENV"
+            ' "$artifact_path"
+            echo "RECEIPT_ARTIFACT_PATH=${artifact_path}" >> "$GITHUB_ENV"
+            [ -n "$receipt_marker" ] && [ -n "$artifact_marker" ] || {
+              echo "::error::Successful billing proof logs did not contain a provider-delivered receipt marker."
+              exit 1
+            }
+          fi
           rm -f "$proof_log"
-          [ -n "$receipt_marker" ] && [ -n "$artifact_marker" ] || {
-            echo "::error::Successful billing proof logs did not contain a provider-delivered receipt marker."
-            exit 1
-          }
-          if [ "$BILLING_STAGING_REGION" = "usd" ]; then
+          if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
+            provider_mode="Razorpay Test Mode checkout prepared"
+          elif [ "$BILLING_STAGING_REGION" = "usd" ]; then
             provider_mode="Polar Sandbox"
           else
             provider_mode="Razorpay Test Mode"
