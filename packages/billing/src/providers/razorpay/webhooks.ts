@@ -27,7 +27,7 @@ import { WebhookAuthError, WebhookPayloadError } from "../../webhook-errors"
 
 export interface RazorpayWebhookEvent {
   event: string
-  /** Razorpay includes a top-level timestamp (Unix seconds) for replay protection. */
+  /** Razorpay includes the original event creation time in Unix seconds. */
   created_at?: number
   payload: {
     payment?: {
@@ -80,8 +80,8 @@ export interface RazorpayWebhookEvent {
   }
 }
 
-/** Default webhook tolerance in milliseconds (5 minutes). */
-const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000
+const MAX_PROVIDER_REPLAY_AGE_MS = 15 * 24 * 60 * 60 * 1000
+const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000
 
 /**
  * Validate a Razorpay webhook signature.
@@ -125,20 +125,20 @@ export function validateRazorpayWebhook(body: string, signature: string): Razorp
     throw new WebhookPayloadError("Razorpay webhook body is not valid JSON")
   }
 
-  // A-L01: Timestamp tolerance: reject events older than 5 minutes to prevent
-  // replay. Razorpay includes a top-level `created_at` field (Unix seconds).
-  // The check is now MANDATORY — previously, if created_at was absent the
-  // replay check was silently skipped, allowing old payloads to be replayed.
-  if (parsed.created_at === undefined || parsed.created_at === null) {
-    throw new WebhookPayloadError("Razorpay webhook missing created_at — cannot verify timestamp")
+  // `created_at` is the original event time. Razorpay can retry a signed
+  // payload for 24 hours and supports replay requests for 15 days. Accept that
+  // documented window; stable provider event IDs and database uniqueness make
+  // delayed duplicate deliveries idempotent.
+  const createdAt = parsed.created_at
+  if (typeof createdAt !== "number" || !Number.isSafeInteger(createdAt) || createdAt <= 0) {
+    throw new WebhookPayloadError("Razorpay webhook missing valid created_at")
   }
-  const eventTimestampMs = parsed.created_at * 1000
-  const ageMs = Date.now() - eventTimestampMs
-  if (ageMs > DEFAULT_TOLERANCE_MS) {
-    throw new WebhookAuthError(
-      "stale_timestamp",
-      `Razorpay webhook timestamp outside tolerance (${ageMs}ms > ${DEFAULT_TOLERANCE_MS}ms)`
-    )
+  const eventAgeMs = Date.now() - createdAt * 1000
+  if (eventAgeMs < -MAX_PROVIDER_CLOCK_SKEW_MS) {
+    throw new WebhookAuthError("stale_timestamp", "Razorpay webhook timestamp is in the future")
+  }
+  if (eventAgeMs > MAX_PROVIDER_REPLAY_AGE_MS) {
+    throw new WebhookAuthError("stale_timestamp", "Razorpay webhook exceeds replay window")
   }
 
   return parsed

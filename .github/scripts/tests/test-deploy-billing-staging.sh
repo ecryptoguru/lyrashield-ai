@@ -41,6 +41,9 @@ must_contain "environment:"
 must_contain "name: billing-staging"
 must_contain "recover_stale_migration:"
 must_contain "prepare_razorpay_checkout:"
+must_contain "receipt_resolve_razorpay_subscription_cancellation:"
+must_contain "receipt_resolve_polar_subscription_purchase:"
+must_contain "receipt_resolve_polar_subscription_cancellation:"
 must_contain "20260814020000_ai_system_profile_versions"
 must_contain "RECOVER_STALE_MIGRATION: \${{ inputs.recover_stale_migration || 'none' }}"
 must_contain "if: github.ref == 'refs/heads/main'"
@@ -213,6 +216,9 @@ must_contain 'BILLING_RECEIPT_COMMISSION_STATUS=${{ inputs.receipt_commission_st
 must_contain 'BILLING_RECEIPT_AUDIT_ACTION=${{ inputs.receipt_audit_action }}'
 must_contain 'BILLING_RECEIPT_AUDIT_RESOURCE_ID=${{ inputs.receipt_audit_resource_id }}'
 must_contain 'BILLING_RECEIPT_AUDIT_COUNT=${{ inputs.receipt_audit_count }}'
+must_contain 'BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CANCELLATION=${{ inputs.receipt_resolve_razorpay_subscription_cancellation }}'
+must_contain 'BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_PURCHASE=${{ inputs.receipt_resolve_polar_subscription_purchase }}'
+must_contain 'BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_CANCELLATION=${{ inputs.receipt_resolve_polar_subscription_cancellation }}'
 must_contain 'Provider receipt artifact checksum mismatch'
 must_contain 'workflowCleanupResult = "passed"'
 must_contain 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
@@ -274,6 +280,9 @@ grep -Fq '/app/e2e/billing/verify-staging-config.sh' "$e2e_runner"
 grep -Fq '/app/e2e/billing/verify-provider-receipt.sh' "$e2e_runner"
 grep -Fq 'pnpm --filter @lyrashield/db exec tsx' "$receipt_verifier"
 grep -Fq 'BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CHARGE:-false' "$receipt_verifier"
+grep -Fq 'BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CANCELLATION:-false' "$receipt_verifier"
+grep -Fq 'BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_PURCHASE:-false' "$receipt_verifier"
+grep -Fq 'BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_CANCELLATION:-false' "$receipt_verifier"
 grep -Fq 'BILLING_RECEIPT_EVENT_ID:?BILLING_RECEIPT_EVENT_ID is required' "$receipt_verifier"
 grep -Fq 'await import("../../packages/config/src/index.ts")' "$e2e_config_smoke"
 grep -Fq 'pnpm --filter @lyrashield/db exec prisma migrate deploy 2>&1' "$migration_script"

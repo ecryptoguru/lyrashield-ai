@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto"
 import { getSystemPrisma } from "../../packages/db/src/index"
-import { selectRazorpaySubscriptionChargeEvent } from "../../packages/billing/src/receipt-event-selection"
+import {
+  isProviderSubscriptionLifecycleReceipt,
+  selectPolarSubscriptionCancellationEvent,
+  selectPolarSubscriptionReceiptEvent,
+  selectRazorpaySubscriptionCancellationEvent,
+  selectRazorpaySubscriptionReceiptEvent,
+} from "../../packages/billing/src/receipt-event-selection"
 
 const provider = process.env.BILLING_RECEIPT_PROVIDER
 let eventId = process.env.BILLING_RECEIPT_EVENT_ID
@@ -10,6 +16,19 @@ const objectId = process.env.BILLING_RECEIPT_OBJECT_ID
 const phase = process.env.BILLING_RECEIPT_PHASE ?? "purchase"
 const resolveRazorpaySubscriptionCharge =
   process.env.BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CHARGE === "true"
+const resolveRazorpaySubscriptionCancellation =
+  process.env.BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CANCELLATION === "true"
+const resolvePolarSubscriptionPurchase =
+  process.env.BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_PURCHASE === "true"
+const resolvePolarSubscriptionCancellation =
+  process.env.BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_CANCELLATION === "true"
+const resolverCount = [
+  resolveRazorpaySubscriptionCharge,
+  resolveRazorpaySubscriptionCancellation,
+  resolvePolarSubscriptionPurchase,
+  resolvePolarSubscriptionCancellation,
+].filter(Boolean).length
+const hasProviderSubscriptionResolver = resolverCount > 0
 
 const parseExpectedCount = (name: string, fallback?: number) => {
   const raw = process.env[name]
@@ -32,11 +51,11 @@ const immutable = {
 
 if (
   !["polar", "razorpay"].includes(provider ?? "") ||
-  (!resolveRazorpaySubscriptionCharge && !eventId) ||
+  (!hasProviderSubscriptionResolver && !eventId) ||
   !workspaceId ||
   !["subscription", "pack"].includes(kind ?? "") ||
   !objectId ||
-  (!resolveRazorpaySubscriptionCharge && !/^[A-Za-z0-9_:-]{1,191}$/.test(eventId ?? "")) ||
+  (!hasProviderSubscriptionResolver && !/^[A-Za-z0-9_:-]{1,191}$/.test(eventId ?? "")) ||
   !/^[A-Za-z0-9_:-]{1,191}$/.test(objectId) ||
   !/^[a-z][a-z0-9_-]{1,63}$/.test(phase) ||
   !/^[0-9a-f]{40}$/.test(immutable.sourceSha) ||
@@ -49,23 +68,47 @@ if (
     "Provider receipt verifier requires valid provider, event, workspace, kind, and object IDs"
   )
 }
+if (resolverCount > 1) {
+  throw new Error("Select only one provider subscription receipt resolver")
+}
 
 const prisma = getSystemPrisma()
 const verifiedProvider = provider as "polar" | "razorpay"
-if (resolveRazorpaySubscriptionCharge) {
-  if (verifiedProvider !== "razorpay" || kind !== "subscription") {
-    throw new Error("Automatic receipt event resolution is limited to Razorpay subscriptions")
+let resolvedEventType: string | null = null
+if (hasProviderSubscriptionResolver) {
+  const resolvingRazorpay =
+    resolveRazorpaySubscriptionCharge || resolveRazorpaySubscriptionCancellation
+  if (
+    kind !== "subscription" ||
+    (resolvingRazorpay && verifiedProvider !== "razorpay") ||
+    (!resolvingRazorpay && verifiedProvider !== "polar")
+  ) {
+    throw new Error("Automatic receipt event resolver does not match the provider subscription")
   }
   const candidates = await prisma.webhookEvent.findMany({
     where: {
       provider: verifiedProvider,
       workspaceId,
-      eventType: "subscription.charged",
+      eventType: resolveRazorpaySubscriptionCancellation
+        ? "subscription.cancelled"
+        : resolveRazorpaySubscriptionCharge
+          ? { in: ["subscription.charged", "subscription.activated"] }
+          : resolvePolarSubscriptionCancellation
+            ? { in: ["subscription.canceled", "subscription.revoked"] }
+            : { in: ["subscription.active", "subscription.created"] },
       processed: true,
     },
-    select: { externalId: true, payload: true },
+    select: { externalId: true, eventType: true, payload: true },
   })
-  eventId = selectRazorpaySubscriptionChargeEvent(candidates, objectId)
+  const selected = resolveRazorpaySubscriptionCancellation
+    ? selectRazorpaySubscriptionCancellationEvent(candidates, objectId)
+    : resolveRazorpaySubscriptionCharge
+      ? selectRazorpaySubscriptionReceiptEvent(candidates, objectId)
+      : resolvePolarSubscriptionCancellation
+        ? selectPolarSubscriptionCancellationEvent(candidates, objectId)
+        : selectPolarSubscriptionReceiptEvent(candidates, objectId)
+  eventId = selected.externalId
+  resolvedEventType = selected.eventType
 }
 const event = await prisma.webhookEvent.findUnique({
   where: { provider_externalId: { provider: verifiedProvider, externalId: eventId } },
@@ -84,8 +127,8 @@ if (tracks.some((track) => track.status !== "succeeded")) {
   throw new Error("Provider receipt has an unresolved replay or retry")
 }
 
-let expectedState: Record<string, string | number>
-let observedState: Record<string, string | number>
+let expectedState: Record<string, string | number | boolean>
+let observedState: Record<string, string | number | boolean>
 const expectedCommissionCount = parseExpectedCount("BILLING_RECEIPT_COMMISSION_COUNT", 0)
 const expectedCommissionStatus = process.env.BILLING_RECEIPT_COMMISSION_STATUS
 let commissionStatuses: string[]
@@ -111,6 +154,23 @@ if (kind === "subscription") {
     plan: account.currentPlan,
     interval: account.interval ?? "",
     status: account.status,
+  }
+  const receiptEventType = resolvedEventType ?? event.eventType
+  if (
+    !isProviderSubscriptionLifecycleReceipt({
+      provider: verifiedProvider,
+      phase,
+      eventType: receiptEventType,
+      status: account.status,
+      canceledAt: account.canceledAt !== null,
+    })
+  ) {
+    throw new Error(`Provider receipt ${phase} lifecycle is incomplete`)
+  }
+  if (phase === "cancellation") {
+    expectedState.cancellationRecorded = true
+    observedState.cancellationRecorded =
+      account.status === "canceled" || account.canceledAt !== null
   }
   commissionStatuses = (
     await prisma.commission.findMany({
@@ -207,6 +267,7 @@ const receipt = {
   provider: verifiedProvider,
   testEnvironment: verifiedProvider === "polar" ? "sandbox" : "test_mode",
   lifecyclePhase: phase,
+  eventType: resolvedEventType ?? event.eventType,
   kind,
   identitySource: event.identitySource ?? "unknown",
   identities: {
