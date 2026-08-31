@@ -13,6 +13,7 @@ job_creator="$repo/.github/scripts/create-billing-staging-job.sh"
 job_starter="$repo/.github/scripts/start-billing-staging-job.sh"
 e2e_runner="$repo/e2e/billing/run-staging-proof.sh"
 razorpay_checkout_preparer="$repo/e2e/billing/prepare-razorpay-checkout.sh"
+polar_checkout_preparer="$repo/e2e/billing/prepare-polar-checkout.sh"
 e2e_config_smoke="$repo/e2e/billing/verify-staging-config.sh"
 receipt_verifier="$repo/e2e/billing/verify-provider-receipt.sh"
 e2e_razorpay="$repo/e2e/billing/razorpay-upi-cap-fallback.spec.ts"
@@ -41,6 +42,7 @@ must_contain "environment:"
 must_contain "name: billing-staging"
 must_contain "recover_stale_migration:"
 must_contain "prepare_razorpay_checkout:"
+must_contain "prepare_polar_checkout:"
 must_contain "receipt_resolve_razorpay_subscription_cancellation:"
 must_contain "receipt_resolve_polar_subscription_purchase:"
 must_contain "receipt_resolve_polar_subscription_cancellation:"
@@ -201,7 +203,8 @@ must_contain 'JOB_REPLICA_RETRY_LIMIT=1'
 must_contain '"$warm_job" "$e2e_image" /bin/true 300'
 must_contain 'proof_command=/app/e2e/billing/run-staging-proof.sh'
 must_contain '"$proof_job" "$e2e_image" "$proof_command" 1800'
-must_contain 'Provider receipt verification and Razorpay checkout preparation cannot run together.'
+must_contain 'Provider receipt verification and checkout preparation cannot run together.'
+must_contain 'Prepare only one provider checkout per staging run.'
 must_contain 'if: inputs.verify_provider_receipt'
 must_contain 'Successful billing proof logs did not contain a provider-delivered receipt marker.'
 must_contain 'Provider-receipt-artifact-v1 '
@@ -446,6 +449,9 @@ grep -Fq 'DROP ROLE' "$e2e_role_script"
 grep -Fq 'BILLING_E2E_DATABASE_URL' "$playwright_config"
 grep -Fq 'process.env.DATABASE_SYSTEM_URL = evidenceDatabaseUrl' "$playwright_config"
 grep -Fq 'BILLING_STAGING_REGION === "inr"' "$e2e_razorpay"
+[ -x "$polar_checkout_preparer" ]
+grep -Fq 'POLAR_ENVIRONMENT' "$polar_checkout_preparer"
+grep -Fq 'Polar-checkout-v1' "$repo/e2e/billing/prepare-polar-checkout.ts"
 if grep -Fq 'cf-ipcountry' "$e2e_razorpay"; then
   echo "FAIL: remote Razorpay proof must not spoof a client country header" >&2
   exit 1

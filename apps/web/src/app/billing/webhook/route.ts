@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
+import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   validatePolarWebhook,
@@ -215,10 +215,15 @@ export async function POST(request: Request) {
       normalized.workspaceId
     )
     if (!inserted) {
-      const existingEvent = await prisma.webhookEvent.findUnique({
-        where: { provider_externalId: { provider, externalId } },
-        select: { id: true, workspaceId: true, processed: true, createdAt: true },
-      })
+      // The signed provider payload carries server-created checkout metadata.
+      // Bind its normalized workspace for the duplicate lookup so the
+      // restricted runtime role can see the original event under RLS.
+      const existingEvent = await runWithWorkspaceContext(normalized.workspaceId, () =>
+        prisma.webhookEvent.findUnique({
+          where: { provider_externalId: { provider, externalId } },
+          select: { id: true, workspaceId: true, processed: true, createdAt: true },
+        })
+      )
       if (!existingEvent) {
         // Row vanished between the P2002 and this lookup (practically
         // unreachable) — treat as a fresh claim and process below.
@@ -227,23 +232,32 @@ export async function POST(request: Request) {
           eventType,
           externalId,
         })
-      } else if (existingEvent.processed) {
-        if (!existingEvent.workspaceId && normalized.workspaceId) {
-          await prisma.webhookEvent.updateMany({
-            where: { id: existingEvent.id, workspaceId: null },
-            data: { workspaceId: normalized.workspaceId },
-          })
-        }
-        // Exact replay of an already-processed event — acknowledge immediately.
-        // Zero extra side effects: every applicable track is already succeeded.
-        logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
-        return NextResponse.json({ success: true }, { status: 200 })
-      } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
-        logger.info("Concurrent duplicate delivery skipped", { provider, eventType, externalId })
-        return NextResponse.json({ success: true }, { status: 200 })
       } else {
-        logger.info("Reprocessing stranded webhook event", { provider, eventType, externalId })
-        claimedEventId = existingEvent.id
+        // Legacy rows may predate workspace-bound ingestion. Repair the
+        // durable receipt before either acknowledging a completed replay or
+        // reprocessing a stranded event; otherwise tracks can succeed while
+        // the exact workspace-scoped receipt remains invisible.
+        if (!existingEvent.workspaceId && normalized.workspaceId) {
+          await runWithWorkspaceContext(normalized.workspaceId, () =>
+            prisma.webhookEvent.updateMany({
+              where: { id: existingEvent.id, workspaceId: null },
+              data: { workspaceId: normalized.workspaceId },
+            })
+          )
+        }
+
+        if (existingEvent.processed) {
+          // Exact replay of an already-processed event — acknowledge immediately.
+          // Zero extra side effects: every applicable track is already succeeded.
+          logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
+          return NextResponse.json({ success: true }, { status: 200 })
+        } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
+          logger.info("Concurrent duplicate delivery skipped", { provider, eventType, externalId })
+          return NextResponse.json({ success: true }, { status: 200 })
+        } else {
+          logger.info("Reprocessing stranded webhook event", { provider, eventType, externalId })
+          claimedEventId = existingEvent.id
+        }
       }
     } else {
       claimedEventId = inserted.id
@@ -267,14 +281,20 @@ export async function POST(request: Request) {
         { status: 500 }
       )
     }
+    const webhookEventId = claimedEventId
 
     // ── Phase 3: durable required tracks (billing/license/affiliate) ─────────
-    const summary = await runApplicableTracks({
-      webhookEventId: claimedEventId,
-      event: normalized,
-      rawPayload: payload,
-      handlers: { dispatchAffiliate },
-    })
+    // Track rows have no direct workspace key, while their parent does. Keep
+    // the parent update inside the signed event's workspace RLS context so a
+    // replay can derive `processed` after all required tracks succeed.
+    const summary = await runWithWorkspaceContext(normalized.workspaceId, () =>
+      runApplicableTracks({
+        webhookEventId,
+        event: normalized,
+        rawPayload: payload,
+        handlers: { dispatchAffiliate },
+      })
+    )
 
     if (!summary.allSucceeded) {
       // Durably queue one bounded retry per failed track (dead-lettered tracks
@@ -284,7 +304,7 @@ export async function POST(request: Request) {
       for (const failure of summary.failures) {
         try {
           await enqueueWebhookTrackRetry({
-            webhookEventId: claimedEventId,
+            webhookEventId,
             track: failure.track,
           })
         } catch (enqueueError) {

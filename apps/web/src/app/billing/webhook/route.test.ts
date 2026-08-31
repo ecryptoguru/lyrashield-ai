@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const runWithWorkspaceContextMock = vi.hoisted(() =>
+  vi.fn((_workspaceId: string | null, fn: () => unknown) => fn())
+)
+
 vi.mock("@lyrashield/config", () => ({
   env: { NODE_ENV: "test", POLAR_LOCAL_PRODUCT_IDS: "", POLAR_WEBHOOK_TOLERANCE_MS: 300_000 },
   isDev: false,
@@ -21,6 +25,7 @@ vi.mock("@lyrashield/db", () => ({
       updateMany: vi.fn(),
     },
   },
+  runWithWorkspaceContext: runWithWorkspaceContextMock,
   // license-fulfillment (billing module graph) resolves the system client lazily
   getSystemPrisma: vi.fn(() => ({})),
 }))
@@ -117,6 +122,7 @@ beforeEach(() => {
   })
   mockPrisma.webhookEvent.create.mockResolvedValue({ id: "evt_row_1" })
   mockPrisma.webhookEvent.findUnique.mockResolvedValue(null)
+  runWithWorkspaceContextMock.mockClear()
 })
 
 describe("POST /billing/webhook — event identity and idempotency", () => {
@@ -224,14 +230,17 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     expect(runTracksMock).toHaveBeenCalledTimes(1)
   })
 
-  it("stranded (>60s) unprocessed row is reprocessed under its existing event id", async () => {
+  it("repairs the workspace binding before reprocessing a stranded row", async () => {
     const ev = rzEvent("subscription.charged", "sub_STALE", 1_755_000_000)
+    const workspaceId = "workspace_stranded_receipt"
+    ev.payload.subscription.entity.notes = { workspaceId }
     validateRazorpayMock.mockReturnValue(ev)
     mockPrisma.webhookEvent.create.mockRejectedValue(
       Object.assign(new Error("unique"), { code: "P2002" })
     )
     mockPrisma.webhookEvent.findUnique.mockResolvedValue({
       id: "evt_stranded",
+      workspaceId: null,
       processed: false,
       createdAt: new Date(Date.now() - 120_000),
     })
@@ -239,10 +248,15 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     const res = await POST(razorpayRequest(ev))
 
     expect(res.status).toBe(200)
+    expect(mockPrisma.webhookEvent.updateMany).toHaveBeenCalledWith({
+      where: { id: "evt_stranded", workspaceId: null },
+      data: { workspaceId },
+    })
     expect(runTracksMock).toHaveBeenCalledTimes(1)
     expect(runTracksMock).toHaveBeenCalledWith(
       expect.objectContaining({ webhookEventId: "evt_stranded" })
     )
+    expect(runWithWorkspaceContextMock).toHaveBeenLastCalledWith(workspaceId, expect.any(Function))
   })
 
   it("missing signature → 401, non-retryable class, no DB write", async () => {
@@ -418,6 +432,7 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     )
 
     expect(response.status).toBe(200)
+    expect(runWithWorkspaceContextMock).toHaveBeenCalledWith(workspaceId, expect.any(Function))
     expect(mockPrisma.webhookEvent.updateMany).toHaveBeenCalledWith({
       where: { id: "evt_legacy_polar", workspaceId: null },
       data: { workspaceId },
