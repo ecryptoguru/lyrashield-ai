@@ -10,7 +10,7 @@ import {
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
 import { hasBillingStagingAccess } from "@/lib/billing-staging-access"
 import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
-import { assessAppOrigin, isAppHost, trustedAppCountry } from "@/lib/app-origin"
+import { assessAppOrigin, isAppHost, isDirectAppOrigin, trustedAppCountry } from "@/lib/app-origin"
 
 // This is the Next.js 16 middleware entry. Next.js detects `proxy.ts` as the
 // proxy/middleware file; do not create a separate `middleware.ts` or the build
@@ -237,6 +237,13 @@ export async function proxy(request: NextRequest) {
   // Only Cloudflare's app hostname is configured with per-host Authenticated
   // Origin Pulls. Reject direct Azure traffic before any Redis-backed limiter;
   // do not let a caller manufacture either the client certificate or country.
+  if (isDirectAppOrigin(request)) {
+    const response = new NextResponse(null, { status: 404 })
+    response.headers.set("Cache-Control", "private, no-store")
+    response.headers.set("Content-Security-Policy", csp)
+    return response
+  }
+
   if (isAppHost(request)) {
     const originTrust = await assessAppOrigin(request)
     if (originTrust === "untrusted") {
