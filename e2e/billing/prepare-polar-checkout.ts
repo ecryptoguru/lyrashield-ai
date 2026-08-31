@@ -55,6 +55,9 @@ try {
   await Promise.all([actors.ownerRequest.dispose(), actors.viewerRequest.dispose()])
   actors = undefined
 } finally {
-  if (actors) await actors.cleanup()
-  await browser.close()
+  try {
+    if (actors) await actors.cleanup()
+  } finally {
+    await browser.close()
+  }
 }
