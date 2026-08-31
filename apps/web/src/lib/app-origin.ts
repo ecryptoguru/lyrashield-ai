@@ -58,3 +58,12 @@ export function trustedAppCountry(request: Request): string | null {
 export function isAppHost(request: Request): boolean {
   return requestHost(request) === APP_HOST
 }
+
+export function isDirectAppOrigin(request: Request): boolean {
+  const host = requestHost(request)
+  return (
+    process.env.CLOUDFLARE_ORIGIN_MTLS === "required" &&
+    host !== APP_HOST &&
+    !["localhost", "127.0.0.1", "::1"].includes(host)
+  )
+}
