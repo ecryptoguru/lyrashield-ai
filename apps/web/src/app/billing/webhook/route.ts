@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
+import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   validatePolarWebhook,
@@ -215,10 +215,15 @@ export async function POST(request: Request) {
       normalized.workspaceId
     )
     if (!inserted) {
-      const existingEvent = await prisma.webhookEvent.findUnique({
-        where: { provider_externalId: { provider, externalId } },
-        select: { id: true, workspaceId: true, processed: true, createdAt: true },
-      })
+      // The provider payload is normalized to a server-resolved workspace
+      // before this point. Bind it for the duplicate lookup so the restricted
+      // runtime role can see the original event under WebhookEvent RLS.
+      const existingEvent = await runWithWorkspaceContext(normalized.workspaceId, () =>
+        prisma.webhookEvent.findUnique({
+          where: { provider_externalId: { provider, externalId } },
+          select: { id: true, workspaceId: true, processed: true, createdAt: true },
+        })
+      )
       if (!existingEvent) {
         // Row vanished between the P2002 and this lookup (practically
         // unreachable) — treat as a fresh claim and process below.
@@ -229,10 +234,12 @@ export async function POST(request: Request) {
         })
       } else if (existingEvent.processed) {
         if (!existingEvent.workspaceId && normalized.workspaceId) {
-          await prisma.webhookEvent.updateMany({
-            where: { id: existingEvent.id, workspaceId: null },
-            data: { workspaceId: normalized.workspaceId },
-          })
+          await runWithWorkspaceContext(normalized.workspaceId, () =>
+            prisma.webhookEvent.updateMany({
+              where: { id: existingEvent.id, workspaceId: null },
+              data: { workspaceId: normalized.workspaceId },
+            })
+          )
         }
         // Exact replay of an already-processed event — acknowledge immediately.
         // Zero extra side effects: every applicable track is already succeeded.
