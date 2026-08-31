@@ -13,7 +13,8 @@ function subscriptionIdFromPayload(payload: unknown): string | null {
 
 function polarSubscriptionIdFromPayload(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null
-  const id = (payload as { data?: { id?: unknown } }).data?.id
+  const data = (payload as { data?: { id?: unknown; subscription_id?: unknown } }).data
+  const id = data?.subscription_id ?? data?.id
   return typeof id === "string" ? id : null
 }
 
@@ -64,11 +65,14 @@ export function selectRazorpaySubscriptionCancellationEvent(
   return { externalId: cancellations[0]!.externalId, eventType: "subscription.cancelled" }
 }
 
-/** Prefer one active Polar subscription receipt, falling back to creation. */
+/** Prefer one active Polar subscription receipt, falling back to creation or its paid order. */
 export function selectPolarSubscriptionReceiptEvent(
   candidates: WebhookEventCandidate[],
   subscriptionId: string
-): { externalId: string; eventType: "subscription.active" | "subscription.created" } {
+): {
+  externalId: string
+  eventType: "subscription.active" | "subscription.created" | "order.paid"
+} {
   const matches = candidates.filter(
     (candidate) => polarSubscriptionIdFromPayload(candidate.payload) === subscriptionId
   )
@@ -80,8 +84,12 @@ export function selectPolarSubscriptionReceiptEvent(
   if (active.length === 0 && created.length === 1) {
     return { externalId: created[0]!.externalId, eventType: "subscription.created" }
   }
+  const paidOrders = matches.filter((candidate) => candidate.eventType === "order.paid")
+  if (active.length === 0 && created.length === 0 && paidOrders.length === 1) {
+    return { externalId: paidOrders[0]!.externalId, eventType: "order.paid" }
+  }
   throw new Error(
-    `Provider receipt could not resolve one Polar subscription receipt event (active ${active.length}, created ${created.length})`
+    `Provider receipt could not resolve one Polar subscription receipt event (active ${active.length}, created ${created.length}, paid orders ${paidOrders.length})`
   )
 }
 
@@ -118,7 +126,7 @@ export function isProviderSubscriptionLifecycleReceipt(params: {
   if (params.phase === "purchase") {
     return params.provider === "razorpay"
       ? ["subscription.charged", "subscription.activated"].includes(params.eventType)
-      : ["subscription.active", "subscription.created"].includes(params.eventType)
+      : ["subscription.active", "subscription.created", "order.paid"].includes(params.eventType)
   }
   if (params.phase !== "cancellation") return true
   return params.provider === "razorpay"
