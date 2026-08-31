@@ -56,6 +56,20 @@ describe("app origin proxy boundary", () => {
     expect(rateLimit.checkApiRateLimit).not.toHaveBeenCalled()
   })
 
+  it("rejects the direct Azure origin when Authenticated Origin Pulls are required", async () => {
+    process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
+
+    const response = await proxy(
+      new NextRequest(
+        "https://lyrashield-app.icyglacier-d3526777.centralindia.azurecontainerapps.io/api/ready"
+      )
+    )
+
+    expect(response.status).toBe(404)
+    expect(response.headers.get("cache-control")).toBe("private, no-store")
+    expect(rateLimit.checkHealthRateLimit).not.toHaveBeenCalled()
+  })
+
   it("admits only a matching Cloudflare certificate before sanitizing country", async () => {
     process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
     process.env.CLOUDFLARE_AOP_CERT_SHA256 = fingerprint
