@@ -281,14 +281,20 @@ export async function POST(request: Request) {
         { status: 500 }
       )
     }
+    const webhookEventId = claimedEventId
 
     // ── Phase 3: durable required tracks (billing/license/affiliate) ─────────
-    const summary = await runApplicableTracks({
-      webhookEventId: claimedEventId,
-      event: normalized,
-      rawPayload: payload,
-      handlers: { dispatchAffiliate },
-    })
+    // Track rows have no direct workspace key, while their parent does. Keep
+    // the parent update inside the signed event's workspace RLS context so a
+    // replay can derive `processed` after all required tracks succeed.
+    const summary = await runWithWorkspaceContext(normalized.workspaceId, () =>
+      runApplicableTracks({
+        webhookEventId,
+        event: normalized,
+        rawPayload: payload,
+        handlers: { dispatchAffiliate },
+      })
+    )
 
     if (!summary.allSucceeded) {
       // Durably queue one bounded retry per failed track (dead-lettered tracks
@@ -298,7 +304,7 @@ export async function POST(request: Request) {
       for (const failure of summary.failures) {
         try {
           await enqueueWebhookTrackRetry({
-            webhookEventId: claimedEventId,
+            webhookEventId,
             track: failure.track,
           })
         } catch (enqueueError) {

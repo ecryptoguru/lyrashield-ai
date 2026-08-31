@@ -256,6 +256,7 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     expect(runTracksMock).toHaveBeenCalledWith(
       expect.objectContaining({ webhookEventId: "evt_stranded" })
     )
+    expect(runWithWorkspaceContextMock).toHaveBeenLastCalledWith(workspaceId, expect.any(Function))
   })
 
   it("missing signature → 401, non-retryable class, no DB write", async () => {
