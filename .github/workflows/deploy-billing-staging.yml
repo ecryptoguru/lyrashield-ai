@@ -21,6 +21,11 @@ on:
         required: false
         type: boolean
         default: false
+      prepare_polar_checkout:
+        description: "Create one disposable Polar Sandbox subscription checkout in isolated USD staging"
+        required: false
+        type: boolean
+        default: false
       receipt_provider:
         description: "polar or razorpay"
         required: false
@@ -511,8 +516,13 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ inputs.verify_provider_receipt }}" = "true" ] && \
-            [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
-            echo "::error::Provider receipt verification and Razorpay checkout preparation cannot run together."
+            { [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ] || [ "${{ inputs.prepare_polar_checkout }}" = "true" ]; }; then
+            echo "::error::Provider receipt verification and checkout preparation cannot run together."
+            exit 1
+          fi
+          if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ] && \
+            [ "${{ inputs.prepare_polar_checkout }}" = "true" ]; then
+            echo "::error::Prepare only one provider checkout per staging run."
             exit 1
           fi
           migration_image="${REGISTRY}/lyrashield-migrate@${MIGRATION_DIGEST}"
@@ -940,7 +950,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run proof with disposable E2E evidence role
-        if: inputs.verify_provider_receipt || inputs.prepare_razorpay_checkout
+        if: inputs.verify_provider_receipt || inputs.prepare_razorpay_checkout || inputs.prepare_polar_checkout
         shell: bash
         env:
           DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
@@ -1222,6 +1232,7 @@ jobs:
             'BILLING_STAGING_ADMISSION=restricted'
             "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}"
             "PREPARE_RAZORPAY_CHECKOUT=${{ inputs.prepare_razorpay_checkout }}"
+            "PREPARE_POLAR_CHECKOUT=${{ inputs.prepare_polar_checkout }}"
             "BILLING_RECEIPT_PROVIDER=${{ inputs.receipt_provider }}"
             "BILLING_RECEIPT_EVENT_ID=${{ inputs.receipt_event_id }}"
             "BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CHARGE=${{ inputs.receipt_resolve_razorpay_subscription_charge }}"
@@ -1265,6 +1276,12 @@ jobs:
               exit 1
             }
             proof_command=/app/e2e/billing/prepare-razorpay-checkout.sh
+          elif [ "${{ inputs.prepare_polar_checkout }}" = "true" ]; then
+            [ "$BILLING_STAGING_REGION" = "usd" ] || {
+              echo "::error::Polar Sandbox checkout preparation requires USD staging."
+              exit 1
+            }
+            proof_command=/app/e2e/billing/prepare-polar-checkout.sh
           fi
 
           E2E_JOB_DATABASE_URL="$e2e_database_url" \
@@ -1292,6 +1309,13 @@ jobs:
               exit 1
             }
             echo "Razorpay Test checkout prepared for controlled browser payment." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ inputs.prepare_polar_checkout }}" = "true" ]; then
+            checkout_marker=$(grep -F 'Polar-checkout-v1 ' "$proof_log" | tail -1 || true)
+            [ -n "$checkout_marker" ] || {
+              echo "::error::Polar Sandbox checkout preparation produced no checkout marker."
+              exit 1
+            }
+            echo "Polar Sandbox checkout prepared for controlled browser payment." >> "$GITHUB_STEP_SUMMARY"
           else
             receipt_marker=$(grep -F 'Provider-delivered ' "$proof_log" | tail -1 || true)
             artifact_marker=$(grep -F 'Provider-receipt-artifact-v1 ' "$proof_log" | tail -1 || true)
@@ -1317,6 +1341,8 @@ jobs:
           rm -f "$proof_log"
           if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
             provider_mode="Razorpay Test Mode checkout prepared"
+          elif [ "${{ inputs.prepare_polar_checkout }}" = "true" ]; then
+            provider_mode="Polar Sandbox checkout prepared"
           elif [ "$BILLING_STAGING_REGION" = "usd" ]; then
             provider_mode="Polar Sandbox"
           else
@@ -1327,7 +1353,7 @@ jobs:
             echo "- Source SHA: \`${IMAGE_SHA}\`"
             echo "- E2E digest: \`${E2E_DIGEST}\`"
             echo "- Region/provider: \`${BILLING_STAGING_REGION}\` / ${provider_mode}"
-            if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
+            if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ] || [ "${{ inputs.prepare_polar_checkout }}" = "true" ]; then
               echo "- Checkout preparation: no provider-delivered receipt verified yet."
             else
               echo "- Receipt verifier: provider-delivered webhook and app effect confirmed"
