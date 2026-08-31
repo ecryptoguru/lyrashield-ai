@@ -215,9 +215,9 @@ export async function POST(request: Request) {
       normalized.workspaceId
     )
     if (!inserted) {
-      // The provider payload is normalized to a server-resolved workspace
-      // before this point. Bind it for the duplicate lookup so the restricted
-      // runtime role can see the original event under WebhookEvent RLS.
+      // The signed provider payload carries server-created checkout metadata.
+      // Bind its normalized workspace for the duplicate lookup so the
+      // restricted runtime role can see the original event under RLS.
       const existingEvent = await runWithWorkspaceContext(normalized.workspaceId, () =>
         prisma.webhookEvent.findUnique({
           where: { provider_externalId: { provider, externalId } },
@@ -232,7 +232,11 @@ export async function POST(request: Request) {
           eventType,
           externalId,
         })
-      } else if (existingEvent.processed) {
+      } else {
+        // Legacy rows may predate workspace-bound ingestion. Repair the
+        // durable receipt before either acknowledging a completed replay or
+        // reprocessing a stranded event; otherwise tracks can succeed while
+        // the exact workspace-scoped receipt remains invisible.
         if (!existingEvent.workspaceId && normalized.workspaceId) {
           await runWithWorkspaceContext(normalized.workspaceId, () =>
             prisma.webhookEvent.updateMany({
@@ -241,16 +245,19 @@ export async function POST(request: Request) {
             })
           )
         }
-        // Exact replay of an already-processed event — acknowledge immediately.
-        // Zero extra side effects: every applicable track is already succeeded.
-        logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
-        return NextResponse.json({ success: true }, { status: 200 })
-      } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
-        logger.info("Concurrent duplicate delivery skipped", { provider, eventType, externalId })
-        return NextResponse.json({ success: true }, { status: 200 })
-      } else {
-        logger.info("Reprocessing stranded webhook event", { provider, eventType, externalId })
-        claimedEventId = existingEvent.id
+
+        if (existingEvent.processed) {
+          // Exact replay of an already-processed event — acknowledge immediately.
+          // Zero extra side effects: every applicable track is already succeeded.
+          logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
+          return NextResponse.json({ success: true }, { status: 200 })
+        } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
+          logger.info("Concurrent duplicate delivery skipped", { provider, eventType, externalId })
+          return NextResponse.json({ success: true }, { status: 200 })
+        } else {
+          logger.info("Reprocessing stranded webhook event", { provider, eventType, externalId })
+          claimedEventId = existingEvent.id
+        }
       }
     } else {
       claimedEventId = inserted.id
