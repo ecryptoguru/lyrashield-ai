@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const runWithWorkspaceContextMock = vi.hoisted(() =>
+  vi.fn((_workspaceId: string | null, fn: () => unknown) => fn())
+)
+
 vi.mock("@lyrashield/config", () => ({
   env: { NODE_ENV: "test", POLAR_LOCAL_PRODUCT_IDS: "", POLAR_WEBHOOK_TOLERANCE_MS: 300_000 },
   isDev: false,
@@ -21,6 +25,7 @@ vi.mock("@lyrashield/db", () => ({
       updateMany: vi.fn(),
     },
   },
+  runWithWorkspaceContext: runWithWorkspaceContextMock,
   // license-fulfillment (billing module graph) resolves the system client lazily
   getSystemPrisma: vi.fn(() => ({})),
 }))
@@ -117,6 +122,7 @@ beforeEach(() => {
   })
   mockPrisma.webhookEvent.create.mockResolvedValue({ id: "evt_row_1" })
   mockPrisma.webhookEvent.findUnique.mockResolvedValue(null)
+  runWithWorkspaceContextMock.mockClear()
 })
 
 describe("POST /billing/webhook — event identity and idempotency", () => {
@@ -418,6 +424,7 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     )
 
     expect(response.status).toBe(200)
+    expect(runWithWorkspaceContextMock).toHaveBeenCalledWith(workspaceId, expect.any(Function))
     expect(mockPrisma.webhookEvent.updateMany).toHaveBeenCalledWith({
       where: { id: "evt_legacy_polar", workspaceId: null },
       data: { workspaceId },
