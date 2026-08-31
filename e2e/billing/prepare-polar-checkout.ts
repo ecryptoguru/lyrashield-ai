@@ -34,7 +34,10 @@ try {
     throw new Error("Polar Sandbox checkout response is incomplete")
   }
   const checkoutUrl = new URL(body.data.url)
-  if (checkoutUrl.protocol !== "https:" || !checkoutUrl.hostname.endsWith("polar.sh")) {
+  if (
+    checkoutUrl.protocol !== "https:" ||
+    (checkoutUrl.hostname !== "polar.sh" && !checkoutUrl.hostname.endsWith(".polar.sh"))
+  ) {
     throw new Error("Polar Sandbox checkout URL is invalid")
   }
 
