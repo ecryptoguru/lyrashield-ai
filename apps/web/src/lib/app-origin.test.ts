@@ -44,6 +44,25 @@ describe("app Cloudflare origin trust", () => {
     expect(await assessAppOrigin(appRequest())).toBe("untrusted")
   })
 
+  it("uses Azure's exact forwarded client-certificate hash when available", async () => {
+    process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
+    process.env.CLOUDFLARE_AOP_CERT_SHA256 = fingerprint
+    process.env.DEPLOY_PROBE_CERT_SHA256 = "f".repeat(64)
+
+    expect(
+      await assessAppOrigin(
+        appRequest({ "x-forwarded-client-cert": `Hash=${fingerprint};Cert="not-a-certificate"` })
+      )
+    ).toBe("cloudflare")
+    expect(
+      await assessAppOrigin(
+        appRequest({
+          "x-forwarded-client-cert": `Hash=${fingerprint};Hash=${"e".repeat(64)}`,
+        })
+      )
+    ).toBe("untrusted")
+  })
+
   it("does not impose app-origin trust on another hostname", async () => {
     expect(isAppHost(new Request("https://scanner.lyrashieldai.com"))).toBe(false)
     expect(await assessAppOrigin(new Request("https://scanner.lyrashieldai.com"))).toBe("off")

@@ -23,6 +23,12 @@ function certificateDer(xfcc: string): Uint8Array | null {
   }
 }
 
+function forwardedCertificateSha256(xfcc: string): string | null {
+  const hashes = [...xfcc.matchAll(/(?:^|;)\s*Hash=(?:"([a-f0-9]{64})"|([a-f0-9]{64}))(?=;|$)/gi)]
+  if (hashes.length !== 1) return null
+  return (hashes[0]![1] ?? hashes[0]![2]!).toLowerCase()
+}
+
 async function certificateSha256(xfcc: string): Promise<string | null> {
   const der = certificateDer(xfcc)
   if (!der) return null
@@ -44,7 +50,7 @@ export async function assessAppOrigin(request: Request): Promise<AppOriginTrust>
   ) {
     return "untrusted"
   }
-  const actual = await certificateSha256(xfcc)
+  const actual = forwardedCertificateSha256(xfcc) ?? (await certificateSha256(xfcc))
   if (actual === cloudflareFingerprint) return "cloudflare"
   if (actual === probeFingerprint) return "probe"
   return "untrusted"
