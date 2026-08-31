@@ -23,6 +23,12 @@ const polarEventFor = (subscriptionId: string, externalId: string, eventType: st
   payload: { type: eventType, data: { id: subscriptionId } },
 })
 
+const polarPaidOrderFor = (subscriptionId: string, externalId: string) => ({
+  externalId,
+  eventType: "order.paid",
+  payload: { type: "order.paid", data: { id: "order_target", subscription_id: subscriptionId } },
+})
+
 describe("selectRazorpaySubscriptionReceiptEvent", () => {
   it("selects the exact subscription's one processed charge", () => {
     expect(
@@ -105,6 +111,15 @@ describe("Polar subscription receipt selection", () => {
     ).toEqual({ externalId: "created", eventType: "subscription.created" })
   })
 
+  it("accepts one paid order bound to the exact subscription", () => {
+    expect(
+      selectPolarSubscriptionReceiptEvent(
+        [polarPaidOrderFor("sub_other", "other"), polarPaidOrderFor("sub_target", "paid")],
+        "sub_target"
+      )
+    ).toEqual({ externalId: "paid", eventType: "order.paid" })
+  })
+
   it("prefers one terminal revocation and falls back to one cancellation", () => {
     expect(
       selectPolarSubscriptionCancellationEvent(
@@ -143,6 +158,15 @@ describe("isProviderSubscriptionLifecycleReceipt", () => {
         provider: "polar",
         phase: "purchase",
         eventType: "subscription.active",
+        status: "active",
+        canceledAt: false,
+      })
+    ).toBe(true)
+    expect(
+      isProviderSubscriptionLifecycleReceipt({
+        provider: "polar",
+        phase: "purchase",
+        eventType: "order.paid",
         status: "active",
         canceledAt: false,
       })

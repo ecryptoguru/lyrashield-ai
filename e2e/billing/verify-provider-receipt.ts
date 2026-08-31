@@ -95,7 +95,7 @@ if (hasProviderSubscriptionResolver) {
           ? { in: ["subscription.charged", "subscription.activated"] }
           : resolvePolarSubscriptionCancellation
             ? { in: ["subscription.canceled", "subscription.revoked"] }
-            : { in: ["subscription.active", "subscription.created"] },
+            : { in: ["subscription.active", "subscription.created", "order.paid"] },
       processed: true,
     },
     select: { externalId: true, eventType: true, payload: true },
