@@ -45,6 +45,11 @@ describe("Prisma Extension — Query Guards (soft-delete)", () => {
     expect(applyQueryGuards("User", "findMany", {}, null).where).toBeUndefined()
   })
 
+  it("keeps webhook receipt ledger rows visible for provider replays", () => {
+    expect(remapSoftDeleteOperation("WebhookEvent", "delete")).toBe("delete")
+    expect(applyQueryGuards("WebhookEvent", "findUnique", {}, null).where).toBeUndefined()
+  })
+
   // Regression: these models have NO deletedAt column. Injecting deletedAt
   // would throw a Prisma validation error at runtime (this previously broke
   // getWorkspaceMembership's findUnique on WorkspaceMember).
@@ -209,8 +214,8 @@ describe("Prisma Extension — request-scoped context isolation", () => {
 })
 
 describe("Prisma Extension — model set correctness (matches schema columns)", () => {
-  it("soft-delete set contains only models with a deletedAt column (20)", () => {
-    expect(SOFT_DELETE_MODELS.size).toBe(20)
+  it("soft-delete set contains only lifecycle-soft-deletable models (19)", () => {
+    expect(SOFT_DELETE_MODELS.size).toBe(19)
     for (const m of [
       "WorkspaceMember",
       "CredentialSet",
@@ -218,6 +223,7 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
       "Retest",
       "Evidence",
       "User",
+      "WebhookEvent",
     ]) {
       expect(SOFT_DELETE_MODELS.has(m)).toBe(false)
     }

@@ -13,10 +13,11 @@ import { AsyncLocalStorage } from "node:async_hooks"
  * multi-tenant security product.
  */
 
-// Models that carry a `deletedAt` column. ONLY these may have `deletedAt: null`
-// injected on reads / be redirected from delete → soft-delete. Injecting
-// `deletedAt` on a model without the column throws a Prisma validation error,
-// so this set must match the schema exactly.
+// Models that are lifecycle-soft-deletable. ONLY these may have `deletedAt: null`
+// injected on reads / be redirected from delete → soft-delete. `WebhookEvent`
+// intentionally remains visible: the provider-event unique key is the durable
+// replay/deduplication ledger. Injecting `deletedAt` on a model without the
+// column throws a Prisma validation error, so this set must match the schema.
 export const SOFT_DELETE_MODELS = new Set<string>([
   "Workspace",
   "Project",
@@ -37,7 +38,6 @@ export const SOFT_DELETE_MODELS = new Set<string>([
   "BillingAccount",
   "MinutePack",
   "Invitation",
-  "WebhookEvent",
 ])
 
 // Models that carry a `workspaceId` column AND are safe to auto-scope by the
