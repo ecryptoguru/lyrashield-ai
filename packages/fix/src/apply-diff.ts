@@ -23,16 +23,35 @@ function parseHunks(diffForFile: string[]): Hunk[] {
   const hunks: Hunk[] = []
   let current: Hunk | null = null
   for (const raw of diffForFile) {
-    const header = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(raw)
-    if (header) {
-      if (current) hunks.push(current)
-      current = {
-        oldStart: parseInt(header[1]!, 10),
-        oldCount: header[2] ? parseInt(header[2], 10) : 1,
-        newStart: parseInt(header[3]!, 10),
-        newCount: header[4] ? parseInt(header[4], 10) : 1,
-        lines: [],
+    if (raw.startsWith("@@")) {
+      // Hunk header: "@@ -oldStart[,oldCount] +newStart[,newCount] @@".
+      // Parsed by splitting the marker spans (no nested-quantifier regex, which
+      // trips the unsafe-regex lint and adds ReDoS surface).
+      const body = raw
+        .slice(2, raw.indexOf("@@", 2) === -1 ? raw.length : raw.indexOf("@@", 2))
+        .trim()
+      const minusIdx = body.indexOf("-")
+      const plusIdx = body.indexOf("+")
+      if (minusIdx !== -1 && plusIdx !== -1) {
+        const oldSpan = body
+          .slice(minusIdx + 1, plusIdx)
+          .trim()
+          .split(",")
+        const newSpan = body
+          .slice(plusIdx + 1)
+          .trim()
+          .split(",")
+        if (current) hunks.push(current)
+        current = {
+          oldStart: parseInt(oldSpan[0]!, 10),
+          oldCount: oldSpan[1] ? parseInt(oldSpan[1], 10) : 1,
+          newStart: parseInt(newSpan[0]!, 10),
+          newCount: newSpan[1] ? parseInt(newSpan[1], 10) : 1,
+          lines: [],
+        }
+        continue
       }
+      if (current) current.lines.push(raw)
       continue
     }
     if (current) current.lines.push(raw)
