@@ -79,7 +79,15 @@ candidate_revision=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME"
 candidate_fqdn=$(az containerapp revision show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$candidate_revision" --query properties.fqdn --output tsv)
 [ -n "$candidate_revision" ] && [ -n "$candidate_fqdn" ]
 az containerapp ingress traffic set --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision-weight "$previous_revision=100" "$candidate_revision=0" --output none
-curl --fail --silent --show-error --max-time 15 --cert "$probe_dir/cert.pem" --key "$probe_dir/key.pem" "https://${candidate_fqdn}/api/ready"
+candidate_ready=0
+for attempt in {1..12}; do
+  if curl --fail --silent --show-error --max-time 5 --cert "$probe_dir/cert.pem" --key "$probe_dir/key.pem" "https://${candidate_fqdn}/api/ready"; then
+    candidate_ready=1
+    break
+  fi
+  sleep 5
+done
+[ "$candidate_ready" -eq 1 ]
 az containerapp ingress traffic set --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision-weight "$candidate_revision=100" --output none
 
 az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query '{revision:properties.latestRevisionName,image:properties.template.containers[0].image,traffic:properties.configuration.ingress.traffic}' --output json
