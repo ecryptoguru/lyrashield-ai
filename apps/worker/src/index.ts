@@ -44,6 +44,7 @@ import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./o
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
+let fixGenerateWorker: Worker<FixGenerateJobData, FixGenerateJobResult> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let workerHeartbeatController: WorkerHeartbeatController | null = null
