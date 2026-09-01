@@ -176,7 +176,7 @@ export function applyTargetCoverageToVerdict(
   return { verdict, coverageCondition: null }
 }
 
-interface ScanRowLike {
+export interface ScanRowLike {
   id: string
   targetId: string | null
   status: string

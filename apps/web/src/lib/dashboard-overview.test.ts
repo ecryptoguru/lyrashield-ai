@@ -5,11 +5,12 @@ import {
   coverageStateFromReceipts,
   userSafeRunFailure,
   workspaceEvidenceIsComplete,
+  type ScanRowLike,
 } from "./dashboard-overview"
 
-const makeRun = (
-  overrides: Partial<Parameters<typeof buildDashboardOverview>[0]["terminalRuns"][number]> = {}
-) => ({
+type RunOverride = Partial<Omit<ScanRowLike, "_count">> & { findingCount?: number }
+
+const makeRun = (overrides: RunOverride = {}): ScanRowLike => ({
   id: overrides.id ?? "scan-1",
   targetId: overrides.targetId ?? "target-1",
   status: overrides.status ?? "COMPLETED",
