@@ -207,7 +207,8 @@ export interface TargetAllowedResult {
 
 /**
  * Assert that the workspace can add another target.
- * Each plan has a targetCaps limit (advisory, enforced for trial).
+ * A positive targetCaps value is a hard limit. Enterprise uses 0 for its
+ * contract-defined limit and must not be blocked by the self-serve caps.
  */
 export async function assertTargetAllowed(workspaceId: string): Promise<TargetAllowedResult> {
   const workspace = await prisma.workspace.findUnique({
@@ -236,7 +237,7 @@ export async function assertTargetAllowed(workspaceId: string): Promise<TargetAl
   // Hard cap for every plan. Workspaces already over their cap (e.g. after a
   // downgrade) keep all existing targets readable and scannable — only new
   // additions are blocked, and no target is ever silently deleted.
-  if (targetCount >= targetCap) {
+  if (targetCap > 0 && targetCount >= targetCap) {
     const message = isTrial
       ? `Your trial allows up to ${targetCap} targets. Upgrade for more.`
       : `Your plan allows up to ${targetCap} protected targets. Remove a target or upgrade to add more.`

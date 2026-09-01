@@ -1,12 +1,12 @@
 -- WP1 repricing: Add LAUNCH_ASSURANCE tier to WorkspacePlan enum.
 -- ALTER TYPE ... ADD VALUE cannot run inside a transaction block in PostgreSQL < 12
 -- and Prisma wraps each migration in a transaction. Prisma automatically detects
--- this statement and runs it outside a transaction. The new value is added after
--- all existing values so existing rows are unaffected.
+-- this statement and runs it outside a transaction. Keep the database enum
+-- order aligned with schema.prisma, without changing any existing values.
 --
 -- This migration is additive only. It MUST be deployed before any code that
 -- references LAUNCH_ASSURANCE. TEAM is intentionally retained (not dropped) —
 -- removing an enum value is a separate, riskier migration and is out of scope
--- for the repricing. No workspace currently holds a paid plan (purchase
--- admission is off), so adding the value is a clean, non-migrating change.
-ALTER TYPE "WorkspacePlan" ADD VALUE IF NOT EXISTS 'LAUNCH_ASSURANCE';
+-- for the repricing. Adding the value does not alter any existing workspace
+-- plan, including retained historical TEAM records.
+ALTER TYPE "WorkspacePlan" ADD VALUE IF NOT EXISTS 'LAUNCH_ASSURANCE' AFTER 'TEAM';
