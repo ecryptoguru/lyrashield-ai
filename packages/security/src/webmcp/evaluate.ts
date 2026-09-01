@@ -255,6 +255,12 @@ function evaluateTool(
     case "WEBMCP-09":
       state = evaluateControl09(tool)
       break
+    case "WEBMCP-11":
+      state = evaluateControl11(tool)
+      break
+    case "WEBMCP-12":
+      state = evaluateControl12(tool)
+      break
     default:
       state = "NOT_ASSESSED"
   }
