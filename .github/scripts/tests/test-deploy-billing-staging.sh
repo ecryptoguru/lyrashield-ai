@@ -507,6 +507,7 @@ grep -Fq 'validate-manual-production-dispatch:' "$production_workflow"
 grep -Fq 'deploy:${SOURCE_SHA}' "$production_workflow"
 grep -Fq 'Manual production deployment may only target current main.' "$production_workflow"
 grep -Fq 'needs: validate-manual-production-dispatch' "$production_workflow"
+grep -Fq '"LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}"' "$production_workflow"
 mtls_patch_block=$(sed -n '/CONTAINER_APP_RESOURCE_ID=$(az containerapp show/,/az containerapp update/p' "$production_workflow")
 grep -Fq 'for attempt in $(seq 1 24); do' <<< "$mtls_patch_block"
 grep -Fq 'if [ "$attempt" = "24" ]; then' <<< "$mtls_patch_block"
