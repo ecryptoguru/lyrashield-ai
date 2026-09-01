@@ -401,6 +401,9 @@ importers:
       '@lyrashield/evidence-storage':
         specifier: workspace:*
         version: link:../../packages/evidence-storage
+      '@lyrashield/fix':
+        specifier: workspace:*
+        version: link:../../packages/fix
       '@lyrashield/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
