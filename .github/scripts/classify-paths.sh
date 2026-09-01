@@ -90,13 +90,15 @@ if [[ "$unknown" == "true" ]]; then
 fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
-  echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
-  echo "app=$app" >> "$GITHUB_OUTPUT"
-  echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
-  echo "shared=$shared" >> "$GITHUB_OUTPUT"
-  echo "marketing-deploy=$marketing_deploy" >> "$GITHUB_OUTPUT"
-  echo "azure-deploy=$azure_deploy" >> "$GITHUB_OUTPUT"
+  {
+    echo "docs-only=$docs_only"
+    echo "marketing=$marketing"
+    echo "app=$app"
+    echo "desktop=$desktop"
+    echo "shared=$shared"
+    echo "marketing-deploy=$marketing_deploy"
+    echo "azure-deploy=$azure_deploy"
+  } >> "$GITHUB_OUTPUT"
 else
   echo "docs-only=$docs_only"
   echo "marketing=$marketing"
