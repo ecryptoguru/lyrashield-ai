@@ -40,6 +40,13 @@ const FindingQuerySchema = z.object({
     .optional(),
   verified: z.enum(["true", "false"]).optional(),
   category: z.string().optional(),
+  // Bounded search: trimmed, at most 120 characters, matched against title,
+  // summary, and CWE inside the caller's workspace only.
+  q: z
+    .string()
+    .transform((value) => value.trim())
+    .pipe(z.string().max(120))
+    .optional(),
   stats: z.enum(["true"]).optional(),
   cursor: z.string().optional(),
   limit: z.string().optional(),
@@ -59,7 +66,7 @@ export async function GET(request: Request) {
       )
     }
 
-    const { workspaceId, targetId, scanId, severity, status, verified, category } = parsed.data
+    const { workspaceId, targetId, scanId, severity, status, verified, category, q } = parsed.data
     const stats = parsed.data.stats === "true"
 
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
@@ -69,7 +76,7 @@ export async function GET(request: Request) {
       return apiSuccess(findingStats)
     }
 
-    const { cursor, limit } = parsePaginationParams(searchParams)
+    const { cursor, limit } = parsePaginationParams(searchParams, 25)
 
     const { items, nextCursor } = await listFindings({
       workspaceId,
@@ -79,6 +86,7 @@ export async function GET(request: Request) {
       ...(status ? { status } : {}),
       ...(verified !== undefined ? { verified: verified === "true" } : {}),
       ...(category ? { category } : {}),
+      ...(q ? { q } : {}),
       ...(cursor ? { cursor } : {}),
       limit,
     })

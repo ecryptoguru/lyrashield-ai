@@ -18,7 +18,7 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { Card, Badge, Button, EmptyState, buttonVariants } from "@lyrashield/ui"
-import { formatTime } from "@/lib/date-format"
+import { formatTime, formatDateTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanReviewProfile } from "@/lib/scan-review-profile"
@@ -520,6 +520,16 @@ export function ScanDetailClient({
     {} as Record<string, number>
   )
   const reviewProfile = getScanReviewProfile(scan.events)
+  // Run-scoped coverage state: what applicable scanners were able to inspect.
+  // NOT_APPLICABLE receipts say nothing about coverage; any applicable receipt
+  // that did not complete makes coverage partial.
+  const applicableReceipts = familyCoverage.filter((receipt) => receipt.status !== "NOT_APPLICABLE")
+  const runCoverageState =
+    applicableReceipts.length === 0
+      ? "None"
+      : applicableReceipts.every((receipt) => receipt.status === "COMPLETED")
+        ? "Complete"
+        : "Partial"
   const topFinding = sortedFindings[0]
   function toggleFinding(id: string) {
     setExpandedFindings((prev) => {
@@ -554,8 +564,10 @@ export function ScanDetailClient({
               {presentation.headline}
             </h1>
             <p className="text-muted-foreground mt-1 text-sm">
+              {scan.target ? `${scan.target.name} · ` : ""}
               {getScanGoalLabel(scan.goal)} · {getScanModeLabel(scan.mode)} ·{" "}
               {getScanTriggerLabel(scan.triggerType)}
+              {scan.endedAt ? ` · completed ${formatDateTime(scan.endedAt)}` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -580,6 +592,14 @@ export function ScanDetailClient({
             )}
             <Badge variant={presentation.badgeVariant} className="text-sm">
               {presentation.label}
+            </Badge>
+            {/* Tamper-evident state stays visible without making the checksum
+                primary content; the full checksum lives in technical disclosure. */}
+            <Badge
+              variant={scan.integrity.manifestChecksum ? "success" : "muted"}
+              title="The run result is sealed into a verifiable manifest"
+            >
+              {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
             </Badge>
           </div>
         </div>
@@ -654,7 +674,7 @@ export function ScanDetailClient({
               </Button>
             </div>
           )}
-          <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-6">
+          <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-4">
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <Clock className="h-4 w-4" aria-hidden="true" />
@@ -667,9 +687,12 @@ export function ScanDetailClient({
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-                Findings reported
+                Issues from this run
               </div>
               <p className="mt-1 text-lg font-semibold">{currentFindings.length}</p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Retained after scanner layers and deduplication.
+              </p>
             </Card>
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
@@ -679,27 +702,20 @@ export function ScanDetailClient({
               <p className="mt-1 text-lg font-semibold">
                 {currentFindings.filter((f) => f.verified).length}
               </p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Backed by an independent verification receipt.
+              </p>
             </Card>
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                <XCircle className="h-4 w-4" aria-hidden="true" />
-                Status
-              </div>
-              <p className="mt-1 text-lg font-semibold">{presentation.label}</p>
-            </Card>
-            <Card className="border-0 p-4 shadow-none">
-              <div
-                className="text-muted-foreground flex items-center gap-2 text-sm"
-                title="The scan result is sealed into a verifiable manifest"
-              >
                 <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                Tamper-evident record
+                Coverage state
               </div>
-              <p className="mt-1 text-lg font-semibold">
-                {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
+              <p className="mt-1 text-lg font-semibold">{runCoverageState}</p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                What applicable scanners were able to inspect.
               </p>
             </Card>
-            <AiSecurityScoreCard data={scan.aiSecurity} />
           </div>
 
           {scan.target && (
@@ -801,17 +817,6 @@ export function ScanDetailClient({
                 </details>
               )}
             </div>
-          )}
-
-          {scan.summary && presentation.assuranceAvailable && (
-            <Card className="mb-6 p-4">
-              <h2 className="mb-1 text-sm font-semibold">Engine summary</h2>
-              <p className="text-muted-foreground text-sm">{scan.summary}</p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Deterministic scanner findings are included in the total and the findings list
-                below.
-              </p>
-            </Card>
           )}
 
           {scan.integrity.urlExecution && (
@@ -918,23 +923,15 @@ export function ScanDetailClient({
                   verification determine the proof state shown by LyraShield.
                 </p>
               </div>
-              <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-md border p-3">
                   <dt className="text-muted-foreground text-xs">Analysis path</dt>
                   <dd className="mt-1 text-sm font-medium">
                     {reviewProfile.model ? "AI-assisted review" : "Deterministic scanners"}
                   </dd>
-                </div>
-                <div className="rounded-md border p-3">
-                  <dt className="text-muted-foreground text-xs">Model</dt>
-                  <dd className="mt-1 text-sm font-medium wrap-break-word">
-                    {reviewProfile.model ?? "Not invoked"}
-                  </dd>
-                  {reviewProfile.reasoningEffort && (
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {reviewProfile.reasoningEffort} reasoning
-                    </p>
-                  )}
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Exact execution provenance is retained in the sealed run manifest.
+                  </p>
                 </div>
                 <div className="rounded-md border p-3">
                   <dt className="text-muted-foreground text-xs">Vibe Security 50</dt>
@@ -969,30 +966,48 @@ export function ScanDetailClient({
                   {incompleteCoverage.length > 0 ? "Coverage limited" : "Coverage recorded"}
                 </Badge>
               </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {familyCoverage.map((receipt) => (
-                  <div key={receipt.controlId} className="rounded-md border p-3 text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">
-                        {SCANNER_LABELS[receipt.scanner] ?? receipt.scanner}
-                      </span>
-                      <Badge
-                        variant={
-                          receipt.status === "COMPLETED"
-                            ? "success"
-                            : receipt.status === "NOT_APPLICABLE"
-                              ? "muted"
-                              : "warning"
-                        }
-                      >
-                        {receipt.status.replaceAll("_", " ")}
-                      </Badge>
+              {/* Collapsed by default: the summary line above carries the state;
+                  per-scanner receipts are the technical disclosure layer. */}
+              <details className="mt-4 rounded-md border">
+                <summary className="hover:bg-muted/50 flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
+                  Review coverage receipts ({familyCoverage.length})
+                  <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+                </summary>
+                <div className="grid gap-2 border-t p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {familyCoverage.map((receipt) => (
+                    <div key={receipt.controlId} className="rounded-md border p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">
+                          {SCANNER_LABELS[receipt.scanner] ?? receipt.scanner}
+                        </span>
+                        <Badge
+                          variant={
+                            receipt.status === "COMPLETED"
+                              ? "success"
+                              : receipt.status === "NOT_APPLICABLE"
+                                ? "muted"
+                                : "warning"
+                          }
+                        >
+                          {receipt.status.replaceAll("_", " ")}
+                        </Badge>
+                      </div>
+                      {receipt.reason && (
+                        <p className="text-muted-foreground mt-1 text-xs">{receipt.reason}</p>
+                      )}
                     </div>
-                    {receipt.reason && (
-                      <p className="text-muted-foreground mt-1 text-xs">{receipt.reason}</p>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                  {scan.integrity.manifestChecksum && (
+                    <p className="text-muted-foreground col-span-full font-mono text-xs">
+                      Manifest SHA-256: {scan.integrity.manifestChecksum}
+                    </p>
+                  )}
+                </div>
+              </details>
+              {/* AI App Security scoring sits in coverage context — a missing
+                  score is a scoring-availability state, not a top-level result. */}
+              <div className="mt-4 border-t pt-4">
+                <AiSecurityScoreCard data={scan.aiSecurity} />
               </div>
               {controlCoverage.length > 0 && (
                 <div className="mt-5 border-t pt-5">
@@ -1073,17 +1088,18 @@ export function ScanDetailClient({
                   </details>
                 </div>
               )}
-              {scan.integrity.manifestChecksum && (
-                <p className="text-muted-foreground mt-3 font-mono text-xs">
-                  Manifest SHA-256: {scan.integrity.manifestChecksum}
-                </p>
-              )}
             </Card>
           )}
 
           {currentFindings.length > 0 && (
             <div className="mb-6">
-              <h2 className="mb-3 text-lg font-semibold">Findings ({currentFindings.length})</h2>
+              <h2 className="mb-1 text-lg font-semibold">
+                Issues from this run ({currentFindings.length})
+              </h2>
+              <p className="text-muted-foreground mb-3 text-xs">
+                Retained after scanner layers and deduplication. Detection is not verification — a
+                finding is verified only with an independent verification receipt.
+              </p>
               {Object.entries(severityCounts)
                 .sort(([a], [b]) => (SEVERITY_ORDER[a] ?? 99) - (SEVERITY_ORDER[b] ?? 99))
                 .map(([sev, count]) => {

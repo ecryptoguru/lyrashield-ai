@@ -10,6 +10,8 @@ export interface ListFindingsParams {
   status?: FindingStatus
   verified?: boolean
   category?: string
+  /** Bounded workspace-scoped search over title, summary, and CWE. */
+  q?: string
   cursor?: string
   limit?: number
 }
@@ -30,6 +32,7 @@ export async function listFindings(params: ListFindingsParams): Promise<{
   nextCursor: string | null
 }> {
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 100)
+  const search = params.q?.trim()
   const where: Record<string, unknown> = {
     workspaceId: params.workspaceId,
     deletedAt: null,
@@ -39,6 +42,17 @@ export async function listFindings(params: ListFindingsParams): Promise<{
     ...(params.status ? { status: params.status } : {}),
     ...(params.verified !== undefined ? { verified: params.verified } : {}),
     ...(params.category ? { category: params.category } : {}),
+    // Search matches title, summary, and CWE only. It never merges or groups
+    // findings — canonical dedupe identity remains the only grouping force.
+    ...(search
+      ? {
+          OR: [
+            { title: { contains: search, mode: "insensitive" } },
+            { summary: { contains: search, mode: "insensitive" } },
+            { cwe: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
   }
 
   const findings = await prisma.finding.findMany({

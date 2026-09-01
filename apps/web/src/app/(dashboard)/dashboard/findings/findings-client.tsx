@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useFindingsWebMcp } from "./findings-webmcp"
 import { z } from "zod"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -27,6 +27,7 @@ import {
   EmptyState,
   Spinner,
   LoadMore,
+  Select,
   Textarea,
   FormField,
   buttonVariants,
@@ -35,7 +36,13 @@ import {
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGet, apiGetPaginated, apiPost, apiPatch } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
-import { ISSUE_PLURAL, RUN_PLURAL, RUN_SINGULAR } from "@/lib/terminology"
+import {
+  ISSUE_PLURAL,
+  RUN_PLURAL,
+  RUN_SINGULAR,
+  TARGET_PLURAL,
+  TARGET_SINGULAR,
+} from "@/lib/terminology"
 import { getFindingNextStep } from "@/lib/finding-next-step"
 import {
   Sheet,
@@ -47,12 +54,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { severityLabel, humanizeToken } from "@/lib/labels"
-import {
-  calculateFindingPriority,
-  type FindingPriorityBand,
-  type FindingPriorityResult,
-} from "@/lib/finding-priority"
+import { calculateFindingPriority, type FindingPriorityResult } from "@/lib/finding-priority"
 import type { FindingStatus, TargetEnvironment } from "@lyrashield/types"
+import {
+  findingFilterToApiQuery,
+  type FindingFilter as FindingFilterValue,
+} from "@/lib/finding-list-params"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -151,13 +158,6 @@ const STATUS_BADGE: Record<string, BadgeVariant> = {
   DUPLICATE: "muted",
 }
 
-const PRIORITY_BADGE: Record<FindingPriorityBand, BadgeVariant> = {
-  urgent: "danger",
-  high: "warning",
-  normal: "info",
-  low: "muted",
-}
-
 // ---------------------------------------------------------------------------
 // Severity icons — mirrors scan-detail-client.tsx SEVERITY_ICON (WCAG 1.4.1)
 // ---------------------------------------------------------------------------
@@ -214,8 +214,11 @@ export function FindingsClient({
   initialData,
   initialNextCursor,
   initialSelectedFindingId,
-  initialFilter = "ALL",
+  initialFilter = "OPEN",
   initialSort = "priority",
+  initialTargetFilter = "",
+  initialQuery = "",
+  targets = [],
 }: {
   workspaceId: string
   initialData: FindingListItem[]
@@ -224,21 +227,40 @@ export function FindingsClient({
   /** Parsed on the server from the URL; never re-read from window here. */
   initialFilter?: string
   initialSort?: SortMode
+  initialTargetFilter?: string
+  initialQuery?: string
+  targets?: { id: string; name: string }[]
 }) {
-  const updateQueryParams = useCallback((updates: { filter?: string; sort?: SortMode }) => {
-    if (typeof window === "undefined") return
-    const params = new URLSearchParams(window.location.search)
-    if (updates.filter && updates.filter !== "ALL") params.set("filter", updates.filter)
-    else params.delete("filter")
-    if (updates.sort && updates.sort !== "priority") params.set("sort", updates.sort)
-    else params.delete("sort")
-    const search = params.toString()
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${search ? `?${search}` : ""}`
-    )
-  }, [])
+  const updateQueryParams = useCallback(
+    (updates: { filter?: string; sort?: SortMode; target?: string; q?: string }) => {
+      if (typeof window === "undefined") return
+      const params = new URLSearchParams(window.location.search)
+      if (updates.filter !== undefined) {
+        // No filter parameter means Open, so All must be written explicitly.
+        if (updates.filter !== "OPEN") params.set("filter", updates.filter)
+        else params.delete("filter")
+      }
+      if (updates.sort !== undefined) {
+        if (updates.sort !== "priority") params.set("sort", updates.sort)
+        else params.delete("sort")
+      }
+      if (updates.target !== undefined) {
+        if (updates.target) params.set("target", updates.target)
+        else params.delete("target")
+      }
+      if (updates.q !== undefined) {
+        if (updates.q) params.set("q", updates.q)
+        else params.delete("q")
+      }
+      const search = params.toString()
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${search ? `?${search}` : ""}`
+      )
+    },
+    []
+  )
 
   const [findings, setFindings] = useState<FindingListItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
@@ -246,6 +268,8 @@ export function FindingsClient({
   // render matches the server-rendered HTML exactly (no hydration divergence).
   const [filter, setFilter] = useState<string>(initialFilter)
   const [sortMode, setSortMode] = useState<SortMode>(initialSort)
+  const [targetFilter, setTargetFilter] = useState(initialTargetFilter)
+  const [query, setQuery] = useState(initialQuery)
   const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(() =>
     initialSelectedFindingId
       ? (initialData.find((finding) => finding.id === initialSelectedFindingId) ?? null)
@@ -253,6 +277,53 @@ export function FindingsClient({
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The row that opened the drawer, for focus restoration on close.
+  const openerRef = useRef<HTMLElement | null>(null)
+  const pushedFindingUrlRef = useRef(false)
+  const rowRefs = useRef(new Map<string, HTMLButtonElement | null>())
+
+  /**
+   * Drawer URL state: opening writes `finding=` (pushState, so Back returns to
+   * the list), closing removes only `finding=` and restores focus to the row
+   * that opened the drawer. Filter/sort/search state is never touched.
+   */
+  const openFinding = useCallback((finding: FindingListItem) => {
+    setSelectedFinding(finding)
+    if (typeof window === "undefined") return
+    const url = new URL(window.location.href)
+    url.searchParams.set("finding", finding.id)
+    window.history.pushState(null, "", `${url.pathname}${url.search}`)
+    pushedFindingUrlRef.current = true
+  }, [])
+
+  const closeFinding = useCallback(() => {
+    const opener = openerRef.current
+    setSelectedFinding(null)
+    openerRef.current = null
+    if (typeof window === "undefined") return
+    if (pushedFindingUrlRef.current) {
+      pushedFindingUrlRef.current = false
+      // Back pops the pushed entry; the popstate listener keeps state in sync.
+      window.history.back()
+    } else {
+      const url = new URL(window.location.href)
+      url.searchParams.delete("finding")
+      window.history.replaceState(null, "", `${url.pathname}${url.search}`)
+    }
+    // Restore focus to the row that opened the drawer.
+    requestAnimationFrame(() => opener?.focus())
+  }, [])
+
+  // Browser Back from a drawer deep link or an opened drawer returns to the
+  // list state without losing filter/sort/search.
+  useEffect(() => {
+    const onPopState = () => {
+      pushedFindingUrlRef.current = false
+      setSelectedFinding(null)
+    }
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [])
 
   const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
     workspaceId,
@@ -271,41 +342,102 @@ export function FindingsClient({
     updateQueryParams,
   })
 
+  const fetchFindings = useCallback(async (params: Record<string, string>) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiGetPaginated<FindingListItem>(`/api/findings`, params, {
+        schema: findingsPaginatedSchema,
+      })
+      setFindings(res.items)
+      setNextCursor(res.nextCursor)
+    } catch {
+      setFindings([])
+      setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  /** Combined query for the current filter/target/search state. */
+  const listQuery = useCallback(
+    (extra: Record<string, string> = {}) => ({
+      workspaceId,
+      ...findingFilterToApiQuery(filter as FindingFilterValue),
+      ...(targetFilter ? { targetId: targetFilter } : {}),
+      ...(query ? { q: query } : {}),
+      ...extra,
+    }),
+    [workspaceId, filter, targetFilter, query]
+  )
+
   const handleFilterChange = useCallback(
     async (newFilter: string) => {
       setFilter(newFilter)
       updateQueryParams({ filter: newFilter, sort: sortMode })
-      if (newFilter === "ALL") {
+      // Reset to the server-rendered page only when returning to the exact
+      // state the server delivered; otherwise fetch the new view.
+      if (
+        newFilter === initialFilter &&
+        !targetFilter &&
+        !query &&
+        findingFilterToApiQuery(newFilter as FindingFilterValue) ===
+          findingFilterToApiQuery(initialFilter as FindingFilterValue)
+      ) {
         setFindings(initialData)
         setNextCursor(initialNextCursor)
         setError(null)
         return
       }
-      setLoading(true)
-      setError(null)
-      try {
-        const params: Record<string, string> = { workspaceId }
-        if (["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].includes(newFilter)) {
-          params.severity = newFilter
-        } else if (["OPEN", "FIXED", "ACCEPTED_RISK", "FALSE_POSITIVE"].includes(newFilter)) {
-          params.status = newFilter
-        } else if (newFilter === "VERIFIED") {
-          params.verified = "true"
-        }
-        const res = await apiGetPaginated(`/api/findings`, params, {
-          schema: findingsPaginatedSchema,
-        })
-        setFindings(res.items)
-        setNextCursor(res.nextCursor)
-      } catch {
-        setFindings([])
-        setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
-      } finally {
-        setLoading(false)
-      }
+      await fetchFindings({
+        workspaceId,
+        ...findingFilterToApiQuery(newFilter as FindingFilterValue),
+        ...(targetFilter ? { targetId: targetFilter } : {}),
+        ...(query ? { q: query } : {}),
+      })
     },
-    [workspaceId, initialData, initialNextCursor, sortMode, updateQueryParams]
+    [
+      sortMode,
+      updateQueryParams,
+      initialFilter,
+      initialData,
+      initialNextCursor,
+      targetFilter,
+      query,
+      fetchFindings,
+      workspaceId,
+    ]
   )
+
+  const handleTargetFilterChange = useCallback(
+    async (value: string) => {
+      setTargetFilter(value)
+      updateQueryParams({ target: value })
+      await fetchFindings({
+        workspaceId,
+        ...findingFilterToApiQuery(filter as FindingFilterValue),
+        ...(value ? { targetId: value } : {}),
+        ...(query ? { q: query } : {}),
+      })
+    },
+    [updateQueryParams, fetchFindings, workspaceId, filter, query]
+  )
+
+  // Bounded server-side search: debounced so typing does not spam the API.
+  useEffect(() => {
+    if (query === initialQuery) return
+    const timer = window.setTimeout(() => {
+      updateQueryParams({ q: query })
+      void fetchFindings({
+        workspaceId,
+        ...findingFilterToApiQuery(filter as FindingFilterValue),
+        ...(targetFilter ? { targetId: targetFilter } : {}),
+        ...(query ? { q: query } : {}),
+      })
+    }, 300)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
 
   // Client-side sort — priority first (the API-ranked page default), then
   // severity high-first, then newest. Each mode keeps its own tie-breakers so
@@ -326,8 +458,8 @@ export function FindingsClient({
   })
 
   const filterChips = [
-    { label: "All", value: "ALL" },
     { label: "Open", value: "OPEN" },
+    { label: "All", value: "ALL" },
     { label: "Critical", value: "CRITICAL" },
     { label: "High", value: "HIGH" },
     { label: "Medium", value: "MEDIUM" },
@@ -337,44 +469,74 @@ export function FindingsClient({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {filterChips.map((chip) => (
-          <button
-            key={chip.value}
-            type="button"
-            onClick={() => void handleFilterChange(chip.value)}
-            className={cn(
-              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-              filter === chip.value
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-            )}
-          >
-            {chip.label}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {filterChips.map((chip) => (
+            <button
+              key={chip.value}
+              type="button"
+              aria-pressed={filter === chip.value}
+              onClick={() => void handleFilterChange(chip.value)}
+              className={cn(
+                "min-h-11 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                filter === chip.value
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              )}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
 
-        {/* Sort control */}
-        <div className="flex items-center gap-1 rounded-full border px-3 py-1">
-          {sortMode === "severity" ? (
-            <SortDesc className="text-muted-foreground h-3 w-3" aria-hidden="true" />
-          ) : (
-            <Calendar className="text-muted-foreground h-3 w-3" aria-hidden="true" />
+        <div className="flex flex-wrap items-center gap-2">
+          {targets.length > 0 && (
+            <Select
+              aria-label={`Filter by ${TARGET_SINGULAR.toLowerCase()}`}
+              value={targetFilter}
+              onChange={(e) => void handleTargetFilterChange(e.target.value)}
+              className="h-9 w-44"
+            >
+              <option value="">All {TARGET_PLURAL.toLowerCase()}</option>
+              {targets.map((target) => (
+                <option key={target.id} value={target.id}>
+                  {target.name}
+                </option>
+              ))}
+            </Select>
           )}
-          <select
-            value={sortMode}
-            onChange={(e) => {
-              const next = e.target.value as SortMode
-              setSortMode(next)
-              updateQueryParams({ filter, sort: next })
-            }}
-            aria-label={`Sort ${ISSUE_PLURAL.toLowerCase()}`}
-            className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
-          >
-            <option value="priority">Priority (recommended)</option>
-            <option value="severity">Severity (high first)</option>
-            <option value="newest">Newest</option>
-          </select>
+          <input
+            type="search"
+            value={query}
+            maxLength={120}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search issues…"
+            aria-label={`Search ${ISSUE_PLURAL.toLowerCase()}`}
+            className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none lg:w-56"
+          />
+
+          {/* Sort control */}
+          <div className="flex items-center gap-1 rounded-full border px-3 py-1">
+            {sortMode === "severity" ? (
+              <SortDesc className="text-muted-foreground h-3 w-3" aria-hidden="true" />
+            ) : (
+              <Calendar className="text-muted-foreground h-3 w-3" aria-hidden="true" />
+            )}
+            <select
+              value={sortMode}
+              onChange={(e) => {
+                const next = e.target.value as SortMode
+                setSortMode(next)
+                updateQueryParams({ filter, sort: next })
+              }}
+              aria-label={`Sort ${ISSUE_PLURAL.toLowerCase()}`}
+              className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <option value="priority">Priority (recommended)</option>
+              <option value="severity">Severity (high first)</option>
+              <option value="newest">Newest</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -437,23 +599,25 @@ export function FindingsClient({
           )}
           {sortedFindings.map((finding) => {
             const SevIcon = SEVERITY_ICON[finding.severity] ?? Shield
+            const priorityReason = finding.priority?.reasons[0]
             return (
-              <Card
-                key={finding.id}
-                className="hover:shadow-card-hover cursor-pointer p-4 transition-shadow"
-                onClick={() => setSelectedFinding(finding)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    setSelectedFinding(finding)
-                  }
-                }}
-              >
-                <div className="flex items-start justify-between gap-4">
+              <Card key={finding.id} className="p-0 transition-shadow hover:shadow-card-hover">
+                {/* One semantic control per row: the title button opens the
+                    drawer. No nested links, buttons, or disclosures inside it. */}
+                <button
+                  type="button"
+                  ref={(el) => {
+                    rowRefs.current.set(finding.id, el)
+                  }}
+                  onClick={(event) => {
+                    openerRef.current = event.currentTarget
+                    openFinding(finding)
+                  }}
+                  aria-haspopup="dialog"
+                  className="flex w-full items-start justify-between gap-4 rounded-xl p-4 text-left focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                >
                   <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center gap-2">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
                       {/* Severity with icon (WCAG 1.4.1) */}
                       <Badge variant={SEVERITY_BADGE[finding.severity] ?? "muted"}>
                         <SevIcon
@@ -464,74 +628,29 @@ export function FindingsClient({
                       </Badge>
                       {finding.verified ? (
                         <span className="flex items-center gap-1 text-xs text-emerald-500">
-                          <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Verified
+                          <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Independently
+                          verified
                         </span>
                       ) : (
                         <span className="text-muted-foreground flex items-center gap-1 text-xs">
                           <XCircle className="h-3 w-3" aria-hidden="true" />{" "}
-                          {finding.verificationStatus.replaceAll("_", " ")}
-                        </span>
-                      )}
-                      <Badge variant={STATUS_BADGE[finding.status] ?? "muted"}>
-                        {finding.status.replace(/_/g, " ")}
-                      </Badge>
-                      {finding.priority && (
-                        <Badge variant={PRIORITY_BADGE[finding.priority.band] ?? "muted"}>
-                          Priority: {finding.priority.band}
-                        </Badge>
-                      )}
-                      {finding.cwe && (
-                        <span className="text-muted-foreground text-xs">{finding.cwe}</span>
-                      )}
-                      {finding.cvssScore !== null && finding.cvssScore !== undefined && (
-                        <span className="text-muted-foreground text-xs">
-                          CVSS: {finding.cvssScore}
+                          {humanizeToken(finding.verificationStatus)}
                         </span>
                       )}
                     </div>
-                    <h3 className="truncate font-medium" title={finding.title}>
+                    <span className="block truncate font-medium" title={finding.title}>
                       {finding.title}
-                    </h3>
-                    <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-                      {finding.summary}
-                    </p>
-                    {finding.priority && finding.priority.reasons.length > 0 && (
-                      <details className="mt-2 text-xs">
-                        <summary className="text-muted-foreground cursor-pointer select-none">
-                          Why priority: {finding.priority.reasons[0]}
-                        </summary>
-                        <div className="text-muted-foreground mt-1 space-y-1 pl-1">
-                          {finding.priority.reasons.slice(1).map((reason) => (
-                            <p key={reason}>{reason}</p>
-                          ))}
-                          {finding.priority.limitations.map((limitation) => (
-                            <p key={limitation}>{limitation}</p>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                    <div className="text-muted-foreground mt-2 flex items-center gap-3 text-xs">
-                      {finding.target && <span>Target: {finding.target.name}</span>}
-                      {finding._count?.evidence ? (
-                        <span className="flex items-center gap-1">
-                          <ShieldCheck className="h-3 w-3" aria-hidden="true" />{" "}
-                          {finding._count.evidence} evidence
-                        </span>
-                      ) : null}
-                      {finding._count?.fixProposals ? (
-                        <span className="flex items-center gap-1">
-                          <ShieldAlert className="h-3 w-3" aria-hidden="true" />{" "}
-                          {finding._count.fixProposals} fix proposals
-                        </span>
-                      ) : null}
-                      <span>Confidence: {finding.confidence}</span>
-                    </div>
+                    </span>
+                    <span className="text-muted-foreground mt-0.5 block text-xs">
+                      {finding.target ? `${finding.target.name} · ` : ""}
+                      {priorityReason ?? humanizeToken(finding.status)}
+                    </span>
                   </div>
                   <ChevronRight
-                    className="text-muted-foreground h-5 w-5 shrink-0"
+                    className="text-muted-foreground mt-1 h-5 w-5 shrink-0"
                     aria-hidden="true"
                   />
-                </div>
+                </button>
               </Card>
             )
           })}
@@ -539,17 +658,11 @@ export function FindingsClient({
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const params: Record<string, string> = { workspaceId, cursor }
-              if (["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].includes(filter)) {
-                params.severity = filter
-              } else if (["OPEN", "FIXED", "ACCEPTED_RISK", "FALSE_POSITIVE"].includes(filter)) {
-                params.status = filter
-              } else if (filter === "VERIFIED") {
-                params.verified = "true"
-              }
-              const res = await apiGetPaginated(`/api/findings`, params, {
-                schema: findingsPaginatedSchema,
-              })
+              const res = await apiGetPaginated<FindingListItem>(
+                `/api/findings`,
+                listQuery({ cursor }),
+                { schema: findingsPaginatedSchema }
+              )
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => setFindings((prev) => [...prev, ...items])}
@@ -560,9 +673,10 @@ export function FindingsClient({
 
       {selectedFinding && (
         <FindingDetailDrawer
+          key={selectedFinding.id}
           finding={selectedFinding}
           workspaceId={workspaceId}
-          onClose={() => setSelectedFinding(null)}
+          onClose={closeFinding}
           onStatusChange={(id, status) => {
             const reprioritize = (f: FindingListItem): FindingListItem =>
               f.id === id
@@ -903,22 +1017,26 @@ function FindingDetailDrawer({
   const epssSummary = extractEpssPercentage(detail?.technicalDetail)
 
   const fetchDetail = useCallback(
-    () =>
+    (signal?: AbortSignal) =>
       apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
         schema: findingDetailSchema,
+        ...(signal ? { signal } : {}),
       }),
     [finding.id, workspaceId]
   )
 
   useEffect(() => {
+    // A different finding selection remounts this drawer (keyed by finding id),
+    // and the unmount abort cancels the superseded request in flight.
+    const controller = new AbortController()
     let cancelled = false
-    fetchDetail()
+    fetchDetail(controller.signal)
       .then((res) => {
         if (cancelled) return
         setDetail(res ?? null)
       })
       .catch((err) => {
-        if (cancelled) return
+        if (cancelled || controller.signal.aborted) return
         setDetail(null)
         setDrawerError(err instanceof Error ? err.message : "Failed to load finding details.")
       })
@@ -928,6 +1046,7 @@ function FindingDetailDrawer({
       })
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [fetchDetail])
 
@@ -1054,8 +1173,21 @@ function FindingDetailDrawer({
         </SheetHeader>
 
         {loading ? (
-          <div className="flex justify-center py-8">
-            <Spinner />
+          // Stable skeleton matching the final layout: badges, tabs, and the
+          // content blocks the drawer will occupy — no spinner-only state.
+          <div className="space-y-4" aria-busy="true" aria-label="Loading issue details">
+            <div className="flex flex-wrap items-center gap-2">
+              <Skeleton className="h-5 w-20 rounded-full" />
+              <Skeleton className="h-5 w-24 rounded-full" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <Skeleton className="h-9 w-full" />
+            <div className="space-y-3">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-32 w-full" />
+            </div>
           </div>
         ) : drawerError ? (
           <div
