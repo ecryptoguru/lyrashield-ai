@@ -195,6 +195,25 @@ export {
   handleFixPrMergedAndReevaluate,
   type GateEvaluationResult,
 } from "./gate-service"
+export {
+  buildLaunchReportPayload,
+  computeLaunchReportChecksum,
+  NEUTRAL_APP_LABEL,
+  LAUNCH_REPORT_PAYLOAD_VERSION,
+  type LaunchReportShareablePayload,
+  type LaunchReportSource,
+  type LaunchReportVerdictLabel,
+} from "./launch-report-payload"
+export {
+  signLaunchReportChecksum,
+  verifyLaunchReportSignature,
+  LAUNCH_REPORT_SIGNING_KEY_ID,
+} from "./launch-report-signing"
+export {
+  generateLaunchReport,
+  getSharedLaunchReport,
+  type LaunchReportResult,
+} from "./launch-report-service"
 export { gatherReportData, generateReportHTML, type ReportData } from "./report-generator"
 export {
   createNotification,

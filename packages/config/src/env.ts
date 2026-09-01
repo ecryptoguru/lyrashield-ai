@@ -363,6 +363,18 @@ const envSchema = z
       .string()
       .optional()
       .default("license-signing-public-key"),
+    // WP4 Launch Readiness Report signing key (single published key, founder-ruled
+    // 2026-09-02). Same ed25519 / Key Vault pattern as the license signing key.
+    //   openssl genpkey -algorithm ed25519 -out launch_report_private.pem
+    LAUNCH_REPORT_SIGNING_PRIVATE_KEY: z
+      .string()
+      .optional()
+      .or(z.literal(""))
+      .refine(
+        (val) => !val || val.includes("-----BEGIN"),
+        "LAUNCH_REPORT_SIGNING_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
+      ),
+    LAUNCH_REPORT_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
     // Latest published Local/Desktop build (semver). Resolved server-side at
     // license issuance and renewal as perpetualFallbackBuild. Never accept a
     // client-supplied currentBuild for this field.
