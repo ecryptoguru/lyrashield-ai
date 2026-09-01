@@ -1,14 +1,17 @@
 import type { Metadata } from "next"
 import { prisma, listScans } from "@lyrashield/db"
+import type { ScanStatus } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { Radar } from "lucide-react"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { ScansClient } from "./scans-client"
 import { SchedulesClient } from "../schedules/schedules-client"
-import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { getCachedSession, getCachedWorkspaceContext, getCachedWorkspaceId } from "@/lib/cache"
 import { RUN_PLURAL, TARGET_PLURAL } from "@/lib/terminology"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
+import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
 
 const SCANS_TABS: SectionTab[] = [
   { value: "runs", label: "Runs", href: "/dashboard/scans?tab=runs" },
@@ -32,12 +35,16 @@ export default async function ScansPage({
     target?: string
     goal?: string
     mode?: string
+    state?: string
   }>
 }) {
   const session = await getCachedSession()
   if (!session) redirect("/sign-in")
 
-  const workspaceId = await getCachedWorkspaceId(session.userId)
+  const [workspaceId, workspaceContext] = await Promise.all([
+    getCachedWorkspaceId(session.userId),
+    getCachedWorkspaceContext(session.userId),
+  ])
 
   if (!workspaceId) {
     return (
@@ -73,7 +80,10 @@ export default async function ScansPage({
     )
   }
 
-  const limit = 50
+  // Filter state is parsed on the server and passed as initial props so the
+  // first client render matches the server-rendered HTML (hydration parity).
+  const stateFilter = parseScanStateFilter(params.state)
+  const limit = 25
   // Scan rows come from listScans so the SSR page and the /api/scans poll share
   // one query shape and one projection — they previously drifted apart.
   const [targets, { items, nextCursor }] = await Promise.all([
@@ -83,7 +93,14 @@ export default async function ScansPage({
       orderBy: { name: "asc" },
       take: 200,
     }),
-    listScans({ workspaceId, limit }),
+    listScans({
+      workspaceId,
+      ...(params.target ? { targetId: params.target } : {}),
+      ...(scanStateStatuses(stateFilter)
+        ? { statuses: scanStateStatuses(stateFilter) as never as ScanStatus[] }
+        : {}),
+      limit,
+    }),
   ])
 
   const initialData = items.map((s) => ({
@@ -104,6 +121,10 @@ export default async function ScansPage({
 
   const autoOpen = params.new === "1"
   const recoveryTarget = targets.find((target) => target.id === params.target)
+  const activeRole = workspaceContext.workspaces.find((w) => w.id === workspaceId)?.role
+  const canManageBilling = activeRole
+    ? hasPermission(activeRole as never, PERMISSIONS.billing.manage)
+    : false
 
   return (
     <div>
@@ -129,6 +150,9 @@ export default async function ScansPage({
         initialTargetId={recoveryTarget?.id}
         initialGoal={params.goal}
         initialMode={params.mode}
+        initialStateFilter={stateFilter}
+        initialTargetFilter={params.target ?? ""}
+        canManageBilling={canManageBilling}
       />
     </div>
   )
