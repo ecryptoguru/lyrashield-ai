@@ -37,7 +37,6 @@ async function certificateSha256(xfcc: string): Promise<string | null> {
 }
 
 export async function assessAppOrigin(request: Request): Promise<AppOriginTrust> {
-  if (requestHost(request) !== APP_HOST) return "off"
   if (process.env.CLOUDFLARE_ORIGIN_MTLS !== "required") return "off"
 
   const cloudflareFingerprint = process.env.CLOUDFLARE_AOP_CERT_SHA256?.toLowerCase() ?? ""
@@ -51,7 +50,7 @@ export async function assessAppOrigin(request: Request): Promise<AppOriginTrust>
     return "untrusted"
   }
   const actual = forwardedCertificateSha256(xfcc) ?? (await certificateSha256(xfcc))
-  if (actual === cloudflareFingerprint) return "cloudflare"
+  if (actual === cloudflareFingerprint && requestHost(request) === APP_HOST) return "cloudflare"
   if (actual === probeFingerprint) return "probe"
   return "untrusted"
 }
