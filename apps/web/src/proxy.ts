@@ -235,9 +235,11 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set("x-nonce", nonce)
 
   // Only Cloudflare's app hostname is configured with per-host Authenticated
-  // Origin Pulls. Reject direct Azure traffic before any Redis-backed limiter;
-  // do not let a caller manufacture either the client certificate or country.
-  if (isDirectAppOrigin(request)) {
+  // Origin Pulls. A direct candidate may pass only with this deployment's
+  // short-lived, exact client certificate; all other direct traffic is denied
+  // before any Redis-backed limiter.
+  const originTrust = await assessAppOrigin(request)
+  if (isDirectAppOrigin(request) && originTrust !== "probe") {
     const response = new NextResponse(null, { status: 404 })
     response.headers.set("Cache-Control", "private, no-store")
     response.headers.set("Content-Security-Policy", csp)
@@ -245,7 +247,6 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isAppHost(request)) {
-    const originTrust = await assessAppOrigin(request)
     if (originTrust === "untrusted") {
       const response = new NextResponse(null, { status: 404 })
       response.headers.set("Cache-Control", "private, no-store")

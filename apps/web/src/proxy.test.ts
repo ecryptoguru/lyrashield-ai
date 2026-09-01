@@ -70,6 +70,22 @@ describe("app origin proxy boundary", () => {
     expect(rateLimit.checkHealthRateLimit).not.toHaveBeenCalled()
   })
 
+  it("admits a direct candidate only with the exact deploy probe certificate", async () => {
+    process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
+    process.env.CLOUDFLARE_AOP_CERT_SHA256 = "f".repeat(64)
+    process.env.DEPLOY_PROBE_CERT_SHA256 = fingerprint
+
+    const response = await proxy(
+      new NextRequest(
+        "https://lyrashield-app--candidate.icyglacier-d3526777.centralindia.azurecontainerapps.io/api/billing/topup",
+        { headers: { "x-forwarded-client-cert": `Cert="${certificate.replace(/\n/g, "\\n")}"` } }
+      )
+    )
+
+    expect(response.status).toBe(200)
+    expect(rateLimit.checkApiRateLimit).toHaveBeenCalledOnce()
+  })
+
   it("admits only a matching Cloudflare certificate before sanitizing country", async () => {
     process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
     process.env.CLOUDFLARE_AOP_CERT_SHA256 = fingerprint
