@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import { validatePatchDiff, diffChecksum } from "./index"
 import { patchScopeForPlan } from "./scope-policy"
 import { applyUnifiedDiff, extractFileDiff } from "./apply-diff"
+import { buildUnifiedDiff } from "./build-diff"
 
 const STARTER = patchScopeForPlan("STARTER")
 const LAUNCH = patchScopeForPlan("LAUNCH_ASSURANCE")
@@ -206,5 +207,28 @@ describe("applyUnifiedDiff — safe, legible application (T5)", () => {
       " b",
     ].join("\n")
     expect(applyUnifiedDiff(original, extractFileDiff(diff, "f.ts"))).toBe("a\ninserted\nb\n")
+  })
+})
+
+describe("buildUnifiedDiff — the producer's diff builder", () => {
+  it("produces a diff that round-trips: apply(before, build(before,after)) === after", () => {
+    const before = "const a = 1\nconst b = unsafe(input)\nconst c = 3\n"
+    const after = "const a = 1\nconst b = sanitize(input)\nconst c = 3\n"
+    const diff = buildUnifiedDiff("src/a.ts", before, after)
+    expect(diff).toContain("diff --git a/src/a.ts b/src/a.ts")
+    // The whole point: the generated diff applies cleanly and yields `after`.
+    expect(applyUnifiedDiff(before, extractFileDiff(diff, "src/a.ts"))).toBe(after)
+  })
+
+  it("the generated diff passes the validator for its own file", () => {
+    const before = "x\ny\nz\n"
+    const after = "x\nY\nz\n"
+    const diff = buildUnifiedDiff("src/a.ts", before, after)
+    const r = validatePatchDiff(diff, "src/a.ts", [], LAUNCH)
+    expect(r.ok).toBe(true)
+  })
+
+  it("returns empty for identical content", () => {
+    expect(buildUnifiedDiff("src/a.ts", "same\n", "same\n")).toBe("")
   })
 })

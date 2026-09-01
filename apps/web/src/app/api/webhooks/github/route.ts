@@ -23,6 +23,7 @@ const GitHubPullRequestEventSchema = z.object({
     number: z.number().int().positive(),
     head: z.object({ ref: z.string().min(1).max(255) }),
     base: z.object({ ref: z.string().min(1).max(255) }),
+    merged: z.boolean().optional(),
   }),
 })
 
@@ -227,6 +228,37 @@ export async function POST(request: NextRequest) {
             prNumber: pullRequest.number,
             action,
           })
+
+          // WP3 loop-closure: a LyraShield fix branch merged. Mark the PR merged,
+          // queue a retest of the finding on the new head, and re-evaluate the
+          // gate so a merged fix moves the verdict toward READY. Unknown or
+          // foreign branches are a no-op (handleFixPrMerged returns null).
+          if (
+            action === "closed" &&
+            pullRequest.merged === true &&
+            pullRequest.head.ref.startsWith("lyrashield/fix-")
+          ) {
+            try {
+              const { handleFixPrMergedAndReevaluate } = await import("@lyrashield/db")
+              const outcome = await handleFixPrMergedAndReevaluate(
+                integration.workspaceId,
+                pullRequest.head.ref,
+                pullRequest.number
+              )
+              if (outcome) {
+                logger.info("Fix PR merge closed the loop", {
+                  retestId: outcome.retestId,
+                  findingId: outcome.findingId,
+                })
+              }
+            } catch (loopErr) {
+              // Loop-closure is best-effort; the event is already stored, so a
+              // retest/reeval failure must not fail the webhook.
+              logger.error("Fix PR loop-closure failed (event already stored)", {
+                error: String(loopErr),
+              })
+            }
+          }
         } catch (err) {
           // Handle the race where two concurrent redeliveries both pass the
           // pre-check above: the unique (provider, externalId) constraint

@@ -177,6 +177,8 @@ export {
   listFixProposals,
   updateFixProposalStatus,
   createPullRequestRecord,
+  handleFixPrMerged,
+  type FixPrMergeResult,
   type CreateFixProposalParams,
   type FixProposalWithDetails,
 } from "./fix-proposal-service"
@@ -190,6 +192,7 @@ export {
 export {
   evaluateGateForTarget,
   getLatestGateVerdict,
+  handleFixPrMergedAndReevaluate,
   type GateEvaluationResult,
 } from "./gate-service"
 export { gatherReportData, generateReportHTML, type ReportData } from "./report-generator"

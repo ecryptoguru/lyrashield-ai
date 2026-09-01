@@ -16,6 +16,7 @@ import {
   type GateEvidenceInput,
   type GateVerdictResult,
 } from "@lyrashield/gate"
+import { logger } from "@lyrashield/logger"
 import { withWorkspaceRLS } from "./rls"
 
 export interface GateEvaluationResult {
@@ -141,4 +142,68 @@ export async function getLatestGateVerdict(workspaceId: string, targetId: string
       orderBy: { evaluatedAt: "desc" },
     })
   })
+}
+
+/**
+ * WP3 loop-closure orchestration: mark a merged fix PR, queue a retest on the
+ * finding's latest completed scan, then re-evaluate the gate for the target.
+ * Kept in the db package so the GitHub webhook route stays a thin adapter.
+ * Returns null (a no-op) when the branch matches no open fix PR in this
+ * workspace.
+ */
+export async function handleFixPrMergedAndReevaluate(
+  workspaceId: string,
+  branchName: string,
+  prNumber?: number
+): Promise<import("./fix-proposal-service").FixPrMergeResult | null> {
+  const { handleFixPrMerged } = await import("./fix-proposal-service")
+
+  // Resolve the finding's latest completed scan to anchor the retest, and the
+  // target for gate re-evaluation — both under RLS.
+  const anchor = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const pr = await tx.pullRequest.findFirst({
+      where: {
+        branchName,
+        status: "open",
+        deletedAt: null,
+        fixProposal: { finding: { workspaceId, deletedAt: null } },
+      },
+      select: {
+        fixProposal: {
+          select: {
+            finding: {
+              select: {
+                targetId: true,
+                scan: { select: { id: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    if (!pr?.fixProposal?.finding?.targetId || !pr.fixProposal.finding.scan?.id) return null
+    return {
+      targetId: pr.fixProposal.finding.targetId,
+      scanId: pr.fixProposal.finding.scan.id,
+    }
+  })
+  if (!anchor) return null
+
+  const result = await handleFixPrMerged({
+    workspaceId,
+    branchName,
+    prNumber,
+    retestScanId: anchor.scanId,
+  })
+  if (!result) return null
+
+  // Re-evaluate the gate so a merged fix moves the verdict. Best-effort: a gate
+  // failure must not roll back the merge/retest that already committed.
+  await evaluateGateForTarget(workspaceId, anchor.targetId).catch((error) => {
+    logger.warn("Gate re-evaluation after fix PR merge failed (non-fatal)", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
+
+  return result
 }
