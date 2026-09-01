@@ -1230,8 +1230,8 @@ model GateVerdict {
   id              String   @id @default(cuid())
   workspaceId     String
   targetId        String
-  /** The completed scan this verdict was computed from. */
-  scanId          String
+  /** The completed scan this verdict was computed from (null when none exists). */
+  scanId          String?
   /** e.g. "lyrashield-gate/1.0.0" — recorded so threshold changes are traceable. */
   standardVersion String
   /** READY | NOT_READY | INSUFFICIENT_EVIDENCE */
@@ -2135,8 +2135,5 @@ model PayoutItem {
   commission Commission @relation(fields: [commissionId], references: [id], onDelete: Restrict)
 
   @@index([commissionId])
-  @@index([payoutId])
-}
-
   @@index([payoutId])
 }
