@@ -239,22 +239,22 @@ describe("provider catalog entitlement validation", () => {
 
   it("accepts immutable legacy Razorpay plan IDs at their original renewal price", () => {
     envState.RAZORPAY_PLAN_IDS = JSON.stringify({
-      team_annual: ["plan-team-current", "plan-team-annual"],
+      launch_assurance_annual: ["plan-launch-assurance-current", "plan-launch-assurance-annual"],
     })
     const event = {
       payload: {
         subscription: {
           entity: {
-            plan_id: "plan-team-annual",
-            notes: { plan: "TEAM", interval: "annual" },
+            plan_id: "plan-launch-assurance-annual",
+            notes: { plan: "LAUNCH_ASSURANCE", interval: "annual" },
           },
         },
-        payment: { entity: { amount: 19_900_000, currency: "INR" } },
+        payment: { entity: { amount: 41_880_000, currency: "INR" } },
       },
     }
     expect(resolveRazorpayCatalogEvent("subscription.charged", event)).toEqual({
       kind: "plan",
-      plan: "TEAM",
+      plan: "LAUNCH_ASSURANCE",
       interval: "annual",
     })
     expect(() =>

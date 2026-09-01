@@ -237,13 +237,22 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
 export function shouldRecordAgentMinutes(
   scanId: string,
   exitStatus: "COMPLETED" | "FAILED",
-  runRecord: EngineRunRecord | null
+  runRecord: EngineRunRecord | null,
+  opts: { cancelled?: boolean } = {}
 ): boolean {
   if (!runRecord) return false
   if (runRecord.run_id !== scanId || runRecord.run_name !== scanId) return false
 
+  // Founder-confirmed billing rules (2026-08-29):
+  // - A user-CANCELLED scan bills for the period actually used. It is billed
+  //   (elapsed time, no floor) whenever engine work was observed.
+  // - Any OTHER failed terminal state is NEVER billed, even if provider usage
+  //   was recorded before the failure (if the customer got nothing usable,
+  //   they pay nothing).
   const validCompletedReceipt = exitStatus === "COMPLETED" && runRecord.status === "completed"
   if (validCompletedReceipt) return true
+
+  if (exitStatus === "FAILED" && !opts.cancelled) return false
 
   if (!runRecord.llm_usage) return false
   const usage = extractUsageSummary(runRecord.llm_usage)
@@ -1032,15 +1041,23 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           ? engineRoutingCoverageIssue(engineProfile, runRecord)
           : null
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
+      const cancelled = engineResult.cancelled === true
       const engineWorkObserved =
         target.type === "REPO" &&
-        shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord)
+        shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord, { cancelled })
 
       // ─── Sprint 10: Agent-minute metering (wall-clock) ──────────────────
       // Record wall-clock agent minutes only after a valid completed receipt
       // or affirmative provider usage proves that model-backed work occurred.
       // Per D1 constraint: minutes are wall-clock, NOT "active-loop" or "thinking time".
       // Deep/Custom scans consume 3× minutes (applied inside recordAgentMinutes).
+      // Billing outcome (founder-confirmed 2026-08-29): failed scans are never
+      // billed; cancelled scans bill elapsed time only (no 1-minute floor).
+      const billingOutcome = cancelled
+        ? ("cancelled" as const)
+        : exitInterpretation.status === "COMPLETED"
+          ? ("completed" as const)
+          : ("failed" as const)
       const engineWallClockMs =
         engineStartedAtMs === null ? 0 : Math.max(1, Date.now() - engineStartedAtMs)
       let agentMinuteTerminalError: {
@@ -1048,7 +1065,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorCategory: string
         errorMessage: string
       } | null = null
-      if (engineWorkObserved) {
+      if (engineWorkObserved && billingOutcome !== "failed") {
         try {
           const billingAccount = await prisma.billingAccount.findUnique({
             where: { workspaceId },
@@ -1058,15 +1075,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             mode,
             phase: "engine_run",
             cycleStart: billingAccount?.currentPeriodStart ?? undefined,
+            outcome: billingOutcome,
           })
 
           if (metering.overageMinutes > 0) {
-            // Check if overage is available (Team plan with spend limit)
+            // Check if overage is available (Launch Assurance plan with spend limit)
             const acct = await prisma.billingAccount.findUnique({
               where: { workspaceId },
               select: { currentPlan: true, spendLimitCents: true },
             })
-            const overageAvailable = acct?.currentPlan === "TEAM" && (acct.spendLimitCents ?? 0) > 0
+            const overageAvailable =
+              acct?.currentPlan === "LAUNCH_ASSURANCE" && (acct.spendLimitCents ?? 0) > 0
 
             if (overageAvailable) {
               const overage = await debitOverage(

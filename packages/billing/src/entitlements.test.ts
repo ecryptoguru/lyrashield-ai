@@ -6,6 +6,9 @@ vi.mock("@lyrashield/db", () => ({
     workspace: {
       findUnique: vi.fn(),
     },
+    target: {
+      count: vi.fn(),
+    },
     billingAccount: {
       update: vi.fn(),
       // The overage path (no minutes remaining) calls findUnique. Return a
@@ -22,10 +25,15 @@ vi.mock("@lyrashield/db", () => ({
 
 vi.mock("@lyrashield/pricing", () => ({
   CLOUD_PLAN_MAP: {
-    FREE: { id: "FREE", deepAllowed: false, agentMinutes: 0 },
-    STARTER: { id: "STARTER", deepAllowed: false, agentMinutes: 300 },
-    PRO: { id: "PRO", deepAllowed: true, agentMinutes: 1200 },
-    TEAM: { id: "TEAM", deepAllowed: true, agentMinutes: 4000 },
+    FREE: { id: "FREE", deepAllowed: false, agentMinutes: 0, targetCaps: 3 },
+    STARTER: { id: "STARTER", deepAllowed: false, agentMinutes: 300, targetCaps: 5 },
+    PRO: { id: "PRO", deepAllowed: true, agentMinutes: 1200, targetCaps: 15 },
+    LAUNCH_ASSURANCE: {
+      id: "LAUNCH_ASSURANCE",
+      deepAllowed: true,
+      agentMinutes: 6000,
+      targetCaps: 50,
+    },
   },
   STANDARD_OVERAGE_PER_MINUTE_USD: 0.15,
 }))
@@ -49,7 +57,7 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
-import { assertScanAllowed } from "./entitlements"
+import { assertScanAllowed, assertTargetAllowed } from "./entitlements"
 import { prisma } from "@lyrashield/db"
 import { getUsageBalance } from "./usage/balance"
 import { getTrialState } from "./trial"
@@ -167,5 +175,73 @@ describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
 
     expect(result.allowed).toBe(true)
     expect(result.isTrial).toBe(true)
+  })
+})
+
+describe("entitlements — protected-target cap (hard-enforced, founder-confirmed 2026-08-29)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("blocks a paid plan at its target cap (Pro = 15)", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
+      plan: "PRO",
+      deepAllowed: true,
+      trialStartedAt: null,
+    })
+    vi.mocked(prisma.target.count).mockResolvedValue(15)
+
+    const result = await assertTargetAllowed("ws-pro-full")
+
+    expect(result.allowed).toBe(false)
+    expect(result.code).toBe("TARGET_LIMIT_REACHED")
+    expect(result.targetsUsed).toBe(15)
+    expect(result.targetCap).toBe(15)
+  })
+
+  it("blocks a paid plan over its cap (over-cap after downgrade) but never deletes", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
+      plan: "STARTER",
+      deepAllowed: false,
+      trialStartedAt: null,
+    })
+    // Over cap: 6 targets on a 5-cap Starter plan
+    vi.mocked(prisma.target.count).mockResolvedValue(6)
+
+    const result = await assertTargetAllowed("ws-starter-over")
+
+    expect(result.allowed).toBe(false)
+    expect(result.code).toBe("TARGET_LIMIT_REACHED")
+    expect(result.targetsUsed).toBe(6)
+    expect(result.targetCap).toBe(5)
+  })
+
+  it("allows a paid plan below its cap", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
+      plan: "LAUNCH_ASSURANCE",
+      deepAllowed: true,
+      trialStartedAt: null,
+    })
+    vi.mocked(prisma.target.count).mockResolvedValue(12)
+
+    const result = await assertTargetAllowed("ws-la-ok")
+
+    expect(result.allowed).toBe(true)
+    expect(result.targetCap).toBe(50)
+  })
+
+  it("blocks a trial workspace at the trial cap", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
+      plan: "FREE",
+      deepAllowed: false,
+      trialStartedAt: new Date("2026-08-01"),
+    })
+    vi.mocked(prisma.target.count).mockResolvedValue(3)
+
+    const result = await assertTargetAllowed("ws-trial-capped")
+
+    expect(result.allowed).toBe(false)
+    expect(result.code).toBe("TARGET_LIMIT_REACHED")
+    expect(result.targetCap).toBe(3)
   })
 })

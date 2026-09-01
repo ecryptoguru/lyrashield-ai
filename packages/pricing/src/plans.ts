@@ -1,15 +1,17 @@
 /**
  * Cloud plan definitions for LyraShield AI.
  *
- * Plans are ordered by tier: TRIAL < STARTER < PRO < TEAM < AGENCY.
- * AGENCY and above are contact-led (no self-serve checkout).
+ * Plans are ordered by tier: TRIAL < STARTER < PRO < LAUNCH_ASSURANCE < ENTERPRISE.
+ * The three self-serve lines (STARTER, PRO, LAUNCH_ASSURANCE) form two product
+ * lines: SCAN (Starter, Pro) and LAUNCH ASSURANCE (the premium evidence/verdict
+ * line). ENTERPRISE is contact-led (no self-serve checkout).
  *
  * All prices are in USD and INR. Monthly and annual prices are listed
  * separately so the billing layer can compute prorations and upgrades
  * without floating-point arithmetic.
  */
 
-export type CloudPlanId = "TRIAL" | "STARTER" | "PRO" | "TEAM" | "AGENCY"
+export type CloudPlanId = "TRIAL" | "STARTER" | "PRO" | "LAUNCH_ASSURANCE" | "ENTERPRISE"
 
 export interface PlanPrice {
   /** Monthly price in major currency units (e.g. 29 = $29). */
@@ -93,51 +95,59 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       "1,200 agent-minutes / month",
       "Up to 15 targets",
       "Deep / Custom scans enabled",
+      "Integrations (GitHub, Slack, Jira)",
       "Priority email support",
       "Evidence Vault + Retest",
       "Scheduled scans",
     ],
   },
   {
-    id: "TEAM",
-    name: "Team",
-    agentMinutes: 4000,
+    id: "LAUNCH_ASSURANCE",
+    name: "Launch Assurance",
+    agentMinutes: 6000,
     targetCaps: 50,
     deepAllowed: true,
     selfServe: true,
     price: {
-      usd: { monthly: 299, annual: 2690 },
-      inr: { monthly: 29900, annual: 269000 },
+      usd: { monthly: 499, annual: 4188 },
+      inr: { monthly: 49900, annual: 418800 },
     },
     features: [
-      "4,000 agent-minutes / month",
+      "Continuous launch gate with a versioned verdict",
+      "6,000 agent-minutes / month",
       "Up to 50 targets",
       "Deep / Custom scans enabled",
-      "Role-based access control",
+      "Verified evidence + coverage receipts",
+      "WebMCP Assurance (agent surfaces)",
+      "CI gating (SARIF)",
+      "Shareable, revocable scorecard",
+      "Retained encrypted evidence",
       "Integrations (GitHub, Slack, Jira)",
-      "Shared reports + scorecards",
+      "Role-based access control",
+      "Shared reports",
       "Priority support",
     ],
   },
   {
-    id: "AGENCY",
-    name: "Agency",
+    id: "ENTERPRISE",
+    name: "Enterprise",
     agentMinutes: 0,
     targetCaps: 0,
     deepAllowed: true,
     selfServe: false,
     price: {
-      usd: { monthly: 499, annual: 0 },
-      inr: { monthly: 49900, annual: 0 },
+      usd: { monthly: 1500, annual: 0 },
+      inr: { monthly: 150000, annual: 0 },
     },
     features: [
       "Custom agent-minute pool",
-      "Unlimited targets (contact-led)",
+      "Custom target limits",
       "Deep / Custom scans enabled",
-      "Multi-workspace management",
-      "SSO / SAML",
-      "Dedicated support + SLA",
+      "Everything in Launch Assurance",
       "Custom integrations",
+      "SSO / SAML — on request",
+      "Multi-workspace management — on request",
+      "Dedicated support with SLA — on request",
     ],
   },
 ] as const

@@ -14,6 +14,7 @@ export const WorkspacePlanSchema = z.enum([
   "STARTER",
   "PRO",
   "TEAM",
+  "LAUNCH_ASSURANCE",
   "AGENCY",
   "BUSINESS",
   "ENTERPRISE",

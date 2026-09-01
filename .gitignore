@@ -100,3 +100,9 @@ docs/superpowers/
 
 # Local Devpost plugin/session state; submission evidence belongs in docs.
 .devpost-hackathon-state.json
+
+# agent helper files (never ship)
+PR_BODY.md
+ciwait.py
+verify-*.mts
+*-stubs-loader.mjs

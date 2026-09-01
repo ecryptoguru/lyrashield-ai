@@ -82,7 +82,7 @@ export default async function BillingPage({
   const plan = billingAccount?.currentPlan ?? "FREE"
   const cloudPlan = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
-  const isTeam = plan === "TEAM"
+  const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
 
   return (
     <div>
@@ -132,7 +132,7 @@ export default async function BillingPage({
               {canManageBilling && (
                 <BillingActions
                   plan={plan}
-                  isTeam={isTeam}
+                  isLaunchAssurance={isLaunchAssurance}
                   workspaceId={workspaceId}
                   purchasesAvailable={purchasesAvailable}
                 />
@@ -235,6 +235,10 @@ export default async function BillingPage({
               <p className="text-xs text-muted-foreground">
                 Agent-minutes are measured as wall-clock time. Deep/Custom scans consume 3× minutes.
               </p>
+              <p className="text-xs text-muted-foreground">
+                You are only billed for usable scans: a failed scan bills nothing, and a cancelled
+                scan bills only the time it actually ran.
+              </p>
             </div>
 
             {/* Grace state */}
@@ -284,8 +288,8 @@ export default async function BillingPage({
           </CardContent>
         </Card>
 
-        {/* Team Spend Limit */}
-        {isTeam && canManageBilling && (
+        {/* Launch Assurance Spend Limit */}
+        {isLaunchAssurance && canManageBilling && (
           <Card>
             <CardHeader>
               <CardTitle>Overage Spend Limit</CardTitle>

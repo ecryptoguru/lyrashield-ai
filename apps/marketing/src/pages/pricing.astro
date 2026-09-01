@@ -20,7 +20,7 @@ const jsonLd = [
 ]
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
-const agencyPlan = getPlan("AGENCY")
+const enterprisePlan = getPlan("ENTERPRISE")
 
 const minutePacks = [
   { id: "pack_100", name: "100-Minute Pack", minutes: 100, priceUsd: 15 },
@@ -209,28 +209,29 @@ const appUrl =
         </div>
       </div>
 
-      <!-- Agency Contact-Led -->
+      <!-- Enterprise Contact-Led -->
       <div
         class="mt-12 rounded-xl border border-gray-200 bg-gray-50 p-8 dark:border-gray-700 dark:bg-gray-800/50"
       >
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Agency</h2>
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Enterprise</h2>
         <p class="mt-3">
           <span class="price-usd-monthly text-2xl font-bold text-gray-900 dark:text-white"
-            >From ${agencyPlan.price.usd.monthly.toLocaleString("en-US")}/mo</span
+            >From ${enterprisePlan.price.usd.monthly.toLocaleString("en-US")}/mo</span
           >
           <span class="price-usd-annual hidden text-2xl font-bold text-gray-900 dark:text-white"
-            >From ${agencyPlan.price.usd.monthly.toLocaleString("en-US")}/mo</span
+            >From ${enterprisePlan.price.usd.monthly.toLocaleString("en-US")}/mo</span
           >
           <span class="price-inr-monthly hidden text-2xl font-bold text-gray-900 dark:text-white"
-            >From ₹{agencyPlan.price.inr.monthly.toLocaleString("en-IN")}/mo</span
+            >From ₹{enterprisePlan.price.inr.monthly.toLocaleString("en-IN")}/mo</span
           >
           <span class="price-inr-annual hidden text-2xl font-bold text-gray-900 dark:text-white"
-            >From ₹{agencyPlan.price.inr.monthly.toLocaleString("en-IN")}/mo</span
+            >From ₹{enterprisePlan.price.inr.monthly.toLocaleString("en-IN")}/mo</span
           >
         </p>
         <p class="mt-2 text-gray-600 dark:text-gray-400">
-          Custom agent-minute pools, unlimited targets, SSO/SAML, multi-workspace management, and
-          dedicated support with SLA.
+          Custom agent-minute pools, unlimited targets and dedicated support. SSO/SAML and
+          multi-workspace management are on the roadmap and available on request — talk to us about
+          timelines.
         </p>
         <a
           href="/support"

@@ -9,7 +9,7 @@
  * - Trial lifecycle (start, state, expiry)
  * - Grace period state machine (mid-scan balance exhaustion)
  * - GeoIP routing (Polar USD vs Razorpay INR)
- * - Overage debit (Team plan opt-in)
+ * - Overage debit (Launch Assurance plan opt-in)
  * - Refund reversal
  * - Pack expiry
  */

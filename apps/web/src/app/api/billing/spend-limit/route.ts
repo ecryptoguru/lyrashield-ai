@@ -11,9 +11,9 @@ const SpendLimitSchema = z.object({
 })
 
 /**
- * POST /api/billing/spend-limit — set the overage spend limit for a Team plan workspace.
+ * POST /api/billing/spend-limit — set the overage spend limit for a Launch Assurance workspace.
  *
- * Only Team plan workspaces can set a spend limit. The spend limit controls
+ * Only Launch Assurance plan workspaces can set a spend limit. The spend limit controls
  * how much overage (at $0.15/min) can be consumed beyond the included minutes.
  *
  * All money is in integer cents (Decimal-safe, never Float).
@@ -45,14 +45,18 @@ export async function POST(request: Request) {
 
     await requirePermission(workspaceId, PERMISSIONS.billing.manage)
 
-    // Verify the workspace is on Team plan
+    // Verify the workspace is on Launch Assurance plan
     const billingAccount = await prisma.billingAccount.findUnique({
       where: { workspaceId },
       select: { currentPlan: true },
     })
 
-    if (!billingAccount || billingAccount.currentPlan !== "TEAM") {
-      return apiError("PLAN_NOT_ELIGIBLE", "Spend limits are only available on the Team plan.", 403)
+    if (!billingAccount || billingAccount.currentPlan !== "LAUNCH_ASSURANCE") {
+      return apiError(
+        "PLAN_NOT_ELIGIBLE",
+        "Spend limits are only available on the Launch Assurance plan.",
+        403
+      )
     }
 
     await prisma.billingAccount.update({

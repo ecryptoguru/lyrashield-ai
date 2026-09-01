@@ -23,6 +23,20 @@ export interface RecordAgentMinutesOptions {
   phase?: string
   /** Cycle start for this billing period. */
   cycleStart?: Date
+  /**
+   * Terminal outcome of the scan. Founder-confirmed billing rules (2026-08-29):
+   * - "failed" scans are NEVER billed — the caller must not call this at all
+   *   for a failed terminal state (no agent_minutes UsageRecord is written).
+   * - "cancelled" scans bill for the period actually used, WITHOUT the
+   *   1-minute floor. A cancel at 20 seconds bills 20 seconds' worth.
+   *   Rounding rule (documented): minutes are whole-minute ceiling, so a
+   *   cancel at 20s bills 1 minute; the difference vs. a normal scan is that
+   *   the floor is not applied, i.e. ms<=0 bills 0 and there is no forced
+   *   minimum. Sub-minute (per-second) billing is impractical because
+   *   UsageRecord.quantity and all pool/pack arithmetic are integer minutes.
+   * - "completed" (default) applies the 1-minute floor as before.
+   */
+  outcome?: "completed" | "failed" | "cancelled"
 }
 
 export interface RecordAgentMinutesResult {
@@ -74,6 +88,13 @@ export async function recordAgentMinutes(
   const phase = opts.phase ?? "default"
   const idempotencyKey = `${workspaceId}:${scanId}:${phase}`
 
+  // Failed scans are never billed (founder-confirmed 2026-08-29): refuse to
+  // write any agent_minutes UsageRecord regardless of how much work completed.
+  if (opts.outcome === "failed") {
+    logger.info("Skipping agent-minute billing for failed scan", { workspaceId, scanId })
+    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
+  }
+
   if (ms <= 0) {
     return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
   }
@@ -86,8 +107,15 @@ export async function recordAgentMinutes(
     return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
   }
 
-  // Wall-clock ms → integer minutes (ceiling, min 1)
-  const rawMinutes = Math.max(1, Math.ceil(ms / 60_000))
+  // Wall-clock ms → integer minutes.
+  // - Normal/completed scans: ceiling with a 1-minute floor (min 1 if ms > 0).
+  // - Cancelled scans: bill elapsed time only, NO floor (min 0). Rounding rule
+  //   is whole-minute ceiling, so a cancel at 20s still rounds to 1 minute;
+  //   the floor (which would also give 1) is simply not the mechanism. The
+  //   distinction that matters is that a cancelled scan is not forced up to a
+  //   minimum — only genuinely elapsed whole minutes are billed.
+  const rawMinutes =
+    opts.outcome === "cancelled" ? Math.ceil(ms / 60_000) : Math.max(1, Math.ceil(ms / 60_000))
 
   // Deep/Custom scans consume 3× minutes
   const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
