@@ -195,6 +195,33 @@ function evaluateControl09(tool: WebMcpToolSurface): WebMcpEvidenceState {
   return "NO_FINDING"
 }
 
+// WEBMCP-11: a credential embedded in the tool's own name/title/description or
+// schema. Literal credential values only — an empty input parameter the caller
+// fills is not a leak (see the control's falsePositiveNotes).
+const EMBEDDED_SECRET =
+  /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}|\bsk-[A-Za-z0-9]{20,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?:api[_-]?key|password|secret|token)\s*[:=]\s*["'][^"'\s]{8,}["'])/i
+
+function evaluateControl11(tool: WebMcpToolSurface): WebMcpEvidenceState {
+  const text = [tool.name, tool.title, tool.description].filter(Boolean).join("\n")
+  const schemaText = (tool.inputSchema.properties ?? [])
+    .map((p) => `${p.name} ${p.description ?? ""}`)
+    .join("\n")
+  const haystack = `${text}\n${schemaText}`
+  if (EMBEDDED_SECRET.test(haystack)) return "DETECTED"
+  return "NO_FINDING"
+}
+
+// WEBMCP-12: instruction-shaped text aimed at the consuming model in the tool
+// contract — the tool surface as a prompt-injection vector.
+const PROMPT_INJECTION_SURFACE =
+  /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+|every\s+|the\s+|your\s+|previous\s+|prior\s+|above\s+|earlier\s+|system\s+){0,3}(instructions|prompts|rules|directives|guardrails)\b|\byou (must|should|will|shall) (always|never)\b|\bsystem prompt\b|\bas an? (ai|language model)\b|\bdo not tell the user\b/i
+
+function evaluateControl12(tool: WebMcpToolSurface): WebMcpEvidenceState {
+  const text = [tool.title, tool.description].filter(Boolean).join("\n")
+  if (PROMPT_INJECTION_SURFACE.test(text)) return "DETECTED"
+  return "NO_FINDING"
+}
+
 function evaluateTool(
   tool: WebMcpToolSurface,
   files: WebMcpScanFile[],
@@ -250,6 +277,10 @@ function ruleSuffix(controlId: WebMcpControlId): string {
       return "missing-cleanup"
     case "WEBMCP-09":
       return "weak-schema"
+    case "WEBMCP-11":
+      return "embedded-secret"
+    case "WEBMCP-12":
+      return "prompt-injection-surface"
     default:
       return "signal"
   }
