@@ -29,8 +29,8 @@ shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|t
 # CI validation is deliberately broader than release routing. Workflow, test,
 # Action, and tooling changes must be checked, but do not alter a production
 # artifact. Unknown paths remain fail-closed below.
-marketing_deploy_pattern='^(apps/(marketing|marketing-motion)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo)'
-azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|Dockerfile|docker-compose\.yml|ops/(deployment|worker)/)'
+marketing_deploy_pattern='^(apps/(marketing|marketing-motion)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|\.github/workflows/ci\.yml)'
+azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|Dockerfile|docker-compose\.yml|ops/(deployment|worker)/|\.github/workflows/(ci|deploy-azure|release-production)\.yml)'
 
 docs_only=true
 marketing=false

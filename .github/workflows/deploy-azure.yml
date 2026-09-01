@@ -7,6 +7,15 @@ on:
         required: false
         type: string
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Current main SHA to deploy
+        required: true
+        type: string
+      confirmation:
+        description: Type deploy:<source_sha> to confirm emergency production deployment
+        required: true
+        type: string
 
 concurrency:
   group: deploy-azure-${{ github.ref }}
@@ -38,7 +47,31 @@ env:
   CLOUDFLARE_AOP_CERT_SHA256: ${{ vars.CLOUDFLARE_AOP_CERT_SHA256 || '' }}
 
 jobs:
+  validate-manual-production-dispatch:
+    name: Validate emergency production dispatch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the current main SHA and exact confirmation
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$CONFIRMATION" != "deploy:${SOURCE_SHA}" ]; then
+            echo "::error::Manual production deployment requires the current main SHA and deploy:<source_sha>."
+            exit 1
+          fi
+          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          if [ "$SOURCE_SHA" != "$latest_main" ]; then
+            echo "::error::Manual production deployment may only target current main."
+            exit 1
+          fi
+
   build:
+    needs: validate-manual-production-dispatch
     name: Build and push container images
     runs-on: ubuntu-24.04
     if: github.ref == 'refs/heads/main'
