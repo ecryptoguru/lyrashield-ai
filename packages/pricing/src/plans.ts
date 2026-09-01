@@ -30,7 +30,7 @@ export interface CloudPlan {
   name: string
   /** Included agent-minutes per month. */
   agentMinutes: number
-  /** Target scan cap per month (advisory, not hard-enforced). */
+  /** Maximum protected targets; 0 represents a custom Enterprise limit. */
   targetCaps: number
   /** Whether Deep/Custom scans are allowed on this plan. */
   deepAllowed: boolean

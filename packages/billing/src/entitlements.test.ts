@@ -34,6 +34,7 @@ vi.mock("@lyrashield/pricing", () => ({
       agentMinutes: 6000,
       targetCaps: 50,
     },
+    ENTERPRISE: { id: "ENTERPRISE", deepAllowed: true, agentMinutes: 0, targetCaps: 0 },
   },
   STANDARD_OVERAGE_PER_MINUTE_USD: 0.15,
 }))
@@ -228,6 +229,20 @@ describe("entitlements — protected-target cap (hard-enforced, founder-confirme
 
     expect(result.allowed).toBe(true)
     expect(result.targetCap).toBe(50)
+  })
+
+  it("allows Enterprise to add targets because its limits are contract-defined", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
+      plan: "ENTERPRISE",
+      deepAllowed: true,
+      trialStartedAt: null,
+    })
+    vi.mocked(prisma.target.count).mockResolvedValue(0)
+
+    const result = await assertTargetAllowed("ws-enterprise")
+
+    expect(result.allowed).toBe(true)
+    expect(result.targetCap).toBe(0)
   })
 
   it("blocks a trial workspace at the trial cap", async () => {
