@@ -29,8 +29,8 @@ shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|t
 # CI validation is deliberately broader than release routing. Workflow, test,
 # Action, and tooling changes must be checked, but do not alter a production
 # artifact. Unknown paths remain fail-closed below.
-marketing_deploy_pattern='^(apps/(marketing|marketing-motion)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo)'
-azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|Dockerfile|docker-compose\.yml|ops/(deployment|worker)/)'
+marketing_deploy_pattern='^(apps/(marketing|marketing-motion)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|\.github/workflows/ci\.yml)'
+azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|Dockerfile|docker-compose\.yml|ops/(deployment|worker)/|\.github/workflows/(ci|deploy-azure|release-production)\.yml)'
 
 docs_only=true
 marketing=false
@@ -90,13 +90,15 @@ if [[ "$unknown" == "true" ]]; then
 fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
-  echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
-  echo "app=$app" >> "$GITHUB_OUTPUT"
-  echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
-  echo "shared=$shared" >> "$GITHUB_OUTPUT"
-  echo "marketing-deploy=$marketing_deploy" >> "$GITHUB_OUTPUT"
-  echo "azure-deploy=$azure_deploy" >> "$GITHUB_OUTPUT"
+  {
+    echo "docs-only=$docs_only"
+    echo "marketing=$marketing"
+    echo "app=$app"
+    echo "desktop=$desktop"
+    echo "shared=$shared"
+    echo "marketing-deploy=$marketing_deploy"
+    echo "azure-deploy=$azure_deploy"
+  } >> "$GITHUB_OUTPUT"
 else
   echo "docs-only=$docs_only"
   echo "marketing=$marketing"

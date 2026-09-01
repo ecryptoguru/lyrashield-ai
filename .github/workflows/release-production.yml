@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       azure-deploy: ${{ steps.routing.outputs.azure-deploy }}
+      current-main: ${{ steps.current-main.outputs.current }}
     steps:
       - name: Download CI routing decision
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -46,9 +47,29 @@ jobs:
             echo "No Azure runtime changes detected; skipping production release." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Confirm release source is current main
+        id: current-main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$latest_main" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Release source or main reference is not an immutable SHA."
+            exit 1
+          fi
+          if [ "$HEAD_SHA" = "$latest_main" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping superseded release ${HEAD_SHA}; main is now ${latest_main}." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   deploy-azure:
     needs: routing
-    if: needs.routing.outputs.azure-deploy == 'true'
+    if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.azure-deploy == 'true'
     uses: ./.github/workflows/deploy-azure.yml
     with:
       source_sha: ${{ github.event.workflow_run.head_sha }}
