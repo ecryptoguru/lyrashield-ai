@@ -702,6 +702,9 @@ importers:
       '@lyrashield/config':
         specifier: workspace:*
         version: link:../config
+      '@lyrashield/gate':
+        specifier: workspace:*
+        version: link:../gate
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../logger
@@ -788,6 +791,15 @@ importers:
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../logger
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+
+  packages/gate:
     devDependencies:
       '@types/node':
         specifier: ^24.0.0

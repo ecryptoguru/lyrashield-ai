@@ -21,6 +21,7 @@
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/score": "workspace:*",
+    "@lyrashield/gate": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@paralleldrive/cuid2": "^3.3.0"

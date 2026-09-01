@@ -187,6 +187,11 @@ export {
   updateRetestStatus,
   type RetestWithDetails,
 } from "./retest-service"
+export {
+  evaluateGateForTarget,
+  getLatestGateVerdict,
+  type GateEvaluationResult,
+} from "./gate-service"
 export { gatherReportData, generateReportHTML, type ReportData } from "./report-generator"
 export {
   createNotification,

@@ -552,6 +552,7 @@ model Workspace {
   agentApprovals       AgentApproval[]
   scoreSnapshots       ScoreSnapshot[]
   aiSecurityScoreSnapshots AiSecurityScoreSnapshot[]
+  gateVerdicts         GateVerdict[]
   findingCandidates    FindingCandidate[]
   findingVerifications FindingVerification[]
   aiSystemProfile      AiSystemProfile[]
@@ -638,6 +639,7 @@ model Target {
   schedules         Schedule[]
   scoreSnapshots    ScoreSnapshot[]
   aiSecurityScoreSnapshots AiSecurityScoreSnapshot[]
+  gateVerdicts      GateVerdict[]
   findingCandidates FindingCandidate[]
   aiSystemProfile   AiSystemProfile?
   threatModels      ThreatModel[]
@@ -831,6 +833,7 @@ model Scan {
   reports              Report[]
   scoreSnapshot        ScoreSnapshot?
   aiSecurityScoreSnapshot AiSecurityScoreSnapshot?
+  gateVerdicts         GateVerdict[]
   resultManifest       ScanResultManifest?
   coverageReceipts     ScanCoverageReceipt[]
   findingCandidates    FindingCandidate[]
@@ -1218,6 +1221,44 @@ model AiSecurityScoreSnapshot {
   @@index([workspaceId, computedAt])
   @@index([workspaceId, targetId, computedAt])
   @@index([targetId, computedAt])
+}
+
+// WP2 Launch Gate: one immutable verdict per (target, standardVersion,
+// evaluation). Append-only — a re-evaluation inserts a new row; the latest
+// non-stale row is the current verdict. History is the audit trail.
+model GateVerdict {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  targetId        String
+  /** The completed scan this verdict was computed from (null when none exists). */
+  scanId          String?
+  /** e.g. "lyrashield-gate/1.0.0" — recorded so threshold changes are traceable. */
+  standardVersion String
+  /** READY | NOT_READY | INSUFFICIENT_EVIDENCE */
+  state           String
+  /** Scanner classes that were evaluated (positive coverage claim). */
+  coverageStatement Json
+  /** Always present; empty only when coverage is genuinely complete. */
+  nonCoverage     Json
+  /** Severity-ordered blockers, each traceable to a verified finding. */
+  blockingReasons Json
+  /** Counts of open findings by verification state. */
+  evidenceSummary Json
+  /** current flag + stale reason. */
+  staleness       Json
+  /** SHA-256 over the canonical evidence input (reproducibility). */
+  inputChecksum   String
+  /** SHA-256 over the rendered verdict payload (tamper-evidence). */
+  verdictChecksum String
+  evaluatedAt     DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  scan      Scan?     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([targetId, evaluatedAt])
+  @@index([workspaceId, targetId, evaluatedAt])
 }
 
 // OSV responses are global, immutable source snapshots. They deliberately do
