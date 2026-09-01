@@ -852,7 +852,23 @@ jobs:
             EMAIL_ENV=("BREVO_API_KEY=secretref:brevo-api-key")
           fi
           probe_dir=$(mktemp -d)
-          trap 'rm -rf "$probe_dir"' EXIT
+          PROBE_LABEL=""
+          cleanup_probe() {
+            local status=$?
+            if [ -n "$PROBE_LABEL" ]; then
+              if ! az containerapp revision label remove \
+                --name "$AZURE_APP_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --label "$PROBE_LABEL" \
+                --output none; then
+                echo "::error::Failed to remove the temporary app candidate probe label."
+                status=1
+              fi
+            fi
+            rm -rf "$probe_dir"
+            exit "$status"
+          }
+          trap cleanup_probe EXIT
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
             -subj "/CN=lyrashield-deploy-probe" \
             -keyout "$probe_dir/key.pem" -out "$probe_dir/cert.pem" >/dev/null 2>&1
@@ -979,12 +995,33 @@ jobs:
             echo "::error::Azure did not return the app candidate revision and FQDN. Production traffic was not changed."
             exit 1
           fi
+          echo "revision=$CANDIDATE_REVISION" >> "$GITHUB_OUTPUT"
+          echo "fqdn=$CANDIDATE_FQDN" >> "$GITHUB_OUTPUT"
           if [ "${{ env.CLOUDFLARE_ORIGIN_MTLS }}" = "required" ]; then
+            APP_FQDN=$(az containerapp show \
+              --name "$AZURE_APP_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.configuration.ingress.fqdn \
+              --output tsv)
+            APP_FQDN_SUFFIX=${APP_FQDN#*.}
+            if [ -z "$APP_FQDN" ] || [ "$APP_FQDN_SUFFIX" = "$APP_FQDN" ]; then
+              echo "::error::Azure did not return a valid app ingress FQDN. Production traffic was not changed."
+              exit 1
+            fi
+            PROBE_LABEL="probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            az containerapp revision label add \
+              --name "$AZURE_APP_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$CANDIDATE_REVISION" \
+              --label "$PROBE_LABEL" \
+              --no-prompt \
+              --output none
+            PROBE_FQDN="${AZURE_APP_CONTAINER_APP_NAME}---${PROBE_LABEL}.${APP_FQDN_SUFFIX}"
             for path in /api/ready /api/ready/evidence; do
               for attempt in $(seq 1 24); do
                 if curl --fail --silent --show-error --max-time 10 \
                   --cert "$probe_dir/cert.pem" --key "$probe_dir/key.pem" \
-                  -H "Host: app.lyrashieldai.com" "https://${CANDIDATE_FQDN}${path}"; then
+                  -H "Host: app.lyrashieldai.com" "https://${PROBE_FQDN}${path}"; then
                   break
                 fi
                 if [ "$attempt" = "24" ]; then
@@ -996,8 +1033,6 @@ jobs:
             done
             echo "mTLS candidate probe passed with ephemeral certificate fingerprint only."
           fi
-          echo "revision=$CANDIDATE_REVISION" >> "$GITHUB_OUTPUT"
-          echo "fqdn=$CANDIDATE_FQDN" >> "$GITHUB_OUTPUT"
 
       - name: Deploy scanner Container App
         id: deploy-scanner
