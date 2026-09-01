@@ -208,9 +208,10 @@ export function buildDashboardOverview(input: {
   terminalRuns: ScanRowLike[]
   receiptsByScanId: Map<string, string[]>
   findingGroups: DashboardFindingGroup[]
-  completedRunCount: number
-  reportCount: number
-  project: { name: string; riskScore: number; trustPlan: unknown } | null
+  /** Presentation supplements; the query function always supplies them. */
+  completedRunCount?: number
+  reportCount?: number
+  project?: { name: string; riskScore: number; trustPlan: unknown } | null
   evaluatedCandidates: {
     scanId: string
     targetId: string
@@ -222,7 +223,7 @@ export function buildDashboardOverview(input: {
     expiresAt: Date
     receiptStatuses: string[]
   }[]
-  scoreHistory: {
+  scoreHistory?: {
     scanId: string
     score: number
     grade: string
@@ -232,6 +233,10 @@ export function buildDashboardOverview(input: {
   now?: Date
 }): DashboardOverview {
   const now = input.now ?? new Date()
+  const completedRunCount = input.completedRunCount ?? 0
+  const reportCount = input.reportCount ?? 0
+  const project = input.project ?? null
+  const scoreHistory = input.scoreHistory ?? []
 
   // One finding-group source feeds open-issue totals, the severity mix,
   // remediation movement, and the readiness aggregate — so every number on the
@@ -349,16 +354,16 @@ export function buildDashboardOverview(input: {
     openIssues,
     openIssuesBySeverity,
     findingGroups: input.findingGroups,
-    completedRunCount: input.completedRunCount,
-    scoreHistory: (input.scoreHistory ?? []).map((entry) => ({
+    completedRunCount,
+    scoreHistory: scoreHistory.map((entry) => ({
       scanId: entry.scanId,
       score: entry.score,
       grade: entry.grade,
       computedAt: entry.computedAt.toISOString(),
       targetName: entry.targetName,
     })),
-    reportCount: input.reportCount,
-    project: input.project,
+    reportCount,
+    project,
     latestRun,
     lastEvaluatedAssessment,
     recentRuns,
