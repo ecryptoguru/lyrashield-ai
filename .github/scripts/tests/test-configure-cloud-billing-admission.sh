@@ -18,6 +18,8 @@ grep -Fq 'gh variable set POLAR_BILLING_ADMISSION --env azure-production' "$scri
 grep -Fq 'gh variable set RAZORPAY_BILLING_ADMISSION --env azure-production' "$script"
 grep -Fq 'gh variable set BILLING_CANARY_WORKSPACE_IDS --env azure-production' "$script"
 grep -Fq 'gh variable delete BILLING_CANARY_WORKSPACE_IDS --env azure-production 2>/dev/null || true' "$script"
+grep -Fq 'set_canary_allowlist "$BILLING_CANARY_WORKSPACE_IDS"' "$script"
+grep -Fq 'if [ -n "$allowlist" ]; then' "$script"
 grep -Fq 'az containerapp revision deactivate' "$script"
 if grep -Fq -- '-H "Host: app.lyrashieldai.com"' "$script"; then
   echo 'FAIL: candidate readiness must use its Azure revision host.' >&2
