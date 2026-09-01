@@ -111,12 +111,7 @@ Review the workspace, target, and goal, choose an available review depth, then s
 
 ## 5. Navigation and workspace switching
 
-Home offers two presentation modes in the header:
-
-- **Guided** is the default. It keeps the launch verdict, assurance steps, next action, security score, and open-finding count prominent while hiding secondary analytical panels.
-- **Pro** adds risk posture and trend, retained finding mix, remediation flow, and recent scan activity.
-
-The choice is saved per workspace in the current browser. If browser storage is unavailable, Guided remains fully functional. Switching modes changes presentation only; it does not change permissions, targets, scan depth, evidence state, or launch verdict.
+Home is one adaptive dashboard. It leads with the workspace's next action (add a target, run a first review, review the highest-priority issue, or generate a report), then shows current posture with the exact evidence scope behind each number, the latest run when it needs attention, four compact metrics, recent activity, and secondary analytics. Technical depth — coverage receipts, manifests, priority reasoning, CWE/CVSS — stays available through progressive disclosure instead of a mode switch. Presentation never changes permissions, targets, scan depth, evidence state, or launch verdict.
 
 The primary navigation contains four lifecycle destinations:
 
