@@ -258,6 +258,9 @@ importers:
       '@lyrashield/evidence-storage':
         specifier: workspace:*
         version: link:../../packages/evidence-storage
+      '@lyrashield/fix':
+        specifier: workspace:*
+        version: link:../../packages/fix
       '@lyrashield/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
@@ -791,6 +794,15 @@ importers:
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../logger
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+
+  packages/fix:
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
