@@ -27,6 +27,9 @@ overrides:
   # GHSA-w5hq-g745-h8pq: uuid <11.1.1 has a missing buffer bounds check.
   # Transitive via @sentry/nextjs > @sentry/webpack-plugin.
   uuid: ">=11.1.1"
+  # GHSA-3f6p-5ww8-9rcr: mysql2 <3.22.0 can downgrade auth to plaintext.
+  # Optional through Prisma and Better Auth; force the compatible fixed release.
+  mysql2: "3.22.0"
 
 peerDependencyRules:
   allowedVersions:
