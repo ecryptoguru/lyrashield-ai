@@ -61,7 +61,7 @@ export function deriveHomeNextAction(
     return {
       eyebrow: "Next step",
       title: "Review the highest-priority issue",
-      description: `This workspace has ${blockers} unresolved critical or high issue${blockers === 1 ? "" : "s"} across all targets. Detection is not verification — review the evidence, then fix and retest.`,
+      description: `This workspace has ${blockers} unresolved critical or high issue${blockers === 1 ? "" : "s"} across all targets. Detection is not verification. Review the evidence, then fix and retest.`,
       href: HOME_BLOCKER_HREF,
       cta: "Open Issues",
     }

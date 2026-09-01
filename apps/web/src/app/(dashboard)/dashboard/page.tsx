@@ -420,7 +420,7 @@ export default async function DashboardPage() {
               {readiness.verdict === "GO"
                 ? "Ready to launch"
                 : readiness.verdict === "INCONCLUSIVE"
-                  ? "Inconclusive — nothing was checked"
+                  ? "Inconclusive: nothing was checked"
                   : readiness.verdict === "NOT_EVALUATED"
                     ? "Needs evidence"
                     : readiness.verdict === "GO_WITH_CONDITIONS"

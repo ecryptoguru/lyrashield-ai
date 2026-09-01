@@ -433,9 +433,10 @@ export async function GET(request: Request) {
     // Intersect the state filter with an explicit legacy status filter so both
     // contracts stay meaningful when combined.
     const stateStatuses = scanStateStatuses(stateFilter)
+    const explicitStatuses = statusFilter ?? (singleStatus ? [singleStatus] : undefined)
     let effectiveStatuses: string[] | undefined
-    if (stateStatuses && statusFilter) {
-      effectiveStatuses = statusFilter.filter((status) => stateStatuses.includes(status))
+    if (stateStatuses && explicitStatuses) {
+      effectiveStatuses = explicitStatuses.filter((status) => stateStatuses.includes(status))
       if (effectiveStatuses.length === 0) {
         return NextResponse.json(
           { success: true, data: { items: [], nextCursor: null } },

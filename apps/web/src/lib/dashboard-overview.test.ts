@@ -76,11 +76,11 @@ describe("workspace verdict target-coverage gate", () => {
     )
   })
 
-  it("keeps a positive verdict when a target has partial but usable coverage", () => {
+  it("refuses a positive verdict when a target has only partial coverage", () => {
     const targets = { ...complete, assessed: 1, partiallyAssessed: 1 }
-    expect(workspaceEvidenceIsComplete(targets)).toBe(true)
+    expect(workspaceEvidenceIsComplete(targets)).toBe(false)
     expect(applyTargetCoverageToVerdict("GO_WITH_CONDITIONS", targets).verdict).toBe(
-      "GO_WITH_CONDITIONS"
+      "NOT_EVALUATED"
     )
   })
 
@@ -189,7 +189,7 @@ describe("buildDashboardOverview", () => {
     expect(overview.latestRun?.id).toBe("scan-latest")
     expect(overview.latestRun?.coverageState).toBe("NONE")
     expect(overview.lastEvaluatedAssessment?.scanId).toBe("scan-earlier")
-    expect(overview.targets).toMatchObject({ total: 1, unassessed: 1, assessed: 0 })
+    expect(overview.targets).toMatchObject({ total: 1, unassessed: 0, assessed: 1 })
   })
 
   it("computes zero, partial, complete, and expired target coverage", () => {
@@ -251,6 +251,107 @@ describe("buildDashboardOverview", () => {
     })
     expect(overview.targets.expiredAssessments).toBe(1)
     expect(overview.lastEvaluatedAssessment?.scoreExpiresAt).toBe("2026-08-01T10:00:00.000Z")
+  })
+
+  it("counts only each active target's latest evaluated assessment as expired", () => {
+    const overview = buildDashboardOverview({
+      targets: [{ id: "target-1", name: "Web app" }],
+      terminalRuns: [makeRun({ id: "scan-current" })],
+      receiptsByScanId: new Map([
+        ["scan-current", ["COMPLETED"]],
+        ["scan-old", ["COMPLETED"]],
+      ]),
+      findingGroups: [],
+      evaluatedCandidates: [
+        {
+          scanId: "scan-old",
+          targetId: "target-1",
+          targetName: "Web app",
+          mode: "STANDARD",
+          completedAt: new Date("2026-07-01T10:00:00Z"),
+          score: 70,
+          grade: "C",
+          expiresAt: new Date("2026-08-01T10:00:00Z"),
+          receiptStatuses: ["COMPLETED"],
+        },
+        {
+          scanId: "scan-current",
+          targetId: "target-1",
+          targetName: "Web app",
+          mode: "STANDARD",
+          completedAt: new Date("2026-08-10T10:00:00Z"),
+          score: 90,
+          grade: "A",
+          expiresAt: new Date("2026-09-10T10:00:00Z"),
+          receiptStatuses: ["COMPLETED"],
+        },
+        {
+          scanId: "scan-deleted-target",
+          targetId: "deleted-target",
+          targetName: "Deleted target",
+          mode: "STANDARD",
+          completedAt: new Date("2026-08-12T10:00:00Z"),
+          score: 50,
+          grade: "F",
+          expiresAt: new Date("2026-08-13T10:00:00Z"),
+          receiptStatuses: ["COMPLETED"],
+        },
+      ],
+      now: new Date("2026-08-15T00:00:00Z"),
+    })
+
+    expect(overview.targets.expiredAssessments).toBe(0)
+    expect(overview.lastEvaluatedAssessment?.scanId).toBe("scan-current")
+  })
+
+  it("keeps older usable coverage when the newest run evaluated nothing", () => {
+    const overview = buildDashboardOverview({
+      targets: [{ id: "target-1", name: "Web app" }],
+      terminalRuns: [
+        makeRun({ id: "scan-new", createdAt: new Date("2026-08-03T10:00:00Z") }),
+        makeRun({ id: "scan-old", createdAt: new Date("2026-08-01T10:00:00Z") }),
+      ],
+      receiptsByScanId: new Map([
+        ["scan-new", ["NOT_APPLICABLE"]],
+        ["scan-old", ["COMPLETED"]],
+      ]),
+      findingGroups: [],
+      evaluatedCandidates: [],
+    })
+
+    expect(overview.latestRun).toMatchObject({ id: "scan-new", coverageState: "NONE" })
+    expect(overview.targets).toMatchObject({ assessed: 1, partiallyAssessed: 0, unassessed: 0 })
+  })
+
+  it("excludes score snapshots from runs that evaluated nothing", () => {
+    const overview = buildDashboardOverview({
+      targets: [{ id: "target-1", name: "Web app" }],
+      terminalRuns: [],
+      receiptsByScanId: new Map([
+        ["scan-evaluated", ["COMPLETED"]],
+        ["scan-empty", ["NOT_APPLICABLE"]],
+      ]),
+      findingGroups: [],
+      evaluatedCandidates: [],
+      scoreHistory: [
+        {
+          scanId: "scan-evaluated",
+          score: 88,
+          grade: "B",
+          computedAt: new Date("2026-08-01T10:00:00Z"),
+          targetName: "Web app",
+        },
+        {
+          scanId: "scan-empty",
+          score: 100,
+          grade: "A_PLUS",
+          computedAt: new Date("2026-08-02T10:00:00Z"),
+          targetName: "Web app",
+        },
+      ],
+    })
+
+    expect(overview.scoreHistory.map((entry) => entry.scanId)).toEqual(["scan-evaluated"])
   })
 
   it("keeps a user-safe failure message and never raw error text on the latest run", () => {

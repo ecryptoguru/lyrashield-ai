@@ -778,7 +778,7 @@ export function ScansClient({
                 <div className="mb-2 flex items-center justify-between">
                   <p className="block text-sm font-medium">Review type</p>
                   <span className="text-muted-foreground text-[11px]">
-                    Simple options — pick one
+                    Simple options: pick one
                   </span>
                 </div>
 

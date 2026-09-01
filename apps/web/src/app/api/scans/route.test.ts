@@ -705,6 +705,29 @@ describe("GET /api/scans", () => {
     )
   })
 
+  it("intersects a single legacy status with the state filter", async () => {
+    vi.mocked(listScans).mockResolvedValue({ items: [], nextCursor: null } as never)
+
+    await GET(makeGetRequest({ workspaceId: "ws-1", state: "ACTIVE", status: "RUNNING" }))
+
+    expect(listScans).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-1", statuses: ["RUNNING"] })
+    )
+  })
+
+  it("returns an empty page when single status and state filters cannot intersect", async () => {
+    const response = await GET(
+      makeGetRequest({ workspaceId: "ws-1", state: "ACTIVE", status: "COMPLETED" })
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { items: [], nextCursor: null },
+    })
+    expect(listScans).not.toHaveBeenCalled()
+  })
+
   it("passes at most three validated scan IDs to the scoped list query", async () => {
     vi.mocked(listScans).mockResolvedValue({ items: [], nextCursor: null } as never)
 

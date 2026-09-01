@@ -2,19 +2,18 @@ import { prisma } from "@lyrashield/db"
 import type { ScanMode } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
+import { CreateScanSchema, resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
 import { evaluateScanEntitlement } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
-import { z } from "zod"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError } from "../../../../lib/api-response"
 
-const EligibilityQuerySchema = z.object({
-  workspaceId: z.string().min(1),
-  targetId: z.string().min(1),
-  goal: z.string().min(1).max(64),
-  mode: z.string().min(1).max(32),
+const EligibilityQuerySchema = CreateScanSchema.pick({
+  workspaceId: true,
+  targetId: true,
+  goal: true,
+  mode: true,
 })
 
 /**
@@ -83,7 +82,7 @@ export async function GET(request: Request) {
       }
     }
 
-    let canonicalMode = mode
+    let canonicalMode: ScanMode = mode
     if (target.type === "REPO" || target.type === "WEB_APP" || target.type === "API") {
       try {
         canonicalMode = resolveScanProfile({
@@ -115,7 +114,7 @@ export async function GET(request: Request) {
     // Read-only entitlement evaluation: no trial/billing mutation on GET.
     // canonicalMode is a resolved profile mode at this point — every
     // unsupported combination returned above.
-    const entitlement = await evaluateScanEntitlement(workspaceId, canonicalMode as ScanMode, {
+    const entitlement = await evaluateScanEntitlement(workspaceId, canonicalMode, {
       mutateOnTrialExpiry: false,
     })
 

@@ -259,7 +259,7 @@ export function TargetsClient({
   }
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {filterProjectId && (
@@ -571,7 +571,7 @@ export function TargetsClient({
         />
       ) : (
         <div
-          className="overflow-x-auto rounded-xl border shadow-sm"
+          className="w-full max-w-full overflow-x-auto rounded-xl border shadow-sm"
           tabIndex={0}
           aria-label="Targets list"
         >
@@ -580,10 +580,10 @@ export function TargetsClient({
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Name</th>
                 <th className="px-4 py-3 text-left font-semibold">Type</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                <th className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
                   {RUN_PLURAL}
                 </th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                <th className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
                   {ISSUE_PLURAL}
                 </th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
@@ -612,8 +612,8 @@ export function TargetsClient({
                       {t.type}
                     </Badge>
                   </td>
-                  <td className="hidden px-4 py-3 sm:table-cell">{t.scanCount}</td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
+                  <td className="hidden px-4 py-3 lg:table-cell">{t.scanCount}</td>
+                  <td className="hidden px-4 py-3 lg:table-cell">
                     {t.findingCount > 0 ? (
                       <span className="text-destructive flex items-center gap-1">
                         <Bug className="h-3 w-3" aria-hidden="true" />

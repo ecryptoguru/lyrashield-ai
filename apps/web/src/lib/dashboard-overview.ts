@@ -141,7 +141,9 @@ export interface DashboardTargetVerdictInput {
  */
 export function workspaceEvidenceIsComplete(targets: DashboardTargetVerdictInput): boolean {
   if (targets.total === 0) return false
-  return targets.unassessed === 0 && targets.expiredAssessments === 0
+  return (
+    targets.partiallyAssessed === 0 && targets.unassessed === 0 && targets.expiredAssessments === 0
+  )
 }
 
 /**
@@ -160,7 +162,12 @@ export function applyTargetCoverageToVerdict(
     const parts: string[] = []
     if (targets.unassessed > 0) {
       parts.push(
-        `${targets.unassessed} of ${targets.total} target${targets.total === 1 ? "" : "s"} has no usable review evidence yet`
+        `${targets.unassessed} of ${targets.total} target${targets.total === 1 ? "" : "s"} ${targets.unassessed === 1 ? "has" : "have"} no usable review evidence yet`
+      )
+    }
+    if (targets.partiallyAssessed > 0) {
+      parts.push(
+        `${targets.partiallyAssessed} target${targets.partiallyAssessed === 1 ? " has" : "s have"} only partial review evidence`
       )
     }
     if (targets.expiredAssessments > 0) {
@@ -262,28 +269,45 @@ export function buildDashboardOverview(input: {
     }
   }
 
-  // Latest terminal run per target drives per-target coverage; a target with
-  // only non-terminal runs (or none) is unassessed.
-  const latestTerminalRunByTarget = new Map<string, ScanRowLike>()
+  // A newer inconclusive run does not erase older usable evidence. Track the
+  // newest terminal run with applicable coverage for each active target.
+  const latestUsableRunByTarget = new Map<string, ScanRowLike>()
   for (const run of input.terminalRuns) {
     if (!run.targetId) continue
-    const existing = latestTerminalRunByTarget.get(run.targetId)
+    if (coverageStateFromReceipts(input.receiptsByScanId.get(run.id) ?? []) === "NONE") continue
+    const existing = latestUsableRunByTarget.get(run.targetId)
     if (!existing || run.createdAt > existing.createdAt)
-      latestTerminalRunByTarget.set(run.targetId, run)
+      latestUsableRunByTarget.set(run.targetId, run)
+  }
+
+  const activeTargetIds = new Set(input.targets.map((target) => target.id))
+  const latestEvaluatedByTarget = new Map<string, (typeof input.evaluatedCandidates)[number]>()
+  for (const candidate of input.evaluatedCandidates) {
+    if (!activeTargetIds.has(candidate.targetId)) continue
+    if (coverageStateFromReceipts(candidate.receiptStatuses) === "NONE") continue
+    const existing = latestEvaluatedByTarget.get(candidate.targetId)
+    if (!existing || candidate.completedAt > existing.completedAt) {
+      latestEvaluatedByTarget.set(candidate.targetId, candidate)
+    }
   }
 
   let assessed = 0
   let partiallyAssessed = 0
   let unassessed = 0
   for (const target of input.targets) {
-    const run = latestTerminalRunByTarget.get(target.id)
-    const state = run ? coverageStateFromReceipts(input.receiptsByScanId.get(run.id) ?? []) : "NONE"
+    const run = latestUsableRunByTarget.get(target.id)
+    const evaluatedCandidate = latestEvaluatedByTarget.get(target.id)
+    const state = run
+      ? coverageStateFromReceipts(input.receiptsByScanId.get(run.id) ?? [])
+      : evaluatedCandidate
+        ? coverageStateFromReceipts(evaluatedCandidate.receiptStatuses)
+        : "NONE"
     if (state === "COMPLETE") assessed++
     else if (state === "PARTIAL") partiallyAssessed++
     else unassessed++
   }
 
-  const expiredAssessments = input.evaluatedCandidates.filter(
+  const expiredAssessments = [...latestEvaluatedByTarget.values()].filter(
     (candidate) => candidate.expiresAt <= now
   ).length
 
@@ -312,8 +336,12 @@ export function buildDashboardOverview(input: {
   // The last evaluated assessment is the newest score snapshot whose scan
   // actually evaluated its target (PARTIAL or COMPLETE coverage) — never the
   // newest workspace score taken independently of the run it describes.
-  const evaluated = input.evaluatedCandidates.find(
-    (candidate) => coverageStateFromReceipts(candidate.receiptStatuses) !== "NONE"
+  const evaluated = [...latestEvaluatedByTarget.values()].reduce<
+    (typeof input.evaluatedCandidates)[number] | null
+  >(
+    (latest, candidate) =>
+      !latest || candidate.completedAt > latest.completedAt ? candidate : latest,
+    null
   )
   const lastEvaluatedAssessment: DashboardOverview["lastEvaluatedAssessment"] = evaluated
     ? {
@@ -355,13 +383,18 @@ export function buildDashboardOverview(input: {
     openIssuesBySeverity,
     findingGroups: input.findingGroups,
     completedRunCount,
-    scoreHistory: scoreHistory.map((entry) => ({
-      scanId: entry.scanId,
-      score: entry.score,
-      grade: entry.grade,
-      computedAt: entry.computedAt.toISOString(),
-      targetName: entry.targetName,
-    })),
+    scoreHistory: scoreHistory
+      .filter(
+        (entry) =>
+          coverageStateFromReceipts(input.receiptsByScanId.get(entry.scanId) ?? []) !== "NONE"
+      )
+      .map((entry) => ({
+        scanId: entry.scanId,
+        score: entry.score,
+        grade: entry.grade,
+        computedAt: entry.computedAt.toISOString(),
+        targetName: entry.targetName,
+      })),
     reportCount,
     project,
     latestRun,

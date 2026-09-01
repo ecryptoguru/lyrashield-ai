@@ -1097,7 +1097,7 @@ export function ScanDetailClient({
                 Issues from this run ({currentFindings.length})
               </h2>
               <p className="text-muted-foreground mb-3 text-xs">
-                Retained after scanner layers and deduplication. Detection is not verification — a
+                Retained after scanner layers and deduplication. Detection is not verification. A
                 finding is verified only with an independent verification receipt.
               </p>
               {Object.entries(severityCounts)
