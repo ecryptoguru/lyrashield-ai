@@ -123,7 +123,7 @@ describe("handleGate target scoping", () => {
 
 describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
   function mockClientWithVerdict(state: string, extra: Record<string, unknown> = {}) {
-    const request = vi.fn(async () => ({
+    return vi.fn(async () => ({
       state,
       blockingReasons: [],
       nonCoverage: [],
@@ -131,7 +131,6 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
       standardVersion: "lyrashield-gate/1.0.0",
       ...extra,
     }))
-    return request
   }
 
   it("exits 0 when the gate verdict is READY", async () => {
