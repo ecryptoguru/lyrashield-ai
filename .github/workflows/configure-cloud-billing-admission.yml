@@ -7,7 +7,7 @@ on:
         description: Joint Polar and Razorpay Cloud admission mode
         required: true
         type: choice
-        options: [off, canary, public]
+        options: ["off", canary, public]
       canary_workspace_ids:
         description: Comma-separated workspace IDs; required only for canary
         required: false

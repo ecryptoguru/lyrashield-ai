@@ -42,6 +42,55 @@ export function isActiveScan(status: ScanStatus) {
   return ACTIVE_STATUSES.has(status)
 }
 
+/**
+ * URL-backed run-state filters. Each state maps to the scan statuses it
+ * covers; "ALL" maps to no filter. Shared by GET /api/scans (validated) and
+ * the Runs page so the URL, API, and UI can never disagree.
+ */
+export const SCAN_STATE_FILTERS = [
+  "ALL",
+  "ACTIVE",
+  "COMPLETED",
+  "NEEDS_ATTENTION",
+  "CANCELLED",
+] as const
+
+export type ScanStateFilter = (typeof SCAN_STATE_FILTERS)[number]
+
+export const SCAN_STATE_STATUSES: Record<Exclude<ScanStateFilter, "ALL">, string[]> = {
+  ACTIVE: ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"],
+  COMPLETED: ["COMPLETED", "PARTIAL"],
+  NEEDS_ATTENTION: ["FAILED", "STOPPED_BUDGET", "TIMED_OUT"],
+  CANCELLED: ["CANCELLED"],
+}
+
+export function parseScanStateFilter(value: string | undefined | null): ScanStateFilter {
+  return (SCAN_STATE_FILTERS as readonly string[]).includes(value ?? "")
+    ? (value as ScanStateFilter)
+    : "ALL"
+}
+
+/** Status list for a state filter, or null when the state is ALL. */
+export function scanStateStatuses(state: ScanStateFilter): string[] | null {
+  return state === "ALL" ? null : SCAN_STATE_STATUSES[state]
+}
+
+/** User-facing label for a state filter option. */
+export function scanStateStatusLabel(state: ScanStateFilter): string {
+  switch (state) {
+    case "ALL":
+      return "All states"
+    case "ACTIVE":
+      return "Active"
+    case "COMPLETED":
+      return "Completed"
+    case "NEEDS_ATTENTION":
+      return "Needs attention"
+    case "CANCELLED":
+      return "Cancelled"
+  }
+}
+
 export function getScanPresentation(
   status: ScanStatus,
   context: ScanPresentationContext = {}

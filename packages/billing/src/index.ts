@@ -20,6 +20,7 @@ export * from "./plans"
 // Entitlements
 export {
   assertScanAllowed,
+  evaluateScanEntitlement,
   assertTargetAllowed,
   type ScanModeAllowed,
   type EntitlementResult,

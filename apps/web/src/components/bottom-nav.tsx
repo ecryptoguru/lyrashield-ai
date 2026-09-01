@@ -126,7 +126,17 @@ export function BottomNav({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label="Workspace navigation"
+              aria-label={[
+                "Workspace navigation",
+                unreadNotifications > 0
+                  ? `${unreadNotifications} unread notification${unreadNotifications === 1 ? "" : "s"}`
+                  : null,
+                pendingApprovals > 0
+                  ? `${pendingApprovals} pending approval${pendingApprovals === 1 ? "" : "s"}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
               className="text-muted-foreground focus-visible:ring-ring relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-[10px] font-medium focus-visible:ring-2 focus-visible:ring-inset"
             >
               <Menu className="size-5" aria-hidden="true" />

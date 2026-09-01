@@ -29,17 +29,23 @@ export interface EntitlementResult {
 }
 
 /**
- * Assert that a scan with the given mode is allowed for this workspace.
+ * Evaluate whether a scan with the given mode is allowed for this workspace.
  *
  * Rules:
  * - DEEP/CUSTOM scans require a plan with deepAllowed=true (PRO and above)
  * - TRIAL and STARTER plans cannot run DEEP/CUSTOM scans
  * - The workspace must have remaining agent-minutes > 0
  * - Trial workspaces may scan any target already admitted to the workspace
+ *
+ * Read-only by default: `mutateOnTrialExpiry` opts the POST path into the
+ * lazy billing-account status write on trial expiry. The advisory preflight
+ * (GET /api/scans/eligibility) must never mutate trial, billing, scan, or
+ * audit state, so it keeps this false.
  */
-export async function assertScanAllowed(
+export async function evaluateScanEntitlement(
   workspaceId: string,
-  mode: ScanMode
+  mode: ScanMode,
+  options: { mutateOnTrialExpiry?: boolean } = {}
 ): Promise<EntitlementResult> {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
@@ -66,12 +72,14 @@ export async function assertScanAllowed(
   const trialState = isTrial ? await getTrialState(workspaceId) : null
 
   // Check trial expiry: if the workspace is on trial and the trial has expired,
-  // block the scan and lazily set the billing account status via blockOnExpiry.
+  // block the scan. The POST path additionally records the billing account
+  // status via blockOnExpiry; read-only callers skip that write.
   if (isTrial && trialState?.isExpired) {
-    // Lazily set the billing account status to "trial_expired"
-    await blockOnExpiry(workspaceId).catch(() => {
-      // Non-blocking — the scan is already blocked below
-    })
+    if (options.mutateOnTrialExpiry) {
+      await blockOnExpiry(workspaceId).catch(() => {
+        // Non-blocking — the scan is already blocked below
+      })
+    }
     return {
       allowed: false,
       code: "TRIAL_EXPIRED",
@@ -174,6 +182,19 @@ export async function assertScanAllowed(
     plan,
     remainingMinutes: balance.totalRemaining,
   }
+}
+
+/**
+ * Assert that a scan with the given mode is allowed for this workspace.
+ *
+ * Authoritative POST-side gate: on trial expiry it also lazily records the
+ * billing-account status. See `evaluateScanEntitlement` for the rules.
+ */
+export async function assertScanAllowed(
+  workspaceId: string,
+  mode: ScanMode
+): Promise<EntitlementResult> {
+  return evaluateScanEntitlement(workspaceId, mode, { mutateOnTrialExpiry: true })
 }
 
 export interface TargetAllowedResult {

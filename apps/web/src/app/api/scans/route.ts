@@ -16,6 +16,7 @@ import {
   resolveScanProfile,
   resolveTargetScanMode,
 } from "@lyrashield/types"
+import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
@@ -380,6 +381,9 @@ export async function GET(request: Request) {
     const targetId = searchParams.get("targetId")
     const rawStatus = searchParams.get("status")
     const rawScanIds = searchParams.get("ids")
+    // URL-backed state filter (ALL | ACTIVE | COMPLETED | NEEDS_ATTENTION |
+    // CANCELLED). Composes with, but never replaces, the legacy status param.
+    const stateFilter = parseScanStateFilter(searchParams.get("state"))
 
     if (!workspaceId) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
@@ -424,13 +428,36 @@ export async function GET(request: Request) {
 
     await requirePermission(workspaceId, PERMISSIONS.scan.view)
 
-    const { cursor, limit } = parsePaginationParams(searchParams)
+    const { cursor, limit } = parsePaginationParams(searchParams, 25)
+
+    // Intersect the state filter with an explicit legacy status filter so both
+    // contracts stay meaningful when combined.
+    const stateStatuses = scanStateStatuses(stateFilter)
+    const explicitStatuses = statusFilter ?? (singleStatus ? [singleStatus] : undefined)
+    let effectiveStatuses: string[] | undefined
+    if (stateStatuses && explicitStatuses) {
+      effectiveStatuses = explicitStatuses.filter((status) => stateStatuses.includes(status))
+      if (effectiveStatuses.length === 0) {
+        return NextResponse.json(
+          { success: true, data: { items: [], nextCursor: null } },
+          { status: 200, headers: { "Cache-Control": "private, no-store" } }
+        )
+      }
+    } else if (stateStatuses) {
+      effectiveStatuses = stateStatuses
+    }
 
     const { items, nextCursor } = await listScans({
       workspaceId,
       ...(scanIds ? { scanIds } : {}),
       ...(targetId ? { targetId } : {}),
-      ...(statusFilter ? { statuses: statusFilter } : singleStatus ? { status: singleStatus } : {}),
+      ...(effectiveStatuses
+        ? { statuses: effectiveStatuses as Parameters<typeof listScans>[0]["statuses"] }
+        : statusFilter
+          ? { statuses: statusFilter }
+          : singleStatus
+            ? { status: singleStatus }
+            : {}),
       ...(cursor ? { cursor } : {}),
       limit,
     })

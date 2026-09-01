@@ -30,26 +30,41 @@ current_image=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --re
 current_source_sha=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query "properties.template.containers[0].env[?name=='LYRASHIELD_PRODUCT_REVISION'].value | [0]" --output tsv)
 [ "$current_image" = "$WEB_IMAGE_DIGEST" ]
 [ "$current_source_sha" = "$DEPLOY_SHA" ]
+set_canary_allowlist() {
+  local allowlist=$1
+  if [ -n "$allowlist" ]; then
+    gh variable set BILLING_CANARY_WORKSPACE_IDS --env azure-production --body "$allowlist"
+  else
+    gh variable delete BILLING_CANARY_WORKSPACE_IDS --env azure-production 2>/dev/null || true
+  fi
+}
+restore_canary_allowlist() {
+  set_canary_allowlist "$previous_allowlist"
+}
 rollback() {
   status=$?
   if [ "$status" -ne 0 ]; then
     gh variable set POLAR_BILLING_ADMISSION --env azure-production --body "$previous_polar"
     gh variable set RAZORPAY_BILLING_ADMISSION --env azure-production --body "$previous_razorpay"
-    gh variable set BILLING_CANARY_WORKSPACE_IDS --env azure-production --body "$previous_allowlist"
+    restore_canary_allowlist
     az containerapp ingress traffic set --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision-weight "$previous_revision=100" --output none || true
+    if [ -n "$candidate_revision" ] && [ "$candidate_revision" != "$previous_revision" ]; then
+      az containerapp revision deactivate --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$candidate_revision" --output none || true
+    fi
   fi
   rm -rf "$probe_dir"
   exit "$status"
 }
 
 probe_dir=$(mktemp -d)
+candidate_revision=""
 trap rollback EXIT
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=lyrashield-deploy-probe" -keyout "$probe_dir/key.pem" -out "$probe_dir/cert.pem" >/dev/null 2>&1
 probe_fingerprint=$(openssl x509 -in "$probe_dir/cert.pem" -outform DER | sha256sum | cut -d' ' -f1)
 
 gh variable set POLAR_BILLING_ADMISSION --env azure-production --body "$CLOUD_BILLING_MODE"
 gh variable set RAZORPAY_BILLING_ADMISSION --env azure-production --body "$CLOUD_BILLING_MODE"
-gh variable set BILLING_CANARY_WORKSPACE_IDS --env azure-production --body "$BILLING_CANARY_WORKSPACE_IDS"
+set_canary_allowlist "$BILLING_CANARY_WORKSPACE_IDS"
 
 az containerapp update --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --image "$WEB_IMAGE_DIGEST" --set-env-vars \
   "LYRASHIELD_PRODUCT_REVISION=$DEPLOY_SHA" \
@@ -64,7 +79,7 @@ candidate_revision=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME"
 candidate_fqdn=$(az containerapp revision show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$candidate_revision" --query properties.fqdn --output tsv)
 [ -n "$candidate_revision" ] && [ -n "$candidate_fqdn" ]
 az containerapp ingress traffic set --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision-weight "$previous_revision=100" "$candidate_revision=0" --output none
-curl --fail --silent --show-error --max-time 15 --cert "$probe_dir/cert.pem" --key "$probe_dir/key.pem" -H "Host: app.lyrashieldai.com" "https://${candidate_fqdn}/api/ready"
+curl --fail --silent --show-error --max-time 15 --cert "$probe_dir/cert.pem" --key "$probe_dir/key.pem" "https://${candidate_fqdn}/api/ready"
 az containerapp ingress traffic set --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision-weight "$candidate_revision=100" --output none
 
 az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query '{revision:properties.latestRevisionName,image:properties.template.containers[0].image,traffic:properties.configuration.ingress.traffic}' --output json

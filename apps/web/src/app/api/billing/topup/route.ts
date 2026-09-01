@@ -13,7 +13,7 @@ import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
-import { checkBillingCheckoutRateLimit } from "@/lib/rate-limit"
+import { checkBillingCheckoutRateLimit, claimBillingCheckoutCreation } from "@/lib/rate-limit"
 import {
   billingAdmissionError,
   paymentsUnavailableError,
@@ -85,6 +85,20 @@ export async function POST(request: Request) {
         logger.error("Billing provider catalog is not configured", { provider, packId })
         return paymentsUnavailableError()
       }
+      const checkoutClaim = await claimBillingCheckoutCreation({
+        workspaceId,
+        provider,
+        kind: "pack",
+        catalogKey: packId,
+      })
+      if (checkoutClaim === "unavailable") return paymentsUnavailableError()
+      if (checkoutClaim === "duplicate") {
+        return apiError(
+          "CHECKOUT_IN_PROGRESS",
+          "A checkout is already being created. Please wait.",
+          409
+        )
+      }
       const url = await createPolarOneTimeCheckout({
         productId,
         successUrl,
@@ -111,6 +125,20 @@ export async function POST(request: Request) {
         amountMinor: amountInr,
         currency: "INR",
       })
+      const checkoutClaim = await claimBillingCheckoutCreation({
+        workspaceId,
+        provider,
+        kind: "pack",
+        catalogKey: packId,
+      })
+      if (checkoutClaim === "unavailable") return paymentsUnavailableError()
+      if (checkoutClaim === "duplicate") {
+        return apiError(
+          "CHECKOUT_IN_PROGRESS",
+          "A checkout is already being created. Please wait.",
+          409
+        )
+      }
       const result = await createRazorpayPaymentLink({
         amount: amountInr,
         description: pack.name,

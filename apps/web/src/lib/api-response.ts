@@ -23,8 +23,11 @@ export function apiPaginated<T>(items: T[], nextCursor: string | null, total?: n
   return apiSuccess({ items, nextCursor, ...(total !== undefined ? { total } : {}) })
 }
 
-export function parsePaginationParams(searchParams: URLSearchParams) {
+export function parsePaginationParams(searchParams: URLSearchParams, defaultLimit = 50) {
   const cursor = searchParams.get("cursor")
-  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "50", 10) || 50, 1), 100)
+  const limit = Math.min(
+    Math.max(parseInt(searchParams.get("limit") ?? String(defaultLimit), 10) || defaultLimit, 1),
+    100
+  )
   return { cursor, limit }
 }

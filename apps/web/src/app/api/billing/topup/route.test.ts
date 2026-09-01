@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  checkoutClaim: "claimed" as "claimed" | "duplicate" | "unavailable",
   createRazorpay: vi.fn().mockResolvedValue({ id: "plink_1", url: "https://rzp.example/topup" }),
   billingQuoteNotes: vi.fn((quote: { amountMinor: number }) => ({
     quotedAmountMinor: String(quote.amountMinor),
@@ -13,6 +14,7 @@ vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:
 vi.mock("@lyrashield/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn() } }))
 vi.mock("@/lib/rate-limit", () => ({
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: false })),
+  claimBillingCheckoutCreation: vi.fn(() => mocks.checkoutClaim),
 }))
 vi.mock("@/lib/billing-admission", () => ({
   billingAdmissionError: () => null,
@@ -35,7 +37,10 @@ vi.mock("@lyrashield/billing", () => ({
 import { POST } from "./route"
 
 describe("POST /api/billing/topup Razorpay quote", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.checkoutClaim = "claimed"
+  })
 
   it("uses one rounded paise amount for both the Payment Link and signed quote", async () => {
     const response = await POST(
@@ -58,5 +63,18 @@ describe("POST /api/billing/topup Razorpay quote", () => {
         }),
       })
     )
+  })
+
+  it("does not create a second provider payment link while checkout is in progress", async () => {
+    mocks.checkoutClaim = "duplicate"
+    const response = await POST(
+      new Request("https://app.lyrashieldai.com/api/billing/topup", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "workspace-1", pack: "pack_100" }),
+      })
+    )
+
+    expect(response.status).toBe(409)
+    expect(mocks.createRazorpay).not.toHaveBeenCalled()
   })
 })

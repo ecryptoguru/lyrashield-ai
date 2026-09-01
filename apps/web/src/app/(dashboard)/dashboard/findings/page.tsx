@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { ISSUE_PLURAL, RUN_PLURAL } from "@/lib/terminology"
-import { getCachedSession, getCachedWorkspaceId, getCachedFindings } from "@/lib/cache"
-import { prisma } from "@lyrashield/db"
+import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { prisma, listFindings } from "@lyrashield/db"
 import { ShieldAlert } from "lucide-react"
 import { FindingsClient, type FindingListItem } from "./findings-client"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -10,14 +10,7 @@ import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-se
 import { EvidenceList } from "./evidence-list"
 import { ReportsClient } from "../reports/reports-client"
 import { calculateFindingPriority } from "@/lib/finding-priority"
-
-const SEVERITY_ORDER: Record<string, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-  INFO: 4,
-}
+import { findingFilterToApiQuery, parseFindingListParams } from "@/lib/finding-list-params"
 
 const FINDINGS_TABS: SectionTab[] = [
   { value: "issues", label: "Issues", href: "/dashboard/findings?tab=issues" },
@@ -39,7 +32,16 @@ export const metadata: Metadata = {
 export default async function FindingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ finding?: string; tab?: string; scanId?: string; targetId?: string }>
+  searchParams: Promise<{
+    finding?: string
+    tab?: string
+    scanId?: string
+    targetId?: string
+    filter?: string
+    sort?: string
+    target?: string
+    q?: string
+  }>
 }) {
   const session = await getCachedSession()
   if (!session) return null
@@ -63,6 +65,9 @@ export default async function FindingsPage({
   const params = await searchParams
   const tab = normalizeTab(params.tab)
   const tabs = FINDINGS_TABS
+  // Filter/sort/search are parsed on the server and passed as initial props so
+  // the server-rendered tree and the client's first render match exactly.
+  const listParams = parseFindingListParams(params)
 
   const description = `Potential and verified security ${ISSUE_PLURAL.toLowerCase()} reported by your ${RUN_PLURAL.toLowerCase()}`
 
@@ -85,7 +90,7 @@ export default async function FindingsPage({
       <div>
         <DashboardSectionTabs
           title={ISSUE_PLURAL}
-          description="Create immutable assurance snapshots from completed scan evidence."
+          description="Create immutable assurance snapshots from completed scan evidence. Reports summarize retained evidence; they do not create new verification."
           tabs={tabs}
           activeTab={tab}
         />
@@ -99,8 +104,20 @@ export default async function FindingsPage({
   }
 
   const { finding: requestedFindingId } = params
-  const [{ items: findings, nextCursor }, requestedFinding] = await Promise.all([
-    getCachedFindings(workspaceId),
+  const [{ items: findings, nextCursor }, targets, requestedFinding] = await Promise.all([
+    listFindings({
+      workspaceId,
+      ...findingFilterToApiQuery(listParams.filter),
+      ...(listParams.target ? { targetId: listParams.target } : {}),
+      ...(listParams.q ? { q: listParams.q } : {}),
+      limit: 25,
+    }),
+    prisma.target.findMany({
+      where: { workspaceId, deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+      take: 200,
+    }),
     requestedFindingId
       ? prisma.finding.findFirst({
           where: { id: requestedFindingId, workspaceId, deletedAt: null },
@@ -191,7 +208,20 @@ export default async function FindingsPage({
         initialData={initialData}
         initialNextCursor={nextCursor}
         initialSelectedFindingId={requestedFindingId}
+        initialFilter={listParams.filter}
+        initialSort={listParams.sort}
+        initialTargetFilter={listParams.target}
+        initialQuery={listParams.q}
+        targets={targets}
       />
     </div>
   )
+}
+
+const SEVERITY_ORDER: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
 }

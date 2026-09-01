@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -12,7 +12,6 @@ import { ThemeToggle } from "./theme-toggle"
 import { PRIMARY_NAV_ITEMS, resolveNav, type NavItem } from "@/lib/nav-items"
 import { apiPost } from "@/lib/api-client"
 import { Badge } from "@lyrashield/ui"
-
 interface Workspace {
   id: string
   name: string
@@ -77,11 +76,30 @@ export function V2Sidebar({
   const pathname = usePathname()
   const router = useRouter()
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(initialWorkspaceId)
+  // Scroll affordance: shown while the navigation region has more content
+  // below the fold (e.g. Settings on short laptops), so truncation is never
+  // silent. Cleared once the user scrolls to the bottom.
+  const [navOverflowing, setNavOverflowing] = useState(false)
+  const navRef = useRef<HTMLElement | null>(null)
   const { secondary } = resolveNav({
     pendingApprovals,
     canViewEvidenceVault,
     platformAdminHref,
   })
+
+  const measureNavOverflow = useCallback((el: HTMLElement | null) => {
+    if (!el) return
+    setNavOverflowing(el.scrollTop + el.clientHeight < el.scrollHeight - 4)
+  }, [])
+
+  useEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    measureNavOverflow(el)
+    const observer = new ResizeObserver(() => measureNavOverflow(el))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [measureNavOverflow, secondary.length])
 
   async function handleSelectWorkspace(id: string) {
     try {
@@ -105,7 +123,7 @@ export function V2Sidebar({
         <a
           href="https://lyrashieldai.com"
           aria-label="Go to the LyraShield AI landing page"
-          className="focus-visible:ring-ring flex h-16 shrink-0 items-center gap-3 border-b px-5 transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
+          className="focus-visible:ring-ring flex h-14 shrink-0 items-center gap-3 border-b px-5 transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
         >
           <div className="shadow-primary-glow bg-card flex size-9 items-center justify-center rounded-xl border p-1">
             <Image
@@ -131,7 +149,7 @@ export function V2Sidebar({
         </a>
 
         {workspaces.length > 0 && (
-          <div className="shrink-0 border-b p-2.5">
+          <div className="shrink-0 border-b p-2">
             <WorkspaceSwitcher
               workspaces={workspaces}
               activeId={activeWorkspaceId}
@@ -140,26 +158,42 @@ export function V2Sidebar({
           </div>
         )}
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main navigation">
-          {/* Grouped rather than eleven flat peers. The nav model already encodes the split,
-              so the sidebar reflects it instead of flattening product work and account
-              settings into one undifferentiated list. */}
-          <div className="flex flex-col gap-1">
-            {PRIMARY_NAV_ITEMS.map((item) => (
-              <SidebarLink key={item.href} item={item} pathname={pathname} />
-            ))}
-          </div>
-          <div className="mt-6">
-            <p className="text-muted-foreground px-3 pb-2 text-[10px] font-semibold tracking-[0.14em] uppercase">
-              Workspace
-            </p>
-            <div className="flex flex-col gap-1">
-              {secondary.map((item) => (
+        <div className="relative min-h-0 flex-1">
+          <nav
+            ref={navRef}
+            className="h-full overflow-y-auto px-3 py-3"
+            aria-label="Main navigation"
+            onScroll={(event) => measureNavOverflow(event.currentTarget)}
+          >
+            {/* Grouped rather than eleven flat peers. The nav model already encodes the split,
+                so the sidebar reflects it instead of flattening product work and account
+                settings into one undifferentiated list. */}
+            <div className="flex flex-col">
+              {PRIMARY_NAV_ITEMS.map((item) => (
                 <SidebarLink key={item.href} item={item} pathname={pathname} />
               ))}
             </div>
-          </div>
-        </nav>
+            <div className="mt-3">
+              <p className="text-muted-foreground px-3 pb-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase">
+                Workspace
+              </p>
+              <div className="flex flex-col">
+                {secondary.map((item) => (
+                  <SidebarLink key={item.href} item={item} pathname={pathname} />
+                ))}
+              </div>
+            </div>
+          </nav>
+          {/* Overflow affordance: a soft fade over the last rows while more
+              destinations sit below the visible navigation region. */}
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-sidebar to-transparent transition-opacity duration-(--duration-fast)",
+              navOverflowing ? "opacity-100" : "opacity-0"
+            )}
+          />
+        </div>
 
         <div className="shrink-0 border-t p-3">
           <div className="mb-1 flex items-center gap-3 rounded-lg px-2 py-2">

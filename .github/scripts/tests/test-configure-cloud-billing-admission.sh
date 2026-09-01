@@ -17,7 +17,16 @@ grep -Fq 'revision-weight "$previous_revision=100" "$candidate_revision=0"' "$sc
 grep -Fq 'gh variable set POLAR_BILLING_ADMISSION --env azure-production' "$script"
 grep -Fq 'gh variable set RAZORPAY_BILLING_ADMISSION --env azure-production' "$script"
 grep -Fq 'gh variable set BILLING_CANARY_WORKSPACE_IDS --env azure-production' "$script"
+grep -Fq 'gh variable delete BILLING_CANARY_WORKSPACE_IDS --env azure-production 2>/dev/null || true' "$script"
+grep -Fq 'set_canary_allowlist "$BILLING_CANARY_WORKSPACE_IDS"' "$script"
+grep -Fq 'if [ -n "$allowlist" ]; then' "$script"
+grep -Fq 'az containerapp revision deactivate' "$script"
+if grep -Fq -- '-H "Host: app.lyrashieldai.com"' "$script"; then
+  echo 'FAIL: candidate readiness must use its Azure revision host.' >&2
+  exit 1
+fi
 grep -Fq 'GH_TOKEN: ${{ secrets.ADMISSION_CONFIG_TOKEN }}' "$workflow"
+grep -Fq 'options: ["off", canary, public]' "$workflow"
 grep -Fq 'web_image_digest:' "$workflow"
 grep -Fq 'source_sha:' "$workflow"
 echo 'Cloud billing admission workflow static contract passed.'

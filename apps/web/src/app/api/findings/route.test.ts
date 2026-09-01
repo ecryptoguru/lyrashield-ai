@@ -58,7 +58,7 @@ describe("GET /api/findings", () => {
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "finding:view")
     expect(listFindings).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "ws-1", limit: 50 })
+      expect.objectContaining({ workspaceId: "ws-1", limit: 25 })
     )
   })
 
