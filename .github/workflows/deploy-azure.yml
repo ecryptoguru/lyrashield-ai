@@ -986,7 +986,7 @@ jobs:
               for attempt in $(seq 1 24); do
                 if curl --fail --silent --show-error --max-time 10 \
                   --cert "$probe_dir/cert.pem" --key "$probe_dir/key.pem" \
-                  -H "Host: app.lyrashieldai.com" "https://${CANDIDATE_FQDN}${path}"; then
+                  "https://${CANDIDATE_FQDN}${path}"; then
                   break
                 fi
                 if [ "$attempt" = "24" ]; then

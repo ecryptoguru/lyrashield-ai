@@ -518,6 +518,11 @@ if [ -z "$candidate_output_line" ] || [ -z "$candidate_probe_line" ] || \
   echo "FAIL: app candidate output must be available to rollback before the mTLS probe" >&2
   exit 1
 fi
+candidate_probe_block=$(sed -n '/for path in \/api\/ready \/api\/ready\/evidence; do/,/mTLS candidate probe passed/p' "$production_workflow")
+if grep -Fq -- '-H "Host: app.lyrashieldai.com"' <<< "$candidate_probe_block"; then
+  echo "FAIL: candidate probe must retain the candidate host so Azure routes to the zero-traffic revision" >&2
+  exit 1
+fi
 grep -Fq 'Restore prior ingress mode after failed rollout' "$production_workflow"
 grep -Fq "failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&" "$production_workflow"
 grep -Fq "steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')" "$production_workflow"
