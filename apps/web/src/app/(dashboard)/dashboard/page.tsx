@@ -2,10 +2,13 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
+  ArrowUpRight,
   Bug,
   CheckCircle2,
-  Circle,
+  Crosshair,
+  LoaderCircle,
   Plus,
   Play,
   ShieldCheck,
@@ -19,7 +22,7 @@ import {
   ScoreTrend,
   SeverityDonut,
 } from "@/components/security-visuals"
-import { formatDate } from "@/lib/date-format"
+import { formatDate, formatDateTime } from "@/lib/date-format"
 import { HOME_LABEL } from "@/lib/terminology"
 import {
   getCachedSession,
@@ -28,14 +31,13 @@ import {
   getCachedDashboardOverview,
 } from "@/lib/cache"
 import { TrustCommandCenter } from "@/components/trust-command-center"
-import { GetStartedChecklist } from "@/components/get-started-checklist"
 import { applyTargetCoverageToVerdict } from "@/lib/dashboard-overview"
+import { deriveHomeNextAction } from "@/lib/home-next-action"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
-import { getScanPresentation } from "@/lib/scan-presentation"
+import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { dashboardPrimaryAction } from "@/components/trust-command-center.utils"
-import { FeatureTour } from "@/components/feature-tour"
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -119,6 +121,12 @@ export default async function DashboardPage() {
       : readinessBase.conditions,
   }
 
+  const primaryAction = dashboardPrimaryAction(targetCount)
+  const nextAction = deriveHomeNextAction(
+    { targets, lastEvaluatedAssessment, remediation, reportCount },
+    openIssues
+  )
+
   const latestScore =
     lastEvaluatedAssessment &&
     lastEvaluatedAssessment.score !== null &&
@@ -126,84 +134,36 @@ export default async function DashboardPage() {
       ? {
           score: lastEvaluatedAssessment.score,
           grade: lastEvaluatedAssessment.grade,
+          targetName: lastEvaluatedAssessment.targetName,
+          completedAtLabel: formatDate(lastEvaluatedAssessment.completedAt),
         }
       : null
-  const primaryAction = dashboardPrimaryAction(targetCount)
 
   // The trend plots only snapshots bound to scans with usable coverage — the
   // read model already excludes scores from runs that evaluated nothing.
   const trend = [...scoreHistory]
     .reverse()
     .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
-  const readinessConfig =
-    readiness.verdict === "GO"
-      ? {
-          label: "Ready to launch",
-          description: "Current scan evidence has no unresolved launch blockers.",
-          href: "/dashboard/launch-readiness",
-          action: "Review launch decision",
-          className: "border-success bg-success/10",
-        }
-      : readiness.verdict === "INCONCLUSIVE"
-        ? {
-            label: "Inconclusive — nothing was checked",
-            description:
-              "The last run completed but no scanner could evaluate the target, so there is no evidence to judge. This is not a clean result.",
-            href: "/dashboard/scans",
-            action: "Review coverage",
-            className: "border-warning bg-warning/10",
-          }
-        : readiness.verdict === "NOT_EVALUATED"
-          ? {
-              label: "Needs evidence",
-              description:
-                targetCount === 0
-                  ? "Add a target before running your first scan."
-                  : "Run a scan before making a launch decision.",
-              href: primaryAction.href,
-              action: primaryAction.label,
-              className: "border-warning bg-warning/10",
-            }
-          : {
-              label: "Needs action",
-              description:
-                readiness.conditions[0] ?? "Review the remaining evidence before you launch.",
-              href: "/dashboard/findings",
-              action: "Review blockers",
-              className: "border-destructive bg-destructive/10",
-            }
 
-  const assuranceSteps = [
-    { label: "Target ready", complete: targetCount > 0, href: "/dashboard/targets" },
-    {
-      // A completed run that evaluated nothing has not captured evidence.
-      label: "Evidence captured",
-      complete: targets.assessed + targets.partiallyAssessed > 0,
-      href: targetCount === 0 ? null : primaryAction.href,
-    },
-    {
-      label: "Blockers cleared",
-      complete: readiness.verdict === "GO",
-      href:
-        targets.assessed + targets.partiallyAssessed === 0
-          ? null
-          : readiness.verdict === "NOT_EVALUATED"
-            ? primaryAction.href
-            : "/dashboard/findings",
-    },
-    {
-      label: "Assurance shared",
-      complete: reportCount > 0,
-      href:
-        targets.assessed + targets.partiallyAssessed > 0 ? "/dashboard/findings?tab=reports" : null,
-    },
-  ]
+  const coverageLabel =
+    targetCount === 0
+      ? "No targets yet"
+      : `${targets.assessed}/${targetCount} assessed` +
+        (targets.partiallyAssessed > 0 ? ` · ${targets.partiallyAssessed} partial` : "") +
+        (targets.expiredAssessments > 0 ? ` · ${targets.expiredAssessments} expired` : "")
 
-  // null when nothing has run yet — the card omits the depth clause rather than claiming one.
-  const commandMode = latestRun?.mode ?? null
+  // Latest-run banner: only when the newest run needs the user's attention.
+  const latestRunAlert =
+    latestRun &&
+    (isActiveScan(latestRun.status) ||
+      latestRun.userSafeFailure ||
+      latestRun.coverageState === "NONE")
+      ? latestRun
+      : null
 
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
+      {/* 1 — workspace label and one primary CTA */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-primary text-xs font-semibold tracking-[0.15em] uppercase">
@@ -228,141 +188,161 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {/* One-time five-step feature tour for new users (replaces the removed
-          Guided/Pro mode split). Dismissible per workspace. */}
-      <FeatureTour workspaceId={workspaceId} />
-
-      {/* First-run guide for brand-new workspaces (zero completed scans). The
-          full metric grid below is the returning-user view; this is what makes
-          the first five minutes simple and engaging. Dismissible per workspace. */}
-      {completedRunCount === 0 && (
-        <GetStartedChecklist workspaceId={workspaceId} steps={assuranceSteps} />
-      )}
-
-      <TrustCommandCenter
-        productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
-        mode={commandMode}
-        assetCount={targetCount}
-        riskScore={project?.riskScore ?? 100}
-        trustPlanData={project?.trustPlan}
-        completedScanCount={completedRunCount}
-        latestScore={latestScore ? { score: latestScore.score, grade: latestScore.grade } : null}
-      />
-
-      <section
-        className={`border-l-2 p-5 sm:p-6 ${readinessConfig.className}`}
-        aria-labelledby="launch-verdict"
-      >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.14em] uppercase">Launch verdict</p>
-            <h2 id="launch-verdict" className="mt-1 text-2xl font-bold tracking-tight">
-              {readinessConfig.label}
-            </h2>
-            <p className="text-foreground/80 mt-2 max-w-2xl text-sm">
-              {readinessConfig.description}
-            </p>
-            {/* Two separately scoped messages: the latest run needs attention,
-                while the last evaluated assessment remains the newest usable
-                evidence for its named target. */}
-            {readiness.verdict === "INCONCLUSIVE" && lastEvaluatedAssessment && (
-              <p className="text-foreground/80 mt-1 max-w-2xl text-sm">
-                Last evaluated assessment: {lastEvaluatedAssessment.targetName} on{" "}
-                {formatDate(lastEvaluatedAssessment.completedAt)}
-                {latestScore
-                  ? ` — grade ${latestScore.grade.replace("_PLUS", "+")} (${latestScore.score}/100)`
-                  : ""}
-                , coverage {lastEvaluatedAssessment.coverageState.toLowerCase()}.
+      {/* One contextual next action — replaces the previous tour + checklist pair. */}
+      {nextAction && (
+        <section
+          className="border-primary/30 bg-primary/[0.04] rounded-xl border p-5 sm:p-6"
+          aria-labelledby="home-next-action"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                {nextAction.eyebrow}
               </p>
-            )}
-            {targets.unassessed > 0 && targetCount > 0 && (
-              <p className="text-foreground/80 mt-1 max-w-2xl text-sm">
-                {targets.unassessed} of {targetCount} target{targetCount === 1 ? "" : "s"} has no
-                usable review evidence yet.
+              <h2 id="home-next-action" className="mt-1 text-xl font-bold tracking-tight">
+                {nextAction.title}
+              </h2>
+              <p className="text-muted-foreground mt-1.5 max-w-2xl text-sm">
+                {nextAction.description}
               </p>
-            )}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {assuranceSteps.map((step) => {
-                const Icon = step.complete ? CheckCircle2 : Circle
-                const content = (
-                  <>
-                    <Icon
-                      className={
-                        step.complete ? "text-success size-4" : "text-muted-foreground size-4"
-                      }
-                      aria-hidden="true"
-                    />
-                    {step.label}
-                  </>
-                )
-                return step.href ? (
-                  <Link
-                    key={step.label}
-                    href={step.href}
-                    className="flex items-center gap-1.5 text-xs font-medium hover:underline"
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <span
-                    key={step.label}
-                    className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium"
-                  >
-                    {content}
-                  </span>
-                )
-              })}
             </div>
-          </div>
-          {targetCount > 0 && (
-            <Link href={readinessConfig.href} className={buttonVariants({ variant: "secondary" })}>
-              {readinessConfig.action}
+            <Link
+              href={nextAction.href}
+              className={`${buttonVariants({ className: "shrink-0" })} min-h-11`}
+            >
+              {nextAction.cta}
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
-          )}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
-      <section className="grid gap-4 sm:grid-cols-2" aria-label="Workspace metrics">
+      {/* 2 — current posture and exact evidence scope */}
+      <TrustCommandCenter
+        productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
+        mode={latestRun?.mode ?? null}
+        trustPlanData={project?.trustPlan}
+        latestScore={latestScore}
+      />
+
+      {/* 3 — latest run warning/progress when it needs attention */}
+      {latestRunAlert && <LatestRunAlert run={latestRunAlert} />}
+
+      {/* 4 — four compact metrics, each naming its evidence scope */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Workspace metrics">
         <MetricCard
           label="Security score"
           value={latestScore?.score ?? "—"}
           detail={
             latestScore
-              ? `Grade ${latestScore.grade.replace("_PLUS", "+")} · ${lastEvaluatedAssessment?.targetName ?? "workspace"}`
-              : completedRunCount > 0
-                ? "Score snapshot unavailable"
-                : "Awaiting completed scan"
+              ? `Grade ${latestScore.grade.replace("_PLUS", "+")} · ${latestScore.targetName}`
+              : "No evaluated review yet"
           }
           icon={ShieldCheck}
         />
         <MetricCard
-          label="Open findings"
+          label="Open issues"
           value={openIssues.total}
           detail={`${openIssuesBySeverity.CRITICAL ?? 0} critical · ${openIssuesBySeverity.HIGH ?? 0} high · workspace-wide`}
           icon={Bug}
         />
+        <MetricCard
+          label="Target coverage"
+          value={targetCount === 0 ? "—" : `${targets.assessed}/${targetCount}`}
+          detail={coverageLabel}
+          icon={Crosshair}
+        />
+        <MetricCard
+          label="Independently verified"
+          value={openIssues.independentlyVerified}
+          detail="Backed by an independent verification receipt"
+          icon={CheckCircle2}
+        />
       </section>
 
+      {/* 5 — recent activity */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
+          <div>
+            <h2 className="font-semibold">Recent activity</h2>
+            <p className="text-muted-foreground mt-1 text-xs">Your most recent runs.</p>
+          </div>
+          <Link
+            href="/dashboard/scans"
+            className="text-primary flex min-h-11 items-center gap-1 text-sm font-medium"
+          >
+            View all <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        </div>
+        {recentRuns.length > 0 ? (
+          <div className="divide-y">
+            {recentRuns.map((run) => {
+              const presentation = getScanPresentation(run.status, {})
+              return (
+                <Link
+                  key={run.id}
+                  href={`/dashboard/scans/${run.id}`}
+                  className="hover:bg-accent/60 flex min-h-16 items-center gap-3 px-5 py-3 transition-colors sm:px-6"
+                >
+                  <span className="bg-primary/8 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                    <Activity className="size-4" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">
+                      {run.targetName ?? "Workspace scan"}
+                    </span>
+                    <span className="text-muted-foreground block text-xs">
+                      {formatDateTime(run.createdAt)} · {run.findingCount} issue
+                      {run.findingCount === 1 ? "" : "s"} from this run
+                    </span>
+                  </span>
+                  <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>
+                </Link>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="px-5 py-6 sm:px-6">
+            <EmptyState
+              icon={Activity}
+              title="No run activity yet"
+              description={
+                targetCount === 0
+                  ? "Add a target to begin your first review."
+                  : "Run your first review to see activity here."
+              }
+              action={
+                <Link
+                  href={primaryAction.href}
+                  className={buttonVariants({ variant: "secondary", size: "sm" })}
+                >
+                  {targetCount === 0 ? (
+                    <Plus className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Play className="size-4" aria-hidden="true" />
+                  )}
+                  {primaryAction.label}
+                </Link>
+              }
+            />
+          </div>
+        )}
+      </Card>
+
+      {/* 6 — secondary analytics and remediation details */}
       <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card className="p-5 sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <h2 className="font-semibold">Risk posture</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                {lastEvaluatedAssessment
-                  ? `Score from the ${formatDate(lastEvaluatedAssessment.completedAt)} review of ${lastEvaluatedAssessment.targetName}.`
+                {latestScore
+                  ? `Score from the ${latestScore.completedAtLabel} review of ${latestScore.targetName}, with recent evaluated snapshots.`
                   : "No evaluated review yet."}
               </p>
             </div>
             <Badge
-              variant={
-                latestScore && latestScore.score >= 80
-                  ? "success"
-                  : latestScore
-                    ? "warning"
-                    : "muted"
-              }
+              variant={latestScore ? (latestScore.score >= 80 ? "success" : "warning") : "muted"}
             >
               {latestScore ? "Evaluated" : "Not evaluated"}
             </Badge>
@@ -375,9 +355,9 @@ export default async function DashboardPage() {
 
         <Card className="p-5 sm:p-6">
           <div className="mb-5">
-            <h2 className="font-semibold">Retained finding mix</h2>
+            <h2 className="font-semibold">Retained issue mix</h2>
             <p className="text-muted-foreground mt-1 text-xs">
-              All retained findings grouped by severity.
+              All retained issues grouped by severity, workspace-wide.
             </p>
           </div>
           <SeverityDonut values={openIssuesBySeverity} />
@@ -390,7 +370,7 @@ export default async function DashboardPage() {
             <div>
               <h2 className="font-semibold">Remediation flow</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                Current finding movement from review through closure.
+                Current issue movement from review through closure.
               </p>
             </div>
             <Wrench className="text-primary size-5" aria-hidden="true" />
@@ -412,74 +392,113 @@ export default async function DashboardPage() {
           />
         </Card>
 
-        <Card className="overflow-hidden">
-          <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
+        <Card className="p-5 sm:p-6">
+          <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-semibold">Recent scan activity</h2>
-              <p className="text-muted-foreground mt-1 text-xs">Your most recent reviews.</p>
+              <h2 className="font-semibold">Launch verdict</h2>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Derived from retained evidence across every active target.
+              </p>
             </div>
             <Link
-              href="/dashboard/scans"
+              href="/dashboard/launch-readiness"
               className="text-primary flex min-h-11 items-center gap-1 text-sm font-medium"
             >
-              View all <ArrowRight className="size-4" aria-hidden="true" />
+              Details <ArrowUpRight className="size-4" aria-hidden="true" />
             </Link>
           </div>
-          {recentRuns.length > 0 ? (
-            <div className="divide-y">
-              {recentRuns.map((run) => {
-                const presentation = getScanPresentation(run.status, {})
-                return (
-                  <Link
-                    key={run.id}
-                    href={`/dashboard/scans/${run.id}`}
-                    className="hover:bg-accent/60 flex min-h-16 items-center gap-3 px-5 py-3 transition-colors sm:px-6"
-                  >
-                    <span className="bg-primary/8 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
-                      <Activity className="size-4" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {run.targetName ?? "Workspace scan"}
-                      </span>
-                      <span className="text-muted-foreground block text-xs">
-                        {formatDate(run.createdAt)} · {run.findingCount} finding
-                        {run.findingCount === 1 ? "" : "s"}
-                      </span>
-                    </span>
-                    <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>
-                  </Link>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="px-5 py-6 sm:px-6">
-              <EmptyState
-                icon={Activity}
-                title="No scan activity yet"
-                description={
-                  targetCount === 0
-                    ? "Add a target to begin your first review."
-                    : "Run your first scan to see activity here."
-                }
-                action={
-                  <Link
-                    href={primaryAction.href}
-                    className={buttonVariants({ variant: "secondary", size: "sm" })}
-                  >
-                    {targetCount === 0 ? (
-                      <Plus className="size-4" aria-hidden="true" />
-                    ) : (
-                      <Play className="size-4" aria-hidden="true" />
-                    )}
-                    {primaryAction.label}
-                  </Link>
-                }
-              />
-            </div>
-          )}
+          <div
+            className={`border-l-2 p-4 ${
+              readiness.verdict === "GO"
+                ? "border-success bg-success/10"
+                : readiness.verdict === "NO_GO"
+                  ? "border-destructive bg-destructive/10"
+                  : "border-warning bg-warning/10"
+            }`}
+          >
+            <p className="font-semibold">
+              {readiness.verdict === "GO"
+                ? "Ready to launch"
+                : readiness.verdict === "INCONCLUSIVE"
+                  ? "Inconclusive — nothing was checked"
+                  : readiness.verdict === "NOT_EVALUATED"
+                    ? "Needs evidence"
+                    : readiness.verdict === "GO_WITH_CONDITIONS"
+                      ? "Ready with conditions"
+                      : "Needs action"}
+            </p>
+            <ul className="text-muted-foreground mt-2 space-y-1 text-sm">
+              {(readiness.conditions.length > 0
+                ? readiness.conditions
+                : ["Current scan evidence has no unresolved launch blockers."]
+              )
+                .slice(0, 3)
+                .map((condition) => (
+                  <li key={condition}>{condition}</li>
+                ))}
+            </ul>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Absence of findings is not independent verification or a security guarantee.
+            </p>
+          </div>
         </Card>
       </section>
     </div>
+  )
+}
+
+function LatestRunAlert({
+  run,
+}: {
+  run: NonNullable<Awaited<ReturnType<typeof getCachedDashboardOverview>>["latestRun"]>
+}) {
+  const active = isActiveScan(run.status)
+  const presentation = getScanPresentation(run.status, {})
+  const tone = active
+    ? "border-primary/30 bg-primary/5"
+    : run.status === "FAILED" || run.status === "TIMED_OUT"
+      ? "border-destructive/50 bg-destructive/10"
+      : "border-warning bg-warning/10 border-l-2"
+  return (
+    <section className={`rounded-lg border p-4 ${tone}`} aria-labelledby="latest-run-alert">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          {active ? (
+            <LoaderCircle
+              className="text-primary mt-0.5 size-5 shrink-0 animate-spin"
+              aria-hidden="true"
+            />
+          ) : (
+            <AlertTriangle
+              className={`mt-0.5 size-5 shrink-0 ${
+                run.status === "FAILED" || run.status === "TIMED_OUT"
+                  ? "text-destructive"
+                  : "text-amber-600"
+              }`}
+              aria-hidden="true"
+            />
+          )}
+          <div className="min-w-0">
+            <h2 id="latest-run-alert" className="text-sm font-semibold">
+              Latest run: {presentation.label.toLowerCase()}
+              {run.targetName ? ` · ${run.targetName}` : ""}
+            </h2>
+            <p className="text-muted-foreground mt-0.5 text-sm">
+              {active
+                ? "This run is still in progress. Findings appear as the run reaches a reliable state."
+                : (run.userSafeFailure ??
+                  "The latest run completed but no scanner could evaluate the target, so there is no evidence to judge. This is not a clean result.")}
+            </p>
+          </div>
+        </div>
+        <Link
+          href={`/dashboard/scans/${run.id}`}
+          className={buttonVariants({ variant: "secondary", size: "sm", className: "shrink-0" })}
+        >
+          {active ? "View progress" : "Review coverage"}
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </Link>
+      </div>
+    </section>
   )
 }
