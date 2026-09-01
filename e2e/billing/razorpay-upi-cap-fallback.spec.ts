@@ -174,7 +174,11 @@ test.describe("Razorpay Test Mode billing proof", () => {
     })
     expect(
       await prisma.billingAccount.findUnique({ where: { workspaceId: actors.workspaceId } })
-    ).toMatchObject({ externalId: subscriptionId, currentPlan: "LAUNCH_ASSURANCE", status: "active" })
+    ).toMatchObject({
+      externalId: subscriptionId,
+      currentPlan: "LAUNCH_ASSURANCE",
+      status: "active",
+    })
     expect(
       await prisma.auditLog.count({
         where: { workspaceId: actors.workspaceId, action: "billing.subscription_synced" },

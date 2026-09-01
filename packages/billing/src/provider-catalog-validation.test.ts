@@ -38,7 +38,9 @@ describe("provider catalog entitlement validation", () => {
       pro_monthly: "polar-pro-monthly",
     })
     envState.POLAR_LOCAL_PRODUCT_IDS = JSON.stringify({ individual_launch: "polar-local-launch" })
-    envState.RAZORPAY_PLAN_IDS = JSON.stringify({ launch_assurance_annual: "plan-launch-assurance-annual" })
+    envState.RAZORPAY_PLAN_IDS = JSON.stringify({
+      launch_assurance_annual: "plan-launch-assurance-annual",
+    })
   })
 
   it("accepts a Polar pack only when provider id, metadata, currency, and amount agree", () => {
