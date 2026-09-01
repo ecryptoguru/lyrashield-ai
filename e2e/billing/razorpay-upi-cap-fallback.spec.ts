@@ -19,7 +19,7 @@ const enabled =
   process.env.BILLING_STAGING_REGION === "inr" &&
   keyId.startsWith("rzp_test_") &&
   Boolean(process.env.RAZORPAY_KEY_SECRET && process.env.RAZORPAY_WEBHOOK_SECRET)
-const plans = ["STARTER", "PRO", "TEAM"] as const
+const plans = ["STARTER", "PRO", "LAUNCH_ASSURANCE"] as const
 const intervals = ["monthly", "annual"] as const
 const packs = [
   ["pack_100", 100, 150_000],
@@ -132,7 +132,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
     const now = Math.floor(Date.now() / 1000)
     const subscriptionId = `sub_test_${Date.now()}`
     const eventId = `razorpay-charge-${Date.now()}`
-    const notes = { workspaceId: actors.workspaceId, plan: "TEAM", interval: "annual" }
+    const notes = { workspaceId: actors.workspaceId, plan: "LAUNCH_ASSURANCE", interval: "annual" }
     const charged = {
       event: "subscription.charged",
       created_at: now,
@@ -140,7 +140,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
         subscription: {
           entity: {
             id: subscriptionId,
-            plan_id: razorpayPlanId("team_annual"),
+            plan_id: razorpayPlanId("launch_assurance_annual"),
             status: "active",
             current_start: now,
             current_end: now + 365 * 86_400,
@@ -150,7 +150,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
         payment: {
           entity: {
             id: `pay_subscription_${Date.now()}`,
-            amount: 26_900_000,
+            amount: 41_880_000,
             currency: "INR",
             notes,
           },
@@ -174,7 +174,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
     })
     expect(
       await prisma.billingAccount.findUnique({ where: { workspaceId: actors.workspaceId } })
-    ).toMatchObject({ externalId: subscriptionId, currentPlan: "TEAM", status: "active" })
+    ).toMatchObject({ externalId: subscriptionId, currentPlan: "LAUNCH_ASSURANCE", status: "active" })
     expect(
       await prisma.auditLog.count({
         where: { workspaceId: actors.workspaceId, action: "billing.subscription_synced" },
@@ -190,7 +190,7 @@ test.describe("Razorpay Test Mode billing proof", () => {
           subscription: {
             entity: {
               id: subscriptionId,
-              plan_id: razorpayPlanId("team_annual"),
+              plan_id: razorpayPlanId("launch_assurance_annual"),
               status: "cancelled",
               ended_at: Math.floor(Date.now() / 1000),
               notes,

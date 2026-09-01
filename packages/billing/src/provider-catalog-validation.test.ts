@@ -7,7 +7,7 @@ const envState = vi.hoisted(() => ({
     pro_monthly: "polar-pro-monthly",
   }),
   POLAR_LOCAL_PRODUCT_IDS: JSON.stringify({ individual_launch: "polar-local-launch" }),
-  RAZORPAY_PLAN_IDS: JSON.stringify({ team_annual: "plan-team-annual" }),
+  RAZORPAY_PLAN_IDS: JSON.stringify({ launch_assurance_annual: "plan-launch-assurance-annual" }),
   BILLING_USD_INR_RATE: 100,
   LYRASHIELD_INTERNAL_API_KEY: "test-internal-quote-secret",
 }))
@@ -38,7 +38,7 @@ describe("provider catalog entitlement validation", () => {
       pro_monthly: "polar-pro-monthly",
     })
     envState.POLAR_LOCAL_PRODUCT_IDS = JSON.stringify({ individual_launch: "polar-local-launch" })
-    envState.RAZORPAY_PLAN_IDS = JSON.stringify({ team_annual: "plan-team-annual" })
+    envState.RAZORPAY_PLAN_IDS = JSON.stringify({ launch_assurance_annual: "plan-launch-assurance-annual" })
   })
 
   it("accepts a Polar pack only when provider id, metadata, currency, and amount agree", () => {
