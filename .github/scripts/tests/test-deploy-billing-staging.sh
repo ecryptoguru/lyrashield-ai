@@ -511,6 +511,19 @@ grep -Fq 'retry_app_update() {' <<< "$mtls_patch_block"
 grep -Fq "ContainerAppOperationInProgress" <<< "$mtls_patch_block"
 grep -Fq 'Container Apps operation did not release before the candidate update.' <<< "$mtls_patch_block"
 grep -Fq 'retry_app_update az containerapp update' <<< "$mtls_patch_block"
+grep -Fq 'PROBE_LABEL="probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' "$production_workflow"
+grep -Fq 'az containerapp revision label add' "$production_workflow"
+grep -Fq 'PROBE_FQDN="${AZURE_APP_CONTAINER_APP_NAME}---${PROBE_LABEL}.${APP_FQDN_SUFFIX}"' "$production_workflow"
+grep -Fq '"https://${PROBE_FQDN}${path}"' "$production_workflow"
+grep -Fq 'az containerapp revision label remove' "$production_workflow"
+grep -Fq 'Failed to remove the temporary app candidate probe label.' "$production_workflow"
+candidate_output_line=$(grep -n 'echo "revision=$CANDIDATE_REVISION" >> "$GITHUB_OUTPUT"' "$production_workflow" | head -1 | cut -d: -f1)
+candidate_probe_line=$(grep -n '"https://${PROBE_FQDN}${path}"' "$production_workflow" | cut -d: -f1)
+if [ -z "$candidate_output_line" ] || [ -z "$candidate_probe_line" ] || \
+  [ "$candidate_output_line" -ge "$candidate_probe_line" ]; then
+  echo "FAIL: app candidate output must be available to rollback before the mTLS probe" >&2
+  exit 1
+fi
 grep -Fq 'Restore prior ingress mode after failed rollout' "$production_workflow"
 grep -Fq "failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&" "$production_workflow"
 grep -Fq "steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')" "$production_workflow"
