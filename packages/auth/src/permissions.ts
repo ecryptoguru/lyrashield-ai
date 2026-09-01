@@ -50,6 +50,9 @@ export const PERMISSIONS = {
   fix: {
     create: "fix:create",
     createPr: "fix:create_pr",
+    /** Approve a fix PR for execution. Tighter than fix.create — a member who can
+     * propose a fix may not also authorize writing it to the customer repo. */
+    approve: "fix:approve",
   },
   retest: {
     create: "retest:create",
@@ -136,6 +139,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.finding.falsePositive,
     PERMISSIONS.fix.create,
     PERMISSIONS.fix.createPr,
+    PERMISSIONS.fix.approve,
     PERMISSIONS.retest.create,
     PERMISSIONS.retest.view,
     PERMISSIONS.report.create,
@@ -176,6 +180,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.finding.falsePositive,
     PERMISSIONS.fix.create,
     PERMISSIONS.fix.createPr,
+    PERMISSIONS.fix.approve,
     PERMISSIONS.retest.create,
     PERMISSIONS.retest.view,
     PERMISSIONS.report.create,

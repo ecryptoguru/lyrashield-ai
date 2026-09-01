@@ -913,6 +913,12 @@ model Finding {
   businessImpact     String?
   technicalDetail    String?
   recommendedFix     String?
+  /** WP3: repo-relative file paths this finding implicates (drives fix-PR patch
+   * scope). Null until a fix proposal supplies them. */
+  implicatedFiles    Json?
+  /** WP3: the commit SHA the implicated scan ran on — the base a fix patch must
+   * apply cleanly against. Null for non-repo targets or pre-WP3 findings. */
+  baseCommit         String?
   status             FindingStatus              @default(OPEN)
   statusReason       String?
   dedupeKey          String

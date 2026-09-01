@@ -399,6 +399,33 @@ export async function getBranchRefSha(
   return data.object.sha
 }
 
+/**
+ * Fetch a file's text content at a ref (branch/SHA). Used by the WP3 fix-PR
+ * pipeline to read the current content a validated patch applies against.
+ * Returns null when the path does not exist at that ref (404).
+ */
+export async function getFileContent(
+  installationId: number,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string
+): Promise<string | null> {
+  const token = await getInstallationToken(installationId)
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+  )
+  if (res.status === 404) return null
+  if (!res.ok) {
+    throw new Error(`Failed to read file ${path}: ${res.status}`)
+  }
+  const data = (await res.json()) as { content?: string; encoding?: string }
+  if (typeof data.content !== "string") return null
+  // GitHub returns base64 with embedded newlines.
+  return Buffer.from(data.content.replace(/\n/g, ""), "base64").toString("utf8")
+}
+
 export async function createBranch(
   installationId: number,
   owner: string,
