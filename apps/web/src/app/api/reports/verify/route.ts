@@ -50,10 +50,10 @@ export async function POST(request: Request) {
     }
     const { reportChecksum, signature } = parsed.data
 
-    const publicKey = env.LAUNCH_REPORT_SIGNING_PUBLIC_KEY || ""
+    // Server's OWN public key (env in dev, Azure Key Vault in production) —
+    // never a client-supplied key, which would allow forgery.
+    const publicKey = await resolveLaunchReportSigningPublicKey()
     if (!publicKey) {
-      // Signing not configured on this deployment — report honestly rather than
-      // crash or guess. An unsigned-capable deployment cannot verify signatures.
       logger.warn("Launch report verification requested but no public key is configured")
       return apiError("NOT_CONFIGURED", "Report signature verification is not available.", 503)
     }

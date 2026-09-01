@@ -61,11 +61,12 @@ export async function generateLaunchReport(
 
     const payload = buildLaunchReportPayload(source, { appDisplayName: opts.appDisplayName })
 
-    // Sign the payload checksum when the signing key is configured. Without a
-    // key the report is still issued (checksum present, signature absent) — the
-    // verification endpoint reports it as unsigned rather than failing.
+    // Sign the payload checksum when a signing key is available. The key is
+    // resolved by the caller (env in dev, Azure Key Vault in production) and
+    // injected; without it the report is still issued (checksum present,
+    // signature absent) and the verification endpoint reports unsigned.
     let signature: string | undefined
-    const privateKey = env.LAUNCH_REPORT_SIGNING_PRIVATE_KEY
+    const privateKey = opts.signingPrivateKey ?? env.LAUNCH_REPORT_SIGNING_PRIVATE_KEY
     if (privateKey) {
       signature = signLaunchReportChecksum(payload.reportChecksum, privateKey)
       payload.signature = signature
