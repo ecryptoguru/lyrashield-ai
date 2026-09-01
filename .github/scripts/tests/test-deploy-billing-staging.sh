@@ -488,6 +488,7 @@ done
 grep -Fq '"BILLING_STAGING_REGION="' "$production_workflow"
 grep -Fq 'POLAR_PRODUCT_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual", "pack_100", "pack_250", "pack_500"]' "$production_workflow"
 grep -Fq 'RAZORPAY_PLAN_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual"]' "$production_workflow"
+grep -Fq 'polar_oat_?*) ;;' "$production_workflow"
 grep -Fq 'Razorpay packs are quote-signed payment links, not plans.' "$production_workflow"
 if grep -Fq -- '--client-certificate-mode' "$production_workflow"; then
   echo "FAIL: deploy workflow must not use unsupported Container Apps client-certificate CLI arguments" >&2

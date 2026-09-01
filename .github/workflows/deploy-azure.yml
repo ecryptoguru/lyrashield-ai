@@ -328,6 +328,13 @@ jobs:
               exit 1
             fi
           done
+          case "$POLAR_ACCESS_TOKEN" in
+            polar_oat_?*) ;;
+            *)
+              echo "::error::azure-production requires a Polar Organization Access Token; replace the protected POLAR_ACCESS_TOKEN secret."
+              exit 1
+              ;;
+          esac
           case "$RAZORPAY_KEY_ID" in
             rzp_live_*) ;;
             *)
