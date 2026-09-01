@@ -93,6 +93,10 @@ out=$(run_classify $'.github/workflows/deploy-azure.yml')
 assert_eq "Azure workflow: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 assert_eq "Azure workflow: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 
+out=$(run_classify $'.github/workflows/configure-cloud-billing-admission.yml')
+assert_eq "Billing admission workflow: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "Billing admission workflow: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+
 # --- Test 7: an uncovered path falls back to shared (fail-closed, v13 P1-7) ---
 # ops/, e2e/, root tooling, and new root configs must not silently skip deploys.
 out=$(run_classify $'ops/worker/refresh-egress.sh')

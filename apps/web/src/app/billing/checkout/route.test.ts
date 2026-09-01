@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   provider: "polar" as "polar" | "razorpay",
   admissionResponse: null as Response | null,
+  checkoutClaim: "claimed" as "claimed" | "duplicate" | "unavailable",
   createPolar: vi.fn().mockResolvedValue("https://polar.example/checkout"),
   createRazorpay: vi.fn().mockResolvedValue("sub_1"),
 }))
@@ -12,6 +13,7 @@ vi.mock("@lyrashield/logger", () => ({ logger: { warn: vi.fn(), info: vi.fn(), e
 vi.mock("@lyrashield/affiliate", () => ({ resolveAttribution: vi.fn().mockResolvedValue(null) }))
 vi.mock("@/lib/rate-limit", () => ({
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: false })),
+  claimBillingCheckoutCreation: vi.fn(() => mocks.checkoutClaim),
 }))
 vi.mock("@/lib/billing-admission", () => ({
   billingAdmissionError: () => mocks.admissionResponse,
@@ -51,6 +53,7 @@ describe("Cloud checkout admission", () => {
     vi.clearAllMocks()
     mocks.provider = "polar"
     mocks.admissionResponse = null
+    mocks.checkoutClaim = "claimed"
   })
 
   it("stops before provider calls when admission is off", async () => {
@@ -69,6 +72,12 @@ describe("Cloud checkout admission", () => {
 
   it("rejects client region overrides", async () => {
     expect((await POST(request({ region: "inr" }))).status).toBe(400)
+    expect(mocks.createPolar).not.toHaveBeenCalled()
+  })
+
+  it("does not create a second provider subscription while checkout is in progress", async () => {
+    mocks.checkoutClaim = "duplicate"
+    expect((await POST(request())).status).toBe(409)
     expect(mocks.createPolar).not.toHaveBeenCalled()
   })
 })
