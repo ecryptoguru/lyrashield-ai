@@ -24,6 +24,7 @@ if grep -Fq -- '-H "Host: app.lyrashieldai.com"' "$script"; then
   exit 1
 fi
 grep -Fq 'GH_TOKEN: ${{ secrets.ADMISSION_CONFIG_TOKEN }}' "$workflow"
+grep -Fq 'options: ["off", canary, public]' "$workflow"
 grep -Fq 'web_image_digest:' "$workflow"
 grep -Fq 'source_sha:' "$workflow"
 echo 'Cloud billing admission workflow static contract passed.'
