@@ -23,6 +23,13 @@ function appRequest(headers: HeadersInit = {}) {
   return new Request("https://app.lyrashieldai.com/billing/checkout", { headers })
 }
 
+function candidateRequest(headers: HeadersInit = {}) {
+  return new Request(
+    "https://lyrashield-app--candidate.icyglacier-d3526777.centralindia.azurecontainerapps.io/api/ready",
+    { headers }
+  )
+}
+
 describe("app Cloudflare origin trust", () => {
   it("requires exact XFCC certificate fingerprint when mTLS is required", async () => {
     process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
@@ -61,6 +68,20 @@ describe("app Cloudflare origin trust", () => {
         })
       )
     ).toBe("untrusted")
+  })
+
+  it("accepts the exact deploy probe certificate on a direct candidate host", async () => {
+    process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
+    process.env.CLOUDFLARE_AOP_CERT_SHA256 = "f".repeat(64)
+    process.env.DEPLOY_PROBE_CERT_SHA256 = fingerprint
+
+    expect(
+      await assessAppOrigin(
+        candidateRequest({
+          "x-forwarded-client-cert": `Hash=${fingerprint};Cert="not-a-certificate"`,
+        })
+      )
+    ).toBe("probe")
   })
 
   it("does not impose app-origin trust on another hostname", async () => {
