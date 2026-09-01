@@ -214,41 +214,38 @@ export function FindingsClient({
   initialData,
   initialNextCursor,
   initialSelectedFindingId,
+  initialFilter = "ALL",
+  initialSort = "priority",
 }: {
   workspaceId: string
   initialData: FindingListItem[]
   initialNextCursor: string | null
   initialSelectedFindingId?: string
+  /** Parsed on the server from the URL; never re-read from window here. */
+  initialFilter?: string
+  initialSort?: SortMode
 }) {
-  const readQueryParams = useCallback(
-    () => new URLSearchParams(typeof window !== "undefined" ? window.location.search : ""),
-    []
-  )
-
-  const updateQueryParams = useCallback(
-    (updates: { filter?: string; sort?: SortMode }) => {
-      const params = readQueryParams()
-      if (updates.filter && updates.filter !== "ALL") params.set("filter", updates.filter)
-      else params.delete("filter")
-      if (updates.sort && updates.sort !== "priority") params.set("sort", updates.sort)
-      else params.delete("sort")
-      const search = params.toString()
-      window.history.replaceState(
-        null,
-        "",
-        `${window.location.pathname}${search ? `?${search}` : ""}`
-      )
-    },
-    [readQueryParams]
-  )
+  const updateQueryParams = useCallback((updates: { filter?: string; sort?: SortMode }) => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (updates.filter && updates.filter !== "ALL") params.set("filter", updates.filter)
+    else params.delete("filter")
+    if (updates.sort && updates.sort !== "priority") params.set("sort", updates.sort)
+    else params.delete("sort")
+    const search = params.toString()
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${search ? `?${search}` : ""}`
+    )
+  }, [])
 
   const [findings, setFindings] = useState<FindingListItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
-  const [filter, setFilter] = useState<string>(() => readQueryParams().get("filter") ?? "ALL")
-  const [sortMode, setSortMode] = useState<SortMode>(() => {
-    const sort = readQueryParams().get("sort")
-    return sort === "severity" || sort === "newest" ? sort : "priority"
-  })
+  // Initial state comes from the server-parsed URL props, so the first client
+  // render matches the server-rendered HTML exactly (no hydration divergence).
+  const [filter, setFilter] = useState<string>(initialFilter)
+  const [sortMode, setSortMode] = useState<SortMode>(initialSort)
   const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(() =>
     initialSelectedFindingId
       ? (initialData.find((finding) => finding.id === initialSelectedFindingId) ?? null)

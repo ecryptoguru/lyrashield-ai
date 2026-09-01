@@ -25,10 +25,11 @@ import {
   getCachedSession,
   getCachedWorkspaceId,
   getCachedWorkspaces,
-  getCachedDashboardAggregates,
+  getCachedDashboardOverview,
 } from "@/lib/cache"
 import { TrustCommandCenter } from "@/components/trust-command-center"
 import { GetStartedChecklist } from "@/components/get-started-checklist"
+import { applyTargetCoverageToVerdict } from "@/lib/dashboard-overview"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { getScanPresentation } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -70,67 +71,70 @@ export default async function DashboardPage() {
 
   const activeWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
 
+  // One coherent read model: every headline below describes the same evidence
+  // scope instead of independently-selected workspace aggregates.
+  const overview = await getCachedDashboardOverview(workspaceId)
   const {
-    targetCount,
-    openFindingCount,
-    reportCount,
+    targets,
+    openIssues,
+    openIssuesBySeverity,
     findingGroups,
-    completedScanCount,
-    evaluatedCoverageCount,
-    scoreSnapshots,
-    recentScans,
+    completedRunCount,
+    scoreHistory,
+    reportCount,
     project,
-  } = await getCachedDashboardAggregates(workspaceId)
+    latestRun,
+    lastEvaluatedAssessment,
+    recentRuns,
+    remediation,
+  } = overview
 
-  const severity = Object.fromEntries(
-    Object.entries(
-      findingGroups.reduce<Record<string, number>>((totals, group) => {
-        totals[group.severity] = (totals[group.severity] ?? 0) + group._count._all
-        return totals
-      }, {})
-    )
-  )
-  const statuses = findingGroups.reduce<Record<string, number>>((totals, group) => {
-    totals[group.status] = (totals[group.status] ?? 0) + group._count._all
-    return totals
-  }, {})
-  const readiness = generateLaunchReadinessReportFromAggregate(
+  const targetCount = targets.total
+  const readinessBase = generateLaunchReadinessReportFromAggregate(
     findingGroups.map((group) => ({
       severity: group.severity,
       status: group.status,
       verified: group.verified,
-      count: group._count._all,
+      count: group.count,
     })),
-    completedScanCount > 0,
+    completedRunCount > 0,
     {
-      evaluated: evaluatedCoverageCount > 0,
+      evaluated: targets.assessed + targets.partiallyAssessed > 0,
       reason:
         "No scanner successfully evaluated a target in this workspace. Open the latest run's coverage notice for the specific reason.",
     }
   )
-  const fixed = statuses.FIXED ?? 0
-  const inProgress =
-    (statuses.FIX_READY ?? 0) +
-    (statuses.PR_OPENED ?? 0) +
-    (statuses.TICKET_CREATED ?? 0) +
-    (statuses.FIXED_PENDING_RETEST ?? 0)
-  const riskAccepted = statuses.ACCEPTED_RISK ?? 0
-  const snapshotScore = scoreSnapshots[0] ?? null
+  // A positive verdict is refused while any active target has no usable,
+  // non-expired evidence — a clean finding sheet is not a launch decision for
+  // targets nobody has been able to inspect.
+  const { verdict, coverageCondition } = applyTargetCoverageToVerdict(
+    readinessBase.verdict,
+    targets
+  )
+  const readiness = {
+    ...readinessBase,
+    verdict,
+    conditions: coverageCondition
+      ? [...readinessBase.conditions, coverageCondition]
+      : readinessBase.conditions,
+  }
 
-  // A score computed from scans that evaluated nothing is not a grade — it is
-  // the absence of one. Showing "100 / A+" there reads as a clean bill of
-  // health for a target nobody managed to inspect, so the number is withheld
-  // entirely rather than qualified with a footnote the user will not open.
-  const coverageEvaluated = evaluatedCoverageCount > 0
-  const evidenceCaptured = completedScanCount > 0 && coverageEvaluated
-  const latestScore = coverageEvaluated ? snapshotScore : null
+  const latestScore =
+    lastEvaluatedAssessment &&
+    lastEvaluatedAssessment.score !== null &&
+    lastEvaluatedAssessment.grade !== null
+      ? {
+          score: lastEvaluatedAssessment.score,
+          grade: lastEvaluatedAssessment.grade,
+        }
+      : null
   const primaryAction = dashboardPrimaryAction(targetCount)
 
-  const trend = coverageEvaluated
-    ? [...scoreSnapshots]
-        .reverse()
-        .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
-    : []
+  // The trend plots only snapshots bound to scans with usable coverage — the
+  // read model already excludes scores from runs that evaluated nothing.
+  const trend = [...scoreHistory]
+    .reverse()
+    .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
   const readinessConfig =
     readiness.verdict === "GO"
       ? {
@@ -174,28 +178,29 @@ export default async function DashboardPage() {
     {
       // A completed run that evaluated nothing has not captured evidence.
       label: "Evidence captured",
-      complete: evidenceCaptured,
+      complete: targets.assessed + targets.partiallyAssessed > 0,
       href: targetCount === 0 ? null : primaryAction.href,
     },
     {
       label: "Blockers cleared",
       complete: readiness.verdict === "GO",
-      href: !evidenceCaptured
-        ? null
-        : readiness.verdict === "NOT_EVALUATED"
-          ? primaryAction.href
-          : "/dashboard/findings",
+      href:
+        targets.assessed + targets.partiallyAssessed === 0
+          ? null
+          : readiness.verdict === "NOT_EVALUATED"
+            ? primaryAction.href
+            : "/dashboard/findings",
     },
     {
       label: "Assurance shared",
       complete: reportCount > 0,
-      href: evidenceCaptured ? "/dashboard/findings?tab=reports" : null,
+      href:
+        targets.assessed + targets.partiallyAssessed > 0 ? "/dashboard/findings?tab=reports" : null,
     },
   ]
 
-  const latestScan = recentScans[0]
   // null when nothing has run yet — the card omits the depth clause rather than claiming one.
-  const commandMode = latestScan?.mode ?? null
+  const commandMode = latestRun?.mode ?? null
 
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
@@ -230,7 +235,7 @@ export default async function DashboardPage() {
       {/* First-run guide for brand-new workspaces (zero completed scans). The
           full metric grid below is the returning-user view; this is what makes
           the first five minutes simple and engaging. Dismissible per workspace. */}
-      {completedScanCount === 0 && (
+      {completedRunCount === 0 && (
         <GetStartedChecklist workspaceId={workspaceId} steps={assuranceSteps} />
       )}
 
@@ -238,9 +243,9 @@ export default async function DashboardPage() {
         productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
         mode={commandMode}
         assetCount={targetCount}
-        riskScore={latestScore?.score ?? project?.riskScore ?? 100}
+        riskScore={project?.riskScore ?? 100}
         trustPlanData={project?.trustPlan}
-        completedScanCount={completedScanCount}
+        completedScanCount={completedRunCount}
         latestScore={latestScore ? { score: latestScore.score, grade: latestScore.grade } : null}
       />
 
@@ -257,6 +262,25 @@ export default async function DashboardPage() {
             <p className="text-foreground/80 mt-2 max-w-2xl text-sm">
               {readinessConfig.description}
             </p>
+            {/* Two separately scoped messages: the latest run needs attention,
+                while the last evaluated assessment remains the newest usable
+                evidence for its named target. */}
+            {readiness.verdict === "INCONCLUSIVE" && lastEvaluatedAssessment && (
+              <p className="text-foreground/80 mt-1 max-w-2xl text-sm">
+                Last evaluated assessment: {lastEvaluatedAssessment.targetName} on{" "}
+                {formatDate(lastEvaluatedAssessment.completedAt)}
+                {latestScore
+                  ? ` — grade ${latestScore.grade.replace("_PLUS", "+")} (${latestScore.score}/100)`
+                  : ""}
+                , coverage {lastEvaluatedAssessment.coverageState.toLowerCase()}.
+              </p>
+            )}
+            {targets.unassessed > 0 && targetCount > 0 && (
+              <p className="text-foreground/80 mt-1 max-w-2xl text-sm">
+                {targets.unassessed} of {targetCount} target{targetCount === 1 ? "" : "s"} has no
+                usable review evidence yet.
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {assuranceSteps.map((step) => {
                 const Icon = step.complete ? CheckCircle2 : Circle
@@ -305,8 +329,8 @@ export default async function DashboardPage() {
           value={latestScore?.score ?? "—"}
           detail={
             latestScore
-              ? `Grade ${latestScore.grade.replace("_PLUS", "+")}`
-              : completedScanCount > 0
+              ? `Grade ${latestScore.grade.replace("_PLUS", "+")} · ${lastEvaluatedAssessment?.targetName ?? "workspace"}`
+              : completedRunCount > 0
                 ? "Score snapshot unavailable"
                 : "Awaiting completed scan"
           }
@@ -314,8 +338,8 @@ export default async function DashboardPage() {
         />
         <MetricCard
           label="Open findings"
-          value={openFindingCount}
-          detail={`${severity.CRITICAL ?? 0} critical · ${severity.HIGH ?? 0} high`}
+          value={openIssues.total}
+          detail={`${openIssuesBySeverity.CRITICAL ?? 0} critical · ${openIssuesBySeverity.HIGH ?? 0} high · workspace-wide`}
           icon={Bug}
         />
       </section>
@@ -326,7 +350,9 @@ export default async function DashboardPage() {
             <div>
               <h2 className="font-semibold">Risk posture</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                Latest score with the last ten completed scan snapshots.
+                {lastEvaluatedAssessment
+                  ? `Score from the ${formatDate(lastEvaluatedAssessment.completedAt)} review of ${lastEvaluatedAssessment.targetName}.`
+                  : "No evaluated review yet."}
               </p>
             </div>
             <Badge
@@ -354,7 +380,7 @@ export default async function DashboardPage() {
               All retained findings grouped by severity.
             </p>
           </div>
-          <SeverityDonut values={severity} />
+          <SeverityDonut values={openIssuesBySeverity} />
         </Card>
       </section>
 
@@ -373,12 +399,15 @@ export default async function DashboardPage() {
             rows={[
               {
                 label: "Open",
-                value: Math.max(0, openFindingCount - inProgress - riskAccepted),
+                value: Math.max(
+                  0,
+                  openIssues.total - remediation.inProgress - remediation.riskAccepted
+                ),
                 tone: "warning",
               },
-              { label: "In remediation", value: inProgress, tone: "primary" },
-              { label: "Fixed", value: fixed, tone: "success" },
-              { label: "Risk accepted", value: riskAccepted },
+              { label: "In remediation", value: remediation.inProgress, tone: "primary" },
+              { label: "Fixed", value: remediation.fixed, tone: "success" },
+              { label: "Risk accepted", value: remediation.riskAccepted },
             ]}
           />
         </Card>
@@ -396,17 +425,14 @@ export default async function DashboardPage() {
               View all <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           </div>
-          {recentScans.length > 0 ? (
+          {recentRuns.length > 0 ? (
             <div className="divide-y">
-              {recentScans.map((scan) => {
-                const presentation = getScanPresentation(scan.status, {
-                  errorCategory: scan.errorCategory,
-                  errorMessage: scan.errorMessage,
-                })
+              {recentRuns.map((run) => {
+                const presentation = getScanPresentation(run.status, {})
                 return (
                   <Link
-                    key={scan.id}
-                    href={`/dashboard/scans/${scan.id}`}
+                    key={run.id}
+                    href={`/dashboard/scans/${run.id}`}
                     className="hover:bg-accent/60 flex min-h-16 items-center gap-3 px-5 py-3 transition-colors sm:px-6"
                   >
                     <span className="bg-primary/8 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
@@ -414,10 +440,11 @@ export default async function DashboardPage() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
-                        {scan.target?.name ?? "Workspace scan"}
+                        {run.targetName ?? "Workspace scan"}
                       </span>
                       <span className="text-muted-foreground block text-xs">
-                        {formatDate(scan.createdAt)} · {scan._count.findings} findings
+                        {formatDate(run.createdAt)} · {run.findingCount} finding
+                        {run.findingCount === 1 ? "" : "s"}
                       </span>
                     </span>
                     <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>

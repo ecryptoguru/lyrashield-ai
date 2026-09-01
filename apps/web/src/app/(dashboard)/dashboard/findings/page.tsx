@@ -10,6 +10,7 @@ import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-se
 import { EvidenceList } from "./evidence-list"
 import { ReportsClient } from "../reports/reports-client"
 import { calculateFindingPriority } from "@/lib/finding-priority"
+import { parseFindingListParams } from "@/lib/finding-list-params"
 
 const SEVERITY_ORDER: Record<string, number> = {
   CRITICAL: 0,
@@ -39,7 +40,14 @@ export const metadata: Metadata = {
 export default async function FindingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ finding?: string; tab?: string; scanId?: string; targetId?: string }>
+  searchParams: Promise<{
+    finding?: string
+    tab?: string
+    scanId?: string
+    targetId?: string
+    filter?: string
+    sort?: string
+  }>
 }) {
   const session = await getCachedSession()
   if (!session) return null
@@ -63,6 +71,9 @@ export default async function FindingsPage({
   const params = await searchParams
   const tab = normalizeTab(params.tab)
   const tabs = FINDINGS_TABS
+  // Filter/sort are parsed on the server and passed as initial props so the
+  // server-rendered tree and the client's first render match exactly.
+  const listParams = parseFindingListParams(params)
 
   const description = `Potential and verified security ${ISSUE_PLURAL.toLowerCase()} reported by your ${RUN_PLURAL.toLowerCase()}`
 
@@ -191,6 +202,8 @@ export default async function FindingsPage({
         initialData={initialData}
         initialNextCursor={nextCursor}
         initialSelectedFindingId={requestedFindingId}
+        initialFilter={listParams.filter}
+        initialSort={listParams.sort}
       />
     </div>
   )
