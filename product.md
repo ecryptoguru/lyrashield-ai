@@ -79,7 +79,7 @@ Two modes: **Cloud subscription** (we pay LLM costs) and **Local BYOK desktop** 
 - Email verification is enabled in production through the Brevo binding on both application surfaces. Deployment fails closed when verification is required but the provider binding is absent.
 - Split marketing/app origin routing and the public Lite Scanner.
 - LyraShield Score, cross-admin-idempotent public scorecards, referrals, and premium social sharing.
-- Two dashboard experiences: Guided for vibe coders, first-time developers, and non-technical operators; Pro for experienced developers and security teams. Both expose the same permissions and launch-critical actions, so mode choice never hides a blocker or changes evidence semantics.
+- One adaptive dashboard for builders, founders, and security teams: a state-derived next action leads, every score and verdict names its evidence scope, and technical depth stays available through progressive disclosure. Permissions, scan behavior, and evidence semantics never change with presentation.
 - A hidden, read-oriented platform admin console for exactly two allowlisted, verified, TOTP-enrolled operators. It exposes bounded health and operational lists without customer source, payloads, secrets, model cost, or cross-tenant mutation authority. Exact-two production provisioning and fresh independent Google-plus-TOTP browser proof passed on 2026-08-26; each future apply must be followed by fresh proof.
 - Azure AI / GPT-5.6 mode routing (Safe/Quick/Standard → Luna/medium; Deep/Custom → Terra/medium with Luna/high specialists).
 - Evidence-backed marketing surface with a public methodology page (release verdict scale: Go, Go with conditions, No go, Not evaluated) and six browser-local no-upload tools.

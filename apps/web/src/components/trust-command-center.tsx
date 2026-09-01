@@ -1,12 +1,7 @@
-"use client"
-
-import { useEffect, useState, useSyncExternalStore } from "react"
-import { ShieldCheck, Clock, ListChecks } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, Badge, cn } from "@lyrashield/ui"
-import { estimateRunMinutes, formatEstimate } from "@/lib/estimator"
 import Link from "next/link"
+import { ListChecks, ShieldCheck } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle, Badge } from "@lyrashield/ui"
 import { modeLabel } from "@/lib/labels"
-import { commandCenterFirstMetric } from "./trust-command-center.utils"
 
 function trustPlanLabel(data: unknown): string {
   if (!data || typeof data !== "object") return "Default"
@@ -31,206 +26,116 @@ function trustPlanLabel(data: unknown): string {
   return "Configured"
 }
 
-function useReducedMotion(): boolean {
-  return useSyncExternalStore(
-    (callback) => {
-      const mql = window.matchMedia("(prefers-reduced-motion: reduce)")
-      mql.addEventListener("change", callback)
-      return () => mql.removeEventListener("change", callback)
-    },
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    () => false
-  )
+interface PostureVerdict {
+  variant: "success" | "warning" | "danger" | "muted"
+  text: string
+  scope: string
 }
 
-// Matches the --ease-out token: cubic-bezier(0.2, 0, 0, 1).
-function easeOutProgress(t: number): number {
-  return 3 * t * t - 2 * t * t * t
-}
-
-function useCountUp(target: number, durationMs = 900): number {
-  const reduced = useReducedMotion()
-  const [value, setValue] = useState(0)
-
-  useEffect(() => {
-    if (reduced) return
-
-    let raf = 0
-    const start = performance.now()
-
-    const tick = (now: number) => {
-      const elapsed = now - start
-      const progress = Math.min(1, elapsed / durationMs)
-      setValue(Math.round(target * easeOutProgress(progress)))
-      if (progress < 1) {
-        raf = requestAnimationFrame(tick)
-      }
+/**
+ * Derive the posture verdict from the last EVALUATED assessment only. A score
+ * is always presented with the target and date it describes — never as a
+ * workspace-wide clean bill of health.
+ */
+export function postureVerdict(
+  latestScore: {
+    score: number
+    grade: string
+    targetName: string
+    completedAtLabel: string
+  } | null
+): PostureVerdict {
+  if (!latestScore) {
+    return {
+      variant: "muted",
+      text: "Not scored",
+      scope: "Run a review to capture your first evidence.",
     }
-
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target, durationMs, reduced])
-
-  return value
+  }
+  const variant =
+    latestScore.score >= 80 ? "success" : latestScore.score >= 50 ? "warning" : "danger"
+  const text =
+    latestScore.score >= 80
+      ? "Ready within completed scope"
+      : latestScore.score >= 50
+        ? "Needs attention"
+        : "Needs action"
+  return {
+    variant,
+    text,
+    scope: `Grade ${latestScore.grade.replace("_PLUS", "+")} · ${latestScore.targetName} · ${latestScore.completedAtLabel}`,
+  }
 }
 
+/**
+ * Current posture header for Home. Server-rendered and static: no count-up,
+ * no delayed reveal, no duration estimate (duration belongs to a selected
+ * target/review combination in the run composer).
+ */
 export function TrustCommandCenter({
   productName,
   mode,
-  assetCount,
-  riskScore,
   trustPlanData,
-  completedScanCount = 0,
-  latestScore = null,
+  latestScore,
 }: {
   productName: string
-  /** Depth of the most recent review, or null when none has run yet. */
+  /** Depth of the most recent run, or null when none has run yet. */
   mode: string | null
-  assetCount: number
-  riskScore: number
   trustPlanData: unknown
-  completedScanCount?: number
-  latestScore?: { score: number; grade: string } | null
+  latestScore: { score: number; grade: string; targetName: string; completedAtLabel: string } | null
 }) {
-  const reduced = useReducedMotion()
-  const [isRevealed, setIsRevealed] = useState(reduced)
-
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => setIsRevealed(true))
-    return () => cancelAnimationFrame(raf)
-  }, [reduced])
-
-  const estimate = estimateRunMinutes(mode ?? "SAFE", assetCount)
-
-  const hasCompletedReview = completedScanCount > 0 && latestScore !== null
-  const score = latestScore?.score ?? riskScore
-  const countedScore = useCountUp(score)
-  const animatedScore = reduced ? score : countedScore
-
-  const verdictVariant = !hasCompletedReview
-    ? "muted"
-    : score >= 80
-      ? "success"
-      : score >= 50
-        ? "warning"
-        : "danger"
-  const verdictText = !hasCompletedReview
-    ? "Not evaluated"
-    : score >= 80
-      ? "Ready to ship within completed scope"
-      : score >= 50
-        ? "Needs attention"
-        : "Needs action"
-
-  const revealBase = "transition-[opacity,transform] duration-(--duration-slow) ease-(--ease-out)"
-  const revealHidden = "opacity-0 translate-y-2"
-  const revealVisible = "opacity-100 translate-y-0"
-  const firstMetric = commandCenterFirstMetric(assetCount)
-
-  const metrics = [
-    {
-      key: "time",
-      title: firstMetric === "next-step" ? "Next step" : "Estimated time",
-      icon: Clock,
-      content:
-        firstMetric === "next-step" ? (
-          <>
-            <Link
-              href="/dashboard/targets"
-              className="text-lg font-semibold underline underline-offset-4"
-            >
-              Add a target
-            </Link>
-            <p className="text-muted-foreground text-xs">
-              Connect a repository, app URL, or API to begin.
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <Clock className="text-primary size-5" aria-hidden="true" />
-              <span className="text-2xl font-bold">{formatEstimate(estimate)}</span>
-            </div>
-            <p className="text-muted-foreground text-xs">
-              For {assetCount} asset{assetCount === 1 ? "" : "s"}
-              {mode ? ` in ${modeLabel(mode).toLowerCase()} mode` : ""}
-            </p>
-          </>
-        ),
-    },
-    {
-      key: "plan",
-      title: "Trust plan",
-      icon: ListChecks,
-      content: (
-        <>
-          <div className="flex items-center gap-2">
-            <ListChecks className="text-primary size-5" aria-hidden="true" />
-            <span className="text-lg font-semibold">{trustPlanLabel(trustPlanData)}</span>
-          </div>
-          <Link
-            href="/dashboard/settings"
-            className="text-muted-foreground decoration-border hover:text-foreground text-xs underline underline-offset-4"
-          >
-            Review and customise controls.
-          </Link>
-        </>
-      ),
-    },
-    {
-      key: "verdict",
-      title: "Latest verdict",
-      icon: ShieldCheck,
-      content: (
-        <>
-          <Badge variant={verdictVariant as "success" | "warning" | "danger" | "muted"}>
-            {verdictText}
-          </Badge>
-          <p className="text-muted-foreground text-xs">
-            {hasCompletedReview
-              ? `Based on the latest completed review (${completedScanCount} total).`
-              : "Run your first review to see evidence."}
-          </p>
-        </>
-      ),
-    },
-  ]
+  const verdict = postureVerdict(latestScore)
 
   return (
-    <div className="space-y-4">
-      <div
-        className={cn(
-          revealBase,
-          isRevealed ? revealVisible : revealHidden,
-          "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
-        )}
-      >
+    <section aria-label="Current posture" className="space-y-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{productName}</h2>
           <p className="text-muted-foreground text-sm">Assurance status and active review plan</p>
         </div>
-        <Badge variant={verdictVariant as "success" | "warning" | "danger" | "muted"}>
-          {/* Withhold the number entirely when nothing has been evaluated — a
-              large "100/100" next to a muted "Not evaluated" badge still reads
-              as a pass at a glance, which is the misread this prevents. */}
-          {hasCompletedReview ? `${animatedScore}/100` : "Not scored"}
-        </Badge>
+        <div className="sm:text-right">
+          <Badge variant={verdict.variant}>{verdict.text}</Badge>
+          <p className="text-muted-foreground mt-1 text-xs">{verdict.scope}</p>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {metrics.map((metric, index) => (
-          <Card
-            key={metric.key}
-            className={cn(revealBase, isRevealed ? revealVisible : revealHidden)}
-            style={{ transitionDelay: `${(index + 1) * 75}ms` }}
-          >
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">{metric.title}</CardTitle>
-            </CardHeader>
-            <CardContent>{metric.content}</CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Trust plan</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <ListChecks className="text-primary size-5" aria-hidden="true" />
+              <span className="text-lg font-semibold">{trustPlanLabel(trustPlanData)}</span>
+            </div>
+            <Link
+              href="/dashboard/settings"
+              className="text-muted-foreground decoration-border hover:text-foreground text-xs underline underline-offset-4"
+            >
+              Review and customise controls.
+            </Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Latest review depth</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="text-primary size-5" aria-hidden="true" />
+              <span className="text-lg font-semibold">
+                {mode ? modeLabel(mode) : "No review yet"}
+              </span>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {mode
+                ? "Depth of the most recent run in this workspace."
+                : "Depth appears after your first run."}
+            </p>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </section>
   )
 }

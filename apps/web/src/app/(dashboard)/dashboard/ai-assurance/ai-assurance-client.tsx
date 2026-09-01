@@ -69,6 +69,10 @@ export function AiAssuranceClient({
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
+  const acceptedCount = items.filter((item) => item.state === "EVIDENCE_ACCEPTED").length
+  const submittedCount = items.filter((item) => item.state === "EVIDENCE_SUBMITTED").length
+  const requiredCount = items.filter((item) => item.state === "EVIDENCE_REQUIRED").length
+
   function replaceItem(next: PublicControlEvidenceItem) {
     setItems((current) => current.map((item) => (item.controlId === next.controlId ? next : item)))
   }
@@ -241,6 +245,63 @@ export function AiAssuranceClient({
           Generate report
         </Link>
       </div>
+
+      {/* At-a-glance completion sequence: profile → threat model → control
+          evidence. Customer-declared, never a certification claim. */}
+      <Card className="p-4">
+        <ol className="grid gap-3 sm:grid-cols-3" aria-label="Evidence Vault progress">
+          <li className="flex items-center gap-2.5">
+            <span
+              className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                initialProfile ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+              }`}
+              aria-hidden="true"
+            >
+              {initialProfile ? "✓" : "1"}
+            </span>
+            <span className="min-w-0 text-sm">
+              <span className="block font-medium">AI system profile</span>
+              <span className="text-muted-foreground block text-xs">
+                {initialProfile ? "Submitted" : "Not submitted"}
+              </span>
+            </span>
+          </li>
+          <li className="flex items-center gap-2.5">
+            <span
+              className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                initialThreatModel ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+              }`}
+              aria-hidden="true"
+            >
+              {initialThreatModel ? "✓" : "2"}
+            </span>
+            <span className="min-w-0 text-sm">
+              <span className="block font-medium">Threat model</span>
+              <span className="text-muted-foreground block text-xs">
+                {initialThreatModel ? "Submitted" : "Not submitted"}
+              </span>
+            </span>
+          </li>
+          <li className="flex items-center gap-2.5">
+            <span
+              className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                acceptedCount + submittedCount > 0
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted text-muted-foreground"
+              }`}
+              aria-hidden="true"
+            >
+              3
+            </span>
+            <span className="min-w-0 text-sm">
+              <span className="block font-medium">Control evidence</span>
+              <span className="text-muted-foreground block text-xs">
+                {acceptedCount} accepted · {submittedCount} submitted · {requiredCount} required
+              </span>
+            </span>
+          </li>
+        </ol>
+      </Card>
 
       <AssuranceInventory
         workspaceId={workspaceId}

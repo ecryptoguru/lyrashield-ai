@@ -151,13 +151,11 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   createdWorkspaceId = workspaceId
 
   await page.goto("/dashboard")
-  await expect(page.getByRole("link", { name: "Target ready" }).first()).toHaveAttribute(
+  await expect(page.getByRole("heading", { name: "Add your first target" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Add a target" }).first()).toHaveAttribute(
     "href",
     "/dashboard/targets"
   )
-  await expect(page.getByRole("link", { name: "Evidence captured" })).toHaveCount(0)
-  await expect(page.getByRole("link", { name: "Blockers cleared" })).toHaveCount(0)
-  await expect(page.getByRole("link", { name: "Assurance shared" })).toHaveCount(0)
 
   const targetResponse = await page.request.post("/api/targets", {
     data: {
@@ -204,12 +202,11 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   await expect(contractTargetResponse).toBeOK()
 
   await page.goto("/dashboard")
-  await expect(page.getByRole("link", { name: "Evidence captured" }).first()).toHaveAttribute(
+  await expect(page.getByRole("heading", { name: "Run your first review" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Start a Trust Run" })).toHaveAttribute(
     "href",
     "/dashboard/scans?new=1"
   )
-  await expect(page.getByRole("link", { name: "Blockers cleared" })).toHaveCount(0)
-  await expect(page.getByRole("link", { name: "Assurance shared" })).toHaveCount(0)
 
   const restoreOnboardingResponse = await page.request.patch("/api/onboarding", {
     data: {
@@ -257,7 +254,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   await expect(finishOnboardingResponse).toBeOK()
 
   await page.goto("/dashboard/scans?new=1")
-  const targetSelect = page.getByLabel("Target")
+  const targetSelect = page.getByLabel("Target", { exact: true })
   await targetSelect.selectOption({ label: "Example target (WEB_APP)" })
   await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
   await expect(page.getByRole("radio", { name: /^Expanded Surface Review:/ })).toBeEnabled()
@@ -282,7 +279,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   await expect(page.getByRole("radio", { name: /^Contract Behavior Review:/ })).toBeEnabled()
 
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } })
-  const scan = await withWorkspaceRLS(workspaceId, async (tx) => {
+  const fixture = await withWorkspaceRLS(workspaceId, async (tx) => {
     const created = await tx.scan.create({
       data: {
         workspaceId,
@@ -296,10 +293,64 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
     await tx.scanEvent.create({
       data: { scanId: created.id, stage: "queued", level: "info", message: "Scan queued" },
     })
-    return created
+    const finding = await tx.finding.create({
+      data: {
+        workspaceId,
+        targetId,
+        scanId: created.id,
+        title: "Unexpected request field accepted",
+        summary: "The request accepts an undocumented field.",
+        severity: "HIGH",
+        confidence: "high",
+        status: "OPEN",
+        verificationStatus: "DETECTED",
+        dedupeKey: `e2e-dashboard-${suffix}`,
+      },
+    })
+    return { scan: created, finding }
   })
-  await page.goto(`/dashboard/scans/${scan.id}`)
+  await page.goto(`/dashboard/scans/${fixture.scan.id}`)
   await expect(page.getByRole("heading", { name: "Scan queued", level: 1 })).toBeVisible()
+
+  const dashboardConsoleErrors: string[] = []
+  const dashboardPageErrors: string[] = []
+  page.on("console", (message) => {
+    if (message.type() === "error") dashboardConsoleErrors.push(message.text())
+  })
+  page.on("pageerror", (error) => dashboardPageErrors.push(error.message))
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const path of [
+    "/dashboard",
+    "/dashboard/targets",
+    "/dashboard/scans",
+    `/dashboard/scans/${fixture.scan.id}`,
+    "/dashboard/findings",
+    `/dashboard/findings?finding=${fixture.finding.id}`,
+  ]) {
+    await page.goto(path)
+    await expect(page.locator("#main-content")).toBeVisible()
+    await expect(page.locator("h1").first()).toBeVisible()
+    await expect(page.locator("body")).not.toContainText("$RS")
+    const pageScrollX = await page.evaluate(() => {
+      window.scrollTo({ left: 10_000 })
+      const position = window.scrollX
+      window.scrollTo({ left: 0 })
+      return position
+    })
+    expect(pageScrollX, `Horizontal page scroll at ${path}`).toBe(0)
+  }
+  await expect(page.getByText("Unexpected request field accepted").first()).toBeVisible()
+  const bottomNavSpacing = await page.evaluate(() => {
+    const main = document.querySelector<HTMLElement>("#main-content")!
+    const nav = document.querySelector<HTMLElement>('nav[aria-label="Main navigation"]')!
+    return {
+      bottomPadding: Number.parseFloat(getComputedStyle(main).paddingBottom),
+      navHeight: nav.getBoundingClientRect().height,
+    }
+  })
+  expect(bottomNavSpacing.bottomPadding).toBeGreaterThanOrEqual(bottomNavSpacing.navHeight)
+  expect(dashboardPageErrors).toEqual([])
+  expect(dashboardConsoleErrors).toEqual([])
 
   const other = await browser.newContext({
     extraHTTPHeaders: { "x-forwarded-for": forwardedFor },
@@ -318,7 +369,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
     }
     await otherPage.goto(`/dashboard/targets/${targetId}`)
     await expect(otherPage.getByRole("heading", { name: /404|Not in evidence/i })).toBeVisible()
-    await otherPage.goto(`/dashboard/scans/${scan.id}`)
+    await otherPage.goto(`/dashboard/scans/${fixture.scan.id}`)
     await expect(otherPage.getByRole("heading", { name: "No workspace yet" })).toBeVisible()
   } finally {
     await other.close()

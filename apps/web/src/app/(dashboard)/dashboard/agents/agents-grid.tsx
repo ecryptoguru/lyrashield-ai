@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Select } from "@lyrashield/ui"
 import { Check, Copy, ExternalLink, Terminal, CircleDashed } from "lucide-react"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 
@@ -179,14 +179,59 @@ export function AgentsGrid({
   agents: AgentCardData[]
   docsBaseUrl: string
 }) {
-  if (agents.length === 0) {
-    return <p className="text-muted-foreground text-sm">No agents registered.</p>
-  }
+  // Client-side filtering over the existing registry data only: a search
+  // across display name and ID, plus a strategy select. No remote search and
+  // no second registry abstraction.
+  const [search, setSearch] = useState("")
+  const [strategy, setStrategy] = useState<"all" | AgentCardData["installStrategy"]>("all")
+
+  const filtered = agents.filter((agent) => {
+    const matchesSearch =
+      search.trim() === "" ||
+      agent.displayName.toLowerCase().includes(search.trim().toLowerCase()) ||
+      agent.id.toLowerCase().includes(search.trim().toLowerCase())
+    const matchesStrategy = strategy === "all" || agent.installStrategy === strategy
+    return matchesSearch && matchesStrategy
+  })
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {agents.map((agent) => (
-        <AgentCard key={agent.id} agent={agent} docsBaseUrl={docsBaseUrl} />
-      ))}
+    <div className="space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search coding agents…"
+          aria-label="Search coding agents"
+          className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none sm:max-w-xs"
+        />
+        <Select
+          aria-label="Filter by setup strategy"
+          value={strategy}
+          onChange={(event) => setStrategy(event.target.value as typeof strategy)}
+          className="h-9 w-full sm:w-48"
+        >
+          <option value="all">All strategies</option>
+          <option value="config-file">Auto-installs</option>
+          <option value="vendor-cli">Vendor installer</option>
+          <option value="guided-manual">Guided manual</option>
+          <option value="agent-plugin">Agent Plugin</option>
+        </Select>
+      </div>
+
+      {agents.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No agents registered.</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-muted-foreground text-sm" role="status">
+          No coding agents match this search or strategy.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((agent) => (
+            <AgentCard key={agent.id} agent={agent} docsBaseUrl={docsBaseUrl} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -396,7 +396,7 @@ Environment validation fails closed in production where a capability is required
 - Dialogs trap focus, restore focus, and support Escape unless destructive confirmation requires otherwise.
 - Honor reduced motion and system/light/dark preference without hydration flash.
 - Server components supply initial data; client components own interaction and typed mutations.
-- `DashboardExperience` stores a per-workspace `guided` or `pro` preference in local storage; storage failure preserves Guided as the fully functional default. `ProDashboardSection` changes presentation density only, never authorization, data scope, or scan behavior.
+- The dashboard is one adaptive surface: `lib/dashboard-overview.ts` is the typed server-side read model (scores bound to scans via `ScoreSnapshot.scanId`, per-target coverage from terminal-run receipts, workspace verdict gated on target coverage), and `lib/home-next-action.ts` derives the single next action. Progressive disclosure carries technical depth; presentation never changes authorization, data scope, or scan behavior.
 - Render and inspect real browser output for UI changes.
 
 ## 10. Commands and verification
