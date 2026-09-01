@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { verifyLaunchReportSignature } from "@lyrashield/db"
+import { resolveLaunchReportSigningPublicKey } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
-import { env } from "@lyrashield/config"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { checkApiRateLimit, clientIpFromRequest } from "../../../../lib/rate-limit"
 
