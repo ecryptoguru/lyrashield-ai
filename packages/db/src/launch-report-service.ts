@@ -15,7 +15,6 @@
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { withWorkspaceRLS } from "./rls"
-import { getLatestGateVerdict } from "./gate-service"
 import {
   buildLaunchReportPayload,
   type LaunchReportShareablePayload,

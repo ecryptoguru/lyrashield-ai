@@ -10,10 +10,19 @@ import { listAll, FindingSchema } from "@lyrashield/sdk"
 export async function handleGate(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
     string: ["fail-on", "sarif", "base", "head", "target"],
-    boolean: ["staged"],
+    boolean: ["staged", "verdict"],
     default: { "fail-on": "HIGH" },
     alias: { t: "target" },
   })
+
+  // WP5: --verdict returns the launch-gate verdict (READY / NOT_READY /
+  // INSUFFICIENT_EVIDENCE) for the target with a stable exit code, instead of
+  // the diff-severity gate. Exit codes: 0 READY, 1 NOT_READY, 2
+  // insufficient-evidence / error. The verdict reflects the named readiness
+  // standard — it never means "secure".
+  if (parsed.verdict) {
+    return runVerdictGate(parsed.target as string | undefined, output)
+  }
 
   const threshold = ((parsed["fail-on"] as string) ?? "HIGH").toUpperCase()
   const thresholdRank = rankSeverity(threshold)
@@ -161,4 +170,72 @@ export async function handleGate(args: string[], output: Output): Promise<number
   }
 
   return failed ? 1 : 0
+}
+
+/**
+ * WP5: the launch-gate verdict as a CLI command. Queries the WP2 gate API for
+ * the target and returns the readiness verdict with a stable exit code.
+ *
+ * Exit codes (stable contract): 0 READY, 1 NOT_READY, 2 INSUFFICIENT_EVIDENCE
+ * or any error. The verdict is a gate result against the named readiness
+ * standard (lyrashield-gate/1.0.0) — it never means the app is "secure".
+ */
+async function runVerdictGate(target: string | undefined, output: Output): Promise<number> {
+  const creds = await getEffectiveCredentials()
+  if (!creds.apiKey) {
+    output.error("The verdict gate requires an API key. Run `lyrashield login` first.", 2)
+    return 2
+  }
+  const workspaceId = requireWorkspace(creds)
+
+  let targetId = target
+  if (!targetId) {
+    const defaultProject = await loadDefaultProject()
+    if (defaultProject?.targetId && defaultProject.workspaceId === workspaceId) {
+      targetId = defaultProject.targetId
+    }
+  }
+  if (!targetId) {
+    output.error("No target. Pass --target or set a default project.", 2)
+    return 2
+  }
+
+  try {
+    const client = await createClient()
+    const res = (await client.request(
+      "GET",
+      `/gate/${encodeURIComponent(targetId)}?workspaceId=${encodeURIComponent(workspaceId)}`
+    )) as {
+      state?: string
+      blockingReasons?: unknown[]
+      nonCoverage?: unknown[]
+      staleness?: { current?: boolean; reason?: string | null }
+      standardVersion?: string
+    }
+
+    const state = res?.state ?? "INSUFFICIENT_EVIDENCE"
+    const stale = res?.staleness && res.staleness.current === false
+
+    if (output.json) {
+      output.result(res)
+    } else if (state === "READY") {
+      output.log(`Gate verdict: READY${stale ? " (stale — re-run the gate)" : ""}`)
+    } else if (state === "NOT_READY") {
+      const blockers = Array.isArray(res?.blockingReasons) ? res.blockingReasons.length : 0
+      output.error(
+        `Gate verdict: NOT READY — ${blockers} blocking finding(s) against ${res?.standardVersion ?? "the readiness standard"}${stale ? " (stale)" : ""}`,
+        1
+      )
+    } else {
+      output.error(
+        "Gate verdict: NOT ENOUGH EVIDENCE — coverage too thin to judge. Run a scan that evaluates this target.",
+        2
+      )
+    }
+
+    return state === "READY" ? 0 : state === "NOT_READY" ? 1 : 2
+  } catch (err) {
+    output.error(`Gate verdict unavailable: ${err instanceof Error ? err.message : String(err)}`, 2)
+    return 2
+  }
 }

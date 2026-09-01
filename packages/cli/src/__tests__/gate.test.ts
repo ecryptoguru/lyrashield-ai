@@ -120,3 +120,61 @@ describe("handleGate target scoping", () => {
     expect(output.log).toHaveBeenCalledWith(expect.stringContaining("WEBMCP-COVERAGE-INCOMPLETE"))
   })
 })
+
+describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
+  function mockClientWithVerdict(state: string, extra: Record<string, unknown> = {}) {
+    const request = vi.fn(async () => ({
+      state,
+      blockingReasons: [],
+      nonCoverage: [],
+      staleness: { current: true, reason: null },
+      standardVersion: "lyrashield-gate/1.0.0",
+      ...extra,
+    }))
+    return request
+  }
+
+  it("exits 0 when the gate verdict is READY", async () => {
+    mockGetEffectiveCredentials.mockResolvedValue({ apiKey: "k", workspaceId: "ws-1" } as never)
+    const request = mockClientWithVerdict("READY")
+    const { createClient } = await import("../client.js")
+    vi.mocked(createClient).mockResolvedValue({ request } as never)
+
+    const output = makeOutput()
+    const exitCode = await handleGate(["--verdict", "--target", "t-1"], output)
+
+    expect(exitCode).toBe(0)
+    expect(output.log).toHaveBeenCalledWith(expect.stringContaining("READY"))
+  })
+
+  it("exits 1 when the gate verdict is NOT_READY", async () => {
+    mockGetEffectiveCredentials.mockResolvedValue({ apiKey: "k", workspaceId: "ws-1" } as never)
+    const request = mockClientWithVerdict("NOT_READY", { blockingReasons: [{ findingId: "f1" }] })
+    const { createClient } = await import("../client.js")
+    vi.mocked(createClient).mockResolvedValue({ request } as never)
+
+    const output = makeOutput()
+    const exitCode = await handleGate(["--verdict", "--target", "t-1"], output)
+
+    expect(exitCode).toBe(1)
+  })
+
+  it("exits 2 when evidence is insufficient or the call errors", async () => {
+    mockGetEffectiveCredentials.mockResolvedValue({ apiKey: "k", workspaceId: "ws-1" } as never)
+    const request = mockClientWithVerdict("INSUFFICIENT_EVIDENCE")
+    const { createClient } = await import("../client.js")
+    vi.mocked(createClient).mockResolvedValue({ request } as never)
+
+    const output = makeOutput()
+    const exitCode = await handleGate(["--verdict", "--target", "t-1"], output)
+
+    expect(exitCode).toBe(2)
+  })
+
+  it("exits 2 without an API key (login required)", async () => {
+    mockGetEffectiveCredentials.mockResolvedValue({ workspaceId: "ws-1" } as never)
+    const output = makeOutput()
+    const exitCode = await handleGate(["--verdict", "--target", "t-1"], output)
+    expect(exitCode).toBe(2)
+  })
+})
