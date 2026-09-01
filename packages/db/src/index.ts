@@ -177,6 +177,8 @@ export {
   listFixProposals,
   updateFixProposalStatus,
   createPullRequestRecord,
+  handleFixPrMerged,
+  type FixPrMergeResult,
   type CreateFixProposalParams,
   type FixProposalWithDetails,
 } from "./fix-proposal-service"

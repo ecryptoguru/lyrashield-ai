@@ -196,3 +196,70 @@ export async function createPullRequestRecord(
     return pr
   })
 }
+
+export interface FixPrMergeResult {
+  pullRequestId: string
+  fixProposalId: string
+  findingId: string
+  retestId: string
+}
+
+/**
+ * WP3 loop-closure: a LyraShield fix PR was merged in the customer's repo.
+ * Marks the PR merged, queues a retest of the finding on the new head, and the
+ * caller re-evaluates the gate so a merged fix moves the verdict toward READY.
+ *
+ * Returns null when no open PR matches the branch in this workspace — an
+ * unknown or foreign branch is a no-op, never an error.
+ */
+export async function handleFixPrMerged(params: {
+  workspaceId: string
+  branchName: string
+  prNumber?: number
+  /** Scan to retest against (the finding's latest scan). */
+  retestScanId: string
+}): Promise<FixPrMergeResult | null> {
+  return withWorkspaceRLS(params.workspaceId, async (tx) => {
+    const pr = await tx.pullRequest.findFirst({
+      where: {
+        branchName: params.branchName,
+        status: "open",
+        deletedAt: null,
+        fixProposal: { finding: { workspaceId: params.workspaceId, deletedAt: null } },
+      },
+      include: { fixProposal: { select: { id: true, findingId: true } } },
+    })
+    if (!pr) return null
+
+    await tx.pullRequest.update({
+      where: { id: pr.id },
+      data: {
+        status: "merged",
+        mergedAt: new Date(),
+        ...(params.prNumber ? { prNumber: params.prNumber } : {}),
+      },
+    })
+
+    const retest = await tx.retest.create({
+      data: {
+        workspaceId: params.workspaceId,
+        findingId: pr.fixProposal.findingId,
+        scanId: params.retestScanId,
+        status: "pending",
+      },
+    })
+
+    logger.info("Fix PR merged — retest queued", {
+      pullRequestId: pr.id,
+      findingId: pr.fixProposal.findingId,
+      retestId: retest.id,
+    })
+
+    return {
+      pullRequestId: pr.id,
+      fixProposalId: pr.fixProposal.id,
+      findingId: pr.fixProposal.findingId,
+      retestId: retest.id,
+    }
+  })
+}

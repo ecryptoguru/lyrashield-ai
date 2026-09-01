@@ -19,6 +19,7 @@
     "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
     "@lyrashield/evidence-storage": "workspace:*",
+    "@lyrashield/fix": "workspace:*",
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/security": "workspace:*",

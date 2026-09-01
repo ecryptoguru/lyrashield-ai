@@ -15,6 +15,12 @@ import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
+import {
+  FIX_GENERATE_QUEUE,
+  processFixGenerateJob,
+  type FixGenerateJobData,
+  type FixGenerateJobResult,
+} from "./jobs/fix-generate.job"
 import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
 import { startApprovalExpiryRunner } from "./approval-expiry"
@@ -405,6 +411,44 @@ async function main(): Promise<void> {
   })
   webhookTrackRetryWorker.run().catch((error) => {
     logger.error("Webhook track retry worker stopped unexpectedly", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
+
+  // WP3 fix-PR producer: assembles a validated patch from a finding's
+  // engine-emitted structured fix and stores it for the approval-bound PR flow.
+  fixGenerateWorker = new Worker<FixGenerateJobData, FixGenerateJobResult>(
+    FIX_GENERATE_QUEUE,
+    async (job) => {
+      const result = await processFixGenerateJob(job.data)
+      logger.info("Fix generation job processed", {
+        jobId: job.id,
+        fixProposalId: job.data.fixProposalId,
+        status: result.status,
+      })
+      return result
+    },
+    {
+      connection: {
+        url: env.REDIS_URL || "redis://localhost:6379",
+        maxRetriesPerRequest: null,
+      },
+      concurrency: 2,
+      autorun: false,
+      drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+      stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
+    }
+  )
+  await fixGenerateWorker.waitUntilReady()
+  fixGenerateWorker.on("failed", (job, error) => {
+    logger.error("Fix generation job failed in queue", {
+      jobId: job?.id,
+      fixProposalId: job?.data?.fixProposalId,
+      reason: error.message,
+    })
+  })
+  fixGenerateWorker.run().catch((error) => {
+    logger.error("Fix generation worker stopped unexpectedly", {
       error: error instanceof Error ? error.message : String(error),
     })
   })

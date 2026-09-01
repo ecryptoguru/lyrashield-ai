@@ -17,3 +17,4 @@ export {
 } from "./diff-validator"
 export { diffChecksum } from "./checksum"
 export { applyUnifiedDiff, extractFileDiff } from "./apply-diff"
+export { buildUnifiedDiff, fixContentChecksum } from "./build-diff"
