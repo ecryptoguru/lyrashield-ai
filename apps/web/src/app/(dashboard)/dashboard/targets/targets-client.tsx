@@ -575,7 +575,7 @@ export function TargetsClient({
           tabIndex={0}
           aria-label="Targets list"
         >
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Name</th>
@@ -586,8 +586,8 @@ export function TargetsClient({
                 <th className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
                   {ISSUE_PLURAL}
                 </th>
-                <th className="px-4 py-3 text-left font-semibold">Status</th>
-                <th className="px-4 py-3 text-left font-semibold">
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Status</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
                   <span className="sr-only">View</span>
                 </th>
               </tr>
@@ -595,12 +595,18 @@ export function TargetsClient({
             <tbody>
               {targets.map((t) => (
                 <tr key={t.id} className="hover:bg-muted/30 border-b last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{t.name}</div>
+                  <td className="overflow-hidden px-4 py-3">
+                    <Link
+                      href={`/dashboard/targets/${t.id}`}
+                      className="block truncate font-medium hover:underline"
+                      aria-label={`View ${TARGET_SINGULAR.toLowerCase()} ${t.name}`}
+                    >
+                      {t.name}
+                    </Link>
                     {t.repoFullName && (
-                      <div className="text-muted-foreground text-xs">{t.repoFullName}</div>
+                      <div className="text-muted-foreground truncate text-xs">{t.repoFullName}</div>
                     )}
-                    {t.url && <div className="text-muted-foreground text-xs">{t.url}</div>}
+                    {t.url && <div className="text-muted-foreground truncate text-xs">{t.url}</div>}
                   </td>
                   <td className="px-4 py-3">
                     <Badge>
@@ -623,10 +629,10 @@ export function TargetsClient({
                       "0"
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     <Badge variant={t.status === "active" ? "success" : "muted"}>{t.status}</Badge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     <Link
                       href={`/dashboard/targets/${t.id}`}
                       className="text-primary text-xs font-medium hover:underline"
