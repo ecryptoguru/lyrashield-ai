@@ -1,10 +1,40 @@
 import { describe, expect, it } from "vitest"
 import {
   SCAN_STATE_FILTERS,
+  getScanPresentation,
+  isActiveScan,
   parseScanStateFilter,
   scanStateStatusLabel,
   scanStateStatuses,
 } from "./scan-presentation"
+
+describe("scan presentation", () => {
+  it("keeps failure and partial runs distinct from completed results", () => {
+    expect(getScanPresentation("FAILED")).toMatchObject({
+      assuranceAvailable: false,
+      headline: "Scan failed",
+    })
+    expect(getScanPresentation("PARTIAL")).toMatchObject({
+      assuranceAvailable: false,
+      badgeVariant: "warning",
+      showFailureDetails: true,
+    })
+  })
+
+  it("keeps active worker states distinct from terminal states", () => {
+    expect(isActiveScan("RUNNING")).toBe(true)
+    expect(isActiveScan("PARTIAL")).toBe(false)
+    expect(isActiveScan("FAILED")).toBe(false)
+  })
+
+  it("routes exhausted agent minutes to usage, not a generic retry", () => {
+    expect(
+      getScanPresentation("STOPPED_BUDGET", {
+        errorCategory: "AGENT_MINUTES_EXHAUSTED",
+      })
+    ).toMatchObject({ label: "Minutes exhausted", recoveryAction: "usage" })
+  })
+})
 
 describe("scan state filters", () => {
   it("maps each state to its documented statuses", () => {

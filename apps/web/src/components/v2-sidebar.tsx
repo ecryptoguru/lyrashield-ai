@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -80,16 +80,26 @@ export function V2Sidebar({
   // below the fold (e.g. Settings on short laptops), so truncation is never
   // silent. Cleared once the user scrolls to the bottom.
   const [navOverflowing, setNavOverflowing] = useState(false)
+  const navRef = useRef<HTMLElement | null>(null)
   const { secondary } = resolveNav({
     pendingApprovals,
     canViewEvidenceVault,
     platformAdminHref,
   })
 
-  function handleNavScroll(event: React.UIEvent<HTMLElement>) {
-    const el = event.currentTarget
+  const measureNavOverflow = useCallback((el: HTMLElement | null) => {
+    if (!el) return
     setNavOverflowing(el.scrollTop + el.clientHeight < el.scrollHeight - 4)
-  }
+  }, [])
+
+  useEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    measureNavOverflow(el)
+    const observer = new ResizeObserver(() => measureNavOverflow(el))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [measureNavOverflow, secondary.length])
 
   async function handleSelectWorkspace(id: string) {
     try {
@@ -150,9 +160,10 @@ export function V2Sidebar({
 
         <div className="relative min-h-0 flex-1">
           <nav
+            ref={navRef}
             className="h-full overflow-y-auto px-3 py-3"
             aria-label="Main navigation"
-            onScroll={handleNavScroll}
+            onScroll={(event) => measureNavOverflow(event.currentTarget)}
           >
             {/* Grouped rather than eleven flat peers. The nav model already encodes the split,
                 so the sidebar reflects it instead of flattening product work and account

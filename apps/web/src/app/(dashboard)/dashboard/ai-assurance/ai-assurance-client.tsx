@@ -248,8 +248,8 @@ export function AiAssuranceClient({
 
       {/* At-a-glance completion sequence: profile → threat model → control
           evidence. Customer-declared, never a certification claim. */}
-      <Card className="p-4" aria-label="Evidence Vault progress">
-        <ol className="grid gap-3 sm:grid-cols-3">
+      <Card className="p-4">
+        <ol className="grid gap-3 sm:grid-cols-3" aria-label="Evidence Vault progress">
           <li className="flex items-center gap-2.5">
             <span
               className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${

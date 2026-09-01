@@ -428,7 +428,6 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
   const [
     targets,
     terminalRuns,
-    receipts,
     findingGroupRows,
     evaluatedSnapshots,
     completedRunCount,
@@ -457,10 +456,6 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
         target: { select: { id: true, name: true } },
         _count: { select: { findings: { where: { deletedAt: null } } } },
       },
-    }),
-    prisma.scanCoverageReceipt.findMany({
-      where: { scan: { workspaceId, deletedAt: null } },
-      select: { scanId: true, status: true },
     }),
     // One group-by feeds open-issue totals, the severity mix, remediation
     // movement, and the readiness aggregate.
@@ -500,6 +495,19 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
       select: { name: true, riskScore: true, trustPlan: true },
     }),
   ])
+
+  const scanIdsInScope = [
+    ...new Set([
+      ...terminalRuns.map((run) => run.id),
+      ...evaluatedSnapshots.map((snapshot) => snapshot.scanId),
+    ]),
+  ]
+  const receipts = scanIdsInScope.length
+    ? await prisma.scanCoverageReceipt.findMany({
+        where: { scanId: { in: scanIdsInScope }, scan: { workspaceId, deletedAt: null } },
+        select: { scanId: true, status: true },
+      })
+    : []
 
   const receiptsByScanId = new Map<string, string[]>()
   for (const receipt of receipts) {

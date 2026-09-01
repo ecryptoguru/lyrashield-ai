@@ -950,6 +950,12 @@ export function ScanDetailClient({
             </Card>
           )}
 
+          {scan.aiSecurity && (
+            <div className="mb-6">
+              <AiSecurityScoreCard data={scan.aiSecurity} />
+            </div>
+          )}
+
           {scan.integrity.coverage.length > 0 && (
             <Card className="mb-6 p-4" aria-labelledby="integrity-heading">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1004,11 +1010,6 @@ export function ScanDetailClient({
                   )}
                 </div>
               </details>
-              {/* AI App Security scoring sits in coverage context — a missing
-                  score is a scoring-availability state, not a top-level result. */}
-              <div className="mt-4 border-t pt-4">
-                <AiSecurityScoreCard data={scan.aiSecurity} />
-              </div>
               {controlCoverage.length > 0 && (
                 <div className="mt-5 border-t pt-5">
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">

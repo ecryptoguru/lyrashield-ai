@@ -245,6 +245,7 @@ export function ScansClient({
   const [targetFilter, setTargetFilter] = useState(initialTargetFilter)
   const [stateFilter, setStateFilter] = useState<ScanStateFilter>(initialStateFilter)
   const [eligibility, setEligibility] = useState<EligibilityState>({ status: "idle" })
+  const [eligibilityAttempt, setEligibilityAttempt] = useState(0)
 
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
@@ -264,16 +265,6 @@ export function ScansClient({
   useEffect(() => {
     scansRef.current = scans
   }, [scans])
-
-  const filteredParams = useCallback(
-    (extra: Record<string, string> = {}) => ({
-      workspaceId,
-      ...(targetFilter ? { target: targetFilter } : {}),
-      ...(stateFilter !== "ALL" ? { state: stateFilter } : {}),
-      ...extra,
-    }),
-    [workspaceId, targetFilter, stateFilter]
-  )
 
   const listParams = useCallback(
     (extra: Record<string, string> = {}) => ({
@@ -302,10 +293,21 @@ export function ScansClient({
     )
   }
 
-  async function refetchFirstPage() {
-    const result = await apiGetPaginated<ScanItem>("/api/scans", listParams(), {
-      schema: scansPaginatedSchema,
-    })
+  async function refetchFirstPage(
+    nextTarget = targetFilter,
+    nextState: ScanStateFilter = stateFilter
+  ) {
+    const result = await apiGetPaginated<ScanItem>(
+      "/api/scans",
+      {
+        workspaceId,
+        ...(nextTarget ? { targetId: nextTarget } : {}),
+        ...(nextState !== "ALL" ? { state: nextState } : {}),
+      },
+      {
+        schema: scansPaginatedSchema,
+      }
+    )
     setScans(result.items)
     setNextCursor(result.nextCursor)
     firstPageIdsRef.current = new Set(result.items.map((scan) => scan.id))
@@ -317,7 +319,7 @@ export function ScansClient({
     updateFilterUrl({ target: value })
     setError(null)
     setErrorCode(null)
-    refetchFirstPage().catch(() => setPollStale(true))
+    refetchFirstPage(value, stateFilter).catch(() => setPollStale(true))
   }
 
   function handleStateFilterChange(value: string) {
@@ -326,7 +328,16 @@ export function ScansClient({
     updateFilterUrl({ state: next })
     setError(null)
     setErrorCode(null)
-    refetchFirstPage().catch(() => setPollStale(true))
+    refetchFirstPage(targetFilter, next).catch(() => setPollStale(true))
+  }
+
+  function handleClearFilters() {
+    setTargetFilter("")
+    setStateFilter("ALL")
+    updateFilterUrl({ target: "", state: "ALL" })
+    setError(null)
+    setErrorCode(null)
+    refetchFirstPage("", "ALL").catch(() => setPollStale(true))
   }
 
   async function handleCreateScan() {
@@ -516,7 +527,14 @@ export function ScansClient({
     // selectedOption is derived from a freshly-built options array each render,
     // so the effect keys on its identity fields instead of the object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showCreate, workspaceId, selectedTarget, selectedOption?.goal, selectedOption?.mode])
+  }, [
+    showCreate,
+    workspaceId,
+    selectedTarget,
+    selectedOption?.goal,
+    selectedOption?.mode,
+    eligibilityAttempt,
+  ])
 
   const eligibilityBlocked = eligibility.status === "ready" && !eligibility.eligibility.allowed
   const startDisabled =
@@ -524,6 +542,7 @@ export function ScansClient({
     !selectedTarget ||
     !selectedOption ||
     eligibility.status === "checking" ||
+    eligibility.status === "error" ||
     eligibilityBlocked
 
   function handleSelectTarget(targetId: string) {
@@ -591,7 +610,7 @@ export function ScansClient({
         // Poll the bounded first page so a scan's terminal state replaces its
         // previous active row. The ETag from the previous tick makes an
         // unchanged list a bodyless 304.
-        const { data, etag } = await apiGetPaginatedConditional("/api/scans", filteredParams(), {
+        const { data, etag } = await apiGetPaginatedConditional("/api/scans", listParams(), {
           signal: controller.signal,
           schema: scansPaginatedSchema,
           ...(pollEtag ? { etag: pollEtag } : {}),
@@ -658,7 +677,7 @@ export function ScansClient({
       document.removeEventListener("visibilitychange", onVisibility)
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
-  }, [hasActiveScans, workspaceId, filteredParams, stateFilter, targetFilter])
+  }, [hasActiveScans, workspaceId, listParams, stateFilter, targetFilter])
 
   return (
     <div>
@@ -915,7 +934,7 @@ export function ScansClient({
                       size="sm"
                       variant="outline"
                       className="mt-2"
-                      onClick={() => setEligibility({ status: "checking" })}
+                      onClick={() => setEligibilityAttempt((attempt) => attempt + 1)}
                     >
                       Retry check
                     </Button>
@@ -1058,8 +1077,7 @@ export function ScansClient({
               <Button
                 variant="outline"
                 onClick={() => {
-                  handleTargetFilterChange("")
-                  handleStateFilterChange("ALL")
+                  handleClearFilters()
                 }}
               >
                 Clear filters

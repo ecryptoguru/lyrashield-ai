@@ -128,8 +128,12 @@ export function BottomNav({
               size="icon"
               aria-label={[
                 "Workspace navigation",
-                unreadNotifications > 0 ? `${unreadNotifications} unread notifications` : null,
-                pendingApprovals > 0 ? `${pendingApprovals} pending approvals` : null,
+                unreadNotifications > 0
+                  ? `${unreadNotifications} unread notification${unreadNotifications === 1 ? "" : "s"}`
+                  : null,
+                pendingApprovals > 0
+                  ? `${pendingApprovals} pending approval${pendingApprovals === 1 ? "" : "s"}`
+                  : null,
               ]
                 .filter(Boolean)
                 .join(", ")}

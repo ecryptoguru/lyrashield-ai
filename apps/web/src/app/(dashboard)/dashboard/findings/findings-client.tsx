@@ -281,6 +281,8 @@ export function FindingsClient({
   const openerRef = useRef<HTMLElement | null>(null)
   const pushedFindingUrlRef = useRef(false)
   const rowRefs = useRef(new Map<string, HTMLButtonElement | null>())
+  const requestGenerationRef = useRef(0)
+  const acceptLoadMoreRef = useRef(false)
 
   /**
    * Drawer URL state: opening writes `finding=` (pushState, so Back returns to
@@ -319,11 +321,14 @@ export function FindingsClient({
   useEffect(() => {
     const onPopState = () => {
       pushedFindingUrlRef.current = false
-      setSelectedFinding(null)
+      const findingId = new URL(window.location.href).searchParams.get("finding")
+      setSelectedFinding(
+        findingId ? (findings.find((finding) => finding.id === findingId) ?? null) : null
+      )
     }
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
-  }, [])
+  }, [findings])
 
   const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
     workspaceId,
@@ -342,20 +347,23 @@ export function FindingsClient({
     updateQueryParams,
   })
 
-  const fetchFindings = useCallback(async (params: Record<string, string>) => {
+  const fetchFindings = useCallback(async (params: Record<string, string>, generation: number) => {
+    if (generation !== requestGenerationRef.current) return
     setLoading(true)
     setError(null)
     try {
       const res = await apiGetPaginated<FindingListItem>(`/api/findings`, params, {
         schema: findingsPaginatedSchema,
       })
+      if (generation !== requestGenerationRef.current) return
       setFindings(res.items)
       setNextCursor(res.nextCursor)
     } catch {
+      if (generation !== requestGenerationRef.current) return
       setFindings([])
       setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
     } finally {
-      setLoading(false)
+      if (generation === requestGenerationRef.current) setLoading(false)
     }
   }, [])
 
@@ -373,6 +381,7 @@ export function FindingsClient({
 
   const handleFilterChange = useCallback(
     async (newFilter: string) => {
+      const generation = ++requestGenerationRef.current
       setFilter(newFilter)
       updateQueryParams({ filter: newFilter, sort: sortMode })
       // Reset to the server-rendered page only when returning to the exact
@@ -389,12 +398,15 @@ export function FindingsClient({
         setError(null)
         return
       }
-      await fetchFindings({
-        workspaceId,
-        ...findingFilterToApiQuery(newFilter as FindingFilterValue),
-        ...(targetFilter ? { targetId: targetFilter } : {}),
-        ...(query ? { q: query } : {}),
-      })
+      await fetchFindings(
+        {
+          workspaceId,
+          ...findingFilterToApiQuery(newFilter as FindingFilterValue),
+          ...(targetFilter ? { targetId: targetFilter } : {}),
+          ...(query ? { q: query } : {}),
+        },
+        generation
+      )
     },
     [
       sortMode,
@@ -411,14 +423,18 @@ export function FindingsClient({
 
   const handleTargetFilterChange = useCallback(
     async (value: string) => {
+      const generation = ++requestGenerationRef.current
       setTargetFilter(value)
       updateQueryParams({ target: value })
-      await fetchFindings({
-        workspaceId,
-        ...findingFilterToApiQuery(filter as FindingFilterValue),
-        ...(value ? { targetId: value } : {}),
-        ...(query ? { q: query } : {}),
-      })
+      await fetchFindings(
+        {
+          workspaceId,
+          ...findingFilterToApiQuery(filter as FindingFilterValue),
+          ...(value ? { targetId: value } : {}),
+          ...(query ? { q: query } : {}),
+        },
+        generation
+      )
     },
     [updateQueryParams, fetchFindings, workspaceId, filter, query]
   )
@@ -426,18 +442,27 @@ export function FindingsClient({
   // Bounded server-side search: debounced so typing does not spam the API.
   useEffect(() => {
     if (query === initialQuery) return
+    const generation = requestGenerationRef.current
     const timer = window.setTimeout(() => {
       updateQueryParams({ q: query })
-      void fetchFindings({
-        workspaceId,
-        ...findingFilterToApiQuery(filter as FindingFilterValue),
-        ...(targetFilter ? { targetId: targetFilter } : {}),
-        ...(query ? { q: query } : {}),
-      })
+      void fetchFindings(
+        {
+          workspaceId,
+          ...findingFilterToApiQuery(filter as FindingFilterValue),
+          ...(targetFilter ? { targetId: targetFilter } : {}),
+          ...(query ? { q: query } : {}),
+        },
+        generation
+      )
     }, 300)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
+
+  const handleQueryChange = useCallback((value: string) => {
+    requestGenerationRef.current += 1
+    setQuery(value)
+  }, [])
 
   // Client-side sort — priority first (the API-ranked page default), then
   // severity high-first, then newest. Each mode keeps its own tie-breakers so
@@ -509,7 +534,7 @@ export function FindingsClient({
             type="search"
             value={query}
             maxLength={120}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleQueryChange(e.target.value)}
             placeholder="Search issues…"
             aria-label={`Search ${ISSUE_PLURAL.toLowerCase()}`}
             className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none lg:w-56"
@@ -658,15 +683,23 @@ export function FindingsClient({
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
+              const generation = requestGenerationRef.current
               const res = await apiGetPaginated<FindingListItem>(
                 `/api/findings`,
                 listQuery({ cursor }),
                 { schema: findingsPaginatedSchema }
               )
+              acceptLoadMoreRef.current = generation === requestGenerationRef.current
               return { items: res.items, nextCursor: res.nextCursor }
             }}
-            onItems={(items) => setFindings((prev) => [...prev, ...items])}
-            onNextCursor={setNextCursor}
+            onItems={(items) => {
+              if (acceptLoadMoreRef.current) setFindings((prev) => [...prev, ...items])
+            }}
+            onNextCursor={(cursor) => {
+              if (!acceptLoadMoreRef.current) return
+              setNextCursor(cursor)
+              acceptLoadMoreRef.current = false
+            }}
           />
         </div>
       )}
