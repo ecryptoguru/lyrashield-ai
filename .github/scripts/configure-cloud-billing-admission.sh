@@ -30,12 +30,16 @@ current_image=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --re
 current_source_sha=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query "properties.template.containers[0].env[?name=='LYRASHIELD_PRODUCT_REVISION'].value | [0]" --output tsv)
 [ "$current_image" = "$WEB_IMAGE_DIGEST" ]
 [ "$current_source_sha" = "$DEPLOY_SHA" ]
-restore_canary_allowlist() {
-  if [ -n "$previous_allowlist" ]; then
-    gh variable set BILLING_CANARY_WORKSPACE_IDS --env azure-production --body "$previous_allowlist"
+set_canary_allowlist() {
+  local allowlist=$1
+  if [ -n "$allowlist" ]; then
+    gh variable set BILLING_CANARY_WORKSPACE_IDS --env azure-production --body "$allowlist"
   else
     gh variable delete BILLING_CANARY_WORKSPACE_IDS --env azure-production 2>/dev/null || true
   fi
+}
+restore_canary_allowlist() {
+  set_canary_allowlist "$previous_allowlist"
 }
 rollback() {
   status=$?
@@ -60,7 +64,7 @@ probe_fingerprint=$(openssl x509 -in "$probe_dir/cert.pem" -outform DER | sha256
 
 gh variable set POLAR_BILLING_ADMISSION --env azure-production --body "$CLOUD_BILLING_MODE"
 gh variable set RAZORPAY_BILLING_ADMISSION --env azure-production --body "$CLOUD_BILLING_MODE"
-gh variable set BILLING_CANARY_WORKSPACE_IDS --env azure-production --body "$BILLING_CANARY_WORKSPACE_IDS"
+set_canary_allowlist "$BILLING_CANARY_WORKSPACE_IDS"
 
 az containerapp update --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --image "$WEB_IMAGE_DIGEST" --set-env-vars \
   "LYRASHIELD_PRODUCT_REVISION=$DEPLOY_SHA" \
