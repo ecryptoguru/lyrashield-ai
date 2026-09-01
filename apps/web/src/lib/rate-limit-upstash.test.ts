@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   limit: vi.fn(),
+  checkoutSet: vi.fn(),
   loggerError: vi.fn(),
   redisInitError: false,
 }))
@@ -21,6 +22,8 @@ vi.mock("@upstash/redis", () => ({
     constructor() {
       if (mocks.redisInitError) throw new Error("init failed with test-token")
     }
+
+    set = mocks.checkoutSet
   },
 }))
 vi.mock("@upstash/ratelimit", () => ({
@@ -33,13 +36,15 @@ vi.mock("@upstash/ratelimit", () => ({
   },
 }))
 
-const { checkApiRateLimit, checkAuthRateLimit } = await import("./rate-limit")
+const { checkApiRateLimit, checkAuthRateLimit, claimBillingCheckoutCreation } =
+  await import("./rate-limit")
 
 describe.sequential("Upstash rate-limit failure cooldown", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-25T00:00:00Z"))
     mocks.limit.mockReset()
+    mocks.checkoutSet.mockReset()
     mocks.loggerError.mockReset()
     mocks.redisInitError = false
   })
@@ -78,5 +83,24 @@ describe.sequential("Upstash rate-limit failure cooldown", () => {
     expect((await checkAuthRateLimit("192.0.2.8")).limited).toBe(false)
     expect(mocks.limit).toHaveBeenCalledTimes(2)
     expect(mocks.loggerError).toHaveBeenCalledTimes(2)
+  })
+
+  it("uses a shared NX expiry lock for one production checkout creation", async () => {
+    mocks.checkoutSet.mockResolvedValueOnce("OK").mockResolvedValueOnce(null)
+    const input = {
+      workspaceId: "workspace-1",
+      provider: "polar" as const,
+      kind: "subscription" as const,
+      catalogKey: "starter_monthly",
+    }
+
+    await expect(claimBillingCheckoutCreation(input)).resolves.toBe("claimed")
+    await expect(claimBillingCheckoutCreation(input)).resolves.toBe("duplicate")
+    expect(mocks.checkoutSet).toHaveBeenNthCalledWith(
+      1,
+      "billing-checkout-lock:workspace-1:polar:subscription:starter_monthly",
+      "1",
+      { nx: true, ex: 90 }
+    )
   })
 })
