@@ -78,6 +78,16 @@ export {
 } from "./vibe-security-controls"
 
 export {
+  AI_BUILT_TAXONOMY_VERSION,
+  AI_BUILT_FAILURE_TAXONOMY,
+  AI_BUILT_FAILURE_MAP,
+  classesCoveredBy,
+  coveredSurfaces,
+  type AiBuiltFailureClass,
+  type DetectionSurface,
+} from "./ai-built-failure-taxonomy"
+
+export {
   checkInstructionSafety,
   sanitizeInstructionInput,
   containsPromptInjection,
