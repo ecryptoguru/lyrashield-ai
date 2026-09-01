@@ -311,6 +311,67 @@ export async function checkBillingCheckoutRateLimit(workspaceId: string) {
   return checkInMemory(`billing-checkout:${workspaceId}`, BILLING_CHECKOUT_MAX, WINDOW_MS)
 }
 
+// A rate limit bounds volume; it does not make two concurrent checkout requests
+// the same operation. Hold this short shared lock while a browser redirect is
+// being created so duplicate clicks cannot mint duplicate provider objects.
+const BILLING_CHECKOUT_LOCK_SECONDS = 90
+const billingCheckoutLocks = new Map<string, number>()
+type CheckoutLockRedis = {
+  set: (key: string, value: string, options: { nx: true; ex: number }) => Promise<unknown>
+}
+let checkoutLockRedis: CheckoutLockRedis | null | undefined
+
+function claimLocalBillingCheckoutLock(key: string): boolean {
+  const now = Date.now()
+  const expiresAt = billingCheckoutLocks.get(key)
+  if (expiresAt && expiresAt > now) return false
+  billingCheckoutLocks.set(key, now + BILLING_CHECKOUT_LOCK_SECONDS * 1_000)
+  return true
+}
+
+async function getCheckoutLockRedis(): Promise<CheckoutLockRedis | null> {
+  if (!upstashConfigured()) return null
+  if (checkoutLockRedis !== undefined) return checkoutLockRedis
+
+  try {
+    const { Redis } = await import("@upstash/redis")
+    checkoutLockRedis = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    }) as CheckoutLockRedis
+  } catch {
+    checkoutLockRedis = null
+    logger.error("Billing checkout lock is unavailable", { reason: "initialization_failed" })
+  }
+  return checkoutLockRedis
+}
+
+/**
+ * Claim one provider checkout creation for a workspace/catalog pair.
+ * Production never falls back to per-instance state: that could create a
+ * duplicate provider object on another replica.
+ */
+export async function claimBillingCheckoutCreation(input: {
+  workspaceId: string
+  provider: "polar" | "razorpay"
+  kind: "subscription" | "pack"
+  catalogKey: string
+}): Promise<"claimed" | "duplicate" | "unavailable"> {
+  const key = `billing-checkout-lock:${input.workspaceId}:${input.provider}:${input.kind}:${input.catalogKey}`
+  if (!isProd) return claimLocalBillingCheckoutLock(key) ? "claimed" : "duplicate"
+
+  const redis = await getCheckoutLockRedis()
+  if (!redis) return "unavailable"
+
+  try {
+    const claimed = await redis.set(key, "1", { nx: true, ex: BILLING_CHECKOUT_LOCK_SECONDS })
+    return claimed ? "claimed" : "duplicate"
+  } catch {
+    logger.error("Billing checkout lock is unavailable", { reason: "request_failed" })
+    return "unavailable"
+  }
+}
+
 /** B-M02: Bounds license activation/verification per IP per minute. */
 const LICENSE_API_MAX = readIntEnv("RATE_LIMIT_LICENSE_API_MAX", 10)
 export async function checkLicenseApiRateLimit(ip: string) {
