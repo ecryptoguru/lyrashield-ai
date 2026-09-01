@@ -6,19 +6,19 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 
 /**
- * GET /api/gate/[targetId] — read the latest persisted Launch Gate verdict.
- * Never recomputes; the verdict is an immutable artifact. Staleness is carried
- * on the verdict so consumers can show "re-run the gate" when it is stale.
+ * GET /api/gate/[targetId]?workspaceId=… — read the latest persisted Launch
+ * Gate verdict. Never recomputes; the verdict is an immutable artifact.
+ * Staleness is carried on the verdict so consumers can show "re-run the gate".
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ targetId: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ targetId: string }> }) {
   try {
     const { targetId } = await params
-    const verdict = await getLatestGateVerdictForRequest(targetId)
-    if (verdict === null) return apiError("NOT_FOUND", "Target not found", 404)
-    if (verdict === undefined) {
+    const workspaceId = new URL(request.url).searchParams.get("workspaceId")
+    if (!workspaceId) return apiError("MISSING_PARAM", "workspaceId is required", 400)
+
+    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const verdict = await getLatestGateVerdict(workspaceId, targetId)
+    if (!verdict) {
       return apiError("NOT_EVALUATED", "No gate verdict has been computed for this target yet", 404)
     }
     return apiSuccess(verdict)
@@ -31,16 +31,23 @@ export async function GET(
 }
 
 /**
- * POST /api/gate/[targetId] — evaluate the gate against current evidence and
- * persist a new immutable verdict. Approval-gated to members who can run scans.
+ * POST /api/gate/[targetId]?workspaceId=… — evaluate the gate against current
+ * evidence and persist a new immutable verdict. Gated to members who can
+ * create scans. workspaceId comes from the query string (the same convention
+ * as the other workspace-scoped routes); the gate service reads the target
+ * under RLS, so a target outside the workspace simply evaluates to not-found.
  */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ targetId: string }> }
 ) {
   try {
     const { targetId } = await params
-    const result = await evaluateGateForTargetRequest(targetId)
+    const workspaceId = new URL(request.url).searchParams.get("workspaceId")
+    if (!workspaceId) return apiError("MISSING_PARAM", "workspaceId is required", 400)
+
+    await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const result = await evaluateGateForTarget(workspaceId, targetId)
     if (!result) return apiError("NOT_FOUND", "Target not found", 404)
     return apiSuccess(result, 201)
   } catch (error) {
@@ -49,31 +56,4 @@ export async function POST(
     logger.error("Failed to evaluate gate", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to evaluate the gate", 500)
   }
-}
-
-// ─── helpers (kept thin; permission + workspace resolution live here) ────────
-
-async function resolveWorkspaceForTarget(targetId: string): Promise<string | null> {
-  // We only need the workspaceId to scope the permission check and the RLS
-  // gate reads; the gate service then re-reads the target under RLS.
-  const target = await prisma.target.findUnique({
-    where: { id: targetId },
-    select: { workspaceId: true },
-  })
-  return target?.workspaceId ?? null
-}
-
-async function getLatestGateVerdictForRequest(targetId: string) {
-  const workspaceId = await resolveWorkspaceForTarget(targetId)
-  if (!workspaceId) return null
-  await requirePermission(workspaceId, PERMISSIONS.finding.view)
-  const verdict = await getLatestGateVerdict(workspaceId, targetId)
-  return verdict ?? undefined
-}
-
-async function evaluateGateForTargetRequest(targetId: string) {
-  const workspaceId = await resolveWorkspaceForTarget(targetId)
-  if (!workspaceId) return null
-  await requirePermission(workspaceId, PERMISSIONS.scan.create)
-  return evaluateGateForTarget(workspaceId, targetId)
 }
