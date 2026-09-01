@@ -131,7 +131,6 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
       standardVersion: "lyrashield-gate/1.0.0",
       ...extra,
     }))
-
   }
 
   it("exits 0 when the gate verdict is READY", async () => {
