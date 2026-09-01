@@ -385,10 +385,10 @@ jobs:
               }
             }
             const requiredCatalogKeys = {
-              POLAR_PRODUCT_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual", "pack_100", "pack_250", "pack_500"],
+              POLAR_PRODUCT_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "launch_assurance_monthly", "launch_assurance_annual", "pack_100", "pack_250", "pack_500"],
               // Razorpay packs are quote-signed payment links, not plans. Their
               // prices and identity come from MINUTE_PACK_MAP and webhook notes.
-              RAZORPAY_PLAN_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "team_monthly", "team_annual"],
+              RAZORPAY_PLAN_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "launch_assurance_monthly", "launch_assurance_annual"],
             };
             for (const [name, keys] of Object.entries(requiredCatalogKeys)) {
               const value = JSON.parse(process.env[name]);
