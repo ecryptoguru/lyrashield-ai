@@ -20,7 +20,7 @@
  */
 
 import { logger } from "@lyrashield/logger"
-import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
+import { uploadEncryptedArtifact, readEncryptedArtifact } from "@lyrashield/evidence-storage"
 import {
   buildUnifiedDiff,
   validatePatchDiff,
