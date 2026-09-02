@@ -21,12 +21,15 @@ Use this index to find the owning document and avoid duplicating current truth.
 - [`ops/monitoring-launch-runbook.md`](ops/monitoring-launch-runbook.md) — actionable Azure alert inventory, provisioning, readback, stop/resume admission, and release validation.
 - [`ops/launch-assurance-status-2026-08-26.md`](ops/launch-assurance-status-2026-08-26.md) — current exact-revision deployment, runtime, admin, provider, and scorecard evidence plus remaining gates.
 - [`ops/launch-assurance-status-2026-08-24.md`](ops/launch-assurance-status-2026-08-24.md) — retained historical release-gate snapshot; current deployment and scan truth live in `AGENTS.md`, `PRD.md`, and `codebase.md`.
+- [`ops/untrusted-launch-gates.md`](ops/untrusted-launch-gates.md) — release-evidence checks to run after worker, queue, evidence-storage, billing, or license-signing changes.
+- [`ops/launch-report-signing-keys-runbook.md`](ops/launch-report-signing-keys-runbook.md) — provisioning the ed25519 key that signs shareable Launch Readiness Reports.
 - [`license-key-compromise-runbook.md`](license-key-compromise-runbook.md) — signing-key incident response.
 
 ## Reference and assurance records
 
 - [`api-stability.md`](api-stability.md) — public API compatibility policy.
 - [`lite-scanner.md`](lite-scanner.md) and [`vibe-security-50.md`](vibe-security-50.md) — bounded scanner/coverage contracts.
+- [`webmcp-assurance.md`](webmcp-assurance.md) — WebMCP tool-surface controls, the shared deterministic analyzer, and the Security Lab/CLI/Action surfaces.
 - [`claims-readiness.md`](claims-readiness.md), [`ai-assurance-framework-mapping.md`](ai-assurance-framework-mapping.md), and [`ai-safety-test-pack.md`](ai-safety-test-pack.md) — claims and AI-assurance boundaries.
 - [`release-checklists/`](release-checklists/) and [`security/`](security/) — retained evidence checklists and customer templates.
 

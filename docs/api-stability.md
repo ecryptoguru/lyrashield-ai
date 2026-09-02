@@ -26,6 +26,11 @@ The following routes are part of the additive-only surface and will not be remov
 - `/billing/checkout` — POST, create checkout session (Polar/Razorpay)
 - `/billing/webhook` — POST, webhook endpoint (Polar/Razorpay)
 - `/billing/portal` — GET, customer portal URL
+- `/api/gate/[targetId]` — GET/POST, read the persisted Launch Gate verdict (GET) or re-evaluate it (POST)
+- `/api/reports/launch-readiness` — POST, generate a signed Launch Readiness Report
+- `/api/reports/verify` — POST, verify a Launch Readiness Report signature by checksum
+- `/api/taxonomy/ai-built-failures` — GET, public versioned AI-Built Failure Taxonomy reference
+- `/api/badge/readiness/[reportId]` — GET, README badge reflecting a target's Launch Gate verdict (token-gated)
 
 Any change that would cause a correctly written v1 client to break must ship as `/api/v2`.
 

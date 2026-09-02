@@ -199,6 +199,21 @@ provider cost fields (`estimatedCostCents`, `actualCostCents`,
 `providerCostUsd`, `billedCostUsd` on `Scan`) are **not** rendered on any
 customer-facing surface.
 
+### 1.10 Launch Gate verdict retrieval and evaluation
+
+**Steps:** for the target scanned in 1.2 (as a member with scan-creation
+rights), call `GET /api/gate/{targetId}?workspaceId={workspaceId}` — before any
+evaluation this must return `404 NOT_EVALUATED`. Then call
+`POST /api/gate/{targetId}?workspaceId={workspaceId}` and repeat the `GET`.
+
+**Pass criteria:** `POST` returns `201` with `{ verdict, gateVerdictId }`
+(`verdict.state` is one of `READY` | `NOT_READY` | `INSUFFICIENT_EVIDENCE`,
+with `blockingReasons`, `coverageStatement`, `nonCoverage`,
+`evidenceSummary`, `staleness`); a target outside the workspace or absent
+evaluates to `404 NOT_FOUND` on `POST`. `GET` never recomputes — it returns the
+persisted verdict unchanged, and `POST` with a non-member session is denied by
+permission check (`GET` needs `finding.view`; `POST` needs `scan.create`).
+
 ---
 
 ## 2. Local licensing flow
