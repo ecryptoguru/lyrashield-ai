@@ -1,10 +1,7 @@
 import { spawn } from "node:child_process"
 
 /**
- * Run all three test suites independently and report every result.
- *
- * The previous `pnpm test` chained the three suites with `&&`, which
- * short-circuits and silently skips marketing/motion when core fails.
+ * Run all test suites independently and report every result.
  * This runner runs independent suites in parallel and exits non-zero if any fail.
  */
 
@@ -16,9 +13,10 @@ const allSuites = [
   },
   // Node 22+ expands the glob natively; no shell needed.
   { name: "motion", command: ["node", "--test", "apps/marketing-motion/tests/*.test.mjs"] },
+  { name: "ops", command: ["node", "--test", ".github/scripts/tests/*.test.mjs"] },
 ]
 
-const requestedSuites = (process.env.LYRASHIELD_TEST_SUITES ?? "core,marketing,motion")
+const requestedSuites = (process.env.LYRASHIELD_TEST_SUITES ?? "core,marketing,motion,ops")
   .split(",")
   .map((name) => name.trim())
   .filter(Boolean)
