@@ -13,7 +13,7 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1113.0",
+    "@aws-sdk/client-s3": "^3.1121.0",
     "@lyrashield/affiliate": "workspace:*",
     "@lyrashield/billing": "workspace:*",
     "@lyrashield/config": "workspace:*",
@@ -24,12 +24,12 @@
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "@sentry/node": "^10.70.0",
-    "bullmq": "6.2.0",
+    "@sentry/node": "^10.72.0",
+    "bullmq": "6.3.2",
     "ioredis": "^5.11.1",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.13",
     "yaml": "^2.9.0",
-    "zod": "^4.0.0"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
