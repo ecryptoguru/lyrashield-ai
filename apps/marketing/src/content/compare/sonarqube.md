@@ -48,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | SonarQube                                                                                            |
-| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                   | SonarQube Cloud (SaaS) or SonarQube Server (self-hosted) + SonarLint IDE                             |
-| Pricing    | Open beta; pricing announced as it matures           | Cloud: Free (50k LOC), Team $34/mo (100k LOC), Enterprise (custom); Server: per-instance/year by LOC |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | 40+ languages                                                                                        |
+| Aspect     | LyraShield AI                                                                                                                  | SonarQube                                                                                            |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | SonarQube Cloud (SaaS) or SonarQube Server (self-hosted) + SonarLint IDE                             |
+| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Cloud: Free (50k LOC), Team $34/mo (100k LOC), Enterprise (custom); Server: per-instance/year by LOC |
+| Languages  | Language-agnostic (deterministic + agentic coverage)                                                                           | 40+ languages                                                                                        |
 
 ## When to use which
 

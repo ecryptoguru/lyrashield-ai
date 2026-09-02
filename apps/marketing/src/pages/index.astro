@@ -10,6 +10,7 @@ import TwoDepths from "@components/landing/TwoDepths.astro"
 import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
+import { tools } from "../lib/tools"
 
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = new URL("/", siteOrigin).toString()
@@ -43,7 +44,7 @@ const faqItems = [
   },
   {
     q: "What is live today and what is on the roadmap?",
-    a: "Live today: the free Lite Check, six browser-local tools, the full release-assurance platform in open beta, the Operational Evidence Vault, an MCP server, GitHub integration, a published CLI, and a GitHub Action with a diff-aware gate and SARIF output. In detail: free Lite Check (passive public URL scan); the full platform with open registration covering target, review, evidence, fix proposal, retest, and report; the Operational Evidence Vault for the seven evidence-required controls; the MCP server for agent-native use; and the GitHub Action running in your own CI. Near-term roadmap: deeper deterministic coverage, richer SARIF interop, and expanded shareable report variants. Published plan prices are available on /pricing; purchase admission remains off during open beta.",
+    a: `Live today: the free Lite Check, ${tools.length} browser-local tools, the full release-assurance platform in open beta, the Operational Evidence Vault, an MCP server, GitHub integration, a published CLI, and a GitHub Action with a diff-aware gate and SARIF output. In detail: free Lite Check (passive public URL scan); the full platform with open registration covering target, review, evidence, fix proposal, retest, and report; the Operational Evidence Vault for the seven evidence-required controls; the MCP server for agent-native use; and the GitHub Action running in your own CI. Near-term roadmap: deeper deterministic coverage, richer SARIF interop, and expanded shareable report variants. Published plan prices are available on /pricing; purchase admission is controlled by the authenticated product.`,
   },
   {
     q: "Do you store my codebase?",

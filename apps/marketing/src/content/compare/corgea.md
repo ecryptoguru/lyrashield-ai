@@ -46,11 +46,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                              | Corgea                                                                                                                                                        |
-| ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS, GitHub App, GitLab/Azure DevOps/Bitbucket/Harness, IDE plugins, CLI, GitHub Action                                                                      |
-| Pricing    | Open beta; pricing announced as it matures | Free ($0, ≤2 members, 10 repos); Growth $39/dev/mo; Scale $49/dev/mo; Enterprise custom. AI Pentest: Standard $4,000, Comprehensive $8,000, Enterprise custom |
-| Languages  | Language-agnostic                          | 20+ (JS, Ruby, C++, Python, C, PHP, Java, Go, C#, TypeScript, and more)                                                                                       |
+| Aspect     | LyraShield AI                                                                                                                  | Corgea                                                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS, GitHub App, GitLab/Azure DevOps/Bitbucket/Harness, IDE plugins, CLI, GitHub Action                                                                      |
+| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free ($0, ≤2 members, 10 repos); Growth $39/dev/mo; Scale $49/dev/mo; Enterprise custom. AI Pentest: Standard $4,000, Comprehensive $8,000, Enterprise custom |
+| Languages  | Language-agnostic                                                                                                              | 20+ (JS, Ruby, C++, Python, C, PHP, Java, Go, C#, TypeScript, and more)                                                                                       |
 
 ## When to use which
 

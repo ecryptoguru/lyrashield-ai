@@ -47,11 +47,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | XBOW                                                                                                                                                                     |
-| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted SaaS (XBOW Console); available on AWS, Google, Oracle, Microsoft cloud marketplaces                                                                               |
-| Pricing            | Open beta; pricing announced as it matures        | Usage-based, scoped to your environment; no published tier table. XBOW Pentest On-Demand starts at $4,000 (one-time per engagement); ongoing enterprise pricing by quote |
-| Compliance posture | Assurance-record orientation for release sign-off | SOC 2, ISO 27001, PCI DSS, NIS 2 alignment; auditable scope and logging                                                                                                  |
+| Aspect             | LyraShield AI                                                                                                                  | XBOW                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                                                                                             | Hosted SaaS (XBOW Console); available on AWS, Google, Oracle, Microsoft cloud marketplaces                                                                               |
+| Pricing            | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Usage-based, scoped to your environment; no published tier table. XBOW Pentest On-Demand starts at $4,000 (one-time per engagement); ongoing enterprise pricing by quote |
+| Compliance posture | Assurance-record orientation for release sign-off                                                                              | SOC 2, ISO 27001, PCI DSS, NIS 2 alignment; auditable scope and logging                                                                                                  |
 
 ## When to use which
 

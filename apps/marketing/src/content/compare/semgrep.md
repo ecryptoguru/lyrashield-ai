@@ -48,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | Semgrep                                                                                                                       |
-| ---------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                   | AppSec Platform (SaaS), CLI (CE), IDE extensions, CI/CD integrations                                                          |
-| Pricing    | Open beta; pricing announced as it matures           | Free ≤10 contributors; Teams from $30/contributor/mo (Code & Supply Chain) or $15/contributor/mo (Secrets); Enterprise custom |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | 30+ languages (GA, Beta, Experimental)                                                                                        |
+| Aspect     | LyraShield AI                                                                                                                  | Semgrep                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | AppSec Platform (SaaS), CLI (CE), IDE extensions, CI/CD integrations                                                          |
+| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free ≤10 contributors; Teams from $30/contributor/mo (Code & Supply Chain) or $15/contributor/mo (Secrets); Enterprise custom |
+| Languages  | Language-agnostic (deterministic + agentic coverage)                                                                           | 30+ languages (GA, Beta, Experimental)                                                                                        |
 
 ## When to use which
 

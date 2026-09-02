@@ -46,11 +46,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | RunSybil                                                                   |
-| ------------------ | ------------------------------------------------- | -------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted; point at a target or run continuously; PR-level feedback           |
-| Pricing            | Open beta; pricing announced as it matures        | Not public — demo/sales; subscription model (per ToS), USD, non-refundable |
-| Compliance posture | Assurance-record orientation for release sign-off | Used for SOC 2 pentest requirements; CTEM Phase 4 validation               |
+| Aspect             | LyraShield AI                                                                                                                  | RunSybil                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                                                                                             | Hosted; point at a target or run continuously; PR-level feedback           |
+| Pricing            | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Not public — demo/sales; subscription model (per ToS), USD, non-refundable |
+| Compliance posture | Assurance-record orientation for release sign-off                                                                              | Used for SOC 2 pentest requirements; CTEM Phase 4 validation               |
 
 ## When to use which
 

@@ -4,7 +4,8 @@
 // built static (output: "static"), so Astro.redirect (SSR-only) does not apply —
 // emit a static page that immediately redirects, and mark the real target as
 // canonical so the bare /docs URL is not indexed as a duplicate.
-const target = "/docs/integrations"
+const origin = Astro.site?.origin || "http://localhost:4321"
+const target = new URL("/docs/integrations", origin).toString()
 ---
 
 <!doctype html>
@@ -19,7 +20,7 @@ const target = "/docs/integrations"
   <body>
     <p>
       This page has moved to
-      <a href={target}>the LyraShield documentation</a>.
+      <a href="/docs/integrations">the LyraShield documentation</a>.
     </p>
     <script is:inline>
       window.location.replace("/docs/integrations")

@@ -46,11 +46,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                              | Mobb                                                                                                                       |
-| ---------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS (multi-tenant), single-tenant, on-prem (AWS); GitHub/GitLab/Azure DevOps/Bitbucket; CLI, API, IDE/MCP                 |
-| Pricing    | Open beta; pricing announced as it matures | Community free (public repos); Development Teams $20/dev/mo; Team $40/dev/mo (5–15 contributors); Enterprise contact-sales |
-| Languages  | Language-agnostic                          | Fixes in Java, JavaScript/TypeScript, C#, Python (Opengrep scans 30+)                                                      |
+| Aspect     | LyraShield AI                                                                                                                  | Mobb                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS (multi-tenant), single-tenant, on-prem (AWS); GitHub/GitLab/Azure DevOps/Bitbucket; CLI, API, IDE/MCP                 |
+| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Community free (public repos); Development Teams $20/dev/mo; Team $40/dev/mo (5–15 contributors); Enterprise contact-sales |
+| Languages  | Language-agnostic                                                                                                              | Fixes in Java, JavaScript/TypeScript, C#, Python (Opengrep scans 30+)                                                      |
 
 ## When to use which
 

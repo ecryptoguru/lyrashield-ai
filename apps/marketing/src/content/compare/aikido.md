@@ -49,11 +49,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | Aikido                                                                                                                                                                   |
-| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS + IDE + CI integrations; broker for internal apps; local code scanning option                                                                                       |
-| Pricing            | Open beta; pricing announced as it matures        | Free (forever, no card); $300/mo small teams; $600/mo growing teams; Enterprise custom. Pentest: typical from $4,000; rightsized $50–$30,000+; continuous testing custom |
-| Compliance posture | Assurance-record orientation for release sign-off | SOC 2 Type II + ISO 27001:2022 attested                                                                                                                                  |
+| Aspect             | LyraShield AI                                                                                                                  | Aikido                                                                                                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS + IDE + CI integrations; broker for internal apps; local code scanning option                                                                                       |
+| Pricing            | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free (forever, no card); $300/mo small teams; $600/mo growing teams; Enterprise custom. Pentest: typical from $4,000; rightsized $50–$30,000+; continuous testing custom |
+| Compliance posture | Assurance-record orientation for release sign-off                                                                              | SOC 2 Type II + ISO 27001:2022 attested                                                                                                                                  |
 
 ## When to use which
 

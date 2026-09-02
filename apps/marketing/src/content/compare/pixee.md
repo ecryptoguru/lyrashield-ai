@@ -45,11 +45,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                              | Pixee                                                                                                |
-| ---------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action         | GitHub App (Pixeebot), GitHub Action, SaaS, self-hosted, air-gapped; SOC 2 compliant; BYOM supported |
-| Pricing    | Open beta; pricing announced as it matures | Not public — outcome-based ("pay per vulnerability resolved"), contact-sales only, no free tier      |
-| Languages  | Language-agnostic                          | Scanner-determined (fixes apply across the languages your scanners cover)                            |
+| Aspect     | LyraShield AI                                                                                                                  | Pixee                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | GitHub App (Pixeebot), GitHub Action, SaaS, self-hosted, air-gapped; SOC 2 compliant; BYOM supported |
+| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Not public — outcome-based ("pay per vulnerability resolved"), contact-sales only, no free tier      |
+| Languages  | Language-agnostic                                                                                                              | Scanner-determined (fixes apply across the languages your scanners cover)                            |
 
 ## When to use which
 

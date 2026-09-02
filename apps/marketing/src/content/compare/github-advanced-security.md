@@ -48,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | GHAS                                                                                      |
-| ---------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action (any CI)          | GitHub.com or GitHub Enterprise Server                                                    |
-| Pricing    | Open beta; pricing announced as it matures           | Free for public repos; Secret Protection $19/committer/mo; Code Security $30/committer/mo |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | C/C++, C#, Go, Java, Kotlin, JS, TS, Python, Ruby, Rust, Swift (no PHP, Scala)            |
+| Aspect     | LyraShield AI                                                                                                                  | GHAS                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action (any CI)                                                                                    | GitHub.com or GitHub Enterprise Server                                                    |
+| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free for public repos; Secret Protection $19/committer/mo; Code Security $30/committer/mo |
+| Languages  | Language-agnostic (deterministic + agentic coverage)                                                                           | C/C++, C#, Go, Java, Kotlin, JS, TS, Python, Ruby, Rust, Swift (no PHP, Scala)            |
 
 ## When to use which
 

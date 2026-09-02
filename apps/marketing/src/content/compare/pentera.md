@@ -45,11 +45,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | Pentera                                                                                                                            |
-| ------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | Platform (Core/Surface/Cloud/Resolve); enterprise deployment; live production                                                      |
-| Pricing            | Open beta; pricing announced as it matures        | Not public — enterprise quote-based; scoped to environment size and modules                                                        |
-| Compliance posture | Assurance-record orientation for release sign-off | Maps validated findings to controls; ISO/IEC 42001 AI governance; Gartner representative vendor in Adversarial Exposure Validation |
+| Aspect             | LyraShield AI                                                                                                                  | Pentera                                                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                                                                                             | Platform (Core/Surface/Cloud/Resolve); enterprise deployment; live production                                                      |
+| Pricing            | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Not public — enterprise quote-based; scoped to environment size and modules                                                        |
+| Compliance posture | Assurance-record orientation for release sign-off                                                                              | Maps validated findings to controls; ISO/IEC 42001 AI governance; Gartner representative vendor in Adversarial Exposure Validation |
 
 ## When to use which
 

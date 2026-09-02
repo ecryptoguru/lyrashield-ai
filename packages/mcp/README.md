@@ -57,11 +57,11 @@ LyraShield under **Settings → API keys** (prefer read-only), then inject these
 client's user-level secret or environment configuration:
 
 - `LYRASHIELD_API_KEY` — your `lsk_…` key
-- `LYRASHIELD_API_URL` — your LyraShield app URL (defaults to `http://localhost:3000`)
+- `LYRASHIELD_API_URL` — your LyraShield app URL (defaults to `https://app.lyrashieldai.com`)
 
 The interactive examples below use the OAuth credential store and therefore contain no secret.
 
-### Claude Code / Cursor / Windsurf / Gemini CLI (the `mcpServers` shape)
+### Claude Code / Cursor / Gemini CLI (the `mcpServers` shape)
 
 ```json
 {
@@ -120,7 +120,7 @@ completed an authenticated runtime matrix.
   manifest and remains `EXPERIMENTAL` until a retained client-runtime receipt exists.
 - VS Code's reserved Agent Plugin entry is experimental and not preferred. Use its verified
   `.vscode/mcp.json` path.
-- Config or guided setup: Windsurf, VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
+- Config or guided setup: VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
   Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity,
   PiCode, OpenClaw, Hermes, and Devin, subject to each registry entry's support tier.
 

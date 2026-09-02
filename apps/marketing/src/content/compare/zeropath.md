@@ -46,11 +46,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                              | ZeroPath                                                                                                              |
-| ---------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
-| Pricing    | Open beta; pricing announced as it matures | Team $1,000/mo + $60/developer; Enterprise custom; usage-based option available                                       |
-| Languages  | Language-agnostic                          | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin, and more)                                  |
+| Aspect     | LyraShield AI                                                                                                                  | ZeroPath                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
+| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Team $1,000/mo + $60/developer; Enterprise custom; usage-based option available                                       |
+| Languages  | Language-agnostic                                                                                                              | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin, and more)                                  |
 
 ## When to use which
 

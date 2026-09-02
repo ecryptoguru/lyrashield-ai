@@ -48,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | Snyk                                                                   |
-| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                   | SaaS, Private Cloud (AWS), CLI, IDE plugins, CI/CD                     |
-| Pricing    | Open beta; pricing announced as it matures           | Free tier (test limits), Team $25/dev/month, Enterprise (custom)       |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | 19+ languages (Java, JS, Python, Go, C/C++, PHP, Ruby, .NET, and more) |
+| Aspect     | LyraShield AI                                                                                                                  | Snyk                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS, Private Cloud (AWS), CLI, IDE plugins, CI/CD                     |
+| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free tier (test limits), Team $25/dev/month, Enterprise (custom)       |
+| Languages  | Language-agnostic (deterministic + agentic coverage)                                                                           | 19+ languages (Java, JS, Python, Go, C/C++, PHP, Ruby, .NET, and more) |
 
 ## When to use which
 

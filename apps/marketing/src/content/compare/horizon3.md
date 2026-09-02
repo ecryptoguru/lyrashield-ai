@@ -45,11 +45,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | Horizon3 NodeZero                                                                                                                                                                               |
-| ------------------ | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS; internal Docker/OVA + external cloud; AWS Marketplace + other clouds                                                                                                                      |
-| Pricing            | Open beta; pricing announced as it matures        | Published on AWS Marketplace (per 12-mo, 500 assets): Core $25,000; Pro $32,500; Elite $42,500. NodeZero Flex one-time (1,000 assets) $15,000. 30-day free trial available; enterprise by quote |
-| Compliance posture | Assurance-record orientation for release sign-off | Trusted by governments, Fortune 10, healthcare; FedRAMP High variant for federal                                                                                                                |
+| Aspect             | LyraShield AI                                                                                                                  | Horizon3 NodeZero                                                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS; internal Docker/OVA + external cloud; AWS Marketplace + other clouds                                                                                                                      |
+| Pricing            | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Published on AWS Marketplace (per 12-mo, 500 assets): Core $25,000; Pro $32,500; Elite $42,500. NodeZero Flex one-time (1,000 assets) $15,000. 30-day free trial available; enterprise by quote |
+| Compliance posture | Assurance-record orientation for release sign-off                                                                              | Trusted by governments, Fortune 10, healthcare; FedRAMP High variant for federal                                                                                                                |
 
 ## When to use which
 
