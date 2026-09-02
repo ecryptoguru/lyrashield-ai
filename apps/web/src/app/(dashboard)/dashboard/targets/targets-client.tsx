@@ -260,7 +260,7 @@ export function TargetsClient({
   }
 
   return (
-    <div className="min-w-0 max-w-full overflow-x-clip">
+    <div className="min-w-0 max-w-full">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {filterProjectId && (
@@ -572,7 +572,7 @@ export function TargetsClient({
         />
       ) : (
         <div
-          className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border shadow-sm"
+          className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border shadow-sm [contain:paint]"
           tabIndex={0}
           aria-label="Targets list"
         >
