@@ -395,7 +395,12 @@ export async function claimBillingCheckoutCreation(input: {
   kind: "subscription" | "pack"
   catalogKey: string
 }): Promise<"claimed" | "duplicate" | "unavailable"> {
-  const key = `billing-checkout-lock:${input.workspaceId}:${input.provider}:${input.kind}:${input.catalogKey}`
+  // One initial subscription per workspace, even across plans and providers.
+  // Packs remain independently purchasable by catalog item.
+  const key =
+    input.kind === "subscription"
+      ? `billing-checkout-lock:${input.workspaceId}:subscription`
+      : `billing-checkout-lock:${input.workspaceId}:${input.provider}:pack:${input.catalogKey}`
   if (!isProd) return claimLocalBillingCheckoutLock(key) ? "claimed" : "duplicate"
 
   const redis = await getCheckoutLockRedis()

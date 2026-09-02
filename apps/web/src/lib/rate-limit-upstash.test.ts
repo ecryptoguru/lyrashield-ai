@@ -98,9 +98,40 @@ describe.sequential("Upstash rate-limit failure cooldown", () => {
     await expect(claimBillingCheckoutCreation(input)).resolves.toBe("duplicate")
     expect(mocks.checkoutSet).toHaveBeenNthCalledWith(
       1,
-      "billing-checkout-lock:workspace-1:polar:subscription:starter_monthly",
+      "billing-checkout-lock:workspace-1:subscription",
       "1",
       { nx: true, ex: 90 }
     )
+  })
+  it("serializes concurrent first subscriptions across catalogs and providers while allowing packs", async () => {
+    const held = new Set<string>()
+    mocks.checkoutSet.mockImplementation(async (key: string) => {
+      if (held.has(key)) return null
+      held.add(key)
+      return "OK"
+    })
+    const outcomes = await Promise.all([
+      claimBillingCheckoutCreation({
+        workspaceId: "free-1",
+        provider: "polar",
+        kind: "subscription",
+        catalogKey: "starter_monthly",
+      }),
+      claimBillingCheckoutCreation({
+        workspaceId: "free-1",
+        provider: "razorpay",
+        kind: "subscription",
+        catalogKey: "pro_annual",
+      }),
+    ])
+    expect(outcomes).toEqual(["claimed", "duplicate"])
+    await expect(
+      claimBillingCheckoutCreation({
+        workspaceId: "free-1",
+        provider: "polar",
+        kind: "pack",
+        catalogKey: "pack_100",
+      })
+    ).resolves.toBe("claimed")
   })
 })
