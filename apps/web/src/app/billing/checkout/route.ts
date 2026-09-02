@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
+import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   createPolarCheckout,
@@ -69,6 +70,21 @@ export async function POST(request: Request) {
     const { region, provider } = resolveRequestBillingProvider(request)
     const admissionError = billingAdmissionError(provider, workspaceId, request)
     if (admissionError) return admissionError
+
+    // This endpoint creates subscriptions; paid plan/interval changes belong
+    // to existing subscription management, including stale or direct callers.
+    const [workspace, billingAccount] = await Promise.all([
+      prisma.workspace.findUnique({ where: { id: workspaceId }, select: { plan: true } }),
+      prisma.billingAccount.findUnique({ where: { workspaceId }, select: { currentPlan: true } }),
+    ])
+    if (!workspace) return apiError("WORKSPACE_NOT_FOUND", "Workspace not found", 404)
+    if (workspace.plan !== "FREE" || (billingAccount && billingAccount.currentPlan !== "FREE")) {
+      return apiError(
+        "SUBSCRIPTION_ALREADY_EXISTS",
+        "Use Manage Subscription to update your existing subscription.",
+        409
+      )
+    }
 
     // Track C integration: resolve affiliate promo code → attach affiliate metadata.
     // No commission created at checkout — only on the paid webhook (per affiliate brief).

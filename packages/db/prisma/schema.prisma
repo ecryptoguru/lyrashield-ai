@@ -24,6 +24,8 @@ model User {
   // Platform-level authority, independent of any workspace/tenant role.
   // Only value is "PLATFORM_OPERATOR"; null means an ordinary tenant user.
   platformRole String?
+  // Private lifetime trial claim; independent of workspace membership.
+  trialStartedAt DateTime?
 
   sessions           Session[]
   accounts           Account[]

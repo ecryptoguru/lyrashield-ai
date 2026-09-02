@@ -63,6 +63,7 @@ export function V2Sidebar({
   activeWorkspaceId: initialWorkspaceId,
   pendingApprovals = 0,
   canViewEvidenceVault = false,
+  canManageBilling = false,
   platformAdminHref = null,
 }: {
   userName: string
@@ -71,6 +72,7 @@ export function V2Sidebar({
   activeWorkspaceId: string | null
   pendingApprovals?: number
   canViewEvidenceVault?: boolean
+  canManageBilling?: boolean
   platformAdminHref?: string | null
 }) {
   const pathname = usePathname()
@@ -84,6 +86,7 @@ export function V2Sidebar({
   const { secondary } = resolveNav({
     pendingApprovals,
     canViewEvidenceVault,
+    canManageBilling,
     platformAdminHref,
   })
 

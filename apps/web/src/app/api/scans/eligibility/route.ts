@@ -4,7 +4,7 @@ import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { CreateScanSchema, resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
-import { evaluateScanEntitlement } from "@lyrashield/billing"
+import { evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { authErrorResponse } from "../../../../lib/api-auth"
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     void parsed.data.goal
 
     // Same workspace permission and target ownership checks as scan creation.
-    await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
 
     // The preflight runs on composer interaction, so it gets its own
     // (looser) per-workspace budget — but still a budget: it does real
@@ -188,6 +188,12 @@ export async function GET(request: Request) {
     const entitlement = await evaluateScanEntitlement(workspaceId, canonicalMode, {
       mutateOnTrialExpiry: false,
     })
+    const trialAvailable =
+      !entitlement.allowed &&
+      entitlement.code === "NO_MINUTES_REMAINING" &&
+      entitlement.plan === "FREE" &&
+      !entitlement.isTrial &&
+      (await isTrialAvailable(workspaceId, session.userId))
 
     logger.info("Scan eligibility preflight", {
       workspaceId,
@@ -198,8 +204,16 @@ export async function GET(request: Request) {
 
     return eligibilityResponse({
       allowed: entitlement.allowed,
-      code: entitlement.allowed ? null : (entitlement.code ?? "SCAN_NOT_ALLOWED"),
-      message: entitlement.allowed ? null : (entitlement.message ?? "Scan not allowed"),
+      code: entitlement.allowed
+        ? null
+        : trialAvailable
+          ? "TRIAL_AVAILABLE"
+          : (entitlement.code ?? "SCAN_NOT_ALLOWED"),
+      message: entitlement.allowed
+        ? null
+        : trialAvailable
+          ? "Start your 14-day trial to receive 100 agent-minutes."
+          : (entitlement.message ?? "Scan not allowed"),
       plan: entitlement.plan,
       isTrial: entitlement.isTrial,
       remainingMinutes: entitlement.remainingMinutes,

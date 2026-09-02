@@ -68,6 +68,12 @@ describe("track", () => {
 })
 
 describe("signup attribution", () => {
+  it("retains valid plan intent across OAuth retry without allowing redirect injection", () => {
+    expect(signupErrorUrl({ source: "pricing" }, "LAUNCH_ASSURANCE")).toBe(
+      "/sign-up?source=pricing&plan=LAUNCH_ASSURANCE"
+    )
+    expect(signupErrorUrl({}, "PRO&callbackURL=//evil.example")).toBe("/sign-up")
+  })
   it("keeps only bounded campaign tokens across an OAuth error return", () => {
     const attribution = readSignupAttribution(
       "?source=Landing_Hero&cta=create_account&target_url=https://private.example"

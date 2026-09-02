@@ -85,6 +85,7 @@ export {
 // Trial
 export {
   startTrial,
+  isTrialAvailable,
   getTrialState,
   blockOnExpiry,
   TRIAL_DURATION_DAYS,

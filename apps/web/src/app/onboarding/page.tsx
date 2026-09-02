@@ -8,8 +8,18 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { InvitationAcceptBridge } from "@/components/invitation-accept-bridge"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
 import { withWorkspaceRLS } from "@lyrashield/db"
+import { cookies } from "next/headers"
+import { parsePlanIntent, planIntentPath, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string }>
+}) {
+  const params = await searchParams
+  const selectedPlan =
+    parsePlanIntent(params.plan) ??
+    parsePlanIntent((await cookies()).get(PLAN_INTENT_COOKIE)?.value)
   const session = await getSession()
 
   if (!session) {
@@ -19,7 +29,7 @@ export default async function OnboardingPage() {
   const state = await getOrCreateOnboardingState(session.userId)
 
   if (state?.completed) {
-    redirect("/dashboard")
+    redirect(selectedPlan ? planIntentPath("/dashboard/billing", selectedPlan) : "/dashboard")
   }
 
   const target =
@@ -59,7 +69,7 @@ export default async function OnboardingPage() {
         </p>
       </div>
 
-      <OnboardingWizard initialState={initialState} />
+      <OnboardingWizard initialState={initialState} selectedPlan={selectedPlan} />
       <InvitationAcceptBridge />
     </div>
   )

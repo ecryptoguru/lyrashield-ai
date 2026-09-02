@@ -21,16 +21,16 @@ Native WebMCP proof is still required. The current Brave session does not expose
 
 ## Script: target 2 minutes 45 seconds
 
-| Time | Screen | Narration and proof |
-| --- | --- | --- |
-| 0:00–0:12 | Lab title and source-local notice | “WebMCP lets agents use page tools. LyraShield helps developers review that tool surface before it reaches production.” |
-| 0:12–0:35 | Native inspector or supported-client tool list, then one `analyze_webmcp_source` invocation | Show the tool name, bounded result, and visible activity receipt. This is the required native WebMCP call. |
-| 0:35–1:00 | Unsafe sample and findings | Load the public unsafe sample and run it. State that the browser-local check keeps pasted source on the device and returns deterministic evidence states, not a security guarantee. |
-| 1:00–1:28 | Rewrite tab | Select `WEBMCP-03`, show the exact `exposedTo: ["*"]` to `exposedTo: []` diff, and say the user must review it before Apply. |
-| 1:28–1:45 | Apply in memory, rerun, Undo | Show the control become `NO FINDING`, other findings stay visible, then Undo. Never imply a repository change was applied. |
-| 1:45–2:05 | Public repository and CI/SARIF evidence | Show source, MIT license, and a green relevant CI run. Explain the same control model can gate pull requests and emit SARIF. |
-| 2:05–2:28 | Dashboard only if judge proof exists | Show an agent preparing a scan form and the human Start control. Do not start a scan in the recording. If unavailable, replace with the public `/webmcp` control catalogue and the human-confirmation explanation. |
-| 2:28–2:45 | Limitations slide or page | “This is deterministic detection, not independent verification. Unsupported or dynamic source remains inconclusive. Runtime drift protection is future work.” |
+| Time      | Screen                                                                                      | Narration and proof                                                                                                                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0:00–0:12 | Lab title and source-local notice                                                           | “WebMCP lets agents use page tools. LyraShield helps developers review that tool surface before it reaches production.”                                                                                            |
+| 0:12–0:35 | Native inspector or supported-client tool list, then one `analyze_webmcp_source` invocation | Show the tool name, bounded result, and visible activity receipt. This is the required native WebMCP call.                                                                                                         |
+| 0:35–1:00 | Unsafe sample and findings                                                                  | Load the public unsafe sample and run it. State that the browser-local check keeps pasted source on the device and returns deterministic evidence states, not a security guarantee.                                |
+| 1:00–1:28 | Rewrite tab                                                                                 | Select `WEBMCP-03`, show the exact `exposedTo: ["*"]` to `exposedTo: []` diff, and say the user must review it before Apply.                                                                                       |
+| 1:28–1:45 | Apply in memory, rerun, Undo                                                                | Show the control become `NO FINDING`, other findings stay visible, then Undo. Never imply a repository change was applied.                                                                                         |
+| 1:45–2:05 | Public repository and CI/SARIF evidence                                                     | Show source, MIT license, and a green relevant CI run. Explain the same control model can gate pull requests and emit SARIF.                                                                                       |
+| 2:05–2:28 | Dashboard only if judge proof exists                                                        | Show an agent preparing a scan form and the human Start control. Do not start a scan in the recording. If unavailable, replace with the public `/webmcp` control catalogue and the human-confirmation explanation. |
+| 2:28–2:45 | Limitations slide or page                                                                   | “This is deterministic detection, not independent verification. Unsupported or dynamic source remains inconclusive. Runtime drift protection is future work.”                                                      |
 
 ## Editing and publication gate
 

@@ -18,6 +18,7 @@ vi.mock("@lyrashield/auth", () => ({
 
 vi.mock("@lyrashield/billing", () => ({
   evaluateScanEntitlement: vi.fn(),
+  isTrialAvailable: vi.fn(),
 }))
 
 vi.mock("@lyrashield/logger", () => ({
@@ -40,7 +41,7 @@ vi.mock("../../../../lib/rate-limit", () => ({
 
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
-import { evaluateScanEntitlement } from "@lyrashield/billing"
+import { evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
 import { GET } from "./route"
 
 function request(params: Record<string, string>) {
@@ -59,6 +60,7 @@ const validQuery = {
 describe("GET /api/scans/eligibility", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(isTrialAvailable).mockResolvedValue(false)
     vi.mocked(requirePermission).mockResolvedValue({ session: { userId: "user-1" } } as never)
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
@@ -153,5 +155,29 @@ describe("GET /api/scans/eligibility", () => {
         remainingMinutes: 120,
       },
     })
+  })
+
+  it("offers an unstarted free workspace its trial before an upgrade", async () => {
+    vi.mocked(evaluateScanEntitlement).mockResolvedValue({
+      allowed: false,
+      code: "NO_MINUTES_REMAINING",
+      message: "Your agent-minute balance is exhausted.",
+      plan: "FREE",
+      isTrial: false,
+      remainingMinutes: 0,
+    } as never)
+    vi.mocked(isTrialAvailable).mockResolvedValue(true)
+
+    const response = await GET(request(validQuery))
+
+    expect((await response.json()).data).toMatchObject({
+      allowed: false,
+      code: "TRIAL_AVAILABLE",
+      message: "Start your 14-day trial to receive 100 agent-minutes.",
+    })
+    expect(isTrialAvailable).toHaveBeenCalledWith("ws-1", "user-1")
+    vi.mocked(isTrialAvailable).mockResolvedValue(false)
+    const exhausted = await GET(request(validQuery))
+    expect((await exhausted.json()).data.code).toBe("NO_MINUTES_REMAINING")
   })
 })

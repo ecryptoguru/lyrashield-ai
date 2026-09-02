@@ -19,6 +19,35 @@ export const TRIAL_AGENT_MINUTES = 100
 /** Trial target cap. */
 export const TRIAL_TARGET_CAP = 3
 
+type TrialTransaction = Parameters<Parameters<typeof withWorkspaceRLS>[1]>[0]
+
+async function hasUsedTrial(
+  userId: string,
+  db: Pick<TrialTransaction, "user" | "workspace">
+): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { trialStartedAt: true } })
+  if (!user || user.trialStartedAt) return true
+  // Older application revisions may still grant trials during migration rollout.
+  return Boolean(
+    await db.workspace.findFirst({
+      where: { trialStartedAt: { not: null }, members: { some: { userId } } },
+      select: { id: true },
+    })
+  )
+}
+
+/** Read-only advisory eligibility. The start transaction repeats all guards. */
+export async function isTrialAvailable(workspaceId: string, userId: string): Promise<boolean> {
+  const [workspace, alreadyUsed] = await Promise.all([
+    prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { plan: true, trialStartedAt: true },
+    }),
+    hasUsedTrial(userId, prisma),
+  ])
+  return Boolean(workspace?.plan === "FREE" && !workspace.trialStartedAt && !alreadyUsed)
+}
+
 export interface TrialState {
   /** Whether the workspace is on an active trial. */
   isActive: boolean
@@ -43,42 +72,50 @@ export interface TrialState {
  *
  * Sets trialStartedAt on the Workspace and grants 100 one-time agent-minutes.
  * Idempotent: if a trial has already started, this is a no-op.
+ * A caller creating a workspace may supply its existing scoped transaction so
+ * workspace creation, the lifetime user claim, and the grant commit together.
  */
 export async function startTrial(
   workspaceId: string,
-  userId: string
-): Promise<{ started: boolean; trialEndsAt: Date; alreadyUsed: boolean }> {
+  userId: string,
+  transaction?: TrialTransaction
+): Promise<{ started: boolean; trialEndsAt: Date | null; alreadyUsed: boolean }> {
   const now = new Date()
   const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
 
-  const result = await withWorkspaceRLS(workspaceId, async (tx) => {
+  const run = async (tx: TrialTransaction) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`trial:${userId}`}, 0))`
-    const memberships = await tx.workspaceMember.findMany({
-      where: { userId },
-      select: { workspaceId: true },
+    const workspace = await tx.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { plan: true, trialStartedAt: true },
     })
-    const existing = await tx.workspace.findFirst({
-      where: {
-        id: { in: memberships.map((membership) => membership.workspaceId) },
-        trialStartedAt: { not: null },
-      },
-      select: { id: true, trialStartedAt: true },
-    })
-    if (existing?.trialStartedAt) {
+    if (!workspace) throw new Error("Workspace not found")
+    if (workspace.plan !== "FREE") throw new Error("TRIAL_PAID_PLAN")
+    if (workspace.trialStartedAt) {
       return {
         started: false,
-        alreadyUsed: existing.id !== workspaceId,
+        alreadyUsed: false,
         trialEndsAt: new Date(
-          existing.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
+          workspace.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
         ),
       }
     }
 
-    const updated = await tx.workspace.updateMany({
-      where: { id: workspaceId, trialStartedAt: null },
-      data: { trialStartedAt: now, plan: "FREE", deepAllowed: false },
+    const alreadyUsed = await hasUsedTrial(userId, tx)
+    // Also persist a legacy claim so later membership removal cannot restore eligibility.
+    const claimed = await tx.user.updateMany({
+      where: { id: userId, trialStartedAt: null },
+      data: { trialStartedAt: now },
     })
-    if (updated.count !== 1) throw new Error("Workspace not found")
+    if (alreadyUsed || claimed.count !== 1)
+      return { started: false, alreadyUsed: true, trialEndsAt: null }
+
+    const updated = await tx.workspace.updateMany({
+      where: { id: workspaceId, plan: "FREE", trialStartedAt: null },
+      data: { trialStartedAt: now, deepAllowed: false },
+    })
+    // A concurrent paid upgrade wins; throwing rolls back the user claim too.
+    if (updated.count !== 1) throw new Error("TRIAL_PAID_PLAN")
     await tx.billingAccount.upsert({
       where: { workspaceId },
       create: { workspaceId, status: "trialing", currentPlan: "FREE", trialEndsAt },
@@ -95,10 +132,11 @@ export async function startTrial(
       },
     })
     return { started: true, alreadyUsed: false, trialEndsAt }
-  })
+  }
+  const result = transaction ? await run(transaction) : await withWorkspaceRLS(workspaceId, run)
 
   if (result.started) {
-    logger.info("Trial started", { workspaceId, trialEndsAt: result.trialEndsAt.toISOString() })
+    logger.info("Trial started", { workspaceId, trialEndsAt: result.trialEndsAt?.toISOString() })
   }
 
   return result
