@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import {
   issueDnsDomainVerification,
   LiveAiSafetyError,
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const parsed = RequestProofSchema.safeParse(await request.json().catch(() => ({})))
     if (!parsed.success)
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+async function put(request: Request) {
   try {
     const parsed = VerifyProofSchema.safeParse(await request.json().catch(() => ({})))
     if (!parsed.success)
@@ -120,3 +121,7 @@ export async function PUT(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to verify domain", 500)
   }
 }
+
+export const POST = withCookieMutation(post)
+
+export const PUT = withCookieMutation(put)

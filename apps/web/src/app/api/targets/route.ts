@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
@@ -10,7 +11,7 @@ import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiPaginated, parsePaginationParams } from "../../../lib/api-response"
 import { assertTargetAllowed } from "@lyrashield/billing"
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -297,3 +298,5 @@ export async function GET(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to list targets", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

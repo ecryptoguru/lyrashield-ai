@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { getThreatModel, saveThreatModel, threatModelMarkdown } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const parsed = ThreatModelSchema.safeParse(await request.json().catch(() => ({})))
     if (!parsed.success)
@@ -121,3 +122,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to save threat model", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

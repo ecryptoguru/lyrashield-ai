@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import {
   createControlEvidence,
   listControlEvidence,
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const body = await request.json().catch(() => ({}))
     const parsed = CreateEvidenceSchema.safeParse(body)
@@ -102,3 +103,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to create control evidence", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

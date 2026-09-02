@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { listReports, createReport, prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const body = await request.json()
     const parsed = CreateReportSchema.safeParse(body)
@@ -83,3 +84,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to create report", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

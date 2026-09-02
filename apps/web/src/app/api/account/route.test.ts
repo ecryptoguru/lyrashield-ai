@@ -14,11 +14,13 @@ describe("DELETE /api/account", () => {
 
   it("requires an authenticated session", async () => {
     getSession.mockResolvedValue(null)
-    expect((await DELETE()).status).toBe(401)
+    expect(
+      (await DELETE(new Request("http://localhost/api/account", { method: "DELETE" }))).status
+    ).toBe(401)
   })
 
   it("fails closed while deletion retention rules require review", async () => {
-    const response = await DELETE()
+    const response = await DELETE(new Request("http://localhost/api/account", { method: "DELETE" }))
 
     expect(response.status).toBe(409)
     expect((await response.json()) as unknown).toMatchObject({

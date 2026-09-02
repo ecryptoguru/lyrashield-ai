@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
 import {
   getSystemPrisma,
@@ -34,7 +35,7 @@ const ConnectSchema = z.object({
  * SyncCursor now carries a monotonic `seq` (BIGINT) for CAS. connect returns
  * the current seq so the desktop's trusted native store can seed its cursor.
  */
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const session = await requireAuth()
     const body: unknown = await request.json().catch(() => null)
@@ -154,3 +155,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to connect sync", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

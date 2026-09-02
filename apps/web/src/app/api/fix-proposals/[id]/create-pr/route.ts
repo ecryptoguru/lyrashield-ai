@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../../lib/api-auth"
 import { z } from "zod"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -28,7 +29,7 @@ const CreatePRSchema = z
  * a patch that fails validation returns a named rejection — never a
  * half-opened PR.
  */
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -149,3 +150,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError("INTERNAL_ERROR", "Failed to validate fix proposal", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

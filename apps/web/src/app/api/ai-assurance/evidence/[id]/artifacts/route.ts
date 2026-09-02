@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../../../lib/api-auth"
 import { randomUUID } from "node:crypto"
 import {
   addControlEvidenceArtifacts,
@@ -77,7 +78,7 @@ async function readBodyWithinLimit(request: Request): Promise<Buffer> {
   return Buffer.concat(chunks, byteLength)
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: evidenceId } = await params
   try {
     const workspaceId = new URL(request.url).searchParams.get("workspaceId")
@@ -143,3 +144,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return privateResponse(apiError("INTERNAL_ERROR", "Failed to add evidence artifacts", 500))
   }
 }
+
+export const POST = withCookieMutation(post)

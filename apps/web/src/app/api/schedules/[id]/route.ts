@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { getSchedule, updateSchedule, deleteSchedule, getNextRunAt, prisma } from "@lyrashield/db"
 import { resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -58,7 +59,7 @@ const PatchScheduleSchema = z.object({
   enabled: z.boolean().optional(),
 })
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function patch(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -117,7 +118,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function remove(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -155,3 +156,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return apiError("INTERNAL_ERROR", "Failed to delete schedule", 500)
   }
 }
+
+export const PATCH = withCookieMutation(patch)
+
+export const DELETE = withCookieMutation(remove)

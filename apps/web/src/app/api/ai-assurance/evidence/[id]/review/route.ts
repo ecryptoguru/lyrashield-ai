@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../../../lib/api-auth"
 import { reviewControlEvidence, prisma, type ControlEvidenceVersionSummary } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -13,7 +14,7 @@ const ReviewEvidenceSchema = z.object({
   status: z.enum(["ACCEPTED", "REJECTED"]),
 })
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -72,3 +73,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError("INTERNAL_ERROR", "Failed to review control evidence", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

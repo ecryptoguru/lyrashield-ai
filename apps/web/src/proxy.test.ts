@@ -19,7 +19,7 @@ vi.mock("@/lib/billing-staging-access", () => ({ hasBillingStagingAccess: () => 
 vi.mock("@/lib/scorecard-sharing", () => ({ scorecardTrackingAllowed: () => false }))
 vi.mock("@/lib/rate-limit", () => rateLimit)
 
-import { proxy } from "./proxy"
+import { proxy, getAffiliateIpHash } from "./proxy"
 
 const certificate = "-----BEGIN CERTIFICATE-----\nAQIDBA==\n-----END CERTIFICATE-----"
 const fingerprint = createHash("sha256")
@@ -33,6 +33,8 @@ afterEach(() => {
     "CLOUDFLARE_ORIGIN_MTLS",
     "CLOUDFLARE_AOP_CERT_SHA256",
     "DEPLOY_PROBE_CERT_SHA256",
+    "TRUSTED_PROXY_IP_HEADER",
+    "IP_HASH_SALT",
   ]) {
     if (originalEnv[key] === undefined) delete process.env[key]
     else process.env[key] = originalEnv[key]
@@ -40,6 +42,18 @@ afterEach(() => {
 })
 
 describe("app origin proxy boundary", () => {
+  it("hashes only the trusted last hop for affiliate attribution", async () => {
+    process.env.TRUSTED_PROXY_IP_HEADER = "x-forwarded-for"
+    process.env.IP_HASH_SALT = "test-salt"
+    const request = new NextRequest("https://app.lyrashieldai.com/?ref=test", {
+      headers: { "x-forwarded-for": "spoofed, 203.0.113.4", "cf-connecting-ip": "spoofed-too" },
+    })
+    expect(await getAffiliateIpHash(request)).toBe(
+      createHash("sha256").update("203.0.113.4test-salt").digest("hex")
+    )
+    delete process.env.TRUSTED_PROXY_IP_HEADER
+    expect(await getAffiliateIpHash(request)).toBeUndefined()
+  })
   it("rejects a direct or spoofed app request before Redis-backed limiting", async () => {
     process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
     process.env.CLOUDFLARE_AOP_CERT_SHA256 = fingerprint

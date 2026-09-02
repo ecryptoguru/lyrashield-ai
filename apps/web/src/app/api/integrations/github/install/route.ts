@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../../lib/api-auth"
 import { NextResponse, type NextRequest } from "next/server"
 import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
@@ -244,7 +245,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function post(request: NextRequest) {
   const session = await getSession()
   if (!session) {
     return NextResponse.json(
@@ -294,3 +295,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withCookieMutation(post)

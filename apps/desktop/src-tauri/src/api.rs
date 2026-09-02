@@ -30,6 +30,8 @@ fn is_transient_verify_status(status: reqwest::StatusCode) -> bool {
     status.is_server_error()
         || status == reqwest::StatusCode::REQUEST_TIMEOUT
         || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || status == reqwest::StatusCode::FORBIDDEN
+        || status == reqwest::StatusCode::NOT_FOUND
 }
 
 impl std::fmt::Display for VerifyError {
@@ -289,6 +291,8 @@ mod tests {
             reqwest::StatusCode::REQUEST_TIMEOUT,
             reqwest::StatusCode::TOO_MANY_REQUESTS,
             reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            reqwest::StatusCode::FORBIDDEN,
+            reqwest::StatusCode::NOT_FOUND,
         ] {
             assert!(is_transient_verify_status(status));
         }

@@ -66,6 +66,7 @@ mod tests {
         let frontend_package = include_str!("../../frontend/package.json");
 
         assert!(!capabilities.contains("sql:"));
+        assert!(!capabilities.contains("updater:"));
         assert!(!frontend_package.contains("@tauri-apps/plugin-sql"));
     }
 }

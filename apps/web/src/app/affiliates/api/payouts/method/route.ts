@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
@@ -29,7 +30,7 @@ const MethodSchema = z
   })
   .strict()
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const session = await getCachedSession()
   if (!session) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
@@ -73,3 +74,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ success: true })
 }
+
+export const POST = withCookieMutation(post)

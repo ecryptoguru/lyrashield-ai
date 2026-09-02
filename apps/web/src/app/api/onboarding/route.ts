@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { getSession, getWorkspaceMembership } from "@lyrashield/auth/server"
@@ -41,7 +42,7 @@ export async function GET() {
   }
 }
 
-export async function PATCH(request: Request) {
+async function patch(request: Request) {
   try {
     const session = await getSession()
     if (!session) {
@@ -176,3 +177,5 @@ export async function PATCH(request: Request) {
     )
   }
 }
+
+export const PATCH = withCookieMutation(patch)

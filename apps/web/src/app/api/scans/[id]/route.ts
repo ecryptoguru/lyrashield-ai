@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { createHash } from "crypto"
 import { getScanWithEvents, cancelScan, prisma, removeScan } from "@lyrashield/db"
 import { getScanQueuePosition } from "@lyrashield/integrations"
@@ -67,7 +68,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   let body: unknown
   try {
@@ -109,7 +110,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function remove(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await params
   const parsedId = ScanIdSchema.safeParse(rawId)
   if (!parsedId.success) {
@@ -151,3 +152,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return apiError("INTERNAL_ERROR", "Failed to remove scan", 500)
   }
 }
+
+export const POST = withCookieMutation(post)
+
+export const DELETE = withCookieMutation(remove)

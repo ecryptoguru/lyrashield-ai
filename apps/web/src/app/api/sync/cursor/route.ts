@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { withWorkspaceRLS } from "@lyrashield/db"
@@ -43,7 +44,7 @@ export async function GET() {
  * or to set lastSyncedFindingId without advancing seq via the findings CAS path.
  * Direct cursor writes cannot carry findings; use POST /findings for evidence.
  */
-export async function PUT(request: Request) {
+async function put(request: Request) {
   try {
     const session = await requireAuth()
     const body: unknown = await request.json().catch(() => null)
@@ -181,3 +182,5 @@ export async function PUT(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to update sync cursor", 500)
   }
 }
+
+export const PUT = withCookieMutation(put)

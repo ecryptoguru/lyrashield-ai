@@ -3,12 +3,5 @@
   "identifier": "default",
   "description": "Default capabilities for the LyraShield desktop app",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "updater:default",
-    "updater:allow-check",
-    "updater:allow-download",
-    "shell:allow-open",
-    "os:default"
-  ]
+  "permissions": ["core:default", "shell:allow-open", "os:default"]
 }

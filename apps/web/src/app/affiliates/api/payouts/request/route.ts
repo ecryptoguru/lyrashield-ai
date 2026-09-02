@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { requestPayout } from "@lyrashield/affiliate"
@@ -8,7 +9,7 @@ const RequestSchema = z.object({
   affiliateId: z.string().min(1),
 })
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const session = await getCachedSession()
   if (!session) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
@@ -52,3 +53,5 @@ export async function POST(request: Request) {
     amount: result.amount,
   })
 }
+
+export const POST = withCookieMutation(post)

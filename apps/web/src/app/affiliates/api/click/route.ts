@@ -4,6 +4,7 @@ import { z } from "zod"
 import { detectAttribution } from "@lyrashield/affiliate"
 import { parseAffiliateCookie } from "@lyrashield/affiliate"
 import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
+import { clientIpFromRequest } from "@/lib/rate-limit"
 
 const ClickSchema = z.object({
   code: z.string().min(1).max(64),
@@ -85,15 +86,8 @@ function hashIp(ip: string): string {
 }
 
 function getClientIp(request: NextRequest): string | undefined {
-  const headers = ["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"]
-  for (const header of headers) {
-    const value = request.headers.get(header)
-    if (value) {
-      const ip = value.split(",")[0]?.trim()
-      if (ip) return ip
-    }
-  }
-  return undefined
+  const ip = clientIpFromRequest(request)
+  return ip === "unknown" ? undefined : ip
 }
 
 /**

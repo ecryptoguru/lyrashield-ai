@@ -355,7 +355,8 @@ pub async fn ensure_license_operational(
     }
 
     // Machine binding — must be member.
-    let machine_id = crate::machine_id::generate_machine_id();
+    let machine_id = crate::machine_id::generate_machine_id()
+        .map_err(LicenseOperationalError::Unavailable)?;
     if !stored.license.machine_ids.contains(&machine_id) {
         return Err(LicenseOperationalError::Invalid(
             "machine not bound to this license".into(),
@@ -663,7 +664,7 @@ mod tests {
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
-        let machine_id = crate::machine_id::generate_machine_id();
+        let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, _pubkey) = make_valid_stored(&machine_id);
         // Tamper to wrong machine
         stored.license.machine_ids = vec!["wrong-machine".into()];
@@ -695,7 +696,7 @@ mod tests {
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
-        let machine_id = crate::machine_id::generate_machine_id();
+        let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, pubkey) = make_valid_stored(&machine_id);
         stored.license.signature = "REVOKED".into();
         let tmp = tempfile::tempdir().unwrap();
@@ -717,7 +718,7 @@ mod tests {
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
-        let machine_id = crate::machine_id::generate_machine_id();
+        let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, _pubkey) = make_valid_stored(&machine_id);
         stored.license.update_eligible_until = "2020-01-01T00:00:00.000Z".into();
         // Re-sign after changing date
@@ -764,7 +765,7 @@ mod tests {
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
-        let machine_id = crate::machine_id::generate_machine_id();
+        let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, pubkey) = make_valid_stored(&machine_id);
         stored.version = 1;
         stored.last_server_verified_at = None;
@@ -808,7 +809,7 @@ mod tests {
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
-        let machine_id = crate::machine_id::generate_machine_id();
+        let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", tmp.path());
@@ -829,7 +830,7 @@ mod tests {
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
-        let machine_id = crate::machine_id::generate_machine_id();
+        let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", tmp.path());
@@ -866,7 +867,7 @@ mod tests {
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
-        let machine_id = crate::machine_id::generate_machine_id();
+        let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", tmp.path());
@@ -902,7 +903,7 @@ mod tests {
             .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap();
-        let machine_id = crate::machine_id::generate_machine_id();
+        let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", tmp.path());

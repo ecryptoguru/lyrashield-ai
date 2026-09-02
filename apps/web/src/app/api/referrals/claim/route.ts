@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { cookies } from "next/headers"
 import type { NextRequest } from "next/server"
 import { createHmac } from "node:crypto"
@@ -8,7 +9,7 @@ import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { getClientIP } from "@/proxy"
 import { isReferralSource } from "../../../../lib/scorecard-sharing"
 
-export async function POST(request: NextRequest) {
+async function post(request: NextRequest) {
   const session = await getSession()
   if (!session) return apiError("UNAUTHORIZED", "Authentication required", 401)
   const cookieStore = await cookies()
@@ -27,3 +28,5 @@ export async function POST(request: NextRequest) {
   cookieStore.delete("ls_ref_source")
   return apiSuccess({ attributed: Boolean(attribution) })
 }
+
+export const POST = withCookieMutation(post)

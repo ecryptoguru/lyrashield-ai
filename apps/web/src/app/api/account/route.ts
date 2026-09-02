@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { getSession } from "@lyrashield/auth/server"
 import { apiError } from "../../../lib/api-response"
 
@@ -6,7 +7,7 @@ import { apiError } from "../../../lib/api-response"
  * billing/audit anonymization contract are approved. The dashboard routes
  * deletion requests through support so they can be reviewed safely.
  */
-export async function DELETE() {
+async function removeAccount(_request: Request) {
   const session = await getSession()
   if (!session) return apiError("UNAUTHORIZED", "Authentication required", 401)
 
@@ -16,3 +17,5 @@ export async function DELETE() {
     409
   )
 }
+
+export const DELETE = withCookieMutation(removeAccount)

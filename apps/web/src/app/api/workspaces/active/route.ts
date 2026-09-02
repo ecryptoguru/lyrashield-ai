@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { cookies, headers } from "next/headers"
 import { auth, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
@@ -6,7 +7,7 @@ import { z } from "zod"
 
 const ActiveWorkspaceSchema = z.object({ workspaceId: z.string().min(1) })
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -45,3 +46,5 @@ export async function POST(request: Request) {
     return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
   }
 }
+
+export const POST = withCookieMutation(post)
