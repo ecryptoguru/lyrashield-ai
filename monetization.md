@@ -90,21 +90,21 @@ agent-minutes)│   history/team/monitoring →      │               │
 
 **Self-serve tiers (Polar global MoR + Razorpay India; INR = USD × 100):**
 
-| Tier                    | Monthly (USD/INR)       | Annual (prepaid, USD/INR)        | Targets | Agent-min/mo | Deep scans         |
-| ----------------------- | ----------------------- | -------------------------------- | ------- | ------------ | ------------------ |
-| **Starter**             | $29 / ₹2,900            | **$295 / ₹29,500** (15% off)     | 5       | **300**      | ❌ (Standard only) |
-| **Pro**                 | $99 / ₹9,900            | **$950 / ₹95,000** (20% off)     | 15      | **1,200**    | ✅ (3× meter)      |
-| **Team**                | $299 / ₹29,900          | **$2,690 / ₹2,69,000** (25% off) | 50      | **4,000**    | ✅ (3× meter)      |
-| **Agency / Enterprise** | **from $499 / ₹49,900** | custom                           | custom  | custom       | ✅                 |
+| Tier                 | Monthly (USD/INR)           | Annual (prepaid, USD/INR)    | Targets | Agent-min/mo | Deep scans         |
+| -------------------- | --------------------------- | ---------------------------- | ------- | ------------ | ------------------ |
+| **Starter**          | $29 / ₹2,900                | **$295 / ₹29,500** (15% off) | 5       | **300**      | ❌ (Standard only) |
+| **Pro**              | $99 / ₹9,900                | **$950 / ₹95,000** (20% off) | 15      | **1,200**    | ✅ (3× meter)      |
+| **Launch Assurance** | $499 / ₹49,900              | **$4,188 / ₹4,18,800**       | 50      | **6,000**    | ✅ (3× meter)      |
+| **Enterprise**       | **from $1,500 / ₹1,50,000** | custom                       | custom  | custom       | ✅                 |
 
-**Meter:** protected targets + **agent minutes** (active agent-loop time, published; **Deep/Custom meter at ~3×**). **Overage: $0.15/agent-min.** **Minute top-up packs (valid 180 days):** **100 min / $15 · 250 min / $30 · 500 min / $50** (volume discount). Included monthly pool doesn't roll over. Starter/Pro buy packs; Team can buy packs and/or opt into metered overage + spend limit. **Mid-scan grace:** when an agent-minute balance hits 0 mid-scan, the workspace enters a **15-minute grace period** (wall-clock, `GRACE_CAP_MS = 900,000 ms`); the scan continues during grace and is stopped with `STOPPED_BUDGET` if grace is exceeded. Grace resets on cycle rollover.
+**Meter:** protected targets + **agent minutes** (active agent-loop time, published; **Deep/Custom meter at ~3×**). **Overage: $0.15/agent-min.** **Minute top-up packs (valid 180 days):** **100 min / $15 · 250 min / $30 · 500 min / $50** (volume discount). Included monthly pool doesn't roll over. Starter/Pro buy packs; Launch Assurance can buy packs and/or opt into metered overage + spend limit. **Mid-scan grace:** when an agent-minute balance hits 0 mid-scan, the workspace enters a **15-minute grace period** (wall-clock, `GRACE_CAP_MS = 900,000 ms`); the scan continues during grace and is stopped with `STOPPED_BUDGET` if grace is exceeded. Grace resets on cycle rollover.
 
 **Tier feature gates (capacity + collaboration + depth, never core detection):**
 
 - **Starter:** Standard scans (no Deep), fix PRs, basic report. _(Role: entry tier / price anchor for Pro.)_
 - **Pro:** + **Deep scans**, weekly monitoring, Slack/Discord, MCP, GitHub Action.
-- **Team:** + team seats, scheduled scans, Jira/Linear, shared reports.
-- **Agency/Enterprise:** + multi-workspace, branded reports, client share links, priority support; SSO/SCIM/private workers/compliance (Phase 4).
+- **Launch Assurance:** + continuous launch gate with a versioned verdict, team seats, scheduled scans, Jira/Linear, shared reports.
+- **Enterprise:** + multi-workspace, branded reports, client share links, priority support; SSO/SCIM/private workers/compliance (Phase 4).
 
 **Trial abuse controls (the trial is the front door):** email verification on, **100 agent-min hard cap, no Deep scans, 3-target cap**, scan-frequency throttle, no auto-convert, no card required (no surprise charges).
 
@@ -238,21 +238,21 @@ Agent-minutes meter **anything that runs the LLM engine**. Deterministic checks 
 
 Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3× pool drain). Allowances are the **final, raised** values.
 
-| Tier    | Price/mo | Incl. min | COGS/mo | Gross margin |
-| ------- | -------- | --------- | ------- | ------------ |
-| Starter | $29      | 300       | $2.47   | **91.5%**    |
-| Pro     | $99      | 1,200     | $9.86   | **90.0%**    |
-| Team    | $299     | 4,000     | $32.88  | **89.0%**    |
+| Tier             | Price/mo | Incl. min | COGS/mo | Gross margin |
+| ---------------- | -------- | --------- | ------- | ------------ |
+| Starter          | $29      | 300       | $2.47   | **91.5%**    |
+| Pro              | $99      | 1,200     | $9.86   | **90.0%**    |
+| Launch Assurance | $499     | 6,000     | $49.32  | **90.1%**    |
 
 **Annual (after discount), monthly-equivalent margin:**
 
-| Tier    | Annual           | /mo-equiv | COGS/mo | Margin |
-| ------- | ---------------- | --------- | ------- | ------ |
-| Starter | $295 (15% off)   | $24.58    | $2.47   | 90.0%  |
-| Pro     | $950 (20% off)   | $79.17    | $9.86   | 87.5%  |
-| Team    | $2,690 (25% off) | $224.17   | $32.88  | 85.3%  |
+| Tier             | Annual           | /mo-equiv | COGS/mo | Margin |
+| ---------------- | ---------------- | --------- | ------- | ------ |
+| Starter          | $295 (15% off)   | $24.58    | $2.47   | 90.0%  |
+| Pro              | $950 (20% off)   | $79.17    | $9.86   | 87.5%  |
+| Launch Assurance | $4,188 (30% off) | $349.00   | $49.32  | 85.9%  |
 
-**Discount cost:** the 15/20/25% annual discounts reduce monthly-equivalent margin by only ~1.5–3.7 points. On COGS grounds they're essentially free; their real value is retention + upfront cash. **Keep them.**
+**Discount cost:** the 15/20/30% annual discounts reduce monthly-equivalent margin by only ~1.5–3.7 points. On COGS grounds they're essentially free; their real value is retention + upfront cash. **Keep them.**
 
 **Minute packs (final — volume-discounted):**
 
@@ -290,7 +290,7 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 
 **Cloud mode:**
 
-- Trial→paid %, tier mix, MRR/ARR, agent minutes consumed, gross margin per scan, Free-trial→Starter→Pro→Team progression, churn, expansion (packs/overage/upgrades).
+- Trial→paid %, tier mix, MRR/ARR, agent minutes consumed, gross margin per scan, Free-trial→Starter→Pro→Launch-Assurance progression, churn, expansion (packs/overage/upgrades).
 
 **Local mode:**
 
@@ -315,8 +315,8 @@ Worst-case = every included agent-minute consumed on Luna (Deep bounded by the 3
 **Cloud (SaaS):**
 
 - **Trial: 14-day, full-feature (Standard/Quick), NO card, 100 agent-min, 3 targets, NO Deep scans.** Convert on limits + clock.
-- Tiers $29/$99/$299 + $499 contact-led; annual 15/20/25% off; INR = USD×100.
-- Meter = targets + agent-minutes (active-loop time, Deep 3×). **Allowances: Starter 300 / Pro 1,200 / Team 4,000 agent-min/mo. Targets: Starter 5 / Pro 15 / Team 50. Overage $0.15/min. Packs: 100/$15 · 250/$30 · 500/$50 (valid 180 days, `PACK_VALIDITY_DAYS = 180`).** Team metered overage + spend limit. **Mid-scan grace: 15 min (`GRACE_CAP_MS = 900,000 ms`), then `STOPPED_BUDGET`.**
+- Tiers $29/$99 self-serve + $499 Launch Assurance self-serve + $1,500-from Enterprise contact-led; annual prices published directly; INR = USD×100.
+- Meter = targets + agent-minutes (active-loop time, Deep 3×). **Allowances: Starter 300 / Pro 1,200 / Launch Assurance 6,000 agent-min/mo. Targets: Starter 5 / Pro 15 / Launch Assurance 50. Overage $0.15/min. Packs: 100/$15 · 250/$30 · 500/$50 (valid 180 days, `PACK_VALIDITY_DAYS = 180`).** Launch Assurance metered overage + spend limit. **Mid-scan grace: 15 min (`GRACE_CAP_MS = 900,000 ms`), then `STOPPED_BUDGET`.**
 - **Deep scans gated to Pro and above** (Starter = Standard only — Starter is the price anchor for Pro).
 - Polar (global MoR) + Razorpay (India). **Refunds: purchases are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.** EDU/OSS discounted, not free. Marketplace Phase 2. Support: community free / priority on higher tiers.
 

@@ -4,7 +4,7 @@ WebMCP Assurance is a LyraShield AI feature that helps builders discover, review
 
 ## What it checks
 
-WebMCP is the browser-native extension of the Model Context Protocol. A page can register tools that a model or agent can call. Those tools can read UI state, prepare scans, or trigger durable actions. WebMCP Assurance checks the resulting tool surface against ten controls.
+WebMCP is the browser-native extension of the Model Context Protocol. A page can register tools that a model or agent can call. Those tools can read UI state, prepare scans, or trigger durable actions. WebMCP Assurance checks the resulting tool surface against twelve controls.
 
 ## Control catalog
 
@@ -20,6 +20,10 @@ WebMCP is the browser-native extension of the Model Context Protocol. A page can
 | WEBMCP-08 | Registration lacks lifecycle cleanup                       | MEDIUM   | deterministic |
 | WEBMCP-09 | Weak schema or missing runtime validation                  | HIGH     | deterministic |
 | WEBMCP-10 | Duplicate, overlapping, or misleading tool contract        | MEDIUM   | deterministic |
+| WEBMCP-11 | Credential or secret embedded in a tool definition         | HIGH     | deterministic |
+| WEBMCP-12 | Prompt-injection surface in a tool contract                | HIGH     | deterministic |
+
+False-positive guards for the two newest controls: a field named `apiKey` that is an empty input parameter the caller fills is not an embedded secret (WEBMCP-11) — only literal credential values are flagged; ordinary imperative documentation of a tool's own behavior is not an injection attempt (WEBMCP-12) — only text addressed at the model's instruction hierarchy is flagged.
 
 Each control produces one of four evidence states: `DETECTED`, `NO_FINDING`, `INCONCLUSIVE`, or `NOT_ASSESSED`. No `INCONCLUSIVE` or `NOT_ASSESSED` result is treated as a clean pass.
 

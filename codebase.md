@@ -1,6 +1,6 @@
 # LyraShield AI — Codebase Guide
 
-> Current implementation map: 2026-08-26. Read [AGENTS.md](./AGENTS.md) first for the immediate handoff and rules; use [PRD.md](./PRD.md) for product scope and release gates. Running code, Prisma schema, migrations, CI, and live evidence override this guide.
+> Current implementation map: 2026-09-02 (post Deep Review v14 and the WP1–WP7 launch-assurance wave). Read [AGENTS.md](./AGENTS.md) first for the immediate handoff and rules; use [PRD.md](./PRD.md) for product scope and release gates. Running code, Prisma schema, migrations, CI, and live evidence override this guide.
 
 ## 1. System overview
 
@@ -57,31 +57,33 @@ Version rules:
 
 ### Shared packages
 
-| Package            | Responsibility                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| `auth`             | Better Auth server/client split, sessions, permissions, OAuth workspace binding           |
-| `db`               | Prisma schema/migrations/client, RLS/scoping, audit chain, domain services                |
-| `types`            | Zod schemas, DTOs, enums, queue/action/scan contracts, OpenAPI exports                    |
-| `ui`               | Accessible shared controls, cards, forms, dialogs, themes, loading/empty states           |
-| `config`           | Environment schemas and shared TypeScript/ESLint configuration                            |
-| `logger`           | Structured, circular-safe, truncating, secret/PII-redacting logs                          |
-| `integrations`     | GitHub, Redis, shared queue, notifications, external providers                            |
-| `security`         | SSRF-safe fetch, public-surface analysis, AI security scanner, prompt/input controls      |
-| `egress-proxy`     | Authenticated DNS-pinned SSRF-safe URL fetching                                           |
-| `score`            | Pure versioned LyraShield Score calculation and eligibility rules                         |
-| `billing`          | Polar/Razorpay gateways, entitlements, trial, usage, packs, grace, overage, sync          |
-| `pricing`          | Cloud plans, minute packs, Local SKUs                                                     |
-| `licenses`         | ed25519 license signing/verification and canonical JSON                                   |
-| `affiliate`        | Attribution, commissions, fraud checks, payouts, reserves, webhook dispatch               |
-| `evidence-storage` | AES-256-GCM envelope encryption and private storage abstraction                           |
-| `mcp`              | API-backed MCP server, stdio transport, tool schemas, prompt-injection guard              |
-| `sdk`              | Authenticated API client used by CLI and MCP                                              |
-| `credentials`      | Single source for `~/.lyrashield/credentials.json`, env precedence, API URL normalization |
-| `cli`              | Canonical unscoped `lyrashield` CLI                                                       |
-| `cli-alias`        | Deprecated `@lyrashield/cli` compatibility wrapper                                        |
-| `agent-registry`   | Install metadata for supported coding agents                                              |
-| `agent-rules`      | Agent policy/rule/skill rendering                                                         |
-| `agent-plugin`     | Portable plugin, MCP descriptor, skill, and client shims                                  |
+| Package            | Responsibility                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| `auth`             | Better Auth server/client split, sessions, permissions, OAuth workspace binding            |
+| `db`               | Prisma schema/migrations/client, RLS/scoping, audit chain, domain services                 |
+| `types`            | Zod schemas, DTOs, enums, queue/action/scan contracts, OpenAPI exports                     |
+| `ui`               | Accessible shared controls, cards, forms, dialogs, themes, loading/empty states            |
+| `config`           | Environment schemas and shared TypeScript/ESLint configuration                             |
+| `logger`           | Structured, circular-safe, truncating, secret/PII-redacting logs                           |
+| `integrations`     | GitHub, Redis, shared queue, notifications, external providers                             |
+| `security`         | SSRF-safe fetch, public-surface analysis, AI security scanner, prompt/input controls       |
+| `egress-proxy`     | Authenticated DNS-pinned SSRF-safe URL fetching                                            |
+| `score`            | Pure versioned LyraShield Score calculation and eligibility rules                          |
+| `billing`          | Polar/Razorpay gateways, entitlements, trial, usage, packs, grace, overage, sync           |
+| `pricing`          | Cloud plans, minute packs, Local SKUs                                                      |
+| `licenses`         | ed25519 license signing/verification and canonical JSON                                    |
+| `affiliate`        | Attribution, commissions, fraud checks, payouts, reserves, webhook dispatch                |
+| `evidence-storage` | AES-256-GCM envelope encryption and private storage abstraction                            |
+| `mcp`              | API-backed MCP server, stdio transport, tool schemas, prompt-injection guard               |
+| `sdk`              | Authenticated API client used by CLI and MCP                                               |
+| `credentials`      | Single source for `~/.lyrashield/credentials.json`, env precedence, API URL normalization  |
+| `cli`              | Canonical unscoped `lyrashield` CLI                                                        |
+| `cli-alias`        | Deprecated `@lyrashield/cli` compatibility wrapper                                         |
+| `agent-registry`   | Install metadata for supported coding agents                                               |
+| `agent-rules`      | Agent policy/rule/skill rendering                                                          |
+| `agent-plugin`     | Portable plugin, MCP descriptor, skill, and client shims                                   |
+| `gate`             | Pure versioned Launch Gate standard (`lyrashield-gate/1.0.0`) and verdict computation      |
+| `fix`              | Fix-PR core: plan-tiered diff scope policy, fail-closed diff validator, applier, checksums |
 
 Generated output—`.next`, `dist`, `.turbo`, `.astro`, `.wrangler`, motion renders, media-local, Prisma generated client, `node_modules`, and `*.tsbuildinfo`—is not source.
 
@@ -181,8 +183,8 @@ Platform administration is intentionally outside this workspace role order:
 - `AsyncLocalStorage` provides request-safe workspace context.
 - `withWorkspaceRLS(workspaceId, fn)` uses transaction-local DB context.
 - `SOFT_DELETE_MODELS` contains only models with `deletedAt`.
-- `WORKSPACE_SCOPED_MODELS` contains only directly scopable models with `workspaceId`.
-- Child tables are scoped through parents and protected by fail-closed RLS policies.
+- `WORKSPACE_SCOPED_MODELS` contains only directly scopable models with `workspaceId` (31 models; `GateVerdict` joined with its RLS migration `20260902100000_gateverdict_rls`).
+- Child tables are scoped through parents and protected by fail-closed RLS policies. `GateVerdict` is RLS-protected directly (batch-3 permissive/strict pattern).
 - Production runtime role must be neither superuser nor `BYPASSRLS`.
 
 ### Audit chain
@@ -192,7 +194,7 @@ Use `prisma.auditLog.create()` through the extended client. Its advisory-locked 
 ### Queue and lifecycle
 
 - Queue authority: `packages/integrations/src/queue.ts`.
-- Use `getScanQueue()` and `enqueueScan()`; never instantiate one-off queues.
+- Use `getScanQueue()` and `enqueueScan()`; never instantiate one-off queues. The fix-generation queue is `enqueueFixGenerate()` from the same module (jobId = fixProposalId); its worker consumer skips proposals already `ready`.
 - Admission checks worker readiness before Scan creation and again at enqueue.
 - Worker heartbeat refreshes every two minutes and expires after five minutes. Heartbeat registration and readiness each use a single-key Lua operation; the separate admission-stop key is checked with `EXISTS` so Redis Cluster never receives a cross-slot script.
 - BullMQ workers use a 10-minute idle `drainDelay` and one-minute stalled check. The modeled 30-day idle command count is 324,019 before and 132,495 after this pacing change (59.11% reduction); it is not live telemetry.
@@ -206,7 +208,7 @@ Lifecycle:
 QUEUED → PREFLIGHT → RUNNING → VERIFYING → COMPLETED
 ```
 
-Alternatives: `FAILED`, `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, `REQUIRES_APPROVAL`.
+Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, `REQUIRES_APPROVAL`. After any terminal state the worker refreshes the target's gate verdict (`evaluateGateForTarget`, best-effort). A failed engine run persists a bounded, redacted stdout/stderr tail to encrypted evidence storage (`engine-stream-tail`) referenced from an `engine_exit_tail` scan event — raw stream content never enters operational logs.
 
 ### Engine boundary
 
@@ -251,6 +253,8 @@ consume agent-minutes; failed runs with positive provider usage remain billable.
 - The result manifest is persisted before retest finalization; crash recovery resumes pending retests from stored receipt evidence before scoring, without replaying billable work.
 - Findings list responses carry a deterministic page-local priority heuristic (severity, status, verified, confidence, target environment, business impact/exploitability context). It is triage context, never proof of exploitability or reachability, and does not change cursor pagination.
 - Finding detail never exposes raw evidence storage URIs; retest receipts surface baseline/retest scan IDs, manifest checksums, revisions, method, and coverage state.
+- Repository findings carry `baseCommit` (the scanned source revision, stamped by `persistFindings`), `implicatedFiles`, and structured fix evidence. The fix-PR pipeline: proposal → `fix-generate` job (deterministic diff from the engine's structured fix, plan-tiered scope validation: PRO+ implicated-set/200 lines, STARTER and below current-file/100) → approval-bound execution (`fix-pr.ts`, checksum-bound, re-validated at execute time, no merge call anywhere). A merged `lyrashield/fix-` branch closes the loop: PR marked merged, a NEW retest scan created and enqueued (the Retest binds to the NEW scan id), gate verdict re-evaluated. Loop-closure failures delete the webhook delivery marker so GitHub redelivers the idempotent path.
+- The Launch Gate: `packages/gate` computes the verdict (`lyrashield-gate/1.0.0`, pure, versioned); `packages/db/src/gate-service.ts` persists append-only `GateVerdict` rows under RLS; uncovered target types always yield INSUFFICIENT_EVIDENCE. `packages/db/src/launch-report-payload.ts` is the ONLY public launch-report payload constructor (key-set regression test, same discipline as `buildScorecardPayload`).
 - Result manifests bind worker execution provenance into their checksum: exact product revision, worker image digest, and engine revision. The production worker fails closed before readiness when any value is missing or malformed; the VM launcher derives all three from the digest-pinned image and its OCI labels.
 - `provision-alerts.sh` reads every rule back after provisioning and fails unless each metric alert and scheduled query is enabled, auto-mitigates, and is bound to the operator action group. `scan_worker_lease_expired` remains unprovisioned until a durable counter exists.
 - `verify:launch-assurance` (host-side, dry-run first) composes evidence proofs, readiness, Azure alert readback, authenticated cancellation, and `reconcileScanQueue` into one ordered command with a bounded JSON receipt. Dry run is read-only; full mode requires exact scan/workspace IDs and the production confirmation phrase.
@@ -261,7 +265,7 @@ consume agent-minutes; failed runs with positive provider usage remain billable.
 - Installation ownership must be provider-backed and bound to initiating user/workspace.
 - Approval claims exact action name and input hash atomically and once.
 - Fix PR route accepts no client-authored patch, branch, title, or body.
-- PR execution remains disabled until a server-generated immutable patch/evidence artifact is approval-bound.
+- PR execution is fail-closed: privileged PR creation runs only a server-generated immutable patch/evidence artifact, immutably bound to an explicit human approval.
 
 ### Public sharing
 
@@ -432,6 +436,8 @@ Current command output is authoritative; never copy historical test counts forwa
 - S3/R2-compatible evidence layer; the 2026-08-26 production round-trip and missing-KEK fail-closed probes passed.
 
 ### Current worker proof
+
+(Record from the 2026-08-26 acceptance round. The engine worker pin has since advanced — engine `.lyrashield-worker-pin` now points at web `ae205163`, and web `deploy-azure.yml` pins engine `2c8fccc3e37a5e21f5752503cc77fc752519cdce` — but no new acceptance round has run against the post-v14 deployment; the evidence below describes the 2026-08-26 deployment.)
 
 - Product revision: `16a1fb7014ce3cbf9e56b69bff5074a5d0d8e0dd`.
 - Engine revision: `852b1ed7ff76d177cef4db5aa1cfbd3bbe6d2664`.

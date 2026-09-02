@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current source of truth: 2026-08-26. This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current source of truth: 2026-09-02 (post Deep Review v14 and the WP1–WP7 launch-assurance wave). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -187,17 +187,25 @@ Result integrity requirements:
 QUEUED → PREFLIGHT → RUNNING → VERIFYING → COMPLETED
 ```
 
-Terminal alternatives: `FAILED`, `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, and `REQUIRES_APPROVAL`.
+Terminal alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved — never reported as COMPLETED), `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, and `REQUIRES_APPROVAL`.
 
-Repository jobs are admitted only while a live worker heartbeat exists. Queue/database drift fails closed; paid work is never automatically replayed after an ambiguous failure.
+Repository jobs are admitted only while a live worker heartbeat exists. Queue/database drift fails closed; paid work is never automatically replayed after an ambiguous failure. A mid-run spend ceiling is enforced both engine-side and by the worker polling live spend (SIGTERM at the grace-adjusted cap). After any terminal state the worker refreshes the target's gate verdict.
 
 ### Remediation
 
 - User may create and inspect a fix proposal.
 - Consequential actions require permission and exact-input approval.
 - Fix PR endpoint accepts no client patch, branch, title, or body.
-- PR creation remains disabled until server-generated patch provenance and GitHub installation ownership are bound.
+- The full fix-PR pipeline is wired end to end (v14): proposal creation enqueues deterministic patch generation from the engine's structured fix (`fix-generate` job, plan-tiered scope validation, encrypted evidence storage); findings carry the scanned `baseCommit` so patches apply against exactly the commit analyzed; a merged `lyrashield/fix-` branch triggers loop-closure — the PR is marked merged, a REAL retest scan is created and queued (bound to the NEW scan, never the finding's original terminal scan). Nothing auto-merges; every PR is an approval-gated proposal.
 - Retest scope derives from the server-owned source scan, never a client-selected replacement.
+
+### Launch gate and assurance reporting
+
+- The Launch Gate is a named, versioned readiness standard (`lyrashield-gate/1.0.0`): a pure function over stored evidence producing READY / NOT_READY / INSUFFICIENT_EVIDENCE verdicts, persisted append-only per target (`GateVerdict`, RLS-protected). Coverage requirements derive from the scan registry; uncovered target types can never earn READY.
+- The verdict is refreshed after every terminal scan state, after a merged fix PR, and on demand via `POST /api/gate/[targetId]`.
+- The Launch Readiness Report renders the verdict as a shareable, verifiable artifact: frozen allowlisted payload (`buildLaunchReportPayload`), ed25519 signature over the checksum (server-owned key), 30-day share tokens, and a public verify endpoint. MEDIUM/LOW findings are disclosed as not gate-evaluated rather than counted as zero.
+- The AI-Built Failure Taxonomy (`ai-built-failure-taxonomy/1.0.0`) is the named, public, citable catalog of how AI-built apps characteristically fail, with every class traced to live controls; exposed read-only at `/api/taxonomy/ai-built-failures`.
+- WebMCP Assurance covers 12 controls (WEBMCP-01…12, including embedded-secret and prompt-injection-surface detection on the tool surface).
 
 ### Reports and sharing
 
@@ -210,21 +218,36 @@ Repository jobs are admitted only while a live worker heartbeat exists. Queue/da
 
 ### Cloud plans
 
-| Plan    |      Monthly price | Included minutes | Targets | Deep                   |
-| ------- | -----------------: | ---------------: | ------: | ---------------------- |
-| Trial   |     $0 for 14 days |              100 |       3 | No                     |
-| Starter |                $29 |              300 |       5 | No                     |
-| Pro     |                $99 |            1,200 |      15 | Yes                    |
-| Team    |               $299 |            4,000 |      50 | Yes + optional overage |
-| Agency  | $499 / contact-led |           Custom |  Custom | Yes                    |
+Two product lines (WP1 repricing, founder-confirmed 2026-08-29, in code at `packages/pricing/src/plans.ts`):
 
-Annual prices: Starter $295, Pro $950, Team $2,690. INR uses the internal USD × 100 pricing rule. Do not publish or change pricing without founder approval.
+**Line 1 — Scan** (find what's wrong):
 
-Minute packs: 100/$15, 250/$30, 500/$50; 180-day validity. Team overage: $0.15/min when explicitly enabled with a spend limit. Deep/Custom consume minutes at 3×.
+| Plan    |     Monthly | Annual |      Minutes | Targets | Deep |
+| ------- | ----------: | -----: | -----------: | ------: | ---- |
+| Trial   | $0, 14 days |      — | 100 one-time |       3 | No   |
+| Starter |         $29 |   $295 |          300 |       5 | No   |
+| Pro     |         $99 |   $950 |        1,200 |      15 | Yes  |
+
+**Line 2 — Launch Assurance** (prove it to a third party):
+
+| Plan             |     Monthly |             Annual | Minutes | Targets | Self-serve |
+| ---------------- | ----------: | -----------------: | ------: | ------: | ---------- |
+| Launch Assurance |        $499 | $4,188 (= $349/mo) |   6,000 |      50 | Yes        |
+| Enterprise       | from $1,500 |                  — |  custom |  custom | No         |
+
+- Team ($299) was removed and merged into Launch Assurance. The `TEAM` enum value is retained in the schema for existing rows; the plan is not sold.
+- Annual discount ladder is deliberately 15 / 20 / 30 across the two lines.
+- Overage: $0.15/min, Launch Assurance only, with a user-set spend limit. Deep/Custom consume minutes at 3×.
+- Integrations (GitHub, Slack, Jira) moved down to Pro. RBAC and shared reports stay at Launch Assurance and above.
+- Failed scans are never billed; cancelled scans bill elapsed time only (no 1-minute floor).
+
+Minute packs: 100/$15, 250/$30, 500/$50; 180-day validity.
 
 Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 minutes of non-bankable mid-scan grace; a scan starting at zero is rejected.
 
 Cloud subscriptions, Local licenses, and minute packs are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error. Provider-confirmed reversals still revoke entitlements and claw back related commissions.
+
+Do not publish or change pricing without founder approval.
 
 ### Local pricing
 

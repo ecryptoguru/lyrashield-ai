@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last verified against the application code and open-registration deployment: 2026-08-26
+Last verified against the application code and open-registration deployment: 2026-09-02
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -292,7 +292,13 @@ Depending on your permission, you may also mark a finding as accepted risk or fa
 
 The **Fix proposals** page lists proposals created from findings. A proposal is guidance and an auditable plan; it is not proof that code changed.
 
-Automatic Fix PR execution is intentionally fail-closed. The application does not accept a client-authored patch, branch, title, or body for privileged PR creation. Creating a real PR remains unavailable until a server-generated patch can be immutably bound to an approval.
+Automatic Fix PR execution is intentionally fail-closed. The application does not accept a client-authored patch, branch, title, or body for privileged PR creation. A real PR is created only from a server-generated patch — deterministically assembled from the engine's structured fix and validated against a plan-tiered scope policy — immutably bound to an explicit human approval before anything is pushed to your repository.
+
+Additional controls around fixes and releases:
+
+- **Launch Gate verdicts** — the gate evaluates a target's retained evidence (latest completed scan, coverage receipts, and findings) into one of three immutable verdict states: `READY`, `NOT_READY`, or `INSUFFICIENT_EVIDENCE`, with blocking reasons, coverage/non-coverage statements, and a staleness signal that tells you when to re-run the gate. `GET /api/gate/[targetId]?workspaceId=…` returns the latest persisted verdict (404 `NOT_EVALUATED` before the first evaluation); `POST` on the same route re-evaluates against current evidence and is limited to members who can create scans.
+- **Signed Launch Readiness Reports** — the launch-readiness report carries an ed25519 signature over its checksum when a signing key is configured for the deployment (`signed: true` on the generated report). Anyone can check a presented report against `POST /api/reports/verify` (`reportChecksum` + `signature`), which returns `{ verified, signingKeyId }` and never verifies against a client-supplied key. Without a configured key the report still issues, marked unsigned.
+- **Approval-gated fix PRs with automatic retest** — a fix proposal with a server-generated patch can be turned into a pull request only through an explicit human approval (`fix.approve`, tighter than `fix.create`); the patch is validated against a plan-tiered scope policy before approval. When the merged fix PR lands in your repository, the server automatically queues a retest scan for the finding and re-evaluates the gate; the finding stays `FIXED_PENDING_RETEST` until that retest records its result.
 
 ## 13. Retests
 
