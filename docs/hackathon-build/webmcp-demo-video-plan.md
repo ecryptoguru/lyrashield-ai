@@ -4,6 +4,8 @@
 
 This is a recording plan, not a published video. Keep the Devpost project as a draft until a real public YouTube URL exists and all required form fields are reviewed.
 
+For the HyperFrames composition, tracks, visual identity, real-capture policy, and render gates, use [webmcp-hyperframes-production-plan.md](webmcp-hyperframes-production-plan.md).
+
 The public Security Lab was rechecked in Brave on September 2. The unsafe sample produced 7 detected and 7 no-finding controls. Preparing the supported `WEBMCP-03` rewrite changes `exposedTo: ["*"]` to `exposedTo: []`; applying it in memory and rerunning produced 6 detected and 8 no-finding controls. No source-upload request or browser-console error was observed.
 
 Native WebMCP proof is still required. The current Brave session does not expose `document.modelContext`; do not imply that it does. Before recording, obtain one headed supported-client capture showing a real native tool invocation. Use Chrome 149+ with the two official WebMCP flags enabled, or a supported ChatGPT desktop session. Do not claim dashboard-tool execution until an ordinary isolated judge account exists.
