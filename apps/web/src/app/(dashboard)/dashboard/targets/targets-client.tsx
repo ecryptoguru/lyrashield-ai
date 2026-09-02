@@ -260,7 +260,7 @@ export function TargetsClient({
   }
 
   return (
-    <div className="min-w-0 max-w-full">
+    <div className="min-w-0 max-w-full overflow-x-clip">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {filterProjectId && (

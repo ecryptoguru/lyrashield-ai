@@ -56,6 +56,7 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   ).toBeOK()
   await page.goto("/dashboard/targets")
   await expect(page.getByText("Mobile Alpha target", { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   const owner = await prisma.user.findUniqueOrThrow({ where: { email } })
   const payload = `<img src=x onerror=alert(1)> ${"unbroken".repeat(70)} END_OF_EXACT_INPUT`
   const approval = await prisma.agentApproval.create({
