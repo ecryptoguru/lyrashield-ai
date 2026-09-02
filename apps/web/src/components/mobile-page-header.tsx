@@ -15,6 +15,8 @@ import { ThemeToggle } from "./theme-toggle"
 function usePageTitle(explicit?: string): string {
   const pathname = usePathname()
   if (explicit) return explicit
+  const exact = NAV_TITLE_ITEMS.find((item) => pathname === item.href)
+  if (exact) return exact.label
   const match = NAV_TITLE_ITEMS.filter(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
   ).sort((a, b) => b.href.length - a.href.length)[0]

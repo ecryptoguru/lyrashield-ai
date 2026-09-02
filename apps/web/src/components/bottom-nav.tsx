@@ -12,8 +12,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { ChevronRight, Menu } from "lucide-react"
+import { ChevronRight, Menu, LogOut } from "lucide-react"
 import { useState } from "react"
+import { authClient } from "@lyrashield/auth"
+import { apiPost } from "@/lib/api-client"
+import { WorkspaceSwitcher } from "./workspace-switcher"
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") {
@@ -98,15 +101,36 @@ export function BottomNav({
   canViewEvidenceVault = false,
   canManageBilling = false,
   platformAdminHref = null,
+  workspaces = [],
+  activeWorkspaceId = null,
 }: {
   unreadNotifications?: number
   pendingApprovals?: number
   canViewEvidenceVault?: boolean
   canManageBilling?: boolean
   platformAdminHref?: string | null
+  workspaces?: React.ComponentProps<typeof WorkspaceSwitcher>["workspaces"]
+  activeWorkspaceId?: string | null
 }) {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function changeSession(workspaceId?: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      if (workspaceId) await apiPost("/api/workspaces/active", { workspaceId })
+      else {
+        const result = await authClient.signOut()
+        if (result.error) throw new Error("Unable to sign out. Please try again.")
+      }
+      window.location.assign(workspaceId ? "/dashboard" : "/sign-in")
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to update your session")
+      setBusy(false)
+    }
+  }
   const { mobilePrimary, more } = resolveNav({
     pendingApprovals,
     canViewEvidenceVault,
@@ -162,6 +186,22 @@ export function BottomNav({
                 Additional workspace navigation and settings.
               </SheetDescription>
             </SheetHeader>
+            <fieldset disabled={busy} className="mt-3 space-y-2 px-1">
+              <p className="text-sm font-medium">
+                {workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.name ??
+                  "Select workspace"}
+              </p>
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                activeId={activeWorkspaceId}
+                onSelect={(id) => void changeSession(id)}
+              />
+            </fieldset>
+            {error && (
+              <p role="alert" className="text-destructive px-1 text-sm">
+                {error}
+              </p>
+            )}
             {/* A single-column list rather than a grid: the list is the exact complement of
                 the bottom bar, so it grows as destinations are added and a grid leaves a
                 ragged final row. */}
@@ -175,6 +215,15 @@ export function BottomNav({
                   unreadNotifications={unreadNotifications}
                 />
               ))}
+              <Button
+                variant="ghost"
+                className="min-h-11 justify-start gap-3 px-3"
+                disabled={busy}
+                onClick={() => void changeSession()}
+              >
+                <LogOut className="size-4.5" aria-hidden="true" />
+                Sign out
+              </Button>
             </div>
           </SheetContent>
         </Sheet>

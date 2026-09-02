@@ -114,6 +114,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </main>
       <BottomNav
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
         unreadNotifications={unreadNotifications}
         pendingApprovals={pendingApprovals}
         canViewEvidenceVault={canViewEvidenceVault}

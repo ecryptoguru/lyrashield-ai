@@ -4,21 +4,12 @@ import { useState } from "react"
 import { AlertTriangle, Check, Copy, RotateCcw } from "lucide-react"
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
 import { writeClipboard } from "./scorecard-share-composer"
+import { safeApiErrorMessage } from "@/lib/safe-api-error-message"
+export { safeApiErrorMessage } from "@/lib/safe-api-error-message"
 
 interface ApiErrorCardProps {
   error: Error & { digest?: string }
   reset?: () => void
-}
-
-const MAX_ERROR_MESSAGE_LENGTH = 500
-
-export function safeApiErrorMessage(message: unknown): string {
-  if (typeof message !== "string") return "Unknown error"
-  const sanitized = message.replace(/[\p{Cc}\p{Cf}]/gu, " ").trim()
-  if (!sanitized) return "Unknown error"
-  return sanitized.length > MAX_ERROR_MESSAGE_LENGTH
-    ? `${sanitized.slice(0, MAX_ERROR_MESSAGE_LENGTH)}…`
-    : sanitized
 }
 
 export function ApiErrorCard({ error, reset }: ApiErrorCardProps) {

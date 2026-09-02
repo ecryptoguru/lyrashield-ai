@@ -214,6 +214,15 @@ export const NAV_TITLE_ITEMS: NavItem[] = [
   REVIEW_QUEUE_BASE,
   PLATFORM_ADMIN_BASE,
   BILLING_BASE,
+  EVIDENCE_VAULT_BASE,
+  {
+    href: "/dashboard/launch-readiness",
+    label: "Launch Readiness",
+    shortLabel: "Readiness",
+    icon: ShieldCheck,
+  },
+  { href: "/dashboard/fixes", label: "Fixes", shortLabel: "Fixes", icon: Bug },
+  { href: "/dashboard/projects", label: "Projects", shortLabel: "Projects", icon: Crosshair },
   ...WORKSPACE_NAV_ITEMS,
 ]
 

@@ -108,7 +108,9 @@ export function V2Sidebar({
     try {
       await apiPost("/api/workspaces/active", { workspaceId: id })
       setActiveWorkspaceId(id)
-      router.refresh()
+      // A document navigation clears all workspace-bound client state and caches.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/dashboard")
     } catch {
       // Keep the last server-confirmed workspace selected if persistence fails.
     }

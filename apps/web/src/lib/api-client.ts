@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { ApiResponse, PaginatedResponse } from "@lyrashield/types"
+import { safeApiErrorMessage } from "./safe-api-error-message"
 
 export class ApiError extends Error {
   details?: unknown
@@ -9,7 +10,7 @@ export class ApiError extends Error {
     message: string,
     public status: number
   ) {
-    super(message)
+    super(safeApiErrorMessage(message))
     this.name = "ApiError"
   }
 }
