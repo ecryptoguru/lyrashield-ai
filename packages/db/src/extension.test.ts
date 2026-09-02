@@ -230,8 +230,10 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     expect(SOFT_DELETE_MODELS.has("ScanEvent")).toBe(true)
   })
 
-  it("workspace-scoped set contains only auto-scopable models with workspaceId (30)", () => {
-    expect(WORKSPACE_SCOPED_MODELS.size).toBe(30)
+  it("workspace-scoped set contains only auto-scopable models with workspaceId (31)", () => {
+    // 30 → 31: GateVerdict joined the set with its RLS migration
+    // (20260902100000_gateverdict_rls).
+    expect(WORKSPACE_SCOPED_MODELS.size).toBe(31)
     for (const m of [
       "ScanEvent",
       "Evidence",

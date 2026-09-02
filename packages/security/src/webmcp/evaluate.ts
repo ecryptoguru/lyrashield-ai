@@ -226,9 +226,12 @@ function evaluateControl11(tool: WebMcpToolSurface): WebMcpEvidenceState {
 // WEBMCP-12: instruction-shaped text aimed at the consuming model in the tool
 // contract — the tool surface as a prompt-injection vector. The filler group
 // uses literal single spaces (no quantifiers inside the repeated group) to stay
-// clear of the unsafe-regex lint and any ReDoS surface.
+// clear of the unsafe-regex lint and any ReDoS surface. The separator class
+// accepts [-_ ] because instruction-shaped TOOL NAMES are identifier-like
+// ("ignore-previous-instructions", "ignore_previous_instructions") — the
+// control's surface includes the tool name.
 const PROMPT_INJECTION_SURFACE =
-  /\b(ignore|disregard|forget|override) (all |any |every |the |your |previous |prior |above |earlier |system ){0,3}(instructions|prompts|rules|directives|guardrails)\b|\byou (must|should|will|shall) (always|never)\b|\bsystem prompt\b|\bas an? (ai|language model)\b|\bdo not tell the user\b/i
+  /\b(ignore|disregard|forget|override)[-_ ](?:all[-_ ]|any[-_ ]|every[-_ ]|the[-_ ]|your[-_ ]|previous[-_ ]|prior[-_ ]|above[-_ ]|earlier[-_ ]|system[-_ ]){0,3}(instructions|prompts|rules|directives|guardrails)\b|\byou (must|should|will|shall) (always|never)\b|\bsystem prompt\b|\bas an? (ai|language model)\b|\bdo not tell the user\b/i
 
 function evaluateControl12(tool: WebMcpToolSurface): WebMcpEvidenceState {
   // The control's text covers "name, title, description" — the tool name is

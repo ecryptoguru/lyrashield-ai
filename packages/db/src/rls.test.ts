@@ -121,6 +121,8 @@ describe("RLS helpers", () => {
       "AgentApproval",
       // Added by 20260713010000_scoresnapshot_rls (missed by the batch-3 pass).
       "ScoreSnapshot",
+      // Added by 20260902100000_gateverdict_rls (same miss pattern).
+      "GateVerdict",
       "FindingCandidate",
       "FindingVerification",
       "AiSystemProfile",
