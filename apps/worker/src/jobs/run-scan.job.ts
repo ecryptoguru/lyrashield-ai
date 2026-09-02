@@ -2,7 +2,13 @@ import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
-import { recordAgentMinutes, enterGrace, debitOverage } from "@lyrashield/billing"
+import {
+  recordAgentMinutes,
+  hasUnsettledScanIntent,
+  enterGrace,
+  debitOverage,
+} from "@lyrashield/billing"
+
 import {
   buildVibeSecurityInstruction,
   summarizeVibeSecurityCoverage,
@@ -65,6 +71,23 @@ import {
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import { ScanJobDataSchema, type ScanJobData, type ScanJobResult } from "../types"
 import type { ScannerCoverageIssue } from "../engine/scanner-coverage"
+
+async function reportInterruptedSettlement(workspaceId: string, scanId: string): Promise<void> {
+  let checkUnavailable = false
+  const pending = await hasUnsettledScanIntent(workspaceId, scanId).catch(() => {
+    checkUnavailable = true
+    return true
+  })
+  if (pending) {
+    logger.error("billing.scan_settlement_commit_uncertain", {
+      workspaceId,
+      scanId,
+      accountingReviewRequired: true,
+      automaticReplayAllowed: false,
+      checkUnavailable,
+    })
+  }
+}
 
 export function extractActualCostUsd(usage: Record<string, unknown> | undefined): number | null {
   if (!usage) return null
@@ -694,9 +717,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       const terminalOutcome = storedTerminalOutcome(pendingFinalization?.resultManifest?.manifest)
       if (pendingFinalization?.status === "COMPLETED") {
+        await reportInterruptedSettlement(workspaceId, scanId)
         return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
       }
       if (pendingFinalization?.status === "PARTIAL") {
+        await reportInterruptedSettlement(workspaceId, scanId)
         return {
           status: "failed",
           errorCategory: pendingFinalization.errorCategory ?? "PARTIAL",
@@ -1997,9 +2022,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // post-processing or an uncertain commit response must not turn a charged
       // COMPLETED/PARTIAL result into FAILED or replay the paid engine.
       if (currentScan?.status === "COMPLETED") {
+        await reportInterruptedSettlement(workspaceId, scanId)
         return { status: "completed", summary: currentScan.summary ?? "Scan completed" }
       }
       if (currentScan?.status === "PARTIAL") {
+        await reportInterruptedSettlement(workspaceId, scanId)
         return {
           status: "failed",
           errorCategory: currentScan.errorCategory ?? "PARTIAL",

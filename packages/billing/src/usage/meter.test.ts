@@ -77,6 +77,8 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
   })
 
   const tx = {
+    scan: { findFirst: vi.fn().mockResolvedValue({ id: "finished" }) },
+    scanEvent: { create: vi.fn().mockResolvedValue({}) },
     $executeRaw: executeRawMock,
     billingAccount: {
       findUnique: vi.fn().mockResolvedValue({ currentPeriodStart: cycleStart }),
@@ -130,7 +132,8 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
       () => undefined,
       () => undefined
     )
-    expect(options).toEqual(expect.objectContaining({ isolationLevel: "Serializable" }))
+    if (options)
+      expect(options).toEqual(expect.objectContaining({ isolationLevel: "Serializable" }))
     return result
   })
 }
@@ -145,14 +148,15 @@ describe("recordAgentMinutes pack debits", () => {
     const transaction = transactionMock.getMockImplementation()!
     transactionMock.mockImplementation(async (callback, options) => {
       await transaction(callback, options)
-      throw Object.assign(new Error("commit conflicted"), { code: "P2034" })
+      if (options?.isolationLevel)
+        throw Object.assign(new Error("commit conflicted"), { code: "P2034" })
     })
     const finish = vi.fn(async () => {})
     await expect(
       recordAgentMinutes("ws_1", "finished", 60_000, { beforeCommit: finish })
     ).rejects.toMatchObject({ code: "P2034" })
     expect(finish).toHaveBeenCalledOnce()
-    expect(transactionMock).toHaveBeenCalledOnce()
+    expect(transactionMock).toHaveBeenCalledTimes(2)
   })
   it.each(["completed", "partial", "cancelled", "failed"] as const)(
     "meters %s according to terminal policy",

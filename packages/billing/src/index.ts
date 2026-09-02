@@ -33,6 +33,7 @@ export { getUsageBalance, type UsageBalance, type PackBalance } from "./usage/ba
 // Usage metering
 export {
   recordAgentMinutes,
+  hasUnsettledScanIntent,
   type RecordAgentMinutesOptions,
   type RecordAgentMinutesResult,
 } from "./usage/meter"

@@ -60,6 +60,34 @@ export interface RecordAgentMinutesResult {
 const MAX_TRANSACTION_ATTEMPTS = 3
 type MeterTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
+/** Read-only recovery check. Never settles or replays interrupted paid work. */
+export async function hasUnsettledScanIntent(
+  workspaceId: string,
+  scanId: string
+): Promise<boolean> {
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const scan = await tx.scan.findFirst({
+      where: { id: scanId, workspaceId },
+      select: {
+        events: { where: { stage: "billing_settlement_intent" }, select: { metadata: true } },
+      },
+    })
+    const keys = [
+      ...new Set(
+        (scan?.events ?? []).flatMap(({ metadata }) => {
+          if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return []
+          return typeof metadata.idempotencyKey === "string" ? [metadata.idempotencyKey] : []
+        })
+      ),
+    ]
+    if (!keys.length) return false
+    const receipts = await tx.usageRecord.count({
+      where: { workspaceId, kind: "agent_minutes", idempotencyKey: { in: keys } },
+    })
+    return receipts !== keys.length
+  })
+}
+
 function isSerializationConflict(error: unknown): boolean {
   return (
     error !== null &&
@@ -129,6 +157,23 @@ export async function recordAgentMinutes(
   // Deep/Custom scans consume 3× minutes
   const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
   const minutes = isDeep ? rawMinutes * DEEP_SCAN_MULTIPLIER : rawMinutes
+
+  // Independent durable intent precedes terminal persistence. UsageRecord is
+  // the atomic settlement receipt; missing receipts remain queryable after death.
+  if (opts.beforeCommit) {
+    await withWorkspaceRLS(workspaceId, async (tx) => {
+      const scan = await tx.scan.findFirst({ where: { id: scanId, workspaceId } })
+      if (!scan) throw new Error("settlement_scan_not_found")
+      await tx.scanEvent.create({
+        data: {
+          scanId,
+          stage: "billing_settlement_intent",
+          message: "Settlement intent; missing usage receipt requires terminal accounting review",
+          metadata: { idempotencyKey, workspaceId, automaticReplayAllowed: false },
+        },
+      })
+    })
+  }
 
   let finalizationStarted = false
   for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {

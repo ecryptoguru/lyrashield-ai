@@ -78,6 +78,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("@lyrashield/billing", () => ({
+  hasUnsettledScanIntent: vi.fn().mockResolvedValue(false),
   recordAgentMinutes: vi
     .fn()
     .mockImplementation(
@@ -211,7 +212,12 @@ import {
   EvidenceStorageConfigurationError,
 } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
-import { debitOverage, enterGrace, recordAgentMinutes } from "@lyrashield/billing"
+import {
+  debitOverage,
+  enterGrace,
+  recordAgentMinutes,
+  hasUnsettledScanIntent,
+} from "@lyrashield/billing"
 import {
   AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
   AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
@@ -693,9 +699,28 @@ describe("processScanJob", () => {
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
     expect(runEngine).toHaveBeenCalledOnce()
   })
+  it("reports a terminal-write acknowledgement failure before the in-memory result is assigned", async () => {
+    vi.mocked(completeScanWithScore).mockImplementationOnce(async () => {
+      vi.mocked(prisma.scan.findUnique).mockResolvedValue({
+        status: "COMPLETED",
+        summary: "Durable",
+      } as never)
+      throw new Error("terminal write acknowledgement lost")
+    })
+    vi.mocked(hasUnsettledScanIntent).mockResolvedValueOnce(true)
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+    expect(hasUnsettledScanIntent).toHaveBeenCalledWith("ws-1", "scan-1")
+    expect(logger.error).toHaveBeenCalledWith(
+      "billing.scan_settlement_commit_uncertain",
+      expect.objectContaining({ accountingReviewRequired: true, automaticReplayAllowed: false })
+    )
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+    expect(runEngine).toHaveBeenCalledOnce()
+  })
   it.each(["COMPLETED", "PARTIAL"])(
     "does not replay engine or settlement for a durable %s result",
     async (status) => {
+      vi.mocked(hasUnsettledScanIntent).mockResolvedValueOnce(true)
       vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
         status,
         summary: "Durable result",
@@ -703,6 +728,14 @@ describe("processScanJob", () => {
       await processScanJob(mockJob)
       expect(runEngine).not.toHaveBeenCalled()
       expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(logger.error).toHaveBeenCalledWith(
+        "billing.scan_settlement_commit_uncertain",
+        expect.objectContaining({
+          scanId: "scan-1",
+          accountingReviewRequired: true,
+          automaticReplayAllowed: false,
+        })
+      )
       expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
     }
   )

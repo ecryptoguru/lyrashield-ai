@@ -15,7 +15,11 @@ vi.mock("@lyrashield/config", async (original) => {
 })
 import { handleFixPrMergedAndReevaluate } from "./gate-service"
 import { prisma as runtime } from "./client"
-import { recordAgentMinutes, type RecordAgentMinutesOptions } from "../../billing/src/usage/meter"
+import {
+  recordAgentMinutes,
+  hasUnsettledScanIntent,
+  type RecordAgentMinutesOptions,
+} from "../../billing/src/usage/meter"
 import { debitOverage } from "../../billing/src/usage/overage"
 import { enterGrace, GRACE_CAP_MS } from "../../billing/src/grace"
 import * as rls from "./rls"
@@ -329,6 +333,7 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         await completeScanWithScore(scan.id, id, "Recovered result")
       },
     })
+    expect(await hasUnsettledScanIntent(id, scan.id)).toBe(false)
     expect((await owner.scan.findUniqueOrThrow({ where: { id: scan.id } })).status).toBe(
       "COMPLETED"
     )
@@ -399,6 +404,14 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         },
       })
     ).rejects.toThrow("injected monetary commit failure")
+    // Independent intent survives the actual settlement rollback. A fresh
+    // recovery read needs no process-local marker and never mutates money.
+    expect(await hasUnsettledScanIntent(id, terminal.id)).toBe(true)
+    expect(
+      await owner.scanEvent.count({
+        where: { scanId: terminal.id, stage: "billing_settlement_intent" },
+      })
+    ).toBe(1)
     expect((await owner.scan.findUniqueOrThrow({ where: { id: terminal.id } })).status).toBe(
       "COMPLETED"
     )
