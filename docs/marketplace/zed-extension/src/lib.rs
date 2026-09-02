@@ -6,7 +6,7 @@ use zed_extension_api::{
 };
 
 const PACKAGE_NAME: &str = "@lyrashield/mcp";
-const PACKAGE_VERSION: &str = "0.2.2";
+const PACKAGE_VERSION: &str = "0.2.4";
 const SERVER_ENTRYPOINT: &str = "node_modules/@lyrashield/mcp/dist/stdio-transport.js";
 const EXTENSION_CRED_ENV_VAR: &str = "LYRASHIELD_EXTENSION_CRED";
 

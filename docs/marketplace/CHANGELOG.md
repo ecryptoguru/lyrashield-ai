@@ -2,7 +2,7 @@
 
 ## 0.1.18 distribution corrections
 
-- Pin the published MCP 0.2.2 package and preserve credential-store OAuth refresh.
+- Pin the published MCP 0.2.4 package and preserve credential-store OAuth refresh.
 - Align client artifact versions, Kiro discovery instructions and Kilo configuration.
 - Use canonical tool names and retain human approval for fix proposals.
 
