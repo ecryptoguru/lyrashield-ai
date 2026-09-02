@@ -46,9 +46,9 @@ export interface InstallAgentResult {
 function renderManualInstructions(agent: AgentEntry, opts: InstallAgentOptions): string {
   const serverName = opts.serverName ?? "lyrashield"
   const command = "npx"
-  const args = ["-y", "@lyrashield/mcp"]
+  const args = ["-y", "@lyrashield/mcp@0.2.2"]
   const env = opts.useCredentialStore
-    ? { LYRASHIELD_API_URL: opts.apiUrl }
+    ? {}
     : { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY", LYRASHIELD_API_URL: opts.apiUrl }
   return `[${agent.displayName} — manual configuration]
 Server name: ${serverName}
@@ -86,6 +86,7 @@ async function tryMergeLocation(
   }
 
   const installOpts: InstallOptions = {
+    useCredentialStore: opts.useCredentialStore,
     transport: opts.transport,
     apiUrl: opts.apiUrl,
     secretMode: (secret.mode === "interpolated"
@@ -153,7 +154,7 @@ async function runVendorCli(
   const args = [...agent.vendorCli.args]
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    LYRASHIELD_API_URL: opts.apiUrl,
+    ...(opts.useCredentialStore ? {} : { LYRASHIELD_API_URL: opts.apiUrl }),
   }
   if (opts.apiKey) env.LYRASHIELD_API_KEY = opts.apiKey
 

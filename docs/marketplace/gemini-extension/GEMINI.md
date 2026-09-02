@@ -7,3 +7,6 @@ existing exact-argument approval gate; never ask a user to paste a token into a 
 
 The extension is a community release artifact until the LyraShield AI publisher account
 and Gemini gallery listing are verified.
+
+Use `lyrashield_check_diff` to review changes and `lyrashield_verify_fix` to retest findings.
+Fixes are proposals that require human review and approval; nothing is applied automatically.

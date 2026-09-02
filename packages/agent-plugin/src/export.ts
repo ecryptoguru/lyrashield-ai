@@ -9,6 +9,7 @@ import { getPluginDir } from "./index.js"
 const PUBLIC_FILES = [
   "README.md",
   "CHANGELOG.md",
+  "CLIENT-CONTRACTS.md",
   "plugin.json",
   "mcp.json",
   "skills",
@@ -101,7 +102,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
 
   for (const relative of PUBLIC_FILES) {
     const source =
-      relative === "README.md" || relative === "CHANGELOG.md"
+      relative === "README.md" || relative === "CHANGELOG.md" || relative === "CLIENT-CONTRACTS.md"
         ? path.join(marketplaceDocs, relative)
         : path.join(pluginRoot, relative)
     await cp(source, path.join(destination, relative), {
@@ -121,6 +122,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
     await cp(path.join(marketplaceDocs, relative), path.join(destination, relative), {
       recursive: true,
       force: true,
+      filter: (source) => !["target", "node_modules", ".git"].includes(path.basename(source)),
     })
   }
 

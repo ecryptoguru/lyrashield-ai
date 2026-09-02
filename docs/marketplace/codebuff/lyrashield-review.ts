@@ -2,7 +2,7 @@ import type { AgentDefinition } from "./types/agent-definition"
 
 const definition: AgentDefinition = {
   id: "lyrashield-review",
-  version: "0.1.2",
+  version: "0.1.18",
   publisher: "lyrashield",
   displayName: "LyraShield Review",
   model: "anthropic/claude-sonnet-4.5",
@@ -11,14 +11,13 @@ const definition: AgentDefinition = {
   mcpServers: {
     lyrashield: {
       command: "npx",
-      args: ["-y", "@lyrashield/mcp"],
+      args: ["-y", "@lyrashield/mcp@0.2.2"],
       env: {
-        LYRASHIELD_API_URL: "https://app.lyrashieldai.com",
         LYRASHIELD_API_KEY: process.env.LYRASHIELD_API_KEY ?? "",
       },
     },
   },
-  toolNames: ["read_files", "code_search", "run_terminal_command", "end_turn"],
+  toolNames: ["read_files", "code_search", "end_turn"],
   spawnerPrompt: "Use for a read-only LyraShield release-assurance review of the current change.",
   systemPrompt: "You are LyraShield Review. Never apply changes or bypass approvals.",
   instructionsPrompt: `Run the read-only review workflow through the LyraShield MCP server:

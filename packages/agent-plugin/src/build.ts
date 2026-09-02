@@ -22,6 +22,8 @@ async function writeGeneratedFile(file: string, content: string): Promise<void> 
 
 const SKILL_APPENDIX = `## Review-depth guide
 
+Fixes are proposals that require human review and approval; nothing is applied automatically.
+
 Deeper modes consume more compute and take longer. Choose the least intensive goal and mode that answer the user's request.
 
 | User intent | Goal | Mode | When to use |
@@ -82,10 +84,7 @@ ${SKILL_APPENDIX}
         mcpServers: {
           lyrashield: {
             command: "npx",
-            args: ["-y", "@lyrashield/mcp"],
-            env: {
-              LYRASHIELD_API_URL,
-            },
+            args: ["-y", "@lyrashield/mcp@0.2.2"],
           },
         },
       },
@@ -126,7 +125,7 @@ ${SKILL_APPENDIX}
                   ...cursorManifest,
                   mcpServers: {
                     lyrashield: {
-                      type: "streamable-http",
+                      type: "http",
                       url: `${LYRASHIELD_API_URL}/api/mcp`,
                     },
                   },

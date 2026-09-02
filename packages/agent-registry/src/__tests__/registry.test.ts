@@ -16,6 +16,19 @@ const TEST_BASE_URL = "https://app.lyrashieldai.com"
 const TEST_MCP_URL = "https://app.lyrashieldai.com/api/mcp"
 const TEST_API_KEY = "lsk_test_lyrashield_api_key"
 
+it("keeps OAuth config free of credential provenance overrides", () => {
+  const agent = getAgent("claude-code")!
+  const entry = renderEntry(agent, {
+    transport: "stdio",
+    apiUrl: TEST_BASE_URL,
+    secretMode: "shell",
+    useCredentialStore: true,
+  })
+  expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_URL")
+  expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_KEY")
+  expect(JSON.stringify(entry.value)).toContain("@lyrashield/mcp@0.2.2")
+})
+
 function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
   let secretMode: InstallOptions["secretMode"] = "inline"
   if (agent.credential.kind === "interpolated-env") {
@@ -189,7 +202,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.value).toMatchObject({
       type: "stdio",
       command: "npx",
-      args: ["-y", "@lyrashield/mcp"],
+      args: ["-y", "@lyrashield/mcp@0.2.2"],
       env: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -205,7 +218,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.value).toMatchObject({
       command: {
         path: "npx",
-        args: ["-y", "@lyrashield/mcp"],
+        args: ["-y", "@lyrashield/mcp@0.2.2"],
         env: {
           LYRASHIELD_API_KEY: TEST_API_KEY,
           LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -221,7 +234,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.rootKey).toBe("mcp_servers")
     expect(entry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp"],
+      args: ["-y", "@lyrashield/mcp@0.2.2"],
       env_vars: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -236,7 +249,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.rootKey).toBe("mcp")
     expect(entry.value).toMatchObject({
       type: "local",
-      command: ["npx", "-y", "@lyrashield/mcp"],
+      command: ["npx", "-y", "@lyrashield/mcp@0.2.2"],
       environment: {
         LYRASHIELD_API_KEY: "{env:LYRASHIELD_API_KEY}",
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -273,7 +286,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(stdioEntry.rootKey).toBe("mcpServers")
     expect(stdioEntry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp"],
+      args: ["-y", "@lyrashield/mcp@0.2.2"],
       type: "local",
     })
     const remoteEntry = renderEntry(agent, testOptions(agent, "remote-http"))

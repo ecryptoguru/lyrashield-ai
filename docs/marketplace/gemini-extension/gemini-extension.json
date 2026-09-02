@@ -1,21 +1,21 @@
 {
   "name": "lyrashield-ai",
-  "version": "0.1.0",
+  "version": "0.1.18",
   "description": "Evidence-backed release assurance for AI-built software.",
   "settings": [
     {
       "name": "LyraShield API Key",
       "description": "Your LyraShield workspace API key (starts with lsk_). Used to authenticate MCP tool calls.",
-      "envVar": "LYRASHIELD_API_KEY",
+      "envVar": "GEMINI_LYRASHIELD_CRED",
       "sensitive": true
     }
   ],
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
+      "args": ["-y", "@lyrashield/mcp@0.2.2"],
       "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+        "LYRASHIELD_API_KEY": "${GEMINI_LYRASHIELD_CRED}"
       }
     }
   },

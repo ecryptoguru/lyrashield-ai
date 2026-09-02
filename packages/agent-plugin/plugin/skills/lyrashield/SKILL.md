@@ -5,12 +5,12 @@ description: Run LyraShield security scans, review findings, and drive the fix â
 
 ## Pre-PR check
 
-1. Run check_diff on the staged changes to identify security issues introduced by this work item.
+1. Run lyrashield_check_diff on the staged changes to identify security issues introduced by this work item.
 2. Review any findings before committing.
 3. If findings are reported, address them or document why each is acceptable.
 ## Post-fix verification
 
-1. After applying a fix for a security finding, run verify_fix with the finding ID.
+1. After applying a fix for a security finding, run lyrashield_verify_fix with the finding ID.
 2. Poll the returned retest scan to a terminal state, then include its outcome and scan reference in the PR description.
 3. Call the result independently verified only when a separate independent-verification receipt exists.
 ## Scope limits
@@ -23,6 +23,8 @@ description: Run LyraShield security scans, review findings, and drive the fix â
 A clean check result does not guarantee the absence of all vulnerabilities. A passing check is not a guarantee of zero vulnerabilities.
 
 ## Review-depth guide
+
+Fixes are proposals that require human review and approval; nothing is applied automatically.
 
 Deeper modes consume more compute and take longer. Choose the least intensive goal and mode that answer the user's request.
 

@@ -1,7 +1,7 @@
 ---
 name: lyrashield
 description: Review LyraShield release-assurance evidence through an OAuth-first MCP connection.
-version: 0.1.0
+version: 0.1.18
 license: MIT-0
 metadata:
   category: security
@@ -27,3 +27,6 @@ LyraShield dashboard evidence instead of
 recreating dashboard UI or copying report contents into prompts.
 
 Write actions require OAuth `lyrashield.write` plus the exact-argument approval gate.
+
+Use `lyrashield_check_diff` to review changes and `lyrashield_verify_fix` to retest findings.
+Fixes are proposals that require human review and approval; nothing is applied automatically.

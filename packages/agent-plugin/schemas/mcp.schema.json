@@ -39,7 +39,7 @@
     "streamableHttpServer": {
       "type": "object",
       "properties": {
-        "type": { "const": "streamable-http" },
+        "type": { "const": "http" },
         "url": { "type": "string", "minLength": 1 },
         "headers": { "$ref": "#/$defs/headers" }
       },

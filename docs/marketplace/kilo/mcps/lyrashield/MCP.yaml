@@ -17,27 +17,22 @@ content:
       - Node.js
     content: |
       {
-        "command": "npx",
-        "args": ["-y", "@lyrashield/mcp"],
-        "env": {
-          "LYRASHIELD_API_URL": "{{LYRASHIELD_API_URL}}",
-          "LYRASHIELD_API_KEY": "{{LYRASHIELD_API_KEY}}"
+        "type": "local",
+        "command": ["npx", "-y", "@lyrashield/mcp@0.2.2"],
+        "environment": {
+          "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
         }
       }
   - name: Streamable HTTP
     content: |
       {
-        "type": "streamable-http",
-        "url": "{{LYRASHIELD_API_URL}}/api/mcp",
+        "type": "remote",
+        "url": "https://app.lyrashieldai.com/api/mcp",
         "headers": {
-          "Authorization": "Bearer {{LYRASHIELD_API_KEY}}"
+          "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
         }
       }
 parameters:
-  - name: LyraShield API URL
-    key: LYRASHIELD_API_URL
-    placeholder: https://app.lyrashieldai.com
-    optional: true
   - name: LyraShield API Key
     key: LYRASHIELD_API_KEY
-    placeholder: lsk_your_api_key_here
+    placeholder: Set LYRASHIELD_API_KEY in your environment

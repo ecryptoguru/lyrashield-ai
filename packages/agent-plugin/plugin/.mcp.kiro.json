@@ -4,11 +4,8 @@
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp"
-      ],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
+        "@lyrashield/mcp@0.2.2"
+      ]
     }
   }
 }

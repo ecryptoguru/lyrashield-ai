@@ -115,7 +115,7 @@ const portableMcp = await readJson("mcp.json")
 const claudeMcp = await readJson(".mcp.json")
 for (const [name, config] of Object.entries({ portableMcp, claudeMcp })) {
   const server = config.mcpServers?.lyrashield
-  assert(server?.type === "streamable-http", `${name} must use Streamable HTTP`)
+  assert(server?.type === "http", `${name} must use Streamable HTTP`)
   assert(server?.url === "https://app.lyrashieldai.com/api/mcp", `${name} has the wrong MCP URL`)
   assert(!("headers" in server), `${name} must allow the hosted OAuth flow to authenticate`)
 }
@@ -125,7 +125,7 @@ const cursorPlugin = await readJson(".cursor-plugin/plugin.json")
 const cursorServer = cursorPlugin.mcpServers?.lyrashield
 assert(cursorServer, ".cursor-plugin/plugin.json must declare the lyrashield MCP server")
 assert(
-  cursorServer.type === "streamable-http",
+  cursorServer.type === "http",
   ".cursor-plugin/plugin.json lyrashield server must use Streamable HTTP"
 )
 assert(
@@ -200,6 +200,7 @@ for (const [artifact, [file, pattern, label]] of Object.entries({
   openclaw: ["openclaw/SKILL.md", /^version:\s*(\S+)\s*$/m, "openclaw SKILL.md"],
 })) {
   const actual = parseVersion(await readFile(path.join(root, file), "utf8"), pattern, label)
+  assert(actual === rootPlugin.version, `${artifact} version must track plugin.json`)
   assert(
     versions[artifact] === actual,
     `manifest.artifactVersions.${artifact} (${versions[artifact]}) must match ${label} (${actual})`
@@ -233,3 +234,59 @@ assert(
 console.log(
   `Marketplace validation passed (${manifest.generatedFiles.length} generated artifacts).`
 )
+
+const expectedPackage = "@lyrashield/mcp@0.2.2"
+for (const file of [
+  ".mcp.kiro.json",
+  "gemini-extension.json",
+  "gemini-extension/gemini-extension.json",
+  "codebuff/lyrashield-review.ts",
+  "zed-extension/src/lib.rs",
+  "kilo/mcps/lyrashield/MCP.yaml",
+]) {
+  const text = await readFile(path.join(root, file), "utf8")
+  assert(
+    !text.includes("LYRASHIELD_API_URL"),
+    `${file} must not override OAuth credential-store provenance`
+  )
+  if (file.endsWith(".rs")) {
+    assert(
+      text.includes('const PACKAGE_VERSION: &str = "0.2.2";'),
+      "Zed must pin the published MCP version"
+    )
+    assert(!text.includes("npm_package_latest_version"), "Zed must not install a floating release")
+  } else {
+    assert(text.includes(expectedPackage), `${file} must pin the published MCP version`)
+  }
+}
+assert(
+  geminiManifest.settings[0].envVar === "GEMINI_LYRASHIELD_CRED",
+  "Gemini setting must survive environment redaction"
+)
+assert(
+  geminiManifest.mcpServers.lyrashield.env.LYRASHIELD_API_KEY === "${GEMINI_LYRASHIELD_CRED}",
+  "Gemini must explicitly map the credential"
+)
+const codebuff = await readFile(path.join(root, "codebuff/lyrashield-review.ts"), "utf8")
+assert(
+  !codebuff.includes("run_terminal_command"),
+  "Read-only Codebuff agent must not run shell commands"
+)
+for (const file of [
+  "skills/lyrashield/SKILL.md",
+  "openclaw/SKILL.md",
+  "kiro-power/POWER.md",
+  "GEMINI.md",
+]) {
+  const text = await readFile(path.join(root, file), "utf8")
+  assert(
+    text.includes("lyrashield_check_diff") && text.includes("lyrashield_verify_fix"),
+    `${file} must use canonical tools`
+  )
+  assert(
+    text.includes(
+      "Fixes are proposals that require human review and approval; nothing is applied automatically."
+    ),
+    `${file} must preserve human approval`
+  )
+}

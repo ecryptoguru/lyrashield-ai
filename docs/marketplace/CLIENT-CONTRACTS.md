@@ -1,0 +1,12 @@
+# Client configuration receipts
+
+Checked 2026-09-03. These are documentation and local contract receipts, not authenticated client acceptance.
+
+- npm read-only metadata reports `@lyrashield/mcp` version 0.2.2. Install commands pin this exact version. Deliberate release updates must update generator, registry, templates, validator and snapshots together.
+- [Kiro configuration](https://kiro.dev/docs/mcp/configuration/) specifies `.kiro/settings/mcp.json` for workspaces and `~/.kiro/settings/mcp.json` for users. Merge the exported stdio entry into one of these files; do not assume the staged plugin directory is discovered.
+- [Gemini MCP configuration](https://geminicli.com/docs/tools/mcp-server/) documents sensitive environment-name filtering and explicit `env` overrides. The extension setting uses `GEMINI_LYRASHIELD_CRED` and explicitly maps it to `LYRASHIELD_API_KEY`. An unset API key leaves the local OAuth credential store available.
+- [Kilo configuration](https://kilo.ai/docs/automate/mcp/using-in-kilo-code) documents `mcp` entries with `type: local`, a command array and `environment`. The marketplace template uses `{env:LYRASHIELD_API_KEY}` instead of embedding a key.
+- [Cursor plugin reference](https://prod.cursor.com/docs/reference/plugins) documents HTTP MCP URLs. Its [first-party install payload](https://cursor.com/install-mcp?config=eyJ0eXBlIjoiaHR0cCIsInVybCI6Imh0dHBzOi8vbWNwLmF0bGFzc2lhbi5jb20vdjEvbWNwIn0%3D&name=atlassian) uses `type: http`.
+- [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins) documents the bundled MCP manifest. The installed OpenAI-curated Cloudflare 0.1.2 and Notion 0.1.8 plugin manifests both use `mcpServers` entries with `type: http`; this is local shipped-format evidence, not a successful LyraShield login.
+
+Local checks cover generated configuration, exact package/version parity, secret exclusion, human approval wording and expired stored OAuth refresh using an isolated mocked token endpoint. Still required: real installs of Claude Code, Cursor, Codex, Kiro, Gemini, Zed, Cline and Kilo reaching `lyrashield_list_workspaces`, plus forced-expiry OAuth sessions in Kiro, Gemini, Zed and Codebuff. No remote CI, provider or production acceptance was performed.

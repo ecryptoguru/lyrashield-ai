@@ -1,6 +1,4 @@
 {
   // Optional API-key fallback for CI or environments that cannot use OAuth.
-  "api_key": "",
-  // Optional LyraShield app URL. Leave empty to use https://app.lyrashieldai.com.
-  "api_url": ""
+  "api_key": ""
 }
