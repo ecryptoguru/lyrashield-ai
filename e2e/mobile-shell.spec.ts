@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 
 test("mobile workspace sheet switches data, reaches Billing and signs out", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -91,7 +91,11 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
     await page.getByRole("button", { name: "Cancel", exact: true }).click()
     await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeFocused()
     expect(
-      (await prisma.agentApproval.findUniqueOrThrow({ where: { id: approval.id } })).status
+      (
+        await withWorkspaceRLS(workspaces[0]!, (tx) =>
+          tx.agentApproval.findUniqueOrThrow({ where: { id: approval.id } })
+        )
+      ).status
     ).toBe("PENDING")
   }
   await page.setViewportSize({ width: 390, height: 844 })

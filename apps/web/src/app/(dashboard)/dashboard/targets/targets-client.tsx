@@ -572,7 +572,7 @@ export function TargetsClient({
         />
       ) : (
         <div
-          className="w-full max-w-full overflow-x-auto rounded-xl border shadow-sm"
+          className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border shadow-sm"
           tabIndex={0}
           aria-label="Targets list"
         >
