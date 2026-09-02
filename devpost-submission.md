@@ -26,7 +26,7 @@ WebMCP is the browser-native agent interface. The product uses deterministic ana
 
 ## How We Used Codex
 
-Codex was used as the engineering collaborator for design review, implementation, tests, adversarial security review, CI diagnosis, and release evidence preparation. The build used bounded parallel work across the analyzer, public tool, worker/report pipeline, CLI/Action gate, and dashboard tools. PRs [#497](https://github.com/ecryptoguru/lyrashield-ai/pull/497), [#498](https://github.com/ecryptoguru/lyrashield-ai/pull/498), and [#499](https://github.com/ecryptoguru/lyrashield-ai/pull/499) received focused review, post-fix security checks, and hosted CI. The published revision is `60eceeb249a16439951605ad6c10ae2f8d6e695d`; it has separate successful production-release evidence.
+Codex was used as the engineering collaborator for design review, implementation, tests, adversarial security review, CI diagnosis, and release evidence preparation. The build used bounded parallel work across the analyzer, public tool, worker/report pipeline, CLI/Action gate, and dashboard tools. PRs [#497](https://github.com/ecryptoguru/lyrashield-ai/pull/497), [#498](https://github.com/ecryptoguru/lyrashield-ai/pull/498), [#499](https://github.com/ecryptoguru/lyrashield-ai/pull/499), [#569](https://github.com/ecryptoguru/lyrashield-ai/pull/569), and [#570](https://github.com/ecryptoguru/lyrashield-ai/pull/570) received focused review and hosted CI. The current public-copy revision is `9d5fb33c20dde357625d6c94497ba8902b786546`, released through successful exact-main CI and Cloudflare deployment.
 
 ## Key Features
 
@@ -68,7 +68,7 @@ Authenticated dashboard path is pending an ordinary isolated judge account. Cred
 
 - WebMCP pillar: `https://lyrashieldai.com/webmcp`
 - Free Security Lab: `https://lyrashieldai.com/tools/webmcp-security-checker`
-- Published revision: `60eceeb249a16439951605ad6c10ae2f8d6e695d`. The live marketing response carries this exact revision marker; `https://app.lyrashieldai.com/api/ready` and `https://app.lyrashieldai.com/api/ready/scans` were healthy after release.
+- Current public-copy revision: `9d5fb33c20dde357625d6c94497ba8902b786546`. The exact-main CI and Cloudflare deployment completed successfully before the live page readback.
 
 ## Public Repository Link
 
@@ -97,16 +97,17 @@ Record a public YouTube video under three minutes with audio: 0:00–0:15 proble
 | Before Aug 25 | LyraShield AI platform, billing, scanner, and dashboard                                                                  | Not claimed as hackathon work.                                                                                                                                           |
 | Aug 29        | Assurance engine, public Security Lab, dashboard tools, and Chrome callback compatibility                                | `dff57663`, `dfe3df0e` / PR [#498](https://github.com/ecryptoguru/lyrashield-ai/pull/498), `60eceeb2` / PR [#499](https://github.com/ecryptoguru/lyrashield-ai/pull/499) |
 | Sep 2         | Embedded-secret and prompt-injection controls; Action and documentation hardening                                        | `f6a86d5c`, `fcdd60c2`, `825cbaa0`                                                                                                                                       |
-| Sep 2–3       | Correct wildcard rewrite, current control count, spec-drift and contract-budget controls, and final submission materials | This pull request; add merged SHA before publishing.                                                                                                                     |
+| Sep 2         | Correct wildcard rewrite, current control count, spec-drift and contract-budget controls                                | [#569](https://github.com/ecryptoguru/lyrashield-ai/pull/569) merged as `964762b0b8d2bcfe3a3acc4f2de538b0b997b633`.                                                      |
+| Sep 2         | Corrected stale public-count copy after live-browser review                                                              | [#570](https://github.com/ecryptoguru/lyrashield-ai/pull/570) merged as `9d5fb33c20dde357625d6c94497ba8902b786546`; exact-main CI and Cloudflare deploy passed.          |
 
 Verify this history with `git log --since=2026-08-25 -- packages/security/src/webmcp apps/marketing/src/pages/webmcp.astro apps/marketing/src/lib/webmcp-security.ts` before form submission.
 
 ## Submission Readiness Notes
 
-- The Devpost draft project is [LyraShield AI — WebMCP Assurance](https://devpost.com/software/lyrashield-ai-webmcp-assurance) (ID `1405030`). Its factual title, description, links, and technology list are populated; it is not published or submitted.
+- The Devpost draft project is [LyraShield AI — WebMCP Assurance](https://devpost.com/software/lyrashield-ai-webmcp-assurance) (ID `1405030`). On Sep 2 it remained an authenticated 2/5-step draft; it is not published or submitted.
 - Required submission form answers include submitter type, country, app status, live URL, public repo, supported agents/clients tested, AI tools used, learning level, and career-value confirmation.
 - Live Devpost requirements also require a public video under three minutes and a public repository URL.
-- The native public-lab inspector and deployed revision are complete. Do not mark judge account, authenticated-dashboard proof, video, or final Devpost form answers complete until their receipts exist.
+- The deployed revision is complete. Do not mark native-client inspection, judge account, authenticated-dashboard proof, video, screenshots, or final Devpost form answers complete until their receipts exist.
 
 ## Known Limitations
 
@@ -121,7 +122,7 @@ Verify this history with `git log --since=2026-08-25 -- packages/security/src/we
 
 - Submitter type: confirm whether this entry is an Individual or Organization.
 - Country of residence: confirm final required selection(s).
-- App status: use `Existing` only if the form answer accurately describes pre-existing LyraShield work and the submission-period additions listed above.
-- Existing-project explanation: finalize against the merged release and live evidence.
+- App status: `Existing`, because the underlying LyraShield platform predates the window; describe only the submission-period additions in the table above.
+- Existing-project explanation: use the two Sep 2 rows above, including both merge revisions and exact-main deployment evidence.
 - Exact live URL, native-client test record, judge testing instructions, final video URL, and final Devpost answer text.
 - Confirm whether the official form asks for a Codex session ID. Do not record one unless the user confirms the correct session.
