@@ -103,6 +103,14 @@ assert_eq "Billing admission script: Azure deploy" "true" "$(get_field "$out" "a
 out=$(run_classify $'.github/scripts/classify-paths.sh')
 assert_eq "Release classifier: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 
+# --- Test 6b: ANY .github/scripts change routes to Azure deploy (wholesale) ---
+# The routing contract covers the whole scripts dir, not two files by name: a
+# future release-gating script added under .github/scripts/ must never
+# silently skip the Azure release path. (v14: widened from a two-file
+# allowlist after a review found new scripts fell through to shared_pattern.)
+out=$(run_classify $'.github/scripts/some-future-gating-script.sh')
+assert_eq "Future CI script: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+
 # --- Test 7: an uncovered path falls back to shared (fail-closed, v13 P1-7) ---
 # ops/, e2e/, root tooling, and new root configs must not silently skip deploys.
 out=$(run_classify $'ops/worker/refresh-egress.sh')

@@ -35,6 +35,13 @@ function run(name, command) {
   return new Promise((resolve) => {
     console.log(`\n==> Starting ${name} tests: ${command.join(" ")}\n`)
     const child = spawn(command[0], command.slice(1), { stdio: "inherit" })
+    // A missing/renamed binary makes spawn emit "error" and "close" never
+    // fires — without this handler the Promise would never settle and CI
+    // would hang to the job timeout instead of failing fast.
+    child.on("error", (error) => {
+      console.error(`\n==> ${name} tests could not start: ${error.message}\n`)
+      resolve({ name, code: 127 })
+    })
     child.on("close", (code) => {
       console.log(`\n==> ${name} tests exited with code ${code ?? 1}\n`)
       resolve({ name, code: code ?? 1 })

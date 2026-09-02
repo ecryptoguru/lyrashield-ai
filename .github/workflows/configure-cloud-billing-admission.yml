@@ -22,7 +22,12 @@ on:
         type: string
 
 concurrency:
-  group: configure-cloud-billing-admission
+  # Same group family as deploy-azure's production deploy: a canary admission
+  # configure and a production deploy both assume they are the sole writer of
+  # container-app traffic weights (each sets its revision to 100). Running
+  # them concurrently can interleave and leave traffic split. Grouped so they
+  # queue against each other.
+  group: deploy-azure-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
