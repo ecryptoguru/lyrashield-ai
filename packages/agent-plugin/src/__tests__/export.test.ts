@@ -224,7 +224,11 @@ describe("exported validator", () => {
     await exportMarketplace(output)
     const target = path.join(output, file)
     await writeFile(target, (await readFile(target, "utf8")).replace(before, after))
-    await expect(runValidator(output)).rejects.toThrow()
+    await expect(
+      execFileAsync(process.execPath, [path.join(output, "scripts", "validate.mjs")], {
+        cwd: output,
+      })
+    ).rejects.toMatchObject({ stdout: "" })
   })
 
   it("passes against a fresh temp-dir export", async () => {

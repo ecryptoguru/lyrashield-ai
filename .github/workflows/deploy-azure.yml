@@ -1248,6 +1248,7 @@ jobs:
           exit "$CANDIDATE_SMOKE_FAILED"
 
       - name: Verify worker queues are empty before traffic promotion
+        id: worker-preflight
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
@@ -1557,6 +1558,7 @@ jobs:
           failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
+          steps.worker-preflight.outcome == 'failure' ||
           steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -1600,6 +1602,7 @@ jobs:
           failure() &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
+          steps.worker-preflight.outcome == 'failure' ||
           steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}

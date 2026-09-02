@@ -231,10 +231,6 @@ assert(
   "root gemini-extension.json excludeTools must equal the manifest-recorded mutating tool set"
 )
 
-console.log(
-  `Marketplace validation passed (${manifest.generatedFiles.length} generated artifacts).`
-)
-
 const expectedPackage = "@lyrashield/mcp@0.2.2"
 for (const file of [
   ".mcp.kiro.json",
@@ -290,3 +286,7 @@ for (const file of [
     `${file} must preserve human approval`
   )
 }
+
+console.log(
+  `Marketplace validation passed (${manifest.generatedFiles.length} generated artifacts).`
+)
