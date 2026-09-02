@@ -205,6 +205,31 @@ const WEBMCP_EXPOSURE_KEYS = [
 const WEBMCP_CONFIRMATION_KEYS = ["mutationTools", "unconfirmedMutations"] as const
 const WEBMCP_SEVERITY_KEYS = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as const
 
+/**
+ * Parse the per-control finding counts. Legacy receipts were written when fewer
+ * controls existed, so a receipt may carry FEWER keys than the current
+ * WEBMCP_CONTROL_IDS — missing controls read as 0. Unknown keys (from a newer
+ * writer than this reader) are dropped. A present-but-malformed value still
+ * fails closed.
+ */
+function findingsByControlRecord(value: unknown): Record<string, number> | null {
+  if (value === undefined) {
+    return Object.fromEntries(WEBMCP_CONTROL_IDS.map((controlId) => [controlId, 0]))
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const out: Record<string, number> = Object.fromEntries(
+    WEBMCP_CONTROL_IDS.map((controlId) => [controlId, 0])
+  )
+  for (const [key, count] of Object.entries(value)) {
+    if (!nonnegativeNumber(count)) return null
+    if (WEBMCP_CONTROL_IDS.includes(key as (typeof WEBMCP_CONTROL_IDS)[number])) {
+      out[key] = count
+    }
+    // Unknown control id (newer writer) — drop, do not fail.
+  }
+  return out
+}
+
 function parseSourceSelection(value: unknown): WebMcpCoverageReceipt["sourceSelection"] | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const raw = value as Record<string, unknown>
@@ -304,10 +329,7 @@ export function parseWebMcpAssurance(value: unknown): ReportWebMcpAssurance | nu
   const exposurePosture = numberRecord(raw.exposurePosture, WEBMCP_EXPOSURE_KEYS)
   const confirmationPosture = numberRecord(raw.confirmationPosture, WEBMCP_CONFIRMATION_KEYS)
   if (!byKind || !byBehavior || !exposurePosture || !confirmationPosture) return null
-  const findingsByControl =
-    raw.findingsByControl === undefined
-      ? Object.fromEntries(WEBMCP_CONTROL_IDS.map((controlId) => [controlId, 0]))
-      : numberRecord(raw.findingsByControl, WEBMCP_CONTROL_IDS)
+  const findingsByControl = findingsByControlRecord(raw.findingsByControl)
   const findingsBySeverity =
     raw.findingsBySeverity === undefined
       ? Object.fromEntries(WEBMCP_SEVERITY_KEYS.map((severity) => [severity, 0]))
