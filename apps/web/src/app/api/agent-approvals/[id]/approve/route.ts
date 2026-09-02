@@ -10,6 +10,8 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
+import { FixPrContextError, resolveFixPrRequest } from "@/lib/fix-pr-context"
+import { executeApprovedFixPr } from "@/lib/fix-pr"
 
 async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: approvalId } = await params
@@ -46,9 +48,32 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       )
     }
 
+    // Fix PR execution is authorized separately and reconstructed exclusively
+    // from the stored proposal. The execution claim rechecks the exact hash.
+    let fixContext
+    if (approval.actionName === "fix_pr.open") {
+      await requirePermission(workspaceId, PERMISSIONS.fix.approve)
+      const stored = approval.input as Record<string, unknown> | null
+      if (!stored || typeof stored.fixProposalId !== "string") {
+        return apiError("INVALID_FIX_APPROVAL", "Approval has no stored fix proposal", 409)
+      }
+      fixContext = await resolveFixPrRequest(workspaceId, stored.fixProposalId, session.userId)
+    }
     const updated = await approveApproval(approvalId, workspaceId, session.userId)
+    if (fixContext) {
+      const execution = await executeApprovedFixPr({ ...fixContext, approvalId })
+      if (execution.status !== "opened") {
+        return apiError(
+          "FIX_PR_NOT_OPENED",
+          "The pull request could not be opened. Review the approval state before retrying.",
+          409
+        )
+      }
+      return apiSuccess({ ...updated, execution })
+    }
     return apiSuccess(updated)
   } catch (err) {
+    if (err instanceof FixPrContextError) return apiError(err.code, err.message, err.status)
     if (err instanceof ApprovalMutationError && err.code === "NOT_FOUND") {
       return apiError("NOT_FOUND", err.message, 404)
     }

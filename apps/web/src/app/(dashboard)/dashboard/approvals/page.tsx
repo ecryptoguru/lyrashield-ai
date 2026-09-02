@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
-import { listApprovals, prisma } from "@lyrashield/db"
+import { listApprovals, withWorkspaceRLS } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { REVIEW_QUEUE_LABEL, APPROVAL_PLURAL } from "@/lib/terminology"
 import { ClipboardCheck, ShieldX } from "lucide-react"
@@ -60,15 +60,15 @@ export default async function ApprovalsPage() {
       ? listApprovals({ workspaceId, status: "PENDING", limit: 50 }).then((r) => r.items)
       : [],
     workspaceId
-      ? prisma.fixProposal
-          .count({
+      ? withWorkspaceRLS(workspaceId, (tx) =>
+          tx.fixProposal.count({
             where: {
               finding: { workspaceId, deletedAt: null },
-              status: { in: ["draft", "pending"] },
+              status: { in: ["draft", "pending", "ready"] },
               deletedAt: null,
             },
           })
-          .then((count) => count > 0)
+        ).then((count) => count > 0)
       : false,
   ])
 

@@ -1,4 +1,5 @@
 "use client"
+import { CreateFixPrAction } from "@/components/create-fix-pr-action"
 
 import { useState, useEffect, useCallback, useRef, useId } from "react"
 import { useFindingsWebMcp } from "./findings-webmcp"
@@ -219,6 +220,7 @@ export function FindingsClient({
   initialTargetFilter = "",
   initialQuery = "",
   targets = [],
+  canCreatePr = false,
 }: {
   workspaceId: string
   initialData: FindingListItem[]
@@ -230,6 +232,7 @@ export function FindingsClient({
   initialTargetFilter?: string
   initialQuery?: string
   targets?: { id: string; name: string }[]
+  canCreatePr?: boolean
 }) {
   const updateQueryParams = useCallback(
     (updates: { filter?: string; sort?: SortMode; target?: string; q?: string }) => {
@@ -722,6 +725,7 @@ export function FindingsClient({
 
       {selectedFinding && (
         <FindingDetailDrawer
+          canCreatePr={canCreatePr}
           key={selectedFinding.id}
           finding={selectedFinding}
           workspaceId={workspaceId}
@@ -1036,11 +1040,13 @@ function StatusActionConfirm({
 // ---------------------------------------------------------------------------
 
 function FindingDetailDrawer({
+  canCreatePr,
   finding,
   workspaceId,
   onClose,
   onStatusChange,
 }: {
+  canCreatePr: boolean
   finding: FindingListItem
   workspaceId: string
   onClose: () => void
@@ -1804,9 +1810,15 @@ function FindingDetailDrawer({
                     </h3>
                     <div className="space-y-2">
                       {detail.fixProposals.map((fp) => (
-                        <div key={fp.id} className="flex items-center gap-2 text-sm">
+                        <div key={fp.id} className="space-y-2 text-sm">
                           <Badge variant="info">{humanizeToken(fp.status)}</Badge>
                           <span className="text-muted-foreground">{fp.summary}</span>
+                          {canCreatePr &&
+                            (fp.status === "ready" ||
+                              (finding.status === "FIX_READY" &&
+                                ["draft", "approved"].includes(fp.status))) && (
+                              <CreateFixPrAction workspaceId={workspaceId} proposalId={fp.id} />
+                            )}
                         </div>
                       ))}
                     </div>

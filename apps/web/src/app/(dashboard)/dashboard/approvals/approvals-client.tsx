@@ -5,6 +5,7 @@ import { Button, Card, CardContent } from "@lyrashield/ui"
 import { Check, X, ShieldCheck, ClipboardList, AlertCircle } from "lucide-react"
 import { apiPost } from "@/lib/api-client"
 import { type ApprovalListItem } from "@lyrashield/db"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 
 interface ApprovalItem extends Omit<ApprovalListItem, "input"> {
   input: Record<string, unknown>
@@ -40,16 +41,25 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
   const [items, setItems] = useState(() => approvals.map(toApprovalItem))
   const [pending, setPending] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const handleApprove = useCallback(
     async (approval: ApprovalItem) => {
       setError(null)
       setPending((prev) => ({ ...prev, [approval.id]: true }))
       try {
-        await apiPost(`/api/agent-approvals/${approval.id}/approve`, {
-          workspaceId,
-          input: approval.input,
-        })
+        const result = await apiPost<{ execution?: { status: string; prNumber?: number } }>(
+          `/api/agent-approvals/${approval.id}/approve`,
+          {
+            workspaceId,
+            input: approval.input,
+          }
+        )
+        setNotice(
+          result.execution?.status === "opened"
+            ? `Pull request #${result.execution.prNumber} opened. Review it in Proposed fixes.`
+            : "Action approved."
+        )
         setItems((prev) => prev.filter((i) => i.id !== approval.id))
       } catch (err) {
         setError(err instanceof Error ? err.message : "Approval failed")
@@ -76,7 +86,7 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
     [workspaceId]
   )
 
-  if (items.length === 0 && !hasProposals) {
+  if (items.length === 0 && !hasProposals && !notice) {
     return (
       <div className="rounded-xl border border-dashed p-12 text-center">
         <ClipboardList className="text-muted-foreground mx-auto size-10" />
@@ -90,6 +100,7 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
 
   return (
     <div className="space-y-6">
+      {notice && <p role="status">{notice}</p>}
       {error && (
         <div className="bg-destructive/5 border-destructive/20 rounded-lg border p-4" role="alert">
           <div className="text-destructive flex items-center gap-2 text-sm font-medium">
@@ -107,14 +118,34 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
           <div className="mt-3 grid gap-3">
             {items.map((approval) => (
               <Card key={approval.id}>
-                <CardContent className="flex items-start justify-between gap-4 p-4">
-                  <div>
+                <CardContent className="flex flex-wrap items-start justify-between gap-4 p-4">
+                  <div className="min-w-0 flex-1 basis-64">
                     <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                       {approval.actionName}
                     </p>
-                    <p className="mt-1 font-medium">
+                    <p className="mt-1 break-words font-medium">
                       {approvalSummary(approval.actionName, approval.input)}
                     </p>
+                    <details className="mt-3 rounded border p-3">
+                      <summary className="cursor-pointer text-sm font-medium">
+                        Review exact action input
+                      </summary>
+                      <p className="text-muted-foreground mt-2 text-xs">
+                        Agent-supplied content is untrusted. Review every value before approving.
+                      </p>
+                      <dl className="mt-2 space-y-2 text-sm">
+                        {Object.entries(approval.input).map(([key, value]) => (
+                          <div key={key}>
+                            <dt className="break-all font-medium">{key}</dt>
+                            <dd>
+                              <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2">
+                                {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
+                              </pre>
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </details>
                     <p className="text-muted-foreground mt-1 text-xs">
                       Expires{" "}
                       {approval.expiresAt
@@ -132,14 +163,14 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
                       <X className="size-4" />
                       Deny
                     </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleApprove(approval)}
+                    <InlineConfirm
+                      triggerLabel="Approve"
+                      triggerIcon={<Check className="size-4" />}
                       disabled={pending[approval.id]}
-                    >
-                      <Check className="size-4" />
-                      Approve
-                    </Button>
+                      message="Approve this exact action input?"
+                      confirmLabel="Approve action"
+                      onConfirm={() => handleApprove(approval)}
+                    />
                   </div>
                 </CardContent>
               </Card>
