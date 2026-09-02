@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from "astro:content"
 
+import ComparisonPricingLadder from "@components/ComparisonPricingLadder.astro"
 import Base from "@layouts/Base.astro"
 
 export async function getStaticPaths() {
@@ -9,7 +10,7 @@ export async function getStaticPaths() {
 }
 
 const { entry } = Astro.props
-const { title, description, competitor, heading, disclaimer, updatedDate, faq } = entry.data
+const { title, description, competitor, heading, disclaimer, updatedDate, faq, pricingLadder } = entry.data
 const { Content } = await render(entry)
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -65,6 +66,8 @@ const jsonLd: unknown[] = [
     <div class="compare-body mt-16 border-t border-border pt-12" data-reveal-group>
       <Content />
     </div>
+
+    {pricingLadder && <ComparisonPricingLadder />}
 
     <section aria-labelledby="faq-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
       <h2 id="faq-heading" class="text-2xl font-semibold text-text" data-reveal>Frequently asked questions</h2>

@@ -6,6 +6,7 @@ heading: "LyraShield AI vs Snyk"
 disclaimer: "Factual comparison. This page compares publicly documented capabilities. Snyk is a mature vulnerability scanning platform. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. Neither replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace Snyk?"
     a: "No. Snyk is a broad developer-first platform covering SAST, SCA, container, IaC, and secrets with IDE plugins and a mature vulnerability database; it is a Leader in Gartner AST. LyraShield in open beta is narrower: agentic pentest plus SCA and secrets focused on immutable release assurance with approval-gated fixes."
@@ -48,11 +49,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                                                                                                  | Snyk                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS, Private Cloud (AWS), CLI, IDE plugins, CI/CD                     |
-| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free tier (test limits), Team $25/dev/month, Enterprise (custom)       |
-| Languages  | Language-agnostic (deterministic + agentic coverage)                                                                           | 19+ languages (Java, JS, Python, Go, C/C++, PHP, Ruby, .NET, and more) |
+| Aspect     | LyraShield AI                                        | Snyk                                                                   |
+| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                   | SaaS, Private Cloud (AWS), CLI, IDE plugins, CI/CD                     |
+| Pricing    | See [pricing](/pricing) for current plan details     | Free tier (test limits), Team $25/dev/month, Enterprise (custom)       |
+| Languages  | Language-agnostic (deterministic + agentic coverage) | 19+ languages (Java, JS, Python, Go, C/C++, PHP, Ruby, .NET, and more) |
 
 ## When to use which
 

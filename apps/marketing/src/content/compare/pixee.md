@@ -6,6 +6,7 @@ heading: "LyraShield AI vs Pixee"
 disclaimer: "Factual comparison. Pixee is an agentic AppSec platform that triages and fixes vulnerabilities found by your existing SAST, SCA, and DAST tools — it is not itself a scanner. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA, and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two occupy different positions in the pipeline; neither replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace Pixee?"
     a: "No, they occupy different positions. Pixee is not a scanner; it ingests findings from 10+ tools like CodeQL, Semgrep, Checkmarx, and Snyk via SARIF and triages exploitability to generate validated fix PRs. LyraShield in open beta is a detector plus assurer: agentic pentest plus SCA and secrets with immutable reports and approval-gated fixes."
@@ -45,11 +46,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                                                                                                  | Pixee                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | GitHub App (Pixeebot), GitHub Action, SaaS, self-hosted, air-gapped; SOC 2 compliant; BYOM supported |
-| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Not public — outcome-based ("pay per vulnerability resolved"), contact-sales only, no free tier      |
-| Languages  | Language-agnostic                                                                                                              | Scanner-determined (fixes apply across the languages your scanners cover)                            |
+| Aspect     | LyraShield AI                                    | Pixee                                                                                                |
+| ---------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action               | GitHub App (Pixeebot), GitHub Action, SaaS, self-hosted, air-gapped; SOC 2 compliant; BYOM supported |
+| Pricing    | See [pricing](/pricing) for current plan details | Not public — outcome-based ("pay per vulnerability resolved"), contact-sales only, no free tier      |
+| Languages  | Language-agnostic                                | Scanner-determined (fixes apply across the languages your scanners cover)                            |
 
 ## When to use which
 

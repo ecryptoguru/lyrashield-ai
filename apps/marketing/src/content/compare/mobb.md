@@ -6,6 +6,7 @@ heading: "LyraShield AI vs Mobb"
 disclaimer: "Factual comparison. Mobb is an AI-powered remediation platform that takes SAST scanner results as input and generates fix PRs, with a newer IDE layer (Mobb Vibe Shield) for AI-coding security. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA, and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two target different parts of the workflow; neither replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace Mobb?"
     a: "No. Mobb is an AI-powered remediation platform that ingests SAST results from Checkmarx, Fortify, Snyk, CodeQL, SonarQube, and Opengrep, auto-triages into Fixable, Irrelevant, Remaining, and generates fixes re-scanned to confirm clearance. LyraShield in open beta is a full assurance loop with its own agentic pentest, SCA, and secrets."
@@ -46,11 +47,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                                                                                                  | Mobb                                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS (multi-tenant), single-tenant, on-prem (AWS); GitHub/GitLab/Azure DevOps/Bitbucket; CLI, API, IDE/MCP                 |
-| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Community free (public repos); Development Teams $20/dev/mo; Team $40/dev/mo (5–15 contributors); Enterprise contact-sales |
-| Languages  | Language-agnostic                                                                                                              | Fixes in Java, JavaScript/TypeScript, C#, Python (Opengrep scans 30+)                                                      |
+| Aspect     | LyraShield AI                                    | Mobb                                                                                                                       |
+| ---------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS (multi-tenant), single-tenant, on-prem (AWS); GitHub/GitLab/Azure DevOps/Bitbucket; CLI, API, IDE/MCP                 |
+| Pricing    | See [pricing](/pricing) for current plan details | Community free (public repos); Development Teams $20/dev/mo; Team $40/dev/mo (5–15 contributors); Enterprise contact-sales |
+| Languages  | Language-agnostic                                | Fixes in Java, JavaScript/TypeScript, C#, Python (Opengrep scans 30+)                                                      |
 
 ## When to use which
 

@@ -67,6 +67,7 @@ const compare = defineCollection({
     disclaimer: z.string().min(80),
     updatedDate: z.coerce.date(),
     draft: z.boolean().default(true),
+    pricingLadder: z.literal(true),
     canonical: z.url().optional(),
     faq: z
       .array(z.object({ q: z.string(), a: z.string() }))

@@ -6,6 +6,7 @@ heading: "LyraShield AI vs Corgea"
 disclaimer: "Factual comparison. Corgea is an AI-native application security platform spanning AI SAST, SCA, secrets detection, IaC, container scanning, and a multi-agent AI pentest, delivering review-ready fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports, and gates fixes behind approvals. The two overlap on pentest, SCA, and secrets; neither fully replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace Corgea?"
     a: "No. Corgea is an AI-native AppSec platform spanning AI SAST with BLAST for business-logic detection, SCA with reachability and dead-package analysis, secrets, IaC, containers, plus pre-code PRD security design reviews and a multi-agent AI pentest from $4,000. LyraShield in open beta is a focused release assurance loop with immutable evidence and approval-gated fixes."
@@ -46,11 +47,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                                                                                                  | Corgea                                                                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS, GitHub App, GitLab/Azure DevOps/Bitbucket/Harness, IDE plugins, CLI, GitHub Action                                                                      |
-| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free ($0, ≤2 members, 10 repos); Growth $39/dev/mo; Scale $49/dev/mo; Enterprise custom. AI Pentest: Standard $4,000, Comprehensive $8,000, Enterprise custom |
-| Languages  | Language-agnostic                                                                                                              | 20+ (JS, Ruby, C++, Python, C, PHP, Java, Go, C#, TypeScript, and more)                                                                                       |
+| Aspect     | LyraShield AI                                    | Corgea                                                                                                                                                        |
+| ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, GitHub App, GitLab/Azure DevOps/Bitbucket/Harness, IDE plugins, CLI, GitHub Action                                                                      |
+| Pricing    | See [pricing](/pricing) for current plan details | Free ($0, ≤2 members, 10 repos); Growth $39/dev/mo; Scale $49/dev/mo; Enterprise custom. AI Pentest: Standard $4,000, Comprehensive $8,000, Enterprise custom |
+| Languages  | Language-agnostic                                | 20+ (JS, Ruby, C++, Python, C, PHP, Java, Go, C#, TypeScript, and more)                                                                                       |
 
 ## When to use which
 

@@ -6,6 +6,7 @@ heading: "LyraShield AI vs Runsybil"
 disclaimer: 'Factual comparison. [RunSybil](https://www.runsybil.com/) is an AI-native offensive security platform whose "Sybil" agents reason like elite attackers — black-box first, mapping the attack surface, chaining vulnerabilities across code, APIs, cloud, and infrastructure, and validating exploitability continuously on every deployment. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. Both independently validate findings and run continuously. Neither replaces the other.'
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace RunSybil?"
     a: "No. RunSybil is an AI-native black-box offensive platform whose Sybil agents reason like elite attackers without requiring source code, testing multi-tenant and business-logic flaws continuously on every deployment. LyraShield in open beta is source and MCP-aware release assurance for AI-built apps with SCA, secrets, evidence states, and approval-gated fixes."
@@ -46,11 +47,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                                                                                                  | RunSybil                                                                   |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                                                                                             | Hosted; point at a target or run continuously; PR-level feedback           |
-| Pricing            | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Not public — demo/sales; subscription model (per ToS), USD, non-refundable |
-| Compliance posture | Assurance-record orientation for release sign-off                                                                              | Used for SOC 2 pentest requirements; CTEM Phase 4 validation               |
+| Aspect             | LyraShield AI                                     | RunSybil                                                                   |
+| ------------------ | ------------------------------------------------- | -------------------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted; point at a target or run continuously; PR-level feedback           |
+| Pricing            | See [pricing](/pricing) for current plan details  | Not public — demo/sales; subscription model (per ToS), USD, non-refundable |
+| Compliance posture | Assurance-record orientation for release sign-off | Used for SOC 2 pentest requirements; CTEM Phase 4 validation               |
 
 ## When to use which
 

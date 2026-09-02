@@ -6,6 +6,7 @@ heading: "LyraShield AI vs Aikido"
 disclaimer: "Factual comparison. [Aikido Security](https://www.aikido.dev/) is a unified security platform covering code, cloud, and runtime from one interface — SAST, SCA, secrets, IaC/container scanning, CSPM, DAST, AI pentesting, and runtime protection — with auto-generated fix PRs. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. Aikido is a broad AppSec platform with a pentest layer; LyraShield AI is a focused release-assurance loop purpose-built for AI-generated code. Neither replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace Aikido?"
     a: "No. Aikido is a unified code to cloud to runtime platform covering SAST, SCA, secrets, IaC, containers, CSPM, DAST, AI pentesting, and runtime protection, with AutoFix PRs and a free forever tier. LyraShield in open beta is not a broad AppSec stack; it is a focused loop for AI-built apps with approval-gated fixes and immutable assurance."
@@ -49,11 +50,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                                                                                                  | Aikido                                                                                                                                                                   |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                                                                                             | SaaS + IDE + CI integrations; broker for internal apps; local code scanning option                                                                                       |
-| Pricing            | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free (forever, no card); $300/mo small teams; $600/mo growing teams; Enterprise custom. Pentest: typical from $4,000; rightsized $50–$30,000+; continuous testing custom |
-| Compliance posture | Assurance-record orientation for release sign-off                                                                              | SOC 2 Type II + ISO 27001:2022 attested                                                                                                                                  |
+| Aspect             | LyraShield AI                                     | Aikido                                                                                                                                                                   |
+| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS + IDE + CI integrations; broker for internal apps; local code scanning option                                                                                       |
+| Pricing            | See [pricing](/pricing) for current plan details  | Free (forever, no card); $300/mo small teams; $600/mo growing teams; Enterprise custom. Pentest: typical from $4,000; rightsized $50–$30,000+; continuous testing custom |
+| Compliance posture | Assurance-record orientation for release sign-off | SOC 2 Type II + ISO 27001:2022 attested                                                                                                                                  |
 
 ## When to use which
 

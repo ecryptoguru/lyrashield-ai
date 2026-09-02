@@ -6,6 +6,7 @@ heading: "LyraShield AI vs XBOW"
 disclaimer: "Factual comparison. [XBOW](https://xbow.com/) by XBOW, Inc. is an autonomous offensive security platform that uses AI agents to continuously pentest applications and APIs, independently proving exploitability with working exploits before a finding reaches your team. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop that separates detection from proof and produces immutable assurance records with approval-gated fixes. Both independently verify findings before surfacing them. Neither replaces the other — they optimize for different deliverables (XBOW: continuous exploit-proof; LyraShield AI: ship-ready assurance for AI-generated code)."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace XBOW?"
     a: "No. XBOW is an autonomous offensive platform that proves exploitability with working exploits, decision logs, and complete case files at portfolio scale across apps and APIs. LyraShield in open beta is a focused release assurance loop for AI-built apps that separates detection from proof and adds SCA, secrets, and approval-gated fixes with immutable reports."
@@ -47,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                                                                                                  | XBOW                                                                                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                                                                                             | Hosted SaaS (XBOW Console); available on AWS, Google, Oracle, Microsoft cloud marketplaces                                                                               |
-| Pricing            | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Usage-based, scoped to your environment; no published tier table. XBOW Pentest On-Demand starts at $4,000 (one-time per engagement); ongoing enterprise pricing by quote |
-| Compliance posture | Assurance-record orientation for release sign-off                                                                              | SOC 2, ISO 27001, PCI DSS, NIS 2 alignment; auditable scope and logging                                                                                                  |
+| Aspect             | LyraShield AI                                     | XBOW                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted SaaS (XBOW Console); available on AWS, Google, Oracle, Microsoft cloud marketplaces                                                                               |
+| Pricing            | See [pricing](/pricing) for current plan details  | Usage-based, scoped to your environment; no published tier table. XBOW Pentest On-Demand starts at $4,000 (one-time per engagement); ongoing enterprise pricing by quote |
+| Compliance posture | Assurance-record orientation for release sign-off | SOC 2, ISO 27001, PCI DSS, NIS 2 alignment; auditable scope and logging                                                                                                  |
 
 ## When to use which
 

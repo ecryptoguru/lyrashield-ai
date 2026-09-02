@@ -6,6 +6,7 @@ heading: "LyraShield AI vs Semgrep"
 disclaimer: "Factual comparison. Semgrep by Semgrep Inc. provides pattern-based static analysis with custom rules, SCA, and secrets detection. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. Neither replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace Semgrep?"
     a: "No. Semgrep excels at fast, customizable pattern-based scanning with rules that look like code, 30+ languages, and an LGPL Community Edition. LyraShield in open beta is not a general SAST engine; it pairs agentic pentest with SCA and secrets to produce evidence states and an immutable assurance record for release decisions."
@@ -48,11 +49,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                                                                                                  | Semgrep                                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                                                                                             | AppSec Platform (SaaS), CLI (CE), IDE extensions, CI/CD integrations                                                          |
-| Pricing    | Trial: 100 one-time agent-minutes; Starter $29/month; Pro $99/month; Launch Assurance $499/month; Enterprise from $1,500/month | Free ≤10 contributors; Teams from $30/contributor/mo (Code & Supply Chain) or $15/contributor/mo (Secrets); Enterprise custom |
-| Languages  | Language-agnostic (deterministic + agentic coverage)                                                                           | 30+ languages (GA, Beta, Experimental)                                                                                        |
+| Aspect     | LyraShield AI                                        | Semgrep                                                                                                                       |
+| ---------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                   | AppSec Platform (SaaS), CLI (CE), IDE extensions, CI/CD integrations                                                          |
+| Pricing    | See [pricing](/pricing) for current plan details     | Free ≤10 contributors; Teams from $30/contributor/mo (Code & Supply Chain) or $15/contributor/mo (Secrets); Enterprise custom |
+| Languages  | Language-agnostic (deterministic + agentic coverage) | 30+ languages (GA, Beta, Experimental)                                                                                        |
 
 ## When to use which
 
