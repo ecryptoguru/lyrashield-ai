@@ -4,6 +4,7 @@ import { computeAuditHash } from "./audit-hash"
 import type { AuditLog } from "./generated/prisma"
 import { ACTIVE_SCAN_STATUSES, lockWorkspaceScanAdmission } from "./scan-service"
 import { runWithDatabaseRLSContext } from "./scoping"
+import { lockWorkspaceMembership } from "./workspace-membership-lock"
 
 const DELETED_USER = "deleted-user"
 
@@ -212,6 +213,54 @@ export async function deleteUserAccount(
   )
 
   const artifactDeletionTaskIds = await prisma.$transaction(async (tx) => {
+    // The preview is advisory. Lock every affected workspace in a stable order,
+    // then reclassify ownership before any deletion or attribution mutation.
+    const lockedPlan: AccountDeletionPlan = { deletable: [], blocked: [], retained: [] }
+    for (const workspaceId of [...affectedWorkspaceIds].sort()) {
+      await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
+      await lockWorkspaceMembership(tx, workspaceId)
+    }
+    for (const workspaceId of [...affectedWorkspaceIds].sort()) {
+      await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { id: true, name: true },
+      })
+      if (!workspace) continue
+      const active = await tx.workspaceMember.findMany({
+        where: { workspaceId, status: "active" },
+        select: { userId: true, role: true },
+      })
+      const owner = active.some((member) => member.userId === userId && member.role === "OWNER")
+      const others = active.filter((member) => member.userId !== userId)
+      if (!owner || others.some((member) => member.role === "OWNER")) {
+        lockedPlan.retained.push(workspace)
+      } else if (others.length === 0) {
+        lockedPlan.deletable.push(workspace)
+      } else {
+        const users = await tx.user.findMany({
+          where: { id: { in: others.map((member) => member.userId) } },
+          select: { id: true, name: true, email: true },
+        })
+        lockedPlan.blocked.push({ ...workspace, members: users })
+      }
+    }
+    if (lockedPlan.blocked.length > 0) throw new AccountDeletionBlockedError(lockedPlan.blocked)
+    const lockedConfirmation =
+      lockedPlan.deletable.length > 0
+        ? lockedPlan.deletable
+            .map((workspace) => workspace.name)
+            .sort()
+            .join(", ")
+        : "DELETE"
+    if (confirmation !== lockedConfirmation)
+      throw new AccountDeletionConfirmationRequiredError(lockedPlan.deletable, lockedConfirmation)
+    plan.deletable = lockedPlan.deletable
+    retainedWorkspaceIds.splice(
+      0,
+      retainedWorkspaceIds.length,
+      ...lockedPlan.retained.map((workspace) => workspace.id)
+    )
     const deletableWorkspaces = [...plan.deletable].sort((a, b) => a.id.localeCompare(b.id))
     const activeScanWorkspaces: AccountDeletionWorkspace[] = []
     const unsupportedArtifactWorkspaces: AccountDeletionWorkspace[] = []

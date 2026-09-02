@@ -31,7 +31,7 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   const workspaces: string[] = []
   for (const name of ["Mobile Alpha", "Mobile Beta"]) {
     const response = await page.request.post("/api/workspaces", {
-      data: { name, slug: `${name.toLowerCase().replaceAll(" ", "-")}-${suffix}`, mode: "VIBE" },
+      data: { name: `${name} ${suffix}`, mode: "VIBE" },
       headers: { Origin: "http://127.0.0.1:3100" },
     })
     await expect(response).toBeOK()
@@ -54,10 +54,18 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   ).toBeOK()
   await page.goto("/dashboard/targets")
   await expect(page.getByText("Mobile Alpha target", { exact: true })).toBeVisible()
+  await page.evaluate(() => {
+    ;(window as Window & { workspaceDocumentMarker?: string }).workspaceDocumentMarker = "alpha"
+  })
   await page.getByRole("button", { name: /^Workspace navigation/ }).click()
   await page.getByRole("combobox", { name: "Active workspace" }).selectOption(workspaces[1]!)
   await expect(page).toHaveURL(/\/dashboard$/)
-  await page.goto("/dashboard/targets")
+  expect(
+    await page.evaluate(
+      () => (window as Window & { workspaceDocumentMarker?: string }).workspaceDocumentMarker
+    )
+  ).toBeUndefined()
+  await page.getByRole("link", { name: "Targets", exact: true }).click()
   await expect(page.getByText("Mobile Beta target", { exact: true })).toBeVisible()
   await expect(page.getByText("Mobile Alpha target", { exact: true })).toHaveCount(0)
   await page.getByRole("button", { name: /^Workspace navigation/ }).click()

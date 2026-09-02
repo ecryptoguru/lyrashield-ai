@@ -90,6 +90,7 @@ export {
   EvidenceEncryptionError,
 } from "./evidence"
 export { withWorkspaceRLS, withoutWorkspaceRLS } from "./rls"
+export { lockWorkspaceMembership } from "./workspace-membership-lock"
 export {
   issuePlatformAdminElevation,
   consumePlatformAdminChallengeAttempt,

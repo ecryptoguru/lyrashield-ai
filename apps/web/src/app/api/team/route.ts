@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS, lockWorkspaceMembership } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS, canGrantRole, hasPermission } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -58,7 +58,7 @@ async function changeMember(
   const result = await withWorkspaceRLS(workspaceId, async (tx) => {
     // Serialize membership changes and recheck the actor after taking the lock.
     // Two owners cannot concurrently remove/demote each other or the final owner.
-    await tx.$queryRaw`SELECT id FROM "Workspace" WHERE id = ${workspaceId} FOR UPDATE`
+    await lockWorkspaceMembership(tx, workspaceId)
     const actor = await tx.workspaceMember.findFirst({
       where: { workspaceId, userId: session.userId, status: "active" },
     })
@@ -234,7 +234,7 @@ async function post(request: Request) {
 
     const [existingMember, existingInvitation, workspaceRow] = await Promise.all([
       prisma.workspaceMember.findFirst({
-        where: { workspaceId, invitedEmail: email },
+        where: { workspaceId, invitedEmail: email, status: "active" },
       }),
       prisma.invitation.findFirst({
         where: { workspaceId, email, status: "pending" },

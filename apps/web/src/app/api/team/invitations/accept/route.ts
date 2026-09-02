@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import { z } from "zod"
-import { getSystemPrisma, prisma } from "@lyrashield/db"
+import { getSystemPrisma, prisma, lockWorkspaceMembership } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -112,6 +112,7 @@ async function post(request: Request) {
     }
 
     const joined = await getSystemPrisma().$transaction(async (tx) => {
+      await lockWorkspaceMembership(tx, invitation.workspaceId)
       const consumed = await tx.invitation.updateMany({
         where: {
           id: invitation.id,

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   revoke: vi.fn(),
 }))
 vi.mock("@lyrashield/db", () => ({
+  lockWorkspaceMembership: async (tx: { $queryRaw: () => Promise<unknown> }) => tx.$queryRaw(),
   prisma: { auditLog: { create: mocks.audit }, invitation: { updateMany: mocks.revoke } },
   withWorkspaceRLS: async (_id: string, fn: (tx: unknown) => unknown) =>
     fn({

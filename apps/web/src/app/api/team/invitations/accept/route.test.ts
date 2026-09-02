@@ -21,6 +21,7 @@ const systemPrismaMocks = {
 }
 
 vi.mock("@lyrashield/db", () => ({
+  lockWorkspaceMembership: vi.fn(),
   getSystemPrisma: () => systemPrismaMocks,
   prisma: {
     auditLog: { create: vi.fn() },
