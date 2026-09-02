@@ -98,7 +98,7 @@ async function changeMember(
   return apiSuccess({ id: memberId })
 }
 
-export async function PATCH(request: Request) {
+async function patch(request: Request) {
   try {
     const body = await request.json().catch(() => null)
     const parsed = ChangeMemberSchema.safeParse(body)
@@ -117,7 +117,7 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+async function remove(request: Request) {
   try {
     const parsed = ChangeMemberSchema.omit({ role: true }).safeParse(
       Object.fromEntries(new URL(request.url).searchParams)
@@ -397,3 +397,5 @@ export async function GET(request: Request) {
 }
 
 export const POST = withCookieMutation(post)
+export const PATCH = withCookieMutation(patch)
+export const DELETE = withCookieMutation(remove)

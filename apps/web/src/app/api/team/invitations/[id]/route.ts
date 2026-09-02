@@ -3,10 +3,10 @@ import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
-import { authErrorResponse } from "@/lib/api-auth"
+import { authErrorResponse, withCookieMutation } from "@/lib/api-auth"
 import { apiError, apiSuccess } from "@/lib/api-response"
 
-export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+async function remove(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const parsed = z
       .object({ workspaceId: z.string().min(1).max(128), id: z.string().min(1).max(128) })
@@ -41,3 +41,5 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     return apiError("INTERNAL_ERROR", "Failed to revoke invitation", 500)
   }
 }
+
+export const DELETE = withCookieMutation(remove)
