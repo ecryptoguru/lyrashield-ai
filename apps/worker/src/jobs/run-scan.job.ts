@@ -716,6 +716,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         },
       })
       const terminalOutcome = storedTerminalOutcome(pendingFinalization?.resultManifest?.manifest)
+      if (pendingFinalization?.status === "FAILED") {
+        return {
+          status: "failed",
+          errorCategory: pendingFinalization.errorCategory ?? "INTERNAL_ERROR",
+          errorMessage:
+            pendingFinalization.errorMessage ?? "Scan failed; paid work was not replayed",
+        }
+      }
       if (pendingFinalization?.status === "COMPLETED") {
         await reportInterruptedSettlement(workspaceId, scanId)
         return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
@@ -1210,6 +1218,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             // Finalization failures must not be swallowed or retried outside
             // the transaction that just rolled back their provisional charges.
             if (finalizationAttempted) throw meterError
+            // Billable success requires a durable settlement obligation. A
+            // preliminary account read or intent insert can fail before the
+            // finalizer starts; never silently complete through that window.
+            // Quota refusal and cancellation retain their existing paths.
+            if (billingOutcome !== "cancelled" && !agentMinuteTerminalError) throw meterError
             if (agentMinuteTerminalError) {
               await prisma.auditLog.create({
                 data: {
@@ -1225,7 +1238,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               scanId,
               error: meterError instanceof Error ? meterError.message : String(meterError),
             })
-            // Non-fatal: don't block the scan if metering fails
+            // Cancellation remains best-effort; quota refusal is finalized below.
           }
         }
       }

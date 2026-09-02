@@ -117,7 +117,7 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
           </p>
           <div className="mt-3 grid gap-3">
             {items.map((approval) => (
-              <Card key={approval.id}>
+              <Card key={approval.id} className="min-w-0">
                 <CardContent className="flex flex-wrap items-start justify-between gap-4 p-4">
                   <div className="min-w-0 flex-1 basis-64">
                     <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
@@ -126,7 +126,7 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
                     <p className="mt-1 break-words font-medium">
                       {approvalSummary(approval.actionName, approval.input)}
                     </p>
-                    <details className="mt-3 rounded border p-3">
+                    <details className="mt-3 min-w-0 max-w-full rounded border p-3">
                       <summary className="cursor-pointer text-sm font-medium">
                         Review exact action input
                       </summary>
@@ -137,8 +137,8 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
                         {Object.entries(approval.input).map(([key, value]) => (
                           <div key={key}>
                             <dt className="break-all font-medium">{key}</dt>
-                            <dd>
-                              <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2">
+                            <dd className="min-w-0 max-w-full">
+                              <pre className="max-h-80 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2">
                                 {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
                               </pre>
                             </dd>
@@ -153,7 +153,7 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
                         : "Never"}
                     </p>
                   </div>
-                  <div className="flex shrink-0 gap-2">
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"

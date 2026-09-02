@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const transactionMock = vi.hoisted(() => vi.fn())
 const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
+const intentCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({}))
 
 vi.mock("@lyrashield/db", () => ({
   prisma: { $transaction: transactionMock },
@@ -78,7 +79,7 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
 
   const tx = {
     scan: { findFirst: vi.fn().mockResolvedValue({ id: "finished" }) },
-    scanEvent: { create: vi.fn().mockResolvedValue({}) },
+    scanEvent: { create: intentCreateMock },
     $executeRaw: executeRawMock,
     billingAccount: {
       findUnique: vi.fn().mockResolvedValue({ currentPeriodStart: cycleStart }),
@@ -143,6 +144,19 @@ beforeEach(() => {
 })
 
 describe("recordAgentMinutes pack debits", () => {
+  it("fails before finalization or debit when durable intent insertion fails once", async () => {
+    configureDatabase(100, [10])
+    const before = structuredClone({ usageRecords, packs })
+    const finalize = vi.fn()
+    intentCreateMock.mockRejectedValueOnce(new Error("intent insert unavailable"))
+    await expect(
+      recordAgentMinutes("ws_1", "finished", 60_000, { beforeCommit: finalize })
+    ).rejects.toThrow("intent insert unavailable")
+    expect(finalize).not.toHaveBeenCalled()
+    expect({ usageRecords, packs }).toEqual(before)
+    expect(transactionMock).toHaveBeenCalledOnce()
+    expect(executeRawMock).not.toHaveBeenCalled()
+  })
   it("does not reassess quota after terminal finalization and an uncertain serialization commit", async () => {
     configureDatabase(100)
     const transaction = transactionMock.getMockImplementation()!

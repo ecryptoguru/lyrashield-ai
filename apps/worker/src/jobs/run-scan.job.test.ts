@@ -659,6 +659,33 @@ describe("processScanJob", () => {
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
     )
   })
+  it.each(["account lookup", "intent insert"])(
+    "fails closed when %s fails once before a durable billing obligation exists",
+    async (stage) => {
+      const error = new Error(`injected ${stage} failure`)
+      if (stage === "account lookup")
+        vi.mocked(prisma.billingAccount.findUnique).mockRejectedValueOnce(error)
+      else vi.mocked(recordAgentMinutes).mockRejectedValueOnce(error)
+      const result = await processScanJob(mockJob)
+      expect(result.status).toBe("failed")
+      expect(completeScanWithScore).not.toHaveBeenCalled()
+      expect(persistResultManifest).not.toHaveBeenCalled()
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+      expect(debitOverage).not.toHaveBeenCalled()
+      expect(enterGrace).not.toHaveBeenCalled()
+      expect(runEngine).toHaveBeenCalledOnce()
+      expect(recordAgentMinutes).toHaveBeenCalledTimes(stage === "account lookup" ? 0 : 1)
+      // Database availability returns on redelivery, but the failed paid run
+      // is terminal: do not try the engine or settlement again.
+      vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+        status: "FAILED",
+        errorCategory: "INTERNAL_ERROR",
+      } as never)
+      await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
+      expect(runEngine).toHaveBeenCalledOnce()
+      expect(recordAgentMinutes).toHaveBeenCalledTimes(stage === "account lookup" ? 0 : 1)
+    }
+  )
   it.each(["manifest", "retests", "score"])(
     "does not commit settlement when %s finalization fails",
     async (stage) => {

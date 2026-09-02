@@ -61,12 +61,13 @@ export function InlineConfirm({
   }
 
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5" role="group" aria-label={message}>
-      {/* Kept visible at all widths — destructive confirms need their context on
-          mobile too. Truncate + title covers very narrow containers. */}
-      <span className="text-muted-foreground min-w-0 truncate text-xs" title={message}>
-        {message}
-      </span>
+    <span
+      className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5"
+      role="group"
+      aria-label={message}
+    >
+      {/* Wrap the full context and controls rather than clipping confirmation. */}
+      <span className="text-muted-foreground min-w-0 break-words text-xs">{message}</span>
       <Button
         ref={confirmRef}
         type="button"

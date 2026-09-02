@@ -54,6 +54,46 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   ).toBeOK()
   await page.goto("/dashboard/targets")
   await expect(page.getByText("Mobile Alpha target", { exact: true })).toBeVisible()
+  const owner = await prisma.user.findUniqueOrThrow({ where: { email } })
+  const payload = `<img src=x onerror=alert(1)> ${"unbroken".repeat(70)} END_OF_EXACT_INPUT`
+  const approval = await prisma.agentApproval.create({
+    data: {
+      workspaceId: workspaces[0]!,
+      requestedById: owner.id,
+      actionName: "local.fixture",
+      inputHash: `non-executable-${suffix}`,
+      input: { payload, nested: { enabled: false } },
+    },
+  })
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/dashboard/approvals")
+    await page.getByText("Review exact action input", { exact: true }).click()
+    const input = page.locator("pre").filter({ hasText: "END_OF_EXACT_INPUT" })
+    await expect(input).toHaveText(payload)
+    await expect(input.locator("img")).toHaveCount(0)
+    await page.getByRole("button", { name: "Approve", exact: true }).click()
+    for (const element of [
+      input,
+      page.getByRole("button", { name: "Approve action", exact: true }),
+      page.getByRole("button", { name: "Cancel", exact: true }),
+    ]) {
+      await element.scrollIntoViewIfNeeded()
+      await expect(element).toBeInViewport()
+      const bounds = await element.boundingBox()
+      expect(bounds).not.toBeNull()
+      expect(bounds!.x).toBeGreaterThanOrEqual(0)
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
+    }
+    expect(await input.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
+    await page.getByRole("button", { name: "Cancel", exact: true }).click()
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeFocused()
+    expect(
+      (await prisma.agentApproval.findUniqueOrThrow({ where: { id: approval.id } })).status
+    ).toBe("PENDING")
+  }
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/dashboard/targets")
   await page.evaluate(() => {
     ;(window as Window & { workspaceDocumentMarker?: string }).workspaceDocumentMarker = "alpha"
   })
