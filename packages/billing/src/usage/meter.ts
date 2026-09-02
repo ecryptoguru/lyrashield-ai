@@ -41,6 +41,9 @@ export interface RecordAgentMinutesOptions {
    * the entire settlement, including pack and overage writes. Never open a
    * second transaction for the same workspace from this callback. */
   settleOverage?: (tx: MeterTransaction, minutes: number) => Promise<void>
+  /** Finish bounded, idempotent result persistence before monetary commit.
+   * A failure rolls back all provisional usage. No provider work belongs here. */
+  beforeCommit?: () => Promise<void>
 }
 
 export interface RecordAgentMinutesResult {
@@ -127,6 +130,7 @@ export async function recordAgentMinutes(
   const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
   const minutes = isDeep ? rawMinutes * DEEP_SCAN_MULTIPLIER : rawMinutes
 
+  let finalizationStarted = false
   for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
     try {
       return await withWorkspaceRLS(
@@ -142,6 +146,8 @@ export async function recordAgentMinutes(
             select: { id: true, metadata: true },
           })
           if (existing) {
+            finalizationStarted = Boolean(opts.beforeCommit)
+            await opts.beforeCommit?.()
             return {
               created: false,
               minutes: 0,
@@ -162,13 +168,22 @@ export async function recordAgentMinutes(
             multiplier: isDeep ? DEEP_SCAN_MULTIPLIER : 1,
           })
           if (overageMinutes > 0) await opts.settleOverage?.(tx, overageMinutes)
+          finalizationStarted = Boolean(opts.beforeCommit)
+          await opts.beforeCommit?.()
 
           return { created: true, minutes, idempotencyKey, overageMinutes }
         },
-        { isolationLevel: "Serializable" }
+        { isolationLevel: "Serializable", ...(opts.beforeCommit ? { timeout: 30_000 } : {}) }
       )
     } catch (error) {
-      if (isSerializationConflict(error) && attempt < MAX_TRANSACTION_ATTEMPTS) {
+      // Once terminal evidence is durable, never reassess quota or rerun its
+      // finalizer in a fresh transaction. An uncertain/aborted monetary commit
+      // leaves the successful result intact and uncharged rather than replaying it.
+      if (
+        isSerializationConflict(error) &&
+        !finalizationStarted &&
+        attempt < MAX_TRANSACTION_ATTEMPTS
+      ) {
         logger.warn("Retrying agent-minute transaction after serialization conflict", {
           workspaceId,
           idempotencyKey,

@@ -73,6 +73,16 @@ const REVERSED_COMMISSION = {
 }
 
 describe("clawback — RISK-C3 replay guard", () => {
+  it("does not reopen manual review for an already reversed above-threshold commission", async () => {
+    vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
+      commissions: [{ ...REVERSED_COMMISSION, amount: { gt: () => true, toString: () => "500" } }],
+    } as never)
+    expect(
+      await onRefund({ provider: "polar", externalId: "reversed-large", reason: "REFUND" })
+    ).toMatchObject({ replay: true, manualReview: false })
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+    expect(prisma.commission.update).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
   })

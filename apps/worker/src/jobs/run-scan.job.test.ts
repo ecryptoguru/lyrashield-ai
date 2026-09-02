@@ -1,5 +1,6 @@
 import { resolve } from "node:path"
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { logger } from "@lyrashield/logger"
 
 const completeUsage = vi.hoisted(() => ({
   model: "azure_ai/gpt-5.6-luna",
@@ -77,12 +78,24 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("@lyrashield/billing", () => ({
-  recordAgentMinutes: vi.fn().mockResolvedValue({
-    created: true,
-    minutes: 1,
-    idempotencyKey: "ws-1:scan-1:engine_run",
-    overageMinutes: 0,
-  }),
+  recordAgentMinutes: vi
+    .fn()
+    .mockImplementation(
+      async (
+        _workspaceId: string,
+        _scanId: string,
+        _ms: number,
+        options?: { beforeCommit?: () => Promise<void> }
+      ) => {
+        await options?.beforeCommit?.()
+        return {
+          created: true,
+          minutes: 1,
+          idempotencyKey: "ws-1:scan-1:engine_run",
+          overageMinutes: 0,
+        }
+      }
+    ),
   getUsageBalance: vi.fn().mockResolvedValue({ totalRemaining: 100 }),
   enterGrace: vi.fn().mockResolvedValue({ shouldContinue: true }),
   debitOverage: vi.fn().mockResolvedValue(undefined),
@@ -640,6 +653,59 @@ describe("processScanJob", () => {
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
     )
   })
+  it.each(["manifest", "retests", "score"])(
+    "does not commit settlement when %s finalization fails",
+    async (stage) => {
+      const failure = new Error("injected finalization failure")
+      if (stage === "manifest") vi.mocked(persistResultManifest).mockRejectedValueOnce(failure)
+      if (stage === "retests") vi.mocked(completeRetestsForScan).mockRejectedValueOnce(failure)
+      if (stage === "score") vi.mocked(completeScanWithScore).mockRejectedValueOnce(failure)
+      let charged = false
+      vi.mocked(recordAgentMinutes).mockImplementationOnce(
+        async (_workspaceId, _scanId, _ms, options) => {
+          await options?.beforeCommit?.()
+          charged = true
+          return { created: true, minutes: 1, idempotencyKey: "test", overageMinutes: 0 }
+        }
+      )
+      await processScanJob(mockJob)
+      expect(charged).toBe(false)
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+      expect(runEngine).toHaveBeenCalledOnce()
+    }
+  )
+  it("preserves completed results on an uncertain settlement commit response", async () => {
+    vi.mocked(recordAgentMinutes).mockImplementationOnce(
+      async (_workspaceId, _scanId, _ms, options) => {
+        await options?.beforeCommit?.()
+        throw new Error("commit acknowledgement lost")
+      }
+    )
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+    expect(logger.error).toHaveBeenCalledWith(
+      "billing.scan_settlement_commit_uncertain",
+      expect.objectContaining({
+        scanId: "scan-1",
+        accountingReviewRequired: true,
+        automaticReplayAllowed: false,
+      })
+    )
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+    expect(runEngine).toHaveBeenCalledOnce()
+  })
+  it.each(["COMPLETED", "PARTIAL"])(
+    "does not replay engine or settlement for a durable %s result",
+    async (status) => {
+      vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+        status,
+        summary: "Durable result",
+      } as never)
+      await processScanJob(mockJob)
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+    }
+  )
   it.each(["content_filter_stopped", "engine_stopped"])(
     "meters a %s PARTIAL result with affirmative scan-bound usage",
     async (reason) => {

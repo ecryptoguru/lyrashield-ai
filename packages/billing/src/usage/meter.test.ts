@@ -130,7 +130,7 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
       () => undefined,
       () => undefined
     )
-    expect(options).toEqual({ isolationLevel: "Serializable" })
+    expect(options).toEqual(expect.objectContaining({ isolationLevel: "Serializable" }))
     return result
   })
 }
@@ -140,6 +140,20 @@ beforeEach(() => {
 })
 
 describe("recordAgentMinutes pack debits", () => {
+  it("does not reassess quota after terminal finalization and an uncertain serialization commit", async () => {
+    configureDatabase(100)
+    const transaction = transactionMock.getMockImplementation()!
+    transactionMock.mockImplementation(async (callback, options) => {
+      await transaction(callback, options)
+      throw Object.assign(new Error("commit conflicted"), { code: "P2034" })
+    })
+    const finish = vi.fn(async () => {})
+    await expect(
+      recordAgentMinutes("ws_1", "finished", 60_000, { beforeCommit: finish })
+    ).rejects.toMatchObject({ code: "P2034" })
+    expect(finish).toHaveBeenCalledOnce()
+    expect(transactionMock).toHaveBeenCalledOnce()
+  })
   it.each(["completed", "partial", "cancelled", "failed"] as const)(
     "meters %s according to terminal policy",
     async (outcome) => {

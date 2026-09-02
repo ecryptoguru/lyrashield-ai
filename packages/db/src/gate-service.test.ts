@@ -178,7 +178,8 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     expect(admission).toHaveBeenCalledWith("SAFE")
     expect(outcome?.mode).toBe("SAFE")
     expect(createScan).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: "SAFE", determinismMode: "targeted_scanner" })
+      expect.objectContaining({ mode: "SAFE", determinismMode: "targeted_scanner" }),
+      prisma
     )
   })
   it("creates no scan when admission fails or a retest is pending", async () => {

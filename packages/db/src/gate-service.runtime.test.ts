@@ -15,9 +15,15 @@ vi.mock("@lyrashield/config", async (original) => {
 })
 import { handleFixPrMergedAndReevaluate } from "./gate-service"
 import { prisma as runtime } from "./client"
-import { recordAgentMinutes } from "../../billing/src/usage/meter"
+import { recordAgentMinutes, type RecordAgentMinutesOptions } from "../../billing/src/usage/meter"
 import { debitOverage } from "../../billing/src/usage/overage"
 import { enterGrace, GRACE_CAP_MS } from "../../billing/src/grace"
+import * as rls from "./rls"
+import { completeScanWithScore } from "./score-service"
+import {
+  persistResultManifest,
+  completeRetestsForScan,
+} from "../../../apps/worker/src/engine/result-integrity"
 
 const owner = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -200,5 +206,203 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     expect(
       (await owner.minutePack.findUniqueOrThrow({ where: { id: pack.id } })).remainingMinutes
     ).toBe(1)
+  })
+  it("rolls back scan and retest together on a late outer transaction failure, then recovers", async () => {
+    const source = await owner.scan.findFirstOrThrow({
+      where: { workspaceId: id, status: "COMPLETED" },
+    })
+    const finding = await owner.finding.create({
+      data: {
+        workspaceId: id,
+        targetId,
+        scanId: source.id,
+        title: "Late failure",
+        summary: "Test",
+        severity: "HIGH",
+        dedupeKey: `${id}-late`,
+      },
+    })
+    const proposal = await owner.fixProposal.create({
+      data: { findingId: finding.id, summary: "Fix" },
+    })
+    const recoveryBranch = `${branch}-late`
+    await owner.pullRequest.create({
+      data: {
+        fixProposalId: proposal.id,
+        provider: "github",
+        repoOwner: "test",
+        repoName: "repo",
+        branchName: recoveryBranch,
+      },
+    })
+    const count = await owner.scan.count({ where: { workspaceId: id } })
+    const original = rls.withWorkspaceRLS
+    let inject = true
+    const spy = vi
+      .spyOn(rls, "withWorkspaceRLS")
+      .mockImplementation((workspaceId, callback, options) =>
+        original(
+          workspaceId,
+          async (tx) => {
+            const result = await callback(tx)
+            if (inject && options?.timeout === 30_000) {
+              inject = false
+              throw new Error("late transaction failure")
+            }
+            return result
+          },
+          options
+        )
+      )
+    try {
+      await expect(
+        handleFixPrMergedAndReevaluate(id, recoveryBranch, 2, async () => {})
+      ).rejects.toThrow("late transaction failure")
+    } finally {
+      spy.mockRestore()
+    }
+    expect(await owner.scan.count({ where: { workspaceId: id } })).toBe(count)
+    expect(await owner.retest.count({ where: { workspaceId: id, findingId: finding.id } })).toBe(0)
+    const recovered = await handleFixPrMergedAndReevaluate(id, recoveryBranch, 2, async () => {})
+    expect(recovered?.retestScanId).toBeTruthy()
+    expect(await owner.scan.count({ where: { workspaceId: id } })).toBe(count + 1)
+    await owner.scan.update({
+      where: { id: recovered!.retestScanId },
+      data: { status: "COMPLETED" },
+    })
+  })
+  it("rolls back provisional charges when result persistence fails and recovers without engine work", async () => {
+    const scan = await owner.scan.create({
+      data: {
+        workspaceId: id,
+        targetId,
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        status: "VERIFYING",
+        createdById: id,
+      },
+    })
+    const beforeUsage = await owner.usageRecord.count({ where: { workspaceId: id } })
+    const beforePacks = await owner.minutePack.findMany({
+      where: { workspaceId: id },
+      select: { id: true, remainingMinutes: true },
+      orderBy: { id: "asc" },
+    })
+    const manifestInput = {
+      scanId: scan.id,
+      target: { id: targetId, type: "REPO" as const },
+      sourceCheckoutAvailable: true,
+      engineFindingCount: 0,
+      coverageIssues: [],
+    }
+    const options: RecordAgentMinutesOptions = {
+      outcome: "completed",
+      settleOverage: async (tx, minutes) => {
+        const debit = await debitOverage(id, minutes, scan.id, "final", tx)
+        if (debit.minutes !== minutes) throw new Error("STOPPED_BUDGET")
+      },
+    }
+    await expect(
+      recordAgentMinutes(id, scan.id, 120_000, {
+        ...options,
+        beforeCommit: async () => {
+          await persistResultManifest(manifestInput)
+          throw new Error("retest persistence unavailable")
+        },
+      })
+    ).rejects.toThrow("retest persistence unavailable")
+    expect(await owner.usageRecord.count({ where: { workspaceId: id } })).toBe(beforeUsage)
+    expect(
+      await owner.minutePack.findMany({
+        where: { workspaceId: id },
+        select: { id: true, remainingMinutes: true },
+        orderBy: { id: "asc" },
+      })
+    ).toEqual(beforePacks)
+    expect(await owner.scanResultManifest.findUnique({ where: { scanId: scan.id } })).not.toBeNull()
+    // Retry only the durable result tail. There is no scanner/provider call.
+    await recordAgentMinutes(id, scan.id, 120_000, {
+      ...options,
+      beforeCommit: async () => {
+        await persistResultManifest(manifestInput)
+        await completeRetestsForScan({ scanId: scan.id, workspaceId: id })
+        await completeScanWithScore(scan.id, id, "Recovered result")
+      },
+    })
+    expect((await owner.scan.findUniqueOrThrow({ where: { id: scan.id } })).status).toBe(
+      "COMPLETED"
+    )
+    expect(
+      await owner.usageRecord.count({
+        where: { workspaceId: id, idempotencyKey: { contains: scan.id } },
+      })
+    ).toBe(2)
+    const failed = await owner.scan.create({
+      data: {
+        workspaceId: id,
+        targetId,
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        status: "VERIFYING",
+        createdById: id,
+      },
+    })
+    const balanceBeforeFailure = await owner.minutePack.findMany({
+      where: { workspaceId: id },
+      select: { id: true, remainingMinutes: true },
+      orderBy: { id: "asc" },
+    })
+    const graceBeforeFailure = (await owner.workspace.findUniqueOrThrow({ where: { id } }))
+      .graceUsedMs
+    const usageBeforeFailure = await owner.usageRecord.count({ where: { workspaceId: id } })
+    await expect(
+      recordAgentMinutes(id, failed.id, 120_000, {
+        outcome: "completed",
+        beforeCommit: async () => {
+          throw new Error("manifest storage unavailable")
+        },
+      })
+    ).rejects.toThrow("manifest storage unavailable")
+    await rls.withWorkspaceRLS(id, (tx) =>
+      tx.scan.update({ where: { id: failed.id }, data: { status: "FAILED" } })
+    )
+    expect((await owner.scan.findUniqueOrThrow({ where: { id: failed.id } })).status).toBe("FAILED")
+    expect(await owner.usageRecord.count({ where: { workspaceId: id } })).toBe(usageBeforeFailure)
+    expect(
+      await owner.minutePack.findMany({
+        where: { workspaceId: id },
+        select: { id: true, remainingMinutes: true },
+        orderBy: { id: "asc" },
+      })
+    ).toEqual(balanceBeforeFailure)
+    expect((await owner.workspace.findUniqueOrThrow({ where: { id } })).graceUsedMs).toBe(
+      graceBeforeFailure
+    )
+    const terminal = await owner.scan.create({
+      data: {
+        workspaceId: id,
+        targetId,
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        status: "VERIFYING",
+        createdById: id,
+      },
+    })
+    await expect(
+      recordAgentMinutes(id, terminal.id, 60_000, {
+        outcome: "completed",
+        beforeCommit: async () => {
+          await persistResultManifest({ ...manifestInput, scanId: terminal.id })
+          await completeRetestsForScan({ scanId: terminal.id, workspaceId: id })
+          await completeScanWithScore(terminal.id, id, "Durable before monetary commit")
+          throw new Error("injected monetary commit failure")
+        },
+      })
+    ).rejects.toThrow("injected monetary commit failure")
+    expect((await owner.scan.findUniqueOrThrow({ where: { id: terminal.id } })).status).toBe(
+      "COMPLETED"
+    )
+    expect(await owner.scoreSnapshot.findUnique({ where: { scanId: terminal.id } })).not.toBeNull()
+    expect(await owner.usageRecord.count({ where: { workspaceId: id } })).toBe(usageBeforeFailure)
   })
 })

@@ -79,9 +79,12 @@ type ScanStatusMetadata = {
   actualCostCents?: number
 }
 
-export async function createScan(params: CreateScanParams): Promise<Scan> {
+export async function createScan(
+  params: CreateScanParams,
+  transaction?: ScanTransaction
+): Promise<Scan> {
   const determinismMode = DeterminismModeSchema.parse(params.determinismMode ?? "default")
-  const scan = await withWorkspaceRLS(params.workspaceId, async (tx) => {
+  const create = async (tx: ScanTransaction) => {
     // The workspace lock makes the shared concurrency cap atomic across manual,
     // scheduled, retest, and agent-created scans on different targets.
     await lockWorkspaceScanAdmission(tx, params.workspaceId)
@@ -136,13 +139,17 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
       },
     })
     return scan
-  })
+  }
+  const scan = transaction
+    ? await create(transaction)
+    : await withWorkspaceRLS(params.workspaceId, create)
 
-  logger.info("Scan created", {
-    scanId: scan.id,
-    workspaceId: params.workspaceId,
-    targetId: params.targetId,
-  })
+  if (!transaction)
+    logger.info("Scan created", {
+      scanId: scan.id,
+      workspaceId: params.workspaceId,
+      targetId: params.targetId,
+    })
   return scan
 }
 

@@ -168,7 +168,7 @@ export async function getLatestGateVerdict(workspaceId: string, targetId: string
  * scan. The caller (the GitHub webhook route) enqueues the new scan —
  * packages/db cannot import the queue package without a dependency cycle.
  *
- * Returns null (a no-op) when the branch matches no open fix PR in this
+ * Returns null (a no-op) when the branch matches no open or merged fix PR in this
  * workspace.
  */
 export async function handleFixPrMergedAndReevaluate(
@@ -178,7 +178,7 @@ export async function handleFixPrMergedAndReevaluate(
   assertRetestAllowed: (mode: ScanMode) => Promise<void>
 ): Promise<FixPrMergeOutcome | null> {
   if (typeof assertRetestAllowed !== "function") throw new Error("Retest admission guard required")
-  return withWorkspaceRLS(
+  const outcome = await withWorkspaceRLS(
     workspaceId,
     async (lockTx) => {
       // Serialize redeliveries through scan creation and durable retest association.
@@ -306,21 +306,23 @@ export async function handleFixPrMergedAndReevaluate(
       // triggerType "retest", Retest.scanId = the NEW scan id. The Retest stays
       // pending until the new scan completes, when completeRetestsForScan binds
       // its verdict to the stored baseline/retest checksums.
-      const { createScan, updateScanStatus, WorkspaceScanConcurrencyLimitError } =
-        await import("./scan-service")
+      const { createScan, WorkspaceScanConcurrencyLimitError } = await import("./scan-service")
       let retestScanId: string | undefined
       let retestId: string
       try {
-        const retestScan = await createScan({
-          workspaceId,
-          targetId: anchor.template.targetId,
-          goal: anchor.template.goal,
-          mode: profile.mode as ScanMode,
-          determinismMode: profile.determinismMode,
-          policyId: anchor.template.policyId ?? undefined,
-          createdById: result.actedById,
-          triggerType: "retest",
-        })
+        const retestScan = await createScan(
+          {
+            workspaceId,
+            targetId: anchor.template.targetId,
+            goal: anchor.template.goal,
+            mode: profile.mode as ScanMode,
+            determinismMode: profile.determinismMode,
+            policyId: anchor.template.policyId ?? undefined,
+            createdById: result.actedById,
+            triggerType: "retest",
+          },
+          lockTx
+        )
         retestScanId = retestScan.id
         const retest = await lockTx.retest.create({
           data: {
@@ -333,11 +335,6 @@ export async function handleFixPrMergedAndReevaluate(
         })
         retestId = retest.id
       } catch (retestError) {
-        if (retestScanId)
-          await updateScanStatus(retestScanId, "FAILED", {
-            errorCategory: "RETEST_SETUP",
-            errorMessage: "Automatic retest setup failed before queueing",
-          })
         if (
           retestError instanceof WorkspaceScanConcurrencyLimitError ||
           (retestError instanceof Error &&
@@ -349,10 +346,8 @@ export async function handleFixPrMergedAndReevaluate(
           })
           throw retestError
         }
-        // The merge is already committed. A retest-creation failure is best-effort
-        // — the finding can still be retested manually from the dashboard — but
-        // re-throw so the webhook route can delete its delivery marker and let
-        // GitHub redeliver (the merge step above will no-op on redelivery).
+        // Scan and Retest share the transaction: any failure rolls both back.
+        // Redelivery can resume from the separately persisted merge state.
         logger.error("Failed to create loop-closure retest scan", {
           workspaceId,
           branchName,
@@ -360,17 +355,6 @@ export async function handleFixPrMergedAndReevaluate(
         })
         throw retestError
       }
-
-      // Re-evaluate the gate immediately against the merged state. This reflects
-      // the PR merge (the fix exists on the target branch) even before the retest
-      // confirms resolution; the retest's own completion path re-evaluates again
-      // with confirmed evidence. Best-effort: a gate failure must not roll back
-      // the merge/retest that already committed.
-      await evaluateGateForTarget(workspaceId, anchor.targetId).catch((error) => {
-        logger.warn("Gate re-evaluation after fix PR merge failed (non-fatal)", {
-          error: error instanceof Error ? error.message : String(error),
-        })
-      })
 
       return {
         ...result,
@@ -384,6 +368,14 @@ export async function handleFixPrMergedAndReevaluate(
     },
     { timeout: 30_000 }
   )
+  // Gate evaluation cannot hold open or roll back the scan/association commit.
+  if (outcome)
+    await evaluateGateForTarget(workspaceId, outcome.targetId).catch((error) => {
+      logger.warn("Gate re-evaluation after fix PR merge failed (non-fatal)", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+  return outcome
 }
 
 /** handleFixPrMergedAndReevaluate result: the merge outcome plus the retest scan to enqueue. */
