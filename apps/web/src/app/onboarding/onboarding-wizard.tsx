@@ -78,7 +78,7 @@ export function OnboardingWizard({
     onboardingPathForTargetType(initialState.targetType ?? null)
   )
   const [githubUnavailable, setGithubUnavailable] = useState(false)
-  const [urlForm, setUrlForm] = useState({ name: "", url: "", ownershipAttested: false })
+  const [urlForm, setUrlForm] = useState({ url: "", ownershipAttested: false })
   const autoFetchAttempted = useRef(false)
   const reviewOptions = getOnboardingReviewOptions(path)
   const selectedReview =
@@ -253,7 +253,7 @@ export function OnboardingWizard({
     const payload = buildUrlTargetPayload({
       workspaceId: data.workspaceId,
       path,
-      name: urlForm.name,
+      name: productName,
       url: urlForm.url,
       environment,
       ownershipAttested: urlForm.ownershipAttested,
@@ -267,7 +267,6 @@ export function OnboardingWizard({
       return
     }
     setError(null)
-    if (!productName) setProductName(payload.name)
     const next = nextStepForPath(payload.type === "API" ? "api" : "url")
     if (next !== null) setStep(next)
   }
@@ -567,8 +566,8 @@ export function OnboardingWizard({
               <Input
                 id="url-name"
                 type="text"
-                value={urlForm.name}
-                onChange={(e) => setUrlForm({ ...urlForm, name: e.target.value })}
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
                 maxLength={100}
                 autoFocus
                 placeholder={path === "api" ? "Production API" : "Staging Site"}

@@ -109,8 +109,11 @@ export function BillingActions({
       )}
       {intent && (
         <p role="status" className="text-sm">
-          Selected plan: {PLANS.find(([id]) => id === intent)?.[1]}. Choose a billing interval below
-          when ready. No purchase has been started.
+          Selected plan: {PLANS.find(([id]) => id === intent)?.[1]}.{" "}
+          {purchasesAvailable
+            ? "Choose a billing interval below when ready."
+            : "You can choose a billing interval when new purchases become available."}{" "}
+          No purchase has been started.
         </p>
       )}
       {purchasesAvailable && (

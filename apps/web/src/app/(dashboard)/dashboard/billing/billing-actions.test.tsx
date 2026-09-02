@@ -12,6 +12,13 @@ const props = {
   trialAvailable: true,
 }
 describe("BillingActions", () => {
+  it("does not direct a selected-plan user to a hidden chooser while purchases are off", () => {
+    const html = renderToString(
+      <BillingActions {...props} selectedPlan="STARTER" purchasesAvailable={false} />
+    )
+    expect(html).toContain("when new purchases become available")
+    expect(html).not.toContain("Choose a billing interval below")
+  })
   it("offers a trial while paid purchase admission is off", () => {
     const html = renderToString(<BillingActions {...props} purchasesAvailable={false} />)
     expect(html).toContain("Start free trial")

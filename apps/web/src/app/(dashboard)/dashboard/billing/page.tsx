@@ -91,7 +91,8 @@ export default async function BillingPage({
   ])
 
   const plan = billingAccount?.currentPlan ?? "FREE"
-  const cloudPlan = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
+  const cloudPlan =
+    CLOUD_PLAN_MAP[(trialState.isActive ? "TRIAL" : plan) as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
   const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
 
@@ -321,7 +322,7 @@ export default async function BillingPage({
         )}
 
         {/* Portal Link */}
-        {canManageBilling && billingAccount?.provider === "polar" && (
+        {canManageBilling && plan !== "FREE" && billingAccount?.provider === "polar" && (
           <Card>
             <CardHeader>
               <CardTitle>Manage Subscription</CardTitle>
