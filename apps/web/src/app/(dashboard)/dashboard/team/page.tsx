@@ -6,6 +6,7 @@ import { TeamClient } from "./team-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 
 export const metadata: Metadata = {
   title: "Team",
@@ -70,5 +71,16 @@ export default async function TeamPage() {
     })),
   }
 
-  return <TeamClient workspaceId={workspaceId} initialData={initialData} />
+  const membership = members.find((member) => member.userId === session.userId)
+  return (
+    <TeamClient
+      key={workspaceId}
+      workspaceId={workspaceId}
+      initialData={initialData}
+      actorRole={membership?.role ?? "VIEWER"}
+      canManage={!!membership && hasPermission(membership.role, PERMISSIONS.member.invite)}
+      canRemove={!!membership && hasPermission(membership.role, PERMISSIONS.member.remove)}
+      canUpdateRole={!!membership && hasPermission(membership.role, PERMISSIONS.member.updateRole)}
+    />
+  )
 }

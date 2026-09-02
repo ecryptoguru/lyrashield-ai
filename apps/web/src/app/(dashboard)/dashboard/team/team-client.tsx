@@ -4,7 +4,10 @@ import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
 import { Button, Badge, FormField, Input, Select, Spinner } from "@lyrashield/ui"
 import { z } from "zod"
-import { apiGet, apiPost } from "@/lib/api-client"
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
+import { canGrantRole } from "@lyrashield/auth"
+import type { MemberRole } from "@lyrashield/db"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { formatDate } from "@/lib/date-format"
 import { PageHeader } from "@/components/page-header"
 
@@ -14,7 +17,7 @@ interface Member {
   name: string
   email: string
   image: string | null
-  role: string
+  role: MemberRole
   status: string
   createdAt: string
 }
@@ -35,7 +38,18 @@ const memberSchema = z
     name: z.string(),
     email: z.string(),
     image: z.string().nullable(),
-    role: z.string(),
+    role: z.enum([
+      "OWNER",
+      "ADMIN",
+      "MEMBER",
+      "VIEWER",
+      "SECURITY_ADMIN",
+      "APPSEC_MANAGER",
+      "DEVELOPER",
+      "AUDITOR",
+      "BILLING_ADMIN",
+      "EXTERNAL_PENTESTER",
+    ]),
     status: z.string(),
     createdAt: z.string().datetime().or(z.string()),
   })
@@ -62,9 +76,17 @@ const teamSchema = z
 export function TeamClient({
   workspaceId,
   initialData,
+  actorRole = "VIEWER",
+  canManage = false,
+  canRemove = false,
+  canUpdateRole = false,
 }: {
   workspaceId: string
   initialData?: { members: Member[]; invitations: Invitation[] }
+  actorRole?: MemberRole
+  canManage?: boolean
+  canRemove?: boolean
+  canUpdateRole?: boolean
 }) {
   const [members, setMembers] = useState<Member[]>(initialData?.members ?? [])
   const [invitations, setInvitations] = useState<Invitation[]>(initialData?.invitations ?? [])
@@ -75,6 +97,32 @@ export function TeamClient({
   const [inviting, setInviting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const roles: MemberRole[] = [
+    "OWNER",
+    "ADMIN",
+    "MEMBER",
+    "VIEWER",
+    "SECURITY_ADMIN",
+    "APPSEC_MANAGER",
+    "DEVELOPER",
+    "AUDITOR",
+    "BILLING_ADMIN",
+    "EXTERNAL_PENTESTER",
+  ]
+
+  async function mutate(action: () => Promise<unknown>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+      await fetchMembers()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to update team")
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const fetchMembers = useCallback(async () => {
     setLoading(true)
@@ -145,12 +193,19 @@ export function TeamClient({
         title="Team Members"
         description="Manage who has access to this workspace"
         action={
-          <Button onClick={() => setShowInvite(!showInvite)}>
-            <UserPlus className="h-4 w-4" aria-hidden="true" />
-            Invite Member
-          </Button>
+          canManage ? (
+            <Button onClick={() => setShowInvite(!showInvite)}>
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              Invite Member
+            </Button>
+          ) : undefined
         }
       />
+      {error && !showInvite && (
+        <p role="alert" className="text-destructive mb-4 text-sm">
+          {error}
+        </p>
+      )}
 
       {showInvite && (
         <form
@@ -228,6 +283,7 @@ export function TeamClient({
               <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Email</th>
               <th className="px-4 py-3 text-left font-semibold">Role</th>
               <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Joined</th>
+              {(canRemove || canUpdateRole) && <th className="px-4 py-3 text-left">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -245,6 +301,53 @@ export function TeamClient({
                 <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                   {formatDate(m.createdAt)}
                 </td>
+                {(canRemove || canUpdateRole) && (
+                  <td className="px-4 py-3">
+                    {canGrantRole(actorRole, m.role) && (
+                      <details>
+                        <summary className="cursor-pointer">Manage {m.name}</summary>
+                        {canUpdateRole && (
+                          <Select
+                            aria-label={`Role for ${m.name}`}
+                            value={m.role}
+                            disabled={busy}
+                            onChange={(event) =>
+                              void mutate(() =>
+                                apiPatch("/api/team", {
+                                  workspaceId,
+                                  memberId: m.id,
+                                  role: event.target.value,
+                                })
+                              )
+                            }
+                          >
+                            {roles
+                              .filter((role) => canGrantRole(actorRole, role))
+                              .map((role) => (
+                                <option key={role} value={role}>
+                                  {role}
+                                </option>
+                              ))}
+                          </Select>
+                        )}
+                        {canRemove && (
+                          <InlineConfirm
+                            triggerLabel="Remove member"
+                            message={`Remove ${m.name} from this workspace?`}
+                            disabled={busy}
+                            onConfirm={() =>
+                              mutate(() =>
+                                apiDelete(
+                                  `/api/team?${new URLSearchParams({ workspaceId, memberId: m.id })}`
+                                )
+                              )
+                            }
+                          />
+                        )}
+                      </details>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -269,6 +372,7 @@ export function TeamClient({
                 <th className="px-4 py-3 text-left font-semibold">Email</th>
                 <th className="px-4 py-3 text-left font-semibold">Role</th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Expires</th>
+                {canManage && <th className="px-4 py-3 text-left">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -284,6 +388,22 @@ export function TeamClient({
                       {formatDate(inv.expiresAt)}
                     </span>
                   </td>
+                  {canManage && (
+                    <td className="px-4 py-3">
+                      <InlineConfirm
+                        triggerLabel="Revoke invitation"
+                        message={`Revoke invitation for ${inv.email}?`}
+                        disabled={busy}
+                        onConfirm={() =>
+                          mutate(() =>
+                            apiDelete(
+                              `/api/team/invitations/${encodeURIComponent(inv.id)}?${new URLSearchParams({ workspaceId })}`
+                            )
+                          )
+                        }
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

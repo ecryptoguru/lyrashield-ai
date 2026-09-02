@@ -135,6 +135,15 @@ async function post(request: Request) {
         throw new Error("INVITATION_CONSUME_CONFLICT")
       }
 
+      const activeMember = await tx.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: { workspaceId: invitation.workspaceId, userId: session.userId },
+        },
+        select: { status: true },
+      })
+      // An old invitation must never demote an existing owner or change an
+      // active member's permissions. Role changes belong to the team route.
+      if (activeMember?.status === "active") return false
       await tx.workspaceMember.upsert({
         where: {
           workspaceId_userId: {

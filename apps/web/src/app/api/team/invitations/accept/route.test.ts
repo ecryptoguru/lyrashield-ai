@@ -109,6 +109,20 @@ describe("POST /api/team/invitations/accept", () => {
     expect(response.status).toBe(401)
   })
 
+  it("consumes an old invitation without overwriting an active member role", async () => {
+    systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)
+    systemPrismaMocks.workspaceMember.findUnique.mockResolvedValue({ status: "active" } as never)
+    const response = await POST(
+      new Request("http://localhost/api/team/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token: "tok-1" }),
+      })
+    )
+    expect(response.status).toBe(200)
+    expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
+    expect((await response.json()).data.alreadyMember).toBe(true)
+  })
+
   it("404s for an unknown or already-consumed invitation", async () => {
     systemPrismaMocks.invitation.findUnique.mockResolvedValue(
       invitationRow({ status: "ACCEPTED" }) as never
