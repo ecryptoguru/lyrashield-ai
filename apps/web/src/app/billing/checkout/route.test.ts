@@ -6,6 +6,14 @@ const mocks = vi.hoisted(() => ({
   checkoutClaim: "claimed" as "claimed" | "duplicate" | "unavailable",
   createPolar: vi.fn().mockResolvedValue("https://polar.example/checkout"),
   createRazorpay: vi.fn().mockResolvedValue("sub_1"),
+  workspace: vi.fn(),
+  billingAccount: vi.fn(),
+}))
+vi.mock("@lyrashield/db", () => ({
+  prisma: {
+    workspace: { findUnique: mocks.workspace },
+    billingAccount: { findUnique: mocks.billingAccount },
+  },
 }))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: vi.fn() }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
@@ -54,6 +62,8 @@ describe("Cloud checkout admission", () => {
     mocks.provider = "polar"
     mocks.admissionResponse = null
     mocks.checkoutClaim = "claimed"
+    mocks.workspace.mockResolvedValue({ plan: "FREE" })
+    mocks.billingAccount.mockResolvedValue(null)
   })
 
   it("stops before provider calls when admission is off", async () => {
@@ -66,6 +76,44 @@ describe("Cloud checkout admission", () => {
     expect((await POST(request())).status).toBe(200)
     mocks.provider = "razorpay"
     expect((await POST(request())).status).toBe(200)
+    expect(mocks.createPolar).toHaveBeenCalledOnce()
+    expect(mocks.createRazorpay).toHaveBeenCalledOnce()
+  })
+
+  it.each(["STARTER", "PRO", "LAUNCH_ASSURANCE"])(
+    "rejects paid %s on both rails before provider calls",
+    async (plan) => {
+      mocks.workspace.mockResolvedValue({ plan })
+      mocks.billingAccount.mockResolvedValue({ currentPlan: plan })
+      for (const provider of ["polar", "razorpay"] as const) {
+        mocks.provider = provider
+        const response = await POST(request())
+        expect(response.status).toBe(409)
+        expect((await response.json()).error.code).toBe("SUBSCRIPTION_ALREADY_EXISTS")
+      }
+      expect(mocks.createPolar).not.toHaveBeenCalled()
+      expect(mocks.createRazorpay).not.toHaveBeenCalled()
+    }
+  )
+
+  it("fails closed when the billing account is paid but workspace plan is stale", async () => {
+    mocks.billingAccount.mockResolvedValue({ currentPlan: "PRO" })
+    expect((await POST(request())).status).toBe(409)
+    expect(mocks.createPolar).not.toHaveBeenCalled()
+    expect(mocks.createRazorpay).not.toHaveBeenCalled()
+  })
+
+  it("permits a FREE trial's first purchase on both rails", async () => {
+    mocks.billingAccount.mockResolvedValue({ currentPlan: "FREE", status: "trialing" })
+    for (const provider of ["polar", "razorpay"] as const) {
+      mocks.provider = provider
+      expect((await POST(request())).status).toBe(200)
+    }
+    expect(mocks.workspace).toHaveBeenCalledWith({ where: { id: "ws_1" }, select: { plan: true } })
+    expect(mocks.billingAccount).toHaveBeenCalledWith({
+      where: { workspaceId: "ws_1" },
+      select: { currentPlan: true },
+    })
     expect(mocks.createPolar).toHaveBeenCalledOnce()
     expect(mocks.createRazorpay).toHaveBeenCalledOnce()
   })

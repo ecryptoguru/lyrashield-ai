@@ -34,6 +34,7 @@ export function BillingActions({
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const intent = parsePlanIntent(selectedPlan)
+  const canStartSubscription = plan === "FREE" && purchasesAvailable
 
   async function act(action: string, work: () => Promise<void>) {
     if (pending.current) return
@@ -55,7 +56,7 @@ export function BillingActions({
   }
 
   function handleCheckout(targetPlan: string, interval: string) {
-    if (!purchasesAvailable) return
+    if (!canStartSubscription) return
     return act(`checkout-${targetPlan}-${interval}`, async () => {
       const data = await apiPost<{ url?: string; subscriptionId?: string; keyId?: string }>(
         "/billing/checkout",
@@ -110,20 +111,19 @@ export function BillingActions({
       {intent && (
         <p role="status" className="text-sm">
           Selected plan: {PLANS.find(([id]) => id === intent)?.[1]}.{" "}
-          {purchasesAvailable
-            ? "Choose a billing interval below when ready."
-            : "You can choose a billing interval when new purchases become available."}{" "}
+          {plan !== "FREE"
+            ? "Use Manage Subscription to review your existing subscription."
+            : purchasesAvailable
+              ? "Choose a billing interval below when ready."
+              : "You can choose a billing interval when new purchases become available."}{" "}
           No purchase has been started.
         </p>
       )}
-      {purchasesAvailable && (
+      {canStartSubscription && (
         <div className="grid gap-3 sm:grid-cols-3" aria-label="Choose a plan">
           {PLANS.map(([targetPlan, label]) => (
             <section key={targetPlan} className="min-w-0 rounded-lg border p-3 space-y-2">
-              <h3 className="font-medium">
-                {label}
-                {plan === targetPlan ? " (current)" : ""}
-              </h3>
+              <h3 className="font-medium">{label}</h3>
               {(["monthly", "annual"] as const).map((interval) => {
                 const action = `checkout-${targetPlan}-${interval}`
                 return (

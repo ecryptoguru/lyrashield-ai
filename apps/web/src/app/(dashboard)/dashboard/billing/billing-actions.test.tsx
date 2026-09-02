@@ -12,6 +12,18 @@ const props = {
   trialAvailable: true,
 }
 describe("BillingActions", () => {
+  it.each(["STARTER", "PRO", "LAUNCH_ASSURANCE"])(
+    "keeps paid %s on subscription management",
+    (plan) => {
+      const html = renderToString(<BillingActions {...props} plan={plan} selectedPlan="PRO" />)
+      expect(html).toContain("Manage Subscription")
+      expect(html).toContain("review your existing subscription")
+      expect(html).not.toContain("Choose a plan")
+      expect(html).not.toContain("Choose a billing interval below")
+      expect(html).not.toContain("Start free trial")
+      expect(html).not.toContain("<button")
+    }
+  )
   it("does not direct a selected-plan user to a hidden chooser while purchases are off", () => {
     const html = renderToString(
       <BillingActions {...props} selectedPlan="STARTER" purchasesAvailable={false} />

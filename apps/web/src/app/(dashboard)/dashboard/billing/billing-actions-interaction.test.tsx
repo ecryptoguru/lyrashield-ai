@@ -39,11 +39,11 @@ function buttons(node: ReactNode): Element[] {
   const element = node as Element
   return [...(element.type === "button" ? [element] : []), ...buttons(element.props.children)]
 }
-function render(purchasesAvailable = true) {
+function render(purchasesAvailable = true, plan = "FREE") {
   hooks.cursor = 0
   return buttons(
     BillingActions({
-      plan: "FREE",
+      plan,
       workspaceId: "ws",
       isLaunchAssurance: false,
       purchasesAvailable,
@@ -85,6 +85,14 @@ it("blocks all checkout and trial actions while a request is pending, including 
   await request
   expect(render().every((button) => !button.props.disabled)).toBe(true)
 })
+
+it.each(["STARTER", "PRO", "LAUNCH_ASSURANCE"])(
+  "exposes no fresh-checkout handler for paid %s",
+  (plan) => {
+    expect(render(true, plan)).toHaveLength(0)
+    expect(post).not.toHaveBeenCalled()
+  }
+)
 
 it("starts a trial with purchase admission off and refreshes after success", async () => {
   post.mockResolvedValueOnce({ started: true })
