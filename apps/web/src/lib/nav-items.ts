@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   ShieldCheck,
   Shield,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -131,6 +132,13 @@ const PLATFORM_ADMIN_BASE: NavItem = {
   icon: Shield,
 }
 
+const BILLING_BASE: NavItem = {
+  href: "/dashboard/billing",
+  label: "Billing",
+  shortLabel: "Billing",
+  icon: CreditCard,
+}
+
 /** Secondary / Workspace destinations that are always present. */
 const WORKSPACE_NAV_ITEMS: NavItem[] = [
   {
@@ -161,6 +169,7 @@ const WORKSPACE_NAV_ITEMS: NavItem[] = [
 ]
 
 export interface NavState {
+  canManageBilling?: boolean
   /**
    * Pending agent approval count for the active workspace. The Review Queue item is
    * only surfaced when this is greater than zero. The layout is responsible for
@@ -183,6 +192,7 @@ function resolveNavItems(state: NavState = {}): NavItem[] {
   const items = [...LIFECYCLE_NAV_ITEMS]
   if (pending > 0) items.push(reviewQueueItem(pending))
   if (state.canViewEvidenceVault) items.push(EVIDENCE_VAULT_BASE)
+  if (state.canManageBilling) items.push(BILLING_BASE)
   items.push(...WORKSPACE_NAV_ITEMS)
   return items
 }
@@ -203,6 +213,7 @@ export const NAV_TITLE_ITEMS: NavItem[] = [
   ...LIFECYCLE_NAV_ITEMS,
   REVIEW_QUEUE_BASE,
   PLATFORM_ADMIN_BASE,
+  BILLING_BASE,
   ...WORKSPACE_NAV_ITEMS,
 ]
 
@@ -257,6 +268,7 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
   if (reviewQueue) conditional.push(reviewQueue)
   if (evidenceVault) conditional.push(evidenceVault)
   if (platformAdmin) conditional.push(platformAdmin)
+  if (state.canManageBilling) conditional.push(BILLING_BASE)
   const secondary = [...conditional, ...WORKSPACE_NAV_ITEMS]
   const more = [...conditional, ...WORKSPACE_NAV_ITEMS]
   const items = [...LIFECYCLE_NAV_ITEMS, ...secondary]

@@ -76,6 +76,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const canViewEvidenceVault = active
     ? hasPermission(active.role as MemberRole, PERMISSIONS.aiAssurance.view)
     : false
+  const canManageBilling = active
+    ? hasPermission(active.role as MemberRole, PERMISSIONS.billing.manage)
+    : false
 
   return (
     <div className="bg-background flex min-h-screen flex-col md:flex-row">
@@ -86,6 +89,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         activeWorkspaceId={activeWorkspaceId}
         pendingApprovals={pendingApprovals}
         canViewEvidenceVault={canViewEvidenceVault}
+        canManageBilling={canManageBilling}
         platformAdminHref={platformAdminHref}
       />
       {/* Title derives from the current route via NAV_ITEMS. On a phone the header
@@ -113,6 +117,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         unreadNotifications={unreadNotifications}
         pendingApprovals={pendingApprovals}
         canViewEvidenceVault={canViewEvidenceVault}
+        canManageBilling={canManageBilling}
         platformAdminHref={platformAdminHref}
       />
       <InvitationAcceptBridge />

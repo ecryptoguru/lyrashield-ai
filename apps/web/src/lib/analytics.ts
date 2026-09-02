@@ -1,3 +1,5 @@
+import { parsePlanIntent } from "./plan-intent"
+
 export const EVENT_ALLOWLIST = {
   landing_view: ["utm_source", "utm_medium", "utm_campaign", "referrer_host"],
   signup_page_viewed: ["source", "cta"],
@@ -38,10 +40,12 @@ export function readSignupAttribution(search: string): SignupAttribution {
   return { source: clean(params.get("source")), cta: clean(params.get("cta")) }
 }
 
-export function signupErrorUrl(attribution: SignupAttribution): string {
+export function signupErrorUrl(attribution: SignupAttribution, selectedPlan?: unknown): string {
   const params = new URLSearchParams()
   if (attribution.source) params.set("source", attribution.source)
   if (attribution.cta) params.set("cta", attribution.cta)
+  const plan = parsePlanIntent(selectedPlan)
+  if (plan) params.set("plan", plan)
   const query = params.toString()
   return `/sign-up${query ? `?${query}` : ""}`
 }

@@ -12,6 +12,7 @@ import {
 } from "@/lib/api-schemas"
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
+import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
 import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
 import {
   buildUrlTargetPayload,
@@ -46,8 +47,17 @@ interface Repo {
   installationId: string
 }
 
-export function OnboardingWizard({ initialState }: { initialState: OnboardingData }) {
+export function OnboardingWizard({
+  initialState,
+  selectedPlan,
+}: {
+  initialState: OnboardingData
+  selectedPlan?: string | null
+}) {
   const router = useRouter()
+  useEffect(() => {
+    rememberPlanIntent(selectedPlan)
+  }, [selectedPlan])
   const [step, setStep] = useState(initialState.currentStep ?? (initialState.workspaceId ? 1 : 0))
   const [data, setData] = useState(initialState)
   const [loading, setLoading] = useState(false)
@@ -68,7 +78,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     onboardingPathForTargetType(initialState.targetType ?? null)
   )
   const [githubUnavailable, setGithubUnavailable] = useState(false)
-  const [urlForm, setUrlForm] = useState({ name: "", url: "", ownershipAttested: false })
+  const [urlForm, setUrlForm] = useState({ url: "", ownershipAttested: false })
   const autoFetchAttempted = useRef(false)
   const reviewOptions = getOnboardingReviewOptions(path)
   const selectedReview =
@@ -226,7 +236,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     setError(null)
     try {
       await persist({ skipped: true, currentStep: 0 })
-      router.push("/dashboard")
+      router.push(selectedPlan ? planIntentPath("/dashboard/billing", selectedPlan) : "/dashboard")
       router.refresh()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not skip setup.")
@@ -243,7 +253,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     const payload = buildUrlTargetPayload({
       workspaceId: data.workspaceId,
       path,
-      name: urlForm.name,
+      name: productName,
       url: urlForm.url,
       environment,
       ownershipAttested: urlForm.ownershipAttested,
@@ -257,7 +267,6 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
       return
     }
     setError(null)
-    if (!productName) setProductName(payload.name)
     const next = nextStepForPath(payload.type === "API" ? "api" : "url")
     if (next !== null) setStep(next)
   }
@@ -557,8 +566,8 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               <Input
                 id="url-name"
                 type="text"
-                value={urlForm.name}
-                onChange={(e) => setUrlForm({ ...urlForm, name: e.target.value })}
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
                 maxLength={100}
                 autoFocus
                 placeholder={path === "api" ? "Production API" : "Staging Site"}

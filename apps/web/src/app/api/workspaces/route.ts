@@ -4,6 +4,7 @@ import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import { CreateWorkspaceSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
+import { startTrial } from "@lyrashield/billing"
 
 function isPrismaUniqueError(error: unknown): error is { code: string } {
   return (
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
     }
 
     const workspaceId = randomUUID()
-    const result = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const { result, trial } = await withWorkspaceRLS(workspaceId, async (tx) => {
       const workspace = await tx.workspace.create({
         data: {
           id: workspaceId,
@@ -104,7 +105,8 @@ export async function POST(request: Request) {
         },
       })
 
-      return workspace
+      const trial = await startTrial(workspace.id, session.userId, tx)
+      return { result: workspace, trial }
     })
 
     await prisma.auditLog.create({
@@ -117,7 +119,11 @@ export async function POST(request: Request) {
       },
     })
 
-    logger.info("Workspace created", { workspaceId: result.id, userId: session.userId })
+    logger.info("Workspace created", {
+      workspaceId: result.id,
+      userId: session.userId,
+      trialStarted: trial.started,
+    })
 
     return NextResponse.json({
       success: true,
@@ -127,6 +133,9 @@ export async function POST(request: Request) {
         slug: result.slug,
         mode: result.mode,
         plan: result.plan,
+        trialStarted: trial.started,
+        trialAlreadyUsed: trial.alreadyUsed,
+        trialEndsAt: trial.trialEndsAt?.toISOString() ?? null,
       },
     })
   } catch (error) {

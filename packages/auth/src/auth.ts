@@ -519,6 +519,11 @@ export const auth = betterAuth({
     deviceAuthorization({ verificationUri: "/device" }),
     oauthProviderPlugin,
   ],
+  user: {
+    additionalFields: {
+      trialStartedAt: { type: "date", required: false, input: false, returned: false },
+    },
+  },
   session: {
     additionalFields: {
       activeWorkspaceId: { type: "string", required: false, input: true },

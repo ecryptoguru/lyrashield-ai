@@ -96,11 +96,13 @@ export function BottomNav({
   unreadNotifications = 0,
   pendingApprovals = 0,
   canViewEvidenceVault = false,
+  canManageBilling = false,
   platformAdminHref = null,
 }: {
   unreadNotifications?: number
   pendingApprovals?: number
   canViewEvidenceVault?: boolean
+  canManageBilling?: boolean
   platformAdminHref?: string | null
 }) {
   const pathname = usePathname()
@@ -108,6 +110,7 @@ export function BottomNav({
   const { mobilePrimary, more } = resolveNav({
     pendingApprovals,
     canViewEvidenceVault,
+    canManageBilling,
     platformAdminHref,
   })
 

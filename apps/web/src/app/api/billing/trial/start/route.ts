@@ -14,8 +14,8 @@ const StartTrialSchema = z.object({
  * POST /api/billing/trial/start — start a trial for a workspace.
  *
  * Requires billing.manage permission on the workspace.
- * Prevents trial abuse across workspaces: if the user already has a workspace
- * with trialStartedAt != null, the request is rejected.
+ * The durable user claim prevents repeated trials across workspaces even after
+ * a membership is removed. Paid workspaces are never downgraded.
  */
 export async function POST(request: Request) {
   let body: unknown
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     logger.info("Trial start requested", {
       workspaceId,
       started: result.started,
-      trialEndsAt: result.trialEndsAt.toISOString(),
+      trialEndsAt: result.trialEndsAt?.toISOString() ?? null,
     })
 
     if (!result.started) {
@@ -56,10 +56,13 @@ export async function POST(request: Request) {
       )
     }
 
-    return apiSuccess({ started: true, trialEndsAt: result.trialEndsAt.toISOString() }, 200)
+    return apiSuccess({ started: true, trialEndsAt: result.trialEndsAt?.toISOString() }, 200)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
+    if (error instanceof Error && error.message === "TRIAL_PAID_PLAN") {
+      return apiError("TRIAL_PAID_PLAN", "Trials are only available on a free workspace.", 409)
+    }
     if (error instanceof Error && error.message === "Workspace not found") {
       return apiError("WORKSPACE_NOT_FOUND", "Workspace not found", 404)
     }

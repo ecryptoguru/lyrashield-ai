@@ -102,10 +102,23 @@ export const READ_OPS = new Set<string>([
 // cases. (S7)
 export const WRITE_SCOPE_OPS = new Set<string>(["updateMany", "deleteMany"])
 
-const workspaceStore = new AsyncLocalStorage<{
+type WorkspaceContext = {
   workspaceId: string | null
   databaseRlsBound: boolean
-}>()
+}
+
+// Match the development Prisma singleton's lifetime. Otherwise HMR can leave
+// its extension reading an old store while reloaded transaction helpers bind a
+// new one, causing a protected write to escape its caller's transaction.
+// Only the storage instance is shared; request values remain async-local.
+const globalForWorkspace = globalThis as unknown as {
+  lyrashieldWorkspaceStore?: AsyncLocalStorage<WorkspaceContext>
+}
+const workspaceStore =
+  globalForWorkspace.lyrashieldWorkspaceStore ?? new AsyncLocalStorage<WorkspaceContext>()
+if (process.env.NODE_ENV !== "production") {
+  globalForWorkspace.lyrashieldWorkspaceStore = workspaceStore
+}
 
 function preserveContextForThenable<T>(value: T): T {
   if (
