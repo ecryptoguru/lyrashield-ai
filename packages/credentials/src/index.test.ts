@@ -116,6 +116,22 @@ describe("resolveCredentials", () => {
     expect(resolved.source).toBe("file")
   })
 
+  it("keeps a stored bearer file-backed when only the API URL is overridden", async () => {
+    process.env.LYRASHIELD_API_URL = "https://override.example.test"
+    readFile.mockResolvedValueOnce(
+      JSON.stringify({ oauthAccessToken: "file-oauth-token", installId: "i" })
+    )
+
+    const resolved = await resolveCredentials()
+
+    expect(resolved).toMatchObject({
+      apiKey: "file-oauth-token",
+      apiUrl: "https://override.example.test",
+      credentialKind: "oauth",
+      source: "file",
+    })
+  })
+
   it("accepts an OAuth bearer as the interactive credential fallback", async () => {
     process.env.LYRASHIELD_OAUTH_ACCESS_TOKEN = "oauth-token"
     readFile.mockRejectedValueOnce(enoent())
