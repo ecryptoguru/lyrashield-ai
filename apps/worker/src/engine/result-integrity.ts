@@ -29,8 +29,8 @@ type ResultManifestInput = {
   matchedControlRanks?: number[]
   urlExecution?: UrlExecutionSummary
   engineExecution?: {
-    model: string
-    reasoningEffort: string
+    model?: string
+    reasoningEffort?: string
     image: string | null
     imageDigest?: string
     engineVersion?: string

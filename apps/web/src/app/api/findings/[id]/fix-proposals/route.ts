@@ -3,6 +3,7 @@ import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
+import { enqueueFixGenerate } from "@lyrashield/integrations"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 import { z } from "zod"
@@ -43,6 +44,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ...(generatedByModel ? { generatedByModel } : {}),
       ...(safetyScore != null ? { safetyScore } : {}),
     })
+
+    // WP3 producer: a proposal without a caller-supplied patch is enqueued for
+    // deterministic generation from the finding's engine-emitted structured
+    // fix. Best-effort — the proposal exists and can be regenerated; a queue
+    // outage must not fail the API response.
+    if (!diffRef) {
+      try {
+        await enqueueFixGenerate({ workspaceId, fixProposalId: proposal.id })
+      } catch (enqueueError) {
+        logger.error("Failed to enqueue fix generation (proposal remains draft)", {
+          fixProposalId: proposal.id,
+          error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
+        })
+      }
+    }
 
     await prisma.auditLog.create({
       data: {
