@@ -14,16 +14,16 @@ Use the existing visual identity in `apps/marketing-motion/DESIGN.md`:
 
 Create one root `index.html` composition at 1920×1080 with seven external scene compositions. Use CSS focus-pull or blur-crossfade transitions at 0.4–0.6 seconds; do not use jump cuts, neon grids, glitches, or generated dashboards.
 
-| Scene | Duration | Real footage required | HyperFrames overlay |
-| --- | ---: | --- | --- |
-| Opening problem | 0:00–0:12 | Lab title or `/webmcp` pillar | “Review WebMCP tools before they reach production.” |
-| Native proof | 0:12–0:35 | Headed supported-client tool list and one real invocation | Tool name, bounded-result label, visible activity receipt. Omit until real native capture exists. |
-| Browser-local analysis | 0:35–1:00 | Security Lab unsafe sample and evidence states | “Local analysis · nothing uploaded” and the observed state count. |
-| Bounded rewrite | 1:00–1:28 | `WEBMCP-03` selection and visible diff | Mono diff callout: `exposedTo: ["*"]` to `exposedTo: []`. |
-| Rerun and undo | 1:28–1:45 | Apply in memory, rerun, Undo | “Review required. No repository change.” |
-| Repository gate | 1:45–2:05 | Public GitHub repo, MIT license, and relevant green CI | “Source scan · SARIF · fail-closed gate.” |
-| Human boundary | 2:05–2:28 | Ordinary judge dashboard proof, only if captured | “Agent prepares. Human starts.” Use `/webmcp` limitation page instead when unavailable. |
-| Limits and close | 2:28–2:45 | Pillar/control page | “Deterministic detection is not verification.” |
+| Scene                  |  Duration | Real footage required                                     | HyperFrames overlay                                                                               |
+| ---------------------- | --------: | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Opening problem        | 0:00–0:12 | Lab title or `/webmcp` pillar                             | “Review WebMCP tools before they reach production.”                                               |
+| Native proof           | 0:12–0:35 | Headed supported-client tool list and one real invocation | Tool name, bounded-result label, visible activity receipt. Omit until real native capture exists. |
+| Browser-local analysis | 0:35–1:00 | Security Lab unsafe sample and evidence states            | “Local analysis · nothing uploaded” and the observed state count.                                 |
+| Bounded rewrite        | 1:00–1:28 | `WEBMCP-03` selection and visible diff                    | Mono diff callout: `exposedTo: ["*"]` to `exposedTo: []`.                                         |
+| Rerun and undo         | 1:28–1:45 | Apply in memory, rerun, Undo                              | “Review required. No repository change.”                                                          |
+| Repository gate        | 1:45–2:05 | Public GitHub repo, MIT license, and relevant green CI    | “Source scan · SARIF · fail-closed gate.”                                                         |
+| Human boundary         | 2:05–2:28 | Ordinary judge dashboard proof, only if captured          | “Agent prepares. Human starts.” Use `/webmcp` limitation page instead when unavailable.           |
+| Limits and close       | 2:28–2:45 | Pillar/control page                                       | “Deterministic detection is not verification.”                                                    |
 
 ## Tracks and media contract
 
