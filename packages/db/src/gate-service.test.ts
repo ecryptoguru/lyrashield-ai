@@ -7,7 +7,7 @@ vi.mock("./client", () => ({
     scan: { findFirst: vi.fn() },
     finding: { findMany: vi.fn() },
     scanCoverageReceipt: { findMany: vi.fn() },
-    pullRequest: { findFirst: vi.fn() },
+    pullRequest: { findFirst: vi.fn(), update: vi.fn() },
     workspaceMember: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
     fixProposal: { findFirst: vi.fn(), update: vi.fn() },
@@ -56,7 +56,7 @@ import { prisma } from "./client"
 import { handleFixPrMergedAndReevaluate } from "./gate-service"
 
 const mockPrisma = prisma as unknown as {
-  pullRequest: { findFirst: ReturnType<typeof vi.fn> }
+  pullRequest: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
   scan: { findFirst: ReturnType<typeof vi.fn> }
   workspaceMember: { findFirst: ReturnType<typeof vi.fn> }
   fixProposal: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
