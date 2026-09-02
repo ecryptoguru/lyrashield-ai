@@ -375,6 +375,16 @@ const envSchema = z
         "LAUNCH_REPORT_SIGNING_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
       ),
     LAUNCH_REPORT_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
+    // Key Vault secret names holding the launch-report signing key pair in
+    // production (mirrors the license-signing secret-name pattern).
+    LAUNCH_REPORT_SIGNING_PRIVATE_KEY_SECRET_NAME: z
+      .string()
+      .optional()
+      .default("launch-report-signing-private-key"),
+    LAUNCH_REPORT_SIGNING_PUBLIC_KEY_SECRET_NAME: z
+      .string()
+      .optional()
+      .default("launch-report-signing-public-key"),
     // Latest published Local/Desktop build (semver). Resolved server-side at
     // license issuance and renewal as perpetualFallbackBuild. Never accept a
     // client-supplied currentBuild for this field.

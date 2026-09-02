@@ -208,3 +208,8 @@ export {
   RETRIEVAL_TOKEN_EXPIRY_MS,
   FULFILLMENT_STATUS,
 } from "./license-fulfillment"
+
+export {
+  resolveLaunchReportSigningPrivateKey,
+  resolveLaunchReportSigningPublicKey,
+} from "./launch-report-keys"
