@@ -28,7 +28,7 @@ async function signUpAndEnterDashboard(page: Page, email: string, forwardedFor: 
   await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
   const skipOnboarding = await page.request.patch("/api/onboarding", {
     data: { skipped: true },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(skipOnboarding).toBeOK()
 }
@@ -105,7 +105,7 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
 
     const workspaceResponse = await page.request.post("/api/workspaces", {
       data: { name: `${workspaceName} ${runSuffix}`, mode: "VIBE" },
-      headers: { "x-forwarded-for": forwardedFor },
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
     })
     await expect(workspaceResponse).toBeOK()
     workspaceId = (await workspaceResponse.json()).data.id as string
@@ -120,7 +120,7 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
         environment: "STAGING",
         ownershipAttested: true,
       },
-      headers: { "x-forwarded-for": forwardedFor },
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
     })
     await expect(targetResponse).toBeOK()
     const targetId = (await targetResponse.json()).data.id as string

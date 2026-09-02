@@ -108,7 +108,7 @@ test("admin enrollment, deny-by-default, TOTP sign-in, and console work end to e
 
   const onboardingResponse = await page.request.patch("/api/onboarding", {
     data: { skipped: true },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(onboardingResponse).toBeOK()
 

@@ -355,8 +355,8 @@ pub async fn ensure_license_operational(
     }
 
     // Machine binding — must be member.
-    let machine_id = crate::machine_id::generate_machine_id()
-        .map_err(LicenseOperationalError::Unavailable)?;
+    let machine_id =
+        crate::machine_id::generate_machine_id().map_err(LicenseOperationalError::Unavailable)?;
     if !stored.license.machine_ids.contains(&machine_id) {
         return Err(LicenseOperationalError::Invalid(
             "machine not bound to this license".into(),

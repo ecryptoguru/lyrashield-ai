@@ -36,7 +36,7 @@ async function signUpAndSignIn(
 
   const skipOnboarding = await page.request.patch("/api/onboarding", {
     data: { skipped: true },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(skipOnboarding).toBeOK()
   await page.goto("/dashboard")
@@ -92,7 +92,7 @@ test("AI assurance dashboard lists the seven evidence-required controls", async 
 
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: workspaceName, mode: "VIBE" },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(workspaceResponse).toBeOK()
   const { data: workspace } = await workspaceResponse.json()
@@ -108,7 +108,7 @@ test("AI assurance dashboard lists the seven evidence-required controls", async 
       environment: "STAGING",
       ownershipAttested: true,
     },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(targetResponse).toBeOK()
   const { data: target } = await targetResponse.json()

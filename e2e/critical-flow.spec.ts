@@ -47,7 +47,7 @@ async function signUp(
   await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
   const skipOnboarding = await page.request.patch("/api/onboarding", {
     data: { skipped: true },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(skipOnboarding).toBeOK()
   await page.goto("/dashboard")
@@ -143,7 +143,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
 
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: workspaceName, mode: "VIBE" },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(workspaceResponse).toBeOK()
   const { data: workspace } = await workspaceResponse.json()
@@ -166,7 +166,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
       environment: "STAGING",
       ownershipAttested: true,
     },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(targetResponse).toBeOK()
   const { data: target } = await targetResponse.json()
@@ -181,7 +181,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
       environment: "STAGING",
       ownershipAttested: true,
     },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(apiTargetResponse).toBeOK()
   const { data: apiTarget } = await apiTargetResponse.json()
@@ -197,7 +197,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
       environment: "STAGING",
       ownershipAttested: true,
     },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(contractTargetResponse).toBeOK()
 
@@ -216,7 +216,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
       targetId: apiTargetId,
       selectedGoal: "LAUNCH_REVIEW",
     },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(restoreOnboardingResponse).toBeOK()
 
@@ -249,7 +249,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
 
   const finishOnboardingResponse = await page.request.patch("/api/onboarding", {
     data: { skipped: true },
-    headers: { "x-forwarded-for": forwardedFor },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await expect(finishOnboardingResponse).toBeOK()
 

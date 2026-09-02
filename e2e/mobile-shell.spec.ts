@@ -4,8 +4,10 @@ import { prisma } from "@lyrashield/db"
 test("mobile workspace sheet switches data, reaches Billing and signs out", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const suffix = crypto.randomUUID()
+  const forwardedFor = "203.0.113.241"
   const email = `mobile-${suffix}@example.com`
   const password = "Mobile-test-password-123!"
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": forwardedFor })
   await page.goto("/sign-up")
   await page.getByLabel("Name").fill("Mobile Tester")
   await page.getByLabel("Email").fill(email)
@@ -15,7 +17,7 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   await prisma.user.update({ where: { email }, data: { emailVerified: true } })
   await page.request.post("/api/auth/sign-out", {
     data: {},
-    headers: { Origin: "http://127.0.0.1:3100" },
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
   await page.goto("/sign-in")
   await page.getByLabel("Email").fill(email)
@@ -25,14 +27,14 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   await expect(
     await page.request.patch("/api/onboarding", {
       data: { skipped: true },
-      headers: { Origin: "http://127.0.0.1:3100" },
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
     })
   ).toBeOK()
   const workspaces: string[] = []
   for (const name of ["Mobile Alpha", "Mobile Beta"]) {
     const response = await page.request.post("/api/workspaces", {
       data: { name: `${name} ${suffix}`, mode: "VIBE" },
-      headers: { Origin: "http://127.0.0.1:3100" },
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
     })
     await expect(response).toBeOK()
     const { data } = await response.json()
@@ -49,7 +51,7 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   await expect(
     await page.request.post("/api/workspaces/active", {
       data: { workspaceId: workspaces[0] },
-      headers: { Origin: "http://127.0.0.1:3100" },
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
     })
   ).toBeOK()
   await page.goto("/dashboard/targets")

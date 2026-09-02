@@ -17,8 +17,7 @@ use commands::*;
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            crate::scan::store::initialize_database(app.handle())
-                .map_err(std::io::Error::other)?;
+            crate::scan::store::initialize_database(app.handle()).map_err(std::io::Error::other)?;
             Ok(())
         })
         .plugin(tauri_plugin_updater::Builder::new().build())
