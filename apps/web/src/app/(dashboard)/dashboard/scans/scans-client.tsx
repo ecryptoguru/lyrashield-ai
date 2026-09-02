@@ -246,6 +246,7 @@ export function ScansClient({
   const [stateFilter, setStateFilter] = useState<ScanStateFilter>(initialStateFilter)
   const [eligibility, setEligibility] = useState<EligibilityState>({ status: "idle" })
   const [eligibilityAttempt, setEligibilityAttempt] = useState(0)
+  const [startingTrial, setStartingTrial] = useState(false)
 
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
@@ -371,6 +372,19 @@ export function ScansClient({
       setErrorCode(err instanceof ApiError ? err.code : null)
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleStartTrial() {
+    setStartingTrial(true)
+    setError(null)
+    try {
+      await apiPost("/api/billing/trial/start", { workspaceId })
+      setEligibilityAttempt((attempt) => attempt + 1)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not start your trial.")
+    } finally {
+      setStartingTrial(false)
     }
   }
 
@@ -964,6 +978,22 @@ export function ScansClient({
                     <p className="text-muted-foreground mt-1">
                       {eligibility.eligibility.message ?? "Not allowed for this workspace."}
                     </p>
+                    {eligibility.eligibility.code === "TRIAL_AVAILABLE" &&
+                      (canManageBilling ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="mt-2"
+                          disabled={startingTrial}
+                          onClick={handleStartTrial}
+                        >
+                          {startingTrial ? "Starting trial…" : "Start free trial"}
+                        </Button>
+                      ) : (
+                        <p className="text-muted-foreground mt-2">
+                          Ask a workspace owner to start the trial.
+                        </p>
+                      ))}
                     {isBillingRecoveryCode(eligibility.eligibility.code) && (
                       <p className="mt-2">
                         {canManageBilling ? (

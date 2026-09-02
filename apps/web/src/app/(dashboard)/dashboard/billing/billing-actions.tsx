@@ -10,6 +10,7 @@ interface BillingActionsProps {
   isLaunchAssurance: boolean
   workspaceId: string
   purchasesAvailable: boolean
+  trialAvailable: boolean
 }
 
 /**
@@ -24,13 +25,14 @@ export function BillingActions({
   isLaunchAssurance: _isLaunchAssurance,
   workspaceId,
   purchasesAvailable,
+  trialAvailable,
 }: BillingActionsProps) {
   const router = useRouter()
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function handleCheckout(targetPlan: string, interval: string) {
-    setLoading(`checkout-${targetPlan}`)
+    setLoading(`checkout-${targetPlan}-${interval}`)
     setError(null)
     try {
       const res = await fetch("/billing/checkout", {
@@ -60,6 +62,24 @@ export function BillingActions({
     }
   }
 
+  async function handleStartTrial() {
+    setLoading("trial")
+    setError(null)
+    try {
+      const response = await fetch("/api/billing/trial/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId }),
+      })
+      if (!response.ok) throw new Error("Could not start trial")
+      router.refresh()
+    } catch {
+      setError("Could not start your trial. Please try again.")
+    } finally {
+      setLoading(null)
+    }
+  }
+
   if (plan === "FREE" || plan === "STARTER") {
     if (!purchasesAvailable) return null
     return (
@@ -69,13 +89,32 @@ export function BillingActions({
             {error}
           </p>
         )}
-        <button
-          onClick={() => handleCheckout("PRO", "monthly")}
-          disabled={loading === "checkout-PRO"}
-          className={buttonVariants({ variant: "default", size: "sm" })}
-        >
-          {loading === "checkout-PRO" ? "Loading..." : "Upgrade"}
-        </button>
+        {trialAvailable && (
+          <button
+            onClick={handleStartTrial}
+            disabled={loading === "trial"}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            {loading === "trial" ? "Starting..." : "Start free trial"}
+          </button>
+        )}
+        {["STARTER", "PRO", "LAUNCH_ASSURANCE"].map((targetPlan) =>
+          targetPlan === plan ? null : (
+            <div key={targetPlan} className="flex items-center gap-1">
+              <span className="text-xs font-medium">{targetPlan.replaceAll("_", " ")}</span>
+              {(["monthly", "annual"] as const).map((interval) => (
+                <button
+                  key={interval}
+                  onClick={() => handleCheckout(targetPlan, interval)}
+                  disabled={loading === `checkout-${targetPlan}-${interval}`}
+                  className={buttonVariants({ variant: "default", size: "sm" })}
+                >
+                  {loading === `checkout-${targetPlan}-${interval}` ? "Loading..." : interval}
+                </button>
+              ))}
+            </div>
+          )
+        )}
       </div>
     )
   }

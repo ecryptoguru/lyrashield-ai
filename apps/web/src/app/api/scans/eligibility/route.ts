@@ -188,6 +188,17 @@ export async function GET(request: Request) {
     const entitlement = await evaluateScanEntitlement(workspaceId, canonicalMode, {
       mutateOnTrialExpiry: false,
     })
+    const trialAvailable =
+      !entitlement.allowed &&
+      entitlement.code === "NO_MINUTES_REMAINING" &&
+      entitlement.plan === "FREE" &&
+      !entitlement.isTrial &&
+      (
+        await prisma.workspace.findUnique({
+          where: { id: workspaceId },
+          select: { trialStartedAt: true },
+        })
+      )?.trialStartedAt === null
 
     logger.info("Scan eligibility preflight", {
       workspaceId,
@@ -198,8 +209,16 @@ export async function GET(request: Request) {
 
     return eligibilityResponse({
       allowed: entitlement.allowed,
-      code: entitlement.allowed ? null : (entitlement.code ?? "SCAN_NOT_ALLOWED"),
-      message: entitlement.allowed ? null : (entitlement.message ?? "Scan not allowed"),
+      code: entitlement.allowed
+        ? null
+        : trialAvailable
+          ? "TRIAL_AVAILABLE"
+          : (entitlement.code ?? "SCAN_NOT_ALLOWED"),
+      message: entitlement.allowed
+        ? null
+        : trialAvailable
+          ? "Start your 14-day trial to receive 100 agent-minutes."
+          : (entitlement.message ?? "Scan not allowed"),
       plan: entitlement.plan,
       isTrial: entitlement.isTrial,
       remainingMinutes: entitlement.remainingMinutes,

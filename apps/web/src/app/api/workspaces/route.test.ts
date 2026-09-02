@@ -19,8 +19,16 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn() },
 }))
+vi.mock("@lyrashield/billing", () => ({
+  startTrial: vi.fn().mockResolvedValue({
+    started: true,
+    alreadyUsed: false,
+    trialEndsAt: new Date("2026-09-17T00:00:00.000Z"),
+  }),
+}))
 
 import { prisma } from "@lyrashield/db"
+import { startTrial } from "@lyrashield/billing"
 import { POST } from "./route"
 
 describe("POST /api/workspaces", () => {
@@ -54,5 +62,6 @@ describe("POST /api/workspaces", () => {
     })
     expect(tx.workspaceMember.create).not.toHaveBeenCalled()
     expect(tx.policy.create).not.toHaveBeenCalled()
+    expect(startTrial).toHaveBeenCalledWith(expect.any(String), "user-1")
   })
 })

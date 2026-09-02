@@ -135,6 +135,7 @@ export default async function BillingPage({
                   isLaunchAssurance={isLaunchAssurance}
                   workspaceId={workspaceId}
                   purchasesAvailable={purchasesAvailable}
+                  trialAvailable={trialState.startedAt === null}
                 />
               )}
             </div>

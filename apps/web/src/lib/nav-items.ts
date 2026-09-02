@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   ShieldCheck,
   Shield,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -151,6 +152,7 @@ const WORKSPACE_NAV_ITEMS: NavItem[] = [
     shortLabel: INTEGRATION_PLURAL,
     icon: Plug,
   },
+  { href: "/dashboard/billing", label: "Billing", shortLabel: "Billing", icon: CreditCard },
   { href: "/dashboard/team", label: TEAM_PLURAL, shortLabel: TEAM_PLURAL, icon: Users },
   {
     href: "/dashboard/settings",

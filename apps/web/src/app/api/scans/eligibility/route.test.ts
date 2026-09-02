@@ -154,4 +154,24 @@ describe("GET /api/scans/eligibility", () => {
       },
     })
   })
+
+  it("offers an unstarted free workspace its trial before an upgrade", async () => {
+    vi.mocked(evaluateScanEntitlement).mockResolvedValue({
+      allowed: false,
+      code: "NO_MINUTES_REMAINING",
+      message: "Your agent-minute balance is exhausted.",
+      plan: "FREE",
+      isTrial: false,
+      remainingMinutes: 0,
+    } as never)
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ trialStartedAt: null } as never)
+
+    const response = await GET(request(validQuery))
+
+    expect((await response.json()).data).toMatchObject({
+      allowed: false,
+      code: "TRIAL_AVAILABLE",
+      message: "Start your 14-day trial to receive 100 agent-minutes.",
+    })
+  })
 })
