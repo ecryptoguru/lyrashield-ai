@@ -180,9 +180,9 @@ export const tools = [
     title: "WebMCP Security Checker",
     seoTitle: "WebMCP Security Checker | LyraShield AI",
     description:
-      "Check browser-registered WebMCP tools locally for unsafe exposure, missing confirmation, weak schemas, and 7 more assurance controls.",
+      "Check browser-registered WebMCP tools locally for unsafe exposure, missing confirmation, weak schemas, and other assurance controls.",
     summary:
-      "This browser-local analyzer reviews WebMCP tool definitions in selected source files or pasted code for 10 assurance controls, prepares a visible rewrite diff, and exports the result to JSON, Markdown, or SARIF.",
+      "This browser-local analyzer reviews WebMCP tool definitions in selected source files or pasted code for 14 assurance controls, prepares a visible rewrite diff, and exports the result to JSON, Markdown, or SARIF.",
     privacy: "Files and pasted code never leave your device.",
     category: "Protect data and access",
     checks: [
