@@ -590,6 +590,11 @@ export function TargetsClient({
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
                   <span className="sr-only">View</span>
                 </th>
+                <th className="hidden">
+                  <span className="sr-only">
+                    {RUN_PLURAL} and {ISSUE_PLURAL} summary
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -640,6 +645,13 @@ export function TargetsClient({
                     >
                       View
                     </Link>
+                  </td>
+                  {/* Mobile/AT fallback: Runs and Issues columns are hidden
+                      below lg, so the primary row data is otherwise
+                      unreachable on small screens. Announce counts + status
+                      without affecting the visual layout. */}
+                  <td className="hidden">
+                    <span className="sr-only">{`${t.status}, ${t.scanCount} ${RUN_PLURAL.toLowerCase()}, ${t.findingCount} ${ISSUE_PLURAL.toLowerCase()}`}</span>
                   </td>
                 </tr>
               ))}

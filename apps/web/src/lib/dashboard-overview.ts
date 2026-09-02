@@ -516,6 +516,60 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     else receiptsByScanId.set(receipt.scanId, [receipt.status])
   }
 
+  // The 200-run window is newest-first across ALL targets, so a target whose
+  // only terminal runs are old can fall outside it entirely — the coverage
+  // pass would then classify an assessed target as unassessed. Derive each
+  // active target's LATEST terminal run explicitly (bounded by target count,
+  // one query) and union it into the run set so the per-target lookup always
+  // sees the target's own newest evidence.
+  const activeTargetIds = targets.map((target) => target.id)
+  const windowScanIds = new Set(terminalRuns.map((run) => run.id))
+  const missingTargets = activeTargetIds.filter(
+    (id) => !terminalRuns.some((r) => r.targetId === id)
+  )
+  let perTargetRuns: typeof terminalRuns = []
+  if (missingTargets.length > 0) {
+    perTargetRuns = await prisma.scan.findMany({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        status: { in: TERMINAL_RUN_STATUSES },
+        targetId: { in: missingTargets },
+      },
+      orderBy: { createdAt: "desc" },
+      // One newest run per missing target is all the coverage pass needs; a
+      // small per-target cap bounds the fetch while covering receipt variety.
+      take: missingTargets.length * 3,
+      select: {
+        id: true,
+        targetId: true,
+        status: true,
+        mode: true,
+        createdAt: true,
+        endedAt: true,
+        summary: true,
+        errorCategory: true,
+        errorMessage: true,
+        target: { select: { id: true, name: true } },
+        _count: { select: { findings: { where: { deletedAt: null } } } },
+      },
+    })
+  }
+  const allTerminalRuns = [...terminalRuns, ...perTargetRuns]
+  // Add receipts for the per-target runs the window fetch had not covered.
+  const extraScanIds = perTargetRuns.map((run) => run.id).filter((id) => !windowScanIds.has(id))
+  if (extraScanIds.length) {
+    const extraReceipts = await prisma.scanCoverageReceipt.findMany({
+      where: { scanId: { in: extraScanIds }, scan: { workspaceId, deletedAt: null } },
+      select: { scanId: true, status: true },
+    })
+    for (const receipt of extraReceipts) {
+      const statuses = receiptsByScanId.get(receipt.scanId)
+      if (statuses) statuses.push(receipt.status)
+      else receiptsByScanId.set(receipt.scanId, [receipt.status])
+    }
+  }
+
   const findingGroups: DashboardFindingGroup[] = findingGroupRows.map((group) => ({
     severity: group.severity as FindingSeverity,
     status: group.status as FindingStatus,
@@ -539,7 +593,7 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
 
   return buildDashboardOverview({
     targets,
-    terminalRuns,
+    terminalRuns: allTerminalRuns,
     receiptsByScanId,
     findingGroups,
     completedRunCount,

@@ -292,8 +292,8 @@ export default async function DashboardPage() {
                       {run.targetName ?? "Workspace scan"}
                     </span>
                     <span className="text-muted-foreground block text-xs">
-                      {formatDateTime(run.createdAt)} · {run.findingCount} issue
-                      {run.findingCount === 1 ? "" : "s"} from this run
+                      {formatDateTime(run.createdAt)} · {run.findingCount} retained issue
+                      {run.findingCount === 1 ? "" : "s"} on record
                     </span>
                   </span>
                   <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>
