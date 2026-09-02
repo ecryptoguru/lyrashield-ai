@@ -40,7 +40,11 @@ Open your Zed settings and add:
 }
 ```
 
-The API URL comes from the credential store or the MCP package default. No environment URL override is injected.
+Stored OAuth uses the credential store's API URL. Inherited URL and credential overrides are
+removed before MCP starts. An explicit API key uses `https://app.lyrashieldai.com` only.
+
+Published MCP 0.2.2 does not refresh expired OAuth tokens; run `lyrashield login --oauth` again
+when the session expires.
 
 ## Requirements
 

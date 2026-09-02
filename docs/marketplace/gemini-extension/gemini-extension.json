@@ -5,7 +5,7 @@
   "settings": [
     {
       "name": "LyraShield API Key",
-      "description": "Your LyraShield workspace API key (starts with lsk_). Used to authenticate MCP tool calls.",
+      "description": "Optional LyraShield Cloud workspace API key (starts with lsk_). Leave empty to use your local OAuth login.",
       "envVar": "GEMINI_LYRASHIELD_CRED",
       "sensitive": true
     }
@@ -13,9 +13,13 @@
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.2"],
+      "args": [
+        "-y",
+        "--node-options=--require=\"${extensionPath}/mcp-env.cjs\"",
+        "@lyrashield/mcp@0.2.2"
+      ],
       "env": {
-        "LYRASHIELD_API_KEY": "${GEMINI_LYRASHIELD_CRED}"
+        "LYRASHIELD_EXTENSION_CRED": "${GEMINI_LYRASHIELD_CRED}"
       }
     }
   },

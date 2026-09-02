@@ -18,6 +18,54 @@ afterEach(async () => {
 })
 
 describe("exportMarketplace", () => {
+  it("launches optional credentials through npm and embedded Zed preload without inherited overrides", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield extension "))
+    outputs.push(output)
+    await exportMarketplace(output)
+    const gemini = JSON.parse(await readFile(path.join(output, "gemini-extension.json"), "utf8"))
+    const preloadOption = gemini.mcpServers.lyrashield.args[1].replace("${extensionPath}", output)
+    const preload = await readFile(path.join(output, "zed-extension/mcp-env.cjs"), "utf8")
+    const probe = `process.stdout.write(JSON.stringify({
+      key: process.env.LYRASHIELD_API_KEY,
+      url: process.env.LYRASHIELD_API_URL,
+      oauth: process.env.LYRASHIELD_OAUTH_ACCESS_TOKEN,
+      temporary: process.env.LYRASHIELD_EXTENSION_CRED
+    }))`
+    const probePath = path.join(output, "stdio probe.mjs")
+    await writeFile(probePath, probe)
+    for (const setting of [undefined, "", "  ", " demo-credential "]) {
+      const env = {
+        PATH: process.env.PATH,
+        HOME: output,
+        LYRASHIELD_API_URL: "http://untrusted.invalid",
+        LYRASHIELD_API_KEY: "inherited-credential",
+        LYRASHIELD_OAUTH_ACCESS_TOKEN: "inherited-token",
+        ...(setting === undefined ? {} : { LYRASHIELD_EXTENSION_CRED: setting }),
+      }
+      const expected = setting?.trim()
+        ? { key: "demo-credential", url: "https://app.lyrashieldai.com" }
+        : {}
+      // npm's own Node option forwarding and paths with spaces are part of the
+      // Gemini launch contract. This uses the installed Node, with no download.
+      const geminiResult = await execFileAsync(
+        "npx",
+        ["--no", preloadOption, "--", "node", "--eval", probe],
+        { cwd: output, env }
+      )
+      expect(JSON.parse(geminiResult.stdout)).toEqual(expected)
+      const zedResult = await execFileAsync(
+        process.execPath,
+        [
+          "--eval",
+          `${preload}\nimport(require('node:url').pathToFileURL(process.argv[1]).href)`,
+          probePath,
+        ],
+        { cwd: output, env }
+      )
+      expect(JSON.parse(zedResult.stdout)).toEqual(expected)
+    }
+  }, 15000)
+
   it("exports only the public client boundary with provenance", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
@@ -163,6 +211,7 @@ describe("exportMarketplace", () => {
       ".mcp.json",
       ".mcp.kiro.json",
       "gemini-extension.json",
+      "mcp-env.cjs",
       "GEMINI.md",
       "LICENSE",
       "zed-extension",

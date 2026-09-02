@@ -39,6 +39,7 @@ const MARKETPLACE_ARTIFACTS = [
 const GENERATED_FILES = [
   ...PUBLIC_FILES,
   "gemini-extension.json",
+  "mcp-env.cjs",
   "GEMINI.md",
   "LICENSE",
   ...MARKETPLACE_ARTIFACTS,
@@ -110,6 +111,11 @@ export async function exportMarketplace(destination: string): Promise<void> {
       force: true,
     })
   }
+  await cp(
+    path.join(marketplaceDocs, "gemini-extension", "mcp-env.cjs"),
+    path.join(destination, "mcp-env.cjs"),
+    { force: true }
+  )
   await cp(
     path.join(marketplaceDocs, "gemini-extension", "GEMINI.md"),
     path.join(destination, "GEMINI.md"),

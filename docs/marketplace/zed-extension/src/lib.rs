@@ -8,7 +8,7 @@ use zed_extension_api::{
 const PACKAGE_NAME: &str = "@lyrashield/mcp";
 const PACKAGE_VERSION: &str = "0.2.2";
 const SERVER_ENTRYPOINT: &str = "node_modules/@lyrashield/mcp/dist/stdio-transport.js";
-const API_KEY_ENV_VAR: &str = "LYRASHIELD_API_KEY";
+const EXTENSION_CRED_ENV_VAR: &str = "LYRASHIELD_EXTENSION_CRED";
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct LyraShieldMcpSettings {
@@ -73,18 +73,19 @@ impl zed::Extension for LyraShieldMcpExtension {
             .map_err(|err| format!("Failed to resolve the extension working directory: {err}"))?
             .join(SERVER_ENTRYPOINT);
 
-        let mut command = Command {
+        let api_key = settings.api_key.unwrap_or_default();
+        let command = Command {
             command: node,
-            args: vec![entrypoint.to_string_lossy().to_string()],
-            env: vec![],
+            args: vec![
+                "--eval".to_string(),
+                format!(
+                    "{}\nimport(require('node:url').pathToFileURL(process.argv[1]).href)",
+                    include_str!("../mcp-env.cjs")
+                ),
+                entrypoint.to_string_lossy().to_string(),
+            ],
+            env: vec![(EXTENSION_CRED_ENV_VAR.to_string(), api_key)],
         };
-        if let Some(api_key) = settings
-            .api_key
-            .map(|key| key.trim().to_string())
-            .filter(|key| !key.is_empty())
-        {
-            command.env.push((API_KEY_ENV_VAR.to_string(), api_key));
-        }
         Ok(command)
     }
 
