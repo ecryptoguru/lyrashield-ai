@@ -272,6 +272,25 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     logger.info("Webhook track retry worker closed")
   }
 
+  // Close the fix-generation worker with the same bounded wait. Its jobs are
+  // idempotent (the consumer skips proposals already ready), so abandoning an
+  // in-flight job to the stalled-job reclaim on a hard timeout is safe.
+  if (fixGenerateWorker) {
+    const localFixGenerateWorker = fixGenerateWorker
+    fixGenerateWorker = null
+    const fixClosed = localFixGenerateWorker.close()
+    const fixOutcome = await Promise.race([
+      fixClosed.then(() => "closed" as const),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 10_000)),
+    ])
+    if (fixOutcome === "timeout") {
+      forcedExit = true
+      logger.warn("Fix generation worker did not close cleanly; forcing shutdown")
+    } else {
+      logger.info("Fix generation worker closed")
+    }
+  }
+
   if (heartbeatsStopped) {
     await unregisterScanWorker(workerId).catch((error) => {
       logger.warn("Could not unregister scan worker", {
@@ -440,6 +459,14 @@ async function main(): Promise<void> {
       stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
     }
   )
+  // A worker without an "error" listener turns a BullMQ connection error into
+  // an unhandled EventEmitter throw that can crash the whole worker process
+  // (the scan worker has the same listener for the same reason).
+  fixGenerateWorker.on("error", (error) => {
+    logger.error("Fix generation worker connection error", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
   await fixGenerateWorker.waitUntilReady()
   fixGenerateWorker.on("failed", (job, error) => {
     logger.error("Fix generation job failed in queue", {

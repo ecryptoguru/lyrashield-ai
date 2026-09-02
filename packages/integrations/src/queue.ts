@@ -226,3 +226,49 @@ export async function getScanQueuePosition(scanId: string): Promise<ScanQueuePos
     return null
   }
 }
+
+/**
+ * WP3 fix-generation queue — the producer side of the fix-PR pipeline.
+ *
+ * The consumer lives in the worker (apps/worker/src/jobs/fix-generate.job.ts);
+ * this is the enqueue path web routes call after creating a draft fix
+ * proposal. Job data is minimal and workspace-scoped so the consumer runs
+ * every read under the RLS context.
+ */
+export const FIX_GENERATE_QUEUE_NAME = "fix-generate"
+
+export interface FixGenerateJobData {
+  workspaceId: string
+  fixProposalId: string
+}
+
+let fixGenerateQueue: Queue<FixGenerateJobData, unknown> | null = null
+
+function getFixGenerateQueue(): Queue<FixGenerateJobData, unknown> {
+  if (!fixGenerateQueue) {
+    fixGenerateQueue = new Queue<FixGenerateJobData, unknown>(FIX_GENERATE_QUEUE_NAME, {
+      connection: getConnectionOpts(),
+      defaultJobOptions: {
+        // The consumer is deterministic from stored evidence (no model call),
+        // so retrying a transient failure is safe. attempts stay small so a
+        // poisoned payload cannot hammer the worker.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 200 },
+      },
+    })
+  }
+  return fixGenerateQueue
+}
+
+/**
+ * Enqueue fix generation for one proposal. jobId = fixProposalId so repeated
+ * enqueues for the same proposal dedupe while one is waiting/active (and the
+ * consumer additionally skips when the proposal is already `ready`).
+ */
+export async function enqueueFixGenerate(data: FixGenerateJobData): Promise<string> {
+  const queue = getFixGenerateQueue()
+  const job = await queue.add("fix-generate", data, { jobId: data.fixProposalId })
+  return job.id!
+}

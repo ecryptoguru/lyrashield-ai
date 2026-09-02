@@ -1777,6 +1777,9 @@ describe("processScanJob", () => {
       workspaceId: "ws-1",
       targetId: "target-1",
       vulnerabilities: [],
+      // The scanned revision is stamped on findings so fix patches apply
+      // against exactly the commit that was analyzed.
+      sourceRevision: "c".repeat(40),
     })
     expect(persistResultManifest).toHaveBeenCalledWith(
       expect.objectContaining({

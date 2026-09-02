@@ -194,6 +194,7 @@ export {
   getLatestGateVerdict,
   handleFixPrMergedAndReevaluate,
   type GateEvaluationResult,
+  type FixPrMergeOutcome,
 } from "./gate-service"
 export {
   buildLaunchReportPayload,
