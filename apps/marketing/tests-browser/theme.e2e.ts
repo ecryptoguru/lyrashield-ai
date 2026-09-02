@@ -184,6 +184,7 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
 
   const menu = page.locator("#mobile-menu")
   await expect(menu).toBeVisible()
+  await expect(menu).toHaveCSS("transform", "none")
   await expect(menu.getByText("Resources", { exact: true })).toBeVisible()
   await expect(menu.getByRole("link", { name: "Free tools", exact: true })).toBeVisible()
   await expect(menu.getByRole("link", { name: "Get started" })).toBeVisible()
@@ -193,6 +194,13 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
   expect(await menu.evaluate((element) => element.scrollHeight)).toBeLessThanOrEqual(
     await menu.evaluate((element) => element.clientHeight)
   )
+  for (const name of ["For agents", "How it works", "Free scan", "Pricing"]) {
+    const link = menu.getByRole("link", { name, exact: true })
+    await expect(link).toBeInViewport()
+    const linkBounds = await link.boundingBox()
+    expect(linkBounds!.height).toBeGreaterThanOrEqual(44)
+    expect(linkBounds!.y + linkBounds!.height).toBeLessThanOrEqual(384)
+  }
 
   await page.keyboard.press("Escape")
   await expect(menu).toBeHidden()

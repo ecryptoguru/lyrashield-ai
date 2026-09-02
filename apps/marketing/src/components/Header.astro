@@ -349,6 +349,10 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       gap: 0.125rem;
     }
 
+    .mobile-menu__primary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .mobile-menu__section {
       margin-top: 0;
     }
