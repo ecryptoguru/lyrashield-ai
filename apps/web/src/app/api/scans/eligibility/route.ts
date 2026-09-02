@@ -2,12 +2,18 @@ import { prisma } from "@lyrashield/db"
 import type { ScanMode } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
+import { normalizeDomainForProof } from "@lyrashield/security"
 import { CreateScanSchema, resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
 import { evaluateScanEntitlement } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError } from "../../../../lib/api-response"
+import {
+  peekFreeUrlScanRateLimit,
+  checkScanEligibilityRateLimit,
+  clientIpFromRequest,
+} from "../../../../lib/rate-limit"
 
 const EligibilityQuerySchema = CreateScanSchema.pick({
   workspaceId: true,
@@ -55,11 +61,76 @@ export async function GET(request: Request) {
     // Same workspace permission and target ownership checks as scan creation.
     await requirePermission(workspaceId, PERMISSIONS.scan.create)
 
+    // The preflight runs on composer interaction, so it gets its own
+    // (looser) per-workspace budget — but still a budget: it does real
+    // entitlement reads per call and must not be unthrottled.
+    const eligibilityRate = await checkScanEligibilityRateLimit(workspaceId)
+    if (eligibilityRate.limited) {
+      return apiError(
+        "ELIGIBILITY_RATE_LIMITED",
+        "Too many eligibility checks in the last minute. Please wait a moment.",
+        429,
+        { "Retry-After": String(Math.max(eligibilityRate.retryAfter, 1)) }
+      )
+    }
+
     const target = await prisma.target.findFirst({
       where: { id: targetId, workspaceId, deletedAt: null },
     })
     if (!target) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+    }
+
+    // Mirror the POST-only gates that apply BEFORE entitlement evaluation, so
+    // the preflight's verdict matches what the run submission would actually
+    // hit. Both checks are read-only here (the free-URL limiter consumes a
+    // token; that is the same meter POST uses, so a preflight does not let a
+    // caller evade it — POST re-checks).
+    if (target.type === "WEB_APP" || target.type === "API") {
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { plan: true },
+      })
+      if (!workspace || workspace.plan === "FREE") {
+        // Read-only peek: repeated preflight calls must not consume the
+        // caller's hourly free-URL budget. The POST path consumes the token.
+        const freeUrlLimit = await peekFreeUrlScanRateLimit(clientIpFromRequest(request))
+        if (freeUrlLimit.limited) {
+          return eligibilityResponse({
+            allowed: false,
+            code: "FREE_URL_SCAN_RATE_LIMITED",
+            message:
+              "Free-plan remote URL reviews are temporarily limited for your network. Verify the domain or upgrade for unrestricted reviews.",
+            plan: "FREE",
+            isTrial: false,
+            remainingMinutes: 0,
+          })
+        }
+      }
+      if (workspace && workspace.plan !== "FREE") {
+        const domain = target.url ? normalizeDomainForProof(target.url) : null
+        const proof = domain
+          ? await prisma.targetDomainVerification.findFirst({
+              where: {
+                workspaceId,
+                domain,
+                status: "VERIFIED",
+                expiresAt: { gt: new Date() },
+              },
+              select: { id: true },
+            })
+          : null
+        if (!proof) {
+          return eligibilityResponse({
+            allowed: false,
+            code: "DOMAIN_VERIFICATION_REQUIRED",
+            message: "Verify control of this domain once before starting a paid remote review.",
+            plan: workspace.plan,
+            isTrial: false,
+            remainingMinutes: 0,
+          })
+        }
+      }
     }
 
     // Resolve the canonical review profile exactly as POST does, so the

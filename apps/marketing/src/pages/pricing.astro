@@ -1,12 +1,19 @@
 ---
 import Base from "@layouts/Base.astro"
-import { CLOUD_PLANS, LOCAL_SKU_MAP, formatINR, formatUSD, getPlan } from "@lyrashield/pricing"
+import {
+  CLOUD_PLANS,
+  LOCAL_SKU_MAP,
+  MINUTE_PACKS,
+  formatINR,
+  formatUSD,
+  getPlan,
+} from "@lyrashield/pricing"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/pricing", origin).toString()
 const title = "Pricing — Cloud & Local Plans | LyraShield AI"
 const description =
-  "Cloud plans from Starter to Team with monthly/annual billing, prepaid minute packs, and a 14-day free trial with no credit card required. Local licenses for self-hosted use. Agent-minutes are wall-clock time."
+  "Cloud plans from Starter to Launch Assurance with monthly/annual billing, prepaid minute packs, and a 14-day free trial with no credit card required. Local licenses for self-hosted use. Agent-minutes are wall-clock time."
 
 const jsonLd = [
   {
@@ -22,11 +29,7 @@ const jsonLd = [
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
 
-const minutePacks = [
-  { id: "pack_100", name: "100-Minute Pack", minutes: 100, priceUsd: 15 },
-  { id: "pack_250", name: "250-Minute Pack", minutes: 250, priceUsd: 30 },
-  { id: "pack_500", name: "500-Minute Pack", minutes: 500, priceUsd: 50 },
-]
+const minutePacks = MINUTE_PACKS
 
 const localLaunch = LOCAL_SKU_MAP.individual_launch
 
@@ -327,8 +330,9 @@ const appUrl =
         Deep and Custom scans consume agent-minutes at 3× the standard rate.
       </p>
       <p class="mt-3 text-sm text-gray-600 dark:text-gray-400">
-        Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for Team
-        plans with a spend limit configured. Minute packs are valid for 6 months from purchase.
+        Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for
+        Launch Assurance plans with a spend limit configured. Minute packs are valid for 6 months
+        from purchase.
       </p>
     </div>
   </div>

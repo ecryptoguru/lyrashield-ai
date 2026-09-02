@@ -88,6 +88,7 @@ Deeper modes consume more compute and take longer. Choose the least intensive mo
 
 - `check-diff [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — fast advisory diff check for obvious risky patterns; not a substitute for a full recorded scan
 - `gate [--fail-on HIGH|MEDIUM|LOW] [--staged] [--base <ref>] [--head <ref>] [--sarif <file>] [--target <targetId>]` — combine local diff patterns with that target's open findings and fail at the chosen severity threshold. Without `--target` (or a saved default project from `project use`), only the local diff checks gate the PR — never the whole workspace's findings.
+- `gate --verdict [--target <id>]` — return the launch-gate verdict for the target instead of the diff-severity gate, with exit code `0` (READY), `1` (NOT_READY), or `2` (insufficient evidence or error — fails closed).
 
 The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes only. It rejects `DEEP` with directions to the hosted app, MCP server, or REST API instead of silently reducing coverage.
 
@@ -101,8 +102,8 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 ## Exit codes
 
 - `0` — success
-- `1` — command failed, or `gate` found findings at/above the threshold
-- `2` — usage or validation error
+- `1` — command failed, or `gate` found findings at/above the threshold; `gate --verdict` returns NOT_READY
+- `2` — usage or validation error; `gate --verdict` returns it on insufficient evidence or any error (fail-closed)
 - `3` — authentication or authorization error (HTTP 401/403)
 - `4` — network or other API error
 - `5` — rate limited (HTTP 429)

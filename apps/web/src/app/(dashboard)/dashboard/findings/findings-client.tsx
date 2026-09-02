@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useId } from "react"
 import { useFindingsWebMcp } from "./findings-webmcp"
 import { z } from "zod"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -330,6 +330,21 @@ export function FindingsClient({
     return () => window.removeEventListener("popstate", onPopState)
   }, [findings])
 
+  // Deep-link hygiene: once a ?finding= deep link has been consumed by the
+  // server render, replace the history entry WITHOUT the param. Without this,
+  // opening another finding (pushState) and closing it pops back to the
+  // original deep-link entry — whose popstate handler would re-open the
+  // deep-linked finding instead of returning to the clean list.
+  useEffect(() => {
+    if (!initialSelectedFindingId || typeof window === "undefined") return
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has("finding")) return
+    url.searchParams.delete("finding")
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`)
+    // Run once on mount: the deep link is consumed exactly once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
     workspaceId,
     findings,
@@ -385,14 +400,15 @@ export function FindingsClient({
       setFilter(newFilter)
       updateQueryParams({ filter: newFilter, sort: sortMode })
       // Reset to the server-rendered page only when returning to the exact
-      // state the server delivered; otherwise fetch the new view.
-      if (
-        newFilter === initialFilter &&
-        !targetFilter &&
-        !query &&
-        findingFilterToApiQuery(newFilter as FindingFilterValue) ===
-          findingFilterToApiQuery(initialFilter as FindingFilterValue)
-      ) {
+      // state the server delivered; otherwise fetch the new view. Compare the
+      // derived query objects field-wise — two freshly-allocated objects are
+      // never === equal, which previously made this branch unreachable and
+      // forced a refetch (discarding loaded pages) even when the filter
+      // matched the server render.
+      const sameDerivedQuery =
+        JSON.stringify(findingFilterToApiQuery(newFilter as FindingFilterValue)) ===
+        JSON.stringify(findingFilterToApiQuery(initialFilter as FindingFilterValue))
+      if (newFilter === initialFilter && !targetFilter && !query && sameDerivedQuery) {
         setFindings(initialData)
         setNextCursor(initialNextCursor)
         setError(null)
@@ -973,6 +989,10 @@ function StatusActionConfirm({
 }) {
   const [comment, setComment] = useState("")
   const trimmed = comment.trim()
+  // useId: two confirm panels can technically be mounted at once (the
+  // drawer's action states are not structurally exclusive), and a duplicated
+  // static id breaks label association for screen readers.
+  const commentFieldId = useId()
 
   return (
     <div
@@ -980,9 +1000,9 @@ function StatusActionConfirm({
       role="group"
       aria-label={label}
     >
-      <FormField label={label} htmlFor="status-comment">
+      <FormField label={label} htmlFor={commentFieldId}>
         <Textarea
-          id="status-comment"
+          id={commentFieldId}
           rows={2}
           placeholder="Add a comment explaining your decision (required)…"
           value={comment}

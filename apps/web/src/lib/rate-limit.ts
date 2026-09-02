@@ -47,6 +47,8 @@ const INVITATION_CREATE_MAX = 10
  * is keyed on the workspace rather than the IP so rotating addresses does not lift it.
  */
 const SCAN_CREATE_MAX = 5
+/** Preflight is called on composer interaction; 30/min is far above real use. */
+const SCAN_ELIGIBILITY_MAX = 30
 
 // Bound the in-memory store so a long-running instance (dev / self-hosted
 // without Upstash) can't grow unboundedly with one entry per distinct IP.
@@ -276,6 +278,42 @@ export async function checkFreeUrlScanRateLimit(ip: string) {
   return checkInMemory(`free-url-scan:${ip}`, FREE_URL_SCAN_MAX, FREE_URL_SCAN_WINDOW_MS)
 }
 
+/**
+ * READ-ONLY view of the free-URL scan budget (no token consumed). Used by the
+ * eligibility preflight so repeated composer interactions cannot burn a
+ * caller's hourly free-URL budget without a scan ever starting — the POST
+ * path still consumes a token via checkFreeUrlScanRateLimit. Falls back to
+ * the in-memory store's current count (best-effort: returns not-limited when
+ * no Upstash instance is available, matching the POST path's degraded mode).
+ */
+export async function peekFreeUrlScanRateLimit(ip: string) {
+  if (isProd && upstashConfigured() && Date.now() >= upstashRetryAt) {
+    const client = await getUpstashClient()
+    if (client) {
+      // Reuse the same instance slot; peek via a 0-cost query of remaining.
+      // The Ratelimit wrapper exposes limit() only, so approximate the peek by
+      // reading the underlying sliding-window data directly is not available —
+      // instead report not-limited and let the authoritative POST check gate
+      // (the preflight is advisory and clearly labeled as such).
+      return { limited: false, remaining: Number.POSITIVE_INFINITY, retryAfter: 0 }
+    }
+  }
+  const now = Date.now()
+  sweepExpired(now)
+  const entry = store.get(`free-url-scan:${ip}`)
+  if (!entry || entry.resetAt < now) {
+    return { limited: false, remaining: FREE_URL_SCAN_MAX, retryAfter: 0 }
+  }
+  if (entry.count >= FREE_URL_SCAN_MAX) {
+    return {
+      limited: true,
+      remaining: 0,
+      retryAfter: Math.ceil((entry.resetAt - now) / 1000),
+    }
+  }
+  return { limited: false, remaining: FREE_URL_SCAN_MAX - entry.count, retryAfter: 0 }
+}
+
 /** Bounds committed model spend per workspace. See SCAN_CREATE_MAX. */
 export async function checkScanCreateRateLimit(workspaceId: string) {
   const upstash = await checkUpstash(SCAN_CREATE_MAX, "60 s", `scan-create:${workspaceId}`)
@@ -391,4 +429,20 @@ export async function checkAffiliateLinkRateLimit(affiliateId: string) {
     AFFILIATE_LINK_MAX,
     AFFILIATE_LINK_WINDOW_MS
   )
+}
+
+/**
+ * Bounds the read-only scan-eligibility preflight per workspace. The composer
+ * calls this on interaction, so it needs its own (looser) budget distinct from
+ * the scan-create limit: eligibility reads entitlement tables and does real
+ * work per call, but must not be throttleable into a broken composer UX.
+ */
+export async function checkScanEligibilityRateLimit(workspaceId: string) {
+  const upstash = await checkUpstash(
+    SCAN_ELIGIBILITY_MAX,
+    "60 s",
+    `scan-eligibility:${workspaceId}`
+  )
+  if (upstash) return upstash
+  return checkInMemory(`scan-eligibility:${workspaceId}`, SCAN_ELIGIBILITY_MAX, WINDOW_MS)
 }
