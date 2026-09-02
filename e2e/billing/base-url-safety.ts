@@ -1,6 +1,7 @@
 const PRODUCTION_HOSTS = new Set([
   "lyrashieldai.com",
   "app.lyrashieldai.com",
+  "scanner.lyrashieldai.com",
   "lyrashield-app.icyglacier-d3526777.centralindia.azurecontainerapps.io",
   "lyrashield-scanner.icyglacier-d3526777.centralindia.azurecontainerapps.io",
 ])
