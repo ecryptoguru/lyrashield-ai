@@ -37,6 +37,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git cat-file -e "${HEAD_SHA}^{commit}"
+          git merge-base --is-ancestor "$HEAD_SHA" origin/main
+          if [ "$HEAD_SHA" != "$(git rev-parse origin/main)" ]; then
+            echo "Skipping superseded CI source $HEAD_SHA"
+            exit 0
+          fi
+          if git rev-parse --verify 'refs/tags/v2^{commit}' >/dev/null 2>&1; then
+            git merge-base --is-ancestor 'refs/tags/v2^{commit}' "$HEAD_SHA"
+          fi
           git tag -fa v2 -m "Update v2 tag to ${HEAD_SHA}" "$HEAD_SHA"
           git push origin v2 --force
 

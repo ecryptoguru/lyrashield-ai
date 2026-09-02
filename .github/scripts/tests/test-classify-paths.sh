@@ -187,6 +187,11 @@ assert_eq "mixed unknown: shared fallback" "true" "$(get_field "$out" "shared")"
 assert_eq "mixed unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "mixed unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
 
+for path in apps/marketing/src/content/compare/snyk.md apps/web/README.md; do
+  out=$(run_classify "$path")
+  assert_eq "$path: docs-only" "false" "$(get_field "$out" "docs-only")"
+done
+
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then
   exit 1

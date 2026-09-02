@@ -1,6 +1,21 @@
 #!/bin/sh
 set -eu
 
+assert_empty_queues() {
+  container=lyrashield-worker
+  preflight=$(docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e 'const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); }')
+  expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
+  [ "$preflight" = "$expected" ] || {
+    echo "Worker promotion requires empty scan and webhook queues" >&2
+    exit 1
+  }
+}
+if [ "${1:-}" = "--preflight" ]; then
+  assert_empty_queues
+  echo "Worker empty-queue preflight passed"
+  exit 0
+fi
+
 target=${1:?worker image digest reference is required}
 expected_app=${2:?product revision is required}
 expected_engine=${3:?engine revision is required}
@@ -163,12 +178,7 @@ case "$admission_stop_owned" in
   *) echo "Worker promotion could not establish scan admission ownership" >&2; exit 1 ;;
 esac
 
-preflight=$(docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e 'const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); }')
-expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
-[ "$preflight" = "$expected" ] || {
-  echo "Worker promotion requires empty scan and webhook queues" >&2
-  exit 1
-}
+assert_empty_queues
 
 # Keep the running worker image for rollback while reclaiming superseded release
 # images before Docker needs space for both compressed and extracted target layers.

@@ -26,90 +26,11 @@ on:
         required: false
         type: boolean
         default: false
-      receipt_provider:
-        description: "polar or razorpay"
+      receipt_json:
+        description: "Receipt fields as JSON; see docs/ops/billing-staging-receipt.md"
         required: false
         type: string
-      receipt_event_id:
-        description: "Provider-delivered webhook event ID"
-        required: false
-        type: string
-      receipt_resolve_razorpay_subscription_charge:
-        description: "Resolve exactly one processed Razorpay subscription.charged event for the provided workspace and subscription"
-        required: false
-        type: boolean
-        default: false
-      receipt_resolve_razorpay_subscription_cancellation:
-        description: "Resolve exactly one processed Razorpay subscription.cancelled event for the provided workspace and subscription"
-        required: false
-        type: boolean
-        default: false
-      receipt_resolve_polar_subscription_purchase:
-        description: "Resolve one processed Polar subscription.active or subscription.created event"
-        required: false
-        type: boolean
-        default: false
-      receipt_resolve_polar_subscription_cancellation:
-        description: "Resolve exactly one processed Polar subscription.canceled or subscription.revoked event"
-        required: false
-        type: boolean
-        default: false
-      receipt_workspace_id:
-        description: "Disposable staging workspace ID"
-        required: false
-        type: string
-      receipt_kind:
-        description: "subscription or pack"
-        required: false
-        type: string
-      receipt_phase:
-        description: "Marker-safe lifecycle phase, such as purchase, cancellation, partial_refund, full_refund, replay, or cleanup"
-        required: false
-        type: string
-      receipt_object_id:
-        description: "Provider subscription or payment object ID"
-        required: false
-        type: string
-      receipt_plan:
-        description: "Expected plan for a subscription receipt"
-        required: false
-        type: string
-      receipt_interval:
-        description: "Expected interval for a subscription receipt"
-        required: false
-        type: string
-      receipt_status:
-        description: "Expected subscription status"
-        required: false
-        type: string
-      receipt_minutes:
-        description: "Expected minutes for a pack receipt"
-        required: false
-        type: string
-      receipt_remaining_minutes:
-        description: "Expected remaining minutes after purchase/refund"
-        required: false
-        type: string
-      receipt_commission_count:
-        description: "Expected commissions bound to the provider object (default 0)"
-        required: false
-        type: string
-      receipt_commission_status:
-        description: "Expected commission status when count is non-zero"
-        required: false
-        type: string
-      receipt_audit_action:
-        description: "Expected workspace audit action bound to the provider object"
-        required: false
-        type: string
-      receipt_audit_resource_id:
-        description: "Audit resource ID when it differs from the provider object"
-        required: false
-        type: string
-      receipt_audit_count:
-        description: "Expected matching audit rows (required with an audit action)"
-        required: false
-        type: string
+        default: "{}"
 
 concurrency:
   group: deploy-billing-staging
@@ -134,6 +55,7 @@ jobs:
       CONTAINER_APP: ${{ vars.STAGING_CONTAINER_APP }}
       REGISTRY: ${{ vars.STAGING_REGISTRY }}
       IMAGE_SHA: ${{ github.sha }}
+      RECEIPT_JSON: ${{ inputs.receipt_json }}
       PULL_IDENTITY_ID: ${{ vars.STAGING_PULL_IDENTITY_ID }}
       APP_IDENTITY_ID: ${{ vars.STAGING_APP_IDENTITY_ID }}
       APP_IDENTITY_CLIENT_ID: ${{ vars.STAGING_APP_IDENTITY_CLIENT_ID }}
@@ -165,6 +87,9 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Validate receipt input before deployment
+        run: node .github/scripts/parse-billing-receipt.mjs > /dev/null
 
       - name: Validate staging-only contract
         shell: bash
@@ -1233,26 +1158,6 @@ jobs:
             "BILLING_STAGING_REGION=${BILLING_STAGING_REGION}"
             "PREPARE_RAZORPAY_CHECKOUT=${{ inputs.prepare_razorpay_checkout }}"
             "PREPARE_POLAR_CHECKOUT=${{ inputs.prepare_polar_checkout }}"
-            "BILLING_RECEIPT_PROVIDER=${{ inputs.receipt_provider }}"
-            "BILLING_RECEIPT_EVENT_ID=${{ inputs.receipt_event_id }}"
-            "BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CHARGE=${{ inputs.receipt_resolve_razorpay_subscription_charge }}"
-            "BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CANCELLATION=${{ inputs.receipt_resolve_razorpay_subscription_cancellation }}"
-            "BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_PURCHASE=${{ inputs.receipt_resolve_polar_subscription_purchase }}"
-            "BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_CANCELLATION=${{ inputs.receipt_resolve_polar_subscription_cancellation }}"
-            "BILLING_RECEIPT_WORKSPACE_ID=${{ inputs.receipt_workspace_id }}"
-            "BILLING_RECEIPT_KIND=${{ inputs.receipt_kind }}"
-            "BILLING_RECEIPT_PHASE=${{ inputs.receipt_phase || 'purchase' }}"
-            "BILLING_RECEIPT_OBJECT_ID=${{ inputs.receipt_object_id }}"
-            "BILLING_RECEIPT_PLAN=${{ inputs.receipt_plan }}"
-            "BILLING_RECEIPT_INTERVAL=${{ inputs.receipt_interval }}"
-            "BILLING_RECEIPT_STATUS=${{ inputs.receipt_status }}"
-            "BILLING_RECEIPT_MINUTES=${{ inputs.receipt_minutes }}"
-            "BILLING_RECEIPT_REMAINING_MINUTES=${{ inputs.receipt_remaining_minutes }}"
-            "BILLING_RECEIPT_COMMISSION_COUNT=${{ inputs.receipt_commission_count }}"
-            "BILLING_RECEIPT_COMMISSION_STATUS=${{ inputs.receipt_commission_status }}"
-            "BILLING_RECEIPT_AUDIT_ACTION=${{ inputs.receipt_audit_action }}"
-            "BILLING_RECEIPT_AUDIT_RESOURCE_ID=${{ inputs.receipt_audit_resource_id }}"
-            "BILLING_RECEIPT_AUDIT_COUNT=${{ inputs.receipt_audit_count }}"
             "BILLING_RECEIPT_SOURCE_SHA=${IMAGE_SHA}"
             "BILLING_RECEIPT_WEB_DIGEST=${WEB_DIGEST}"
             "BILLING_RECEIPT_MIGRATION_DIGEST=${MIGRATION_DIGEST}"
@@ -1269,6 +1174,10 @@ jobs:
             "RAZORPAY_PLAN_IDS=${RAZORPAY_PLAN_IDS}"
             "BILLING_USD_INR_RATE=${BILLING_USD_INR_RATE}"
           )
+          receipt_env=$(node .github/scripts/parse-billing-receipt.mjs)
+          while IFS= read -r entry; do
+            [ -z "$entry" ] || proof_env+=("$entry")
+          done <<< "$receipt_env"
           proof_command=/app/e2e/billing/run-staging-proof.sh
           if [ "${{ inputs.prepare_razorpay_checkout }}" = "true" ]; then
             [ "$BILLING_STAGING_REGION" = "inr" ] || {
