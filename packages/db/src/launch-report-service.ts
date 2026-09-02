@@ -33,12 +33,14 @@ export interface LaunchReportResult {
  *
  * @param opts.appDisplayName  Customer-opted-in app name. Omit for the neutral
  *   label ("a protected application") — we never name the app by default.
+ * @param opts.signingPrivateKey  Signing key resolved by the caller (env in
+ *   dev, Azure Key Vault in production); omitted -> env fallback -> unsigned.
  */
 export async function generateLaunchReport(
   workspaceId: string,
   targetId: string,
   createdById: string,
-  opts: { appDisplayName?: string } = {}
+  opts: { appDisplayName?: string; signingPrivateKey?: string } = {}
 ): Promise<LaunchReportResult | null> {
   return withWorkspaceRLS(workspaceId, async (tx) => {
     const verdict = await tx.gateVerdict.findFirst({
