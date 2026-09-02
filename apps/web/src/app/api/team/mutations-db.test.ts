@@ -66,6 +66,47 @@ async function localFixture() {
 }
 
 it.runIf(process.env.TEAM_MUTATION_DB_TEST === "1")(
+  "anonymizes attribution and rebuilds the audit chain in a soft-deleted retained workspace",
+  async () => {
+    const fixture = await localFixture()
+    const { db, system, users, workspace } = fixture
+    try {
+      const audit = await db.prisma.auditLog.create({
+        data: {
+          workspaceId: workspace.id,
+          actorUserId: users[0]!.id,
+          action: "workspace.updated",
+          resourceType: "workspace",
+          resourceId: workspace.id,
+        },
+      })
+      await system.workspace.update({
+        where: { id: workspace.id },
+        data: { deletedAt: new Date() },
+      })
+      expect(await db.prisma.workspace.findUnique({ where: { id: workspace.id } })).toBeNull()
+      const result = await db.deleteUserAccount(users[0]!.id, "DELETE")
+      expect(result.workspaceIds).toContain(workspace.id)
+      expect(await system.user.findUnique({ where: { id: users[0]!.id } })).toBeNull()
+      const entries = await system.auditLog.findMany({
+        where: { workspaceId: workspace.id },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      })
+      expect(entries.find((entry) => entry.id === audit.id)?.actorUserId).toBeNull()
+      expect(entries.some((entry) => entry.actorUserId === users[0]!.id)).toBe(false)
+      expect(entries.some((entry) => entry.action === "account.deleted")).toBe(true)
+      expect(db.verifyAuditChain(entries)).toBe(true)
+      expect(await system.workspace.findUnique({ where: { id: workspace.id } })).toMatchObject({
+        deletedAt: expect.any(Date),
+      })
+    } finally {
+      await fixture.cleanup()
+    }
+  },
+  30_000
+)
+
+it.runIf(process.env.TEAM_MUTATION_DB_TEST === "1")(
   "removes, reinvites and reactivates the same membership with the new role",
   async () => {
     const fixture = await localFixture()

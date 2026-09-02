@@ -222,10 +222,10 @@ export async function deleteUserAccount(
     }
     for (const workspaceId of [...affectedWorkspaceIds].sort()) {
       await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
-      const workspace = await tx.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { id: true, name: true },
-      })
+      // Erasure must also visit soft-deleted workspaces. Bypass only the
+      // lifecycle read filter; the workspace RLS context and row lock remain.
+      const [workspace] = await tx.$queryRaw<AccountDeletionWorkspace[]>`
+        SELECT id, name FROM "Workspace" WHERE id = ${workspaceId}`
       if (!workspace) continue
       const active = await tx.workspaceMember.findMany({
         where: { workspaceId, status: "active" },
