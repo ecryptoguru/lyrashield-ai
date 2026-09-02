@@ -45,10 +45,10 @@ Constants (verified in `packages/pricing/src/plans.ts`, `packs.ts`,
 - Trial: **14 days**, **100 one-time agent-minutes**, **3 targets**, no Deep,
   no card.
 - Plans (monthly agent-min / target cap): TRIAL 100/3 · STARTER 300/5 ·
-  PRO 1200/15 · TEAM 4000/50 · AGENCY custom. Deep allowed PRO+.
+  PRO 1200/15 · LAUNCH_ASSURANCE 6000/50 · ENTERPRISE custom. Deep allowed PRO+.
 - Deep/Custom meter at **3×** (`DEEP_SCAN_MULTIPLIER = 3`).
-- Overage **$0.15/min** (`STANDARD_OVERAGE_PER_MINUTE_USD = 0.15`), Team only,
-  gated by a user-set spend limit.
+- Overage **$0.15/min** (`STANDARD_OVERAGE_PER_MINUTE_USD = 0.15`), Launch
+  Assurance only, gated by a user-set spend limit.
 - Minute packs: `pack_100` $15 · `pack_250` $30 · `pack_500` $50, valid
   **180 days**; draw order = monthly pool → oldest unexpired pack → overage.
 - Grace cap `GRACE_CAP_MS = 900000` (15 min) per billing cycle.
@@ -106,7 +106,7 @@ time-travel account) → attempt a scan.
 ### 1.4 Upgrade → checkout (monthly + annual, Polar USD + Razorpay INR)
 
 **Steps:** from the upgrade CTA, `POST /billing/checkout` for each
-combination: `{workspaceId, plan: STARTER|PRO|TEAM, interval: monthly|annual}`
+combination: `{workspaceId, plan: STARTER|PRO|LAUNCH_ASSURANCE, interval: monthly|annual}`
 via Polar (USD region) and Razorpay (INR region). Complete checkout in each
 provider's **test/sandbox mode**. Live mode is read-only readiness inspection;
 no real purchase is part of this gate.
@@ -123,7 +123,7 @@ RATE_LIMITED` fires on rapid repeats; `503 PROVIDER_NOT_CONFIGURED` if a
   `AuditLog action=billing.subscription_synced`.
 - `status=active` → `UsageRecord kind=pool_grant` with
   `idempotencyKey="<ws>:<periodStart>:<plan>"`, quantity = plan minutes
-  (STARTER 300 / PRO 1200 / TEAM 4000); `graceUsedMs` reset to 0.
+  (STARTER 300 / PRO 1200 / LAUNCH_ASSURANCE 6000); `graceUsedMs` reset to 0.
 - **Annual grants monthly, not lump-sum:** a PRO annual checkout grants
   exactly **1200** minutes, not 14400 (pinned by
   `e2e/billing/checkout-flows.spec.ts`).
@@ -163,9 +163,9 @@ Polar and Razorpay; complete payment.
 - Draw order: after the monthly pool is exhausted, consumption decrements
   `MinutePack.remainingMinutes` oldest-first.
 
-### 1.7 Overage (Team)
+### 1.7 Overage (Launch Assurance)
 
-**Steps:** on TEAM, `POST /api/billing/spend-limit` `{cents}` (e.g. 1500 =
+**Steps:** on LAUNCH_ASSURANCE, `POST /api/billing/spend-limit` `{cents}` (e.g. 1500 =
 $15), exhaust pool + packs, run a scan that spills into overage.
 
 **Pass criteria:**
@@ -174,7 +174,8 @@ $15), exhaust pool + packs, run a scan that spills into overage.
   `idempotencyKey="<ws>:<scanId>:<phase>:overage"`, debited at $0.15/min.
 - When cumulative cycle overage × $0.15 reaches `spendLimitCents`, further
   scans → `403 NO_MINUTES_REMAINING` (spend-limit variant message).
-- `POST /api/billing/spend-limit` on a non-TEAM plan → `403 PLAN_NOT_ELIGIBLE`.
+- `POST /api/billing/spend-limit` on a plan without overage eligibility
+  (e.g. PRO) → `403 PLAN_NOT_ELIGIBLE`.
 
 ### 1.8 Refund reversal
 

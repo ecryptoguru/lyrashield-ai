@@ -221,10 +221,33 @@ export function useFindingsWebMcp({
           updateQueryParams({ filter: newFilter, sort: newSort })
 
           if (newFilter === "ALL") {
-            visibleFindings = initialData
-            setFindings(initialData)
-            setNextCursor(initialNextCursor)
-            setError(null)
+            // Fetch the ALL view like every other filter switch instead of
+            // resetting to the server-rendered page: initialData is the
+            // default-filter page, and resetting here would silently discard
+            // pages the user had already loaded under ALL. No extra params —
+            // ALL is the unfiltered view.
+            try {
+              const res = await apiGetPaginated(
+                `/api/findings`,
+                { workspaceId },
+                {
+                  signal,
+                  schema: findingsPaginatedSchema,
+                }
+              )
+              visibleFindings = res.items as unknown as FindingListItem[]
+              if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+              setFindings(visibleFindings)
+              setNextCursor(res.nextCursor)
+              setError(null)
+            } catch (error) {
+              if (signal.aborted || (error instanceof Error && error.name === "AbortError")) {
+                throw error
+              }
+              setFindings([])
+              setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
+              throw new Error(`Failed to load ${ISSUE_PLURAL.toLowerCase()}.`)
+            }
           } else {
             const params: Record<string, string> = { workspaceId }
             if (["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].includes(newFilter)) {

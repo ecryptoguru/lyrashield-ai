@@ -56,7 +56,10 @@ export async function EvidenceList({ workspaceId }: { workspaceId: string }) {
       {findings.map((f) => (
         <Link
           key={f.id}
-          href={`/dashboard/findings/${f.id}`}
+          // The findings detail contract is the drawer's `?finding=` query —
+          // there is no /dashboard/findings/[id] route (a deep link to one
+          // 404s). Same contract as scan-detail-client's top-finding link.
+          href={`/dashboard/findings?finding=${encodeURIComponent(f.id)}`}
           className="group bg-card hover:border-primary/50 hover:shadow-card-hover block rounded-xl border p-4 transition-colors"
         >
           <div className="flex items-start justify-between gap-4">

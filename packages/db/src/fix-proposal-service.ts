@@ -201,13 +201,16 @@ export interface FixPrMergeResult {
   pullRequestId: string
   fixProposalId: string
   findingId: string
+  /** The user whose action triggered the merge processing (the PR opener). */
+  actedById: string
   retestId: string
 }
 
 /**
- * WP3 loop-closure: a LyraShield fix PR was merged in the customer's repo.
- * Marks the PR merged, queues a retest of the finding on the new head, and the
- * caller re-evaluates the gate so a merged fix moves the verdict toward READY.
+ * WP3 loop-closure step 1: a LyraShield fix PR was merged in the customer's
+ * repo. Marks the PR merged. The retest scan creation and gate re-evaluation
+ * are orchestrated by handleFixPrMergedAndReevaluate (gate-service), which
+ * calls this first so the merge is committed before any retest work.
  *
  * Returns null when no open PR matches the branch in this workspace — an
  * unknown or foreign branch is a no-op, never an error.
@@ -216,8 +219,6 @@ export async function handleFixPrMerged(params: {
   workspaceId: string
   branchName: string
   prNumber?: number
-  /** Scan to retest against (the finding's latest scan). */
-  retestScanId: string
 }): Promise<FixPrMergeResult | null> {
   return withWorkspaceRLS(params.workspaceId, async (tx) => {
     const pr = await tx.pullRequest.findFirst({
@@ -231,6 +232,24 @@ export async function handleFixPrMerged(params: {
     })
     if (!pr) return null
 
+    // createdById for the follow-on retest scan: the GitHub pusher is external,
+    // so attribute the automated retest to the workspace OWNER (the account that
+    // owns the target being retested). Resolve BEFORE mutating so a workspace
+    // with no active owner never reaches a half-closed state.
+    const owner = await tx.workspaceMember.findFirst({
+      where: { workspaceId: params.workspaceId, role: "OWNER", status: "active" },
+      select: { userId: true },
+      orderBy: { createdAt: "asc" },
+    })
+    if (!owner) {
+      logger.warn("Fix PR merge not processed: workspace has no active owner", {
+        workspaceId: params.workspaceId,
+        branchName: params.branchName,
+        pullRequestId: pr.id,
+      })
+      return null
+    }
+
     await tx.pullRequest.update({
       where: { id: pr.id },
       data: {
@@ -240,26 +259,19 @@ export async function handleFixPrMerged(params: {
       },
     })
 
-    const retest = await tx.retest.create({
-      data: {
-        workspaceId: params.workspaceId,
-        findingId: pr.fixProposal.findingId,
-        scanId: params.retestScanId,
-        status: "pending",
-      },
-    })
-
-    logger.info("Fix PR merged — retest queued", {
+    logger.info("Fix PR merged", {
       pullRequestId: pr.id,
       findingId: pr.fixProposal.findingId,
-      retestId: retest.id,
     })
 
     return {
       pullRequestId: pr.id,
       fixProposalId: pr.fixProposal.id,
       findingId: pr.fixProposal.findingId,
-      retestId: retest.id,
+      actedById: owner.userId,
+      // The retest row itself is created by the orchestrator after the new
+      // scan exists (it must bind to the NEW scan id, not this PR).
+      retestId: "",
     }
   })
 }

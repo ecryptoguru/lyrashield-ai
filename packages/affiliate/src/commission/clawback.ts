@@ -82,11 +82,29 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
   const originalAmount = commission.amount
   if (reason === "REFUND") {
     if (!payload.refundAmount || !payload.currency) {
-      throw new Error("affiliate_refund_money_mismatch")
+      // A refund event without money facts cannot be auto-reconciled. Route
+      // to manual review instead of throwing: a thrown error exhausts the
+      // webhook retries and drops the clawback on the floor entirely — the
+      // affiliate keeps a commission on a refunded order. Manual review
+      // preserves the reversal obligation.
+      logger.error("Clawback: refund event missing amount or currency — manual review", {
+        externalId,
+      })
+      return { reversed: false, manualReview: true, notFound: false }
     }
     const refundAmount = new Prisma.Decimal(payload.refundAmount)
     if (payload.currency !== conversion.currency || !refundAmount.equals(conversion.grossAmount)) {
-      throw new Error("affiliate_refund_money_mismatch")
+      // Same principle: provider rounding drift or a partial/mismatched refund
+      // is a reconciliation question for a human, not a silent pass and not a
+      // dropped clawback. (Full-refund evidence is the billing layer's
+      // precondition for emitting refund_completed, so a mismatch here means
+      // the two systems disagree and must be reconciled by hand.)
+      logger.error("Clawback: refund money mismatch with conversion — manual review", {
+        externalId,
+        refundCurrency: payload.currency,
+        conversionCurrency: conversion.currency,
+      })
+      return { reversed: false, manualReview: true, notFound: false }
     }
   }
   const manualReview = originalAmount.gt(new Prisma.Decimal(CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD))

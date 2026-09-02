@@ -7,6 +7,8 @@ import {
   classesCoveredBy,
   coveredSurfaces,
 } from "./ai-built-failure-taxonomy"
+import { VIBE_SECURITY_CONTROLS } from "./vibe-security-controls"
+import { WEBMCP_CONTROLS_BY_ID } from "./webmcp/controls"
 
 describe("AI-Built Failure Taxonomy (WP6)", () => {
   it("is named and versioned", () => {
@@ -45,11 +47,19 @@ describe("AI-Built Failure Taxonomy (WP6)", () => {
   })
 
   it("every referenced controlId resolves to a real registry entry (traceability)", () => {
-    // The shape of the ids is asserted; the existence check runs against the
-    // registries in the security package's own tests. Here we assert the format.
+    // Existence, not just format: a controlId that drifts out of its registry
+    // (a control removed or renumbered) breaks the taxonomy's coverage claim
+    // silently — this pins every id against the live registries.
+    const vibeRanks = new Set(VIBE_SECURITY_CONTROLS.map((c) => c.rank))
     for (const c of AI_BUILT_FAILURE_TAXONOMY) {
       for (const id of c.controlIds) {
         expect(id === "" || /^(vibe-\d{2}|WEBMCP-\d{2})$/.test(id)).toBe(true)
+        if (id.startsWith("vibe-")) {
+          const rank = Number(id.slice("vibe-".length))
+          expect(vibeRanks.has(rank)).toBe(true)
+        } else if (id !== "") {
+          expect(id in WEBMCP_CONTROLS_BY_ID).toBe(true)
+        }
       }
     }
   })

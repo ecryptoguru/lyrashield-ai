@@ -14,7 +14,13 @@ const systemPrisma = {
 const prisma = { auditLog: { create: vi.fn() } }
 
 vi.mock("@lyrashield/db", () => ({ getSystemPrisma: () => systemPrisma, prisma }))
-vi.mock("@lyrashield/integrations", () => ({ verifyWebhookSignature }))
+vi.mock("@lyrashield/integrations", () => ({
+  verifyWebhookSignature,
+  // The route imports enqueueScanJob via @/lib/queue, which re-exports
+  // `enqueueScan` AS `enqueueScanJob` from this package — so the mock must
+  // define the ORIGINAL export name.
+  enqueueScan: vi.fn(async () => "queued-job-id"),
+}))
 vi.mock("@lyrashield/logger", () => ({ logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 
 const { POST } = await import("./route")

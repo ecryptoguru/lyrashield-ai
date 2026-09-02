@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({
-  prisma: { target: { findFirst: vi.fn() } },
+  prisma: {
+    target: { findFirst: vi.fn() },
+    workspace: { findUnique: vi.fn() },
+    targetDomainVerification: { findFirst: vi.fn() },
+  },
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
@@ -18,6 +22,20 @@ vi.mock("@lyrashield/billing", () => ({
 
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn() },
+}))
+
+vi.mock("../../../../lib/rate-limit", () => ({
+  checkScanEligibilityRateLimit: vi.fn(async () => ({
+    limited: false,
+    remaining: 29,
+    retryAfter: 0,
+  })),
+  peekFreeUrlScanRateLimit: vi.fn(async () => ({
+    limited: false,
+    remaining: Number.POSITIVE_INFINITY,
+    retryAfter: 0,
+  })),
+  clientIpFromRequest: () => "127.0.0.1",
 }))
 
 import { prisma } from "@lyrashield/db"
@@ -74,6 +92,46 @@ describe("GET /api/scans/eligibility", () => {
       where: { id: "target-1", workspaceId: "ws-1", deletedAt: null },
     })
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+  })
+
+  it("mirrors the POST domain-verification gate for paid remote targets", async () => {
+    // Preflight parity: a paid WEB_APP target without a verified domain must
+    // report DOMAIN_VERIFICATION_REQUIRED here, not an allowed verdict that
+    // POST would then reject with a raw error.
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://app.example.com",
+    } as never)
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+
+    const response = await GET(request({ ...validQuery, mode: "SAFE" }))
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.data.allowed).toBe(false)
+    expect(body.data.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+  })
+
+  it("reports a paid target as allowed once a current domain proof exists", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://app.example.com",
+    } as never)
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+      id: "proof-1",
+    } as never)
+
+    const response = await GET(request({ ...validQuery, mode: "SAFE" }))
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.data.allowed).toBe(true)
+    expect(evaluateScanEntitlement).toHaveBeenCalled()
   })
 
   it("evaluates entitlement without mutating trial state", async () => {

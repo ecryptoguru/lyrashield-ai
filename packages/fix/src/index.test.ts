@@ -26,17 +26,25 @@ describe("patchScopeForPlan (founder decision: plan-tiered)", () => {
       maxLinesTouched: 100,
     })
   })
-  it("all other plans get the implicated set with a 200-line cap", () => {
+  it("all paid plans at or above Pro get the implicated set with a 200-line cap", () => {
     expect(patchScopeForPlan("PRO")).toEqual({ pathScope: "implicated-set", maxLinesTouched: 200 })
     expect(patchScopeForPlan("LAUNCH_ASSURANCE")).toEqual({
       pathScope: "implicated-set",
       maxLinesTouched: 200,
     })
+    expect(patchScopeForPlan("TEAM")).toEqual({
+      pathScope: "implicated-set",
+      maxLinesTouched: 200,
+    })
+    expect(patchScopeForPlan("AGENCY").maxLinesTouched).toBe(200)
+    expect(patchScopeForPlan("BUSINESS").maxLinesTouched).toBe(200)
     expect(patchScopeForPlan("ENTERPRISE").maxLinesTouched).toBe(200)
   })
-  it("unknown plans fail closed to the strictest tier", () => {
-    expect(patchScopeForPlan("NOPE").pathScope).toBe("implicated-set")
-    expect(patchScopeForPlan("")).toBeDefined()
+  it("unknown, free and trial plans fail closed to the strictest tier (current-file, 100)", () => {
+    expect(patchScopeForPlan("NOPE")).toEqual({ pathScope: "current-file", maxLinesTouched: 100 })
+    expect(patchScopeForPlan("")).toEqual({ pathScope: "current-file", maxLinesTouched: 100 })
+    expect(patchScopeForPlan("FREE")).toEqual({ pathScope: "current-file", maxLinesTouched: 100 })
+    expect(patchScopeForPlan("TRIAL")).toEqual({ pathScope: "current-file", maxLinesTouched: 100 })
   })
 })
 
@@ -130,6 +138,23 @@ describe("validatePatchDiff — forbidden content", () => {
       "+x",
     ].join("\n")
     const r = validatePatchDiff(diff, "src/new.ts", [], STARTER)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe("NEW_FILE_OUT_OF_SCOPE")
+  })
+
+  it("rejects new file creation even on implicated-set plans (executor cannot apply them)", () => {
+    // Regression guard: the v1 executor reads the target file at the scanned
+    // base commit and applies the diff to it — a file absent at that commit
+    // always fails at execution time. Validation must reject before approval.
+    const diff = [
+      "diff --git a/src/new.ts b/src/new.ts",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/src/new.ts",
+      "@@ -0,0 +1 @@",
+      "+x",
+    ].join("\n")
+    const r = validatePatchDiff(diff, "src/a.ts", ["src/a.ts", "src/new.ts"], LAUNCH)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe("NEW_FILE_OUT_OF_SCOPE")
   })

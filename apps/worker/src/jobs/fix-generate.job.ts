@@ -28,8 +28,9 @@ import {
   patchScopeForPlan,
 } from "@lyrashield/fix"
 import { withWorkspaceRLS } from "@lyrashield/db"
+import { FIX_GENERATE_QUEUE_NAME } from "@lyrashield/integrations"
 
-export const FIX_GENERATE_QUEUE = "fix-generate"
+export const FIX_GENERATE_QUEUE = FIX_GENERATE_QUEUE_NAME
 
 export interface FixGenerateJobData {
   workspaceId: string
@@ -51,33 +52,53 @@ export async function processFixGenerateJob(
 ): Promise<FixGenerateJobResult> {
   const { workspaceId, fixProposalId } = data
 
-  return withWorkspaceRLS(workspaceId, async (tx) => {
-    const proposal = await tx.fixProposal.findFirst({
-      where: { id: fixProposalId, finding: { workspaceId, deletedAt: null }, deletedAt: null },
-      include: {
-        finding: {
-          select: {
-            id: true,
-            targetId: true,
-            baseCommit: true,
-            implicatedFiles: true,
-            target: { select: { type: true } },
+  try {
+    // Phase 1 — read under RLS, compute the diff, validate. No artifact I/O
+    // inside the DB transaction: holding an RLS transaction open across S3
+    // round-trips needlessly extends row locks and, on a post-upload rollback,
+    // would orphan the uploaded artifact with no compensating cleanup.
+    const prepared = await withWorkspaceRLS(workspaceId, async (tx) => {
+      const proposal = await tx.fixProposal.findFirst({
+        where: { id: fixProposalId, finding: { workspaceId, deletedAt: null }, deletedAt: null },
+        include: {
+          finding: {
+            select: {
+              id: true,
+              targetId: true,
+              baseCommit: true,
+              implicatedFiles: true,
+              target: { select: { type: true } },
+            },
           },
         },
-      },
-    })
-    if (!proposal) return { status: "skipped", reason: "proposal not found" }
+      })
+      if (!proposal) return { skip: "proposal not found" as const }
+      if (!proposal.finding) return { skip: "finding not found" as const }
+      // Idempotent re-run guard: a proposal that already reached `ready` has a
+      // stored, checksum-bound patch. Re-generating would silently rewrite the
+      // diffRef an approval may already be bound to — skip instead.
+      if (proposal.status === "ready") return { skip: "proposal already ready" as const }
+      if (proposal.status === "failed")
+        return { skip: "proposal previously failed validation" as const }
 
-    const finding = proposal.finding
-    if (!finding) return { status: "skipped", reason: "finding not found" }
+      const finding = proposal.finding
 
-    // The engine's structured fix lives in the finding's evidence (claim_context
-    // / code_location artifacts). Pull the latest code_location with a fix.
-    const evidence = await tx.evidence.findMany({
-      where: { findingId: finding.id, type: "code_location" },
-      select: { storageUri: true },
-      orderBy: { createdAt: "desc" },
+      // The engine's structured fix lives in the finding's evidence (claim_context
+      // / code_location artifacts). Pull the latest code_location with a fix.
+      const evidence = await tx.evidence.findMany({
+        where: { findingId: finding.id, type: "code_location" },
+        select: { storageUri: true },
+        orderBy: { createdAt: "desc" },
+      })
+
+      return { finding, evidence }
     })
+
+    if ("skip" in prepared) {
+      return { status: "skipped", reason: prepared.skip }
+    }
+
+    const { finding, evidence } = prepared
 
     // The structured fix (fix_before/fix_after) is read from the finding's
     // stored code-location evidence content. The producer requires it; without
@@ -119,20 +140,25 @@ export async function processFixGenerateJob(
       return { status: "skipped", reason: "fix produced no change" }
     }
 
-    // Resolve the plan for the scope policy.
-    const workspace = await tx.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { plan: true },
-    })
+    // Resolve the plan for the scope policy (read outside the transaction —
+    // plan resolution needs no row locks).
+    const workspace = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { plan: true },
+      })
+    )
     const policy = patchScopeForPlan(workspace?.plan ?? "STARTER")
 
     // Validate the generated diff against the plan-tiered scope before storing.
     const validation = validatePatchDiff(diff, anchorFile, implicatedFiles, policy)
     if (!validation.ok) {
-      await tx.fixProposal.update({
-        where: { id: fixProposalId },
-        data: { status: "failed" },
-      })
+      await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.fixProposal.update({
+          where: { id: fixProposalId },
+          data: { status: "failed" },
+        })
+      )
       logger.warn("Generated fix failed scope validation", {
         fixProposalId,
         code: validation.code,
@@ -142,6 +168,9 @@ export async function processFixGenerateJob(
 
     // Store the diff in evidence storage (encrypted, workspace-scoped). ownerId
     // follows the finding-evidence convention (the finding this patch fixes).
+    // The artifact is content-addressed (`fix-${fixProposalId}`), so a failure
+    // of the linking transaction below leaves an orphaned-but-harmless artifact
+    // that a retry re-uploads to the same key.
     const artifact = await uploadEncryptedArtifact({
       workspaceId,
       ownerId: finding.id,
@@ -153,15 +182,29 @@ export async function processFixGenerateJob(
 
     const checksum = diffChecksum(diff)
 
-    // Link the patch to the proposal and stamp the finding's fix-PR fields.
-    await tx.fixProposal.update({
-      where: { id: fixProposalId },
-      data: { diffRef: artifact.storageUri, status: "ready" },
+    // Phase 2 — short transaction to link the patch to the proposal and stamp
+    // the finding's fix-PR fields. Nothing above holds locks across this.
+    const linked = await withWorkspaceRLS(workspaceId, async (tx) => {
+      // Re-read status inside the linking transaction: a concurrent run may
+      // have marked this proposal ready or failed while we were uploading.
+      const current = await tx.fixProposal.findUnique({
+        where: { id: fixProposalId },
+        select: { status: true },
+      })
+      if (current?.status === "ready") return false
+      await tx.fixProposal.update({
+        where: { id: fixProposalId },
+        data: { diffRef: artifact.storageUri, status: "ready" },
+      })
+      await tx.finding.update({
+        where: { id: finding.id },
+        data: { implicatedFiles },
+      })
+      return true
     })
-    await tx.finding.update({
-      where: { id: finding.id },
-      data: { implicatedFiles },
-    })
+    if (!linked) {
+      return { status: "skipped", reason: "proposal already ready" }
+    }
 
     logger.info("Fix patch generated and stored", {
       fixProposalId,
@@ -172,5 +215,14 @@ export async function processFixGenerateJob(
     })
 
     return { status: "stored", diffRef: artifact.storageUri }
-  })
+  } catch (error) {
+    // A thrown error (not a named rejection above) is infrastructure, not a
+    // verdict on the diff. Keep the proposal in its current (draft) state so a
+    // BullMQ retry re-attempts generation rather than burying it as failed.
+    logger.error("Fix generation job errored", {
+      fixProposalId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
 }
