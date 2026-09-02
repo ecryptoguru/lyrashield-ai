@@ -116,7 +116,7 @@ function evaluateControl03(tool: WebMcpToolSurface): WebMcpEvidenceState {
   }
   if (Array.isArray(tool.exposedTo)) {
     if (tool.exposedTo.length === 0) return "NO_FINDING"
-    return tool.exposedTo.every((origin) => origin === "self") ? "NO_FINDING" : "DETECTED"
+    return "DETECTED"
   }
   return "NO_FINDING"
 }
@@ -242,6 +242,20 @@ function evaluateControl12(tool: WebMcpToolSurface): WebMcpEvidenceState {
   return "NO_FINDING"
 }
 
+const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/
+
+function evaluateControl14(tool: WebMcpToolSurface): WebMcpEvidenceState {
+  if (!tool.name) return "INCONCLUSIVE"
+  if (!TOOL_NAME.test(tool.name) || tool.name.length > 30) return "DETECTED"
+  if (!tool.description || tool.description.length > 500) return "DETECTED"
+  for (const property of tool.inputSchema.properties ?? []) {
+    if (property.name.length > 30 || (property.description?.length ?? 0) > 150) {
+      return "DETECTED"
+    }
+  }
+  return "NO_FINDING"
+}
+
 function evaluateTool(
   tool: WebMcpToolSurface,
   files: WebMcpScanFile[],
@@ -279,6 +293,9 @@ function evaluateTool(
     case "WEBMCP-12":
       state = evaluateControl12(tool)
       break
+    case "WEBMCP-14":
+      state = evaluateControl14(tool)
+      break
     default:
       state = "NOT_ASSESSED"
   }
@@ -307,9 +324,40 @@ function ruleSuffix(controlId: WebMcpControlId): string {
       return "embedded-secret"
     case "WEBMCP-12":
       return "prompt-injection-surface"
+    case "WEBMCP-14":
+      return "contract-budget"
     default:
       return "signal"
   }
+}
+
+function evaluateControl13(
+  files: WebMcpScanFile[],
+  context: WebMcpEvaluateContext
+): WebMcpSignal[] {
+  const findings = context.specDrift?.findings ?? []
+  if (findings.length === 0) {
+    return [
+      noFindingSignal(
+        "WEBMCP-13",
+        "WEBMCP-13.current-api",
+        files[0] ?? { path: "inventory", content: "", size: 0, extension: "" }
+      ),
+    ]
+  }
+  return findings.map((finding) => {
+    const file = findFile(files, finding.path) ?? {
+      path: finding.path,
+      content: "",
+      size: 0,
+      extension: "",
+    }
+    return buildSignal("WEBMCP-13", finding.ruleId, "DETECTED", file, {
+      line: finding.startLine,
+      endLine: finding.endLine,
+      snippet: getLineAt(file.content, finding.startLine).slice(0, 120),
+    })
+  })
 }
 
 function evaluateControl04(
@@ -453,7 +501,7 @@ export function evaluateWebMcpSurface(
   const partialReason =
     "WebMCP discovery was incomplete; clean results cannot be established until all eligible definitions are assessed."
 
-  if (inventory.definitions.length === 0 && !context?.headerExposure) {
+  if (inventory.definitions.length === 0 && !context?.headerExposure && !context?.specDrift) {
     for (const controlId of WEBMCP_CONTROL_IDS) {
       const file = files[0] ?? { path: "inventory", content: "", size: 0, extension: "" }
       signals.push(
@@ -473,7 +521,7 @@ export function evaluateWebMcpSurface(
   if (inventory.definitions.length === 0) {
     // Header/config exposure can still be assessed when no tools are defined.
     for (const controlId of WEBMCP_CONTROL_IDS) {
-      if (controlId === "WEBMCP-04") continue
+      if (controlId === "WEBMCP-04" || controlId === "WEBMCP-13") continue
       const file = files[0] ?? { path: "inventory", content: "", size: 0, extension: "" }
       signals.push(
         notAssessedSignal(
@@ -485,18 +533,21 @@ export function evaluateWebMcpSurface(
       )
     }
     signals.push(...evaluateControl04(files, context ?? {}))
+    signals.push(...evaluateControl13(files, context ?? {}))
     return signals
   }
 
   for (const tool of inventory.definitions) {
     for (const controlId of WEBMCP_CONTROL_IDS) {
-      if (controlId === "WEBMCP-04" || controlId === "WEBMCP-10") continue
+      if (controlId === "WEBMCP-04" || controlId === "WEBMCP-10" || controlId === "WEBMCP-13")
+        continue
       signals.push(evaluateTool(tool, files, controlId))
     }
   }
 
   signals.push(...evaluateControl04(files, context ?? {}))
   signals.push(...evaluateControl10(files, inventory.definitions))
+  signals.push(...evaluateControl13(files, context ?? {}))
 
   if (partialCoverage) {
     const file = files[0] ?? { path: "inventory", content: "", size: 0, extension: "" }

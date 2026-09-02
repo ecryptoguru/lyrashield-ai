@@ -82,7 +82,7 @@ Implements: `prd.md > Epic 1`, `Epic 5`
 
 Implements: `prd.md > Epic 2`
 
-`evaluateWebMcpSurface(inventory, context)` implements version `webmcp-assurance/1` with 10 controls:
+`evaluateWebMcpSurface(inventory, context)` implements detector version `webmcp-assurance/2` with 14 controls:
 
 1. `WEBMCP-01` Annotation/behavior mismatch.
 2. `WEBMCP-02` Externally influenced output lacks `untrustedContentHint`.
@@ -94,6 +94,10 @@ Implements: `prd.md > Epic 2`
 8. `WEBMCP-08` Component registration lacks lifecycle cleanup.
 9. `WEBMCP-09` Weak schema or missing runtime validation at a trust boundary.
 10. `WEBMCP-10` Duplicate, overlapping, ambiguous, or misleading tool contract.
+11. `WEBMCP-11` Credential or secret embedded in a tool definition.
+12. `WEBMCP-12` Prompt-injection surface in a tool contract.
+13. `WEBMCP-13` Spec drift or misplaced registration option.
+14. `WEBMCP-14` Tool contract exceeds browser guidance.
 
 Each control has a stable title, severity policy, detection predicate, remediation, safe-rewrite capability, and evidence limitations. Protective wording and code examples must not trigger mutation/prompt-injection findings merely because they mention dangerous patterns.
 
@@ -109,7 +113,7 @@ Implements: `prd.md > Epic 4`
 - Insert bounded schema properties and `additionalProperties: false` when a closed object schema is structurally safe.
 - Forward `{ signal }` into recognized `fetch` calls.
 - Add `AbortController` registration cleanup patterns to supported React effects/components.
-- For a statically located wildcard `exposedTo`, emit a deterministic same-origin patch using `exposedTo: ["self"]`. Dynamic or explicit cross-origin requirements remain unresolved guidance; never guess trusted third-party origins.
+- For a statically located wildcard `exposedTo`, emit a deterministic same-origin patch using `exposedTo: []`. Dynamic or explicit cross-origin requirements remain unresolved guidance; never guess trusted third-party origins.
 - For direct mutation handlers, return confirmation-boundary guidance without a patch; never claim an automatic semantic rewrite is safe.
 - Add bounded output mapping for recognized array-return patterns.
 

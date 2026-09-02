@@ -54,7 +54,7 @@ Acceptance criteria:
 
 Acceptance criteria:
 
-- Version one implements 10 controls covering annotation accuracy, untrusted content, exposure, permissions policy, confirmation, sensitive/bounded output, cancellation, lifecycle cleanup, schema/runtime validation, and tool clarity.
+- Version two implements 14 controls covering annotation accuracy, untrusted content, exposure, permissions policy, confirmation, sensitive/bounded output, cancellation, lifecycle cleanup, schema/runtime validation, tool clarity, embedded secrets, prompt injection, spec drift, and contract budgets.
 - Every signal includes control ID, state, severity, file, line when known, bounded snippet, remediation, evidence source, detector version, and limitations.
 - Results use `DETECTED`, `NO_FINDING`, `INCONCLUSIVE`, or `NOT_ASSESSED` consistently.
 - The analyzer is deterministic: identical normalized input and detector version produce identical inventory hashes and policy results.
@@ -212,7 +212,7 @@ These are post-hackathon extensions, not substitutes for the committed scope.
 
 ## Free And Paid Packaging
 
-The free product must provide complete, trustworthy deterministic results rather than a crippled teaser. Free includes the no-login local Security Lab with all 10 controls, current-input inventory, deterministic rewrite preview/Apply/Undo/rerun, JSON/Markdown/SARIF export, public benchmark and control documentation, the focused account-less CLI check, and the self-contained GitHub Action subset.
+The free product must provide complete, trustworthy deterministic results rather than a crippled teaser. Free includes the no-login local Security Lab with all 14 controls, current-input inventory, deterministic rewrite preview/Apply/Undo/rerun, JSON/Markdown/SARIF export, public benchmark and control documentation, the focused account-less CLI check, and the self-contained GitHub Action subset.
 
 Paid value begins when LyraShield manages a real repository and assurance lifecycle: connected private-repository scans, persisted inventory and findings, revision-bound manifests, historical Tool Surface Diff, centralized CI policy, approval-bound repository fix proposals, retests, monitoring, team workflows, durable audit, and immutable developer/executive/compliance reports. Dashboard WebMCP tools are included in the existing 14-day trial and every paid Cloud plan; Local/Desktop includes the repository capability under the existing paid BYOK license. Do not create a separate WebMCP add-on or change approved plan prices for this release.
 

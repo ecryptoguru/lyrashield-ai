@@ -96,7 +96,7 @@ document.modelContext.registerTool({
     const response = await fetch(\`/api/docs?query=\${encodeURIComponent(query)}\`, { signal })
     return response.json()
   },
-}, { exposedTo: ["self"] })
+}, { exposedTo: [] })
 `
 
 const UNSAFE_IMPERATIVE = `

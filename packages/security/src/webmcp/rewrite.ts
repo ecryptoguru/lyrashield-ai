@@ -159,7 +159,7 @@ function exposureEdit(file: WebMcpScanFile, signal: WebMcpSignal): WebMcpTextEdi
     startColumn: start.column,
     endLine: end.line,
     endColumn: end.column,
-    newText: '["self"]',
+    newText: "[]",
     controlIds: ["WEBMCP-03"],
   }
 }

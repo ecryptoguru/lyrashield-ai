@@ -11,6 +11,7 @@ import type {
   WebMcpToolSurface,
   WebMcpDiscoveryOptions,
   WebMcpEvidenceLocation,
+  WebMcpSpecDriftFinding,
 } from "./types"
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -243,6 +244,12 @@ function discoverConfigExposure(file: WebMcpScanFile, context: WebMcpEvaluateCon
   }
 }
 
+function recordSpecDrift(context: WebMcpEvaluateContext, findings: WebMcpSpecDriftFinding[]): void {
+  if (findings.length === 0) return
+  context.specDrift ??= { findings: [] }
+  context.specDrift.findings.push(...findings)
+}
+
 export async function discoverWebMcpTools(
   files: WebMcpScanFile[],
   options: WebMcpDiscoveryOptions = {}
@@ -319,6 +326,7 @@ export async function discoverWebMcpTools(
             tool.source.path = file.path
             definitions.push(tool)
           }
+          recordSpecDrift(context, result.specDriftFindings)
           incompleteDefinitions += result.incomplete
           definitionLimitReached ||= result.limitReached
         } else {
@@ -358,6 +366,7 @@ export async function discoverWebMcpTools(
             remainingDefinitions()
           )
           definitions.push(...result.tools)
+          recordSpecDrift(context, result.specDriftFindings)
           incompleteDefinitions += result.incomplete
           definitionLimitReached ||= result.limitReached
         } else if (region.kind === "template") {
@@ -396,6 +405,7 @@ export async function discoverWebMcpTools(
         tool.source.path = file.path
         definitions.push(tool)
       }
+      recordSpecDrift(context, result.specDriftFindings)
       incompleteDefinitions += result.incomplete
       definitionLimitReached ||= result.limitReached
     }

@@ -5,7 +5,7 @@ import { WEBMCP_DETECTOR_VERSION } from "../../../../packages/security/src/webmc
 const registry = {
   version: "webmcp-controls/1",
   detectorVersion: WEBMCP_DETECTOR_VERSION,
-  updatedDate: "2026-08-29",
+  updatedDate: "2026-09-02",
   controls: WEBMCP_CONTROLS.map((control) => ({
     id: control.id,
     title: control.title,

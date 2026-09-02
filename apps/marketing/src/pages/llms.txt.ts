@@ -163,7 +163,7 @@ export const GET: APIRoute = async (context) => {
     `Vibe Security 50: ${reviewControlCount} controls are routed to code or URL review where applicable and ${evidenceControlCount} require operational or human evidence outside the scan.`,
     "Operational Evidence Vault: a private, workspace-scoped, encrypted, and versioned place to submit, review, and accept evidence for the 7 evidence-required Vibe Security 50 controls. Accepted evidence is frozen into private assurance reports; public/shared reports do not expose AI-assurance data or raw storage URIs.",
     "",
-    "WebMCP Assurance: a browser-local, read-only model-context policy checker for pages that expose WebMCP tools. It analyzes selected source files or pasted code for 10 controls, prepares a bounded rewrite diff, and exports JSON, Markdown, or SARIF. Nothing is uploaded.",
+    "WebMCP Assurance: a browser-local, read-only model-context policy checker for pages that expose WebMCP tools. It analyzes selected source files or pasted code for 14 controls, prepares a bounded rewrite diff, and exports JSON, Markdown, or SARIF. Nothing is uploaded.",
     "WebMCP public pages: /webmcp (explanatory guide), /tools/webmcp-security-checker (interactive checker), and /webmcp-controls.json (public control registry).",
     "WebMCP tools: analyze_webmcp_source, prepare_webmcp_rewrite, and the page-scoped read-only explain_webmcp_assurance on /webmcp.",
     "WebMCP limitations: WebMCP is experimental and not universally supported. A clean result does not prove an application is secure, and the checker does not write to your repository or create a workspace authorization channel.",

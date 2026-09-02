@@ -168,6 +168,34 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     remediationTemplate:
       "Rewrite the tool contract to describe behavior, not to instruct the model. Remove imperative text aimed at the consuming agent.",
   },
+  {
+    id: "WEBMCP-13",
+    title: "Spec drift or misplaced WebMCP registration option",
+    description:
+      "Source uses a legacy WebMCP API, a non-standard annotation, or places registration-only exposedTo or signal options inside the tool definition.",
+    strategy: "deterministic",
+    severity: "MEDIUM",
+    negativeEvidence:
+      "Source uses document.modelContext and current registration options, with only readOnlyHint and untrustedContentHint annotations.",
+    falsePositiveNotes:
+      "Only parsed executable source is assessed; documentation and string examples are not treated as tool registrations.",
+    remediationTemplate:
+      "Use document.modelContext, remove retired APIs and non-standard annotations, and pass exposedTo or signal in registerTool's options argument.",
+  },
+  {
+    id: "WEBMCP-14",
+    title: "Tool contract exceeds browser guidance",
+    description:
+      "A tool or parameter name, description, or identifier exceeds the WebMCP syntax or Chrome guidance budget.",
+    strategy: "deterministic",
+    severity: "MEDIUM",
+    negativeEvidence:
+      "Tool and parameter names use the permitted characters and stay within 30 characters; descriptions stay within Chrome's published budgets.",
+    falsePositiveNotes:
+      "Budgets are deterministic review guidance, not proof that a shorter contract is safe or that a longer one is malicious.",
+    remediationTemplate:
+      "Use a concise permitted identifier, keep names within 30 characters, tool descriptions within 500 characters, and parameter descriptions within 150 characters.",
+  },
 ]
 
 export const WEBMCP_CONTROLS_BY_ID: Record<WebMcpControlId, WebMcpControlDefinition> =

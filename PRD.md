@@ -205,7 +205,7 @@ Repository jobs are admitted only while a live worker heartbeat exists. Queue/da
 - The verdict is refreshed after every terminal scan state, after a merged fix PR, and on demand via `POST /api/gate/[targetId]`.
 - The Launch Readiness Report renders the verdict as a shareable, verifiable artifact: frozen allowlisted payload (`buildLaunchReportPayload`), ed25519 signature over the checksum (server-owned key), 30-day share tokens, and a public verify endpoint. MEDIUM/LOW findings are disclosed as not gate-evaluated rather than counted as zero.
 - The AI-Built Failure Taxonomy (`ai-built-failure-taxonomy/1.0.0`) is the named, public, citable catalog of how AI-built apps characteristically fail, with every class traced to live controls; exposed read-only at `/api/taxonomy/ai-built-failures`.
-- WebMCP Assurance covers 12 controls (WEBMCP-01…12, including embedded-secret and prompt-injection-surface detection on the tool surface).
+- WebMCP Assurance covers 14 controls (WEBMCP-01…14, including embedded-secret, prompt-injection-surface, spec-drift, and contract-budget detection on the tool surface).
 
 ### Reports and sharing
 

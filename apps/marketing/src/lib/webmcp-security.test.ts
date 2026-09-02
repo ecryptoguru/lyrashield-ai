@@ -70,7 +70,7 @@ describe("public WebMCP Security Lab", () => {
     expect(plan.edits).toHaveLength(1)
     expect(plan.addressed).toContain("WEBMCP-03")
     expect(plan.updatedChecksum).toMatch(/^[a-f0-9]{64}$/)
-    expect(rewritten).toContain('exposedTo: ["self"]')
+    expect(rewritten).toContain("exposedTo: []")
     expect(rewritten).not.toContain('exposedTo: ["*"]')
   })
 
