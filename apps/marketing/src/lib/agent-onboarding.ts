@@ -98,7 +98,7 @@ function renderWebMcpSection(origin: string): string {
     "",
     "Available public tools:",
     "",
-    "- `analyze_webmcp_source` — analyze source files or pasted code for 10 WebMCP controls.",
+    "- `analyze_webmcp_source` — analyze source files or pasted code for 14 WebMCP controls.",
     "- `prepare_webmcp_rewrite` — prepare a bounded, reviewable rewrite diff from the same analysis.",
     "- `explain_webmcp_assurance` — page-scoped, read-only explanation of published WebMCP topics on /webmcp.",
     "",

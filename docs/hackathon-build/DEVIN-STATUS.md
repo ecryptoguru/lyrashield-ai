@@ -66,7 +66,7 @@ This section supersedes the historical subagent notes below.
 - `apps/marketing/package.json` and `apps/web/package.json` — added `webmcp-types` dev dependency.
 - `packages/security/src/webmcp/` — created contract files:
   - `types.ts` — normalized WebMCP surface model, controls, signals, inventory, rewrite types.
-  - `controls.ts` — 10 versioned WebMCP controls.
+  - `controls.ts` — 14 versioned WebMCP controls.
   - `canonicalize.ts` — stable definition serialization and inventory hashing.
   - `hash.ts` — universal SHA-256 using Web Crypto.
   - `utils.ts` — signal builders, snippet/line helpers, protective wording detection.

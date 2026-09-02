@@ -34,7 +34,7 @@ At the same time, LyraShield's own browser experience is still primarily human-a
 
 ## What We Are Building
 
-- A shared, browser-compatible deterministic WebMCP analyzer with 10 versioned controls.
+- A shared, browser-compatible deterministic WebMCP analyzer with 14 versioned controls.
 - A tool-surface inventory containing registrations, annotations, schemas, source locations, behavior classification, exposure, and a stable definition hash.
 - A public no-login WebMCP Security Lab and free local checker with file and paste modes.
 - Deterministic safe rewrite proposals with before/after diff, limitations, and no automatic repository mutation.
