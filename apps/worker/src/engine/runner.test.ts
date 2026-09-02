@@ -43,6 +43,12 @@ import {
   parseEngineProgressFingerprint,
   readEngineProgressFingerprint,
   readEngineSpendUsd,
+  createEngineStreamTail,
+  appendEngineStreamTail,
+  flushEngineStreamTail,
+  redactEngineTailLine,
+  ENGINE_TAIL_MAX_LINES,
+  ENGINE_TAIL_MAX_CHARS,
   OVERSHOOT_GRACE,
   terminateActiveEngineProcesses,
   trackActiveEngineProcess,
@@ -953,5 +959,65 @@ describe("parseEngineProgressFingerprint", () => {
     expect(parseEngineProgressFingerprint("a:34:running")).toBeNull()
     expect(parseEngineProgressFingerprint("12:-1:running")).toBeNull()
     expect(parseEngineProgressFingerprint("12:34:unknown-phase")).toBeNull()
+  })
+})
+
+describe("engine stream tail capture (failure diagnosis without log exposure)", () => {
+  it("keeps only the last lines and stays bounded", () => {
+    const tail = createEngineStreamTail()
+    for (let i = 1; i <= 120; i++) {
+      appendEngineStreamTail(tail, Buffer.from(`line ${i}\n`))
+    }
+    // "line 120\n" leaves no pending segment — everything landed as lines.
+    expect(tail.pending).toBe("")
+    expect(tail.lines.length).toBeLessThanOrEqual(ENGINE_TAIL_MAX_LINES)
+    expect(tail.chars).toBeLessThanOrEqual(ENGINE_TAIL_MAX_CHARS)
+    expect(tail.lines.at(-1)).toBe("line 120")
+    // The oldest lines were dropped — only the tail survives.
+    expect(tail.lines).not.toContain("line 1")
+  })
+
+  it("assembles a line split across chunk boundaries (no phantom partials)", () => {
+    const tail = createEngineStreamTail()
+    appendEngineStreamTail(tail, Buffer.from("start of li"))
+    // The first chunk has no newline — nothing is recorded yet.
+    expect(tail.lines).toEqual([])
+    expect(tail.pending).toBe("start of li")
+    appendEngineStreamTail(tail, Buffer.from("ne\nsecond line\n"))
+    expect(tail.lines).toEqual(["start of line", "second line"])
+    expect(tail.pending).toBe("")
+  })
+
+  it("flushes a trailing partial line once, at close time", () => {
+    const tail = createEngineStreamTail()
+    appendEngineStreamTail(tail, Buffer.from("first line\nno trailing newline yet"))
+    expect(tail.lines).toEqual(["first line"])
+    expect(tail.pending).toBe("no trailing newline yet")
+    flushEngineStreamTail(tail)
+    expect(tail.lines).toEqual(["first line", "no trailing newline yet"])
+    expect(tail.pending).toBe("")
+    // Idempotent: a second flush has nothing to emit.
+    flushEngineStreamTail(tail)
+    expect(tail.lines).toEqual(["first line", "no trailing newline yet"])
+  })
+
+  it("redacts secret-shaped values before persistence", () => {
+    // Fixtures are assembled from low-entropy fragments so the secret scanner
+    // does not flag the test source itself (a literal high-entropy-looking
+    // token here previously tripped gitleaks' generic-api-key rule).
+    const fakeQuoted = ["sk-test", "0123456789", "testtest"].join("-")
+    const fakeAssigned = ["AKIA", "TESTTEST", "TESTTEST12"].join("")
+    expect(redactEngineTailLine(`export API_KEY="${fakeQuoted}"`)).toBe(
+      'export API_KEY="***REDACTED***"'
+    )
+    expect(redactEngineTailLine(`api_key=${fakeAssigned}`)).toBe("api_key=***REDACTED***")
+    expect(redactEngineTailLine("Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6")).toBe(
+      "Authorization: Bearer ***REDACTED***"
+    )
+    // Ordinary engine output is untouched.
+    expect(redactEngineTailLine("Cloning repository from https://github.com/acme/app.git")).toBe(
+      "Cloning repository from https://github.com/acme/app.git"
+    )
+    expect(redactEngineTailLine("token=abc123")).toBe("token=abc123")
   })
 })
