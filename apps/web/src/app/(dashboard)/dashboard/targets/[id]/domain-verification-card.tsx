@@ -88,7 +88,9 @@ function DomainVerificationContent({
       ? "Not verified (expired)"
       : proof.status === "VERIFIED"
         ? `Verified until ${formatDateTime(proof.expiresAt)}`
-        : "Not verified"
+        : initialStatus === "Self-attested"
+          ? initialStatus
+          : "Not verified"
     : initialExpiry !== null && initialExpiry <= now
       ? "Not verified (expired)"
       : canValidate && initialExpiry !== null

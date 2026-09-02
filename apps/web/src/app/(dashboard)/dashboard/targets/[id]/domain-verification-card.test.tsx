@@ -121,6 +121,17 @@ describe("domain verification card", () => {
     expect(html).not.toContain("TXT value</")
     expect(harness.buttons.get("Verify now")?.disabled).toBe(false)
   })
+  it("preserves the server's self-attested label for pending DNS proof without granting verification", async () => {
+    const html = await load([proof])
+    expect(html).toContain("Self-attested")
+    expect(html).not.toContain("Verified until")
+    expect(render({ ...defaults, initialStatus: "Verified until 2099-01-01T00:00:00Z" })).toContain(
+      "Not verified"
+    )
+    expect(
+      render({ ...defaults, initialStatus: "Verified until 2099-01-01T00:00:00Z" })
+    ).not.toContain("Verified until")
+  })
   it("issues, independently copies both DNS fields, and verifies with expiry", async () => {
     await load([{ ...proof, status: "VERIFIED" }])
     harness.post.mockResolvedValueOnce({
@@ -130,7 +141,8 @@ describe("domain verification card", () => {
     harness.buttons.get("Issue proof")!.onClick!()
     await settle()
     let html = render()
-    expect(html).toContain("Not verified")
+    expect(html).toContain("Self-attested")
+    expect(html).not.toContain("Verified until")
     expect(html).toContain("previous proof is invalid")
     expect(harness.post).toHaveBeenCalledWith(
       "/api/target-domain-verifications",
