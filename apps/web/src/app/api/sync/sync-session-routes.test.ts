@@ -20,6 +20,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 vi.mock("@lyrashield/db", () => ({
   prisma: {
+    license: { update: mocks.licenseUpdate },
     workspaceMember: { findUnique: mocks.workspaceMemberFindUnique },
     workspace: { findUnique: vi.fn() },
   },
@@ -134,5 +135,46 @@ describe("sync session routes", () => {
     expect(response.status).toBe(200)
     expect(mocks.findLicenseById).toHaveBeenCalledWith("license_1")
     expect(mocks.findLicenseByKeyHash).not.toHaveBeenCalled()
+  })
+
+  it("refuses license transfer without active membership in its owning workspace", async () => {
+    mocks.findLicenseByKeyHash.mockResolvedValue({
+      license: { ...license, workspaceId: "other_workspace" },
+    })
+    mocks.workspaceMemberFindUnique
+      .mockResolvedValueOnce({ status: "active" })
+      .mockResolvedValueOnce(null)
+    const response = await connect(
+      new Request("http://localhost/api/sync/connect", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "workspace_1", licenseKey: "raw-license-key" }),
+      })
+    )
+    expect(response.status).toBe(403)
+    expect((await response.json()).error.code).toBe("LICENSE_ALREADY_LINKED")
+    expect(mocks.systemLicenseUpdate).not.toHaveBeenCalled()
+    expect(mocks.licenseUpdate).not.toHaveBeenCalled()
+    expect(mocks.syncCursorUpdate).not.toHaveBeenCalled()
+  })
+
+  it("transfers through the system client after both workspace memberships pass", async () => {
+    mocks.findLicenseByKeyHash.mockResolvedValue({
+      license: { ...license, workspaceId: "other_workspace" },
+    })
+    const response = await connect(
+      new Request("http://localhost/api/sync/connect", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "workspace_1", licenseKey: "raw-license-key" }),
+      })
+    )
+    expect(response.status).toBe(200)
+    expect(mocks.workspaceMemberFindUnique).toHaveBeenNthCalledWith(2, {
+      where: { workspaceId_userId: { workspaceId: "other_workspace", userId: session.userId } },
+    })
+    expect(mocks.systemLicenseUpdate).toHaveBeenCalledWith({
+      where: { id: license.id },
+      data: { workspaceId: "workspace_1" },
+    })
+    expect(mocks.licenseUpdate).not.toHaveBeenCalled()
   })
 })
