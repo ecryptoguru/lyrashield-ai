@@ -1,6 +1,10 @@
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
-import { withWorkspaceRLS, findLicenseForSyncByKeyHash } from "@lyrashield/db"
+import {
+  getSystemPrisma,
+  prisma,
+  withWorkspaceRLS,
+  findLicenseForSyncByKeyHash,
+} from "@lyrashield/db"
 import { requireAuth } from "@lyrashield/auth/server"
 import { type LocalSkuId } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
@@ -88,9 +92,9 @@ export async function POST(request: Request) {
     }
 
     if (license.workspaceId !== workspaceId) {
-      // License workspace linkage is a privileged cross-workspace write (license row is not RLS-scoped).
-      // Use direct prisma (not workspace-RLS) for this single column update; cursor RLS is separate.
-      await prisma.license.update({
+      // License linkage is a privileged cross-workspace write. License is FORCE-RLS
+      // scoped, so this deliberately uses the narrow system client.
+      await getSystemPrisma().license.update({
         where: { id: license.id },
         data: { workspaceId },
       })

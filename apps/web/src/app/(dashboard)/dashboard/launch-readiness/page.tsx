@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { Rocket } from "lucide-react"
 import { LaunchReadinessClient } from "./launch-readiness-client"
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
@@ -37,12 +37,14 @@ export default async function LaunchReadinessPage() {
     prisma.scan.count({
       where: { workspaceId, status: "COMPLETED", deletedAt: null },
     }),
-    prisma.scanCoverageReceipt.count({
-      where: {
-        status: "COMPLETED",
-        scan: { workspaceId, status: "COMPLETED", deletedAt: null },
-      },
-    }),
+    withWorkspaceRLS(workspaceId, (tx) =>
+      tx.scanCoverageReceipt.count({
+        where: {
+          status: "COMPLETED",
+          scan: { workspaceId, status: "COMPLETED", deletedAt: null },
+        },
+      })
+    ),
   ])
 
   const initialReport = generateLaunchReadinessReportFromAggregate(

@@ -1,4 +1,4 @@
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import type { ScanStatus, FindingSeverity, FindingStatus, ScoreGrade } from "@lyrashield/db"
 import type { ReadinessVerdict } from "./launch-readiness"
 
@@ -503,10 +503,12 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     ]),
   ]
   const receipts = scanIdsInScope.length
-    ? await prisma.scanCoverageReceipt.findMany({
-        where: { scanId: { in: scanIdsInScope }, scan: { workspaceId, deletedAt: null } },
-        select: { scanId: true, status: true },
-      })
+    ? await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scanCoverageReceipt.findMany({
+          where: { scanId: { in: scanIdsInScope }, scan: { workspaceId, deletedAt: null } },
+          select: { scanId: true, status: true },
+        })
+      )
     : []
 
   const receiptsByScanId = new Map<string, string[]>()
@@ -559,10 +561,12 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
   // Add receipts for the per-target runs the window fetch had not covered.
   const extraScanIds = perTargetRuns.map((run) => run.id).filter((id) => !windowScanIds.has(id))
   if (extraScanIds.length) {
-    const extraReceipts = await prisma.scanCoverageReceipt.findMany({
-      where: { scanId: { in: extraScanIds }, scan: { workspaceId, deletedAt: null } },
-      select: { scanId: true, status: true },
-    })
+    const extraReceipts = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.scanCoverageReceipt.findMany({
+        where: { scanId: { in: extraScanIds }, scan: { workspaceId, deletedAt: null } },
+        select: { scanId: true, status: true },
+      })
+    )
     for (const receipt of extraReceipts) {
       const statuses = receiptsByScanId.get(receipt.scanId)
       if (statuses) statuses.push(receipt.status)

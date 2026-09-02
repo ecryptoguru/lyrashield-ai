@@ -4,7 +4,7 @@ import { execFile as nodeExecFile } from "node:child_process"
 import { promisify } from "node:util"
 import { pathToFileURL } from "node:url"
 import { parseArgs } from "node:util"
-import { getSystemPrisma, prisma, type ScanStatus } from "@lyrashield/db"
+import { getSystemPrisma, prisma, withWorkspaceRLS, type ScanStatus } from "@lyrashield/db"
 import {
   getRedis,
   getWebhookTrackRetryQueue,
@@ -119,7 +119,7 @@ export interface LaunchAssuranceDeps {
     workspaceId: string
     status: ScanStatus
   }>
-  countEngineStartsSince: (scanId: string, since: Date) => Promise<number>
+  countEngineStartsSince: (scanId: string, workspaceId: string, since: Date) => Promise<number>
   hasTerminalCostUncertainty: (now: Date) => Promise<boolean>
   resolveProvenance: () => WorkerExecutionProvenance | null
   getFailureInjectionOperationalState: () => Promise<{
@@ -791,7 +791,7 @@ export async function verifyLaunchAssurance(
         if (!TERMINAL_SCAN_STATUSES.has(state.status)) {
           throw new Error(`scan did not settle to a terminal state within ${SETTLE_TIMEOUT_MS}ms`)
         }
-        const engineStarts = await deps.countEngineStartsSince(scanId, cancelStartedAt)
+        const engineStarts = await deps.countEngineStartsSince(scanId, workspaceId, cancelStartedAt)
         if (engineStarts > 0) {
           throw new Error(`${engineStarts} engine_start event(s) appeared after cancellation`)
         }
@@ -909,10 +909,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       if (!scan) throw new Error(`scan not found: ${scanId}`)
       return scan
     },
-    countEngineStartsSince: async (scanId, since) =>
-      prisma.scanEvent.count({
-        where: { scanId, stage: "engine_start", createdAt: { gt: since }, deletedAt: null },
-      }),
+    countEngineStartsSince: async (scanId, workspaceId, since) =>
+      withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scanEvent.count({
+          where: { scanId, stage: "engine_start", createdAt: { gt: since }, deletedAt: null },
+        })
+      ),
     hasTerminalCostUncertainty: async (now) =>
       (await findOldestTerminalUnreconciledCost(now)) !== null,
     resolveProvenance: resolveWorkerExecutionProvenance,

@@ -1,5 +1,5 @@
 import { withWorkspaceRLS } from "./rls"
-import type { FixProposal, PullRequest, Finding } from "./generated/prisma"
+import type { FixProposal, PullRequest, Finding, Target } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 
 export interface CreateFixProposalParams {
@@ -12,7 +12,9 @@ export interface CreateFixProposalParams {
 }
 
 export interface FixProposalWithDetails extends FixProposal {
-  finding: Pick<Finding, "id" | "title" | "severity" | "status" | "cwe">
+  finding: Pick<Finding, "id" | "title" | "severity" | "status" | "cwe"> & {
+    target: Pick<Target, "id" | "name" | "repoFullName">
+  }
   pullRequests: PullRequest[]
 }
 
@@ -63,7 +65,14 @@ export async function getFixProposal(
       },
       include: {
         finding: {
-          select: { id: true, title: true, severity: true, status: true, cwe: true },
+          select: {
+            id: true,
+            title: true,
+            severity: true,
+            status: true,
+            cwe: true,
+            target: { select: { id: true, name: true, repoFullName: true } },
+          },
         },
         pullRequests: true,
       },
@@ -95,7 +104,14 @@ export async function listFixProposals(params: {
       },
       include: {
         finding: {
-          select: { id: true, title: true, severity: true, status: true, cwe: true },
+          select: {
+            id: true,
+            title: true,
+            severity: true,
+            status: true,
+            cwe: true,
+            target: { select: { id: true, name: true, repoFullName: true } },
+          },
         },
         pullRequests: true,
       },
