@@ -206,7 +206,23 @@ export async function handleFixPrMergedAndReevaluate(
       select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
     })
     const template = latestCompleted ?? finding.scan
-    return { findingId: finding.id, targetId: finding.targetId, template }
+    // Scan.targetId is nullable in the schema; a scan row without a target
+    // cannot anchor a retest. (Finding.targetId is already null-checked above.)
+    if (!template.targetId) return null
+    return {
+      findingId: finding.id,
+      targetId: template.targetId,
+      template: {
+        ...template,
+        targetId: template.targetId,
+      } as {
+        id: string
+        goal: string
+        mode: string
+        policyId: string | null
+        targetId: string
+      },
+    }
   })
   if (!anchor) return null
 
