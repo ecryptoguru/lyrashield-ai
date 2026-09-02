@@ -17,6 +17,7 @@ import {
   type GateVerdictResult,
 } from "@lyrashield/gate"
 import { logger } from "@lyrashield/logger"
+import type { ScanGoal, ScanMode } from "@lyrashield/types"
 import type { FixPrMergeResult } from "./fix-proposal-service"
 import { withWorkspaceRLS } from "./rls"
 
@@ -212,13 +213,15 @@ export async function handleFixPrMergedAndReevaluate(
     return {
       findingId: finding.id,
       targetId: template.targetId,
+      // Prisma returns the enum values as strings; the asserted type carries
+      // the canonical union names so consumers satisfy ScanJobData directly.
       template: {
         ...template,
         targetId: template.targetId,
       } as {
         id: string
-        goal: string
-        mode: string
+        goal: ScanGoal
+        mode: ScanMode
         policyId: string | null
         targetId: string
       },
@@ -306,7 +309,9 @@ export interface FixPrMergeOutcome extends FixPrMergeResult {
   retestScanId: string
   /** The template the retest scan was created from — the fields the caller's enqueue payload needs. */
   targetId: string
-  goal: string
-  mode: string
+  /** Scan goal/mode as the canonical union names so the webhook enqueue
+   * payload satisfies ScanJobData directly. */
+  goal: ScanGoal
+  mode: ScanMode
   policyId: string | null
 }
