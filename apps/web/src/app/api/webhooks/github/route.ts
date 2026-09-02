@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { getSystemPrisma, prisma } from "@lyrashield/db"
-import { verifyWebhookSignature, enqueueScanJob } from "@lyrashield/integrations"
+import { verifyWebhookSignature } from "@lyrashield/integrations"
+import { enqueueScanJob } from "@/lib/queue"
 import { logger } from "@lyrashield/logger"
 
 const GitHubInstallationDeletedEventSchema = z.object({
