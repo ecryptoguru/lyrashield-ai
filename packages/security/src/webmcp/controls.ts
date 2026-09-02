@@ -140,6 +140,34 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     remediationTemplate:
       "Rename, merge, or clarify duplicate tools so each has a unique name and a distinct, honest description.",
   },
+  {
+    id: "WEBMCP-11",
+    title: "Credential or secret embedded in a tool definition",
+    description:
+      "A tool's name, title, description, or input schema embeds a credential, API key, token, or connection string, disclosing it to the model and to anyone who can read the tool surface.",
+    strategy: "deterministic",
+    severity: "HIGH",
+    negativeEvidence:
+      "No tool name, title, description, or schema field contains a credential-shaped value.",
+    falsePositiveNotes:
+      "A field named 'apiKey' that is an empty input parameter the caller fills is not an embedded secret; only literal credential values are flagged.",
+    remediationTemplate:
+      "Remove the credential from the tool definition. Read it from a server-side secret store at execution time, never embed it where the model or a reader can see it.",
+  },
+  {
+    id: "WEBMCP-12",
+    title: "Prompt-injection surface in a tool contract",
+    description:
+      "A tool's description or schema carries instruction-shaped text aimed at the consuming model (e.g. 'ignore previous instructions', 'you must always'), turning the tool surface into a prompt-injection vector.",
+    strategy: "deterministic",
+    severity: "HIGH",
+    negativeEvidence:
+      "Tool descriptions and schemas describe the tool's behavior and parameters without instructing the consuming model.",
+    falsePositiveNotes:
+      "Ordinary imperative documentation of the tool's own behavior is not an injection attempt; only text addressed at the model's instruction hierarchy is flagged.",
+    remediationTemplate:
+      "Rewrite the tool contract to describe behavior, not to instruct the model. Remove imperative text aimed at the consuming agent.",
+  },
 ]
 
 export const WEBMCP_CONTROLS_BY_ID: Record<WebMcpControlId, WebMcpControlDefinition> =

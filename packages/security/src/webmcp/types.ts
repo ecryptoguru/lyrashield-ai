@@ -33,6 +33,8 @@ export type WebMcpControlId =
   | "WEBMCP-08"
   | "WEBMCP-09"
   | "WEBMCP-10"
+  | "WEBMCP-11"
+  | "WEBMCP-12"
 
 export interface WebMcpScanFile {
   path: string
