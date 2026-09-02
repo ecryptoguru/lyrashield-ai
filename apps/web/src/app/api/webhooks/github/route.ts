@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { getSystemPrisma, prisma } from "@lyrashield/db"
-import { verifyWebhookSignature } from "@lyrashield/integrations"
+import { verifyWebhookSignature, enqueueScanJob } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 
 const GitHubInstallationDeletedEventSchema = z.object({
@@ -238,6 +238,7 @@ export async function POST(request: NextRequest) {
             pullRequest.merged === true &&
             pullRequest.head.ref.startsWith("lyrashield/fix-")
           ) {
+            let loopClosureDelivered = false
             try {
               const { handleFixPrMergedAndReevaluate } = await import("@lyrashield/db")
               const outcome = await handleFixPrMergedAndReevaluate(
@@ -246,15 +247,44 @@ export async function POST(request: NextRequest) {
                 pullRequest.number
               )
               if (outcome) {
+                // The retest scan exists but is not queued yet — packages/db
+                // cannot reach the scan queue. Enqueue it here; a queue outage
+                // deletes the delivery marker below so GitHub redelivers and
+                // the merge step no-ops cleanly while the enqueue retries.
+                await enqueueScanJob({
+                  scanId: outcome.retestScanId,
+                  workspaceId: integration.workspaceId,
+                  targetId: outcome.targetId,
+                  goal: outcome.goal,
+                  mode: outcome.mode,
+                  ...(outcome.policyId ? { policyId: outcome.policyId } : {}),
+                })
+                loopClosureDelivered = true
                 logger.info("Fix PR merge closed the loop", {
                   retestId: outcome.retestId,
                   findingId: outcome.findingId,
+                  retestScanId: outcome.retestScanId,
                 })
+              } else {
+                loopClosureDelivered = true
               }
             } catch (loopErr) {
-              // Loop-closure is best-effort; the event is already stored, so a
-              // retest/reeval failure must not fail the webhook.
-              logger.error("Fix PR loop-closure failed (event already stored)", {
+              // Loop-closure is best-effort for the webhook RESPONSE (it must
+              // still 2xx so GitHub does not hammer retries on a permanent
+              // failure), but not for DELIVERY: unless the outcome was fully
+              // delivered (merge + retest + enqueue), delete the stored event
+              // marker so GitHub's automatic redelivery retries the idempotent
+              // path — the merge step no-ops on redelivery and only the
+              // missing tail is retried. Mirrors the audit-compensation
+              // pattern used for the installation.deleted track above.
+              if (!loopClosureDelivered) {
+                await systemPrisma.webhookEvent
+                  .deleteMany({
+                    where: { provider: "github", externalId: deliveryId },
+                  })
+                  .catch(() => undefined)
+              }
+              logger.error("Fix PR loop-closure failed (marker cleared for redelivery)", {
                 error: String(loopErr),
               })
             }

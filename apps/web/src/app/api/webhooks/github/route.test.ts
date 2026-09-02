@@ -14,7 +14,10 @@ const systemPrisma = {
 const prisma = { auditLog: { create: vi.fn() } }
 
 vi.mock("@lyrashield/db", () => ({ getSystemPrisma: () => systemPrisma, prisma }))
-vi.mock("@lyrashield/integrations", () => ({ verifyWebhookSignature }))
+vi.mock("@lyrashield/integrations", () => ({
+  verifyWebhookSignature,
+  enqueueScanJob: vi.fn(async () => "queued-job-id"),
+}))
 vi.mock("@lyrashield/logger", () => ({ logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 
 const { POST } = await import("./route")

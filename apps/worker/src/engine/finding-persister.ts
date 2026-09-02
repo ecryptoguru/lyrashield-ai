@@ -18,6 +18,13 @@ export interface PersistFindingsParams {
   workspaceId: string
   targetId: string
   vulnerabilities: EngineVulnerability[] | NormalizedFinding[]
+  /**
+   * The source revision the scan's repository evidence was collected at (the
+   * engine's sourceRevision). Stamped on every finding this scan touches so a
+   * fix patch can be applied against exactly the commit that was scanned.
+   * Optional and additive — callers without a checkout (URL/API targets) omit it.
+   */
+  sourceRevision?: string
 }
 
 export interface PersistedFinding {
@@ -156,7 +163,7 @@ async function persistEvidence(
 }
 
 export async function persistFindings(params: PersistFindingsParams): Promise<PersistedFinding[]> {
-  const { scanId, workspaceId, targetId, vulnerabilities } = params
+  const { scanId, workspaceId, targetId, vulnerabilities, sourceRevision } = params
   const results: PersistedFinding[] = []
 
   if (vulnerabilities.length === 0) {
@@ -272,6 +279,10 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           recommendedFix: vuln.remediation_steps ?? null,
           businessImpact: vuln.impact ?? null,
           exploitability: vuln.poc_description ?? null,
+          // Keep the fix-PR base commit current with the scan that last saw
+          // this finding: a patch must apply against what was actually scanned,
+          // not a stale revision from the finding's first detection.
+          ...(sourceRevision ? { baseCommit: sourceRevision } : {}),
           ...(reopen ? { status: "OPEN" as const, fixedAt: null } : {}),
           verified,
           verificationStatus,
@@ -336,6 +347,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
           ...(vuln.impact ? { businessImpact: vuln.impact } : {}),
           ...(vuln.poc_description ? { exploitability: vuln.poc_description } : {}),
+          ...(sourceRevision ? { baseCommit: sourceRevision } : {}),
         },
       })
       findingId = finding.id

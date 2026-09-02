@@ -17,6 +17,7 @@ import {
   createAiSecurityScoreSnapshot,
   qualifyReferralForWorkspace,
   withScanFinalizationClaim,
+  evaluateGateForTarget,
   type ScanStatus,
 } from "@lyrashield/db"
 import {
@@ -325,6 +326,31 @@ function timeoutErrorMessage(totalRuntimeMs: number): string {
 
 function imageDigest(image: string | undefined): string | undefined {
   return image?.match(/@?(sha256:[a-f0-9]{64})$/i)?.[1]?.toLowerCase()
+}
+
+/**
+ * WP2 gate maintenance: re-evaluate the Launch Gate verdict for a target after
+ * a scan reaches a terminal state. A completed scan adds evidence (verdict may
+ * move toward READY); a failed/stopped scan changes the staleness picture. The
+ * verdict is derived purely from stored evidence, so this is a best-effort
+ * refresh — a gate failure must never fail or retry a scan that already
+ * finalized. No-op for scans without a target.
+ */
+async function refreshGateVerdictAfterTerminalScan(
+  workspaceId: string,
+  targetId: string | null | undefined,
+  scanId: string
+): Promise<void> {
+  if (!targetId) return
+  try {
+    await evaluateGateForTarget(workspaceId, targetId)
+  } catch (error) {
+    logger.warn("Post-scan gate evaluation failed (non-fatal)", {
+      scanId,
+      targetId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 function isTimeoutError(error: unknown): boolean {
@@ -710,6 +736,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         // scanners, so billable work is never replayed.
         await completeRetestsForScan({ scanId, workspaceId })
         await completeScanWithScore(scanId, workspaceId, pendingFinalization.summary)
+        await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
         try {
           await qualifyReferralForWorkspace(workspaceId)
         } catch (referralError) {
@@ -1137,8 +1164,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const engineExecution =
         engineWorkObserved && engineProfile && engineModel
           ? {
-              model: runRecord?.model ?? "",
-              reasoningEffort: runRecord?.reasoning_effort ?? "",
+              // Spread-only-when-present (matching every other receipt field
+              // below): a receipt that omits model/reasoning must not persist
+              // empty strings into the manifest.
+              ...(runRecord?.model ? { model: runRecord.model } : { model: engineModel }),
+              ...(runRecord?.reasoning_effort
+                ? { reasoningEffort: runRecord.reasoning_effort }
+                : {}),
               image: env.LYRASHIELD_IMAGE || null,
               ...(imageDigest(env.LYRASHIELD_IMAGE)
                 ? { imageDigest: imageDigest(env.LYRASHIELD_IMAGE) }
@@ -1583,6 +1615,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           workspaceId,
           targetId,
           vulnerabilities: orchestratorResult.allFindings,
+          // Stamp the scanned revision on every finding so fix patches apply
+          // against exactly the commit that was analyzed.
+          ...(engineResult.sourceRevision ? { sourceRevision: engineResult.sourceRevision } : {}),
         })
 
         const newFindings = persistedFindings.filter((f) => f.isNew).length
@@ -1684,6 +1719,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             errorMessage: engineTerminalError.errorMessage,
             ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
           })
+          // A PARTIAL/FAILED/STOPPED terminal state still changed stored
+          // evidence (findings, receipts) — refresh the gate verdict so it
+          // never presents a stale pre-scan picture as current.
+          await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
           return {
             persistedFindings,
             newFindings,
@@ -1702,6 +1741,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             errorMessage: "Protected run limit reached",
             actualCostCents: Math.round(billedCostUsd! * 100),
           })
+          await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
           return {
             persistedFindings,
             newFindings,
@@ -1716,6 +1756,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         // Retests may validate a pending fix and change the target's scoreable
         // state. Freeze the score only after those outcomes are persisted.
         await completeScanWithScore(scanId, workspaceId, scanSummary)
+        // Refresh the gate verdict now that this scan's evidence is stored.
+        await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
         return { persistedFindings, newFindings, scanSummary, terminalResult: null }
       })
 
