@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("./client", () => ({
   prisma: {
+    $executeRaw: vi.fn(),
+    findingCandidate: { findMany: vi.fn().mockResolvedValue([]) },
     gateVerdict: { findFirst: vi.fn(), create: vi.fn() },
     target: { findFirst: vi.fn() },
     scan: { findFirst: vi.fn() },
@@ -11,7 +13,7 @@ vi.mock("./client", () => ({
     workspaceMember: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
     fixProposal: { findFirst: vi.fn(), update: vi.fn() },
-    retest: { create: vi.fn() },
+    retest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) },
   },
 }))
 
@@ -50,10 +52,16 @@ vi.mock("@lyrashield/gate", () => ({
 
 vi.mock("./scan-service", () => ({
   createScan: vi.fn(async () => ({ id: "new-retest-scan-id" })),
+  updateScanStatus: vi.fn(),
+  WorkspaceScanConcurrencyLimitError: class extends Error {},
 }))
 
 import { prisma } from "./client"
-import { handleFixPrMergedAndReevaluate } from "./gate-service"
+import { createScan, WorkspaceScanConcurrencyLimitError } from "./scan-service"
+import { handleFixPrMergedAndReevaluate as handleMerge } from "./gate-service"
+const admission = vi.fn(async () => {})
+const handleFixPrMergedAndReevaluate = (workspaceId: string, branch: string, prNumber?: number) =>
+  handleMerge(workspaceId, branch, prNumber, admission)
 
 const mockPrisma = prisma as unknown as {
   pullRequest: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
@@ -70,9 +78,14 @@ const mockPrisma = prisma as unknown as {
 describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    admission.mockResolvedValue(undefined)
+    vi.mocked(prisma.retest.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.findingCandidate.findMany).mockResolvedValue([])
+    vi.mocked(createScan).mockResolvedValue({ id: "new-retest-scan-id" } as never)
     // Default happy-path shape: an open fix PR whose finding has a source scan
     // and a latest completed scan on the target.
     mockPrisma.pullRequest.findFirst.mockResolvedValue({
+      id: "pr-1",
       fixProposal: {
         finding: {
           id: "finding-1",
@@ -153,5 +166,56 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     expect(outcome).not.toBeNull()
     // The template fell back to the finding's original scan goal.
     expect(outcome!.goal).toBe("Review the checkout flow")
+  })
+  it("narrows deterministic Deep findings before checking entitlement", async () => {
+    const anchor = await mockPrisma.pullRequest.findFirst()
+    anchor.fixProposal.finding.scan.mode = "DEEP"
+    mockPrisma.pullRequest.findFirst.mockResolvedValue(anchor)
+    vi.mocked(prisma.findingCandidate.findMany).mockResolvedValue([
+      { scannerSource: "secrets" },
+    ] as never)
+    const outcome = await handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    expect(admission).toHaveBeenCalledWith("SAFE")
+    expect(outcome?.mode).toBe("SAFE")
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "SAFE", determinismMode: "targeted_scanner" })
+    )
+  })
+  it("creates no scan when admission fails or a retest is pending", async () => {
+    admission.mockRejectedValueOnce(new Error("RETEST_NOT_ENTITLED"))
+    await expect(
+      handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    ).rejects.toThrow("RETEST_NOT_ENTITLED")
+    expect(createScan).not.toHaveBeenCalled()
+    vi.mocked(prisma.retest.findFirst)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "pending" } as never)
+    expect(
+      await handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    ).toBeNull()
+    expect(createScan).not.toHaveBeenCalled()
+  })
+  it("defers concurrency failures for redelivery without creating a retest", async () => {
+    vi.mocked(createScan).mockRejectedValueOnce(new WorkspaceScanConcurrencyLimitError())
+    await expect(
+      handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    ).rejects.toBeInstanceOf(WorkspaceScanConcurrencyLimitError)
+    expect(prisma.retest.create).not.toHaveBeenCalled()
+  })
+  it("reuses the durable queued scan on delivery retry", async () => {
+    vi.mocked(prisma.retest.findFirst).mockResolvedValueOnce({
+      id: "retest-existing",
+      scanId: "queued-1",
+      scan: { status: "QUEUED", mode: "SAFE", goal: "Review", policyId: null },
+    } as never)
+    const result = await handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    expect(result?.retestScanId).toBe("queued-1")
+    expect(createScan).not.toHaveBeenCalled()
+    expect(prisma.$executeRaw).toHaveBeenCalled()
+  })
+  it("fails closed without the injected admission boundary", async () => {
+    await expect(
+      handleMerge("workspace-1", "branch", undefined, undefined as never)
+    ).rejects.toThrow("Retest admission guard required")
   })
 })

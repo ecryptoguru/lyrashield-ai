@@ -79,7 +79,7 @@ describe("listFindings", () => {
     expect(prisma.finding.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ workspaceId: "workspace-1", deletedAt: null }),
-        orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
+        orderBy: [{ severity: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         take: 51,
         include: expect.objectContaining({
           target: { select: { id: true, name: true, type: true, environment: true } },

@@ -36,7 +36,11 @@ export interface RecordAgentMinutesOptions {
    *   UsageRecord.quantity and all pool/pack arithmetic are integer minutes.
    * - "completed" (default) applies the 1-minute floor as before.
    */
-  outcome?: "completed" | "failed" | "cancelled"
+  outcome?: "completed" | "partial" | "failed" | "cancelled"
+  /** Resolve uncovered minutes before this transaction commits. Throw to void
+   * the entire settlement, including pack and overage writes. Never open a
+   * second transaction for the same workspace from this callback. */
+  settleOverage?: (tx: MeterTransaction, minutes: number) => Promise<void>
 }
 
 export interface RecordAgentMinutesResult {
@@ -115,7 +119,9 @@ export async function recordAgentMinutes(
   //   distinction that matters is that a cancelled scan is not forced up to a
   //   minimum — only genuinely elapsed whole minutes are billed.
   const rawMinutes =
-    opts.outcome === "cancelled" ? Math.ceil(ms / 60_000) : Math.max(1, Math.ceil(ms / 60_000))
+    opts.outcome === "cancelled" || opts.outcome === "partial"
+      ? Math.ceil(ms / 60_000)
+      : Math.max(1, Math.ceil(ms / 60_000))
 
   // Deep/Custom scans consume 3× minutes
   const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
@@ -155,6 +161,7 @@ export async function recordAgentMinutes(
             rawMinutes,
             multiplier: isDeep ? DEEP_SCAN_MULTIPLIER : 1,
           })
+          if (overageMinutes > 0) await opts.settleOverage?.(tx, overageMinutes)
 
           return { created: true, minutes, idempotencyKey, overageMinutes }
         },
@@ -213,7 +220,13 @@ async function recordMinutesAndDebitIncrementalSpillover(
     where: { workspaceId: input.workspaceId },
     select: { currentPeriodStart: true },
   })
-  const cycleStart = billingAccount?.currentPeriodStart
+  const trial = !billingAccount?.currentPeriodStart
+    ? await tx.workspace.findUnique({
+        where: { id: input.workspaceId },
+        select: { trialStartedAt: true },
+      })
+    : null
+  const cycleStart = billingAccount?.currentPeriodStart ?? trial?.trialStartedAt
 
   const [grantRecords, priorConsumeRecords] = cycleStart
     ? await Promise.all([

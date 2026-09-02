@@ -39,6 +39,7 @@ vi.mock("@lyrashield/db", () => {
   return {
     Prisma: { Decimal: FakeDecimal },
     prisma: {
+      auditLog: { create: vi.fn() },
       conversion: {
         findFirst: vi.fn(),
       },
@@ -197,11 +198,20 @@ describe("clawback — RISK-C3 replay guard", () => {
       const result = await onRefund({
         provider: "razorpay",
         externalId: "pay-789",
+        workspaceId: "workspace-1",
         reason: "REFUND",
         ...evidence,
       })
       expect(result.reversed).toBe(false)
       expect(result.manualReview).toBe(true)
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: "affiliate.clawback.manual_review",
+            workspaceId: "workspace-1",
+          }),
+        })
+      )
     }
     expect(prisma.commission.update).not.toHaveBeenCalled()
   })

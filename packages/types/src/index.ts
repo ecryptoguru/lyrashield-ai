@@ -522,3 +522,4 @@ export type FindingQueryInput = z.infer<typeof FindingQuerySchema>
 
 export * from "./url-scan-capabilities"
 export * from "./scan-profile"
+export * from "./retest-profile"

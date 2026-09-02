@@ -261,7 +261,7 @@ describe("evidenceSummary per-severity unresolved counts", () => {
     lastSeenAtMs: 900_000,
   })
 
-  it("counts unresolved CRITICAL and HIGH; MEDIUM/LOW are not counted (not gate-evaluated)", () => {
+  it("counts all unresolved severity bands without making MEDIUM/LOW blocking", () => {
     const verdict = computeGateVerdict(
       baseInput({
         findings: [
@@ -276,6 +276,8 @@ describe("evidenceSummary per-severity unresolved counts", () => {
     expect(verdict.state).toBe("NOT_READY")
     expect(verdict.evidenceSummary.unresolvedCritical).toBe(1)
     expect(verdict.evidenceSummary.unresolvedHigh).toBe(1) // f2 unresolved; f3 is FIXED so not blocking
+    expect(verdict.evidenceSummary.unresolvedMedium).toBe(1)
+    expect(verdict.evidenceSummary.unresolvedLow).toBe(1)
   })
 
   it("does not count retest-confirmed-resolved findings as unresolved", () => {

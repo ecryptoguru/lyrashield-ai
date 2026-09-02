@@ -611,7 +611,7 @@ async function runEngineProcess(
       failureType = marker.failureType ?? failureType
     })
 
-    child.on("close", (code) => {
+    child.on("close", async (code) => {
       closed = true
       if (timer) clearTimeout(timer)
       clearInterval(heartbeatTimer)
@@ -638,7 +638,7 @@ async function runEngineProcess(
         // the scan event references the artifact URI. Startup/clone errors
         // land on stdout, which is exactly the case the byte counts alone
         // could not explain.
-        void persistEngineStreamTail(scanId, exitCode, failureType, stdoutTail, stderrTail)
+        await persistEngineStreamTail(scanId, exitCode, failureType, stdoutTail, stderrTail)
       }
       resolvePromise({
         exitCode,

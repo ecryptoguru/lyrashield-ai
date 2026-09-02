@@ -953,6 +953,7 @@ model Finding {
   @@index([lastSeenAt])
   @@index([slaDueAt])
   @@index([workspaceId, status, severity])
+  @@index([workspaceId, severity, createdAt])
   @@index([workspaceId, createdAt])
 }
 

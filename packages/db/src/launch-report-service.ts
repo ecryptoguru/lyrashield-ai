@@ -65,6 +65,8 @@ export async function generateLaunchReport(
     const evidenceSummary: LaunchReportSource["evidenceSummary"] = {
       verified: storedSummary.verified,
       retestConfirmed: storedSummary.retestConfirmed,
+      unresolvedMedium: storedSummary.unresolvedMedium,
+      unresolvedLow: storedSummary.unresolvedLow,
       unresolvedCritical:
         typeof storedSummary.unresolvedCritical === "number"
           ? storedSummary.unresolvedCritical

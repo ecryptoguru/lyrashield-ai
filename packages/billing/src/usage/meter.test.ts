@@ -140,6 +140,22 @@ beforeEach(() => {
 })
 
 describe("recordAgentMinutes pack debits", () => {
+  it.each(["completed", "partial", "cancelled", "failed"] as const)(
+    "meters %s according to terminal policy",
+    async (outcome) => {
+      configureDatabase(100)
+      const result = await recordAgentMinutes("ws_1", "scan_outcome", 65_000, { outcome })
+      expect(result.minutes).toBe(outcome === "failed" ? 0 : 2)
+      expect(usageRecords.filter((r) => r.kind === "agent_minutes")).toHaveLength(
+        outcome === "failed" ? 0 : 1
+      )
+    }
+  )
+  it("does not force a minute onto a zero-duration partial run", async () => {
+    configureDatabase(100)
+    expect((await recordAgentMinutes("ws_1", "partial", 0, { outcome: "partial" })).minutes).toBe(0)
+    expect(transactionMock).not.toHaveBeenCalled()
+  })
   it("debits only each tick's incremental spillover", async () => {
     configureDatabase(10, [20])
 

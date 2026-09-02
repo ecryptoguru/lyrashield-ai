@@ -26,6 +26,28 @@ beforeEach(() => {
 })
 
 describe("affiliate webhook-dispatch — normalized event fan-out", () => {
+  it("fails the required track rather than succeeding a manual-review clawback", async () => {
+    onRefundMock.mockResolvedValueOnce({ manualReview: true, reversed: false })
+    await expect(
+      dispatch({
+        provider: "polar",
+        kind: "refund_completed",
+        rawType: "refund.created",
+        productKind: "subscription",
+        workspaceId: "workspace-1",
+        orderId: "order-1",
+        money: {
+          currency: "USD",
+          grossAmount: "49",
+          discountAmount: "0",
+          taxAmount: "0",
+          commissionableAmount: "49",
+        },
+        metadata: {},
+        entity: {},
+      })
+    ).rejects.toThrow("affiliate_clawback_manual_review")
+  })
   it("e) refund.completed kind fires clawback exactly once with refundId propagated", async () => {
     const result = await dispatch({
       provider: "razorpay",

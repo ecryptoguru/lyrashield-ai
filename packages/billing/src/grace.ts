@@ -79,8 +79,10 @@ export async function getGraceState(workspaceId: string): Promise<GraceState> {
  */
 export async function enterGrace(
   workspaceId: string,
-  deltaMs: number
+  deltaMs: number,
+  transaction?: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 ): Promise<{ shouldContinue: boolean; remainingMs: number }> {
+  const db = transaction ?? prisma
   // A-L06: Validate input bounds — reject negative or oversized deltaMs.
   // deltaMs represents milliseconds of grace consumed in one tick; negative
   // values would credit grace, and oversized values (> 15 min) are nonsensical
@@ -95,7 +97,7 @@ export async function enterGrace(
   // This prevents concurrent ticks from each incrementing past the cap.
   // The WHERE clause ensures the increment only happens if graceUsedMs
   // is still below the cap, making the check-and-increment atomic.
-  const result = await prisma.workspace
+  const result = await db.workspace
     .updateMany({
       where: {
         id: workspaceId,
@@ -105,7 +107,10 @@ export async function enterGrace(
         graceUsedMs: { increment: cappedDelta },
       },
     })
-    .catch(() => ({ count: 0 }))
+    .catch((error) => {
+      if (transaction) throw error
+      return { count: 0 }
+    })
 
   if (result.count === 0) {
     // Either workspace not found, or grace cap already exceeded
@@ -113,7 +118,7 @@ export async function enterGrace(
   }
 
   // Read the updated value to compute remaining
-  const updated = await prisma.workspace.findUnique({
+  const updated = await db.workspace.findUnique({
     where: { id: workspaceId },
     select: { graceUsedMs: true, graceCycleStart: true },
   })
@@ -124,7 +129,7 @@ export async function enterGrace(
 
   // Ensure graceCycleStart is set if it was null (first grace entry).
   if (!updated.graceCycleStart) {
-    await prisma.workspace.updateMany({
+    await db.workspace.updateMany({
       where: { id: workspaceId, graceCycleStart: null },
       data: { graceCycleStart: new Date() },
     })
@@ -134,25 +139,30 @@ export async function enterGrace(
 
   if (newUsedMs >= GRACE_CAP_MS) {
     // Grace exceeded — clamp to cap and signal stop
-    await prisma.workspace
+    await db.workspace
       .update({
         where: { id: workspaceId },
         data: { graceUsedMs: GRACE_CAP_MS },
       })
-      .catch(() => {})
+      .catch((error) => {
+        if (transaction) throw error
+      })
 
     // A-L03: Audit log grace exhaustion
-    await prisma.auditLog
-      .create({
-        data: {
-          workspaceId,
-          action: "billing.grace_exceeded",
-          resourceType: "workspace",
-          resourceId: workspaceId,
-          metadata: { graceUsedMs: GRACE_CAP_MS },
-        },
-      })
-      .catch(() => {})
+    // The caller audits a refused atomic settlement after rollback. The
+    // extended audit client must never run inside this transaction.
+    if (!transaction)
+      await prisma.auditLog
+        .create({
+          data: {
+            workspaceId,
+            action: "billing.grace_exceeded",
+            resourceType: "workspace",
+            resourceId: workspaceId,
+            metadata: { graceUsedMs: GRACE_CAP_MS },
+          },
+        })
+        .catch(() => {})
 
     logger.warn("Grace period exceeded — scan should stop", {
       workspaceId,

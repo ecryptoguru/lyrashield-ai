@@ -114,16 +114,14 @@ export interface EvidenceSummary {
   /** Blocking findings still resting on bare DETECTED — the weak spot. */
   blockingUnverified: number
   /**
-   * Unresolved findings by severity — CRITICAL and HIGH only (the gate's
-   * blocking severities). MEDIUM/LOW do not block in v1.0.0 and are NOT
-   * counted here, so a public report reading these fields can never mistake
-   * "not gate-evaluated" for "zero medium/low findings". The launch report
-   * maps its public counts from these fields instead of re-deriving them
-   * from blockingReasons (which would structurally always read 0 for
-   * non-blocking severities).
+   * Unresolved findings by severity. MEDIUM/LOW are counted for disclosure
+   * but do not block launch in v1.0.0. Legacy verdicts lack those counts and
+   * the public report must represent that absence as not evaluated.
    */
   unresolvedCritical: number
   unresolvedHigh: number
+  unresolvedMedium: number
+  unresolvedLow: number
 }
 
 export interface StalenessSignal {
@@ -170,6 +168,8 @@ function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
     blockingUnverified: 0,
     unresolvedCritical: 0,
     unresolvedHigh: 0,
+    unresolvedMedium: 0,
+    unresolvedLow: 0,
   }
   for (const f of findings) {
     switch (f.verificationStatus) {
@@ -192,6 +192,8 @@ function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
     if (isBlocking(f) && f.verificationStatus === "DETECTED") summary.blockingUnverified++
     if (isBlocking(f) && f.severity === "CRITICAL") summary.unresolvedCritical++
     if (isBlocking(f) && f.severity === "HIGH") summary.unresolvedHigh++
+    if (isBlocking(f) && f.severity === "MEDIUM") summary.unresolvedMedium++
+    if (isBlocking(f) && f.severity === "LOW") summary.unresolvedLow++
   }
   return summary
 }

@@ -22,6 +22,7 @@ import { CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD } from "../index"
 export type ClawbackReason = "REFUND" | "CHARGEBACK" | "SELF_REFERRAL" | "FRAUD"
 
 export interface RefundPayload {
+  workspaceId?: string | null
   /** Provider name. */
   provider: string
   /** External order/charge id. */
@@ -80,6 +81,30 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
 
   const commission = conversion.commissions[0]!
   const originalAmount = commission.amount
+  const conversionAmount = conversion.grossAmount.toString()
+  async function flagManualReview(reviewReason: string): Promise<ClawbackResult> {
+    // Workspace binding comes from the normalized provider event, never a
+    // guessed affiliate owner. Missing binding must dead-letter as well.
+    if (!payload.workspaceId) throw new Error("affiliate_clawback_manual_review_missing_workspace")
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: payload.workspaceId,
+        action: "affiliate.clawback.manual_review",
+        resourceType: "commission",
+        resourceId: commission.id,
+        metadata: {
+          commissionId: commission.id,
+          originalAmount: originalAmount.toString(),
+          conversionAmount,
+          refundAmount: payload.refundAmount ?? null,
+          currency: payload.currency ?? null,
+          reason,
+          reviewReason,
+        },
+      },
+    })
+    return { reversed: false, commissionId: commission.id, manualReview: true, notFound: false }
+  }
   if (reason === "REFUND") {
     if (!payload.refundAmount || !payload.currency) {
       // A refund event without money facts cannot be auto-reconciled. Route
@@ -90,7 +115,7 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
       logger.error("Clawback: refund event missing amount or currency — manual review", {
         externalId,
       })
-      return { reversed: false, manualReview: true, notFound: false }
+      return flagManualReview("missing_money_evidence")
     }
     const refundAmount = new Prisma.Decimal(payload.refundAmount)
     if (payload.currency !== conversion.currency || !refundAmount.equals(conversion.grossAmount)) {
@@ -104,10 +129,11 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
         refundCurrency: payload.currency,
         conversionCurrency: conversion.currency,
       })
-      return { reversed: false, manualReview: true, notFound: false }
+      return flagManualReview("money_mismatch")
     }
   }
   const manualReview = originalAmount.gt(new Prisma.Decimal(CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD))
+  if (manualReview) return flagManualReview("amount_above_threshold")
 
   // C-M11 / RISK-C3: Idempotency guard for clawback replay. If the commission
   // is already REVERSED, this is a replayed refund webhook (providers retry).

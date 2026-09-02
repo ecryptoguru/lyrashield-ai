@@ -29,6 +29,7 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
 
 vi.mock("@lyrashield/db", () => ({
   prisma: {
+    auditLog: { create: vi.fn().mockResolvedValue({}) },
     target: {
       findFirst: vi.fn(),
     },
@@ -566,6 +567,34 @@ describe("processScanJob", () => {
     } as never)
   })
 
+  it.each(["budget_exceeded", "unknown_failure"])(
+    "never bills terminal %s even with affirmative provider usage",
+    async (reason) => {
+      vi.mocked(runEngine).mockResolvedValueOnce({
+        exitCode: 0,
+        output: {
+          vulnerabilities: [],
+          findingsComplete: false,
+          findingCount: 0,
+          summary: "Stopped",
+          runRecord: {
+            run_id: "scan-1",
+            run_name: "scan-1",
+            status: "stopped",
+            terminal_reason: reason,
+            llm_usage: completeUsage,
+          },
+        },
+      } as never)
+      await processScanJob(mockJob)
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(updateScanStatus).toHaveBeenCalledWith(
+        "scan-1",
+        reason === "budget_exceeded" ? "STOPPED_BUDGET" : "FAILED",
+        expect.anything()
+      )
+    }
+  )
   it("completes successfully when engine returns exit code 0", async () => {
     const result = await processScanJob(mockJob)
 
@@ -611,6 +640,40 @@ describe("processScanJob", () => {
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
     )
   })
+  it.each(["content_filter_stopped", "engine_stopped"])(
+    "meters a %s PARTIAL result with affirmative scan-bound usage",
+    async (reason) => {
+      vi.mocked(runEngine).mockResolvedValueOnce({
+        exitCode: 0,
+        output: {
+          vulnerabilities: [{ title: "Retained finding" }],
+          findingCount: 1,
+          findingsComplete: false,
+          summary: "Partial findings",
+          runRecord: {
+            run_id: "scan-1",
+            run_name: "scan-1",
+            status: "stopped",
+            terminal_reason: reason,
+            llm_usage: completeUsage,
+          },
+        },
+      } as never)
+      await processScanJob(mockJob)
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PARTIAL", expect.anything())
+      expect(recordAgentMinutes).toHaveBeenCalledWith(
+        "ws-1",
+        "scan-1",
+        expect.any(Number),
+        expect.objectContaining({ outcome: "partial" })
+      )
+      expect(persistResultManifest).toHaveBeenCalledWith(
+        expect.objectContaining({ engineExecution: expect.objectContaining({}) })
+      )
+      const manifest = vi.mocked(persistResultManifest).mock.calls.at(-1)?.[0]
+      expect(manifest?.engineExecution?.model).toBeUndefined()
+    }
+  )
 
   it("meters only engine wall time, excluding setup before invocation", async () => {
     const startedAt = new Date("2026-08-25T00:00:00.000Z")
@@ -652,12 +715,12 @@ describe("processScanJob", () => {
   })
 
   it("stops when the spend limit cannot cover every uncovered minute", async () => {
-    vi.mocked(recordAgentMinutes).mockResolvedValueOnce({
-      created: true,
-      minutes: 5,
-      idempotencyKey: "ws-1:scan-1:engine_run",
-      overageMinutes: 3,
-    })
+    vi.mocked(recordAgentMinutes).mockImplementationOnce(
+      async (_workspaceId, _scanId, _ms, options) => {
+        await options?.settleOverage?.(prisma as never, 3)
+        return { created: true, minutes: 5, idempotencyKey: "test", overageMinutes: 3 }
+      }
+    )
     vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
       currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
       currentPlan: "LAUNCH_ASSURANCE",
@@ -673,7 +736,7 @@ describe("processScanJob", () => {
       status: "failed",
       errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
     })
-    expect(debitOverage).toHaveBeenCalledWith("ws-1", 3, "scan-1", "engine_overage")
+    expect(debitOverage).toHaveBeenCalledWith("ws-1", 3, "scan-1", "engine_overage", prisma)
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: expect.objectContaining({ llmRequestCount: 1, llmInputTokens: 1_000 }),
@@ -701,12 +764,12 @@ describe("processScanJob", () => {
   })
 
   it("persists provider usage and deterministic receipts when minute grace is exhausted", async () => {
-    vi.mocked(recordAgentMinutes).mockResolvedValueOnce({
-      created: true,
-      minutes: 15,
-      idempotencyKey: "ws-1:scan-1:engine_run",
-      overageMinutes: 15,
-    })
+    vi.mocked(recordAgentMinutes).mockImplementationOnce(
+      async (_workspaceId, _scanId, _ms, options) => {
+        await options?.settleOverage?.(prisma as never, 15)
+        return { created: true, minutes: 15, idempotencyKey: "test", overageMinutes: 15 }
+      }
+    )
     vi.mocked(enterGrace).mockResolvedValueOnce({ shouldContinue: false })
 
     await expect(processScanJob(mockJob)).resolves.toMatchObject({

@@ -57,7 +57,7 @@ export async function listFindings(params: ListFindingsParams): Promise<{
 
   const findings = await prisma.finding.findMany({
     where,
-    orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ severity: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
     include: {

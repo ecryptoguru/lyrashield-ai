@@ -70,9 +70,14 @@ export async function getUsageBalance(workspaceId: string): Promise<UsageBalance
     select: { currentPeriodStart: true, currentPlan: true },
   })
 
-  const cycleStartFilter = billingAccount?.currentPeriodStart
-    ? { cycleStart: { gte: billingAccount.currentPeriodStart } }
-    : {}
+  const workspace = !billingAccount?.currentPeriodStart
+    ? await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { trialStartedAt: true },
+      })
+    : null
+  const cycleStart = billingAccount?.currentPeriodStart ?? workspace?.trialStartedAt ?? null
+  const cycleStartFilter = cycleStart ? { cycleStart: { gte: cycleStart } } : {}
 
   const [packs, grantRecords, consumeRecords] = await Promise.all([
     prisma.minutePack.findMany({
@@ -91,34 +96,32 @@ export async function getUsageBalance(workspaceId: string): Promise<UsageBalance
       },
     }),
     // Pool/trial grants for the current cycle
-    prisma.usageRecord.findMany({
+    prisma.usageRecord.aggregate({
       where: {
         workspaceId,
         kind: { in: [...GRANT_KINDS] },
         deletedAt: null,
         ...cycleStartFilter,
       },
-      select: { quantity: true },
+      _sum: { quantity: true },
     }),
     // Consumption for the current cycle
-    prisma.usageRecord.findMany({
+    prisma.usageRecord.groupBy({
+      by: ["kind"],
       where: {
         workspaceId,
         kind: { in: [...CONSUME_KINDS] },
         deletedAt: null,
         ...cycleStartFilter,
       },
-      select: { kind: true, quantity: true },
+      _sum: { quantity: true },
     }),
   ])
 
-  const poolMinutes = grantRecords.reduce((sum, r) => sum + r.quantity, 0)
-  const poolConsumed = consumeRecords
-    .filter((r) => r.kind === "agent_minutes")
-    .reduce((sum, r) => sum + r.quantity, 0)
-  const overageConsumed = consumeRecords
-    .filter((r) => r.kind === "overage_minutes")
-    .reduce((sum, r) => sum + r.quantity, 0)
+  const poolMinutes = grantRecords._sum.quantity ?? 0
+  const poolConsumed = consumeRecords.find((r) => r.kind === "agent_minutes")?._sum.quantity ?? 0
+  const overageConsumed =
+    consumeRecords.find((r) => r.kind === "overage_minutes")?._sum.quantity ?? 0
 
   // Overage is consumed AFTER pool + packs, so it does NOT reduce pool remaining.
   const poolRemaining = Math.max(0, poolMinutes - poolConsumed)
@@ -150,6 +153,6 @@ export async function getUsageBalance(workspaceId: string): Promise<UsageBalance
     })),
     totalRemaining: poolRemaining + packRemaining,
     overageConsumed,
-    cycleStart: billingAccount?.currentPeriodStart ?? null,
+    cycleStart,
   }
 }

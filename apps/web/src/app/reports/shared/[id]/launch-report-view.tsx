@@ -78,6 +78,18 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
             <p className="text-lg font-semibold">{payload.counts.unresolvedHigh}</p>
           </div>
           <div>
+            <p className="text-muted-foreground">Unresolved medium</p>
+            <p className="text-lg font-semibold">
+              {payload.counts.unresolvedMedium ?? "Not evaluated"}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Unresolved low</p>
+            <p className="text-lg font-semibold">
+              {payload.counts.unresolvedLow ?? "Not evaluated"}
+            </p>
+          </div>
+          <div>
             <p className="text-muted-foreground">Fixed &amp; retest-confirmed</p>
             <p className="text-lg font-semibold">{payload.counts.fixedAndRetestConfirmed}</p>
           </div>

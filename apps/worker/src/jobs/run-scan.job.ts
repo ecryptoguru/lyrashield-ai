@@ -237,7 +237,7 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
 
 export function shouldRecordAgentMinutes(
   scanId: string,
-  exitStatus: "COMPLETED" | "FAILED",
+  exitStatus: "COMPLETED" | "PARTIAL" | "FAILED",
   runRecord: EngineRunRecord | null,
   opts: { cancelled?: boolean } = {}
 ): boolean {
@@ -1080,11 +1080,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Deep/Custom scans consume 3× minutes (applied inside recordAgentMinutes).
       // Billing outcome (founder-confirmed 2026-08-29): failed scans are never
       // billed; cancelled scans bill elapsed time only (no 1-minute floor).
-      const billingOutcome = cancelled
-        ? ("cancelled" as const)
-        : exitInterpretation.status === "COMPLETED"
-          ? ("completed" as const)
-          : ("failed" as const)
       const engineWallClockMs =
         engineStartedAtMs === null ? 0 : Math.max(1, Date.now() - engineStartedAtMs)
       let agentMinuteTerminalError: {
@@ -1092,62 +1087,97 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorCategory: string
         errorMessage: string
       } | null = null
-      if (engineWorkObserved && billingOutcome !== "failed") {
-        try {
-          const billingAccount = await prisma.billingAccount.findUnique({
-            where: { workspaceId },
-            select: { currentPeriodStart: true },
-          })
-          const metering = await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
-            mode,
-            phase: "engine_run",
-            cycleStart: billingAccount?.currentPeriodStart ?? undefined,
-            outcome: billingOutcome,
-          })
-
-          if (metering.overageMinutes > 0) {
-            // Check if overage is available (Launch Assurance plan with spend limit)
-            const acct = await prisma.billingAccount.findUnique({
-              where: { workspaceId },
-              select: { currentPlan: true, spendLimitCents: true },
-            })
-            const overageAvailable =
-              acct?.currentPlan === "LAUNCH_ASSURANCE" && (acct.spendLimitCents ?? 0) > 0
-
-            if (overageAvailable) {
-              const overage = await debitOverage(
-                workspaceId,
-                metering.overageMinutes,
-                scanId,
-                "engine_overage"
-              )
-              if (!overage.debited || overage.minutes !== metering.overageMinutes) {
-                agentMinuteTerminalError = {
-                  status: "STOPPED_BUDGET" as ScanStatus,
-                  errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
-                  errorMessage: AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
-                }
-              }
-            } else {
-              // Enter grace period (15min cap)
-              const graceResult = await enterGrace(workspaceId, engineWallClockMs)
-              if (!graceResult.shouldContinue) {
-                // Preserve provider usage, deterministic receipts, and findings before
-                // sealing the terminal entitlement outcome below.
-                agentMinuteTerminalError = {
-                  status: "STOPPED_BUDGET" as ScanStatus,
-                  errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
-                  errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
-                }
-              }
-            }
-          }
-        } catch (meterError) {
-          log.warn("Failed to record agent minutes", {
+      const meterEngineRun = async (
+        billingOutcome: "completed" | "partial" | "failed" | "cancelled"
+      ) => {
+        const billableWork =
+          target.type === "REPO" &&
+          shouldRecordAgentMinutes(
             scanId,
-            error: meterError instanceof Error ? meterError.message : String(meterError),
-          })
-          // Non-fatal: don't block the scan if metering fails
+            billingOutcome === "partial" ? "PARTIAL" : exitInterpretation.status,
+            runRecord,
+            { cancelled: billingOutcome === "cancelled" }
+          )
+        if (billableWork && billingOutcome !== "failed") {
+          try {
+            const billingAccount = await prisma.billingAccount.findUnique({
+              where: { workspaceId },
+              select: { currentPeriodStart: true },
+            })
+            const settleOverage = async (
+              minutes: number,
+              tx?: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+            ) => {
+              // Check if overage is available (Launch Assurance plan with spend limit)
+              const acct = await (tx ?? prisma).billingAccount.findUnique({
+                where: { workspaceId },
+                select: { currentPlan: true, spendLimitCents: true },
+              })
+              const overageAvailable =
+                acct?.currentPlan === "LAUNCH_ASSURANCE" && (acct.spendLimitCents ?? 0) > 0
+
+              if (overageAvailable) {
+                const overage = await debitOverage(
+                  workspaceId,
+                  minutes,
+                  scanId,
+                  "engine_overage",
+                  tx
+                )
+                if (!overage.debited || overage.minutes !== minutes) {
+                  agentMinuteTerminalError = {
+                    status: "STOPPED_BUDGET" as ScanStatus,
+                    errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+                    errorMessage: AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
+                  }
+                }
+              } else {
+                // Enter grace period (15min cap)
+                const graceResult = await enterGrace(workspaceId, engineWallClockMs, tx)
+                if (!graceResult.shouldContinue) {
+                  // Preserve provider usage, deterministic receipts, and findings before
+                  // sealing the terminal entitlement outcome below.
+                  agentMinuteTerminalError = {
+                    status: "STOPPED_BUDGET" as ScanStatus,
+                    errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+                    errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
+                  }
+                }
+              }
+              if (tx && agentMinuteTerminalError)
+                throw new Error(agentMinuteTerminalError.errorCategory)
+            }
+            const metering = await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
+              mode,
+              phase: "engine_run",
+              cycleStart: billingAccount?.currentPeriodStart ?? undefined,
+              outcome: billingOutcome,
+              // Cancellation deliberately retains its existing settlement policy.
+              ...(billingOutcome !== "cancelled"
+                ? { settleOverage: (tx, minutes) => settleOverage(minutes, tx) }
+                : {}),
+            })
+            if (billingOutcome === "cancelled" && metering.overageMinutes > 0) {
+              await settleOverage(metering.overageMinutes)
+            }
+          } catch (meterError) {
+            if (agentMinuteTerminalError) {
+              await prisma.auditLog.create({
+                data: {
+                  workspaceId,
+                  action: "billing.scan_settlement_refused",
+                  resourceType: "scan",
+                  resourceId: scanId,
+                  metadata: { reason: agentMinuteTerminalError.errorCategory },
+                },
+              })
+            }
+            log.warn("Failed to record agent minutes", {
+              scanId,
+              error: meterError instanceof Error ? meterError.message : String(meterError),
+            })
+            // Non-fatal: don't block the scan if metering fails
+          }
         }
       }
 
@@ -1167,7 +1197,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               // Spread-only-when-present (matching every other receipt field
               // below): a receipt that omits model/reasoning must not persist
               // empty strings into the manifest.
-              ...(runRecord?.model ? { model: runRecord.model } : { model: engineModel }),
+              ...(runRecord?.model ? { model: runRecord.model } : {}),
               ...(runRecord?.reasoning_effort
                 ? { reasoningEffort: runRecord.reasoning_effort }
                 : {}),
@@ -1208,6 +1238,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           : undefined
 
       if (engineResult.cancelled) {
+        await meterEngineRun("cancelled")
         return {
           status: "failed",
           errorCategory: "CANCELLED",
@@ -1669,6 +1700,18 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           where: { id: scanId },
           data: { summary: scanSummary },
         })
+        // Terminal classification, including receipt incompleteness and the
+        // reconciled budget, owns billing — process exit zero alone does not.
+        await meterEngineRun(
+          budgetExceeded || engineTerminalError?.status === "STOPPED_BUDGET"
+            ? "failed"
+            : engineTerminalError?.status === "PARTIAL"
+              ? "partial"
+              : engineTerminalError
+                ? "failed"
+                : "completed"
+        )
+        if (agentMinuteTerminalError) engineTerminalError = agentMinuteTerminalError
         await persistResultManifest({
           scanId,
           target: {

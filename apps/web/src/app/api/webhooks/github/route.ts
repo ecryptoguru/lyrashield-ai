@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { getSystemPrisma, prisma } from "@lyrashield/db"
 import { verifyWebhookSignature } from "@lyrashield/integrations"
-import { enqueueScanJob } from "@/lib/queue"
+import { enqueueScanJob, assertScanWorkerAvailable } from "@/lib/queue"
+import { assertScanAllowed } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 
 const GitHubInstallationDeletedEventSchema = z.object({
@@ -245,7 +246,13 @@ export async function POST(request: NextRequest) {
               const outcome = await handleFixPrMergedAndReevaluate(
                 integration.workspaceId,
                 pullRequest.head.ref,
-                pullRequest.number
+                pullRequest.number,
+                async (mode) => {
+                  const entitlement = await assertScanAllowed(integration.workspaceId, mode)
+                  if (!entitlement.allowed)
+                    throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
+                  await assertScanWorkerAvailable()
+                }
               )
               if (outcome) {
                 // The retest scan exists but is not queued yet — packages/db
@@ -270,14 +277,8 @@ export async function POST(request: NextRequest) {
                 loopClosureDelivered = true
               }
             } catch (loopErr) {
-              // Loop-closure is best-effort for the webhook RESPONSE (it must
-              // still 2xx so GitHub does not hammer retries on a permanent
-              // failure), but not for DELIVERY: unless the outcome was fully
-              // delivered (merge + retest + enqueue), delete the stored event
-              // marker so GitHub's automatic redelivery retries the idempotent
-              // path — the merge step no-ops on redelivery and only the
-              // missing tail is retried. Mirrors the audit-compensation
-              // pattern used for the installation.deleted track above.
+              // Clear the incomplete delivery marker and return 5xx so a
+              // redelivery can resume the durable merge/retest association.
               if (!loopClosureDelivered) {
                 await systemPrisma.webhookEvent
                   .deleteMany({
@@ -288,6 +289,7 @@ export async function POST(request: NextRequest) {
               logger.error("Fix PR loop-closure failed (marker cleared for redelivery)", {
                 error: String(loopErr),
               })
+              if (!loopClosureDelivered) throw loopErr
             }
           }
         } catch (err) {

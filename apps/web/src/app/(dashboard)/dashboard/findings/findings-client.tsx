@@ -561,6 +561,7 @@ export function FindingsClient({
 
           {/* Sort control */}
           <div className="flex items-center gap-1 rounded-full border px-3 py-1">
+            <span className="text-muted-foreground text-xs">Sort loaded results</span>
             {sortMode === "severity" ? (
               <SortDesc className="text-muted-foreground h-3 w-3" aria-hidden="true" />
             ) : (
@@ -573,7 +574,8 @@ export function FindingsClient({
                 setSortMode(next)
                 updateQueryParams({ filter, sort: next })
               }}
-              aria-label={`Sort ${ISSUE_PLURAL.toLowerCase()}`}
+              aria-label="Sort loaded results"
+              title="Sort loaded results"
               className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
             >
               <option value="priority">Priority (recommended)</option>

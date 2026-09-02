@@ -126,7 +126,7 @@ export async function startTrial(
         workspaceId,
         kind: "trial_grant",
         quantity: TRIAL_AGENT_MINUTES,
-        idempotencyKey: `${workspaceId}:${now.toISOString()}:TRIAL`,
+        idempotencyKey: `${workspaceId}:TRIAL`,
         cycleStart: now,
         metadata: { plan: "TRIAL", source: "trial", agentMinutes: TRIAL_AGENT_MINUTES },
       },

@@ -16,7 +16,7 @@
 
 import { createHash } from "node:crypto"
 
-export const LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/1.0.0"
+export const LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/1.1.0"
 
 /** The neutral default shown for the app when the customer has not opted in to naming it. */
 export const NEUTRAL_APP_LABEL = "a protected application"
@@ -45,11 +45,12 @@ export interface LaunchReportShareablePayload {
   counts: {
     unresolvedCritical: number
     unresolvedHigh: number
-    unresolvedMedium: number
-    unresolvedLow: number
+    unresolvedMedium: number | null
+    unresolvedLow: number | null
     fixedAndRetestConfirmed: number
     independentlyVerified: number
   }
+  notEvaluatedSeverities: string[]
   /** Whether the verdict was stale at issue (new code/findings since evaluation). */
   stale: boolean
   /** SHA-256 over the canonical payload (verification). */
@@ -77,6 +78,8 @@ export interface LaunchReportSource {
      */
     unresolvedCritical: number
     unresolvedHigh: number
+    unresolvedMedium?: number
+    unresolvedLow?: number
   }
   staleness: { current: boolean }
   verdictChecksum: string
@@ -141,16 +144,16 @@ export function buildLaunchReportPayload(
     counts: {
       unresolvedCritical: source.evidenceSummary.unresolvedCritical,
       unresolvedHigh: source.evidenceSummary.unresolvedHigh,
-      // v1.0.0 of the standard does not gate on MEDIUM/LOW (they feed the
-      // score/report layers, not the verdict). Publishing counts for them
-      // would imply they were evaluated for launch when they were not, so
-      // the fields carry 0 AND the report body explains the scope. The
-      // allowlist test pins this contract.
-      unresolvedMedium: 0,
-      unresolvedLow: 0,
+      // Missing legacy counts are unknown, never zero.
+      unresolvedMedium: source.evidenceSummary.unresolvedMedium ?? null,
+      unresolvedLow: source.evidenceSummary.unresolvedLow ?? null,
       fixedAndRetestConfirmed: source.evidenceSummary.retestConfirmed,
       independentlyVerified: source.evidenceSummary.verified,
     },
+    notEvaluatedSeverities: [
+      ...(source.evidenceSummary.unresolvedMedium == null ? ["MEDIUM"] : []),
+      ...(source.evidenceSummary.unresolvedLow == null ? ["LOW"] : []),
+    ],
     stale: !source.staleness.current,
   }
 
