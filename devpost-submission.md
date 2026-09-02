@@ -80,6 +80,8 @@ The repository contains a visible open-source `LICENSE`. Add the exact merged re
 
 Record a public YouTube video under three minutes with audio: 0:00–0:15 problem; 0:15–1:05 Security Lab in Chrome and DevTools WebMCP pane; 1:05–1:35 review-required rewrite, Apply, and Undo; 1:35–2:10 CLI/SARIF, Action, and receipt; 2:10–2:45 dashboard preparation plus human Start control; 2:45–3:00 limitations. State that deterministic detection is not verification and that runtime drift protection is roadmap work.
 
+The recording and publication gates are in [docs/hackathon-build/webmcp-demo-video-plan.md](docs/hackathon-build/webmcp-demo-video-plan.md). It explicitly forbids claiming native-client or authenticated-dashboard proof until the corresponding real capture exists.
+
 ## Screenshot Shot List
 
 1. Free Security Lab with the source-local privacy note and unsafe-sample findings.
