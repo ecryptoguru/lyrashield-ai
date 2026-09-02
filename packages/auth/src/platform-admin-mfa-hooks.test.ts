@@ -83,6 +83,12 @@ vi.mock("./permissions", () => ({
 
 import "./auth"
 
+it("keeps the lifetime trial claim private and rejects auth input writes", () => {
+  expect(captured.options?.user).toMatchObject({
+    additionalFields: { trialStartedAt: { type: "date", input: false, returned: false } },
+  })
+})
+
 type HookContext = {
   path: string
   headers: Headers

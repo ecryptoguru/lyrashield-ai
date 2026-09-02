@@ -4,7 +4,7 @@ import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { CreateScanSchema, resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
-import { evaluateScanEntitlement } from "@lyrashield/billing"
+import { evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { authErrorResponse } from "../../../../lib/api-auth"
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     void parsed.data.goal
 
     // Same workspace permission and target ownership checks as scan creation.
-    await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
 
     // The preflight runs on composer interaction, so it gets its own
     // (looser) per-workspace budget — but still a budget: it does real
@@ -193,12 +193,7 @@ export async function GET(request: Request) {
       entitlement.code === "NO_MINUTES_REMAINING" &&
       entitlement.plan === "FREE" &&
       !entitlement.isTrial &&
-      (
-        await prisma.workspace.findUnique({
-          where: { id: workspaceId },
-          select: { trialStartedAt: true },
-        })
-      )?.trialStartedAt === null
+      (await isTrialAvailable(workspaceId, session.userId))
 
     logger.info("Scan eligibility preflight", {
       workspaceId,

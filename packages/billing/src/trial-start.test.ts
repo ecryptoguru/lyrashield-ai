@@ -1,91 +1,104 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const withWorkspaceRLSMock = vi.hoisted(() => vi.fn())
-const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
-const workspaceUpdateMock = vi.hoisted(() => vi.fn().mockResolvedValue({ count: 1 }))
-const billingUpsertMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "billing_1" }))
-const usageCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "usage_1" }))
-const membershipFindManyMock = vi.hoisted(() => vi.fn())
-const workspaceFindFirstMock = vi.hoisted(() => vi.fn())
-
-vi.mock("@lyrashield/db", () => ({
-  prisma: {},
-  withWorkspaceRLS: withWorkspaceRLSMock,
+const { tx, withWorkspaceRLSMock } = vi.hoisted(() => ({
+  tx: {
+    $executeRaw: vi.fn(),
+    workspace: { findUnique: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    user: { findUnique: vi.fn(), updateMany: vi.fn() },
+    billingAccount: { upsert: vi.fn() },
+    usageRecord: { create: vi.fn() },
+  },
+  withWorkspaceRLSMock: vi.fn(),
 }))
-vi.mock("@lyrashield/logger", () => ({
-  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}))
-vi.mock("@lyrashield/pricing", () => ({ CLOUD_PLAN_MAP: { TRIAL: { targetCaps: 3 } } }))
-
-import { startTrial, TRIAL_AGENT_MINUTES } from "./trial"
+vi.mock("@lyrashield/db", () => ({ prisma: tx, withWorkspaceRLS: withWorkspaceRLSMock }))
+vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn() } }))
+import { startTrial, isTrialAvailable } from "./trial"
 
 beforeEach(() => {
-  vi.clearAllMocks()
-  const tx = {
-    $executeRaw: executeRawMock,
-    workspaceMember: {
-      findMany: membershipFindManyMock,
-    },
-    workspace: {
-      findFirst: workspaceFindFirstMock,
-      updateMany: workspaceUpdateMock,
-    },
-    billingAccount: { upsert: billingUpsertMock },
-    usageRecord: { create: usageCreateMock },
-  }
-  membershipFindManyMock.mockResolvedValue([{ workspaceId: "ws_1" }])
-  workspaceFindFirstMock.mockResolvedValue(null)
-  withWorkspaceRLSMock.mockImplementation((workspaceId, callback) => {
-    expect(workspaceId).toBe("ws_1")
-    return callback(tx)
-  })
+  vi.resetAllMocks()
+  tx.workspace.findUnique.mockResolvedValue({ plan: "FREE", trialStartedAt: null })
+  tx.workspace.findFirst.mockResolvedValue(null)
+  tx.user.findUnique.mockResolvedValue({ trialStartedAt: null })
+  tx.workspace.updateMany.mockResolvedValue({ count: 1 })
+  tx.user.updateMany.mockResolvedValue({ count: 1 })
+  withWorkspaceRLSMock.mockImplementation((_id, run) => run(tx))
 })
 
 describe("startTrial", () => {
-  it("serializes a user trial and atomically creates its entitlement", async () => {
-    const result = await startTrial("ws_1", "user_1")
-
-    expect(executeRawMock).toHaveBeenCalledOnce()
-    expect(workspaceUpdateMock).toHaveBeenCalledWith({
-      where: { id: "ws_1", trialStartedAt: null },
-      data: expect.objectContaining({ plan: "FREE", deepAllowed: false }),
+  it("retains old-revision trial history before the durable user marker was written", async () => {
+    tx.workspace.findFirst.mockResolvedValue({ id: "legacy" })
+    expect(await isTrialAvailable("ws", "user")).toBe(false)
+    expect(await startTrial("ws", "user")).toEqual({
+      started: false,
+      alreadyUsed: true,
+      trialEndsAt: null,
     })
-    expect(billingUpsertMock).toHaveBeenCalledOnce()
-    expect(usageCreateMock).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        workspaceId: "ws_1",
-        kind: "trial_grant",
-        quantity: TRIAL_AGENT_MINUTES,
-      }),
+    expect(tx.user.updateMany).toHaveBeenCalledWith({
+      where: { id: "user", trialStartedAt: null },
+      data: { trialStartedAt: expect.any(Date) },
     })
-    expect(result).toMatchObject({ started: true, alreadyUsed: false })
+    expect(tx.workspace.updateMany).not.toHaveBeenCalled()
+    expect(tx.usageRecord.create).not.toHaveBeenCalled()
   })
-
-  it("does not grant another trial when the user already used one", async () => {
-    const startedAt = new Date("2026-08-01T00:00:00.000Z")
-    membershipFindManyMock.mockResolvedValueOnce([
-      { workspaceId: "ws_1" },
-      { workspaceId: "ws_other" },
-    ])
-    workspaceFindFirstMock.mockImplementationOnce(
-      async ({ where }: { where: { id: { in: string[] } } }) => {
-        // Workspace and WorkspaceMember intentionally have no RLS policy and are
-        // excluded from extension auto-scoping. The ws_1 transaction GUC only
-        // filters RLS-protected entitlement tables, so ws_other remains visible.
-        expect(where.id.in).toEqual(["ws_1", "ws_other"])
-        return { id: "ws_other", trialStartedAt: startedAt }
-      }
-    )
-
-    const result = await startTrial("ws_1", "user_1")
-
-    expect(withWorkspaceRLSMock).toHaveBeenCalledWith("ws_1", expect.any(Function))
-    expect(membershipFindManyMock).toHaveBeenCalledWith({
-      where: { userId: "user_1" },
-      select: { workspaceId: true },
+  it("serializes and claims the user with the entitlement in one scoped transaction", async () => {
+    expect(await startTrial("ws", "user")).toMatchObject({ started: true, alreadyUsed: false })
+    expect(withWorkspaceRLSMock).toHaveBeenCalledWith("ws", expect.any(Function))
+    expect(tx.$executeRaw).toHaveBeenCalledOnce()
+    expect(tx.workspace.updateMany).toHaveBeenCalledWith({
+      where: { id: "ws", plan: "FREE", trialStartedAt: null },
+      data: { trialStartedAt: expect.any(Date), deepAllowed: false },
     })
-    expect(result).toMatchObject({ started: false, alreadyUsed: true })
-    expect(workspaceUpdateMock).not.toHaveBeenCalled()
-    expect(usageCreateMock).not.toHaveBeenCalled()
+    expect(tx.usageRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ quantity: 100, kind: "trial_grant" }),
+    })
+  })
+  it("reuses the creator transaction instead of committing a second transaction", async () => {
+    await startTrial("ws", "user", tx as never)
+    expect(withWorkspaceRLSMock).not.toHaveBeenCalled()
+    expect(tx.usageRecord.create).toHaveBeenCalledOnce()
+  })
+  it("does not grant again after a durable user claim", async () => {
+    tx.user.updateMany.mockResolvedValue({ count: 0 })
+    expect(await startTrial("ws", "user")).toEqual({
+      started: false,
+      alreadyUsed: true,
+      trialEndsAt: null,
+    })
+    expect(tx.workspace.updateMany).not.toHaveBeenCalled()
+    expect(tx.usageRecord.create).not.toHaveBeenCalled()
+  })
+  it("returns the existing trial without another grant", async () => {
+    tx.workspace.findUnique.mockResolvedValue({ plan: "FREE", trialStartedAt: new Date() })
+    expect(await startTrial("ws", "user")).toMatchObject({ started: false, alreadyUsed: false })
+    expect(tx.user.updateMany).not.toHaveBeenCalled()
+  })
+  it("never downgrades a paid workspace", async () => {
+    tx.workspace.findUnique.mockResolvedValue({ plan: "PRO", trialStartedAt: null })
+    await expect(startTrial("ws", "user")).rejects.toThrow("TRIAL_PAID_PLAN")
+    expect(tx.user.updateMany).not.toHaveBeenCalled()
+  })
+  it("aborts the claim if a paid upgrade wins the conditional write", async () => {
+    tx.workspace.updateMany.mockResolvedValue({ count: 0 })
+    await expect(startTrial("ws", "user")).rejects.toThrow("TRIAL_PAID_PLAN")
+    expect(tx.billingAccount.upsert).not.toHaveBeenCalled()
+  })
+  it("propagates a grant failure for transaction rollback", async () => {
+    tx.usageRecord.create.mockRejectedValue(new Error("grant failed"))
+    await expect(startTrial("ws", "user")).rejects.toThrow("grant failed")
+  })
+})
+
+describe("isTrialAvailable", () => {
+  it("requires an unused user and a free workspace with no trial", async () => {
+    expect(await isTrialAvailable("ws", "user")).toBe(true)
+    tx.user.findUnique.mockResolvedValue({ trialStartedAt: new Date() })
+    expect(await isTrialAvailable("ws", "user")).toBe(false)
+    tx.user.findUnique.mockResolvedValue(null)
+    expect(await isTrialAvailable("ws", "user")).toBe(false)
+    tx.user.findUnique.mockResolvedValue({ trialStartedAt: null })
+    tx.workspace.findUnique.mockResolvedValue({ plan: "PRO", trialStartedAt: null })
+    expect(await isTrialAvailable("ws", "user")).toBe(false)
+    tx.workspace.findUnique.mockResolvedValue({ plan: "FREE", trialStartedAt: new Date() })
+    expect(await isTrialAvailable("ws", "user")).toBe(false)
   })
 })

@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     }
 
     const workspaceId = randomUUID()
-    const result = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const { result, trial } = await withWorkspaceRLS(workspaceId, async (tx) => {
       const workspace = await tx.workspace.create({
         data: {
           id: workspaceId,
@@ -105,9 +105,9 @@ export async function POST(request: Request) {
         },
       })
 
-      return workspace
+      const trial = await startTrial(workspace.id, session.userId, tx)
+      return { result: workspace, trial }
     })
-    const trial = await startTrial(result.id, session.userId)
 
     await prisma.auditLog.create({
       data: {
@@ -134,7 +134,8 @@ export async function POST(request: Request) {
         mode: result.mode,
         plan: result.plan,
         trialStarted: trial.started,
-        trialEndsAt: trial.trialEndsAt.toISOString(),
+        trialAlreadyUsed: trial.alreadyUsed,
+        trialEndsAt: trial.trialEndsAt?.toISOString() ?? null,
       },
     })
   } catch (error) {

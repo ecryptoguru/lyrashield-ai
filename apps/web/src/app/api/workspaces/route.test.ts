@@ -62,6 +62,36 @@ describe("POST /api/workspaces", () => {
     })
     expect(tx.workspaceMember.create).not.toHaveBeenCalled()
     expect(tx.policy.create).not.toHaveBeenCalled()
-    expect(startTrial).toHaveBeenCalledWith(expect.any(String), "user-1")
+    expect(startTrial).toHaveBeenCalledWith(expect.any(String), "user-1", tx)
+  })
+  it("creates the workspace without a second trial when already used", async () => {
+    vi.mocked(startTrial).mockResolvedValueOnce({
+      started: false,
+      alreadyUsed: true,
+      trialEndsAt: null,
+    })
+    const response = await POST(
+      new Request("http://localhost/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "Another workspace", mode: "VIBE" }),
+      })
+    )
+    expect(response.status).toBe(200)
+    expect((await response.json()).data).toMatchObject({
+      trialStarted: false,
+      trialAlreadyUsed: true,
+      trialEndsAt: null,
+    })
+  })
+  it("fails the creation transaction when trial provisioning fails", async () => {
+    vi.mocked(startTrial).mockRejectedValueOnce(new Error("grant failed"))
+    const response = await POST(
+      new Request("http://localhost/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "Retry workspace", mode: "VIBE" }),
+      })
+    )
+    expect(response.status).toBe(500)
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
   })
 })

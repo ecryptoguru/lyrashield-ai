@@ -79,12 +79,19 @@ describe("nav-items lifecycle primary destinations", () => {
 })
 
 describe("nav-items workspace destinations", () => {
+  it("gates billing on server-confirmed permission on desktop and mobile", () => {
+    for (const canManageBilling of [false, true]) {
+      const nav = resolveNav({ canManageBilling })
+      for (const items of [nav.items, nav.secondary, nav.more]) {
+        expect(items.some((item) => item.href === "/dashboard/billing")).toBe(canManageBilling)
+      }
+    }
+  })
   it("keeps coding agents before direct service integrations", () => {
     expect(SECONDARY_NAV_ITEMS.map((item) => item.href)).toEqual([
       "/dashboard/notifications",
       "/dashboard/agents",
       "/dashboard/integrations",
-      "/dashboard/billing",
       "/dashboard/team",
       "/dashboard/settings",
     ])

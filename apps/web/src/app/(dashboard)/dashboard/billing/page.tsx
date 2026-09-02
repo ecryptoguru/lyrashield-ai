@@ -2,7 +2,13 @@ import type { Metadata } from "next"
 import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
-import { getUsageBalance, getTrialState, getGraceState, CLOUD_PLAN_MAP } from "@lyrashield/billing"
+import {
+  getUsageBalance,
+  getTrialState,
+  getGraceState,
+  isTrialAvailable,
+  CLOUD_PLAN_MAP,
+} from "@lyrashield/billing"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
@@ -12,7 +18,8 @@ import { UpgradeNowButton } from "./upgrade-now-button"
 import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
-import { headers } from "next/headers"
+import { headers, cookies } from "next/headers"
+import { parsePlanIntent, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
 import { getRequestBillingAdmission, resolveRequestBillingProvider } from "@/lib/billing-admission"
 import { BillingReturnNotice } from "./billing-return-notice"
 
@@ -23,7 +30,7 @@ export const metadata: Metadata = {
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ checkout?: string; topup?: string }>
+  searchParams: Promise<{ checkout?: string; topup?: string; plan?: string }>
 }) {
   const session = await getCachedSession()
   if (!session) return null
@@ -54,13 +61,16 @@ export default async function BillingPage({
   })
   const { provider: checkoutProvider } = resolveRequestBillingProvider(billingRequest)
   const returns = await searchParams
+  const selectedPlan =
+    parsePlanIntent(returns.plan) ??
+    parsePlanIntent((await cookies()).get(PLAN_INTENT_COOKIE)?.value)
   const purchasesAvailable = getRequestBillingAdmission(
     checkoutProvider,
     workspaceId,
     billingRequest
   ).allowed
 
-  const [billingAccount, balance, trialState, graceState] = await Promise.all([
+  const [billingAccount, balance, trialState, graceState, trialAvailable] = await Promise.all([
     prisma.billingAccount.findUnique({
       where: { workspaceId },
       select: {
@@ -77,6 +87,7 @@ export default async function BillingPage({
     getUsageBalance(workspaceId),
     getTrialState(workspaceId),
     getGraceState(workspaceId),
+    canManageBilling ? isTrialAvailable(workspaceId, session.userId) : Promise.resolve(false),
   ])
 
   const plan = billingAccount?.currentPlan ?? "FREE"
@@ -120,7 +131,7 @@ export default async function BillingPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="space-y-4">
               <div>
                 <p className="text-2xl font-bold">{cloudPlan?.name ?? plan}</p>
                 {billingAccount?.interval && (
@@ -135,7 +146,8 @@ export default async function BillingPage({
                   isLaunchAssurance={isLaunchAssurance}
                   workspaceId={workspaceId}
                   purchasesAvailable={purchasesAvailable}
-                  trialAvailable={trialState.startedAt === null}
+                  trialAvailable={trialAvailable}
+                  selectedPlan={selectedPlan}
                 />
               )}
             </div>

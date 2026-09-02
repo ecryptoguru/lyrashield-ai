@@ -25,6 +25,7 @@ import {
   type SignupAttribution,
 } from "@/lib/analytics"
 import { storePendingInvitation } from "@/lib/pending-invitation"
+import { parsePlanIntent, planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
 
 const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
   /\/$/,
@@ -53,10 +54,13 @@ export default function SignUpPage() {
   // page look like a bare credentials form. Show a skeleton instead.
   const [providersLoading, setProvidersLoading] = useState(true)
   const attribution = useRef<SignupAttribution>({})
+  const selectedPlan = useRef<string | null>(null)
   const [invited, setInvited] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    selectedPlan.current = parsePlanIntent(params.get("plan"))
+    rememberPlanIntent(selectedPlan.current)
     // Team invitation link: stash the token for the post-auth bridge and
     // strip it from the URL so it cannot leak into redirects or analytics.
     const inviteToken = params.get("invite")
@@ -79,7 +83,7 @@ export default function SignUpPage() {
       oauthErrorTimer = window.setTimeout(() => {
         setError("Social sign up could not be completed. Please try again.")
       }, 0)
-      window.history.replaceState(null, "", signupErrorUrl(nextAttribution))
+      window.history.replaceState(null, "", signupErrorUrl(nextAttribution, selectedPlan.current))
     }
 
     void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
@@ -123,7 +127,7 @@ export default function SignUpPage() {
         name,
         email,
         password,
-        callbackURL: "/onboarding",
+        callbackURL: planIntentPath("/onboarding", selectedPlan.current),
       })
 
       if (signUpError) {
@@ -136,7 +140,7 @@ export default function SignUpPage() {
       // When email verification is required the server returns token: null;
       // otherwise Better Auth signs the new user in immediately.
       if (data?.token) {
-        router.push("/onboarding")
+        router.push(planIntentPath("/onboarding", selectedPlan.current))
         router.refresh()
         return
       }
@@ -162,8 +166,8 @@ export default function SignUpPage() {
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/onboarding",
-        errorCallbackURL: signupErrorUrl(attribution.current),
+        callbackURL: planIntentPath("/onboarding", selectedPlan.current),
+        errorCallbackURL: signupErrorUrl(attribution.current, selectedPlan.current),
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "GitHub sign up failed. Please try again.")
@@ -182,8 +186,8 @@ export default function SignUpPage() {
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/onboarding",
-        errorCallbackURL: signupErrorUrl(attribution.current),
+        callbackURL: planIntentPath("/onboarding", selectedPlan.current),
+        errorCallbackURL: signupErrorUrl(attribution.current, selectedPlan.current),
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "Google sign up failed. Please try again.")
@@ -202,8 +206,8 @@ export default function SignUpPage() {
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "microsoft",
-        callbackURL: "/onboarding",
-        errorCallbackURL: signupErrorUrl(attribution.current),
+        callbackURL: planIntentPath("/onboarding", selectedPlan.current),
+        errorCallbackURL: signupErrorUrl(attribution.current, selectedPlan.current),
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "Microsoft sign up failed. Please try again.")
@@ -219,7 +223,10 @@ export default function SignUpPage() {
     setResendLoading(true)
     setResendStatus("idle")
     try {
-      await authClient.sendVerificationEmail({ email, callbackURL: "/onboarding" })
+      await authClient.sendVerificationEmail({
+        email,
+        callbackURL: planIntentPath("/onboarding", selectedPlan.current),
+      })
       setResendStatus("success")
       setResendCooldown(30)
       const tick = () => {
