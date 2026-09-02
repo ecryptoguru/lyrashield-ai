@@ -1,18 +1,99 @@
 use crate::scan::types::*;
 use async_trait::async_trait;
 use serde_json::Value as JsonValue;
+use sha2::{Digest, Sha384};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_sql::{Migration, MigrationKind};
 
-pub fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "create scans and findings tables",
-        sql: include_str!("../sql/001_init.sql"),
-        kind: MigrationKind::Up,
-    }]
+const MIGRATIONS: &[(i64, &str, &str)] = &[(
+    1,
+    "create scans and findings tables",
+    include_str!("../sql/001_init.sql"),
+)];
+const MIGRATION_TABLE: &str = "CREATE TABLE IF NOT EXISTS _sqlx_migrations (
+    version BIGINT PRIMARY KEY,
+    description TEXT NOT NULL,
+    installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    success BOOLEAN NOT NULL,
+    checksum BLOB NOT NULL,
+    execution_time BIGINT NOT NULL
+);";
+// Keep the existing app config path and idempotent schema so upgrades retain data.
+pub fn initialize_database(app: &AppHandle) -> Result<(), String> {
+    let path = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("app_config_dir: {}", e))?;
+    open_database(&path.join("lyrashield.db"))?;
+    Ok(())
+}
+
+fn open_database(path: &std::path::Path) -> Result<rusqlite::Connection, String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create database directory: {}", e))?;
+    }
+    let mut conn = rusqlite::Connection::open(path).map_err(|e| format!("rusqlite open: {}", e))?;
+    // SQLx created shipped databases in WAL mode; retain that concurrency contract.
+    conn.pragma_update(None, "journal_mode", "WAL")
+        .map_err(|e| format!("database journal mode: {}", e))?;
+    migrate_database(&mut conn, MIGRATIONS)?;
+    Ok(conn)
+}
+
+// Startup owns schema validation. Normal operations must not acquire migration
+// write locks, or recreate a database removed after startup.
+fn connect_database(path: &std::path::Path) -> Result<rusqlite::Connection, String> {
+    rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .map_err(|e| format!("rusqlite open: {}", e))
+}
+
+// Preserve the SQLx migration ledger and checksum contract used by shipped databases.
+fn migrate_database(
+    conn: &mut rusqlite::Connection,
+    migrations: &[(i64, &str, &str)],
+) -> Result<(), String> {
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|e| format!("migration transaction: {}", e))?;
+    tx.execute_batch(MIGRATION_TABLE)
+        .map_err(|e| format!("migration ledger: {}", e))?;
+    let applied = {
+        let mut stmt = tx
+            .prepare("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
+            .map_err(|e| format!("read migrations: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, bool>(1)?,
+                    row.get::<_, Vec<u8>>(2)?,
+                ))
+            })
+            .map_err(|e| format!("read migrations: {}", e))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("read migrations: {}", e))?
+    };
+    for (version, success, checksum) in &applied {
+        let Some((_, _, sql)) = migrations.iter().find(|(id, _, _)| id == version) else {
+            return Err(format!("unknown applied migration: {}", version));
+        };
+        if !success || checksum.as_slice() != Sha384::digest(sql.as_bytes()).as_slice() {
+            return Err(format!("dirty or changed migration: {}", version));
+        }
+    }
+    for (version, description, sql) in migrations {
+        if applied.iter().any(|(id, _, _)| id == version) {
+            continue;
+        }
+        let started = std::time::Instant::now();
+        tx.execute_batch(sql)
+            .map_err(|e| format!("migration {} failed: {}", version, e))?;
+        tx.execute("INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) VALUES (?1, ?2, 1, ?3, ?4)",
+            rusqlite::params![version, description, Sha384::digest(sql.as_bytes()).as_slice(), started.elapsed().as_nanos().min(i64::MAX as u128) as i64])
+            .map_err(|e| format!("record migration {}: {}", version, e))?;
+    }
+    tx.commit().map_err(|e| format!("commit migrations: {}", e))
 }
 
 // === Abstraction trait for testability (ponytail: trait + rusqlite fallback for tests) ===
@@ -26,7 +107,7 @@ pub trait ScanStorage: Send + Sync {
     ) -> Result<Vec<HashMap<String, JsonValue>>, String>;
 }
 
-// Production storage via tauri-plugin-sql
+// Production storage uses the existing native rusqlite connection path.
 pub struct TauriStorage {
     app: AppHandle,
 }
@@ -34,10 +115,6 @@ pub struct TauriStorage {
 #[async_trait]
 impl ScanStorage for TauriStorage {
     async fn execute(&self, sql: &str, params: Vec<JsonValue>) -> Result<(), String> {
-        let _db = self
-            .app
-            .try_state::<tauri_plugin_sql::DbInstances>()
-            .ok_or_else(|| "DbInstances not available".to_string())?;
         open_via_app_path(&self.app, sql, params, true).await
     }
     async fn select(
@@ -45,10 +122,6 @@ impl ScanStorage for TauriStorage {
         sql: &str,
         params: Vec<JsonValue>,
     ) -> Result<Vec<HashMap<String, JsonValue>>, String> {
-        let _db = self
-            .app
-            .try_state::<tauri_plugin_sql::DbInstances>()
-            .ok_or_else(|| "DbInstances not available".to_string())?;
         select_via_app_path(&self.app, sql, params).await
     }
 }
@@ -65,18 +138,12 @@ async fn open_via_app_path(
         .app_config_dir()
         .map_err(|e| format!("app_config_dir: {}", e))?;
     let db_path = app_path.join("lyrashield.db");
-    let _conn_str = format!("sqlite:{}", db_path.to_string_lossy());
     // Use rusqlite directly for both execute/select (same file, durable)
     let db_path_clone = db_path.clone();
     let sql_owned = sql.to_string();
     let params_owned = params.clone();
     tokio::task::spawn_blocking(move || {
-        let conn = rusqlite::Connection::open(&db_path_clone)
-            .map_err(|e| format!("rusqlite open: {}", e))?;
-        // ensure schema exists
-        let init = include_str!("../sql/001_init.sql");
-        conn.execute_batch(init)
-            .map_err(|e| format!("init batch: {}", e))?;
+        let conn = connect_database(&db_path_clone)?;
         if is_execute {
             let mut stmt = conn
                 .prepare(&sql_owned)
@@ -104,11 +171,7 @@ async fn select_via_app_path(
     let sql_owned = sql.to_string();
     let params_owned = params;
     tokio::task::spawn_blocking(move || {
-        let conn =
-            rusqlite::Connection::open(&db_path).map_err(|e| format!("rusqlite open: {}", e))?;
-        let init = include_str!("../sql/001_init.sql");
-        conn.execute_batch(init)
-            .map_err(|e| format!("init batch: {}", e))?;
+        let conn = connect_database(&db_path)?;
         let mut stmt = conn
             .prepare(&sql_owned)
             .map_err(|e| format!("prepare: {}", e))?;
@@ -234,11 +297,7 @@ fn test_storage() -> Arc<TestStorage> {
 }
 
 fn storage_for(app: &AppHandle) -> Arc<dyn ScanStorage> {
-    if app.try_state::<tauri_plugin_sql::DbInstances>().is_some() {
-        Arc::new(TauriStorage { app: app.clone() }) as Arc<dyn ScanStorage>
-    } else {
-        test_storage() as Arc<dyn ScanStorage>
-    }
+    Arc::new(TauriStorage { app: app.clone() }) as Arc<dyn ScanStorage>
 }
 
 // === Public helpers that fail-closed (persistence failure prevents success) ===
@@ -619,6 +678,169 @@ fn get_string(row: &HashMap<String, JsonValue>, key: &str) -> Result<String, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn normal_reads_do_not_acquire_migration_write_locks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lyrashield.db");
+        assert!(connect_database(&path).is_err());
+        assert!(!path.exists());
+        let writer = open_database(&path).unwrap();
+        let mode: String = writer
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
+            .unwrap();
+        assert_eq!(mode, "wal");
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let reader = connect_database(&path).unwrap();
+        reader.busy_timeout(std::time::Duration::ZERO).unwrap();
+        let count: i64 = reader
+            .query_row("SELECT COUNT(*) FROM _sqlx_migrations", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 1);
+        writer.execute_batch("ROLLBACK").unwrap();
+    }
+
+    #[test]
+    fn opens_an_existing_sqlx_database_without_rewriting_its_receipt() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("lyrashield.db");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(include_str!("../sql/001_init.sql"))
+            .unwrap();
+        conn.execute_batch(MIGRATION_TABLE).unwrap();
+        // SHA-384 of the shipped v1 SQL, matching SQLx Migration::new.
+        conn.execute("INSERT INTO _sqlx_migrations (version,description,success,checksum,execution_time) VALUES (1,'create scans and findings tables',1,x'3a07a2a94f5c125f3e6e67331ceb6b900897c7c1c7bf58a505e202c4e14844d440e510be74038e6df9273660cd18d4c8',42)", []).unwrap();
+        conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES ('legacy','local','standard','completed','before-upgrade')", []).unwrap();
+        drop(conn);
+        let conn = open_database(&path).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT started_at FROM scans WHERE scan_id='legacy'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "before-upgrade"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT execution_time FROM _sqlx_migrations WHERE version=1",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            42
+        );
+    }
+
+    #[test]
+    fn disk_database_preserves_sqlx_migrations_and_existing_history() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("config/lyrashield.db");
+        // First startup creates the directory, schema and SQLx-compatible version receipt.
+        let conn = open_database(&path).unwrap();
+        let checksum: Vec<u8> = conn
+            .query_row(
+                "SELECT checksum FROM _sqlx_migrations WHERE version = 1 AND success = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            checksum,
+            Sha384::digest(MIGRATIONS[0].2.as_bytes()).to_vec()
+        );
+        conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES ('existing','local','standard','completed','now')", []).unwrap();
+        drop(conn);
+        // Existing data and version bookkeeping survive repeat startup.
+        for _ in 0..2 {
+            let conn = open_database(&path).unwrap();
+            assert_eq!(
+                conn.query_row(
+                    "SELECT count(*) FROM scans WHERE scan_id='existing'",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+                1
+            );
+            assert_eq!(
+                conn.query_row("SELECT count(*) FROM _sqlx_migrations", [], |row| row
+                    .get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+        }
+        let mut conn = open_database(&path).unwrap();
+        let broken = [
+            MIGRATIONS[0],
+            (
+                2,
+                "broken",
+                "CREATE TABLE should_rollback (id INTEGER); INVALID SQL;",
+            ),
+        ];
+        assert!(migrate_database(&mut conn, &broken).is_err());
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name='should_rollback'",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM _sqlx_migrations", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        drop(conn);
+        let mut conn = open_database(&path).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM scans WHERE scan_id='existing'",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+        let next = [
+            MIGRATIONS[0],
+            (2, "next", "CREATE TABLE next_version (id INTEGER);"),
+        ];
+        migrate_database(&mut conn, &next).unwrap();
+        migrate_database(&mut conn, &next).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM _sqlx_migrations", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn existing_sqlx_ledger_rejects_tampering_dirty_and_unknown_versions() {
+        for alteration in [
+            "UPDATE _sqlx_migrations SET checksum=x'00'",
+            "UPDATE _sqlx_migrations SET success=0",
+            "UPDATE _sqlx_migrations SET version=99",
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            let path = tmp.path().join("lyrashield.db");
+            let conn = open_database(&path).unwrap();
+            conn.execute(alteration, []).unwrap();
+            drop(conn);
+            assert!(open_database(&path).is_err());
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let invalid_path = tmp.path().join("directory.db");
+        std::fs::create_dir(&invalid_path).unwrap();
+        assert!(open_database(&invalid_path).is_err());
+    }
     #[tokio::test]
     async fn sequenced_events_roundtrip() {
         let store = TestStorage::new_in_memory();

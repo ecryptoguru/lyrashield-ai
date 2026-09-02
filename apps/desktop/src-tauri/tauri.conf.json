@@ -56,9 +56,6 @@
       "windows": {
         "installMode": "passive"
       }
-    },
-    "sql": {
-      "preload": ["sqlite:lyrashield.db"]
     }
   }
 }

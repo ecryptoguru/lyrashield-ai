@@ -16,11 +16,11 @@ use commands::*;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:lyrashield.db", crate::scan::store::migrations())
-                .build(),
-        )
+        .setup(|app| {
+            crate::scan::store::initialize_database(app.handle())
+                .map_err(std::io::Error::other)?;
+            Ok(())
+        })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
