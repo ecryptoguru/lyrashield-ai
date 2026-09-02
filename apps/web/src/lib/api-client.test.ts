@@ -5,8 +5,16 @@ import { z } from "zod"
 const mockFetch = vi.fn()
 vi.stubGlobal("fetch", mockFetch)
 
-const { apiGet, apiPost, apiPatch, apiDelete, apiGetPaginated, apiGetConditional, ApiError } =
-  await import("./api-client")
+const {
+  apiGet,
+  apiPost,
+  apiPut,
+  apiPatch,
+  apiDelete,
+  apiGetPaginated,
+  apiGetConditional,
+  ApiError,
+} = await import("./api-client")
 
 function jsonResponse(data: unknown, success = true, status = 200) {
   return {
@@ -20,6 +28,24 @@ function jsonResponse(data: unknown, success = true, status = 200) {
 }
 
 describe("api-client", () => {
+  it("sends domain verification as a validated PUT through the shared request helper", async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ status: "VERIFIED" }))
+    await expect(
+      apiPut(
+        "/api/target-domain-verifications",
+        { workspaceId: "ws1", verificationId: "p1" },
+        { schema: z.object({ status: z.literal("VERIFIED") }) }
+      )
+    ).resolves.toEqual({ status: "VERIFIED" })
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/target-domain-verifications",
+      expect.objectContaining({
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: "ws1", verificationId: "p1" }),
+      })
+    )
+  })
   beforeEach(() => {
     mockFetch.mockReset()
   })

@@ -39,6 +39,7 @@ vi.mock("@lyrashield/db", () => {
   return {
     Prisma: { Decimal: FakeDecimal },
     prisma: {
+      auditLog: { create: vi.fn() },
       conversion: {
         findFirst: vi.fn(),
       },
@@ -72,6 +73,16 @@ const REVERSED_COMMISSION = {
 }
 
 describe("clawback — RISK-C3 replay guard", () => {
+  it("does not reopen manual review for an already reversed above-threshold commission", async () => {
+    vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
+      commissions: [{ ...REVERSED_COMMISSION, amount: { gt: () => true, toString: () => "500" } }],
+    } as never)
+    expect(
+      await onRefund({ provider: "polar", externalId: "reversed-large", reason: "REFUND" })
+    ).toMatchObject({ replay: true, manualReview: false })
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+    expect(prisma.commission.update).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -197,11 +208,20 @@ describe("clawback — RISK-C3 replay guard", () => {
       const result = await onRefund({
         provider: "razorpay",
         externalId: "pay-789",
+        workspaceId: "workspace-1",
         reason: "REFUND",
         ...evidence,
       })
       expect(result.reversed).toBe(false)
       expect(result.manualReview).toBe(true)
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: "affiliate.clawback.manual_review",
+            workspaceId: "workspace-1",
+          }),
+        })
+      )
     }
     expect(prisma.commission.update).not.toHaveBeenCalled()
   })

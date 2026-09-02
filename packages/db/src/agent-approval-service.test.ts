@@ -93,6 +93,27 @@ describe("agent approval mutation errors", () => {
     vi.clearAllMocks()
   })
 
+  it.each([approveApproval, denyApproval])(
+    "cannot overwrite a concurrent decision or execution",
+    async (decide) => {
+      agentApproval.findFirst.mockResolvedValue({ status: "PENDING", expiresAt: null })
+      agentApproval.updateMany.mockResolvedValue({ count: 0 })
+      await expect(decide("approval-1", "workspace-1", "admin-1")).rejects.toMatchObject({
+        code: "NOT_PENDING",
+      })
+      expect(agentApproval.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: "approval-1",
+            workspaceId: "workspace-1",
+            status: "PENDING",
+          }),
+        })
+      )
+      expect(agentApproval.update).not.toHaveBeenCalled()
+    }
+  )
+
   it("returns a stable typed code when an approval is missing", async () => {
     agentApproval.findFirst.mockResolvedValue(null)
 
@@ -115,6 +136,18 @@ describe("agent approval mutation errors", () => {
 describe("approval execution claim state machine", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it("never releases a possibly partial provider write for automatic retry", async () => {
+    agentApproval.updateMany.mockResolvedValue({ count: 1 })
+    expect(
+      await failApprovalExecution("approval-1", "workspace-1", { error: "uncertain write" }, false)
+    ).toBe("TERMINAL")
+    expect(agentApproval.updateMany).toHaveBeenCalledOnce()
+    expect(agentApproval.updateMany).toHaveBeenCalledWith({
+      where: { id: "approval-1", workspaceId: "workspace-1", status: "EXECUTING" },
+      data: { status: "EXECUTION_FAILED", result: { error: "uncertain write" } },
+    })
   })
 
   it("claims only APPROVED, hash-matching, unexpired rows and increments attempts", async () => {

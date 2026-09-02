@@ -1,5 +1,4 @@
 ---
-import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -92,35 +91,9 @@ const jsonLd: unknown[] = [
   </p>
   <pre><code>npx lyrashield install vscode</code></pre>
   <p>
-    Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand
-    below. VS Code's verified LyraShield path is MCP configuration; it is not a preferred Agent
-    Plugin client.
-  </p>
-
-  <h2>Manual configuration</h2>
-  <p>Prefer a plain MCP config entry? Configure it by hand below.</p>
-
-  <div class="callout callout--warn">
-    <strong>Critical gotcha:</strong> VS Code uses the root key <code>servers</code>, not{" "}
-    <code>mcpServers</code>. Using <code>mcpServers</code> silently fails. Every entry also
-    requires a <code>"type": "stdio"</code> field.
-  </div>
-
-  <p>
-    Create or open <code>.vscode/mcp.json</code> in your project root. Use <code>servers</code> as
-    the top-level key.
-  </p>
-
-  <AgentSnippet agentId="vscode" transport="stdio" />
-
-  <h2>User-level global config</h2>
-  <p>
-    To register the server globally for all projects, open VS Code settings (<code>
-      Ctrl/Cmd + Shift + P
-    </code> → <em>Preferences: Open User Settings (JSON)</em>) and add the same <code>
-      servers
-    </code> block at the top level under the <code>github.copilot.chat.agent.mcpServers</code> or equivalent
-    user-level MCP key.
+    VS Code is a config-guided MCP client. For a user-profile server, use <em>MCP: Open User
+    Configuration</em> or <em>MCP: Add Server</em>; VS Code owns the profile-specific
+    <code>mcp.json</code> path. Do not edit <code>settings.json</code> for MCP configuration.
   </p>
 
   <h2>Credentials</h2>
@@ -139,7 +112,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace OAuth login. The
+    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace OAuth login. The
     <code>@lyrashield/mcp</code> package is published on npm, so
     <code>npx -y @lyrashield/mcp</code> resolves directly.
   </div>

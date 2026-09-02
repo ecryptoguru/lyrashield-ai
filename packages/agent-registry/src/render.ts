@@ -52,6 +52,7 @@ function resolveSecret(
 }
 
 function buildEnvBlock(agent: AgentEntry, opts: InstallOptions): Record<string, string> {
+  if (opts.useCredentialStore) return {}
   const env: Record<string, string> = {
     LYRASHIELD_API_URL: opts.apiUrl,
   }
@@ -71,7 +72,7 @@ function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string
   // Code) instead of the standard command string + args + env triple.
   if (agent.stdioStyle === "array-command-environment") {
     const entry: Record<string, unknown> = {
-      command: ["npx", "-y", "@lyrashield/mcp"],
+      command: ["npx", "-y", "@lyrashield/mcp@0.2.2"],
       environment: env,
       enabled: true,
     }
@@ -87,14 +88,14 @@ function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string
     entry = {
       [agent.commandWrapperKey]: {
         path: "npx",
-        args: ["-y", "@lyrashield/mcp"],
+        args: ["-y", "@lyrashield/mcp@0.2.2"],
         env,
       },
     }
   } else {
     entry = {
       command: "npx",
-      args: ["-y", "@lyrashield/mcp"],
+      args: ["-y", "@lyrashield/mcp@0.2.2"],
     }
     if (agent.credential.kind === "env-names") {
       entry[agent.credential.field] = env

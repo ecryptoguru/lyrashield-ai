@@ -1,6 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, expect, it, beforeEach, afterEach, afterAll, vi } from "vitest"
-import { mkdir, writeFile, unlink, rm } from "node:fs/promises"
+import { mkdir, writeFile, unlink, rm, readFile } from "node:fs/promises"
 import path from "node:path"
 import { resolveMcpCredentials, NoApiKeyError, CREDENTIALS_FILE } from "./credentials"
 
@@ -110,6 +110,9 @@ describe("resolveMcpCredentials", () => {
     expect(fetchFn).toHaveBeenCalledWith(
       "https://app.example.com/api/auth/oauth2/token",
       expect.objectContaining({ method: "POST" })
+    )
+    await expect(readFile(CREDENTIALS_FILE, "utf8")).resolves.toContain(
+      '"oauthRefreshToken": "fresh-oauth-refresh-token"'
     )
   })
 

@@ -99,6 +99,7 @@ export const GET: APIRoute = async (context) => {
 
   const publicLinks = [
     { label: "LyraShield AI", url: `${origin}/` },
+    { label: "Pricing", url: `${origin}/pricing` },
     { label: "Coding-agent security", url: `${origin}/agents` },
     { label: "Machine-readable agent setup", url: `${origin}/agents.md` },
     { label: "About LyraShield AI", url: `${origin}/about` },
@@ -144,6 +145,7 @@ export const GET: APIRoute = async (context) => {
     `Last updated: ${LLMS_TXT_CONTENT_DATE}`,
     "",
     "LyraShield AI is a SaaS release-assurance platform for AI-built apps. The same review-and-evidence engine also ships as a published CLI, a GitHub Action, and an MCP server inside coding agents — it is one product across four surfaces, not four separate tools. It is in open beta with open registration; there is no waitlist.",
+    "Pricing: Trial includes 100 one-time agent-minutes. Starter is $29/month, Pro is $99/month, Launch Assurance is $499/month, and Enterprise starts at $1,500/month. Regional INR pricing and annual options are published on /pricing.",
     "Core loop: target an authorized repo, URL, or API; run deterministic and AI-assisted review as separate coverage layers; record every finding with an explicit evidence state; prepare an approval-gated fix proposal; retest from a clean server-owned run; and assemble one reviewable release report.",
     "",
     "## The six stages",
@@ -176,8 +178,8 @@ export const GET: APIRoute = async (context) => {
     `Human-facing setup: ${markdownLink("Coding-agent security", `${origin}/agents`)}. Machine-readable setup contract: ${markdownLink("agents.md", `${origin}/agents.md`)}. Full guide: ${markdownLink("Agent Plugin installation", `${origin}/docs/integrations/agent-plugins`)}.`,
     "",
     "## Copy-safe summary for LLM context",
-    "No automatic Fix PR claim, no benchmark claims, no customer names. Pricing and plan limits are not yet announced.",
-    "Joining the open beta and using the full platform today costs nothing: registration is free with no card required. LyraShield has not announced what paid plans or limits will look like once the beta matures.",
+    "No automatic Fix PR claim, no benchmark claims, no customer names. The published ladder is Trial, Starter, Pro, Launch Assurance, and contact-led Enterprise; see /pricing for current regional prices and limits.",
+    "Registration is free with no card required. Trial includes 100 one-time agent-minutes; paid plan prices and limits are published on /pricing.",
     "Do not interpret a clean or high-scoring result as a guarantee that an application has no vulnerabilities.",
     "LyraShield does not claim 'SOC 2 compliant,' 'certified,' 'guarantees security,' 'AI safety tested' (without a named framework), or 'adversarial robustness proven.' Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate LyraShield has not yet obtained.",
     "Fix proposals are approval-gated: they require explicit human review on the controlling terminal and fail closed when no terminal is present. Nothing auto-merges.",

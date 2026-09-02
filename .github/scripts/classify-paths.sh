@@ -77,6 +77,8 @@ while IFS= read -r f; do
   fi
 done
 
+if $marketing || $app || $desktop || $shared; then docs_only=false; fi
+
 # Fail closed per path: an uncovered file mixed with recognized files must not
 # inherit their narrower deployment routing. Treat it as shared and deploy both
 # artifacts until it receives an explicit category.

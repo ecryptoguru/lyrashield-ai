@@ -1,5 +1,6 @@
 import { resolve } from "node:path"
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { logger } from "@lyrashield/logger"
 
 const completeUsage = vi.hoisted(() => ({
   model: "azure_ai/gpt-5.6-luna",
@@ -29,6 +30,7 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
 
 vi.mock("@lyrashield/db", () => ({
   prisma: {
+    auditLog: { create: vi.fn().mockResolvedValue({}) },
     target: {
       findFirst: vi.fn(),
     },
@@ -76,12 +78,25 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("@lyrashield/billing", () => ({
-  recordAgentMinutes: vi.fn().mockResolvedValue({
-    created: true,
-    minutes: 1,
-    idempotencyKey: "ws-1:scan-1:engine_run",
-    overageMinutes: 0,
-  }),
+  hasUnsettledScanIntent: vi.fn().mockResolvedValue(false),
+  recordAgentMinutes: vi
+    .fn()
+    .mockImplementation(
+      async (
+        _workspaceId: string,
+        _scanId: string,
+        _ms: number,
+        options?: { beforeCommit?: () => Promise<void> }
+      ) => {
+        await options?.beforeCommit?.()
+        return {
+          created: true,
+          minutes: 1,
+          idempotencyKey: "ws-1:scan-1:engine_run",
+          overageMinutes: 0,
+        }
+      }
+    ),
   getUsageBalance: vi.fn().mockResolvedValue({ totalRemaining: 100 }),
   enterGrace: vi.fn().mockResolvedValue({ shouldContinue: true }),
   debitOverage: vi.fn().mockResolvedValue(undefined),
@@ -197,7 +212,12 @@ import {
   EvidenceStorageConfigurationError,
 } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
-import { debitOverage, enterGrace, recordAgentMinutes } from "@lyrashield/billing"
+import {
+  debitOverage,
+  enterGrace,
+  recordAgentMinutes,
+  hasUnsettledScanIntent,
+} from "@lyrashield/billing"
 import {
   AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
   AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
@@ -566,6 +586,34 @@ describe("processScanJob", () => {
     } as never)
   })
 
+  it.each(["budget_exceeded", "unknown_failure"])(
+    "never bills terminal %s even with affirmative provider usage",
+    async (reason) => {
+      vi.mocked(runEngine).mockResolvedValueOnce({
+        exitCode: 0,
+        output: {
+          vulnerabilities: [],
+          findingsComplete: false,
+          findingCount: 0,
+          summary: "Stopped",
+          runRecord: {
+            run_id: "scan-1",
+            run_name: "scan-1",
+            status: "stopped",
+            terminal_reason: reason,
+            llm_usage: completeUsage,
+          },
+        },
+      } as never)
+      await processScanJob(mockJob)
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(updateScanStatus).toHaveBeenCalledWith(
+        "scan-1",
+        reason === "budget_exceeded" ? "STOPPED_BUDGET" : "FAILED",
+        expect.anything()
+      )
+    }
+  )
   it("completes successfully when engine returns exit code 0", async () => {
     const result = await processScanJob(mockJob)
 
@@ -611,6 +659,147 @@ describe("processScanJob", () => {
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
     )
   })
+  it.each(["account lookup", "intent insert"])(
+    "fails closed when %s fails once before a durable billing obligation exists",
+    async (stage) => {
+      const error = new Error(`injected ${stage} failure`)
+      if (stage === "account lookup")
+        vi.mocked(prisma.billingAccount.findUnique).mockRejectedValueOnce(error)
+      else vi.mocked(recordAgentMinutes).mockRejectedValueOnce(error)
+      const result = await processScanJob(mockJob)
+      expect(result.status).toBe("failed")
+      expect(completeScanWithScore).not.toHaveBeenCalled()
+      expect(persistResultManifest).not.toHaveBeenCalled()
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+      expect(debitOverage).not.toHaveBeenCalled()
+      expect(enterGrace).not.toHaveBeenCalled()
+      expect(runEngine).toHaveBeenCalledOnce()
+      expect(recordAgentMinutes).toHaveBeenCalledTimes(stage === "account lookup" ? 0 : 1)
+      // Database availability returns on redelivery, but the failed paid run
+      // is terminal: do not try the engine or settlement again.
+      vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+        status: "FAILED",
+        errorCategory: "INTERNAL_ERROR",
+      } as never)
+      await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
+      expect(runEngine).toHaveBeenCalledOnce()
+      expect(recordAgentMinutes).toHaveBeenCalledTimes(stage === "account lookup" ? 0 : 1)
+    }
+  )
+  it.each(["manifest", "retests", "score"])(
+    "does not commit settlement when %s finalization fails",
+    async (stage) => {
+      const failure = new Error("injected finalization failure")
+      if (stage === "manifest") vi.mocked(persistResultManifest).mockRejectedValueOnce(failure)
+      if (stage === "retests") vi.mocked(completeRetestsForScan).mockRejectedValueOnce(failure)
+      if (stage === "score") vi.mocked(completeScanWithScore).mockRejectedValueOnce(failure)
+      let charged = false
+      vi.mocked(recordAgentMinutes).mockImplementationOnce(
+        async (_workspaceId, _scanId, _ms, options) => {
+          await options?.beforeCommit?.()
+          charged = true
+          return { created: true, minutes: 1, idempotencyKey: "test", overageMinutes: 0 }
+        }
+      )
+      await processScanJob(mockJob)
+      expect(charged).toBe(false)
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+      expect(runEngine).toHaveBeenCalledOnce()
+    }
+  )
+  it("preserves completed results on an uncertain settlement commit response", async () => {
+    vi.mocked(recordAgentMinutes).mockImplementationOnce(
+      async (_workspaceId, _scanId, _ms, options) => {
+        await options?.beforeCommit?.()
+        throw new Error("commit acknowledgement lost")
+      }
+    )
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+    expect(logger.error).toHaveBeenCalledWith(
+      "billing.scan_settlement_commit_uncertain",
+      expect.objectContaining({
+        scanId: "scan-1",
+        accountingReviewRequired: true,
+        automaticReplayAllowed: false,
+      })
+    )
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+    expect(runEngine).toHaveBeenCalledOnce()
+  })
+  it("reports a terminal-write acknowledgement failure before the in-memory result is assigned", async () => {
+    vi.mocked(completeScanWithScore).mockImplementationOnce(async () => {
+      vi.mocked(prisma.scan.findUnique).mockResolvedValue({
+        status: "COMPLETED",
+        summary: "Durable",
+      } as never)
+      throw new Error("terminal write acknowledgement lost")
+    })
+    vi.mocked(hasUnsettledScanIntent).mockResolvedValueOnce(true)
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+    expect(hasUnsettledScanIntent).toHaveBeenCalledWith("ws-1", "scan-1")
+    expect(logger.error).toHaveBeenCalledWith(
+      "billing.scan_settlement_commit_uncertain",
+      expect.objectContaining({ accountingReviewRequired: true, automaticReplayAllowed: false })
+    )
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+    expect(runEngine).toHaveBeenCalledOnce()
+  })
+  it.each(["COMPLETED", "PARTIAL"])(
+    "does not replay engine or settlement for a durable %s result",
+    async (status) => {
+      vi.mocked(hasUnsettledScanIntent).mockResolvedValueOnce(true)
+      vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+        status,
+        summary: "Durable result",
+      } as never)
+      await processScanJob(mockJob)
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(logger.error).toHaveBeenCalledWith(
+        "billing.scan_settlement_commit_uncertain",
+        expect.objectContaining({
+          scanId: "scan-1",
+          accountingReviewRequired: true,
+          automaticReplayAllowed: false,
+        })
+      )
+      expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+    }
+  )
+  it.each(["content_filter_stopped", "engine_stopped"])(
+    "meters a %s PARTIAL result with affirmative scan-bound usage",
+    async (reason) => {
+      vi.mocked(runEngine).mockResolvedValueOnce({
+        exitCode: 0,
+        output: {
+          vulnerabilities: [{ title: "Retained finding" }],
+          findingCount: 1,
+          findingsComplete: false,
+          summary: "Partial findings",
+          runRecord: {
+            run_id: "scan-1",
+            run_name: "scan-1",
+            status: "stopped",
+            terminal_reason: reason,
+            llm_usage: completeUsage,
+          },
+        },
+      } as never)
+      await processScanJob(mockJob)
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PARTIAL", expect.anything())
+      expect(recordAgentMinutes).toHaveBeenCalledWith(
+        "ws-1",
+        "scan-1",
+        expect.any(Number),
+        expect.objectContaining({ outcome: "partial" })
+      )
+      expect(persistResultManifest).toHaveBeenCalledWith(
+        expect.objectContaining({ engineExecution: expect.objectContaining({}) })
+      )
+      const manifest = vi.mocked(persistResultManifest).mock.calls.at(-1)?.[0]
+      expect(manifest?.engineExecution?.model).toBeUndefined()
+    }
+  )
 
   it("meters only engine wall time, excluding setup before invocation", async () => {
     const startedAt = new Date("2026-08-25T00:00:00.000Z")
@@ -652,12 +841,12 @@ describe("processScanJob", () => {
   })
 
   it("stops when the spend limit cannot cover every uncovered minute", async () => {
-    vi.mocked(recordAgentMinutes).mockResolvedValueOnce({
-      created: true,
-      minutes: 5,
-      idempotencyKey: "ws-1:scan-1:engine_run",
-      overageMinutes: 3,
-    })
+    vi.mocked(recordAgentMinutes).mockImplementationOnce(
+      async (_workspaceId, _scanId, _ms, options) => {
+        await options?.settleOverage?.(prisma as never, 3)
+        return { created: true, minutes: 5, idempotencyKey: "test", overageMinutes: 3 }
+      }
+    )
     vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
       currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
       currentPlan: "LAUNCH_ASSURANCE",
@@ -673,7 +862,7 @@ describe("processScanJob", () => {
       status: "failed",
       errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
     })
-    expect(debitOverage).toHaveBeenCalledWith("ws-1", 3, "scan-1", "engine_overage")
+    expect(debitOverage).toHaveBeenCalledWith("ws-1", 3, "scan-1", "engine_overage", prisma)
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: expect.objectContaining({ llmRequestCount: 1, llmInputTokens: 1_000 }),
@@ -701,12 +890,12 @@ describe("processScanJob", () => {
   })
 
   it("persists provider usage and deterministic receipts when minute grace is exhausted", async () => {
-    vi.mocked(recordAgentMinutes).mockResolvedValueOnce({
-      created: true,
-      minutes: 15,
-      idempotencyKey: "ws-1:scan-1:engine_run",
-      overageMinutes: 15,
-    })
+    vi.mocked(recordAgentMinutes).mockImplementationOnce(
+      async (_workspaceId, _scanId, _ms, options) => {
+        await options?.settleOverage?.(prisma as never, 15)
+        return { created: true, minutes: 15, idempotencyKey: "test", overageMinutes: 15 }
+      }
+    )
     vi.mocked(enterGrace).mockResolvedValueOnce({ shouldContinue: false })
 
     await expect(processScanJob(mockJob)).resolves.toMatchObject({

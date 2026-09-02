@@ -7,6 +7,7 @@ import { TARGET_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+import { getTargetDomainStatuses } from "@/lib/target-domain-status"
 
 export const metadata: Metadata = {
   title: "Targets",
@@ -65,6 +66,7 @@ export default async function TargetsPage({
   const githubAccountLogin =
     (githubIntegration?.metadata as { accountLogin?: string } | null)?.accountLogin ?? null
 
+  const domainStatuses = await getTargetDomainStatuses(workspaceId, items)
   const initialData = items.map((t) => ({
     id: t.id,
     name: t.name,
@@ -80,10 +82,14 @@ export default async function TargetsPage({
     scanCount: t._count.scans,
     findingCount: t._count.findings,
     createdAt: t.createdAt.toISOString(),
+    domainVerificationStatus:
+      domainStatuses.get(t.id) ??
+      (t.type === "WEB_APP" || t.type === "API" ? "Not verified" : "Not applicable"),
   }))
 
   return (
     <TargetsClient
+      key={workspaceId}
       workspaceId={workspaceId}
       initialProjectId={params.projectId}
       initialData={initialData}

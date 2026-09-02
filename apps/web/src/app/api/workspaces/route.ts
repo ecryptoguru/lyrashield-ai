@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { randomUUID } from "node:crypto"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
@@ -15,7 +16,7 @@ function isPrismaUniqueError(error: unknown): error is { code: string } {
   )
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const session = await getSession()
     if (!session) {
@@ -187,3 +188,5 @@ export async function GET() {
     )
   }
 }
+
+export const POST = withCookieMutation(post)

@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { revokeScorecardShare } from "@lyrashield/db"
 import { requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
@@ -8,7 +9,7 @@ import { apiError, apiSuccess } from "../../../../lib/api-response"
 const Body = z.object({ workspaceId: z.string().min(1) })
 const PUBLISHERS = new Set(["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"])
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function remove(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const parsed = Body.safeParse(await request.json())
     if (!parsed.success) return apiError("INVALID_PARAM", "workspaceId is required", 400)
@@ -28,3 +29,5 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return apiError("INTERNAL_ERROR", "Failed to revoke scorecard share", 500)
   }
 }
+
+export const DELETE = withCookieMutation(remove)

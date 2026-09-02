@@ -119,23 +119,10 @@ Target state for Amp-built PRs:
 | 5 | Diff-aware SARIF gate | `.github/workflows/*`, code-scanning alerts | AI-generated auth bypass ships because CI was all-green |
 | 6 | Auth file CODEOWNERS | `CODEOWNERS`, `src/auth/**` | Single-agent edit disables authorization check |
 
-## FAQ
-
-### Q: Where is Amp MCP config stored and which wins?
-Global: `~/.config/amp/settings.json` (or Windows `%APPDATA%`). Workspace: `.amp/settings.json` which requires explicit approval. Precedence: CLI `--mcp-config` > user/workspace > skills. Override skill-bundled servers in user config to enforce security settings.
-
-### Q: How do I add LyraShield to Amp securely?
-From CLI: `amp mcp add lyrashield --header "Authorization=Bearer $LYRASHIELD_API_KEY" https://app.lyrashieldai.com/api/mcp`. This starts OAuth flow if needed for other servers, but for LyraShield uses Bearer header. Store the key in your shell env or Amp's secret management, not in JSON literals. Full pattern in [amp integration guide](/docs/integrations/amp).
-
-### Q: What makes orbs risky?
-Orbs persist env vars and filesystem. A secret set in an orb remains until the orb is destroyed or rotated. Treat orb teardown like credential rotation: script it, do not leave to manual cleanup. See [hermes-app-security-checklist](/blog/hermes-app-security-checklist) for similar lifecycle controls around idle timeouts.
-
-### Q: Can I bundle LyraShield in an Amp skill?
-Yes, Amp recommends bundling MCP servers in skills via `mcp.json` to keep tool lists clean. If you do, still override sensitive fields in `amp.mcpServers` in user settings and require approval for workspace overrides. The skill provides defaults, your config provides policy.
-
-Hardening references: [OWASP Top 10](https://owasp.org/www-project-top-ten/) for access control failures, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) for hardcoded credentials in orbs, [MCP docs](https://modelcontextprotocol.io/docs) for transport security, [GitHub code security docs](https://docs.github.com/en/code-security) for SARIF upload, and the [MCP servers registry](https://github.com/modelcontextprotocol/servers) for vetting third-party servers.
 
 ## Why pair Amp with LyraShield
+
+Amp configuration deserves the same review discipline as application code. Use the [OWASP Top 10](https://owasp.org/www-project-top-ten/) to frame authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) when secrets may enter configuration, and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) to confirm transport and tool contracts. These sources do not certify an Amp setup. They give reviewers stable vocabulary for checking which tools can run, where credentials resolve, and whether a workflow retains enough evidence for a release decision. Record the configuration revision you reviewed, then retest after changing an orb, skill, MCP server, or approval boundary.
 
 Amp gives you orchestration across models, remote persistence via orbs, and a clean extension model, ideal for shipping full features from a single prompt. LyraShield complements that with release assurance for AI-built apps that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action that is diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's focus is verified findings tied to evidence, fix, retest, report so AI-generated code does not reintroduce CWE-20/287/798 across sessions. Every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 

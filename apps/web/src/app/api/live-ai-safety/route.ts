@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import {
   createLiveAiSafetyPlan,
   LiveAiSafetyError,
@@ -81,7 +82,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+async function put(request: Request) {
   try {
     const parsed = SettingsSchema.safeParse(await request.json().catch(() => ({})))
     if (!parsed.success)
@@ -103,7 +104,7 @@ export async function PUT(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const parsed = PlanRequestSchema.safeParse(await request.json().catch(() => ({})))
     if (!parsed.success) return privateError("INVALID_PARAM", "Invalid live safety plan", 400)
@@ -123,3 +124,7 @@ export async function POST(request: Request) {
     return privateError("INTERNAL_ERROR", "Failed to create live safety plan", 500)
   }
 }
+
+export const PUT = withCookieMutation(put)
+
+export const POST = withCookieMutation(post)

@@ -128,7 +128,7 @@ export function FixesClient({
         <EmptyState
           icon={Wrench}
           title="No proposed fixes yet"
-          description="When trust runs surface issues, you can generate proposed fixes and create pull requests from the issues page."
+          description="Open an issue to record a fix proposal. Proposals with a stored patch can request a pull request after human approval. A summary alone does not change your code."
           action={
             <Link href="/dashboard/findings" className={buttonVariants()}>
               Review issues

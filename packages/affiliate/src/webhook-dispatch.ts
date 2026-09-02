@@ -18,6 +18,7 @@ import { onLocalOrderPaid, type LocalOrderPaidPayload } from "./commission/local
 
 /** Structural subset of the billing NormalizedBillingEvent union. */
 export interface NormalizedEventDispatchInput {
+  workspaceId?: string | null
   provider: string
   kind:
     | "subscription_paid"
@@ -67,6 +68,7 @@ export async function dispatch(
       const refundPayload = mapRefundPayload(input, reason)
       if (refundPayload) {
         const result = await onRefund(refundPayload)
+        if (result.manualReview) throw new Error("affiliate_clawback_manual_review")
         return { handled: true, result }
       }
       logger.warn("Affiliate clawback skipped — refund payload missing order reference", {
@@ -258,6 +260,7 @@ function mapRefundPayload(
     provider,
     externalId,
     refundId: refundId ?? null,
+    workspaceId: input.workspaceId,
     refundAmount: money.grossAmount,
     currency: money.currency,
     reason,

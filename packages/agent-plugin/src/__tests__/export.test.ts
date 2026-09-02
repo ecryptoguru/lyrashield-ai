@@ -18,6 +18,54 @@ afterEach(async () => {
 })
 
 describe("exportMarketplace", () => {
+  it("launches optional credentials through npm and embedded Zed preload without inherited overrides", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield extension "))
+    outputs.push(output)
+    await exportMarketplace(output)
+    const gemini = JSON.parse(await readFile(path.join(output, "gemini-extension.json"), "utf8"))
+    const preloadOption = gemini.mcpServers.lyrashield.args[1].replace("${extensionPath}", output)
+    const preload = await readFile(path.join(output, "zed-extension/mcp-env.cjs"), "utf8")
+    const probe = `process.stdout.write(JSON.stringify({
+      key: process.env.LYRASHIELD_API_KEY,
+      url: process.env.LYRASHIELD_API_URL,
+      oauth: process.env.LYRASHIELD_OAUTH_ACCESS_TOKEN,
+      temporary: process.env.LYRASHIELD_EXTENSION_CRED
+    }))`
+    const probePath = path.join(output, "stdio probe.mjs")
+    await writeFile(probePath, probe)
+    for (const setting of [undefined, "", "  ", " demo-credential "]) {
+      const env = {
+        PATH: process.env.PATH,
+        HOME: output,
+        LYRASHIELD_API_URL: "http://untrusted.invalid",
+        LYRASHIELD_API_KEY: "inherited-credential",
+        LYRASHIELD_OAUTH_ACCESS_TOKEN: "inherited-token",
+        ...(setting === undefined ? {} : { LYRASHIELD_EXTENSION_CRED: setting }),
+      }
+      const expected = setting?.trim()
+        ? { key: "demo-credential", url: "https://app.lyrashieldai.com" }
+        : {}
+      // npm's own Node option forwarding and paths with spaces are part of the
+      // Gemini launch contract. This uses the installed Node, with no download.
+      const geminiResult = await execFileAsync(
+        "npx",
+        ["--no", preloadOption, "--", "node", "--eval", probe],
+        { cwd: output, env }
+      )
+      expect(JSON.parse(geminiResult.stdout)).toEqual(expected)
+      const zedResult = await execFileAsync(
+        process.execPath,
+        [
+          "--eval",
+          `${preload}\nimport(require('node:url').pathToFileURL(process.argv[1]).href)`,
+          probePath,
+        ],
+        { cwd: output, env }
+      )
+      expect(JSON.parse(zedResult.stdout)).toEqual(expected)
+    }
+  }, 15000)
+
   it("exports only the public client boundary with provenance", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
@@ -52,7 +100,7 @@ describe("exportMarketplace", () => {
     }
     expect(portableMcp.mcpServers).toEqual({
       lyrashield: {
-        type: "streamable-http",
+        type: "http",
         url: "https://app.lyrashieldai.com/api/mcp",
       },
     })
@@ -99,7 +147,7 @@ describe("exportMarketplace", () => {
     expect(codexManifest.$schema).toBeUndefined()
     expect(claudeMcp.mcpServers).toEqual({
       lyrashield: {
-        type: "streamable-http",
+        type: "http",
         url: "https://app.lyrashieldai.com/api/mcp",
       },
     })
@@ -107,15 +155,13 @@ describe("exportMarketplace", () => {
       await readFile(path.join(output, ".cursor-plugin", "plugin.json"), "utf8")
     ) as { mcpServers?: Record<string, unknown>; variables?: unknown }
     expect(cursorManifest.mcpServers).toEqual({
-      lyrashield: { type: "streamable-http", url: "https://app.lyrashieldai.com/api/mcp" },
+      lyrashield: { type: "http", url: "https://app.lyrashieldai.com/api/mcp" },
     })
     expect(cursorManifest.variables).toBeUndefined()
     const kiroMcp = JSON.parse(await readFile(path.join(output, ".mcp.kiro.json"), "utf8")) as {
       mcpServers?: Record<string, { env?: Record<string, string> }>
     }
-    expect(kiroMcp.mcpServers?.lyrashield?.env).toEqual({
-      LYRASHIELD_API_URL: "https://app.lyrashieldai.com",
-    })
+    expect(kiroMcp.mcpServers?.lyrashield?.env).toBeUndefined()
     await expect(
       readFile(path.join(output, "skills", "lyrashield", "SKILL.md"), "utf8")
     ).resolves.toContain("Pre-PR check")
@@ -125,7 +171,7 @@ describe("exportMarketplace", () => {
     ).resolves.toContain("lyrashield-mcp")
     await expect(
       readFile(path.join(output, "codebuff", "lyrashield-review.ts"), "utf8")
-    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.2"[\s\S]*mcpServers:/)
+    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.18"[\s\S]*mcpServers:/)
     await expect(
       readFile(path.join(output, "gemini-extension", "gemini-extension.json"), "utf8")
     ).resolves.toContain("lyrashield-ai")
@@ -153,6 +199,7 @@ describe("exportMarketplace", () => {
     expect(manifest.generatedFiles).toEqual([
       "README.md",
       "CHANGELOG.md",
+      "CLIENT-CONTRACTS.md",
       "plugin.json",
       "mcp.json",
       "skills",
@@ -164,6 +211,7 @@ describe("exportMarketplace", () => {
       ".mcp.json",
       ".mcp.kiro.json",
       "gemini-extension.json",
+      "mcp-env.cjs",
       "GEMINI.md",
       "LICENSE",
       "zed-extension",
@@ -201,15 +249,37 @@ describe("exportMarketplace", () => {
 
     // Manifest versions must match each artifact's own source-of-truth file.
     expect(manifest.artifactVersions).toEqual({
-      zed: "0.1.1",
-      gemini: "0.1.0",
-      codebuff: "0.1.2",
-      openclaw: "0.1.0",
+      zed: "0.1.18",
+      gemini: "0.1.18",
+      codebuff: "0.1.18",
+      openclaw: "0.1.18",
     })
   })
 })
 
 describe("exported validator", () => {
+  it.each([
+    [
+      ".mcp.kiro.json",
+      '"command": "npx"',
+      '"env": {"LYRASHIELD_API_URL":"https://app.lyrashieldai.com"}, "command": "npx"',
+    ],
+    ["gemini-extension.json", "@lyrashield/mcp@0.2.2", "@lyrashield/mcp"],
+    ["codebuff/lyrashield-review.ts", '"read_files"', '"run_terminal_command", "read_files"'],
+    ["openclaw/SKILL.md", "nothing is applied automatically.", "changes apply automatically."],
+  ])("rejects unsafe distribution drift in %s", async (file, before, after) => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    const target = path.join(output, file)
+    await writeFile(target, (await readFile(target, "utf8")).replace(before, after))
+    await expect(
+      execFileAsync(process.execPath, [path.join(output, "scripts", "validate.mjs")], {
+        cwd: output,
+      })
+    ).rejects.toMatchObject({ stdout: "" })
+  })
+
   it("passes against a fresh temp-dir export", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)

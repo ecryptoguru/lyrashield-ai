@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -18,7 +19,7 @@ const SpendLimitSchema = z.object({
  *
  * All money is in integer cents (Decimal-safe, never Float).
  */
-export async function POST(request: Request) {
+async function post(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -85,3 +86,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to update spend limit", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

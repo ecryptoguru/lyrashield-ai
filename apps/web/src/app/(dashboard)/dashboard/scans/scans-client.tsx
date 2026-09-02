@@ -792,6 +792,17 @@ export function ScansClient({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             <div className="space-y-5">
+              {errorCode === "DOMAIN_VERIFICATION_REQUIRED" && selectedTarget && (
+                <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
+                  <p>Domain verification is required before this review can start.</p>
+                  <Link
+                    href={`/dashboard/targets/${encodeURIComponent(selectedTarget)}#domain-verification`}
+                    className="text-primary inline-flex min-h-11 items-center font-medium hover:underline"
+                  >
+                    Verify control of this domain
+                  </Link>
+                </div>
+              )}
               <FormField label={TARGET_SINGULAR} htmlFor="scan-target">
                 <Select
                   id="scan-target"
@@ -1011,6 +1022,15 @@ export function ScansClient({
                         )}
                       </p>
                     )}
+                    {eligibility.eligibility.code === "DOMAIN_VERIFICATION_REQUIRED" &&
+                      selectedTarget && (
+                        <Link
+                          href={`/dashboard/targets/${encodeURIComponent(selectedTarget)}#domain-verification`}
+                          className="text-primary mt-2 inline-flex min-h-11 items-center font-medium hover:underline"
+                        >
+                          Verify control of this domain
+                        </Link>
+                      )}
                   </div>
                 ) : null}
               </div>

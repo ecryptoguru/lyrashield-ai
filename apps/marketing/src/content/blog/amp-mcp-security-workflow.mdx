@@ -17,7 +17,7 @@ faq:
     a: "Amp reads MCP servers from its agent config under a servers or mcpServers key depending on version. Use the CLI installer to add the LyraShield entry so the transport and auth fields are correct, and keep the lsk_ key in an env reference rather than a literal in the committed config file."
 ---
 
-You can wire Amp directly to LyraShield AI via MCP to get target aware verification inside your agent loop. In this guide you will add the local stdio server using pinned npx -y @lyrashield/mcp@0.2.2 and the remote server at https://app.lyrashieldai.com/api/mcp with bearer auth, confirm tool listing, run a scoped scan for findings with recorded evidence states, and enforce a diff aware GitHub Action gate that uploads SARIF for code scanning.
+You can wire Amp directly to LyraShield AI via MCP to get target aware verification inside your agent loop. In this guide you will add the local stdio server using pinned npx -y @lyrashield/mcp and the remote server at https://app.lyrashieldai.com/api/mcp with bearer auth, confirm tool listing, run a scoped scan for findings with recorded evidence states, and enforce a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
 Vibe coding with Amp is fast because the agent fills in routes, components, and API handlers from short prompts. Speed amplifies both delivery and risk, which is why early verification matters. A solid policy reference is the [vibe coding security guide](/blog/vibe-coding-security-guide) that outlines hygiene, review checkpoints, and supply chain controls. For category background, consult [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) to map common issues in generated front ends and APIs to concrete weakness types.
 
@@ -78,7 +78,7 @@ Settings.json option for project local or user global config:
 }
 ```
 
-This pins stdio to npx -y @lyrashield/mcp@0.2.2 and exposes remote at https://app.lyrashieldai.com/api/mcp via bearer header, as required. The canonical reference lives in [Amp integration guide](/docs/integrations/amp). Avoid storing raw keys in the JSON file. Use `${env:VAR}` or $VAR so expansion happens at runtime. If you manage a shared Amp profile for your org, add both entries there and let repos inherit them. That keeps verification consistent even when developers spin up new projects from templates without remembering to add security tooling. It also reduces drift between local and CI expectations, since the same target names and tool filters apply everywhere.
+This pins stdio to npx -y @lyrashield/mcp and exposes remote at https://app.lyrashieldai.com/api/mcp via bearer header, as required. The canonical reference lives in [Amp integration guide](/docs/integrations/amp). Avoid storing raw keys in the JSON file. Use `${env:VAR}` or $VAR so expansion happens at runtime. If you manage a shared Amp profile for your org, add both entries there and let repos inherit them. That keeps verification consistent even when developers spin up new projects from templates without remembering to add security tooling. It also reduces drift between local and CI expectations, since the same target names and tool filters apply everywhere.
 
 ## 3. Verify connection and list security tools
 
@@ -94,7 +94,7 @@ Show command type and tool names.
 Expected response:
 
 ```text
-lyrashield (stdio via npx -y @lyrashield/mcp@0.2.2):
+lyrashield (stdio via npx -y @lyrashield/mcp):
 - lyrashield_scan_target(target, scope)
 - lyrashield_get_findings(id)
 - lyrashield_list_targets()

@@ -145,23 +145,12 @@ Target PR gate:
 | 5 | Lifecycle timeouts | `idle_timeout_seconds`, `max_lifetime_seconds`, `timeout` | Hung stdio server holds auth, stale session |
 | 6 | Disable wrappers | `resources: false`, `prompts: false` | Resource exfil via `list_resources` |
 
-## FAQ
-
-### Q: Where is Hermes MCP config and how do env vars work?
-`~/.hermes/config.yaml` under `mcp_servers`. Env interpolation supports `${VAR}` or Cursor-style `${env:VAR}`, same resolution. Secrets resolve from `.env` and process env, with profile secret scope fallback. Place secrets in `~/.hermes/.env`, reference via var, then `/reload-mcp`.
-
-### Q: How do I filter MCP tools safely?
-Set `tools.include` whitelist for sensitive servers, `tools.exclude` blacklist for broad servers. Entries support exact names or fnmatch globs like `*_radar_*`. Disable utility wrappers with `tools.resources: false` and `prompts: false`. If filtering removes all tools and no wrappers remain, Hermes creates no runtime toolset, which is the safe default.
-
-### Q: How do I add LyraShield to Hermes?
-Use stdio: `command: npx`, `args: ["-y","@lyrashield/mcp"]`, `env: {LYRASHIELD_API_KEY: "${env:LYRASHIELD_API_KEY}"}`. Or remote: `url: https://app.lyrashieldai.com/api/mcp`, `headers: {Authorization: "Bearer ${env:LYRASHIELD_API_KEY}"}`. Add `tools` filtering and `timeout`. Docs canonical at [hermes integration guide](/docs/integrations/hermes).
-
-### Q: Are catalog MCP servers safe?
-Catalog entries under `optional-mcps/` are Nous-reviewed but disabled by default, you still choose. Install only what you need, apply `include` filtering, and verify backing service authentication. No community submission tier exists for catalog; additions are via PR merge.
-
-Reference primary sources while hardening: [OWASP LLM Top 10](https://owasp.org/www-project-top-ten/) for prompt injection and excessive agency, [CWE-284](https://cwe.mitre.org/data/definitions/284.html) for improper access control, [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18) for tool filtering and timeouts, [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure development controls, and [OSV](https://osv.dev/) for dependency advisories before shipping AI-built code.
 
 ## Why pair Hermes with LyraShield
+
+Treat Hermes configuration as code that deserves review before it gains access to repositories or credentials. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) helps frame authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) covers hardcoded credential risk, and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) defines transport and tool contracts. None of these sources certifies a Hermes deployment. They provide a concrete review baseline for checking which skills can execute, where secrets resolve, and whether a release record captures the configuration revision and its limits. Recheck this boundary after changing a skill, backend, MCP server, or approval policy.
+
+Keep the evidence bounded to the reviewed scope: a successful configuration check does not establish runtime behavior for every future tool call. When a change expands access, record that expansion, name the reviewer, and require a fresh check before release with the same target boundary and clear recorded limitations.
 
 Hermes maximizes adaptability: skills that write skills, runs-anywhere backends, model-agnostic routing. LyraShield adds the counterpart: release assurance for AI-built apps with minimal new surface. The combination positioning matters, Hermes owns generation and orchestration, LyraShield owns `target, review, evidence, fix, retest, report` with SCA + secrets + agentic pentest feeding SARIF, not another chat loop. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 

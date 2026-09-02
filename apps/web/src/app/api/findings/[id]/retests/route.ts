@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../../lib/api-auth"
 import {
   createScan,
   getFinding,
@@ -27,7 +28,7 @@ const CreateRetestSchema = z.object({
   scanId: z.string().optional(),
 })
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -216,3 +217,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError("INTERNAL_ERROR", "Failed to create retest", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

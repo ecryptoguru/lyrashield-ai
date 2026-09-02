@@ -19,7 +19,7 @@ faq:
 
 Fastest path: run `npx lyrashield init` to detect Windsurf and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference. Windsurf uses a config-file install, with no Agent Plugin.
 
-Windsurf users can secure AI built apps by configuring LyraShield MCP in Windsurf config via stdio using npx -y @lyrashield/mcp@0.2.2 or via remote URL with Bearer lsk\_ key, then verifying the server and scanning inline for OWASP risks and supply chain issues.
+Windsurf users can secure AI built apps by configuring LyraShield MCP in Windsurf config via stdio using npx -y @lyrashield/mcp or via remote URL with Bearer lsk\_ key, then verifying the server and scanning inline for OWASP risks and supply chain issues.
 
 Windsurf Cascade edits multiple files per turn, which can spread [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks such as injection via helpers and leaked secrets. This guide applies [vibe coding security guide](/blog/vibe-coding-security-guide) to Windsurf, adding verification via MCP. LyraShield AI is agent native AppSec at [LyraShield site](https://lyrashieldai.com), built around Target to Scan to Evidence State to Fix Proposal to Retest to Report. See [Windsurf integration guide](/docs/integrations/windsurf) and [Windsurf security workflow](/blog/windsurf-security-workflow). Transport follows [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions).
 
@@ -27,13 +27,13 @@ Windsurf Cascade edits multiple files per turn, which can spread [OWASP Top 10](
 
 Create LyraShield API key starting with lsk\_ and store as LYRASHIELD_API_KEY. Never commit key to source control or chat logs. For local work, export it in shell profile. For teams, keep it in secret manager and add to GitHub repository secrets for CI parity. Naming consistency between shell, IDE config and CI reduces misconfig.
 
-You need Node 18 plus so npx resolves pinned package, windsurf updated to build supporting MCP, and testable target such as http://localhost:3000 or repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.2 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
+You need Node 18 plus so npx resolves pinned package, windsurf updated to build supporting MCP, and testable target such as http://localhost:3000 or repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
 
 Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals are proposals requiring review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. See [Windsurf integration guide](/docs/integrations/windsurf).
 
 ## 2. Configure MCP server in windsurf config file
 
-windsurf reads MCP from ~/.codeium/windsurf/mcp_config.json. Top level key is mcpServers plus serverUrl. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp@0.2.2 for stdio.
+windsurf reads MCP from ~/.codeium/windsurf/mcp_config.json. Top level key is mcpServers plus serverUrl. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp for stdio.
 
 ```json
 {
@@ -61,7 +61,7 @@ Placeholder `${env:LYRASHIELD_API_KEY}` is resolved securely without writing sec
 
 Restart windsurf after saving config and open MCP servers view to confirm lyrashield shows connected with tools. In chat ask to list MCP tools to see scan tool. This confirms handshake completed.
 
-If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp@0.2.2 manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
+If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
 
 Verification prevents silent failure where agent assumes scan succeeded but server was unreachable. That leaves [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks undetected and breaks verification loop. Allow egress to [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) if org blocks external.
 

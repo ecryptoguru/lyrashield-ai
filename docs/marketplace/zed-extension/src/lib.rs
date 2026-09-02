@@ -6,23 +6,15 @@ use zed_extension_api::{
 };
 
 const PACKAGE_NAME: &str = "@lyrashield/mcp";
+const PACKAGE_VERSION: &str = "0.2.2";
 const SERVER_ENTRYPOINT: &str = "node_modules/@lyrashield/mcp/dist/stdio-transport.js";
-const API_KEY_ENV_VAR: &str = "LYRASHIELD_API_KEY";
-const API_URL_ENV_VAR: &str = "LYRASHIELD_API_URL";
-const DEFAULT_API_URL: &str = "https://app.lyrashieldai.com";
+const EXTENSION_CRED_ENV_VAR: &str = "LYRASHIELD_EXTENSION_CRED";
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct LyraShieldMcpSettings {
     /// Optional LyraShield workspace API key for CI or non-OAuth environments.
     #[serde(default)]
     api_key: Option<String>,
-    /// The LyraShield app URL. Defaults to https://app.lyrashieldai.com.
-    #[serde(default = "default_api_url")]
-    api_url: String,
-}
-
-fn default_api_url() -> String {
-    DEFAULT_API_URL.to_string()
 }
 
 struct LyraShieldMcpExtension;
@@ -37,8 +29,7 @@ impl LyraShieldMcpExtension {
                  \"context_servers\": {{\n    \
                      \"{context_server_id}\": {{\n      \
                          \"settings\": {{\n        \
-                             \"api_key\": \"lsk_…\",\n        \
-                             \"api_url\": \"https://app.lyrashieldai.com\"\n      \
+                             \"api_key\": \"lsk_…\"\n        \
                          }}\n    \
                      }}\n  \
                  }}\n\
@@ -67,24 +58,13 @@ impl zed::Extension for LyraShieldMcpExtension {
                     &format!("Invalid settings for the LyraShield MCP server: {err}."),
                 )
             })?,
-            None => LyraShieldMcpSettings {
-                api_key: None,
-                api_url: default_api_url(),
-            },
+            None => LyraShieldMcpSettings { api_key: None },
         };
 
-        let api_url = settings.api_url.trim().to_string();
-        let api_url = if api_url.is_empty() {
-            DEFAULT_API_URL.to_string()
-        } else {
-            api_url
-        };
-
-        let latest_version = zed::npm_package_latest_version(PACKAGE_NAME)?;
         let installed_version = zed::npm_package_installed_version(PACKAGE_NAME)?;
 
-        if installed_version.as_deref() != Some(latest_version.as_str()) {
-            zed::npm_install_package(PACKAGE_NAME, &latest_version)?;
+        if installed_version.as_deref() != Some(PACKAGE_VERSION) {
+            zed::npm_install_package(PACKAGE_NAME, PACKAGE_VERSION)?;
         }
 
         let node = zed::node_binary_path()?;
@@ -93,18 +73,19 @@ impl zed::Extension for LyraShieldMcpExtension {
             .map_err(|err| format!("Failed to resolve the extension working directory: {err}"))?
             .join(SERVER_ENTRYPOINT);
 
-        let mut command = Command {
+        let api_key = settings.api_key.unwrap_or_default();
+        let command = Command {
             command: node,
-            args: vec![entrypoint.to_string_lossy().to_string()],
-            env: vec![(API_URL_ENV_VAR.to_string(), api_url)],
+            args: vec![
+                "--eval".to_string(),
+                format!(
+                    "{}\nimport(require('node:url').pathToFileURL(process.argv[1]).href)",
+                    include_str!("../mcp-env.cjs")
+                ),
+                entrypoint.to_string_lossy().to_string(),
+            ],
+            env: vec![(EXTENSION_CRED_ENV_VAR.to_string(), api_key)],
         };
-        if let Some(api_key) = settings
-            .api_key
-            .map(|key| key.trim().to_string())
-            .filter(|key| !key.is_empty())
-        {
-            command.env.push((API_KEY_ENV_VAR.to_string(), api_key));
-        }
         Ok(command)
     }
 
@@ -115,8 +96,7 @@ impl zed::Extension for LyraShieldMcpExtension {
     ) -> Result<Option<ContextServerConfiguration>> {
         let installation_instructions =
             include_str!("../configuration/installation_instructions.md").to_string();
-        let default_settings =
-            include_str!("../configuration/default_settings.jsonc").to_string();
+        let default_settings = include_str!("../configuration/default_settings.jsonc").to_string();
         let settings_schema = serde_json::to_string(&schemars::schema_for!(LyraShieldMcpSettings))
             .map_err(|err| format!("Failed to serialize the settings schema: {err}"))?;
 

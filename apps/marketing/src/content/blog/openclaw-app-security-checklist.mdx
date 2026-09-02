@@ -162,27 +162,12 @@ Target PR gate:
 | 5   | Channel input validation                           | Gateway, 29 channels                                                   | Chat message triggers repo write/push           |
 | 6   | Diff-aware SARIF gate + CODEOWNERS                 | `.github/workflows/*`, `CODEOWNERS`                                    | AI auth bypass ships, no owner on auth file     |
 
-## FAQ
-
-### Q: Where is OpenClaw MCP config and how do I manage it safely?
-
-`~/.openclaw/openclaw.json` JSON5 under `mcp.servers`. Manage via `openclaw mcp list`, `show <name>`, `set <json>`, `configure`, `tools --include/--exclude`, `login <name>`, `logout <name>`, `reload`, `unset <name>`. `status --verbose` shows resolved auth without connecting. Browser Control UI at `/settings/mcp` (`/mcp` alias) shows inventory and filter summary.
-
-### Q: How do I filter MCP tools least-privilege?
-
-Use `toolFilter.include` whitelist and `toolFilter.exclude` blacklist with exact names or `*` globs. Includes apply to `resources_list`, `resources_read`, `prompts_list`, `prompts_get` wrappers too. Set `enabled: false` to keep definition but exclude from discovery.
-
-### Q: How do I add LyraShield MCP to OpenClaw?
-
-Stdio: `openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp`. Remote: `--url https://app.lyrashieldai.com/api/mcp --transport streamable-http --header "Authorization=Bearer ${LYRASHIELD_API_KEY}"`. Manage OAuth via `openclaw mcp login lyrashield_remote` if proxying. Docs at [openclaw integration guide](/docs/integrations/openclaw).
-
-### Q: Does OpenClaw support OAuth for remote MCP?
-
-Yes. Set `auth: "oauth"` and run `openclaw mcp login <server>`. Tokens are stored under OpenClaw state and hot-applied on config change. OAuth scope/redirect/client metadata overridable via `oauth` object.
-
-Primary references for this gateway setup: [OWASP Top 10](https://owasp.org/www-project-top-ten/) for A03 injection via channel inputs, [CWE-20](https://cwe.mitre.org/data/definitions/20.html) and [MITRE ATT&CK](https://attack.mitre.org/) for input handling and initial access patterns, [Model Context Protocol docs](https://modelcontextprotocol.io/docs) for toolFilter and transport choice, [GitHub code scanning docs](https://docs.github.com/en/code-security/code-scanning) for SARIF retention, and the [OpenClaw repo](https://github.com/openclaw/openclaw) for verified config shape.
 
 ## Why pair OpenClaw with LyraShield
+
+OpenClaw gateway configuration should be reviewed as executable access policy. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) supplies a baseline for authorization and injection review, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) covers hardcoded credential exposure, and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) defines MCP transport and tool contracts. These references are not a security guarantee. They help reviewers inspect which channels and tools can act, where credentials resolve, and whether a release record binds the configuration revision to its stated limits. Repeat this review after changing a gateway, channel, skill, MCP server, or approval boundary.
+
+Keep that record scoped to the gateway revision reviewed.
 
 OpenClaw gives you local-first gateway power: one control plane for 29 channels, client-and-server MCP, and a verified registry with `doctor`/`probe`. LyraShield is the narrow verifier on that gateway: release assurance for AI-built apps with `target, review, evidence, fix, retest, report` and SCA and secrets feeding SARIF, not another general-purpose agent. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 

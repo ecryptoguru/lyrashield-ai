@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { updateNotificationStatus, prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -12,7 +13,7 @@ const PatchNotificationSchema = z.object({
   status: z.enum(["pending", "sent", "read", "failed"]).optional(),
 })
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function patch(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -69,3 +70,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return apiError("INTERNAL_ERROR", "Failed to update notification", 500)
   }
 }
+
+export const PATCH = withCookieMutation(patch)

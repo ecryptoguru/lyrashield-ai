@@ -12,8 +12,18 @@ const systemPrisma = {
   $transaction: vi.fn(),
 }
 const prisma = { auditLog: { create: vi.fn() } }
+const handleMerged = vi.fn()
+const assertScanAllowed = vi.fn()
+const assertScanWorkerAvailable = vi.fn()
+const enqueueScanJob = vi.fn()
 
-vi.mock("@lyrashield/db", () => ({ getSystemPrisma: () => systemPrisma, prisma }))
+vi.mock("@lyrashield/db", () => ({
+  getSystemPrisma: () => systemPrisma,
+  prisma,
+  handleFixPrMergedAndReevaluate: handleMerged,
+}))
+vi.mock("@lyrashield/billing", () => ({ assertScanAllowed }))
+vi.mock("@/lib/queue", () => ({ assertScanWorkerAvailable, enqueueScanJob }))
 vi.mock("@lyrashield/integrations", () => ({
   verifyWebhookSignature,
   // The route imports enqueueScanJob via @/lib/queue, which re-exports
@@ -50,6 +60,35 @@ describe("GitHub installation webhook", () => {
       workspaceId: "workspace-1",
     })
     systemPrisma.$transaction.mockImplementation(async (callback) => callback(tx))
+  })
+  it("returns 500 and clears the delivery marker when automatic retest delivery fails", async () => {
+    handleMerged.mockRejectedValueOnce(new Error("deferred"))
+    systemPrisma.webhookEvent.deleteMany.mockResolvedValue({ count: 1 })
+    const response = await POST(
+      new Request("http://localhost/api/webhooks/github", {
+        method: "POST",
+        headers: {
+          "x-hub-signature-256": "sha256=valid",
+          "x-github-event": "pull_request",
+          "x-github-delivery": "retry-1",
+        },
+        body: JSON.stringify({
+          action: "closed",
+          installation: { id: 42 },
+          repository: { full_name: "test/repo", id: 1 },
+          pull_request: {
+            number: 1,
+            merged: true,
+            head: { ref: "lyrashield/fix-test" },
+            base: { ref: "main" },
+          },
+        }),
+      }) as never
+    )
+    expect(response.status).toBe(500)
+    expect(systemPrisma.webhookEvent.deleteMany).toHaveBeenCalledWith({
+      where: { provider: "github", externalId: "retry-1" },
+    })
   })
 
   it("records the delivery atomically before disconnecting an installation", async () => {

@@ -30,14 +30,12 @@ const {
 } = Astro.props
 
 const xUrl = __MARKETING_X_URL__
-let twitterSite = "@lyrashieldai"
+let twitterSite: string | undefined
 if (xUrl) {
   try {
     const handle = new URL(xUrl).pathname.replace(/^\/+|\/+$/g, "").split("/")[0]
     if (handle) twitterSite = `@${handle}`
-  } catch {
-    // Keep the fallback handle if the configured X URL is not a valid URL.
-  }
+  } catch {}
 }
 
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
@@ -75,7 +73,7 @@ const indexable = __MARKETING_INDEXABLE__
 <meta property="og:site_name" content="LyraShield AI" />
 <meta property="og:locale" content="en_US" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:site" content={twitterSite} />
+{twitterSite && <meta name="twitter:site" content={twitterSite} />}
 <meta name="twitter:title" content={title} />
 <meta name="twitter:description" content={description} />
 <meta name="twitter:image" content={imageUrl} />

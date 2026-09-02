@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.18 distribution corrections
+
+- Pin the published MCP 0.2.2 package and preserve credential-store OAuth refresh.
+- Align client artifact versions, Kiro discovery instructions and Kilo configuration.
+- Use canonical tool names and retain human approval for fix proposals.
+
 ## 0.1.18
 
 - Sanitized marketplace validation failures so detected credentials are never echoed into CI logs.

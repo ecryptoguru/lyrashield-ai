@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { ISSUE_PLURAL, RUN_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { prisma, listFindings } from "@lyrashield/db"
@@ -195,6 +196,10 @@ export default async function FindingsPage({
         new Date(right.lastSeenAt).getTime() - new Date(left.lastSeenAt).getTime()
     )
 
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: session.userId } },
+    select: { role: true, status: true },
+  })
   return (
     <div>
       <DashboardSectionTabs
@@ -204,6 +209,10 @@ export default async function FindingsPage({
         activeTab={tab}
       />
       <FindingsClient
+        canCreatePr={
+          membership?.status === "active" &&
+          hasPermission(membership.role, PERMISSIONS.fix.createPr)
+        }
         workspaceId={workspaceId}
         initialData={initialData}
         initialNextCursor={nextCursor}

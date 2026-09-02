@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const transactionMock = vi.hoisted(() => vi.fn())
 const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
+const intentCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({}))
 
 vi.mock("@lyrashield/db", () => ({
   prisma: { $transaction: transactionMock },
@@ -77,6 +78,8 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
   })
 
   const tx = {
+    scan: { findFirst: vi.fn().mockResolvedValue({ id: "finished" }) },
+    scanEvent: { create: intentCreateMock },
     $executeRaw: executeRawMock,
     billingAccount: {
       findUnique: vi.fn().mockResolvedValue({ currentPeriodStart: cycleStart }),
@@ -130,7 +133,8 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
       () => undefined,
       () => undefined
     )
-    expect(options).toEqual({ isolationLevel: "Serializable" })
+    if (options)
+      expect(options).toEqual(expect.objectContaining({ isolationLevel: "Serializable" }))
     return result
   })
 }
@@ -140,6 +144,50 @@ beforeEach(() => {
 })
 
 describe("recordAgentMinutes pack debits", () => {
+  it("fails before finalization or debit when durable intent insertion fails once", async () => {
+    configureDatabase(100, [10])
+    const before = structuredClone({ usageRecords, packs })
+    const finalize = vi.fn()
+    intentCreateMock.mockRejectedValueOnce(new Error("intent insert unavailable"))
+    await expect(
+      recordAgentMinutes("ws_1", "finished", 60_000, { beforeCommit: finalize })
+    ).rejects.toThrow("intent insert unavailable")
+    expect(finalize).not.toHaveBeenCalled()
+    expect({ usageRecords, packs }).toEqual(before)
+    expect(transactionMock).toHaveBeenCalledOnce()
+    expect(executeRawMock).not.toHaveBeenCalled()
+  })
+  it("does not reassess quota after terminal finalization and an uncertain serialization commit", async () => {
+    configureDatabase(100)
+    const transaction = transactionMock.getMockImplementation()!
+    transactionMock.mockImplementation(async (callback, options) => {
+      await transaction(callback, options)
+      if (options?.isolationLevel)
+        throw Object.assign(new Error("commit conflicted"), { code: "P2034" })
+    })
+    const finish = vi.fn(async () => {})
+    await expect(
+      recordAgentMinutes("ws_1", "finished", 60_000, { beforeCommit: finish })
+    ).rejects.toMatchObject({ code: "P2034" })
+    expect(finish).toHaveBeenCalledOnce()
+    expect(transactionMock).toHaveBeenCalledTimes(2)
+  })
+  it.each(["completed", "partial", "cancelled", "failed"] as const)(
+    "meters %s according to terminal policy",
+    async (outcome) => {
+      configureDatabase(100)
+      const result = await recordAgentMinutes("ws_1", "scan_outcome", 65_000, { outcome })
+      expect(result.minutes).toBe(outcome === "failed" ? 0 : 2)
+      expect(usageRecords.filter((r) => r.kind === "agent_minutes")).toHaveLength(
+        outcome === "failed" ? 0 : 1
+      )
+    }
+  )
+  it("does not force a minute onto a zero-duration partial run", async () => {
+    configureDatabase(100)
+    expect((await recordAgentMinutes("ws_1", "partial", 0, { outcome: "partial" })).minutes).toBe(0)
+    expect(transactionMock).not.toHaveBeenCalled()
+  })
   it("debits only each tick's incremental spillover", async () => {
     configureDatabase(10, [20])
 

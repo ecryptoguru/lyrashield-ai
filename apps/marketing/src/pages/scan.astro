@@ -408,12 +408,17 @@ const jsonLd = [
         const why = document.createElement("p")
         why.textContent = check.whyItMatters
         const link = document.createElement("a")
-        link.href = `${check.learnMoreUrl}#evidence-states`
         link.className = "mt-4 inline-flex min-h-11 items-center font-semibold text-accent"
         link.textContent = "How LyraShield handles this →"
         const wrap = document.createElement("div")
         wrap.appendChild(why)
-        wrap.appendChild(link)
+        try {
+          const learnMoreUrl = new URL(check.learnMoreUrl)
+          if (learnMoreUrl.protocol === "https:") {
+            link.href = `${learnMoreUrl.toString()}#evidence-states`
+            wrap.appendChild(link)
+          }
+        } catch {}
         body.appendChild(what)
         body.appendChild(wrap)
         details.appendChild(summaryEl)

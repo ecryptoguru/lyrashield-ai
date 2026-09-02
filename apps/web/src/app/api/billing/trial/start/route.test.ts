@@ -3,7 +3,8 @@ vi.mock("@lyrashield/auth/server", () => ({ requirePermission: vi.fn() }))
 vi.mock("@lyrashield/billing", () => ({ startTrial: vi.fn() }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock("@/lib/api-auth", () => ({
+vi.mock("@/lib/api-auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-auth")>()),
   authErrorResponse: (error: Error) =>
     error.message === "denied" ? new Response(null, { status: 403 }) : null,
 }))

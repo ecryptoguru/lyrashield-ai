@@ -6,6 +6,7 @@ heading: "LyraShield AI vs GitHub Advanced Security"
 disclaimer: "Factual comparison. GitHub Advanced Security is GitHub's security suite (CodeQL, secret scanning, Dependabot). LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. The LyraShield GitHub Action complements GHAS rather than replacing it — it adds diff-aware pattern checks that run in your own runner with no account required."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace GitHub Advanced Security?"
     a: "No. GHAS is a mature, integrated scanner inside GitHub with CodeQL, secret scanning for 180+ providers, and Dependabot. LyraShield is release assurance for AI-built apps in open beta that separates detection from proof and produces an immutable assurance record. They solve different problems and complement each other."
@@ -51,7 +52,7 @@ faq:
 | Aspect     | LyraShield AI                                        | GHAS                                                                                      |
 | ---------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Deployment | Hosted + CLI + MCP + GitHub Action (any CI)          | GitHub.com or GitHub Enterprise Server                                                    |
-| Pricing    | Open beta; pricing announced as it matures           | Free for public repos; Secret Protection $19/committer/mo; Code Security $30/committer/mo |
+| Pricing    | See [pricing](/pricing) for current plan details     | Free for public repos; Secret Protection $19/committer/mo; Code Security $30/committer/mo |
 | Languages  | Language-agnostic (deterministic + agentic coverage) | C/C++, C#, Go, Java, Kotlin, JS, TS, Python, Ruby, Rust, Swift (no PHP, Scala)            |
 
 ## When to use which

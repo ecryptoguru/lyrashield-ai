@@ -60,6 +60,7 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
 - `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`
 - `status [scanId] [--watch]` — list scans or inspect one scan
 - `targets [--name ... --type ... --url ... --repo ...]` — list or create targets
+- `targets verify-domain <targetId> [--issue|--check]` — show domain-control status for a WEB_APP/API target in the configured workspace. `--issue` returns the DNS TXT host, value, and challenge expiry; publish that record, then use `--check`. Issuing replaces the previous token and verified status. The TXT value is returned only on issue; save it before exiting. All proof operations require target validation permission. Supports `--json`; invalid targets, permission failures, missing/expired proofs, and failed DNS checks exit nonzero. DNS control does not establish application security.
 - `readiness [--target <targetId>]` — get the launch-readiness verdict
 
 ### Scan mode guide

@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { randomBytes } from "node:crypto"
@@ -15,7 +16,7 @@ function generateCode(): string {
   return randomBytes(6).toString("base64url").slice(0, 8).toUpperCase()
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const session = await getCachedSession()
   if (!session) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
@@ -73,3 +74,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ success: true, linkId: link.id, code })
 }
+
+export const POST = withCookieMutation(post)

@@ -60,6 +60,10 @@ export function validateComparePage({ slug, data, body, programEntry, context = 
   }
 
   if (data.draft !== false) errors.push("released comparison must set draft: false")
+  if (data.pricingLadder !== true) errors.push("comparison must render the shared pricing ladder")
+  if (/\|\s*Pricing\s*\|[^|\n]*(?:\$29|\$99|\$499|\$1,500)/.test(body)) {
+    errors.push("comparison must not hardcode the LyraShield pricing ladder")
+  }
 
   for (const [label, pattern] of PROHIBITED_CLAIMS) {
     if (pattern.test(text)) errors.push(`prohibited product claim: ${label}`)

@@ -8,7 +8,6 @@ export async function handleInstall(args: string[], output: Output): Promise<num
   const parsed = minimist(args, {
     boolean: ["dry-run", "global", "project", "inline-secret", "yes"],
     string: ["transport"],
-    default: { transport: "stdio" },
   })
 
   const [agentId] = parsed._
@@ -17,19 +16,13 @@ export async function handleInstall(args: string[], output: Output): Promise<num
     return 2
   }
 
-  const transport = parsed.transport as Transport
-  if (!["stdio", "remote-http"].includes(transport)) {
+  const transport = parsed.transport as Transport | undefined
+  if (transport && !["stdio", "remote-http"].includes(transport)) {
     output.error("--transport must be stdio or remote-http")
     return 2
   }
 
   const creds = await getEffectiveCredentials()
-  if (!creds.apiKey) {
-    output.error(
-      "No LyraShield credential. Run: lyrashield login --oauth, or use an API key for CI."
-    )
-    return 3
-  }
 
   const scope = parsed.global ? "global" : parsed.project ? "project" : undefined
 
@@ -48,9 +41,19 @@ export async function handleInstall(args: string[], output: Output): Promise<num
     return 2
   }
 
+  if (
+    !creds.apiKey &&
+    !(agent.installStrategy === "agent-plugin" && agent.transports.includes("remote-http"))
+  ) {
+    output.error(
+      "No LyraShield credential. Run: lyrashield login --oauth, or use an API key for CI."
+    )
+    return 3
+  }
+
   const result = await installAgent({
     agent,
-    transport,
+    transport: transport ?? agent.transports[0]!,
     apiUrl: creds.apiUrl,
     apiKey: creds.credentialKind === "api-key" ? creds.apiKey : undefined,
     useCredentialStore: creds.credentialKind === "oauth",

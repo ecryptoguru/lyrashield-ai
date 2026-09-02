@@ -8,7 +8,7 @@ draft: false
 heroImage: agent-security-14
 faq:
   - q: "How do I register LyraShield in OpenCode?"
-    a: "Add an mcp.servers entry in opencode.json with type local or remote, command npx -y @lyrashield/mcp@0.2.2, and env mapping for LYRASHIELD_API_KEY. Restart OpenCode and verify the tool list."
+    a: "Add an mcp.servers entry in opencode.json with type local or remote, command npx -y @lyrashield/mcp, and env mapping for LYRASHIELD_API_KEY. Restart OpenCode and verify the tool list."
   - q: "Does OpenCode support remote MCP with Bearer?"
     a: "Yes. Use type remote with URL https://app.lyrashieldai.com/api/mcp and pass LYRASHIELD_API_KEY as Bearer via env. The same pattern is used in the GitHub Action."
   - q: "What matches LyraShield v1 scope?"
@@ -19,9 +19,9 @@ faq:
 
 Fastest path: run `npx lyrashield init` to auto-detect OpenCode and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json. The manual config below is what the CLI writes, kept for reference.
 
-Connect OpenCode to LyraShield AI through MCP to scan AI generated code for findings with evidence states, propose Fix Proposals that are designed to be minimal, and enforce the same checks in CI with a diff aware gate. The server entry lives in `opencode.json` under `mcp.servers` and supports local stdio via `npx -y @lyrashield/mcp@0.2.2` plus remote HTTP with a bearer token.
+Connect OpenCode to LyraShield AI through MCP to scan AI generated code for findings with evidence states, propose Fix Proposals that are designed to be minimal, and enforce the same checks in CI with a diff aware gate. The server entry lives in `opencode.json` under `mcp.servers` and supports local stdio via `npx -y @lyrashield/mcp` plus remote HTTP with a bearer token.
 
-OpenCode runs agent workflows from `opencode.json`, which makes it a natural place to add security tooling that survives across sessions. The [vibe coding security guide](/blog/vibe-coding-security-guide) outlines why AI built projects need verification that ties code, deps, and secrets together. LyraShield AI is agent native AppSec for AI built software following Target to Scan to Evidence State to Fix Proposal to Retest to Report. This guide shows exact OpenCode config using `npx -y @lyrashield/mcp@0.2.2` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification steps, inline scans, GitHub Action, and rules.
+OpenCode runs agent workflows from `opencode.json`, which makes it a natural place to add security tooling that survives across sessions. The [vibe coding security guide](/blog/vibe-coding-security-guide) outlines why AI built projects need verification that ties code, deps, and secrets together. LyraShield AI is agent native AppSec for AI built software following Target to Scan to Evidence State to Fix Proposal to Retest to Report. This guide shows exact OpenCode config using `npx -y @lyrashield/mcp` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification steps, inline scans, GitHub Action, and rules.
 
 ## 1. Prerequisites and setup
 
@@ -71,7 +71,7 @@ Remote HTTP with Bearer:
 }
 ```
 
-Both use the pinned command `npx -y @lyrashield/mcp@0.2.2` in some form, and remote uses [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. The `{env:VAR}` expansion is OpenCode native, it pulls from your shell env without hardcoding secrets. If you want a sibling checklist for rollout, see the [OpenCode AI app security checklist](/blog/opencode-app-security-checklist) which mirrors this gate pattern. Link the guide as [OpenCode integration guide](/docs/integrations/opencode) rather than a bare path to pass editorial checks.
+Both use the pinned command `npx -y @lyrashield/mcp` in some form, and remote uses [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. The `{env:VAR}` expansion is OpenCode native, it pulls from your shell env without hardcoding secrets. If you want a sibling checklist for rollout, see the [OpenCode AI app security checklist](/blog/opencode-app-security-checklist) which mirrors this gate pattern. Link the guide as [OpenCode integration guide](/docs/integrations/opencode) rather than a bare path to pass editorial checks.
 
 The remote Bearer pattern targets `https://app.lyrashieldai.com/api/mcp` and passes `${LYRASHIELD_API_KEY}` in the `Authorization` header. This is the same endpoint the GitHub Action calls, so editor and CI produce the same finding IDs. Keeping both entries in `opencode.json` lets you use local stdio for fast editor feedback and switch to remote for CI parity by setting `disabled: true` on the one you are not using.
 

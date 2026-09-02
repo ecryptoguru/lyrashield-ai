@@ -57,11 +57,11 @@ LyraShield under **Settings → API keys** (prefer read-only), then inject these
 client's user-level secret or environment configuration:
 
 - `LYRASHIELD_API_KEY` — your `lsk_…` key
-- `LYRASHIELD_API_URL` — your LyraShield app URL (defaults to `http://localhost:3000`)
+- `LYRASHIELD_API_URL` — your LyraShield app URL (defaults to `https://app.lyrashieldai.com`)
 
 The interactive examples below use the OAuth credential store and therefore contain no secret.
 
-### Claude Code / Cursor / Windsurf / Gemini CLI (the `mcpServers` shape)
+### Claude Code / Cursor / Gemini CLI (the `mcpServers` shape)
 
 ```json
 {
@@ -120,7 +120,7 @@ completed an authenticated runtime matrix.
   manifest and remains `EXPERIMENTAL` until a retained client-runtime receipt exists.
 - VS Code's reserved Agent Plugin entry is experimental and not preferred. Use its verified
   `.vscode/mcp.json` path.
-- Config or guided setup: Windsurf, VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
+- Config or guided setup: VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
   Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity,
   PiCode, OpenClaw, Hermes, and Devin, subject to each registry entry's support tier.
 
@@ -189,11 +189,14 @@ Read-only tools never prompt. A read-only key is additionally rejected server-si
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.2; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/mcp` 0.2.3; runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,
   credentials, prompt-injection guards, schemas, structured results, and approval policy.
+- A stored OAuth credential is refreshed before the stdio server starts when it is expired or
+  within the one-minute refresh window; the rotated credential is atomically persisted. Environment
+  credentials remain immutable and retain precedence.
 - [`docs/protocol-conformance.md`](./docs/protocol-conformance.md) maps protocol claims to focused
   tests and lists intentionally unsupported draft features.
 

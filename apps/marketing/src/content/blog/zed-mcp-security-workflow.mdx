@@ -59,7 +59,7 @@ Remote HTTP mode with Bearer:
       "source": "custom",
       "command": {
         "path": "npx",
-        "args": ["-y", "@lyrashield/mcp", "--remote"],
+        "args": ["-y", "@lyrashield/mcp"],
         "env": {
           "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}",
           "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp"
@@ -70,7 +70,7 @@ Remote HTTP mode with Bearer:
 }
 ```
 
-The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and authenticates with `Authorization: Bearer lsk_...`. The stdio entry uses the pinned command `npx -y @lyrashield/mcp` as requested. You can also run the remote endpoint directly from tools that support streamable HTTP. Keep `$VAR` expansion explicit as shown, since Zed expands variables at launch. For comparison of editor setups, see the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) which walks through the same pattern for checklist driven reviews. The core difference is the `--remote` flag and `LYRASHIELD_API_URL` entry. In stdio mode the binary lives in the `npx` cache, pin a version if reproducibility matters. In remote mode the server is managed, but at the cost of network dependency, so editor and CI share the same finding IDs.
+The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and authenticates with `Authorization: Bearer lsk_...`. The stdio entry uses the pinned command `npx -y @lyrashield/mcp` as requested. You can also run the remote endpoint directly from tools that support streamable HTTP. Keep `$VAR` expansion explicit as shown, since Zed expands variables at launch. For comparison of editor setups, see the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) which walks through the same pattern for checklist driven reviews. The remote endpoint is configured by the client rather than MCP command arguments. In stdio mode the binary lives in the `npx` cache, pin a version if reproducibility matters. In remote mode the server is managed, but at the cost of network dependency, so editor and CI share the same finding IDs.
 
 ## 3. Verify the connection in Zed
 

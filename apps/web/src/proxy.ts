@@ -99,19 +99,12 @@ async function hashWithSalt(value: string): Promise<string> {
 
 /**
  * S3: Extract and hash the client IP for affiliate click storage.
- * Checks common proxy headers (cf-connecting-ip, true-client-ip, etc.).
- * Returns undefined if no IP header is found.
+ * Uses the same configured trusted last hop as rate limiting.
+ * Unknown addresses are omitted rather than conflated into one affiliate visitor.
  */
-async function getAffiliateIpHash(request: NextRequest): Promise<string | undefined> {
-  const headers = ["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"]
-  for (const header of headers) {
-    const value = request.headers.get(header)
-    if (value) {
-      const ip = value.split(",")[0]?.trim()
-      if (ip) return hashWithSalt(ip)
-    }
-  }
-  return undefined
+export async function getAffiliateIpHash(request: NextRequest): Promise<string | undefined> {
+  const ip = getClientIP(request)
+  return ip === "unknown" ? undefined : hashWithSalt(ip)
 }
 
 /**

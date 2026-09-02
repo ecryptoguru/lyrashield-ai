@@ -240,7 +240,7 @@ export async function handleFixPrMerged(params: {
     const pr = await tx.pullRequest.findFirst({
       where: {
         branchName: params.branchName,
-        status: "open",
+        status: { in: ["open", "merged"] },
         deletedAt: null,
         fixProposal: { finding: { workspaceId: params.workspaceId, deletedAt: null } },
       },
@@ -266,14 +266,15 @@ export async function handleFixPrMerged(params: {
       return null
     }
 
-    await tx.pullRequest.update({
-      where: { id: pr.id },
-      data: {
-        status: "merged",
-        mergedAt: new Date(),
-        ...(params.prNumber ? { prNumber: params.prNumber } : {}),
-      },
-    })
+    if (pr.status !== "merged")
+      await tx.pullRequest.update({
+        where: { id: pr.id },
+        data: {
+          status: "merged",
+          mergedAt: new Date(),
+          ...(params.prNumber ? { prNumber: params.prNumber } : {}),
+        },
+      })
 
     logger.info("Fix PR merged", {
       pullRequestId: pr.id,

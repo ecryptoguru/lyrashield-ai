@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { createHash } from "node:crypto"
@@ -5,6 +6,7 @@ import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { getCachedSession } from "@/lib/cache"
 import { detectFraudSignals, AFFILIATE_TERMS_VERSION } from "@lyrashield/affiliate"
+import { clientIpFromRequest } from "@/lib/rate-limit"
 
 // C-M10: IP / user-agent hashing for fraud-signal signup counts. Mirrors the
 // salted SHA-256 used by the click route so the hashes match across routes.
@@ -16,15 +18,8 @@ function hashIp(value: string): string {
 }
 
 function getClientIp(request: Request): string | undefined {
-  const headers = ["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"]
-  for (const header of headers) {
-    const value = request.headers.get(header)
-    if (value) {
-      const ip = value.split(",")[0]?.trim()
-      if (ip) return ip
-    }
-  }
-  return undefined
+  const ip = clientIpFromRequest(request)
+  return ip === "unknown" ? undefined : ip
 }
 
 const ApplySchema = z.object({
@@ -47,31 +42,10 @@ const ApplySchema = z.object({
   taxFormStatus: z.enum(["will_complete", "have_w9", "have_w8ben", "have_w8ben_e", "have_gstin"]),
 })
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const session = await getCachedSession()
   if (!session) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
-  }
-
-  // C-L09: CSRF protection — verify Origin/Referer header matches the app URL
-  // for form POST submissions. This prevents cross-site form submission attacks.
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
-  if (appUrl) {
-    const origin = request.headers.get("origin")
-    const referer = request.headers.get("referer")
-    const allowedOrigin = new URL(appUrl).origin
-    if (origin && new URL(origin).origin !== allowedOrigin) {
-      return NextResponse.json(
-        { success: false, error: "Cross-origin form submission not allowed" },
-        { status: 403 }
-      )
-    }
-    if (referer && new URL(referer).origin !== allowedOrigin) {
-      return NextResponse.json(
-        { success: false, error: "Cross-origin form submission not allowed" },
-        { status: 403 }
-      )
-    }
   }
 
   const formData = await request.formData().catch(() => null)
@@ -177,3 +151,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ success: true, affiliateId: affiliate.id }, { status: 201 })
 }
+
+export const POST = withCookieMutation(post)

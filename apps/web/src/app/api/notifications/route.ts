@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import {
   listNotifications,
   createNotification,
@@ -63,7 +64,7 @@ const CreateNotificationSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const body = await request.json()
     const parsed = CreateNotificationSchema.safeParse(body)
@@ -110,7 +111,7 @@ const MarkAllReadSchema = z.object({
   action: z.literal("mark_all_read"),
 })
 
-export async function PATCH(request: Request) {
+async function patch(request: Request) {
   try {
     const parsed = MarkAllReadSchema.safeParse(await request.json())
     if (!parsed.success) return apiError("INVALID_PARAM", "Invalid mark-all-read request", 400)
@@ -136,3 +137,7 @@ export async function PATCH(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to mark all notifications read", 500)
   }
 }
+
+export const POST = withCookieMutation(post)
+
+export const PATCH = withCookieMutation(patch)

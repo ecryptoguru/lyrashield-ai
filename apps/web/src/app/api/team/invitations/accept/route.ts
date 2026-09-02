@@ -1,5 +1,6 @@
+import { withCookieMutation } from "../../../../../lib/api-auth"
 import { z } from "zod"
-import { getSystemPrisma, prisma } from "@lyrashield/db"
+import { getSystemPrisma, prisma, lockWorkspaceMembership } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
  * match between the invitation's email and the signed-in account's email, so
  * a leaked link cannot add an arbitrary account to a workspace.
  */
-export async function POST(request: Request) {
+async function post(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
     }
 
     const joined = await getSystemPrisma().$transaction(async (tx) => {
+      await lockWorkspaceMembership(tx, invitation.workspaceId)
       const consumed = await tx.invitation.updateMany({
         where: {
           id: invitation.id,
@@ -134,6 +136,15 @@ export async function POST(request: Request) {
         throw new Error("INVITATION_CONSUME_CONFLICT")
       }
 
+      const activeMember = await tx.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: { workspaceId: invitation.workspaceId, userId: session.userId },
+        },
+        select: { status: true },
+      })
+      // An old invitation must never demote an existing owner or change an
+      // active member's permissions. Role changes belong to the team route.
+      if (activeMember?.status === "active") return false
       await tx.workspaceMember.upsert({
         where: {
           workspaceId_userId: {
@@ -188,3 +199,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to accept invitation", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

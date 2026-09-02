@@ -67,7 +67,7 @@ Automated coverage includes:
 
 ## Production boundary and remaining gates
 
-The passive Lite Check launch gate is complete: the canonical site, isolated scanner origin, Turnstile, abuse address, Upstash limiter, PostHog project, CORS, fail-closed bot check, six browser-local tools, open-registration boundaries, and a real scan are live and verified. Keep the following separate:
+The passive Lite Check launch gate is complete: the canonical site, isolated scanner origin, Turnstile, abuse address, Upstash limiter, PostHog project, CORS, fail-closed bot check, seven browser-local tools, open-registration boundaries, and a real scan are live and verified. Keep the following separate:
 
 1. The authenticated app is separately deployed at `https://app.lyrashieldai.com` with open registration. The production marketing Worker sets `PUBLIC_APP_URL` to that app origin, so the header exposes Sign in/Sign up and CTAs link to sign-up; a build that leaves it unset (local dev, or a preview environment with no authenticated origin) hides those links instead. Either way the app remains a separate deployment and this does not change the Lite Check boundary — the Lite Check itself stays no-signup and passive.
 2. Full repository scans require BullMQ-compatible TLS Redis, private evidence storage, dedicated sandbox-capable worker compute, authorized models, and controlled egress; the Lite Scanner's Supabase/Upstash/Azure Container App deployment does not supply that pipeline.

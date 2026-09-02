@@ -29,6 +29,16 @@ function verdict(overrides: Partial<LaunchReportSource> = {}): LaunchReportSourc
 }
 
 describe("buildLaunchReportPayload — the disclosure allowlist", () => {
+  it("preserves evaluated medium and low counts without claiming they block launch", () => {
+    const source = verdict()
+    source.evidenceSummary.unresolvedMedium = 7
+    source.evidenceSummary.unresolvedLow = 2
+    const payload = buildLaunchReportPayload(source)
+    expect(payload.counts.unresolvedMedium).toBe(7)
+    expect(payload.counts.unresolvedLow).toBe(2)
+    expect(payload.notEvaluatedSeverities).toEqual([])
+    expect(payload.payloadVersion).toBe("lyrashield-launch-report/1.1.0")
+  })
   it("emits exactly the allowed key set (regression guard)", () => {
     const payload = buildLaunchReportPayload(verdict())
     expect(Object.keys(payload).sort()).toEqual([
@@ -38,6 +48,7 @@ describe("buildLaunchReportPayload — the disclosure allowlist", () => {
       "evaluatedAt",
       "issuedAt",
       "nonCoverage",
+      "notEvaluatedSeverities",
       "payloadVersion",
       "reportChecksum",
       "stale",
@@ -137,8 +148,9 @@ describe("buildLaunchReportPayload — the disclosure allowlist", () => {
     )
     expect(payload.counts.unresolvedCritical).toBe(3)
     expect(payload.counts.unresolvedHigh).toBe(2)
-    expect(payload.counts.unresolvedMedium).toBe(0)
-    expect(payload.counts.unresolvedLow).toBe(0)
+    expect(payload.counts.unresolvedMedium).toBeNull()
+    expect(payload.counts.unresolvedLow).toBeNull()
+    expect(payload.notEvaluatedSeverities).toEqual(["MEDIUM", "LOW"])
     // And blockingReasons alone (without summary counts) cannot inflate them.
     const fromReasonsOnly = buildLaunchReportPayload(
       verdict({

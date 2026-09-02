@@ -503,6 +503,9 @@ export function validateArticle(article, programEntry, context = {}) {
     }
   }
 
+  if (/^## FAQ\s*$/m.test(body))
+    errors.push("body FAQ heading duplicates frontmatter FAQ")
+
   errors.push(...headingErrors(body))
 
   const isAuthority = programEntry?.index === 1 || slug === "vibe-coding-security-guide"

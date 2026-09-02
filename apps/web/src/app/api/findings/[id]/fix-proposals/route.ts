@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../../lib/api-auth"
 import { createFixProposal, getFinding } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -16,7 +17,7 @@ const CreateFixProposalSchema = z.object({
   safetyScore: z.number().int().min(0).max(100).optional(),
 })
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -78,3 +79,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError("INTERNAL_ERROR", "Failed to create fix proposal", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

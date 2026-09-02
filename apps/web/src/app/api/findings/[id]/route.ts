@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { getFinding, updateFindingStatus, markFalsePositive, acceptRisk } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -70,7 +71,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function patch(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -158,3 +159,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return apiError("INTERNAL_ERROR", "Failed to update finding", 500)
   }
 }
+
+export const PATCH = withCookieMutation(patch)

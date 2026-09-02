@@ -345,6 +345,8 @@ jobs:
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: |
           bash .github/scripts/tests/test-promote-worker-vm.sh
+          bash .github/scripts/tests/test-configure-cloud-billing-admission.sh
+          node --test .github/scripts/tests/parse-billing-receipt.test.mjs .github/scripts/tests/worker-preflight.test.mjs
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
           sh ops/worker/refresh-secrets.test.sh
@@ -388,7 +390,7 @@ jobs:
         timeout-minutes: 10
         run: pnpm --filter @lyrashield/marketing test:browser
 
-      - name: Browser E2E
+      - name: Browser E2E (includes functional mobile shell at 390px)
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         timeout-minutes: 15
         # DATABASE_URL: the NOBYPASSRLS runtime role — the app under test runs
@@ -773,6 +775,12 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: apps/desktop/src-tauri
+
+      - name: Audit Rust dependencies
+        working-directory: apps/desktop/src-tauri
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit
 
       - name: Format check
         working-directory: apps/desktop/src-tauri

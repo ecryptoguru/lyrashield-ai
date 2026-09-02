@@ -1,16 +1,36 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 import { createId } from "@paralleldrive/cuid2"
-import { PrismaClient } from "./generated/prisma"
+import { PrismaClient, Prisma } from "./generated/prisma"
 import { PrismaPg } from "@prisma/adapter-pg"
-import { prisma } from "./client"
+import { prisma as applicationPrisma } from "./client"
+import { WORKSPACE_SCOPED_MODELS } from "./scoping"
+
+// Change only the connection configuration: application helpers retain the real
+// client, extensions, transactions and PostgreSQL policies.
+vi.mock("@lyrashield/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/config")>()
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      DATABASE_URL: process.env.RLS_RUNTIME_DATABASE_URL ?? actual.env.DATABASE_URL,
+    },
+  }
+})
+vi.mock("../../auth/src/server", () => ({
+  requirePermission: vi.fn().mockResolvedValue(undefined),
+}))
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+})
+let fixturesStarted = false
 
 /**
  * Proves workspace isolation is enforced by Postgres, not merely declared.
  *
- * The rest of the suite proves two things by inspection: that WORKSPACE_SCOPED_MODELS
- * matches the RLS-protected table set, and that the Prisma extension injects a workspace
- * filter. Neither executes a query, so neither would catch a policy that was dropped,
+ * Unit checks prove the Prisma extension injects a workspace filter. They do not
+ * execute a query, so they cannot catch a policy that was dropped,
  * mis-scoped, or reverted to allow-all — the failure mode that returns another tenant's
  * rows instead of raising an error.
  *
@@ -63,8 +83,13 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       )
     }
 
-    // Seed through the privileged client: the restricted role cannot create the workspace
-    // rows that the policies key on.
+    const [applicationRole] = await applicationPrisma.$queryRaw<
+      Array<{ name: string }>
+    >`SELECT current_user AS name`
+    expect(applicationRole?.name).toBe(role.rolname)
+
+    // Keep fixture setup separate from the restricted application write assertions.
+    fixturesStarted = true
     await prisma.workspace.create({
       data: { id: workspaceId, name: "RLS fail-closed owner", slug: workspaceId },
     })
@@ -121,6 +146,12 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
   })
 
   afterAll(async () => {
+    if (!fixturesStarted) {
+      await restricted?.$disconnect()
+      await applicationPrisma.$disconnect()
+      await prisma.$disconnect()
+      return
+    }
     await prisma.artifactDeletionTask.deleteMany({
       where: { id: { in: [artifactDeletionTaskId, enqueuedArtifactDeletionTaskId] } },
     })
@@ -129,6 +160,8 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     }
     await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id IN (${workspaceId}, ${otherWorkspaceId})`
     await restricted?.$disconnect()
+    await applicationPrisma.$disconnect()
+    await prisma.$disconnect()
   })
 
   /**
@@ -158,6 +191,391 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     >`SELECT count(*)::bigint AS count FROM "Target" WHERE id = ${targetId}`
     return Number(rows[0]?.count ?? 0)
   }
+
+  it("accounts for every live public RLS table and verifies enforcement flags", async () => {
+    const children = [
+      "ScanEvent",
+      "Evidence",
+      "ScanResultManifest",
+      "ScanCoverageReceipt",
+      "FixProposal",
+      "PullRequest",
+      "Ticket",
+      "ScorecardShare",
+      "ScorecardEvent",
+      "AiSystemProfileVersion",
+      "ThreatModelVersion",
+      "ControlEvidenceVersion",
+    ]
+    const explicit = {
+      License: "Nullable workspace for system-issued, not-yet-linked licenses",
+      LicenseKey: "Nullable workspace; privileged key lookup before workspace linkage",
+      LicenseActivation: "Nullable workspace; privileged machine activation",
+      LicenseRevocation: "Inherits workspace through License",
+      SyncCursor: "Explicit workspace transactions in sync routes",
+    }
+    const systemOnly = {
+      ArtifactDeletionTask: "Owner-only durable deletion outbox survives workspace deletion",
+      PlatformAdminAudit: "Owner-only cross-workspace operator audit",
+      PlatformAdminElevation: "Owner-only cross-workspace action elevation",
+      PlatformAdminChallengeLimit: "Owner-only operator challenge rate limit",
+    }
+    const rows = await restricted.$queryRaw<
+      Array<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>
+    >`
+      SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')`
+    const tenantTables = [...WORKSPACE_SCOPED_MODELS, ...children, ...Object.keys(explicit)]
+    expect(
+      rows
+        .filter((row) => row.relrowsecurity)
+        .map((row) => row.relname)
+        .sort()
+    ).toEqual([...tenantTables, ...Object.keys(systemOnly)].sort())
+    for (const table of tenantTables) {
+      expect(
+        rows.find((row) => row.relname === table),
+        table
+      ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true })
+    }
+    for (const table of Object.keys(systemOnly)) {
+      expect(
+        rows.find((row) => row.relname === table),
+        table
+      ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: false })
+    }
+  })
+
+  it("executes dashboard, readiness route and fix listing against the restricted application client", async () => {
+    const { withWorkspaceRLS } = await import("./rls")
+    const { listFixProposals } = await import("./fix-proposal-service")
+    const { getDashboardOverview } = await import("../../../apps/web/src/lib/dashboard-overview")
+    const { GET } = await import("../../../apps/web/src/app/api/launch-readiness/route")
+    const { receipt, proposal } = await withWorkspaceRLS(workspaceId, async (tx) => ({
+      receipt: await tx.scanCoverageReceipt.create({
+        data: { scanId, scanner: "runtime-app", controlId: `app-${suffix}`, status: "COMPLETED" },
+      }),
+      proposal: await tx.fixProposal.create({
+        data: { findingId, kind: "patch", summary: "Runtime application regression" },
+      }),
+    }))
+    try {
+      expect((await getDashboardOverview(workspaceId)).targets).toMatchObject({
+        total: 1,
+        assessed: 1,
+        unassessed: 0,
+      })
+      expect((await getDashboardOverview(otherWorkspaceId)).targets.total).toBe(0)
+      expect((await listFixProposals({ workspaceId })).items.map((item) => item.id)).toContain(
+        proposal.id
+      )
+      expect((await listFixProposals({ workspaceId: otherWorkspaceId })).items).toEqual([])
+      const own = await GET(
+        new Request(`http://localhost/api/launch-readiness?workspaceId=${workspaceId}`)
+      )
+      expect(own.status).toBe(200)
+      expect((await own.json()).data.verdict).not.toMatch(/INCONCLUSIVE|NOT_EVALUATED/)
+      const foreign = await GET(
+        new Request(
+          `http://localhost/api/launch-readiness?workspaceId=${otherWorkspaceId}&targetId=${targetId}`
+        )
+      )
+      expect(foreign.status).toBe(200)
+      expect((await foreign.json()).data.verdict).toBe("NOT_EVALUATED")
+      // A missing transaction wrapper must still fail closed for child rows.
+      expect(await applicationPrisma.scanCoverageReceipt.count({ where: { id: receipt.id } })).toBe(
+        0
+      )
+      expect(await applicationPrisma.fixProposal.count({ where: { id: proposal.id } })).toBe(0)
+    } finally {
+      await prisma.fixProposal.delete({ where: { id: proposal.id } })
+      await prisma.scanCoverageReceipt.delete({ where: { id: receipt.id } })
+    }
+  })
+
+  it("writes every child and license table as runtime, denying foreign and absent contexts", async () => {
+    const { withWorkspaceRLS } = await import("./rls")
+    const parents = await withWorkspaceRLS(workspaceId, async (tx) => ({
+      snapshot: await tx.scoreSnapshot.create({
+        data: {
+          workspaceId,
+          targetId,
+          scanId,
+          modelVersion: "rls",
+          score: 50,
+          grade: "C",
+          breakdown: {},
+          scanMode: "STANDARD",
+          expiresAt: new Date("9999-01-01"),
+        },
+      }),
+      profile: await tx.aiSystemProfile.create({
+        data: { workspaceId, targetId, profile: {}, createdById: suffix, updatedById: suffix },
+      }),
+      threat: await tx.threatModel.create({ data: { workspaceId, targetId } }),
+      control: await tx.controlEvidence.create({
+        data: { workspaceId, targetId, controlId: `matrix-${suffix}` },
+      }),
+    }))
+    const proposalId = createId(),
+      shareId = createId(),
+      licenseId = createId()
+    const cases: Array<{
+      table: string
+      create: (tx: Prisma.TransactionClient) => Promise<{ id: string }>
+    }> = [
+      {
+        table: "ScanEvent",
+        create: (tx) =>
+          tx.scanEvent.create({ data: { scanId, stage: "completed", message: "runtime matrix" } }),
+      },
+      {
+        table: "Evidence",
+        create: (tx) =>
+          tx.evidence.create({
+            data: { findingId, type: "receipt", storageUri: evidenceStorageUri },
+          }),
+      },
+      {
+        table: "ScanResultManifest",
+        create: (tx) =>
+          tx.scanResultManifest.create({ data: { scanId, manifest: {}, checksum: suffix } }),
+      },
+      {
+        table: "ScanCoverageReceipt",
+        create: (tx) =>
+          tx.scanCoverageReceipt.create({
+            data: { scanId, scanner: "matrix", controlId: `matrix-${suffix}`, status: "COMPLETED" },
+          }),
+      },
+      {
+        table: "FixProposal",
+        create: (tx) =>
+          tx.fixProposal.create({
+            data: { id: proposalId, findingId, kind: "patch", summary: "runtime matrix" },
+          }),
+      },
+      {
+        table: "PullRequest",
+        create: (tx) =>
+          tx.pullRequest.create({
+            data: {
+              fixProposalId: proposalId,
+              provider: "github",
+              repoOwner: "fixture",
+              repoName: "fixture",
+              branchName: "fixture",
+            },
+          }),
+      },
+      {
+        table: "Ticket",
+        create: (tx) => tx.ticket.create({ data: { findingId, provider: "fixture" } }),
+      },
+      {
+        table: "ScorecardShare",
+        create: (tx) =>
+          tx.scorecardShare.create({
+            data: {
+              id: shareId,
+              snapshotId: parents.snapshot.id,
+              slug: suffix,
+              publicPayload: {},
+              createdById: suffix,
+            },
+          }),
+      },
+      {
+        table: "ScorecardEvent",
+        create: (tx) =>
+          tx.scorecardEvent.create({
+            data: { shareId, eventType: "view", visitorHash: suffix, dayBucket: new Date() },
+          }),
+      },
+      {
+        table: "AiSystemProfileVersion",
+        create: (tx) =>
+          tx.aiSystemProfileVersion.create({
+            data: {
+              aiSystemProfileId: parents.profile.id,
+              version: 1,
+              profile: {},
+              checksum: suffix,
+              createdById: suffix,
+            },
+          }),
+      },
+      {
+        table: "ThreatModelVersion",
+        create: (tx) =>
+          tx.threatModelVersion.create({
+            data: {
+              threatModelId: parents.threat.id,
+              version: 1,
+              content: {},
+              checksum: suffix,
+              createdById: suffix,
+            },
+          }),
+      },
+      {
+        table: "ControlEvidenceVersion",
+        create: (tx) =>
+          tx.controlEvidenceVersion.create({
+            data: {
+              controlEvidenceId: parents.control.id,
+              version: 1,
+              status: "SUBMITTED",
+              attestation: "fixture",
+              artifactManifest: [],
+              checksum: suffix,
+              createdById: suffix,
+            },
+          }),
+      },
+      {
+        table: "License",
+        create: (tx) =>
+          tx.license.create({
+            data: {
+              id: licenseId,
+              workspaceId,
+              ownerEmail: "fixture@example.com",
+              sku: "individual_launch",
+              seatCount: 1,
+              updateEligibleUntil: new Date("9999-01-01"),
+              signingKeyId: "fixture",
+              signature: "fixture",
+              issuedAt: new Date(),
+            },
+          }),
+      },
+      {
+        table: "LicenseKey",
+        create: (tx) =>
+          tx.licenseKey.create({
+            data: { licenseId, workspaceId, keyHash: suffix, issuedByProvider: suffix },
+          }),
+      },
+      {
+        table: "LicenseActivation",
+        create: (tx) =>
+          tx.licenseActivation.create({
+            data: { licenseId, workspaceId, machineId: suffix, lastSeenAt: new Date() },
+          }),
+      },
+      {
+        table: "LicenseRevocation",
+        create: (tx) =>
+          tx.licenseRevocation.create({
+            data: { licenseId, revokedAt: new Date(), reason: "fixture", revokedByKeyId: suffix },
+          }),
+      },
+      {
+        table: "GateVerdict",
+        create: (tx) =>
+          tx.gateVerdict.create({
+            data: {
+              workspaceId,
+              targetId,
+              scanId,
+              standardVersion: "matrix",
+              state: "INSUFFICIENT_EVIDENCE",
+              coverageStatement: {},
+              nonCoverage: {},
+              blockingReasons: [],
+              evidenceSummary: {},
+              staleness: {},
+              inputChecksum: suffix,
+              verdictChecksum: suffix,
+            },
+          }),
+      },
+    ]
+    const created: Array<{ table: string; id: string }> = []
+    try {
+      for (const entry of cases) {
+        const row = await withWorkspaceRLS(workspaceId, entry.create)
+        created.push({ table: entry.table, id: row.id })
+        // Identifiers come only from the fixed table list above; values stay parameterized.
+        const table = Prisma.raw(`"${entry.table}"`)
+        for (const context of [workspaceId, otherWorkspaceId, null]) {
+          const visible = await asWorkspace(context, (tx) =>
+            tx.$queryRaw<Array<{ id: string }>>(
+              Prisma.sql`SELECT id FROM ${table} WHERE id = ${row.id}`
+            )
+          )
+          expect(visible.length, `${entry.table}: ${context}`).toBe(context === workspaceId ? 1 : 0)
+          if (context !== workspaceId) {
+            expect(
+              await asWorkspace(context, (tx) =>
+                tx.$executeRaw(Prisma.sql`DELETE FROM ${table} WHERE id = ${row.id}`)
+              ),
+              entry.table
+            ).toBe(0)
+            await expect(
+              asWorkspace(context, entry.create),
+              `${entry.table}: denied insert`
+            ).rejects.toThrow(/row-level security/i)
+          }
+        }
+      }
+    } finally {
+      for (const row of created.reverse()) {
+        await prisma.$executeRaw(
+          Prisma.sql`DELETE FROM ${Prisma.raw(`"${row.table}"`)} WHERE id = ${row.id}`
+        )
+      }
+      await prisma.scoreSnapshot.delete({ where: { id: parents.snapshot.id } })
+      await prisma.aiSystemProfile.delete({ where: { id: parents.profile.id } })
+      await prisma.threatModel.delete({ where: { id: parents.threat.id } })
+      await prisma.controlEvidence.delete({ where: { id: parents.control.id } })
+    }
+  })
+
+  it("reads runtime coverage for a target outside the dashboard's 200-run window", async () => {
+    const { withWorkspaceRLS } = await import("./rls")
+    const { getDashboardOverview } = await import("../../../apps/web/src/lib/dashboard-overview")
+    const oldTarget = await prisma.target.create({
+      data: { workspaceId, type: "REPO", name: "Old assessed target" },
+    })
+    const recentIds = Array.from({ length: 200 }, () => createId())
+    try {
+      const oldScan = await prisma.scan.create({
+        data: {
+          workspaceId,
+          targetId: oldTarget.id,
+          goal: "LAUNCH_REVIEW",
+          status: "COMPLETED",
+          createdById: suffix,
+          createdAt: new Date("2020-01-01"),
+        },
+      })
+      await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scanCoverageReceipt.create({
+          data: { scanId: oldScan.id, scanner: "old", controlId: "old", status: "COMPLETED" },
+        })
+      )
+      await prisma.scan.createMany({
+        data: recentIds.map((id) => ({
+          id,
+          workspaceId,
+          targetId,
+          goal: "LAUNCH_REVIEW",
+          status: "COMPLETED",
+          createdById: suffix,
+          createdAt: new Date("2030-01-01"),
+        })),
+      })
+      const overview = await getDashboardOverview(workspaceId)
+      expect(overview.targets).toMatchObject({ total: 2, assessed: 1, unassessed: 1 })
+      expect((await getDashboardOverview(otherWorkspaceId)).targets.total).toBe(0)
+    } finally {
+      await prisma.scan.deleteMany({ where: { id: { in: recentIds } } })
+      await prisma.target.delete({ where: { id: oldTarget.id } })
+    }
+  })
 
   it("allows owning-workspace coverage and fix-proposal writes", async () => {
     const { withWorkspaceRLS } = await import("./rls")
@@ -680,6 +1098,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     const keyHash = `rls-keyhash-${suffix}`
 
     afterAll(async () => {
+      if (!fixturesStarted) return
       await prisma.$executeRaw`DELETE FROM "LicenseKey" WHERE "licenseId" = ${licenseId}`
       await prisma.$executeRaw`DELETE FROM "License" WHERE id = ${licenseId}`
     })
@@ -746,6 +1165,30 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         SELECT id FROM "LicenseKey" WHERE "keyHash" = ${keyHash}
       `
       expect(rows).toHaveLength(1)
+    })
+
+    it("preserves system activation and revocation of unlinked licenses without exposing them to runtime", async () => {
+      const activation = await prisma.licenseActivation.create({
+        data: { licenseId, machineId: suffix, lastSeenAt: new Date() },
+      })
+      const revocation = await prisma.licenseRevocation.create({
+        data: {
+          licenseId,
+          revokedAt: new Date(),
+          reason: "system fixture",
+          revokedByKeyId: "fixture",
+        },
+      })
+      expect(
+        await prisma.licenseRevocation.findUnique({ where: { id: revocation.id } })
+      ).not.toBeNull()
+      for (const context of [null, workspaceId, otherWorkspaceId]) {
+        const counts = await asWorkspace(context, async (tx) => [
+          await tx.licenseActivation.count({ where: { id: activation.id } }),
+          await tx.licenseRevocation.count({ where: { id: revocation.id } }),
+        ])
+        expect(counts).toEqual([0, 0])
+      }
     })
   })
 })

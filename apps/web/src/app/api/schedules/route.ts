@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { listSchedules, createSchedule, getNextRunAt, prisma } from "@lyrashield/db"
 import { resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -65,7 +66,7 @@ const CreateScheduleSchema = z.object({
   mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).default("SAFE"),
 })
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const body = await request.json()
     const parsed = CreateScheduleSchema.safeParse(body)
@@ -128,3 +129,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to create schedule", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

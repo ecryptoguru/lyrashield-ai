@@ -145,24 +145,32 @@ export async function approveApproval(
   }
 
   if (approval.expiresAt && approval.expiresAt < new Date()) {
-    await prisma.agentApproval.update({
-      where: { id: approvalId },
+    await prisma.agentApproval.updateMany({
+      where: { id: approvalId, workspaceId, status: "PENDING" },
       data: { status: "EXPIRED" },
     })
     throw new ApprovalMutationError("EXPIRED", "Approval has expired")
   }
 
-  const updated = await prisma.agentApproval.update({
-    where: { id: approvalId },
+  const decidedAt = new Date()
+  const updated = await prisma.agentApproval.updateMany({
+    where: {
+      id: approvalId,
+      workspaceId,
+      status: "PENDING",
+      OR: [{ expiresAt: null }, { expiresAt: { gt: decidedAt } }],
+    },
     data: {
       status: "APPROVED",
       approvedById,
-      approvedAt: new Date(),
+      approvedAt: decidedAt,
     },
   })
+  if (updated.count !== 1)
+    throw new ApprovalMutationError("NOT_PENDING", "Approval was already decided or expired")
 
   logger.info("Agent approval approved", { approvalId, approvedById })
-  return updated
+  return { ...approval, status: "APPROVED", approvedById, approvedAt: decidedAt }
 }
 
 export async function denyApproval(
@@ -184,17 +192,20 @@ export async function denyApproval(
 
   // approvedById stores the user who made the decision (approve or deny)
   // for audit purposes. deniedAt timestamp distinguishes deny from approve.
-  const updated = await prisma.agentApproval.update({
-    where: { id: approvalId },
+  const deniedAt = new Date()
+  const updated = await prisma.agentApproval.updateMany({
+    where: { id: approvalId, workspaceId, status: "PENDING" },
     data: {
       status: "DENIED",
       approvedById: deniedById,
-      deniedAt: new Date(),
+      deniedAt,
     },
   })
+  if (updated.count !== 1)
+    throw new ApprovalMutationError("NOT_PENDING", "Approval was already decided")
 
   logger.info("Agent approval denied", { approvalId, deniedById })
-  return updated
+  return { ...approval, status: "DENIED", approvedById: deniedById, deniedAt }
 }
 
 export async function saveApprovalResult(
@@ -268,17 +279,20 @@ export async function completeApprovalExecution(
 export async function failApprovalExecution(
   approvalId: string,
   workspaceId: string,
-  errorResult?: Record<string, unknown>
+  errorResult?: Record<string, unknown>,
+  retryable = true
 ): Promise<"RETRYABLE" | "TERMINAL"> {
-  const released = await prisma.agentApproval.updateMany({
-    where: {
-      id: approvalId,
-      workspaceId,
-      status: "EXECUTING",
-      attempts: { lt: MAX_APPROVAL_EXECUTION_ATTEMPTS },
-    },
-    data: { status: "APPROVED" },
-  })
+  const released = retryable
+    ? await prisma.agentApproval.updateMany({
+        where: {
+          id: approvalId,
+          workspaceId,
+          status: "EXECUTING",
+          attempts: { lt: MAX_APPROVAL_EXECUTION_ATTEMPTS },
+        },
+        data: { status: "APPROVED" },
+      })
+    : { count: 0 }
   if (released.count === 1) return "RETRYABLE"
 
   await prisma.agentApproval.updateMany({

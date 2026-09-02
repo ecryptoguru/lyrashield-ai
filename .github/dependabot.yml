@@ -17,8 +17,16 @@ updates:
     # Security-sensitive packages: keep major bumps as individual, reviewed PRs.
     # (better-auth, @prisma/*, pg, bullmq are intentionally NOT grouped so a
     # major/behavioral change is never buried in a batch.)
+    # Only these compatibility migrations defer routine major versions.
+    # update-types does not suppress Dependabot security updates.
     ignore:
-      - dependency-name: "*"
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ioredis"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 
   # GitHub Actions used in workflows.

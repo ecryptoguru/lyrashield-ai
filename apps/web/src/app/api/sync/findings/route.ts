@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { withWorkspaceRLS } from "@lyrashield/db"
@@ -64,7 +65,7 @@ const FindingSyncSchema = z.object({
  * FIXED mapped to FIXED_PENDING_RETEST and rejected if forged terminal persists, unknown statuses rejected.
  * Reports persisted atomically in same tx (full persistence; never count discarded input).
  */
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const session = await requireAuth()
     const body: unknown = await request.json().catch(() => null)
@@ -419,3 +420,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to sync findings", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

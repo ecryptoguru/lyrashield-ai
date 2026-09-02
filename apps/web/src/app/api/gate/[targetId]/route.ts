@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { evaluateGateForTarget, getLatestGateVerdict } from "@lyrashield/db"
@@ -37,10 +38,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ targ
  * as the other workspace-scoped routes); the gate service reads the target
  * under RLS, so a target outside the workspace simply evaluates to not-found.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ targetId: string }> }
-) {
+async function post(request: Request, { params }: { params: Promise<{ targetId: string }> }) {
   try {
     const { targetId } = await params
     const workspaceId = new URL(request.url).searchParams.get("workspaceId")
@@ -57,3 +55,5 @@ export async function POST(
     return apiError("INTERNAL_ERROR", "Failed to evaluate the gate", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

@@ -1,7 +1,8 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS, lockWorkspaceMembership } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
-import { PERMISSIONS, canGrantRole } from "@lyrashield/auth"
+import { PERMISSIONS, canGrantRole, hasPermission } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { sendNotification } from "@lyrashield/integrations"
@@ -27,6 +28,110 @@ const InviteMemberSchema = z.object({
     ])
     .default("MEMBER"),
 })
+
+const ChangeMemberSchema = z
+  .object({
+    workspaceId: z.string().min(1).max(128),
+    memberId: z.string().min(1).max(128),
+    role: z.enum([
+      "OWNER",
+      "ADMIN",
+      "MEMBER",
+      "VIEWER",
+      "SECURITY_ADMIN",
+      "APPSEC_MANAGER",
+      "DEVELOPER",
+      "AUDITOR",
+      "BILLING_ADMIN",
+      "EXTERNAL_PENTESTER",
+    ]),
+  })
+  .strict()
+
+async function changeMember(
+  input: z.infer<typeof ChangeMemberSchema> | Omit<z.infer<typeof ChangeMemberSchema>, "role">
+) {
+  const { workspaceId, memberId } = input
+  const role = "role" in input ? input.role : undefined
+  const permission = role ? PERMISSIONS.member.updateRole : PERMISSIONS.member.remove
+  const { session } = await requirePermission(workspaceId, permission)
+  const result = await withWorkspaceRLS(workspaceId, async (tx) => {
+    // Serialize membership changes and recheck the actor after taking the lock.
+    // Two owners cannot concurrently remove/demote each other or the final owner.
+    await lockWorkspaceMembership(tx, workspaceId)
+    const actor = await tx.workspaceMember.findFirst({
+      where: { workspaceId, userId: session.userId, status: "active" },
+    })
+    const member = await tx.workspaceMember.findFirst({
+      where: { id: memberId, workspaceId, status: "active" },
+    })
+    if (!actor || !hasPermission(actor.role, permission)) throw new Error("FORBIDDEN")
+    if (!member) return apiError("NOT_FOUND", "Member not found", 404)
+    if (!canGrantRole(actor.role, member.role) || (role && !canGrantRole(actor.role, role))) {
+      return apiError("FORBIDDEN", "You cannot manage a role equal to or higher than your own", 403)
+    }
+    if (member.role === "OWNER" && role !== "OWNER") {
+      const owners = await tx.workspaceMember.count({
+        where: { workspaceId, status: "active", role: "OWNER" },
+      })
+      if (owners <= 1)
+        return apiError("LAST_OWNER", "The workspace must keep at least one owner", 409)
+    }
+    await tx.workspaceMember.updateMany({
+      where: { id: memberId, workspaceId, status: "active" },
+      data: role ? { role } : { status: "removed" },
+    })
+    return { previousRole: member.role, userId: member.userId }
+  })
+  if (result instanceof Response) return result
+  // The extended audit client owns its chain transaction; do not nest it above.
+  await prisma.auditLog.create({
+    data: {
+      workspaceId,
+      actorUserId: session.userId,
+      action: role ? "member.role_changed" : "member.removed",
+      resourceType: "workspaceMember",
+      resourceId: memberId,
+      metadata: { ...result, ...(role ? { role } : {}) },
+    },
+  })
+  return apiSuccess({ id: memberId })
+}
+
+async function patch(request: Request) {
+  try {
+    const body = await request.json().catch(() => null)
+    const parsed = ChangeMemberSchema.safeParse(body)
+    if (!parsed.success)
+      return apiError(
+        "VALIDATION_ERROR",
+        "workspaceId, memberId and a valid role are required",
+        400
+      )
+    return await changeMember(parsed.data)
+  } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
+    logger.error("Failed to change member role", { error: String(error) })
+    return apiError("INTERNAL_ERROR", "Failed to change member role", 500)
+  }
+}
+
+async function remove(request: Request) {
+  try {
+    const parsed = ChangeMemberSchema.omit({ role: true }).safeParse(
+      Object.fromEntries(new URL(request.url).searchParams)
+    )
+    if (!parsed.success)
+      return apiError("VALIDATION_ERROR", "workspaceId and memberId are required", 400)
+    return await changeMember(parsed.data)
+  } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
+    logger.error("Failed to remove member", { error: String(error) })
+    return apiError("INTERNAL_ERROR", "Failed to remove member", 500)
+  }
+}
 
 /**
  * The accept link an invited member follows. It points at sign-up with the
@@ -66,7 +171,7 @@ async function sendInvitationEmail(params: {
   }
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -129,7 +234,7 @@ export async function POST(request: Request) {
 
     const [existingMember, existingInvitation, workspaceRow] = await Promise.all([
       prisma.workspaceMember.findFirst({
-        where: { workspaceId, invitedEmail: email },
+        where: { workspaceId, invitedEmail: email, status: "active" },
       }),
       prisma.invitation.findFirst({
         where: { workspaceId, email, status: "pending" },
@@ -290,3 +395,7 @@ export async function GET(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to list members", 500)
   }
 }
+
+export const POST = withCookieMutation(post)
+export const PATCH = withCookieMutation(patch)
+export const DELETE = withCookieMutation(remove)

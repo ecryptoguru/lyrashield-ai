@@ -89,6 +89,7 @@ describe("nav-items workspace destinations", () => {
   })
   it("keeps coding agents before direct service integrations", () => {
     expect(SECONDARY_NAV_ITEMS.map((item) => item.href)).toEqual([
+      "/dashboard/fixes",
       "/dashboard/notifications",
       "/dashboard/agents",
       "/dashboard/integrations",

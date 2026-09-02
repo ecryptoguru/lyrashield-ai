@@ -2,7 +2,13 @@ import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
-import { recordAgentMinutes, enterGrace, debitOverage } from "@lyrashield/billing"
+import {
+  recordAgentMinutes,
+  hasUnsettledScanIntent,
+  enterGrace,
+  debitOverage,
+} from "@lyrashield/billing"
+
 import {
   buildVibeSecurityInstruction,
   summarizeVibeSecurityCoverage,
@@ -65,6 +71,23 @@ import {
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import { ScanJobDataSchema, type ScanJobData, type ScanJobResult } from "../types"
 import type { ScannerCoverageIssue } from "../engine/scanner-coverage"
+
+async function reportInterruptedSettlement(workspaceId: string, scanId: string): Promise<void> {
+  let checkUnavailable = false
+  const pending = await hasUnsettledScanIntent(workspaceId, scanId).catch(() => {
+    checkUnavailable = true
+    return true
+  })
+  if (pending) {
+    logger.error("billing.scan_settlement_commit_uncertain", {
+      workspaceId,
+      scanId,
+      accountingReviewRequired: true,
+      automaticReplayAllowed: false,
+      checkUnavailable,
+    })
+  }
+}
 
 export function extractActualCostUsd(usage: Record<string, unknown> | undefined): number | null {
   if (!usage) return null
@@ -237,7 +260,7 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
 
 export function shouldRecordAgentMinutes(
   scanId: string,
-  exitStatus: "COMPLETED" | "FAILED",
+  exitStatus: "COMPLETED" | "PARTIAL" | "FAILED",
   runRecord: EngineRunRecord | null,
   opts: { cancelled?: boolean } = {}
 ): boolean {
@@ -670,6 +693,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let urlProfile: UrlScanProfile | undefined
     let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
     let engineModel: string | undefined
+    let durableFinalizationResult: ScanJobResult | null = null
     try {
       // A manifest is the immutable checkpoint after findings and retests have
       // been persisted. If an infrastructure error interrupted only the final
@@ -692,6 +716,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         },
       })
       const terminalOutcome = storedTerminalOutcome(pendingFinalization?.resultManifest?.manifest)
+      if (pendingFinalization?.status === "FAILED") {
+        return {
+          status: "failed",
+          errorCategory: pendingFinalization.errorCategory ?? "INTERNAL_ERROR",
+          errorMessage:
+            pendingFinalization.errorMessage ?? "Scan failed; paid work was not replayed",
+        }
+      }
+      if (pendingFinalization?.status === "COMPLETED") {
+        await reportInterruptedSettlement(workspaceId, scanId)
+        return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
+      }
+      if (pendingFinalization?.status === "PARTIAL") {
+        await reportInterruptedSettlement(workspaceId, scanId)
+        return {
+          status: "failed",
+          errorCategory: pendingFinalization.errorCategory ?? "PARTIAL",
+          errorMessage: pendingFinalization.errorMessage ?? "Partial findings preserved",
+        }
+      }
       if (
         pendingFinalization?.resultManifest &&
         ["RUNNING", "VERIFYING"].includes(pendingFinalization.status) &&
@@ -1080,11 +1124,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Deep/Custom scans consume 3× minutes (applied inside recordAgentMinutes).
       // Billing outcome (founder-confirmed 2026-08-29): failed scans are never
       // billed; cancelled scans bill elapsed time only (no 1-minute floor).
-      const billingOutcome = cancelled
-        ? ("cancelled" as const)
-        : exitInterpretation.status === "COMPLETED"
-          ? ("completed" as const)
-          : ("failed" as const)
       const engineWallClockMs =
         engineStartedAtMs === null ? 0 : Math.max(1, Date.now() - engineStartedAtMs)
       let agentMinuteTerminalError: {
@@ -1092,62 +1131,115 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorCategory: string
         errorMessage: string
       } | null = null
-      if (engineWorkObserved && billingOutcome !== "failed") {
-        try {
-          const billingAccount = await prisma.billingAccount.findUnique({
-            where: { workspaceId },
-            select: { currentPeriodStart: true },
-          })
-          const metering = await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
-            mode,
-            phase: "engine_run",
-            cycleStart: billingAccount?.currentPeriodStart ?? undefined,
-            outcome: billingOutcome,
-          })
-
-          if (metering.overageMinutes > 0) {
-            // Check if overage is available (Launch Assurance plan with spend limit)
-            const acct = await prisma.billingAccount.findUnique({
-              where: { workspaceId },
-              select: { currentPlan: true, spendLimitCents: true },
-            })
-            const overageAvailable =
-              acct?.currentPlan === "LAUNCH_ASSURANCE" && (acct.spendLimitCents ?? 0) > 0
-
-            if (overageAvailable) {
-              const overage = await debitOverage(
-                workspaceId,
-                metering.overageMinutes,
-                scanId,
-                "engine_overage"
-              )
-              if (!overage.debited || overage.minutes !== metering.overageMinutes) {
-                agentMinuteTerminalError = {
-                  status: "STOPPED_BUDGET" as ScanStatus,
-                  errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
-                  errorMessage: AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
-                }
-              }
-            } else {
-              // Enter grace period (15min cap)
-              const graceResult = await enterGrace(workspaceId, engineWallClockMs)
-              if (!graceResult.shouldContinue) {
-                // Preserve provider usage, deterministic receipts, and findings before
-                // sealing the terminal entitlement outcome below.
-                agentMinuteTerminalError = {
-                  status: "STOPPED_BUDGET" as ScanStatus,
-                  errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
-                  errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
-                }
-              }
-            }
-          }
-        } catch (meterError) {
-          log.warn("Failed to record agent minutes", {
+      const meterEngineRun = async (
+        billingOutcome: "completed" | "partial" | "failed" | "cancelled",
+        finishEvidence?: () => Promise<void>
+      ) => {
+        const billableWork =
+          target.type === "REPO" &&
+          shouldRecordAgentMinutes(
             scanId,
-            error: meterError instanceof Error ? meterError.message : String(meterError),
-          })
-          // Non-fatal: don't block the scan if metering fails
+            billingOutcome === "partial" ? "PARTIAL" : exitInterpretation.status,
+            runRecord,
+            { cancelled: billingOutcome === "cancelled" }
+          )
+        if (billableWork && billingOutcome !== "failed") {
+          let finalizationAttempted = false
+          try {
+            const billingAccount = await prisma.billingAccount.findUnique({
+              where: { workspaceId },
+              select: { currentPeriodStart: true },
+            })
+            const settleOverage = async (
+              minutes: number,
+              tx?: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+            ) => {
+              // Check if overage is available (Launch Assurance plan with spend limit)
+              const acct = await (tx ?? prisma).billingAccount.findUnique({
+                where: { workspaceId },
+                select: { currentPlan: true, spendLimitCents: true },
+              })
+              const overageAvailable =
+                acct?.currentPlan === "LAUNCH_ASSURANCE" && (acct.spendLimitCents ?? 0) > 0
+
+              if (overageAvailable) {
+                const overage = await debitOverage(
+                  workspaceId,
+                  minutes,
+                  scanId,
+                  "engine_overage",
+                  tx
+                )
+                if (!overage.debited || overage.minutes !== minutes) {
+                  agentMinuteTerminalError = {
+                    status: "STOPPED_BUDGET" as ScanStatus,
+                    errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+                    errorMessage: AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
+                  }
+                }
+              } else {
+                // Enter grace period (15min cap)
+                const graceResult = await enterGrace(workspaceId, engineWallClockMs, tx)
+                if (!graceResult.shouldContinue) {
+                  // Preserve provider usage, deterministic receipts, and findings before
+                  // sealing the terminal entitlement outcome below.
+                  agentMinuteTerminalError = {
+                    status: "STOPPED_BUDGET" as ScanStatus,
+                    errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
+                    errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
+                  }
+                }
+              }
+              if (tx && agentMinuteTerminalError)
+                throw new Error(agentMinuteTerminalError.errorCategory)
+            }
+            const metering = await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
+              mode,
+              phase: "engine_run",
+              cycleStart: billingAccount?.currentPeriodStart ?? undefined,
+              outcome: billingOutcome,
+              ...(finishEvidence
+                ? {
+                    beforeCommit: async () => {
+                      finalizationAttempted = true
+                      await finishEvidence()
+                    },
+                  }
+                : {}),
+              // Cancellation deliberately retains its existing settlement policy.
+              ...(billingOutcome !== "cancelled"
+                ? { settleOverage: (tx, minutes) => settleOverage(minutes, tx) }
+                : {}),
+            })
+            if (billingOutcome === "cancelled" && metering.overageMinutes > 0) {
+              await settleOverage(metering.overageMinutes)
+            }
+          } catch (meterError) {
+            // Finalization failures must not be swallowed or retried outside
+            // the transaction that just rolled back their provisional charges.
+            if (finalizationAttempted) throw meterError
+            // Billable success requires a durable settlement obligation. A
+            // preliminary account read or intent insert can fail before the
+            // finalizer starts; never silently complete through that window.
+            // Quota refusal and cancellation retain their existing paths.
+            if (billingOutcome !== "cancelled" && !agentMinuteTerminalError) throw meterError
+            if (agentMinuteTerminalError) {
+              await prisma.auditLog.create({
+                data: {
+                  workspaceId,
+                  action: "billing.scan_settlement_refused",
+                  resourceType: "scan",
+                  resourceId: scanId,
+                  metadata: { reason: agentMinuteTerminalError.errorCategory },
+                },
+              })
+            }
+            log.warn("Failed to record agent minutes", {
+              scanId,
+              error: meterError instanceof Error ? meterError.message : String(meterError),
+            })
+            // Cancellation remains best-effort; quota refusal is finalized below.
+          }
         }
       }
 
@@ -1167,7 +1259,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               // Spread-only-when-present (matching every other receipt field
               // below): a receipt that omits model/reasoning must not persist
               // empty strings into the manifest.
-              ...(runRecord?.model ? { model: runRecord.model } : { model: engineModel }),
+              ...(runRecord?.model ? { model: runRecord.model } : {}),
               ...(runRecord?.reasoning_effort
                 ? { reasoningEffort: runRecord.reasoning_effort }
                 : {}),
@@ -1208,6 +1300,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           : undefined
 
       if (engineResult.cancelled) {
+        await meterEngineRun("cancelled")
         return {
           status: "failed",
           errorCategory: "CANCELLED",
@@ -1669,96 +1762,121 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           where: { id: scanId },
           data: { summary: scanSummary },
         })
-        await persistResultManifest({
-          scanId,
-          target: {
-            id: target.id,
-            type: target.type,
-            repoFullName: target.repoFullName,
-            branch: target.branch,
-            url: target.url,
-          },
-          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-          engineFindingCount: orchestratorResult.engineFindings.length,
-          coverageIssues: [
-            ...orchestratorResult.coverageIssues,
-            ...(routingCoverageIssue ? [routingCoverageIssue] : []),
-          ],
-          aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
-          webMcpCoverage: orchestratorResult.webMcpCoverage,
-          matchedControlRanks: coverage.matchedControlRanks,
-          urlExecution: orchestratorResult.urlExecution,
-          engineExecution,
-          accounting: {
-            maxBudgetUsd,
-            billedCostUsd,
-            reconciled: costReconciled,
-            ...(reconciliationReason ? { reconciliationReason } : {}),
-          },
-          workerExecution,
-          terminalOutcome: engineTerminalError
-            ? {
-                status: engineTerminalError.status as "PARTIAL" | "FAILED" | "STOPPED_BUDGET",
-                errorCategory: engineTerminalError.errorCategory,
-                errorMessage: engineTerminalError.errorMessage,
-              }
-            : budgetExceeded
+        const finishEvidence = async () => {
+          await persistResultManifest({
+            scanId,
+            target: {
+              id: target.id,
+              type: target.type,
+              repoFullName: target.repoFullName,
+              branch: target.branch,
+              url: target.url,
+            },
+            sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
+            engineFindingCount: orchestratorResult.engineFindings.length,
+            coverageIssues: [
+              ...orchestratorResult.coverageIssues,
+              ...(routingCoverageIssue ? [routingCoverageIssue] : []),
+            ],
+            aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
+            webMcpCoverage: orchestratorResult.webMcpCoverage,
+            matchedControlRanks: coverage.matchedControlRanks,
+            urlExecution: orchestratorResult.urlExecution,
+            engineExecution,
+            accounting: {
+              maxBudgetUsd,
+              billedCostUsd,
+              reconciled: costReconciled,
+              ...(reconciliationReason ? { reconciliationReason } : {}),
+            },
+            workerExecution,
+            terminalOutcome: engineTerminalError
               ? {
-                  status: "STOPPED_BUDGET",
-                  errorCategory: "BUDGET_EXCEEDED",
-                  errorMessage: "Protected run limit reached",
+                  status: engineTerminalError.status as "PARTIAL" | "FAILED" | "STOPPED_BUDGET",
+                  errorCategory: engineTerminalError.errorCategory,
+                  errorMessage: engineTerminalError.errorMessage,
                 }
-              : { status: "COMPLETED", errorCategory: null, errorMessage: null },
-        })
-
-        await completeRetestsForScan({ scanId, workspaceId })
-
-        if (engineTerminalError) {
-          await updateScanStatus(scanId, engineTerminalError.status, {
-            errorCategory: engineTerminalError.errorCategory,
-            errorMessage: engineTerminalError.errorMessage,
-            ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
+              : budgetExceeded
+                ? {
+                    status: "STOPPED_BUDGET",
+                    errorCategory: "BUDGET_EXCEEDED",
+                    errorMessage: "Protected run limit reached",
+                  }
+                : { status: "COMPLETED", errorCategory: null, errorMessage: null },
           })
-          // A PARTIAL/FAILED/STOPPED terminal state still changed stored
-          // evidence (findings, receipts) — refresh the gate verdict so it
-          // never presents a stale pre-scan picture as current.
-          await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
-          return {
-            persistedFindings,
-            newFindings,
-            scanSummary,
-            terminalResult: {
-              status: "failed" as const,
+
+          await completeRetestsForScan({ scanId, workspaceId })
+
+          if (engineTerminalError) {
+            await updateScanStatus(scanId, engineTerminalError.status, {
               errorCategory: engineTerminalError.errorCategory,
               errorMessage: engineTerminalError.errorMessage,
-            },
+              ...(billedCostUsd !== null
+                ? { actualCostCents: Math.round(billedCostUsd * 100) }
+                : {}),
+            })
+            // A PARTIAL/FAILED/STOPPED terminal state still changed stored
+            // evidence (findings, receipts) — refresh the gate verdict so it
+            // never presents a stale pre-scan picture as current.
+            await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
+            return {
+              persistedFindings,
+              newFindings,
+              scanSummary,
+              terminalResult: {
+                status: "failed" as const,
+                errorCategory: engineTerminalError.errorCategory,
+                errorMessage: engineTerminalError.errorMessage,
+              },
+            }
           }
-        }
 
-        if (budgetExceeded) {
-          await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-            errorCategory: "BUDGET_EXCEEDED",
-            errorMessage: "Protected run limit reached",
-            actualCostCents: Math.round(billedCostUsd! * 100),
-          })
-          await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
-          return {
-            persistedFindings,
-            newFindings,
-            scanSummary,
-            terminalResult: {
-              status: "failed" as const,
+          if (budgetExceeded) {
+            await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
               errorCategory: "BUDGET_EXCEEDED",
               errorMessage: "Protected run limit reached",
-            },
+              actualCostCents: Math.round(billedCostUsd! * 100),
+            })
+            await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
+            return {
+              persistedFindings,
+              newFindings,
+              scanSummary,
+              terminalResult: {
+                status: "failed" as const,
+                errorCategory: "BUDGET_EXCEEDED",
+                errorMessage: "Protected run limit reached",
+              },
+            }
           }
+          // Retests may validate a pending fix and change the target's scoreable
+          // state. Freeze the score only after those outcomes are persisted.
+          await completeScanWithScore(scanId, workspaceId, scanSummary)
+          // Refresh the gate verdict now that this scan's evidence is stored.
+          await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
+          return { persistedFindings, newFindings, scanSummary, terminalResult: null }
         }
-        // Retests may validate a pending fix and change the target's scoreable
-        // state. Freeze the score only after those outcomes are persisted.
-        await completeScanWithScore(scanId, workspaceId, scanSummary)
-        // Refresh the gate verdict now that this scan's evidence is stored.
-        await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
-        return { persistedFindings, newFindings, scanSummary, terminalResult: null }
+        let finished: Awaited<ReturnType<typeof finishEvidence>> | undefined
+        // Quota refusal happens before any terminal evidence is sealed. For
+        // billable results, DB-only finalization must finish before money commits.
+        await meterEngineRun(
+          budgetExceeded || engineTerminalError?.status === "STOPPED_BUDGET"
+            ? "failed"
+            : engineTerminalError?.status === "PARTIAL"
+              ? "partial"
+              : engineTerminalError
+                ? "failed"
+                : "completed",
+          async () => {
+            finished = await finishEvidence()
+            durableFinalizationResult = finished.terminalResult ?? {
+              status: "completed",
+              summary: finished.scanSummary,
+            }
+          }
+        )
+        if (agentMinuteTerminalError) engineTerminalError = agentMinuteTerminalError
+        return finished ?? (await finishEvidence())
       })
 
       if (finalization.status === "cancelled") {
@@ -1883,9 +2001,22 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const currentScan = await prisma.scan
         .findUnique({
           where: { id: scanId },
-          select: { status: true },
+          select: { status: true, summary: true, errorCategory: true, errorMessage: true },
         })
         .catch(() => null)
+      if (durableFinalizationResult) {
+        log.error("billing.scan_settlement_commit_uncertain", {
+          scanId,
+          workspaceId,
+          terminalStatus: currentScan?.status ?? "UNKNOWN",
+          accountingReviewRequired: true,
+          automaticReplayAllowed: false,
+          errorType: error instanceof Error ? error.name : "UNKNOWN",
+        })
+        return durableFinalizationResult
+      }
+      // Do not overwrite an unknown durable outcome during a DB outage.
+      if (!currentScan) throw error
       if (currentScan?.status === "CANCELLED") {
         if (globalScanTimeoutReached) {
           return {
@@ -1898,6 +2029,21 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           status: "failed",
           errorCategory: "CANCELLED",
           errorMessage: "Scan cancelled by user",
+        }
+      }
+      // A terminal result was durable before any monetary commit. Errors in
+      // post-processing or an uncertain commit response must not turn a charged
+      // COMPLETED/PARTIAL result into FAILED or replay the paid engine.
+      if (currentScan?.status === "COMPLETED") {
+        await reportInterruptedSettlement(workspaceId, scanId)
+        return { status: "completed", summary: currentScan.summary ?? "Scan completed" }
+      }
+      if (currentScan?.status === "PARTIAL") {
+        await reportInterruptedSettlement(workspaceId, scanId)
+        return {
+          status: "failed",
+          errorCategory: currentScan.errorCategory ?? "PARTIAL",
+          errorMessage: currentScan.errorMessage ?? "Partial findings preserved",
         }
       }
 

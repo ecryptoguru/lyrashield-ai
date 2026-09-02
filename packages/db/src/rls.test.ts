@@ -95,63 +95,8 @@ describe("RLS helpers", () => {
   })
 
   describe("RLS table coverage", () => {
-    // Workspace-scoped tables carry their own workspaceId and are auto-guarded
-    // by the Prisma client extension. WORKSPACE_SCOPED_MODELS must match this
-    // set exactly — if a model is in the set, it must have an RLS policy, and
-    // vice versa.
-    const RLS_TABLES = [
-      "Project",
-      "Target",
-      "CredentialSet",
-      "Policy",
-      "Scan",
-      "ApiKey",
-      "Finding",
-      "Integration",
-      "UsageRecord",
-      "AuditLog",
-      "Report",
-      "Notification",
-      "Schedule",
-      "BillingAccount",
-      "MinutePack",
-      "Invitation",
-      "WebhookEvent",
-      "Retest",
-      "AgentApproval",
-      // Added by 20260713010000_scoresnapshot_rls (missed by the batch-3 pass).
-      "ScoreSnapshot",
-      // Added by 20260902100000_gateverdict_rls (same miss pattern).
-      "GateVerdict",
-      "FindingCandidate",
-      "FindingVerification",
-      "AiSystemProfile",
-      "ThreatModel",
-      "ControlEvidence",
-      "AiSecurityScoreSnapshot",
-      "TargetDomainVerification",
-      "LiveAiSafetySettings",
-      "LiveAiSafetyPlan",
-      "LiveAiSafetyRun",
-    ]
-
-    it("WORKSPACE_SCOPED_MODELS matches the RLS-protected table set exactly", () => {
-      const modelSet = new Set(WORKSPACE_SCOPED_MODELS)
-      const rlsSet = new Set(RLS_TABLES)
-
-      // Every RLS table should be in WORKSPACE_SCOPED_MODELS
-      for (const table of RLS_TABLES) {
-        expect(modelSet.has(table)).toBe(true)
-      }
-
-      // Every WORKSPACE_SCOPED_MODELS entry should have an RLS policy
-      for (const model of modelSet) {
-        expect(rlsSet.has(model)).toBe(true)
-      }
-
-      // Same size
-      expect(modelSet.size).toBe(rlsSet.size)
-    })
+    // Live coverage and ENABLE/FORCE flags are checked against pg_catalog in
+    // rls-fail-closed.test.ts. These fast checks cover only helper semantics.
 
     it("excludes identity tables needed for cross-workspace membership queries from RLS", () => {
       expect(WORKSPACE_SCOPED_MODELS.has("Workspace")).toBe(false)

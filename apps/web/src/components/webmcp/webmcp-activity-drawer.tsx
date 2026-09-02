@@ -58,24 +58,7 @@ export function WebMcpActivityDrawer() {
       setIsOpen(false)
       return
     }
-    if (event.key !== "Tab") return
-
-    const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )
-    if (!focusable?.length) {
-      event.preventDefault()
-      return
-    }
-    const first = focusable[0]
-    const last = focusable[focusable.length - 1]
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault()
-      last?.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first?.focus()
-    }
+    // Non-modal panel: Tab may leave it; the page remains interactive.
   }, [])
 
   const { receipts, latest } = snapshot
@@ -89,7 +72,7 @@ export function WebMcpActivityDrawer() {
   const StatusIcon = status.icon
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
+    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 md:bottom-6 sm:right-6">
       {/* Live region for running work; completed history is not re-announced. */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {latestRunning
@@ -129,10 +112,9 @@ export function WebMcpActivityDrawer() {
           id="webmcp-activity-panel"
           className={cn(
             "shadow-card-hover w-[calc(100vw-2rem)] max-w-sm overflow-hidden border",
-            "fixed bottom-16 right-4 sm:bottom-[4.5rem] sm:right-6"
+            "fixed bottom-32 right-4 md:bottom-[4.5rem] sm:right-6"
           )}
           role="dialog"
-          aria-modal="true"
           aria-label="Agent activity history"
           onKeyDown={handlePanelKeyDown}
         >

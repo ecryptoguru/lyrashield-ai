@@ -479,6 +479,15 @@ ${filler}
     expect(classifySource("http://owasp.org/insecure")).toBe("invalid")
   })
 
+  it("rejects body FAQ headings when frontmatter owns FAQ content", () => {
+    expect(
+      validateArticle(
+        { slug: "post", data: {}, body: "## FAQ\n\nDuplicate FAQ content." },
+        { slug: "post" }
+      )
+    ).toContain("body FAQ heading duplicates frontmatter FAQ")
+  })
+
   it("validates catalog paths, dimensions, budgets, hashes, clusters, and adjacency", () => {
     const root = mkdtempSync(join(tmpdir(), "blog-validation-"))
     const imageRoot = join(root, "public/images/blog/library/verification-01")

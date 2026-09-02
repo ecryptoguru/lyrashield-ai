@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { ApiResponse, PaginatedResponse } from "@lyrashield/types"
+import { safeApiErrorMessage } from "./safe-api-error-message"
 
 export class ApiError extends Error {
   details?: unknown
@@ -9,7 +10,7 @@ export class ApiError extends Error {
     message: string,
     public status: number
   ) {
-    super(message)
+    super(safeApiErrorMessage(message))
     this.name = "ApiError"
   }
 }
@@ -217,6 +218,19 @@ export async function apiPatch<T>(
   return request<T>(url, {
     ...options,
     method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+}
+
+export async function apiPut<T>(
+  url: string,
+  body?: unknown,
+  options?: FetchOptions<T>
+): Promise<T> {
+  return request<T>(url, {
+    ...options,
+    method: "PUT",
     headers: { "Content-Type": "application/json", ...options?.headers },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })

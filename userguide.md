@@ -441,7 +441,7 @@ LyraShield Cloud offers a 14-day free trial: 100 agent-minutes, Standard and Qui
 | LAUNCH ASSURANCE | $499/mo     |      6,000 |      50 | Yes  | Deep + opt-in overage + spend limit + RBAC |
 | ENTERPRISE       | Contact-led |     custom |  custom | Yes  | Custom terms                               |
 
-- **Annual billing:** 15–25% discount, prepaid.
+- **Annual billing:** 15–30% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
 - **Minute packs:** 100/$15, 250/$30, 500/$50 — valid 180 days.
 - **Overage:** $0.15/min — Launch Assurance opt-in with a configurable spend limit.

@@ -6,6 +6,7 @@ heading: "LyraShield AI vs SonarQube"
 disclaimer: "Factual comparison. SonarQube by SonarSource provides static analysis, code quality, and security hotspot review. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. Neither replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace SonarQube?"
     a: "No. SonarQube is the long-standing code quality and security standard with 40+ languages, code smells, duplication, complexity metrics, taint analysis, IaC scanning, and Quality Gates that block merges. LyraShield in open beta does not focus on code quality; it focuses on release assurance with evidence states and immutable reports."
@@ -51,7 +52,7 @@ faq:
 | Aspect     | LyraShield AI                                        | SonarQube                                                                                            |
 | ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Deployment | Hosted + CLI + MCP + GitHub Action                   | SonarQube Cloud (SaaS) or SonarQube Server (self-hosted) + SonarLint IDE                             |
-| Pricing    | Open beta; pricing announced as it matures           | Cloud: Free (50k LOC), Team $34/mo (100k LOC), Enterprise (custom); Server: per-instance/year by LOC |
+| Pricing    | See [pricing](/pricing) for current plan details     | Cloud: Free (50k LOC), Team $34/mo (100k LOC), Enterprise (custom); Server: per-instance/year by LOC |
 | Languages  | Language-agnostic (deterministic + agentic coverage) | 40+ languages                                                                                        |
 
 ## When to use which

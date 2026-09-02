@@ -36,7 +36,14 @@ export interface RecordAgentMinutesOptions {
    *   UsageRecord.quantity and all pool/pack arithmetic are integer minutes.
    * - "completed" (default) applies the 1-minute floor as before.
    */
-  outcome?: "completed" | "failed" | "cancelled"
+  outcome?: "completed" | "partial" | "failed" | "cancelled"
+  /** Resolve uncovered minutes before this transaction commits. Throw to void
+   * the entire settlement, including pack and overage writes. Never open a
+   * second transaction for the same workspace from this callback. */
+  settleOverage?: (tx: MeterTransaction, minutes: number) => Promise<void>
+  /** Finish bounded, idempotent result persistence before monetary commit.
+   * A failure rolls back all provisional usage. No provider work belongs here. */
+  beforeCommit?: () => Promise<void>
 }
 
 export interface RecordAgentMinutesResult {
@@ -52,6 +59,34 @@ export interface RecordAgentMinutesResult {
 
 const MAX_TRANSACTION_ATTEMPTS = 3
 type MeterTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+/** Read-only recovery check. Never settles or replays interrupted paid work. */
+export async function hasUnsettledScanIntent(
+  workspaceId: string,
+  scanId: string
+): Promise<boolean> {
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const scan = await tx.scan.findFirst({
+      where: { id: scanId, workspaceId },
+      select: {
+        events: { where: { stage: "billing_settlement_intent" }, select: { metadata: true } },
+      },
+    })
+    const keys = [
+      ...new Set(
+        (scan?.events ?? []).flatMap(({ metadata }) => {
+          if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return []
+          return typeof metadata.idempotencyKey === "string" ? [metadata.idempotencyKey] : []
+        })
+      ),
+    ]
+    if (!keys.length) return false
+    const receipts = await tx.usageRecord.count({
+      where: { workspaceId, kind: "agent_minutes", idempotencyKey: { in: keys } },
+    })
+    return receipts !== keys.length
+  })
+}
 
 function isSerializationConflict(error: unknown): boolean {
   return (
@@ -115,12 +150,32 @@ export async function recordAgentMinutes(
   //   distinction that matters is that a cancelled scan is not forced up to a
   //   minimum — only genuinely elapsed whole minutes are billed.
   const rawMinutes =
-    opts.outcome === "cancelled" ? Math.ceil(ms / 60_000) : Math.max(1, Math.ceil(ms / 60_000))
+    opts.outcome === "cancelled" || opts.outcome === "partial"
+      ? Math.ceil(ms / 60_000)
+      : Math.max(1, Math.ceil(ms / 60_000))
 
   // Deep/Custom scans consume 3× minutes
   const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
   const minutes = isDeep ? rawMinutes * DEEP_SCAN_MULTIPLIER : rawMinutes
 
+  // Independent durable intent precedes terminal persistence. UsageRecord is
+  // the atomic settlement receipt; missing receipts remain queryable after death.
+  if (opts.beforeCommit) {
+    await withWorkspaceRLS(workspaceId, async (tx) => {
+      const scan = await tx.scan.findFirst({ where: { id: scanId, workspaceId } })
+      if (!scan) throw new Error("settlement_scan_not_found")
+      await tx.scanEvent.create({
+        data: {
+          scanId,
+          stage: "billing_settlement_intent",
+          message: "Settlement intent; missing usage receipt requires terminal accounting review",
+          metadata: { idempotencyKey, workspaceId, automaticReplayAllowed: false },
+        },
+      })
+    })
+  }
+
+  let finalizationStarted = false
   for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
     try {
       return await withWorkspaceRLS(
@@ -136,6 +191,8 @@ export async function recordAgentMinutes(
             select: { id: true, metadata: true },
           })
           if (existing) {
+            finalizationStarted = Boolean(opts.beforeCommit)
+            await opts.beforeCommit?.()
             return {
               created: false,
               minutes: 0,
@@ -155,13 +212,23 @@ export async function recordAgentMinutes(
             rawMinutes,
             multiplier: isDeep ? DEEP_SCAN_MULTIPLIER : 1,
           })
+          if (overageMinutes > 0) await opts.settleOverage?.(tx, overageMinutes)
+          finalizationStarted = Boolean(opts.beforeCommit)
+          await opts.beforeCommit?.()
 
           return { created: true, minutes, idempotencyKey, overageMinutes }
         },
-        { isolationLevel: "Serializable" }
+        { isolationLevel: "Serializable", ...(opts.beforeCommit ? { timeout: 30_000 } : {}) }
       )
     } catch (error) {
-      if (isSerializationConflict(error) && attempt < MAX_TRANSACTION_ATTEMPTS) {
+      // Once terminal evidence is durable, never reassess quota or rerun its
+      // finalizer in a fresh transaction. An uncertain/aborted monetary commit
+      // leaves the successful result intact and uncharged rather than replaying it.
+      if (
+        isSerializationConflict(error) &&
+        !finalizationStarted &&
+        attempt < MAX_TRANSACTION_ATTEMPTS
+      ) {
         logger.warn("Retrying agent-minute transaction after serialization conflict", {
           workspaceId,
           idempotencyKey,
@@ -213,7 +280,13 @@ async function recordMinutesAndDebitIncrementalSpillover(
     where: { workspaceId: input.workspaceId },
     select: { currentPeriodStart: true },
   })
-  const cycleStart = billingAccount?.currentPeriodStart
+  const trial = !billingAccount?.currentPeriodStart
+    ? await tx.workspace.findUnique({
+        where: { id: input.workspaceId },
+        select: { trialStartedAt: true },
+      })
+    : null
+  const cycleStart = billingAccount?.currentPeriodStart ?? trial?.trialStartedAt
 
   const [grantRecords, priorConsumeRecords] = cycleStart
     ? await Promise.all([

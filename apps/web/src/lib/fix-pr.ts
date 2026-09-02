@@ -73,7 +73,7 @@ export interface FixPrOutcome {
 }
 
 function approvalUrl(base: string, approvalId: string): string {
-  return `${base.replace(/\/+$/, "")}/agent-approvals/${approvalId}`
+  return `${base.replace(/\/+$/, "")}/dashboard/approvals?approval=${encodeURIComponent(approvalId)}`
 }
 
 /**
@@ -171,6 +171,11 @@ export async function executeApprovedFixPr(
       req.repoName,
       baseBranch
     )
+    if (fromSha !== req.baseCommit) {
+      throw new Error(
+        "The repository changed since this scan. Retest and request a new fix approval."
+      )
+    }
     await createBranch(req.installationId, req.repoOwner, req.repoName, branchName, fromSha)
 
     // Apply the validated diff file-by-file: fetch current content at the base
@@ -228,9 +233,14 @@ export async function executeApprovedFixPr(
 
     return { status: "opened", approvalId: req.approvalId, prNumber: pr.number, prUrl: pr.url }
   } catch (error) {
-    await failApprovalExecution(req.approvalId, req.workspaceId, {
-      error: error instanceof Error ? error.message : String(error),
-    })
+    await failApprovalExecution(
+      req.approvalId,
+      req.workspaceId,
+      {
+        error: error instanceof Error ? error.message : String(error),
+      },
+      false
+    )
     logger.error("Fix PR execution failed", {
       fixProposalId: req.fixProposalId,
       error: error instanceof Error ? error.message : String(error),

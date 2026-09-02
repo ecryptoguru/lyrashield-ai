@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { createApiKey, listApiKeys, prisma, API_KEY_SCOPES } from "@lyrashield/db"
 import { requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
@@ -43,7 +44,7 @@ const CreateApiKeySchema = z.object({
   expiresAt: z.iso.datetime().optional(),
 })
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     const body: unknown = await request.json().catch(() => null)
     const parsed = CreateApiKeySchema.safeParse(body)
@@ -92,3 +93,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to create API key", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

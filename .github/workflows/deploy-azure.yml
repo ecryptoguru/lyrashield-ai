@@ -1247,6 +1247,22 @@ jobs:
           wait "$EGRESS_SMOKE_PID" || CANDIDATE_SMOKE_FAILED=1
           exit "$CANDIDATE_SMOKE_FAILED"
 
+      - name: Verify worker queues are empty before traffic promotion
+        id: worker-preflight
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: |
+          source ops/deployment/azure-vm-run-command.sh
+          payload=$(base64 --wrap=0 .github/scripts/promote-worker-vm.sh)
+          result=$(azure_vm_run_command_with_retry \
+            --name "$WORKER_VM_NAME" --resource-group "$RG" \
+            --command-id RunShellScript \
+            --scripts "printf '%s' '$payload' | base64 -d | sh -s -- --preflight" \
+            --query 'value[0].message' --output tsv)
+          printf '%s\n' "$result"
+          grep -q "Worker empty-queue preflight passed" <<< "$result"
+
       - name: Promote healthy candidate revisions
         id: promote
         env:
@@ -1431,6 +1447,7 @@ jobs:
           exit "$CLEANUP_FAILED"
 
       - name: Promote verified worker digest on VM
+        id: worker-vm
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
@@ -1454,7 +1471,7 @@ jobs:
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.
       - name: Roll back production traffic on health failure
-        if: failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')
+        if: failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
@@ -1541,7 +1558,8 @@ jobs:
           failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
-          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')
+          steps.worker-preflight.outcome == 'failure' ||
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -1584,7 +1602,8 @@ jobs:
           failure() &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
-          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')
+          steps.worker-preflight.outcome == 'failure' ||
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}

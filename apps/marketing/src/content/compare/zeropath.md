@@ -6,6 +6,7 @@ heading: "LyraShield AI vs ZeroPath"
 disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC, and DAST-style runtime validation into a single reasoning engine, and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports, and gates fixes behind approvals. Neither replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace ZeroPath?"
     a: "No. ZeroPath is a unified AI-native SAST plus SCA, secrets, IaC, and DAST-style runtime validation with taint tracking, natural-language policy, CycloneDX AI-BOM across 17 component kinds, and an open-source MCP server and CLI. LyraShield in open beta focuses on agentic pentest as core with SCA, secrets, evidence states, and approval-gated fixes."
@@ -46,11 +47,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                              | ZeroPath                                                                                                              |
-| ---------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action         | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
-| Pricing    | Open beta; pricing announced as it matures | Team $1,000/mo + $60/developer; Enterprise custom; usage-based option available                                       |
-| Languages  | Language-agnostic                          | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin, and more)                                  |
+| Aspect     | LyraShield AI                                    | ZeroPath                                                                                                              |
+| ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
+| Pricing    | See [pricing](/pricing) for current plan details | Team $1,000/mo + $60/developer; Enterprise custom; usage-based option available                                       |
+| Languages  | Language-agnostic                                | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin, and more)                                  |
 
 ## When to use which
 

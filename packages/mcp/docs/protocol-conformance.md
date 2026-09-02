@@ -1,6 +1,6 @@
 # MCP protocol conformance
 
-Baseline: `@modelcontextprotocol/sdk` 1.30.0 and `@lyrashield/mcp` 0.2.2.
+Baseline: `@modelcontextprotocol/sdk` 1.30.0 and `@lyrashield/mcp` 0.2.3.
 
 ## Supported and tested
 

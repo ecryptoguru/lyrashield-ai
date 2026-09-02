@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { revokeApiKey, prisma } from "@lyrashield/db"
 import { requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
@@ -5,7 +6,7 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 
 /** Revoke a workspace API key. ADMIN+ browser session only; idempotence-safe CAS. */
-export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+async function remove(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params
     const { searchParams } = new URL(request.url)
@@ -42,3 +43,5 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     return apiError("INTERNAL_ERROR", "Failed to revoke API key", 500)
   }
 }
+
+export const DELETE = withCookieMutation(remove)

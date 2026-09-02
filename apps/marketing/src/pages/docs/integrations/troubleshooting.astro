@@ -42,7 +42,7 @@ const faqItems = [
   },
   {
     q: "The npx install fails with a package not found error",
-    a: "The @lyrashield/mcp package is published on npm. If npx -y @lyrashield/mcp fails to resolve, check that you're on Node.js 20+, that your npm registry is set to the public registry (npm config get registry), and that a corporate proxy or mirror isn't blocking scoped packages.",
+    a: "The @lyrashield/mcp package is published on npm. If npx -y @lyrashield/mcp fails to resolve, check that you're on Node.js 24+, that your npm registry is set to the public registry (npm config get registry), and that a corporate proxy or mirror isn't blocking scoped packages.",
   },
 ]
 
@@ -172,7 +172,7 @@ const jsonLd: unknown[] = [
       </code>.
     </li>
     <li>
-      If the package fails to resolve, verify you are on Node.js 20+ and that your network can
+      If the package fails to resolve, verify you are on Node.js 24+ and that your network can
       reach the npm registry — a corporate proxy, firewall, or offline mirror is the usual cause.
       <code>@lyrashield/mcp</code> is published and live on npm.
     </li>

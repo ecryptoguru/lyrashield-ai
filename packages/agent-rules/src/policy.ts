@@ -9,7 +9,7 @@ export const LYRASHIELD_POLICY: Policy = {
       id: "pre-pr",
       title: "Pre-PR check",
       instructions: [
-        "Run check_diff on the staged changes to identify security issues introduced by this work item.",
+        "Run lyrashield_check_diff on the staged changes to identify security issues introduced by this work item.",
         "Review any findings before committing.",
         "If findings are reported, address them or document why each is acceptable.",
       ],
@@ -18,7 +18,7 @@ export const LYRASHIELD_POLICY: Policy = {
       id: "post-fix",
       title: "Post-fix verification",
       instructions: [
-        "After applying a fix for a security finding, run verify_fix with the finding ID.",
+        "After applying a fix for a security finding, run lyrashield_verify_fix with the finding ID.",
         "Poll the returned retest scan to a terminal state, then include its outcome and scan reference in the PR description.",
         "Call the result independently verified only when a separate independent-verification receipt exists.",
       ],

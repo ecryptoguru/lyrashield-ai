@@ -46,6 +46,7 @@ export const githubReposSchema = z.array(githubRepoSchema)
 
 export const targetSchema = z
   .object({
+    domainVerificationStatus: z.string().optional(),
     id: z.string(),
     name: z.string(),
     type: z.string(),

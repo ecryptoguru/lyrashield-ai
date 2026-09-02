@@ -22,6 +22,8 @@ export default defineConfig({
       "e2e/**",
       "apps/marketing/src/tests/**",
       "apps/marketing-motion/tests/**",
+      // These use node:test and run in the ops suite, not Vitest.
+      ".github/scripts/tests/**",
     ],
   },
 })

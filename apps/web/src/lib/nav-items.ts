@@ -141,6 +141,7 @@ const BILLING_BASE: NavItem = {
 
 /** Secondary / Workspace destinations that are always present. */
 const WORKSPACE_NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard/fixes", label: "Fixes", shortLabel: "Fixes", icon: Bug },
   {
     href: "/dashboard/notifications",
     label: NOTIFICATION_PLURAL,
@@ -214,6 +215,14 @@ export const NAV_TITLE_ITEMS: NavItem[] = [
   REVIEW_QUEUE_BASE,
   PLATFORM_ADMIN_BASE,
   BILLING_BASE,
+  EVIDENCE_VAULT_BASE,
+  {
+    href: "/dashboard/launch-readiness",
+    label: "Launch Readiness",
+    shortLabel: "Readiness",
+    icon: ShieldCheck,
+  },
+  { href: "/dashboard/projects", label: "Projects", shortLabel: "Projects", icon: Crosshair },
   ...WORKSPACE_NAV_ITEMS,
 ]
 

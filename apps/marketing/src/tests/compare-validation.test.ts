@@ -31,6 +31,7 @@ const page = (overrides = {}) => ({
       "Factual comparison. This page compares publicly documented capabilities of both platforms and neither replaces the other.",
     updatedDate: new Date().toISOString().slice(0, 10),
     draft: false,
+    pricingLadder: true,
     faq: [
       { q: "Does it replace Rival?", a: "No." },
       { q: "Can they run together?", a: "Yes." },
@@ -50,6 +51,22 @@ describe("compare governance", () => {
     expect(validateComparePage(page({ programEntry: undefined }))).toContain(
       "page is not mapped in the compare program"
     )
+  })
+
+  it("requires the shared ladder and rejects copied LyraShield prices", () => {
+    expect(validateComparePage(page({ data: { ...page().data, pricingLadder: false } }))).toContain(
+      "comparison must render the shared pricing ladder"
+    )
+    expect(
+      validateComparePage(
+        page({
+          body: BODY.replace(
+            "| Focus | Release assurance | Scanning |",
+            "| Pricing | Starter $29/month | Scanning |"
+          ),
+        })
+      )
+    ).toContain("comparison must not hardcode the LyraShield pricing ladder")
   })
 
   it("catches a competitor name that drifts from the program", () => {

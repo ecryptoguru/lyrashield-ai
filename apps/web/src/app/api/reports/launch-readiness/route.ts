@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -30,7 +31,7 @@ const GenerateSchema = z
  * issued without a key is unsigned and the verify endpoint reports it as
  * unavailable, never a guess.
  */
-export async function POST(request: Request) {
+async function post(request: Request) {
   try {
     let body: unknown
     try {
@@ -92,3 +93,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to generate the launch readiness report", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

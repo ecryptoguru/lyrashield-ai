@@ -6,6 +6,7 @@ heading: "LyraShield AI vs Pentera"
 disclaimer: "Factual comparison. [Pentera](https://pentera.io/platform/) is an AI-powered automated security validation platform that emulates real attacks across internal networks, external surface, cloud, and web applications in live production to reveal what is actually exploitable, then automates remediation and re-testing (Pentera Core, Surface, Cloud, Resolve). [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. Pentera validates enterprise exposure across environments; LyraShield AI gates AI-generated-code releases. Neither replaces the other."
 updatedDate: 2026-08-07
 draft: false
+pricingLadder: true
 faq:
   - q: "Does LyraShield replace Pentera?"
     a: "No. Pentera is an enterprise automated security validation platform testing internal, external, cloud, and web apps in live production with full kill-chain emulation, business-impact prioritization, and Resolve remediation workflows. LyraShield in open beta is a focused release assurance loop for AI-built apps, not enterprise exposure management."
@@ -48,7 +49,7 @@ faq:
 | Aspect             | LyraShield AI                                     | Pentera                                                                                                                            |
 | ------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Deployment         | Hosted + CLI + MCP + GitHub Action                | Platform (Core/Surface/Cloud/Resolve); enterprise deployment; live production                                                      |
-| Pricing            | Open beta; pricing announced as it matures        | Not public — enterprise quote-based; scoped to environment size and modules                                                        |
+| Pricing            | See [pricing](/pricing) for current plan details  | Not public — enterprise quote-based; scoped to environment size and modules                                                        |
 | Compliance posture | Assurance-record orientation for release sign-off | Maps validated findings to controls; ISO/IEC 42001 AI governance; Gartner representative vendor in Adversarial Exposure Validation |
 
 ## When to use which

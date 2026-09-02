@@ -74,6 +74,8 @@ export type RegistryAgentEntry = AgentEntry & {
 }
 
 export interface InstallOptions {
+  /** Preserve stored OAuth refresh and custom origin instead of injecting environment overrides. */
+  useCredentialStore?: boolean
   transport: Transport
   apiUrl: string
   secretMode: "inline" | "interpolated" | "shell" | "header"

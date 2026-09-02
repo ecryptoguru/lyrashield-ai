@@ -9,6 +9,7 @@ import { getPluginDir } from "./index.js"
 const PUBLIC_FILES = [
   "README.md",
   "CHANGELOG.md",
+  "CLIENT-CONTRACTS.md",
   "plugin.json",
   "mcp.json",
   "skills",
@@ -38,6 +39,7 @@ const MARKETPLACE_ARTIFACTS = [
 const GENERATED_FILES = [
   ...PUBLIC_FILES,
   "gemini-extension.json",
+  "mcp-env.cjs",
   "GEMINI.md",
   "LICENSE",
   ...MARKETPLACE_ARTIFACTS,
@@ -101,7 +103,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
 
   for (const relative of PUBLIC_FILES) {
     const source =
-      relative === "README.md" || relative === "CHANGELOG.md"
+      relative === "README.md" || relative === "CHANGELOG.md" || relative === "CLIENT-CONTRACTS.md"
         ? path.join(marketplaceDocs, relative)
         : path.join(pluginRoot, relative)
     await cp(source, path.join(destination, relative), {
@@ -109,6 +111,11 @@ export async function exportMarketplace(destination: string): Promise<void> {
       force: true,
     })
   }
+  await cp(
+    path.join(marketplaceDocs, "gemini-extension", "mcp-env.cjs"),
+    path.join(destination, "mcp-env.cjs"),
+    { force: true }
+  )
   await cp(
     path.join(marketplaceDocs, "gemini-extension", "GEMINI.md"),
     path.join(destination, "GEMINI.md"),
@@ -121,6 +128,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
     await cp(path.join(marketplaceDocs, relative), path.join(destination, relative), {
       recursive: true,
       force: true,
+      filter: (source) => !["target", "node_modules", ".git"].includes(path.basename(source)),
     })
   }
 

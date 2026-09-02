@@ -34,6 +34,7 @@ interface Target {
   scanCount: number
   findingCount: number
   createdAt: string
+  domainVerificationStatus?: string
 }
 
 interface GithubRepo {
@@ -571,15 +572,16 @@ export function TargetsClient({
         />
       ) : (
         <div
-          className="w-full max-w-full overflow-x-auto rounded-xl border shadow-sm"
+          className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border shadow-sm [contain:paint]"
           tabIndex={0}
           aria-label="Targets list"
         >
-          <table className="w-full table-fixed text-sm">
+          <table className="w-full min-w-[40rem] text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Name</th>
                 <th className="px-4 py-3 text-left font-semibold">Type</th>
+                <th className="px-4 py-3 text-left font-semibold">Domain verification</th>
                 <th className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
                   {RUN_PLURAL}
                 </th>
@@ -590,7 +592,7 @@ export function TargetsClient({
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
                   <span className="sr-only">View</span>
                 </th>
-                <th className="hidden">
+                <th className="sr-only">
                   <span className="sr-only">
                     {RUN_PLURAL} and {ISSUE_PLURAL} summary
                   </span>
@@ -623,6 +625,20 @@ export function TargetsClient({
                       {t.type}
                     </Badge>
                   </td>
+                  <td className="px-4 py-3">
+                    <Badge
+                      variant={
+                        t.domainVerificationStatus?.startsWith("Verified until")
+                          ? "success"
+                          : "muted"
+                      }
+                    >
+                      {t.domainVerificationStatus ??
+                        (t.type === "WEB_APP" || t.type === "API"
+                          ? "Not verified"
+                          : "Not applicable")}
+                    </Badge>
+                  </td>
                   <td className="hidden px-4 py-3 lg:table-cell">{t.scanCount}</td>
                   <td className="hidden px-4 py-3 lg:table-cell">
                     {t.findingCount > 0 ? (
@@ -650,7 +666,7 @@ export function TargetsClient({
                       below lg, so the primary row data is otherwise
                       unreachable on small screens. Announce counts + status
                       without affecting the visual layout. */}
-                  <td className="hidden">
+                  <td className="sr-only">
                     <span className="sr-only">{`${t.status}, ${t.scanCount} ${RUN_PLURAL.toLowerCase()}, ${t.findingCount} ${ISSUE_PLURAL.toLowerCase()}`}</span>
                   </td>
                 </tr>

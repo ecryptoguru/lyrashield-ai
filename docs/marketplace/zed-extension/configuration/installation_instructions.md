@@ -33,20 +33,23 @@ Open your Zed settings and add:
   "context_servers": {
     "lyrashield-mcp": {
       "settings": {
-        "api_key": "lsk_your_key_here",
-        "api_url": "https://app.lyrashieldai.com"
+        "api_key": "lsk_your_key_here"
       }
     }
   }
 }
 ```
 
-`api_url` is optional and defaults to `https://app.lyrashieldai.com`.
+Stored OAuth uses the credential store's API URL. Inherited URL and credential overrides are
+removed before MCP starts. An explicit API key uses `https://app.lyrashieldai.com` only.
+
+Published MCP 0.2.2 does not refresh expired OAuth tokens; run `lyrashield login --oauth` again
+when the session expires.
 
 ## Requirements
 
-- **Node.js** v20 or newer (Zed provides its own Node binary; you do not need to install one manually).
-- The `@lyrashield/mcp` package is downloaded and kept up to date automatically.
+- **Node.js** v24 or newer (Zed provides its own Node binary; you do not need to install one manually).
+- The `@lyrashield/mcp` package is pinned to version 0.2.2; releases deliberately update this pin.
 
 ## Available tools
 

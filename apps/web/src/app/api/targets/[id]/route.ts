@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -8,7 +9,7 @@ import { checkScanUrlSafe } from "../../../../lib/ssrf"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError } from "../../../../lib/api-response"
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function patch(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let body: unknown
   try {
     body = await request.json()
@@ -154,3 +155,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return apiError("INTERNAL_ERROR", "Failed to update target", 500)
   }
 }
+
+export const PATCH = withCookieMutation(patch)

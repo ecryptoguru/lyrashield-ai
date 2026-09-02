@@ -44,9 +44,10 @@ else
   echo "ERROR: could not read BILLING_CANARY_WORKSPACE_IDS (gh failure); aborting before any mutation" >&2
   exit 1
 fi
-previous_revision=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestRevisionName --output tsv)
-current_image=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query 'properties.template.containers[0].image' --output tsv)
-current_source_sha=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query "properties.template.containers[0].env[?name=='LYRASHIELD_PRODUCT_REVISION'].value | [0]" --output tsv)
+previous_revision=$(az containerapp show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query "properties.configuration.ingress.traffic[?weight==\`100\`].revisionName | [0]" --output tsv)
+[ -n "$previous_revision" ] && [ "$previous_revision" != "None" ] && [ "$previous_revision" != "null" ] || { echo "No single 100%-traffic revision" >&2; exit 1; }
+current_image=$(az containerapp revision show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$previous_revision" --query 'properties.template.containers[0].image' --output tsv)
+current_source_sha=$(az containerapp revision show --name "$AZURE_APP_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$previous_revision" --query "properties.template.containers[0].env[?name=='LYRASHIELD_PRODUCT_REVISION'].value | [0]" --output tsv)
 [ "$current_image" = "$WEB_IMAGE_DIGEST" ]
 [ "$current_source_sha" = "$DEPLOY_SHA" ]
 set_canary_allowlist() {

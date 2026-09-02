@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { createApproval, listApprovals } from "@lyrashield/db"
 import { checkApprovalCreateRateLimit } from "../../../lib/rate-limit"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -87,3 +88,5 @@ export async function POST(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to create agent approval", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

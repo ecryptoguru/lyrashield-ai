@@ -18,7 +18,7 @@ pub async fn activate_license(
     license_key: String,
     api_url: Option<String>,
 ) -> Result<LicenseStatus, String> {
-    let machine_id = generate_machine_id();
+    let machine_id = generate_machine_id()?;
     let client = ApiClient::new(api_url.clone())?;
     let response = client.activate(&license_key, &machine_id).await?;
     let verification = verify_license(&response.license, BUNDLED_PUBLIC_KEY);

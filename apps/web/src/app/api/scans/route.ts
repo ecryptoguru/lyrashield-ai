@@ -1,3 +1,4 @@
+import { withCookieMutation } from "../../../lib/api-auth"
 import { createHash } from "crypto"
 import {
   prisma,
@@ -83,7 +84,7 @@ function scanListEtag(
   return `"${createHash("sha256").update(payload).digest("hex")}"`
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -479,3 +480,5 @@ export async function GET(request: Request) {
     return apiError("INTERNAL_ERROR", "Failed to list scans", 500)
   }
 }
+
+export const POST = withCookieMutation(post)

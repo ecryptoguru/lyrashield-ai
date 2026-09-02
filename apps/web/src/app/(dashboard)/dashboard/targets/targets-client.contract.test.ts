@@ -18,4 +18,12 @@ describe("manual repository target form", () => {
       "...(repoForm.branch.trim() ? { branch: repoForm.branch.trim() } : {}),"
     )
   })
+
+  it("keeps domain verification and screen-reader fallback cells visible to assistive technology", () => {
+    expect(source).toContain("Domain verification")
+    expect(source).toContain("Not applicable")
+    expect(source).toContain('<th className="sr-only">')
+    expect(source).toContain('<td className="sr-only">')
+    expect(source).not.toContain('<td className="hidden">')
+  })
 })

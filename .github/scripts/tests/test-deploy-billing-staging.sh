@@ -43,10 +43,11 @@ must_contain "name: billing-staging"
 must_contain "recover_stale_migration:"
 must_contain "prepare_razorpay_checkout:"
 must_contain "prepare_polar_checkout:"
-must_contain "receipt_resolve_razorpay_subscription_cancellation:"
-must_contain "receipt_resolve_polar_subscription_purchase:"
-must_contain "receipt_resolve_polar_subscription_cancellation:"
 must_contain "20260814020000_ai_system_profile_versions"
+must_contain "receipt_json:"
+must_contain 'RECEIPT_JSON: ${{ inputs.receipt_json }}'
+must_contain 'receipt_env=$(node .github/scripts/parse-billing-receipt.mjs)'
+must_contain 'proof_env+=("$entry")'
 must_contain "RECOVER_STALE_MIGRATION: \${{ inputs.recover_stale_migration || 'none' }}"
 must_contain "if: github.ref == 'refs/heads/main'"
 must_contain "id-token: write"
@@ -213,15 +214,6 @@ must_contain 'BILLING_RECEIPT_WEB_DIGEST=${WEB_DIGEST}'
 must_contain 'BILLING_RECEIPT_MIGRATION_DIGEST=${MIGRATION_DIGEST}'
 must_contain 'BILLING_RECEIPT_E2E_DIGEST=${E2E_DIGEST}'
 must_contain 'BILLING_RECEIPT_REVISION=${STAGING_REVISION}'
-must_contain 'BILLING_RECEIPT_REMAINING_MINUTES=${{ inputs.receipt_remaining_minutes }}'
-must_contain 'BILLING_RECEIPT_COMMISSION_COUNT=${{ inputs.receipt_commission_count }}'
-must_contain 'BILLING_RECEIPT_COMMISSION_STATUS=${{ inputs.receipt_commission_status }}'
-must_contain 'BILLING_RECEIPT_AUDIT_ACTION=${{ inputs.receipt_audit_action }}'
-must_contain 'BILLING_RECEIPT_AUDIT_RESOURCE_ID=${{ inputs.receipt_audit_resource_id }}'
-must_contain 'BILLING_RECEIPT_AUDIT_COUNT=${{ inputs.receipt_audit_count }}'
-must_contain 'BILLING_RECEIPT_RESOLVE_RAZORPAY_SUBSCRIPTION_CANCELLATION=${{ inputs.receipt_resolve_razorpay_subscription_cancellation }}'
-must_contain 'BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_PURCHASE=${{ inputs.receipt_resolve_polar_subscription_purchase }}'
-must_contain 'BILLING_RECEIPT_RESOLVE_POLAR_SUBSCRIPTION_CANCELLATION=${{ inputs.receipt_resolve_polar_subscription_cancellation }}'
 must_contain 'Provider receipt artifact checksum mismatch'
 must_contain 'workflowCleanupResult = "passed"'
 must_contain 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
@@ -530,7 +522,7 @@ if grep -Fq -- '-H "Host: app.lyrashieldai.com"' <<< "$candidate_probe_block"; t
 fi
 grep -Fq 'Restore prior ingress mode after failed rollout' "$production_workflow"
 grep -Fq "failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&" "$production_workflow"
-grep -Fq "steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure')" "$production_workflow"
+grep -Fq "steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')" "$production_workflow"
 grep -Fq 'Previous Container Apps client certificate mode did not recover after rollout failure.' "$production_workflow"
 grep -Fq 'Deactivate zero-traffic candidates after failed rollout' "$production_workflow"
 grep -Fq 'candidate ${candidate} still serves ${weight}% traffic; refusing to deactivate it.' "$production_workflow"

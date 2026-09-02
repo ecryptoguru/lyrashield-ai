@@ -2,6 +2,7 @@ import { access, readFile, readdir } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { runInNewContext } from "node:vm"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -87,6 +88,7 @@ async function scanSecrets(dir) {
         ".json",
         ".ts",
         ".js",
+        ".cjs",
         ".mjs",
         ".yml",
         ".yaml",
@@ -115,7 +117,7 @@ const portableMcp = await readJson("mcp.json")
 const claudeMcp = await readJson(".mcp.json")
 for (const [name, config] of Object.entries({ portableMcp, claudeMcp })) {
   const server = config.mcpServers?.lyrashield
-  assert(server?.type === "streamable-http", `${name} must use Streamable HTTP`)
+  assert(server?.type === "http", `${name} must use Streamable HTTP`)
   assert(server?.url === "https://app.lyrashieldai.com/api/mcp", `${name} has the wrong MCP URL`)
   assert(!("headers" in server), `${name} must allow the hosted OAuth flow to authenticate`)
 }
@@ -125,7 +127,7 @@ const cursorPlugin = await readJson(".cursor-plugin/plugin.json")
 const cursorServer = cursorPlugin.mcpServers?.lyrashield
 assert(cursorServer, ".cursor-plugin/plugin.json must declare the lyrashield MCP server")
 assert(
-  cursorServer.type === "streamable-http",
+  cursorServer.type === "http",
   ".cursor-plugin/plugin.json lyrashield server must use Streamable HTTP"
 )
 assert(
@@ -200,6 +202,7 @@ for (const [artifact, [file, pattern, label]] of Object.entries({
   openclaw: ["openclaw/SKILL.md", /^version:\s*(\S+)\s*$/m, "openclaw SKILL.md"],
 })) {
   const actual = parseVersion(await readFile(path.join(root, file), "utf8"), pattern, label)
+  assert(actual === rootPlugin.version, `${artifact} version must track plugin.json`)
   assert(
     versions[artifact] === actual,
     `manifest.artifactVersions.${artifact} (${versions[artifact]}) must match ${label} (${actual})`
@@ -229,6 +232,111 @@ assert(
   JSON.stringify(rootGemini.excludeTools) === JSON.stringify(excluded),
   "root gemini-extension.json excludeTools must equal the manifest-recorded mutating tool set"
 )
+
+const expectedPackage = "@lyrashield/mcp@0.2.2"
+for (const file of [
+  ".mcp.kiro.json",
+  "gemini-extension.json",
+  "gemini-extension/gemini-extension.json",
+  "codebuff/lyrashield-review.ts",
+  "zed-extension/src/lib.rs",
+  "kilo/mcps/lyrashield/MCP.yaml",
+]) {
+  const text = await readFile(path.join(root, file), "utf8")
+  assert(
+    !text.includes("LYRASHIELD_API_URL"),
+    `${file} must not override OAuth credential-store provenance`
+  )
+  if (file.endsWith(".rs")) {
+    assert(
+      text.includes('const PACKAGE_VERSION: &str = "0.2.2";'),
+      "Zed must pin the published MCP version"
+    )
+    assert(!text.includes("npm_package_latest_version"), "Zed must not install a floating release")
+  } else {
+    assert(text.includes(expectedPackage), `${file} must pin the published MCP version`)
+  }
+}
+assert(
+  geminiManifest.settings[0].envVar === "GEMINI_LYRASHIELD_CRED",
+  "Gemini setting must survive environment redaction"
+)
+assert(
+  geminiManifest.mcpServers.lyrashield.env.LYRASHIELD_EXTENSION_CRED ===
+    "${GEMINI_LYRASHIELD_CRED}",
+  "Gemini must explicitly pass the optional extension credential"
+)
+assert(
+  JSON.stringify(rootGemini.mcpServers) === JSON.stringify(geminiManifest.mcpServers),
+  "Both Gemini entrypoints must use the same credential launcher"
+)
+assert(
+  geminiManifest.mcpServers.lyrashield.args.includes(
+    '--node-options=--require="${extensionPath}/mcp-env.cjs"'
+  ),
+  "Gemini must preload credential normalization before the published MCP server"
+)
+const credentialPreload = await readFile(path.join(root, "mcp-env.cjs"), "utf8")
+for (const relative of ["gemini-extension/mcp-env.cjs", "zed-extension/mcp-env.cjs"]) {
+  assert(
+    (await readFile(path.join(root, relative), "utf8")) === credentialPreload,
+    `${relative} must match the root credential preload`
+  )
+}
+const zed = await readFile(path.join(root, "zed-extension/src/lib.rs"), "utf8")
+assert(
+  zed.includes('include_str!("../mcp-env.cjs")') &&
+    zed.includes('"--eval".to_string()') &&
+    zed.includes('const EXTENSION_CRED_ENV_VAR: &str = "LYRASHIELD_EXTENSION_CRED";'),
+  "Zed must embed credential normalization before importing the MCP entrypoint"
+)
+for (const setting of [undefined, "", "  ", " demo-credential "]) {
+  const env = {
+    LYRASHIELD_API_URL: "http://untrusted.invalid",
+    LYRASHIELD_API_KEY: "inherited-credential",
+    LYRASHIELD_OAUTH_ACCESS_TOKEN: "inherited-token",
+    ...(setting === undefined ? {} : { LYRASHIELD_EXTENSION_CRED: setting }),
+  }
+  runInNewContext(credentialPreload, { process: { env } })
+  assert(!("LYRASHIELD_EXTENSION_CRED" in env), "Launcher must remove its temporary credential")
+  assert(
+    !("LYRASHIELD_OAUTH_ACCESS_TOKEN" in env),
+    "Launcher must remove inherited OAuth overrides"
+  )
+  if (setting?.trim()) {
+    assert(env.LYRASHIELD_API_KEY === "demo-credential", "Explicit API key must be preserved")
+    assert(
+      env.LYRASHIELD_API_URL === "https://app.lyrashieldai.com",
+      "Explicit Cloud API key must use the canonical HTTPS origin"
+    )
+  } else {
+    assert(!("LYRASHIELD_API_KEY" in env), "Empty credentials must not block stored OAuth")
+    assert(!("LYRASHIELD_API_URL" in env), "Stored OAuth must retain its stored issuer")
+  }
+}
+const codebuff = await readFile(path.join(root, "codebuff/lyrashield-review.ts"), "utf8")
+assert(
+  !codebuff.includes("run_terminal_command"),
+  "Read-only Codebuff agent must not run shell commands"
+)
+for (const file of [
+  "skills/lyrashield/SKILL.md",
+  "openclaw/SKILL.md",
+  "kiro-power/POWER.md",
+  "GEMINI.md",
+]) {
+  const text = await readFile(path.join(root, file), "utf8")
+  assert(
+    text.includes("lyrashield_check_diff") && text.includes("lyrashield_verify_fix"),
+    `${file} must use canonical tools`
+  )
+  assert(
+    text.includes(
+      "Fixes are proposals that require human review and approval; nothing is applied automatically."
+    ),
+    `${file} must preserve human approval`
+  )
+}
 
 console.log(
   `Marketplace validation passed (${manifest.generatedFiles.length} generated artifacts).`

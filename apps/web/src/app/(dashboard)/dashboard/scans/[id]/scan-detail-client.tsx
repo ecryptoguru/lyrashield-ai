@@ -316,6 +316,10 @@ export function ScanDetailClient({
   })
   const etagRef = useRef<string | undefined>(undefined)
   const prevStatusRef = useRef(initialScan.status)
+  const scanRef = useRef(scan)
+  useEffect(() => {
+    scanRef.current = scan
+  }, [scan])
 
   // Announce the active→terminal transition. Polling swaps the in-progress view
   // for the stat grid silently otherwise, so users who looked away (or use a
@@ -366,7 +370,7 @@ export function ScanDetailClient({
           goal: updated.goal,
           mode: updated.mode,
           triggerType: updated.triggerType,
-          target: scan.target,
+          target: scanRef.current.target,
           startedAt: asIsoString(updated.startedAt),
           endedAt: asIsoString(updated.endedAt),
           summary: updated.summary,
@@ -382,11 +386,11 @@ export function ScanDetailClient({
             createdAt: asIsoString(event.createdAt)!,
           })),
           integrity: {
-            ...scan.integrity,
+            ...scanRef.current.integrity,
             manifestChecksum: updated.resultManifest?.checksum ?? null,
             // urlExecution comes from the server-rendered manifest detail;
             // the polling payload carries the checksum only.
-            urlExecution: scan.integrity.urlExecution,
+            urlExecution: scanRef.current.integrity.urlExecution,
             coverage: (updated.coverageReceipts ?? []).map((receipt) => ({
               scanner: receipt.scanner,
               controlId: receipt.controlId,
@@ -396,7 +400,7 @@ export function ScanDetailClient({
               metadata: asMetadata(receipt.metadata),
             })),
           },
-          aiSecurity: scan.aiSecurity,
+          aiSecurity: scanRef.current.aiSecurity,
         }
         let refreshedFindings: FindingItem[] | null = null
         if (
@@ -424,7 +428,7 @@ export function ScanDetailClient({
         if (!signal.aborted) setRefreshError(true)
       }
     },
-    [scan.aiSecurity, scan.id, scan.target, scan.workspaceId, scan.integrity]
+    [scan.id, scan.workspaceId]
   )
 
   useEffect(() => {

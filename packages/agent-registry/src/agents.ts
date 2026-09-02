@@ -336,7 +336,7 @@ const amp: AgentEntry = {
   credential: { kind: "shell-env" },
   vendorCli: {
     command: "amp",
-    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp"],
+    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.2"],
   },
   rulesFiles: ["AGENTS.md"],
   source: {
@@ -702,8 +702,8 @@ const claudeCodePlugin: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
-  credential: { kind: "shell-env" },
+  transports: ["remote-http"],
+  credential: { kind: "ui-fields" },
   rulesFiles: ["CLAUDE.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -711,7 +711,7 @@ const claudeCodePlugin: AgentEntry = {
   },
   gotchas: [
     "Claude Code may also discover `.claude-plugin/plugin.json`; the package includes a manifest shim in that directory.",
-    "The MCP stdio server reads credentials from `~/.lyrashield/credentials.json` — run `lyrashield login --oauth` before installing.",
+    "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
   ],
 }
 
@@ -730,8 +730,8 @@ const cursorPlugin: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
-  credential: { kind: "shell-env" },
+  transports: ["remote-http"],
+  credential: { kind: "ui-fields" },
   rulesFiles: [".cursor/rules/lyrashield.mdc"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -739,7 +739,7 @@ const cursorPlugin: AgentEntry = {
   },
   gotchas: [
     "Cursor discovers Agent Plugins from `~/.cursor/plugins/local/`; the portable `plugin.json` at the plugin root is the manifest.",
-    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
+    "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
   ],
 }
 
@@ -758,8 +758,8 @@ const vscodePlugin: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
-  credential: { kind: "shell-env" },
+  transports: ["remote-http"],
+  credential: { kind: "ui-fields" },
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
     checkedOn: "2026-08-12",
@@ -769,7 +769,7 @@ const vscodePlugin: AgentEntry = {
     "VS Code reads the portable root `plugin.json`; there is no VS Code-specific shim directory. Our manifest declares the Agent Plugins 1.0 `$schema`, so VS Code classifies it as Agent Plugins 1.0 and takes MCP servers from the root `mcp.json`.",
     "Auto-registration is NOT wired yet, so this path is a staging copy rather than a discovery path. VS Code only auto-discovers plugins under `~/.copilot/installed-plugins/`; everything else arrives via a configured marketplace, Install-from-Source, or an explicit entry in the `chat.pluginLocations` setting.",
     "Until marketplace or Install-from-Source registration ships, install VS Code through its verified config-file path: `lyrashield install vscode` writes `.vscode/mcp.json`. Agent plugins additionally require the `chat.plugins.enabled` setting.",
-    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
+    "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
   ],
 }
 
@@ -788,8 +788,8 @@ const openaiCodexPlugin: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
-  credential: { kind: "shell-env" },
+  transports: ["remote-http"],
+  credential: { kind: "ui-fields" },
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -797,7 +797,7 @@ const openaiCodexPlugin: AgentEntry = {
   },
   gotchas: [
     "Codex recognizes root `plugin.json` files using the Agent Plugins 1.0 schema and maps them to Codex plugin manifests.",
-    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
+    "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
   ],
 }
 
@@ -816,8 +816,8 @@ const githubCopilotPlugin: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
-  credential: { kind: "shell-env" },
+  transports: ["remote-http"],
+  credential: { kind: "ui-fields" },
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -825,7 +825,7 @@ const githubCopilotPlugin: AgentEntry = {
   },
   gotchas: [
     "GitHub Copilot CLI scans each plugin directory for a `plugin.json` manifest at the root.",
-    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
+    "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
   ],
 }
 
@@ -852,7 +852,7 @@ const kiroPlugin: AgentEntry = {
     url: "https://kiro.dev/docs/cli/chat/configuration/",
   },
   gotchas: [
-    "Kiro discovers plugins from `~/.kiro/plugins/`; the portable `plugin.json` at the plugin root is the manifest.",
+    "Merge the exported `.mcp.kiro.json` server into `.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json`; the staged plugin directory alone does not establish MCP discovery.",
     "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
   ],
 }
