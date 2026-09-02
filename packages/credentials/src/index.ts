@@ -279,6 +279,9 @@ export async function resolveCredentials(
     apiUrl: envUrl ?? stored?.apiUrl ?? DEFAULT_API_URL,
     workspaceId: stored?.workspaceId,
     installId: stored?.installId,
-    source: envKey || envOAuth || envUrl ? "env" : stored ? "file" : "none",
+    // `source` identifies the bearer credential, not an independent API URL
+    // override. Consumers use it to decide whether an OAuth credential may be
+    // refreshed and persisted.
+    source: envKey || envOAuth ? "env" : stored ? "file" : "none",
   }
 }

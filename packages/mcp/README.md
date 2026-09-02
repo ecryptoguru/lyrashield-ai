@@ -130,7 +130,7 @@ and discovery locations differ.
 
 ### Credentials resolution
 
-The server reads `LYRASHIELD_API_KEY` and `LYRASHIELD_API_URL` from the environment first. If those are absent, it falls back to `~/.lyrashield/credentials.json` — the credentials file written by `lyrashield login` (with `0o600` permissions). This means `npx -y @lyrashield/mcp` works without any env vars after a single `lyrashield login`.
+The server gives `LYRASHIELD_API_KEY` or `LYRASHIELD_OAUTH_ACCESS_TOKEN` precedence over `~/.lyrashield/credentials.json`, the credentials file written by `lyrashield login` (with `0o600` permissions). `LYRASHIELD_API_URL` independently overrides the API origin without replacing a stored OAuth credential. This means `npx -y @lyrashield/mcp` works without any env credential after a single `lyrashield login`.
 
 `@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#github-action) instead.
 
@@ -189,14 +189,15 @@ Read-only tools never prompt. A read-only key is additionally rejected server-si
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.3; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/mcp` 0.2.4; runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,
   credentials, prompt-injection guards, schemas, structured results, and approval policy.
 - A stored OAuth credential is refreshed before the stdio server starts when it is expired or
-  within the one-minute refresh window; the rotated credential is atomically persisted. Environment
-  credentials remain immutable and retain precedence.
+  within the one-minute refresh window, including when `LYRASHIELD_API_URL` overrides the API
+  origin; the rotated credential is atomically persisted. Environment credentials remain immutable
+  and retain precedence.
 - [`docs/protocol-conformance.md`](./docs/protocol-conformance.md) maps protocol claims to focused
   tests and lists intentionally unsupported draft features.
 

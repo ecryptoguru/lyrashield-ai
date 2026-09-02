@@ -21,6 +21,7 @@ beforeEach(() => {
   process.env = { ...ORIGINAL_ENV }
   delete process.env.LYRASHIELD_API_KEY
   delete process.env.LYRASHIELD_API_URL
+  delete process.env.LYRASHIELD_OAUTH_ACCESS_TOKEN
 })
 
 afterEach(async () => {
@@ -78,7 +79,7 @@ describe("resolveMcpCredentials", () => {
     expect(creds.apiUrl).toBe("https://app.lyrashieldai.com")
   })
 
-  it("refreshes an expired stored OAuth credential before starting the MCP server", async () => {
+  it("refreshes an expired stored OAuth credential with an API URL override before starting the MCP server", async () => {
     const refreshed = { access: "fresh-oauth-access-token", refresh: "fresh-oauth-refresh-token" }
     const fetchFn = vi.fn(
       async () =>
@@ -92,12 +93,13 @@ describe("resolveMcpCredentials", () => {
         )
     )
     vi.stubGlobal("fetch", fetchFn)
+    process.env.LYRASHIELD_API_URL = "https://override.example.com"
     await mkdir(path.dirname(CREDENTIALS_FILE), { recursive: true })
     await writeFile(
       CREDENTIALS_FILE,
       JSON.stringify({
         installId: "install-1",
-        apiUrl: "https://app.example.com",
+        apiUrl: "https://issuer.example.com",
         oauthAccessToken: "expired-oauth-access-token",
         oauthRefreshToken: "old-oauth-refresh-token",
         oauthExpiresAt: "2020-01-01T00:00:00.000Z",
@@ -107,8 +109,9 @@ describe("resolveMcpCredentials", () => {
     const creds = await resolveMcpCredentials()
 
     expect(creds.apiKey).toBe("fresh-oauth-access-token")
+    expect(creds.apiUrl).toBe("https://override.example.com")
     expect(fetchFn).toHaveBeenCalledWith(
-      "https://app.example.com/api/auth/oauth2/token",
+      "https://issuer.example.com/api/auth/oauth2/token",
       expect.objectContaining({ method: "POST" })
     )
     await expect(readFile(CREDENTIALS_FILE, "utf8")).resolves.toContain(
