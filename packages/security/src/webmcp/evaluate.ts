@@ -197,9 +197,19 @@ function evaluateControl09(tool: WebMcpToolSurface): WebMcpEvidenceState {
 
 // WEBMCP-11: a credential embedded in the tool's own name/title/description or
 // schema. Literal credential values only — an empty input parameter the caller
-// fills is not a leak (see the control's falsePositiveNotes).
-const EMBEDDED_SECRET =
-  /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}|\bsk-[A-Za-z0-9]{20,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?:api[_-]?key|password|secret|token)\s*[:=]\s*["'][^"'\s]{8,}["'])/i
+// fills is not a leak (see the control's falsePositiveNotes). Two assignment
+// forms are covered: quoted values ("key": "sk-...") and unquoted ones
+// (DATABASE_URL=postgres://user:pw@host/db, api_key=AKIA...), since tool
+// descriptions frequently embed connection strings and env-style examples.
+const EMBEDDED_SECRET_QUOTED =
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}|\bsk-[A-Za-z0-9]{20,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?:api[_-]?key|api[_-]?secret|password|secret|token|credential)\s*[:=]\s*["'][^"'\s]{8,}["']/i
+const EMBEDDED_SECRET_UNQUOTED =
+  /\b(?:api[_-]?key|api[_-]?secret|password|secret|token|credential)[_a-z0-9]*\s*[:=]\s*[A-Za-z0-9+/_=.\-:]{20,}/i
+// A database/connection URI carrying inline credentials (scheme://user:pass@).
+// The user:pass@ shape is what makes it a secret; credential-free URLs
+// (https://example.com) do not match.
+const EMBEDDED_SECRET_CONN_URI =
+  /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp|ftp):\/\/[A-Za-z0-9_.-]+:[^@\s/]{4,}@/i
 
 function evaluateControl11(tool: WebMcpToolSurface): WebMcpEvidenceState {
   const text = [tool.name, tool.title, tool.description].filter(Boolean).join("\n")
@@ -207,7 +217,9 @@ function evaluateControl11(tool: WebMcpToolSurface): WebMcpEvidenceState {
     .map((p) => `${p.name} ${p.description ?? ""}`)
     .join("\n")
   const haystack = `${text}\n${schemaText}`
-  if (EMBEDDED_SECRET.test(haystack)) return "DETECTED"
+  if (EMBEDDED_SECRET_QUOTED.test(haystack)) return "DETECTED"
+  if (EMBEDDED_SECRET_UNQUOTED.test(haystack)) return "DETECTED"
+  if (EMBEDDED_SECRET_CONN_URI.test(haystack)) return "DETECTED"
   return "NO_FINDING"
 }
 
@@ -219,7 +231,10 @@ const PROMPT_INJECTION_SURFACE =
   /\b(ignore|disregard|forget|override) (all |any |every |the |your |previous |prior |above |earlier |system ){0,3}(instructions|prompts|rules|directives|guardrails)\b|\byou (must|should|will|shall) (always|never)\b|\bsystem prompt\b|\bas an? (ai|language model)\b|\bdo not tell the user\b/i
 
 function evaluateControl12(tool: WebMcpToolSurface): WebMcpEvidenceState {
-  const text = [tool.title, tool.description].filter(Boolean).join("\n")
+  // The control's text covers "name, title, description" — the tool name is
+  // part of the model-visible contract, so an instruction-shaped name
+  // (e.g. "ignore-previous-instructions") must be scanned too.
+  const text = [tool.name, tool.title, tool.description].filter(Boolean).join("\n")
   if (PROMPT_INJECTION_SURFACE.test(text)) return "DETECTED"
   return "NO_FINDING"
 }

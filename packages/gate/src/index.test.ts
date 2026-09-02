@@ -6,6 +6,8 @@ import {
   isTargetTypeCovered,
   requiredScannersForTarget,
   type GateEvidenceInput,
+  type GateFindingSeverity,
+  type GateVerificationStatus,
 } from "./index"
 import { computeInputChecksum, computeVerdictChecksum } from "./checksum"
 
@@ -27,6 +29,7 @@ function baseInput(overrides: Partial<GateEvidenceInput> = {}): GateEvidenceInpu
     coverageReceipts: fullCoverage(),
     findings: [],
     requiredScanners: REPO_REQUIRED,
+    targetTypeCovered: true,
     ...overrides,
   }
 }
@@ -221,5 +224,76 @@ describe("reproducibility (load-bearing determinism guarantee)", () => {
       ],
     })
     expect(computeInputChecksum(clean)).not.toBe(computeInputChecksum(withFinding))
+  })
+})
+
+describe("GATE-0 target-type coverage", () => {
+  it("never issues READY for a target type the standard does not cover, even with completed receipts", () => {
+    // This is the regression the uncovered-type fallthrough needed: a
+    // CLOUD_ACCOUNT/CONTAINER/IAC target with an empty requiredScanners list
+    // previously fell through to READY because no scanners were missing.
+    const verdict = computeGateVerdict(
+      baseInput({ requiredScanners: [], targetTypeCovered: false })
+    )
+    expect(verdict.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(verdict.coverageStatement).toEqual([])
+    expect(verdict.staleness.current).toBe(false)
+    expect(verdict.staleness.reason).toContain("not covered")
+  })
+
+  it("still evaluates normally for covered types", () => {
+    expect(computeGateVerdict(baseInput()).state).toBe("READY")
+  })
+})
+
+describe("evidenceSummary per-severity unresolved counts", () => {
+  const finding = (
+    id: string,
+    severity: GateFindingSeverity,
+    status = "OPEN",
+    verificationStatus: GateVerificationStatus = "VERIFIED"
+  ) => ({
+    id,
+    severity,
+    status,
+    verificationStatus,
+    retestConfirmedResolved: false,
+    lastSeenAtMs: 900_000,
+  })
+
+  it("counts unresolved CRITICAL and HIGH; MEDIUM/LOW are not counted (not gate-evaluated)", () => {
+    const verdict = computeGateVerdict(
+      baseInput({
+        findings: [
+          finding("f1", "CRITICAL"),
+          finding("f2", "HIGH"),
+          finding("f3", "HIGH", "FIXED", "VERIFIED"),
+          finding("f4", "MEDIUM"),
+          finding("f5", "LOW"),
+        ],
+      })
+    )
+    expect(verdict.state).toBe("NOT_READY")
+    expect(verdict.evidenceSummary.unresolvedCritical).toBe(1)
+    expect(verdict.evidenceSummary.unresolvedHigh).toBe(1) // f2 unresolved; f3 is FIXED so not blocking
+  })
+
+  it("does not count retest-confirmed-resolved findings as unresolved", () => {
+    const verdict = computeGateVerdict(
+      baseInput({
+        findings: [
+          {
+            id: "f1",
+            severity: "CRITICAL",
+            status: "OPEN",
+            verificationStatus: "VERIFIED",
+            retestConfirmedResolved: true,
+            lastSeenAtMs: 900_000,
+          },
+        ],
+      })
+    )
+    expect(verdict.state).toBe("READY")
+    expect(verdict.evidenceSummary.unresolvedCritical).toBe(0)
   })
 })

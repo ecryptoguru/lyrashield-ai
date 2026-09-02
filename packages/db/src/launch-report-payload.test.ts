@@ -15,7 +15,12 @@ function verdict(overrides: Partial<LaunchReportSource> = {}): LaunchReportSourc
     coverageStatement: ["engine", "sca", "secrets"],
     nonCoverage: [],
     blockingReasons: [],
-    evidenceSummary: { verified: 4, retestConfirmed: 2 },
+    evidenceSummary: {
+      verified: 4,
+      retestConfirmed: 2,
+      unresolvedCritical: 0,
+      unresolvedHigh: 0,
+    },
     staleness: { current: true },
     verdictChecksum: "abc",
     evaluatedAt: new Date("2026-09-01T00:00:00.000Z"),
@@ -98,6 +103,12 @@ describe("buildLaunchReportPayload — the disclosure allowlist", () => {
     const payload = buildLaunchReportPayload(
       verdict({
         blockingReasons: [{ severity: "CRITICAL" }, { severity: "HIGH" }],
+        evidenceSummary: {
+          verified: 4,
+          retestConfirmed: 2,
+          unresolvedCritical: 1,
+          unresolvedHigh: 1,
+        },
       })
     )
     const json = JSON.stringify(payload)
@@ -106,6 +117,35 @@ describe("buildLaunchReportPayload — the disclosure allowlist", () => {
     }
     expect(payload.counts.unresolvedCritical).toBe(1)
     expect(payload.counts.unresolvedHigh).toBe(1)
+  })
+
+  it("maps public counts from the gate's evidenceSummary, not blockingReasons", () => {
+    // Regression guard for the structurally-zero bug: blockingReasons carries
+    // only CRITICAL/HIGH, so deriving MEDIUM/LOW counts from it would always
+    // read 0 and imply "no medium/low findings" when they are simply not
+    // gate-evaluated. The counts must come from the evidence summary, and the
+    // non-gated severities stay explicitly 0 with the scope note in the body.
+    const payload = buildLaunchReportPayload(
+      verdict({
+        evidenceSummary: {
+          verified: 4,
+          retestConfirmed: 2,
+          unresolvedCritical: 3,
+          unresolvedHigh: 2,
+        },
+      })
+    )
+    expect(payload.counts.unresolvedCritical).toBe(3)
+    expect(payload.counts.unresolvedHigh).toBe(2)
+    expect(payload.counts.unresolvedMedium).toBe(0)
+    expect(payload.counts.unresolvedLow).toBe(0)
+    // And blockingReasons alone (without summary counts) cannot inflate them.
+    const fromReasonsOnly = buildLaunchReportPayload(
+      verdict({
+        blockingReasons: [{ severity: "CRITICAL" }, { severity: "CRITICAL" }],
+      })
+    )
+    expect(fromReasonsOnly.counts.unresolvedCritical).toBe(0)
   })
 
   it("marks stale when the verdict is not current", () => {

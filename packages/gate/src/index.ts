@@ -76,6 +76,16 @@ export interface GateEvidenceInput {
   findings: GateFindingInput[]
   /** Scanner classes that MUST report for this target type (registry-derived). */
   requiredScanners: readonly string[]
+  /**
+   * Whether the target type is covered by the standard at all. False means the
+   * registry has no coverage requirements for this type yet (deferred type),
+   * so no verdict beyond INSUFFICIENT_EVIDENCE can be honestly issued — even
+   * with completed receipts. The pure function enforces this itself rather
+   * than trusting the caller to pass an empty requiredScanners list, because
+   * empty-list-means-covered is indistinguishable from
+   * empty-list-means-deferred at the call site.
+   */
+  targetTypeCovered: boolean
 }
 
 // ─── Output types ────────────────────────────────────────────────────────────
@@ -103,6 +113,17 @@ export interface EvidenceSummary {
   inconclusive: number
   /** Blocking findings still resting on bare DETECTED — the weak spot. */
   blockingUnverified: number
+  /**
+   * Unresolved findings by severity — CRITICAL and HIGH only (the gate's
+   * blocking severities). MEDIUM/LOW do not block in v1.0.0 and are NOT
+   * counted here, so a public report reading these fields can never mistake
+   * "not gate-evaluated" for "zero medium/low findings". The launch report
+   * maps its public counts from these fields instead of re-deriving them
+   * from blockingReasons (which would structurally always read 0 for
+   * non-blocking severities).
+   */
+  unresolvedCritical: number
+  unresolvedHigh: number
 }
 
 export interface StalenessSignal {
@@ -147,6 +168,8 @@ function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
     retestConfirmed: 0,
     inconclusive: 0,
     blockingUnverified: 0,
+    unresolvedCritical: 0,
+    unresolvedHigh: 0,
   }
   for (const f of findings) {
     switch (f.verificationStatus) {
@@ -167,6 +190,8 @@ function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
     }
     if (f.retestConfirmedResolved) summary.retestConfirmed++
     if (isBlocking(f) && f.verificationStatus === "DETECTED") summary.blockingUnverified++
+    if (isBlocking(f) && f.severity === "CRITICAL") summary.unresolvedCritical++
+    if (isBlocking(f) && f.severity === "HIGH") summary.unresolvedHigh++
   }
   return summary
 }
@@ -195,6 +220,29 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   const receipts = input.coverageReceipts
   const nonCoverage: NonCoverageItem[] = []
   const coverageStatement: string[] = []
+
+  // GATE-0 — Target-type coverage (the registry gate). A target type the
+  // standard does not yet cover (deferred: no registry requirements exist)
+  // can never earn READY/NOT_READY, no matter what receipts exist — claiming
+  // otherwise would present an unexamined dimension as examined. This is
+  // enforced HERE rather than by callers passing an empty requiredScanners,
+  // because an empty required list is ambiguous between "covered with no
+  // requirements" and "deferred".
+  if (!input.targetTypeCovered) {
+    const evidence = summarizeEvidence(input.findings)
+    return {
+      standardVersion: GATE_STANDARD_VERSION,
+      state: "INSUFFICIENT_EVIDENCE",
+      nonCoverage,
+      coverageStatement: [],
+      blockingReasons: [],
+      evidenceSummary: evidence,
+      staleness: {
+        current: false,
+        reason: "This target type is not covered by the readiness standard yet.",
+      },
+    }
+  }
 
   // GATE-1 — Coverage sufficiency (the honesty gate).
   let anyCompleted = false
@@ -267,19 +315,15 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   }
 
   // GATE-4 — Evidence-state floor: READY may not rest on DETECTED-only findings.
-  const openMediumPlus = input.findings.filter(
-    (f) =>
-      BLOCKING_STATUSES.has(f.status) &&
-      !f.retestConfirmedResolved &&
-      (f.severity === "MEDIUM" || f.severity === "LOW")
-  )
+  // (MEDIUM/LOW with blocking statuses do NOT block in v1.0.0 — they surface in
+  // the score/report layers — so no openMediumPlus carve-out is needed here.)
   const anyVerifiedOrRetest = evidenceSummary.verified + evidenceSummary.retestConfirmed > 0
   const allDetectedOnly =
     input.findings.length > 0 &&
     input.findings.every((f) => f.verificationStatus === "DETECTED") &&
     !anyVerifiedOrRetest
 
-  if (allDetectedOnly && (input.findings.length > 0 || openMediumPlus.length > 0)) {
+  if (allDetectedOnly) {
     return {
       standardVersion: GATE_STANDARD_VERSION,
       state: "INSUFFICIENT_EVIDENCE",

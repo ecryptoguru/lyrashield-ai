@@ -105,6 +105,7 @@ export async function evaluateGateForTarget(
       requiredScanners: isTargetTypeCovered(target.type)
         ? requiredScannersForTarget(target.type)
         : [],
+      targetTypeCovered: isTargetTypeCovered(target.type),
     }
 
     const verdict = computeGateVerdict(evidence)
@@ -141,7 +142,10 @@ export async function getLatestGateVerdict(workspaceId: string, targetId: string
   return withWorkspaceRLS(workspaceId, async (tx) => {
     return tx.gateVerdict.findFirst({
       where: { workspaceId, targetId },
-      orderBy: { evaluatedAt: "desc" },
+      // id tiebreaker: evaluatedAt is a timestamp — two verdicts in the same
+      // millisecond are possible (e.g. merge + completion in one tick), and
+      // ordering by timestamp alone would make the "latest" nondeterministic.
+      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
     })
   })
 }

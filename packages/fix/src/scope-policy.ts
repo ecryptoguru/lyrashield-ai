@@ -3,7 +3,7 @@
  *
  * Founder decision (2026-09-02) — scope limits are PLAN-TIERED:
  * - Starter ($29): current-file-only, 100-line cap.
- * - All other plans: finding-implicated file set, 200-line cap.
+ * - All other PAID plans: finding-implicated file set, 200-line cap.
  *
  * These limits are enforced mechanically by the diff validator, never by the
  * generating model's goodwill. A patch that exceeds its plan's scope is
@@ -23,17 +23,29 @@ export interface PatchScopePolicy {
   maxLinesTouched: number
 }
 
+/** Plans with the broader implicated-set policy (paid tiers at or above Pro). */
+const IMPLICATED_SET_PLANS: ReadonlySet<string> = new Set([
+  "PRO",
+  "TEAM",
+  "LAUNCH_ASSURANCE",
+  "AGENCY",
+  "BUSINESS",
+  "ENTERPRISE",
+])
+
 /**
  * Resolve the patch scope policy for a workspace plan.
  *
- * The plan string is the WorkspacePlan enum value. STARTER is the $29 tier;
- * everything else (PRO, LAUNCH_ASSURANCE, ENTERPRISE, and internal/legacy
- * values) gets the broader implicated-set policy. Unknown plans fail closed to
- * the strictest tier.
+ * The plan string is the WorkspacePlan enum value. PRO and above get the
+ * broader implicated-set policy. Anything else — STARTER (its own deliberate
+ * tier), FREE, TRIAL, legacy/internal values, or an unrecognized string —
+ * fails closed to the STRICTEST tier (current-file, 100 lines): an unknown
+ * plan must never silently widen what a generated patch may touch.
  */
 export function patchScopeForPlan(plan: string): PatchScopePolicy {
-  if (plan === "STARTER") {
-    return { pathScope: "current-file", maxLinesTouched: 100 }
+  if (IMPLICATED_SET_PLANS.has(plan)) {
+    return { pathScope: "implicated-set", maxLinesTouched: 200 }
   }
-  return { pathScope: "implicated-set", maxLinesTouched: 200 }
+  // STARTER, FREE, TRIAL, unknown: strictest tier.
+  return { pathScope: "current-file", maxLinesTouched: 100 }
 }

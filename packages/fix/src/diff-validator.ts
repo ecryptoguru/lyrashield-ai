@@ -231,12 +231,18 @@ export function validatePatchDiff(
       if (file.isDelete) {
         return { ok: false, code: "DELETE_NOT_ALLOWED", reason: `Patch may not delete ${path}.` }
       }
-      // No new files at all under current-file scope.
-      if (file.isNew && policy.pathScope === "current-file") {
+      // No new files at all in v1 — for ANY tier. The PR executor reads the
+      // target file at the scanned base commit and applies the diff to it;
+      // a file that does not exist at that commit has nothing to apply to, so
+      // an approved new-file patch would be guaranteed to fail at execution
+      // time and waste a human approval. Reject at validation, before it can
+      // be presented as viable. (Creation support is a deliberate future
+      // feature, not a scope-tier distinction.)
+      if (file.isNew) {
         return {
           ok: false,
           code: "NEW_FILE_OUT_OF_SCOPE",
-          reason: `Patch may not create ${path} on this plan.`,
+          reason: `Patch may not create ${path}; fix patches may only modify existing files.`,
         }
       }
       for (const line of file.addedLines) {
