@@ -60,3 +60,5 @@ Caption treatment: high-contrast foreground `#edf6fb`, muted supporting text `#9
 - `captions.vtt`: captions generated only from the approved final narration.
 
 No asset may be replaced with a generated simulation. Missing proof removes its scene or uses the documented public fallback.
+
+Use [webmcp-demo-narration.md](webmcp-demo-narration.md) for the factual narration and provisional caption cues. Replace its times only after the final narration exists.
