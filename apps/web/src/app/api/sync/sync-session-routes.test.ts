@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   workspaceMemberFindUnique: vi.fn(),
   licenseUpdate: vi.fn(),
+  systemLicenseUpdate: vi.fn(),
   syncCursorFindUnique: vi.fn(),
   syncCursorUpdate: vi.fn(),
   findLicenseById: vi.fn(),
@@ -21,8 +22,8 @@ vi.mock("@lyrashield/db", () => ({
   prisma: {
     workspaceMember: { findUnique: mocks.workspaceMemberFindUnique },
     workspace: { findUnique: vi.fn() },
-    license: { update: mocks.licenseUpdate },
   },
+  getSystemPrisma: () => ({ license: { update: mocks.systemLicenseUpdate } }),
   findLicenseForSyncById: mocks.findLicenseById,
   findLicenseForSyncByKeyHash: mocks.findLicenseByKeyHash,
   withWorkspaceRLS: vi.fn(async (_workspaceId: string, callback: (tx: unknown) => unknown) =>
@@ -94,6 +95,25 @@ describe("sync session routes", () => {
         session,
       })
     ).toEqual({ valid: true, licenseId: "license_1" })
+  })
+
+  it("links an unbound license through the system client", async () => {
+    mocks.findLicenseByKeyHash.mockResolvedValue({ license: { ...license, workspaceId: null } })
+    mocks.systemLicenseUpdate.mockResolvedValue({ ...license, workspaceId: "workspace_1" })
+
+    const response = await connect(
+      new Request("http://localhost/api/sync/connect", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "workspace_1", licenseKey: "raw-license-key" }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(mocks.systemLicenseUpdate).toHaveBeenCalledWith({
+      where: { id: "license_1" },
+      data: { workspaceId: "workspace_1" },
+    })
+    expect(mocks.licenseUpdate).not.toHaveBeenCalled()
   })
 
   it("accepts the short-lived token on cursor reads and rechecks the license by id", async () => {

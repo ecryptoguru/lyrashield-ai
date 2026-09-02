@@ -36,6 +36,8 @@ const suffix = randomUUID().replace(/-/g, "")
 const workspaceId = `rls-fc-owner-${suffix}`
 const otherWorkspaceId = `rls-fc-other-${suffix}`
 let targetId = ""
+let scanId = ""
+let findingId = ""
 const artifactDeletionTaskId = createId()
 const enqueuedArtifactDeletionTaskId = createId()
 let evidenceStorageUri = ""
@@ -87,6 +89,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         createdById: `rls-fc-evidence-user-${suffix}`,
       },
     })
+    scanId = scan.id
     const finding = await prisma.finding.create({
       data: {
         workspaceId,
@@ -98,6 +101,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         dedupeKey: `rls-fc-evidence-${suffix}`,
       },
     })
+    findingId = finding.id
     evidenceStorageUri = `s3://evidence/evidence/${workspaceId}/${createId()}.enc`
     await prisma.evidence.create({
       data: {
@@ -154,6 +158,96 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     >`SELECT count(*)::bigint AS count FROM "Target" WHERE id = ${targetId}`
     return Number(rows[0]?.count ?? 0)
   }
+
+  it("allows owning-workspace coverage and fix-proposal writes", async () => {
+    const { withWorkspaceRLS } = await import("./rls")
+    const { receipt, proposal } = await withWorkspaceRLS(workspaceId, async (tx) => {
+      const receipt = await tx.scanCoverageReceipt.create({
+        data: {
+          scanId,
+          scanner: "rls-fail-closed",
+          controlId: `rls-fc-coverage-${suffix}`,
+          status: "COMPLETED",
+        },
+      })
+      const proposal = await tx.fixProposal.create({
+        data: {
+          findingId,
+          kind: "patch",
+          summary: "RLS fail-closed proposal write probe",
+        },
+      })
+      return { receipt, proposal }
+    })
+
+    try {
+      const counts = await asWorkspace(workspaceId, async (tx) => {
+        const [coverage, fixes] = await Promise.all([
+          tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "ScanCoverageReceipt" WHERE id = ${receipt.id}
+          `,
+          tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "FixProposal" WHERE id = ${proposal.id}
+          `,
+        ])
+        return [Number(coverage[0]?.count ?? 0), Number(fixes[0]?.count ?? 0)]
+      })
+      expect(counts).toEqual([1, 1])
+
+      const foreignCounts = await asWorkspace(otherWorkspaceId, async (tx) => {
+        const [coverage, fixes] = await Promise.all([
+          tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "ScanCoverageReceipt" WHERE id = ${receipt.id}
+          `,
+          tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "FixProposal" WHERE id = ${proposal.id}
+          `,
+        ])
+        return [Number(coverage[0]?.count ?? 0), Number(fixes[0]?.count ?? 0)]
+      })
+      expect(foreignCounts).toEqual([0, 0])
+    } finally {
+      await prisma.fixProposal.delete({ where: { id: proposal.id } })
+      await prisma.scanCoverageReceipt.delete({ where: { id: receipt.id } })
+    }
+  })
+
+  it("fails closed and writes GateVerdict only with its workspace context", async () => {
+    const { withWorkspaceRLS } = await import("./rls")
+    const verdict = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.gateVerdict.create({
+        data: {
+          workspaceId,
+          targetId,
+          scanId,
+          standardVersion: "rls-fail-closed/1",
+          state: "INSUFFICIENT_EVIDENCE",
+          coverageStatement: {},
+          nonCoverage: {},
+          blockingReasons: [],
+          evidenceSummary: {},
+          staleness: {},
+          inputChecksum: `input-${suffix}`,
+          verdictChecksum: `verdict-${suffix}`,
+        },
+      })
+    )
+
+    try {
+      const count = async (id: string | null) =>
+        asWorkspace(id, async (tx) => {
+          const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "GateVerdict" WHERE id = ${verdict.id}
+          `
+          return Number(rows[0]?.count ?? 0)
+        })
+      expect(await count(workspaceId)).toBe(1)
+      expect(await count(null)).toBe(0)
+      expect(await count(otherWorkspaceId)).toBe(0)
+    } finally {
+      await prisma.gateVerdict.delete({ where: { id: verdict.id } })
+    }
+  })
 
   it("returns the row to its owning workspace", async () => {
     expect(await asWorkspace(workspaceId, countThisTarget)).toBe(1)

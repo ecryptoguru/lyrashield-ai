@@ -1,4 +1,4 @@
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -38,17 +38,19 @@ export async function GET(request: Request) {
       }),
       // Whether any completed scan actually evaluated the target. Zero findings
       // with zero coverage must not read as a pass.
-      prisma.scanCoverageReceipt.count({
-        where: {
-          status: "COMPLETED",
-          scan: {
-            workspaceId,
+      withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scanCoverageReceipt.count({
+          where: {
             status: "COMPLETED",
-            deletedAt: null,
-            ...(targetId ? { targetId } : {}),
+            scan: {
+              workspaceId,
+              status: "COMPLETED",
+              deletedAt: null,
+              ...(targetId ? { targetId } : {}),
+            },
           },
-        },
-      }),
+        })
+      ),
     ])
 
     const report = generateLaunchReadinessReportFromAggregate(

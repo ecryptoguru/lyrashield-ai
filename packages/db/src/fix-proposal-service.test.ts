@@ -135,6 +135,7 @@ describe("fix-proposal-service", () => {
           severity: "CRITICAL",
           status: "OPEN",
           cwe: "CWE-89",
+          target: { id: "target-1", name: "Web app", repoFullName: "owner/repo" },
         },
         pullRequests: [],
       }
@@ -150,7 +151,16 @@ describe("fix-proposal-service", () => {
           deletedAt: null,
         },
         include: {
-          finding: { select: { id: true, title: true, severity: true, status: true, cwe: true } },
+          finding: {
+            select: {
+              id: true,
+              title: true,
+              severity: true,
+              status: true,
+              cwe: true,
+              target: { select: { id: true, name: true, repoFullName: true } },
+            },
+          },
           pullRequests: true,
         },
       })

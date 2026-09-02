@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { prisma } from "@lyrashield/db"
+import { listFixProposals } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { Wrench } from "lucide-react"
 import { FixesClient } from "./fixes-client"
@@ -33,31 +33,7 @@ export default async function FixesPage() {
   }
 
   const limit = 20
-  const proposals = await prisma.fixProposal.findMany({
-    where: {
-      deletedAt: null,
-      finding: { workspaceId, deletedAt: null },
-    },
-    include: {
-      finding: {
-        select: {
-          id: true,
-          title: true,
-          severity: true,
-          status: true,
-          cwe: true,
-          target: { select: { id: true, name: true, repoFullName: true } },
-        },
-      },
-      pullRequests: true,
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit + 1,
-  })
-
-  const hasMore = proposals.length > limit
-  const items = hasMore ? proposals.slice(0, limit) : proposals
-  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
+  const { items, nextCursor } = await listFixProposals({ workspaceId, limit })
 
   const initialData = items.map((p) => ({
     id: p.id,
