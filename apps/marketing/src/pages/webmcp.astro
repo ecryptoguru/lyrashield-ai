@@ -12,16 +12,16 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/webmcp", origin).toString()
 const checkerUrl = new URL("/tools/webmcp-security-checker", origin).toString()
 const controlsUrl = new URL("/webmcp-controls.json", origin).toString()
-const reviewed = "2026-08-29"
-
-const title = "WebMCP Assurance — Definition, Risks, and 10 Security Controls"
-const description =
-  "What WebMCP is, why browser-native agent tools need review, the 10 WebMCP assurance controls, and how to check your source locally before release."
+const reviewed = "2026-09-02"
 
 const severityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 } as const
 const controls = [...WEBMCP_CONTROLS].sort(
   (a, b) => severityOrder[a.severity] - severityOrder[b.severity]
 )
+const controlCount = controls.length
+const title = `WebMCP Assurance — Definition, Risks, and ${controlCount} Security Controls`
+const description =
+  `What WebMCP is, why browser-native agent tools need review, the ${controlCount} WebMCP assurance controls, and how to check your source locally before release.`
 
 const faq = [
   {
@@ -34,7 +34,7 @@ const faq = [
   },
   {
     q: "What does the free checker do?",
-    a: "It analyzes selected source files or pasted code entirely in your browser for 10 WebMCP controls, prepares a bounded rewrite diff, and exports JSON, Markdown, or SARIF. Nothing is uploaded.",
+    a: `It analyzes selected source files or pasted code entirely in your browser for ${controlCount} WebMCP controls, prepares a bounded rewrite diff, and exports JSON, Markdown, or SARIF. Nothing is uploaded.`,
   },
   {
     q: "Can the tool rewrite my repository automatically?",
@@ -108,6 +108,9 @@ const jsonLd = [
         <a href={checkerUrl} class="lift inline-flex min-h-12 items-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open the free WebMCP Security Checker</a>
         <a href={`${appUrl}/sign-up?source=webmcp`} class="lift inline-flex min-h-12 items-center rounded-lg border border-border bg-bg-raised px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free LyraShield AI account</a>
       </div>
+      <p class="mt-4 max-w-3xl text-sm leading-6 text-text-muted" data-reveal>
+        This page exposes 1 read tool. The Security Lab exposes 2 read tools. The dashboard exposes 2 read tools and 1 prepared-mutation tool; it never acts without your click.
+      </p>
     </header>
 
     <section class="mt-16" data-reveal="scale">
@@ -126,13 +129,13 @@ const jsonLd = [
         A browser tool can read data, trigger UI changes, or start network requests. If the tool annotations do not match the implementation, an agent may call a durable mutation thinking it is read-only, send data to an unexpected origin, or skip a confirmation step. Because the tools are exposed to the page origin, misconfigured headers or cross-origin iframes can widen that surface.
       </p>
       <p class="mt-4 leading-7 text-text-muted">
-        LyraShield's approach is to treat WebMCP as part of the release surface: discover the registered tools, check their behavior against the 10 controls, prepare a bounded diff, and rerun the check before applying anything. No tool is automatically trusted just because it has a clean schema.
+        LyraShield's approach is to treat WebMCP as part of the release surface: discover the registered tools, check their behavior against the {controlCount} controls, prepare a bounded diff, and rerun the check before applying anything. No tool is automatically trusted just because it has a clean schema.
       </p>
     </section>
 
     <section class="mt-16" data-reveal="scale">
       <div class="mb-6 flex items-center justify-between gap-3">
-        <h2 class="text-2xl font-semibold text-text">The 10 WebMCP controls</h2>
+        <h2 class="text-2xl font-semibold text-text">The {controlCount} WebMCP controls</h2>
         <a href={controlsUrl} class="text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Machine-readable registry</a>
       </div>
       <p class="leading-7 text-text-muted">Each control has a stable ID, severity, and evidence state. A result is a signal for review, not a claim that the condition is exploitable. The registry is versioned as {WEBMCP_DETECTOR_VERSION}.</p>
@@ -201,13 +204,13 @@ const jsonLd = [
 
     <section class="mt-16" data-reveal="scale">
       <h2 class="text-2xl font-semibold text-text">Try the checker</h2>
-      <p class="mt-4 leading-7 text-text-muted">Open the WebMCP Security Checker, load the unsafe sample, and review the 10 controls without creating an account. The check runs in your browser and nothing is uploaded.</p>
+      <p class="mt-4 leading-7 text-text-muted">Open the WebMCP Security Checker, load the unsafe sample, and review the {controlCount} controls without creating an account. The check runs in your browser and nothing is uploaded.</p>
       <a href={checkerUrl} class="lift mt-6 inline-flex min-h-12 items-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open the WebMCP Security Checker</a>
     </section>
   </section>
 
   <script>
-    import { WEBMCP_CONTROLS_BY_ID } from "../../../../packages/security/src/webmcp/controls"
+    import { WEBMCP_CONTROLS_BY_ID, WEBMCP_CONTROL_IDS } from "../../../../packages/security/src/webmcp/controls"
 
     const explainContent: Record<string, string> = {
       definition:
@@ -215,9 +218,9 @@ const jsonLd = [
       risks:
         "A WebMCP tool can read data, start network requests, or trigger durable mutations. Risks include annotation/behavior mismatch, unsafe cross-origin exposure, missing confirmation boundaries, weak schemas, and missing cancellation or cleanup.",
       controls:
-        `LyraShield WebMCP Assurance defines 10 controls: ${WEBMCP_CONTROLS_BY_ID["WEBMCP-01"].title}, ${WEBMCP_CONTROLS_BY_ID["WEBMCP-02"].title}, and eight more. Each control returns DETECTED, NO_FINDING, INCONCLUSIVE, or NOT_ASSESSED.`,
+        `LyraShield WebMCP Assurance defines ${WEBMCP_CONTROL_IDS.length} controls: ${WEBMCP_CONTROLS_BY_ID["WEBMCP-01"].title}, ${WEBMCP_CONTROLS_BY_ID["WEBMCP-02"].title}, and ${WEBMCP_CONTROL_IDS.length - 2} more. Each control returns DETECTED, NO_FINDING, INCONCLUSIVE, or NOT_ASSESSED.`,
       methodology:
-        "Discover tool definitions and header exposure, normalize each tool surface, evaluate the 10 controls, prepare a bounded rewrite diff, and rerun the check in memory before any repository change.",
+        `Discover tool definitions and header exposure, normalize each tool surface, evaluate the ${WEBMCP_CONTROL_IDS.length} controls, prepare a bounded rewrite diff, and rerun the check in memory before any repository change.`,
       limitations:
         "Static discovery cannot resolve dynamic behavior or server-side context. A clear result does not prove an application is secure. WebMCP is experimental and not every browser supports it.",
       cli:

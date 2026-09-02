@@ -2,7 +2,12 @@ import ts from "typescript"
 import { computeDefinitionHash } from "./canonicalize"
 import { sha256 } from "./hash"
 import { getLineNumber } from "./utils"
-import type { ImperativeDiscoveryResult, WebMcpScanFile, WebMcpToolSurface } from "./types"
+import type {
+  ImperativeDiscoveryResult,
+  WebMcpScanFile,
+  WebMcpSpecDriftFinding,
+  WebMcpToolSurface,
+} from "./types"
 
 function staticMemberName(node: ts.Expression): string | null {
   if (ts.isPropertyAccessExpression(node)) return node.name.text
@@ -475,7 +480,7 @@ export async function discoverImperativeTools(
   maxDefinitions = Number.POSITIVE_INFINITY
 ): Promise<ImperativeDiscoveryResult> {
   if (file.truncated || !file.content) {
-    return { tools: [], incomplete: 0, limitReached: false }
+    return { tools: [], incomplete: 0, limitReached: false, specDriftFindings: [] }
   }
 
   const sourceFile = ts.createSourceFile(
@@ -489,9 +494,44 @@ export async function discoverImperativeTools(
   const tools: WebMcpToolSurface[] = []
   let incomplete = 0
   let limitReached = false
+  const specDriftFindings: WebMcpSpecDriftFinding[] = []
+
+  const recordSpecDrift = (ruleId: string, node: ts.Node): void => {
+    const startLine = getLineNumber(file.content, node.getStart(sourceFile)) + lineOffset
+    const endLine = getLineNumber(file.content, node.getEnd()) + lineOffset
+    const finding = { ruleId, path: file.path, startLine, endLine }
+    if (
+      !specDriftFindings.some(
+        (existing) =>
+          existing.ruleId === finding.ruleId &&
+          existing.path === finding.path &&
+          existing.startLine === finding.startLine &&
+          existing.endLine === finding.endLine
+      )
+    ) {
+      specDriftFindings.push(finding)
+    }
+  }
 
   function visit(node: ts.Node) {
     if (signal?.aborted || limitReached) return
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "navigator" &&
+      node.name.text === "modelContext"
+    ) {
+      recordSpecDrift("WEBMCP-13.legacy-navigator-model-context", node)
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ["provideContext", "clearContext", "unregisterTool", "requestUserInteraction"].includes(
+        node.expression.name.text
+      )
+    ) {
+      recordSpecDrift("WEBMCP-13.removed-api", node)
+    }
     const registration = classifyRegisterToolCall(node)
     if (!registration) {
       ts.forEachChild(node, visit)
@@ -528,6 +568,25 @@ export async function discoverImperativeTools(
       annotationsObj && ts.isObjectLiteralExpression(annotationsObj)
         ? getPropertyBoolean(annotationsObj, "untrustedContentHint", sourceFile)
         : null
+
+    if (annotationsObj && ts.isObjectLiteralExpression(annotationsObj)) {
+      for (const property of annotationsObj.properties) {
+        if (!ts.isPropertyAssignment(property)) continue
+        const annotation = ts.isIdentifier(property.name)
+          ? property.name.text
+          : ts.isStringLiteral(property.name)
+            ? property.name.text
+            : null
+        if (annotation && annotation !== "readOnlyHint" && annotation !== "untrustedContentHint") {
+          recordSpecDrift("WEBMCP-13.unsupported-annotation", property)
+        }
+      }
+    }
+
+    for (const option of ["exposedTo", "signal"]) {
+      const misplaced = getPropertyValue(arg, option, sourceFile)
+      if (misplaced) recordSpecDrift("WEBMCP-13.misplaced-registration-option", misplaced)
+    }
 
     const registrationOptions = call.arguments[1]
     const exposedToNode =
@@ -602,5 +661,5 @@ export async function discoverImperativeTools(
     tool.definitionHash = await computeDefinitionHash(tool, sha256)
   }
 
-  return { tools, incomplete, limitReached }
+  return { tools, incomplete, limitReached, specDriftFindings }
 }

@@ -4,7 +4,7 @@ WebMCP Assurance is a LyraShield AI feature that helps builders discover, review
 
 ## What it checks
 
-WebMCP is the browser-native extension of the Model Context Protocol. A page can register tools that a model or agent can call. Those tools can read UI state, prepare scans, or trigger durable actions. WebMCP Assurance checks the resulting tool surface against twelve controls.
+WebMCP is the browser-native extension of the Model Context Protocol. A page can register tools that a model or agent can call. Those tools can read UI state, prepare scans, or trigger durable actions. WebMCP Assurance checks the resulting tool surface against fourteen controls.
 
 ## Control catalog
 
@@ -22,8 +22,10 @@ WebMCP is the browser-native extension of the Model Context Protocol. A page can
 | WEBMCP-10 | Duplicate, overlapping, or misleading tool contract        | MEDIUM   | deterministic |
 | WEBMCP-11 | Credential or secret embedded in a tool definition         | HIGH     | deterministic |
 | WEBMCP-12 | Prompt-injection surface in a tool contract                | HIGH     | deterministic |
+| WEBMCP-13 | Spec drift or misplaced registration option                | MEDIUM   | deterministic |
+| WEBMCP-14 | Tool contract exceeds browser guidance                     | MEDIUM   | deterministic |
 
-False-positive guards for the two newest controls: a field named `apiKey` that is an empty input parameter the caller fills is not an embedded secret (WEBMCP-11) — only literal credential values are flagged; ordinary imperative documentation of a tool's own behavior is not an injection attempt (WEBMCP-12) — only text addressed at the model's instruction hierarchy is flagged.
+False-positive guards: a field named `apiKey` that is an empty input parameter the caller fills is not an embedded secret (WEBMCP-11); ordinary imperative documentation of a tool's own behavior is not an injection attempt (WEBMCP-12); WEBMCP-13 parses executable source rather than documentation; WEBMCP-14 flags published syntax and budget boundaries, not semantic safety.
 
 Each control produces one of four evidence states: `DETECTED`, `NO_FINDING`, `INCONCLUSIVE`, or `NOT_ASSESSED`. No `INCONCLUSIVE` or `NOT_ASSESSED` result is treated as a clean pass.
 
@@ -85,7 +87,7 @@ The GitHub Action uses the same rule IDs and severities for its documented high-
 - WebMCP is an experimental browser API. Support and shape may change.
 - Detection is deterministic static analysis; it is not verification.
 - `INCONCLUSIVE` means coverage is incomplete and must not be treated as safe.
-- The v1 rewrite engine automatically rewrites only statically located wildcard `exposedTo` declarations to same-origin scope. Other findings remain unresolved guidance rather than unsafe generated code.
+- The rewrite engine replaces only statically located wildcard `exposedTo` declarations with `[]`, preserving default same-origin scope. Other findings remain unresolved guidance rather than unsafe generated code.
 - The dedicated parser Worker is about 1.03 MiB compressed in the current production build and loads only when analysis starts; the interactive page code is about 8.5 KiB compressed.
 - The public lab requires a browser that supports `document.modelContext` for the native tool-registration demo; the core source analysis still works without it.
 
@@ -93,5 +95,5 @@ The GitHub Action uses the same rule IDs and severities for its documented high-
 
 - Official WebMCP resources: `https://webmcp.devpost.com/resources`
 - WebMCP type package: `webmcp-types@0.1.5` (MIT)
-- Detector version: `webmcp-assurance/1`
+- Detector version: `webmcp-assurance/2`
 - Inventory version: `webmcp-inventory/1`

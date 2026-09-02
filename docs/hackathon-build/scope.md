@@ -25,7 +25,7 @@ At the same time, LyraShield's own browser experience is still primarily human-a
 
 1. A developer pastes or selects WebMCP source in the public local checker, or connects a repository for a full LyraShield scan.
 2. LyraShield discovers WebMCP registrations and produces a bounded tool-surface inventory with source locations and schema hashes.
-3. A deterministic policy engine evaluates 10 controls and returns `DETECTED`, `NO_FINDING`, `INCONCLUSIVE`, or `NOT_ASSESSED` with coverage and limitations.
+3. A deterministic policy engine evaluates 14 controls and returns `DETECTED`, `NO_FINDING`, `INCONCLUSIVE`, or `NOT_ASSESSED` with coverage and limitations.
 4. LyraShield prepares deterministic safe rewrite proposals for supported controls. The developer reviews and copies or applies them through an existing approval-bound workflow.
 5. CLI and GitHub Action checks identify newly introduced WebMCP regressions, emit SARIF, and enforce only high-confidence findings at the configured threshold.
 6. Full scans preserve WebMCP findings and coverage in the existing evidence lifecycle and include a WebMCP Tool Surface section in security reports.

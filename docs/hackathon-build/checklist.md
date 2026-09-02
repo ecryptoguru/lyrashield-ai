@@ -25,10 +25,10 @@
       Acceptance: Eligible definitions produce stable inventory entries with source lines and hashes; dynamic/unsupported definitions remain explicit; no source is executed; limits and cancellation are recorded.
       Verify: Security-package unit tests, deterministic checksum snapshot tests, malformed/limit fixtures, browser-bundle import test, compressed Worker budget, proof ordinary marketing/dashboard bundles exclude parser dependencies, typecheck, lint, and repeated-run equality.
 
-- [x] **3. Implement the 10-control policy engine and safe rewrite planner**
-      Evidence: all 10 controls, evidence states, bounded checksums, fail-closed rewrite planning, overlap handling, rerun validation, and focused fixtures are implemented. Typecheck, lint, and 26 tests pass. Automatic rewrite is deliberately limited to statically located wildcard exposure; unsupported semantics remain unresolved.
+- [x] **3. Implement the 14-control policy engine and safe rewrite planner**
+      Evidence: all 14 controls, evidence states, bounded checksums, fail-closed rewrite planning, overlap handling, rerun validation, and focused fixtures are implemented. Automatic rewrite is deliberately limited to statically located wildcard exposure; unsupported semantics remain unresolved.
       What to build: Add versioned control metadata, evidence-state evaluation, severity policy, protective-pattern handling, bounded snippets, limitations, supported `TextEdit` rewrites, conflict detection, parse-after-rewrite checks, before/after diff generation, and rerun validation.
-      Acceptance: All 10 controls have positive, negative, inconclusive, and protective fixtures where applicable; supported rewrites clear their addressed signal without hiding unrelated findings; ambiguous rewrites fail closed.
+      Acceptance: All 14 controls have positive, negative, inconclusive, and protective fixtures where applicable; supported rewrites clear their addressed signal without hiding unrelated findings; ambiguous rewrites fail closed.
       Verify: Control calibration suite, rewrite golden tests, parse-after-rewrite tests, idempotence tests, property/boundary cases for limits, lint, typecheck, and security review of secret handling.
 
 - [x] **4. Integrate WebMCP Assurance into full repository scans and manifest v6**

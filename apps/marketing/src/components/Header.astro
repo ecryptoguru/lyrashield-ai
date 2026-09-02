@@ -44,6 +44,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
             </summary>
             <div class="absolute top-full right-0 mt-1 grid w-72 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
               <a href="/tools" class="rounded-lg px-3 py-2 text-sm font-medium text-accent hover:bg-bg">All free tools</a>
+              <a href="/webmcp" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">WebMCP Assurance</a>
               {tools.map((tool) => (
                 <a href={toolUrl(tool.slug)} class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">
                   {tool.title}
@@ -124,8 +125,8 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
           <div class="mobile-menu__resources">
             <a href="/methodology" class="menu-link mobile-menu__resource">Methodology</a>
             <a href="/tools" class="menu-link mobile-menu__resource">Free tools</a>
+            <a href="/webmcp" class="menu-link mobile-menu__resource">WebMCP Assurance</a>
             <a href="/blog" class="menu-link mobile-menu__resource">Guides</a>
-            <a href="/docs/integrations" class="menu-link mobile-menu__resource">Docs</a>
           </div>
         </div>
         {appUrl && (

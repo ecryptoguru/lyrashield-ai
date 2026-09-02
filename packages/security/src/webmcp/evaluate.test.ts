@@ -202,4 +202,50 @@ describe("evaluateWebMcpSurface", () => {
       "DETECTED"
     )
   })
+
+  it("WEBMCP-13 detects legacy APIs and options placed in the tool definition", async () => {
+    const source = `navigator.modelContext.provideContext()
+document.modelContext.registerTool({
+  name: "current",
+  description: "Current tool.",
+  annotations: { destructiveHint: true },
+  exposedTo: ["https://example.com"],
+  signal: controller.signal,
+  execute: () => ({ ok: true }),
+})`
+    const file = { path: "src/legacy.ts", content: source, size: source.length, extension: ".ts" }
+    const { inventory, context } = await discoverWebMcpTools([file])
+    const signals = evaluateWebMcpSurface([file], inventory, context)
+
+    expect(signals.filter((signal) => signal.controlId === "WEBMCP-13")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: "WEBMCP-13.legacy-navigator-model-context",
+          state: "DETECTED",
+        }),
+        expect.objectContaining({ ruleId: "WEBMCP-13.removed-api", state: "DETECTED" }),
+        expect.objectContaining({ ruleId: "WEBMCP-13.unsupported-annotation", state: "DETECTED" }),
+        expect.objectContaining({
+          ruleId: "WEBMCP-13.misplaced-registration-option",
+          state: "DETECTED",
+        }),
+      ])
+    )
+  })
+
+  it("WEBMCP-14 detects invalid or oversized contract fields", async () => {
+    const source = `document.modelContext.registerTool({
+  name: "invalid tool name",
+  description: "${"x".repeat(501)}",
+  inputSchema: { type: "object", properties: { ${"p".repeat(31)}: { type: "string", description: "${"d".repeat(151)}" } } },
+  execute: () => ({ ok: true }),
+})`
+    const file = { path: "src/budget.ts", content: source, size: source.length, extension: ".ts" }
+    const { inventory, context } = await discoverWebMcpTools([file])
+    const signals = evaluateWebMcpSurface([file], inventory, context)
+
+    expect(signals.find((signal) => signal.ruleId === "WEBMCP-14.contract-budget")?.state).toBe(
+      "DETECTED"
+    )
+  })
 })

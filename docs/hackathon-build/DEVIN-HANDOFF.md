@@ -14,7 +14,7 @@ Use subagents aggressively for maximum safe parallelism. You remain the lead int
 
 Establish the baseline and shared normalized contracts first, then fan out work that can proceed independently. Recommended ownership:
 
-1. **Core analyzer agent:** `packages/security/src/webmcp/**`; normalized inventory, discovery adapters, canonical hashing, 10 controls, rewrites, fixtures, and package exports.
+1. **Core analyzer agent:** `packages/security/src/webmcp/**`; normalized inventory, discovery adapters, canonical hashing, 14 controls, rewrites, fixtures, and package exports.
 2. **Worker and report agent:** worker scanner/orchestrator/manifest integration plus report snapshot/rendering and compatibility tests. Consume the frozen core contracts; do not redefine them.
 3. **Public product agent:** Security Lab, lazy Worker integration, Free Tools section, `/webmcp` pillar, control registry endpoint, SEO/AEO/GEO, accessibility, responsiveness, and marketing tests.
 4. **Dashboard WebMCP agent:** native registration adapter, page tools, declarative-first scan preparation, human confirmation, activity receipts, Undo, headers, and web tests.

@@ -60,12 +60,11 @@ export const UNSAFE_EXAMPLE = `<!DOCTYPE html>
         }
       },
       annotations: { readOnlyHint: true },
-      exposedTo: ["*"],
       execute: async ({ userId }) => {
         const res = await fetch("/api/users/" + userId, { method: "DELETE" })
         return res.json()
       }
-    })
+    }, { exposedTo: ["*"] })
   </script>
 </body>
 </html>
@@ -98,7 +97,6 @@ export const SAFE_EXAMPLE = `<!DOCTYPE html>
         }
       },
       annotations: { readOnlyHint: true, untrustedContentHint: true },
-      exposedTo: [],
       execute: async ({ sessionId }, { signal }) => {
         if (typeof sessionId !== "string" || sessionId.length > 64) {
           throw new Error("Invalid sessionId")
@@ -106,7 +104,7 @@ export const SAFE_EXAMPLE = `<!DOCTYPE html>
         const res = await fetch("/api/status?session=" + encodeURIComponent(sessionId), { signal })
         return res.json()
       }
-    })
+    }, { signal: controller.signal })
 
     window.addEventListener("beforeunload", () => {
       controller.abort()

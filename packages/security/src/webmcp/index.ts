@@ -46,6 +46,7 @@ export type {
   WebMcpRewritePlan,
   WebMcpEvaluateContext,
   WebMcpEvidenceLocation,
+  WebMcpSpecDriftFinding,
 } from "./types"
 
 export { WEBMCP_DETECTOR_VERSION } from "./types"

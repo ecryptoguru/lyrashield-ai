@@ -1,4 +1,4 @@
-export const WEBMCP_DETECTOR_VERSION = "webmcp-assurance/1" as const
+export const WEBMCP_DETECTOR_VERSION = "webmcp-assurance/2" as const
 
 export type WebMcpDefinitionKind = "imperative" | "declarative"
 
@@ -35,6 +35,8 @@ export type WebMcpControlId =
   | "WEBMCP-10"
   | "WEBMCP-11"
   | "WEBMCP-12"
+  | "WEBMCP-13"
+  | "WEBMCP-14"
 
 export interface WebMcpScanFile {
   path: string
@@ -213,6 +215,14 @@ export interface ImperativeDiscoveryResult {
   tools: WebMcpToolSurface[]
   incomplete: number
   limitReached: boolean
+  specDriftFindings: WebMcpSpecDriftFinding[]
+}
+
+export interface WebMcpSpecDriftFinding {
+  ruleId: string
+  path: string
+  startLine: number
+  endLine: number
 }
 
 export interface DeclarativeDiscoveryResult {
@@ -255,4 +265,5 @@ export interface WebMcpEvaluateContext {
       delegatedToolsIframe?: WebMcpEvidenceLocation[]
     }
   }
+  specDrift?: { findings: WebMcpSpecDriftFinding[] }
 }

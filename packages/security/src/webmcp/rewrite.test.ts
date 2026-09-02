@@ -82,7 +82,7 @@ describe("planWebMcpRewrite", () => {
     const rerun = await analyze(rewritten)
 
     expect(plan.edits).toHaveLength(1)
-    expect(rewritten).toContain('exposedTo: ["self"]')
+    expect(rewritten).toContain("exposedTo: []")
     expect(plan.updatedChecksum).toBe(rerun.inventory.checksum)
     expect(rerun.signals).not.toEqual(
       expect.arrayContaining([
@@ -139,9 +139,8 @@ document.modelContext.registerTool({ name: "wildcard", execute: () => null }, { 
     document.modelContext.registerTool({
       name: "public_sample",
       inputSchema: { type: "object", additionalProperties: false },
-      exposedTo: ["*"],
       execute: () => ({ ok: true }),
-    })
+    }, { exposedTo: ["*"] })
   </script>
 </body></html>`
       const file = {
@@ -159,7 +158,7 @@ document.modelContext.registerTool({ name: "wildcard", execute: () => null }, { 
       const rerunSignals = evaluateWebMcpSurface([rerunFile], rerun.inventory, rerun.context)
 
       expect(plan.edits).toHaveLength(1)
-      expect(rewritten).toContain('exposedTo: ["self"]')
+      expect(rewritten).toContain("exposedTo: []")
       expect(plan.updatedChecksum).toBe(rerun.inventory.checksum)
       expect(rerunSignals).not.toEqual(
         expect.arrayContaining([
