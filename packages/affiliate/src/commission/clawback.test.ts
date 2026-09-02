@@ -168,7 +168,7 @@ describe("clawback — RISK-C3 replay guard", () => {
     expect(prisma.affiliate.update).toHaveBeenCalledOnce()
   })
 
-  it("fails closed before mutation when refund amount or currency disagrees", async () => {
+  it("routes a refund money mismatch to manual review instead of throwing", async () => {
     vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
       id: "conv-3",
       idempotencyKey: "razorpay:pay-789",
@@ -185,18 +185,23 @@ describe("clawback — RISK-C3 replay guard", () => {
       ],
     })
 
+    // A mismatch (partial refund, rounding drift, or currency disagreement) is
+    // a reconciliation question for a human — never a thrown error that would
+    // exhaust webhook retries and silently drop the clawback, and never a
+    // silent pass that leaves the commission standing on a refunded order.
     for (const evidence of [
       { refundAmount: "49.0000", currency: "INR" },
       { refundAmount: "50.0000", currency: "USD" },
+      { refundAmount: undefined, currency: undefined },
     ]) {
-      await expect(
-        onRefund({
-          provider: "razorpay",
-          externalId: "pay-789",
-          reason: "REFUND",
-          ...evidence,
-        })
-      ).rejects.toThrow("affiliate_refund_money_mismatch")
+      const result = await onRefund({
+        provider: "razorpay",
+        externalId: "pay-789",
+        reason: "REFUND",
+        ...evidence,
+      })
+      expect(result.reversed).toBe(false)
+      expect(result.manualReview).toBe(true)
     }
     expect(prisma.commission.update).not.toHaveBeenCalled()
   })

@@ -45,17 +45,43 @@ export async function generateLaunchReport(
   return withWorkspaceRLS(workspaceId, async (tx) => {
     const verdict = await tx.gateVerdict.findFirst({
       where: { workspaceId, targetId },
-      orderBy: { evaluatedAt: "desc" },
+      // id tiebreaker for same-millisecond verdicts (see getLatestGateVerdict).
+      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
     })
     if (!verdict) return null
+
+    // Stored evidenceSummary comes from the gate's versioned output. Verdicts
+    // persisted before the per-severity counts existed lack
+    // unresolvedCritical/unresolvedHigh — a missing value reading as 0 would
+    // silently understate unresolved work, so re-derive from blockingReasons
+    // (which carried the CRITICAL/HIGH truth for those older verdicts).
+    const storedSummary = verdict.evidenceSummary as LaunchReportSource["evidenceSummary"] & {
+      unresolvedCritical?: number
+      unresolvedHigh?: number
+    }
+    const blockingReasons = verdict.blockingReasons as LaunchReportSource["blockingReasons"]
+    const legacyCritical = blockingReasons.filter((b) => b.severity === "CRITICAL").length
+    const legacyHigh = blockingReasons.filter((b) => b.severity === "HIGH").length
+    const evidenceSummary: LaunchReportSource["evidenceSummary"] = {
+      verified: storedSummary.verified,
+      retestConfirmed: storedSummary.retestConfirmed,
+      unresolvedCritical:
+        typeof storedSummary.unresolvedCritical === "number"
+          ? storedSummary.unresolvedCritical
+          : legacyCritical,
+      unresolvedHigh:
+        typeof storedSummary.unresolvedHigh === "number"
+          ? storedSummary.unresolvedHigh
+          : legacyHigh,
+    }
 
     const source: LaunchReportSource = {
       standardVersion: verdict.standardVersion,
       state: verdict.state as LaunchReportSource["state"],
       coverageStatement: verdict.coverageStatement as string[],
       nonCoverage: verdict.nonCoverage as LaunchReportSource["nonCoverage"],
-      blockingReasons: verdict.blockingReasons as LaunchReportSource["blockingReasons"],
-      evidenceSummary: verdict.evidenceSummary as LaunchReportSource["evidenceSummary"],
+      blockingReasons,
+      evidenceSummary,
       staleness: verdict.staleness as LaunchReportSource["staleness"],
       verdictChecksum: verdict.verdictChecksum,
       evaluatedAt: verdict.evaluatedAt,

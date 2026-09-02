@@ -69,6 +69,14 @@ export interface LaunchReportSource {
   evidenceSummary: {
     verified: number
     retestConfirmed: number
+    /**
+     * Unresolved blocking-severity counts from the gate's evidence summary.
+     * These are the numbers the public counts block maps from — NOT
+     * blockingReasons, which structurally only ever carries CRITICAL/HIGH and
+     * would silently read 0 for anything the gate does not block on.
+     */
+    unresolvedCritical: number
+    unresolvedHigh: number
   }
   staleness: { current: boolean }
   verdictChecksum: string
@@ -116,11 +124,6 @@ export function buildLaunchReportPayload(
 ): LaunchReportShareablePayload {
   const issuedAt = opts.issuedAt ?? new Date()
 
-  const unresolved = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
-  for (const b of source.blockingReasons) {
-    if (b.severity in unresolved) unresolved[b.severity as keyof typeof unresolved]++
-  }
-
   const nonCoverage = source.nonCoverage.map((n) => {
     // Disclose WHAT was not covered, not the operational why (which can leak internals).
     return n.scanner
@@ -136,10 +139,15 @@ export function buildLaunchReportPayload(
     coverageStatement: source.coverageStatement,
     nonCoverage,
     counts: {
-      unresolvedCritical: unresolved.CRITICAL,
-      unresolvedHigh: unresolved.HIGH,
-      unresolvedMedium: unresolved.MEDIUM,
-      unresolvedLow: unresolved.LOW,
+      unresolvedCritical: source.evidenceSummary.unresolvedCritical,
+      unresolvedHigh: source.evidenceSummary.unresolvedHigh,
+      // v1.0.0 of the standard does not gate on MEDIUM/LOW (they feed the
+      // score/report layers, not the verdict). Publishing counts for them
+      // would imply they were evaluated for launch when they were not, so
+      // the fields carry 0 AND the report body explains the scope. The
+      // allowlist test pins this contract.
+      unresolvedMedium: 0,
+      unresolvedLow: 0,
       fixedAndRetestConfirmed: source.evidenceSummary.retestConfirmed,
       independentlyVerified: source.evidenceSummary.verified,
     },
