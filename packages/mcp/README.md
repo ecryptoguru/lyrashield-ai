@@ -189,11 +189,14 @@ Read-only tools never prompt. A read-only key is additionally rejected server-si
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.2; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/mcp` 0.2.3; runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,
   credentials, prompt-injection guards, schemas, structured results, and approval policy.
+- A stored OAuth credential is refreshed before the stdio server starts when it is expired or
+  within the one-minute refresh window; the rotated credential is atomically persisted. Environment
+  credentials remain immutable and retain precedence.
 - [`docs/protocol-conformance.md`](./docs/protocol-conformance.md) maps protocol claims to focused
   tests and lists intentionally unsupported draft features.
 
