@@ -20,6 +20,7 @@ vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
 
 import { issueDnsDomainVerification, prisma, verifyDnsDomainVerification } from "@lyrashield/db"
 import { GET, POST, PUT } from "./route"
+import { requirePermission } from "@lyrashield/auth/server"
 
 const jsonRequest = (method: string, body: unknown) =>
   new Request("https://app.lyrashieldai.com/api/target-domain-verifications", {
@@ -38,7 +39,33 @@ describe("target domain verification route", () => {
     )
     expect(response.status).toBe(200)
     expect(response.headers.get("Cache-Control")).toBe("private, no-store")
+    expect(requirePermission).toHaveBeenCalledWith("ws-1", "target:validate")
+    expect(prisma.targetDomainVerification.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workspaceId: "ws-1" },
+        select: expect.not.objectContaining({ challengeToken: true }),
+      })
+    )
   })
+
+  it.each(["GET", "POST", "PUT"])(
+    "requires target validation permission for %s",
+    async (method) => {
+      vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN"))
+      const response =
+        method === "GET"
+          ? await GET(
+              new Request("http://localhost/api/target-domain-verifications?workspaceId=ws-1")
+            )
+          : method === "POST"
+            ? await POST(jsonRequest("POST", { workspaceId: "ws-1", domain: "example.com" }))
+            : await PUT(jsonRequest("PUT", { workspaceId: "ws-1", verificationId: "proof-1" }))
+      expect(response.status).toBe(403)
+      expect(issueDnsDomainVerification).not.toHaveBeenCalled()
+      expect(verifyDnsDomainVerification).not.toHaveBeenCalled()
+      expect(prisma.targetDomainVerification.findMany).not.toHaveBeenCalled()
+    }
+  )
 
   it("returns the DNS challenge only to the authorized issuance response", async () => {
     vi.mocked(issueDnsDomainVerification).mockResolvedValue({

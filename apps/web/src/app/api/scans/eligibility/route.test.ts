@@ -134,6 +134,15 @@ describe("GET /api/scans/eligibility", () => {
     const body = await response.json()
     expect(body.data.allowed).toBe(true)
     expect(evaluateScanEntitlement).toHaveBeenCalled()
+    expect(prisma.targetDomainVerification.findFirst).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "ws-1",
+        domain: "app.example.com",
+        status: "VERIFIED",
+        expiresAt: { gt: expect.any(Date) },
+      },
+      select: { id: true },
+    })
   })
 
   it("evaluates entitlement without mutating trial state", async () => {

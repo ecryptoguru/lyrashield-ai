@@ -222,6 +222,19 @@ export async function apiPatch<T>(
   })
 }
 
+export async function apiPut<T>(
+  url: string,
+  body?: unknown,
+  options?: FetchOptions<T>
+): Promise<T> {
+  return request<T>(url, {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+}
+
 export async function apiDelete<T>(url: string, options?: FetchOptions<T>): Promise<T> {
   return request<T>(url, { ...options, method: "DELETE" })
 }

@@ -10,6 +10,7 @@ import { checkScanUrlSafe } from "../../../lib/ssrf"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiPaginated, parsePaginationParams } from "../../../lib/api-response"
 import { assertTargetAllowed } from "@lyrashield/billing"
+import { getTargetDomainStatuses } from "@/lib/target-domain-status"
 
 async function post(request: Request) {
   let body: unknown
@@ -273,6 +274,7 @@ export async function GET(request: Request) {
     const hasMore = targets.length > limit
     const items = hasMore ? targets.slice(0, limit) : targets
     const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
+    const domainStatuses = await getTargetDomainStatuses(workspaceId, items)
 
     return apiPaginated(
       items.map((t) => ({
@@ -290,6 +292,9 @@ export async function GET(request: Request) {
         scanCount: t._count.scans,
         findingCount: t._count.findings,
         createdAt: t.createdAt,
+        domainVerificationStatus:
+          domainStatuses.get(t.id) ??
+          (t.type === "WEB_APP" || t.type === "API" ? "Not verified" : "Not applicable"),
       })),
       nextCursor
     )

@@ -88,8 +88,67 @@ describe("live AI safety service", () => {
       resolveTxt: async () => [[token.slice(0, 16), token.slice(16)]],
     })
     expect(mockPrisma.targetDomainVerification.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "VERIFIED" }) })
+      expect.objectContaining({
+        where: {
+          id: "proof-1",
+          workspaceId: "ws-1",
+          challengeToken: token,
+          expiresAt: new Date(now.getTime() + 1),
+        },
+        data: expect.objectContaining({ status: "VERIFIED" }),
+      })
     )
+  })
+
+  it("does not verify a replacement challenge using an in-flight old DNS result", async () => {
+    const token = "a".repeat(48)
+    const expiresAt = new Date(now.getTime() + 60_000)
+    mockPrisma.targetDomainVerification.findFirst.mockResolvedValue({
+      id: "proof-1",
+      domain: "staging.example.com",
+      challengeToken: token,
+      expiresAt,
+    })
+    await expect(
+      verifyDnsDomainVerification({
+        workspaceId: "ws-1",
+        verificationId: "proof-1",
+        actorUserId: "user-1",
+        now,
+        resolveTxt: async () => {
+          // Reissuance commits while DNS is in flight; Prisma cannot match the
+          // old token/expiry predicate when finalizing the stale verification.
+          mockPrisma.targetDomainVerification.update.mockRejectedValueOnce({ code: "P2025" })
+          return [[token]]
+        },
+      })
+    ).rejects.toMatchObject({ code: "DOMAIN_VERIFICATION_PROOF_CHANGED" })
+    expect(mockPrisma.targetDomainVerification.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "proof-1", workspaceId: "ws-1", challengeToken: token, expiresAt },
+      })
+    )
+    expect(mockPrisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("reissuance resets a previous verified record and returns only the new token", async () => {
+    mockPrisma.targetDomainVerification.findFirst.mockResolvedValue({ id: "proof-1" })
+    mockPrisma.targetDomainVerification.update.mockResolvedValue({ id: "proof-1" })
+    const issued = await issueDnsDomainVerification({
+      workspaceId: "ws-1",
+      domain: "staging.example.com",
+      createdById: "user-1",
+      now,
+    })
+    expect(mockPrisma.targetDomainVerification.update).toHaveBeenCalledWith({
+      where: { id: "proof-1" },
+      data: expect.objectContaining({
+        status: "PENDING",
+        challengeToken: issued.token,
+        verifiedAt: null,
+        lastCheckedAt: null,
+      }),
+    })
   })
 
   it("rejects live plans for production targets before creating a run", async () => {

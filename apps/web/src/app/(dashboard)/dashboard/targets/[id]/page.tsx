@@ -7,6 +7,9 @@ import { Card, Badge } from "@lyrashield/ui"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { ScorecardControls } from "./scorecard-controls"
 import { RepositoryRefEditor } from "./repository-ref-editor"
+import { DomainVerificationCard } from "./domain-verification-card"
+import { normalizeDomainForProof } from "@lyrashield/security"
+import { getTargetDomainStatuses } from "@/lib/target-domain-status"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { modeLabel } from "@/lib/labels"
 import { TARGET_SINGULAR } from "@/lib/terminology"
@@ -93,6 +96,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
   const canUpdateTarget = hasPermission(membership.role, PERMISSIONS.target.update)
   const latestScore = target.scoreSnapshots[0]
   const scoreExpired = latestScore ? latestScore.expiresAt <= new Date() : false
+  const domainStatuses = await getTargetDomainStatuses(workspaceId, [target])
 
   return (
     <div>
@@ -243,6 +247,15 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             </div>
           </dl>
         </div>
+      )}
+
+      {(target.type === "WEB_APP" || target.type === "API") && (
+        <DomainVerificationCard
+          workspaceId={workspaceId}
+          domain={normalizeDomainForProof(target.url ?? "")}
+          canValidate={hasPermission(membership.role, PERMISSIONS.target.validate)}
+          initialStatus={domainStatuses.get(target.id) ?? "Not verified"}
+        />
       )}
 
       <div

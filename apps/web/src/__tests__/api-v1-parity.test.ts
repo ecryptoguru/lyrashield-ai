@@ -3,6 +3,13 @@ import { describe, it, expect } from "vitest"
 // Each v1 route must re-export the same HTTP method handlers as its unversioned twin.
 
 describe("/api/v1 parity", () => {
+  it("target-domain-verifications (GET, POST, PUT)", async () => {
+    const v1 = await import("../app/api/v1/target-domain-verifications/route")
+    const twin = await import("../app/api/target-domain-verifications/route")
+    expect(v1.GET).toBe(twin.GET)
+    expect(v1.POST).toBe(twin.POST)
+    expect(v1.PUT).toBe(twin.PUT)
+  })
   it("scans (GET, POST)", async () => {
     const v1 = await import("../app/api/v1/scans/route")
     const twin = await import("../app/api/scans/route")

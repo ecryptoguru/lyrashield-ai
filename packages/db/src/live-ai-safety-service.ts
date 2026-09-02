@@ -119,10 +119,29 @@ export async function verifyDnsDomainVerification(input: {
     }
 
     const expiresAtVal = new Date(now.getTime() + DOMAIN_PROOF_TTL_MS)
-    const result = await tx.targetDomainVerification.update({
-      where: { id: verification.id },
-      data: { status: "VERIFIED", verifiedAt: now, lastCheckedAt: now, expiresAt: expiresAtVal },
-    })
+    const result = await tx.targetDomainVerification
+      .update({
+        // DNS resolution yields control. A reissued challenge must never inherit
+        // verification obtained with the previous token.
+        where: {
+          id: verification.id,
+          workspaceId: input.workspaceId,
+          challengeToken: verification.challengeToken,
+          expiresAt: verification.expiresAt,
+        },
+        data: { status: "VERIFIED", verifiedAt: now, lastCheckedAt: now, expiresAt: expiresAtVal },
+      })
+      .catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "P2025"
+        ) {
+          throw new LiveAiSafetyError("DOMAIN_VERIFICATION_PROOF_CHANGED")
+        }
+        throw error
+      })
     return { updated: result, expiresAt: expiresAtVal }
   })
 
