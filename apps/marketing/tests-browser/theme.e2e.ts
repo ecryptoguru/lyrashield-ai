@@ -275,3 +275,24 @@ test("keeps Free tools separate from the restored desktop Resources menu", async
   ).toBeVisible()
   await expect(resourcesDropdown.getByRole("link", { name: "Guides", exact: true })).toBeVisible()
 })
+
+test("keeps desktop navigation labels on one line at the compact desktop width", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1159, height: 863 })
+  await page.goto("/")
+
+  const header = page.locator("header.sticky")
+  const items = header.locator('nav[aria-label="Main"] > ul > li')
+  await expect(items).toHaveCount(7)
+  expect(
+    await header.evaluate((element) => element.getBoundingClientRect().height)
+  ).toBeLessThanOrEqual(65)
+
+  for (const item of await items.all()) {
+    expect(
+      await item.evaluate((element) => element.getBoundingClientRect().height)
+    ).toBeLessThanOrEqual(44)
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1159)
+})
