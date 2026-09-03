@@ -24,6 +24,18 @@ const PERMANENT_REDIRECTS: Record<string, string> = {
   "/sitemap.xml": "/sitemap-index.xml",
 }
 
+// Trailing-slash canonicalisation. wrangler.jsonc sets
+// assets.html_handling to "none" so the platform layer performs NO
+// built-in HTML handling (with the drop-trailing-slash default it
+// canonicalised with a 307, which is not cacheable as permanently moved).
+// Every canonical URL on this site is slash-less, so any request whose
+// path ends in "/" (except the homepage itself) is redirected here with a
+// permanent 301. This also covers direct asset-shaped requests
+// ("/pricing/index.html") that html_handling "none" would otherwise 404
+// per Cloudflare's docs table (workers-sdk#7422): with html_handling
+// disabled, folder index files only resolve via their exact
+// /folder/index.html form, which this canonicalisation redirects to the
+// page route the Astro app manifest serves.
 export const onRequest = defineMiddleware(async ({ url }, next) => {
   const redirectTarget = PERMANENT_REDIRECTS[url.pathname]
   if (redirectTarget) {
@@ -35,6 +47,33 @@ export const onRequest = defineMiddleware(async ({ url }, next) => {
         "X-Robots-Tag": "noindex",
       },
     })
+  }
+
+  // Trailing-slash and index.html canonicalisation (301). Must run before
+  // next() so it wins over any remaining asset-layer behavior. Query and
+  // hash are preserved (hash never reaches the server; query is reattached).
+  const pathname = url.pathname
+  const hasTrailingSlash = pathname.length > 1 && pathname.endsWith("/")
+  const isIndexHtml = pathname.length > 1 && /\/index\.html$/.test(pathname)
+  if (hasTrailingSlash || isIndexHtml) {
+    let canonicalPath = pathname
+    if (isIndexHtml) {
+      // /pricing/index.html -> /pricing ; /blog/index.html -> /blog
+      canonicalPath = pathname.replace(/\/index\.html$/, "")
+    }
+    canonicalPath = canonicalPath.replace(/\/+$/, "")
+    if (canonicalPath === "") canonicalPath = "/"
+    if (canonicalPath !== pathname) {
+      const location = canonicalPath + url.search
+      return new Response(null, {
+        status: 301,
+        headers: {
+          Location: location,
+          "Cache-Control": "public, max-age=31536000",
+          "X-Robots-Tag": "noindex",
+        },
+      })
+    }
   }
 
   const response = await next()

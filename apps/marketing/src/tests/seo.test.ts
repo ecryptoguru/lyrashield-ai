@@ -151,7 +151,11 @@ describe("marketing SEO metadata", () => {
       vars: { PUBLIC_SITE_URL: string; PUBLIC_APP_URL: string; PUBLIC_INDEXABLE: string }
     }>(wranglerConfig)
 
-    expect(wranglerConfig).toContain('"html_handling": "drop-trailing-slash"')
+    // html_handling "none": the platform layer performs NO built-in HTML
+    // handling (the drop-trailing-slash default canonicalised with a 307).
+    // Trailing-slash and /index.html canonicalisation to 301s is done by
+    // src/middleware.ts instead — the status: 301 assertion below covers it.
+    expect(wranglerConfig).toContain('"html_handling": "none"')
     expect(parsed.vars.PUBLIC_SITE_URL).toBe("https://lyrashieldai.com")
     expect(parsed.vars.PUBLIC_APP_URL).toBe("https://app.lyrashieldai.com")
     expect(parsed.vars.PUBLIC_INDEXABLE).toBe("true")

@@ -209,6 +209,53 @@ function contentLastmod() {
 
 const LASTMOD = contentLastmod()
 
+/**
+ * Git-derived "last commit that touched these source files" dates for pages
+ * that render dateModified from their own source history. Computed HERE, in
+ * plain Node during config load, because the @astrojs/cloudflare adapter
+ * prerenders pages inside workerd — where node:child_process cannot spawn
+ * git, so any execSync at render time silently fails. The result is injected
+ * into page code via the __MARKETING_SOURCE_DATES__ vite define (the same
+ * pattern as __MARKETING_BUILD_REVISION__). Keys are the path-lists the
+ * pages ask about, joined with "|".
+ */
+function sourceDates() {
+  const appRoot = fileURLToPath(new URL(".", import.meta.url))
+  const gitDate = (...paths) => {
+    try {
+      const output = execSync(
+        `git log -1 --format=%cI -- ${paths.map((p) => JSON.stringify(p)).join(" ")}`,
+        { cwd: appRoot, stdio: ["ignore", "pipe", "ignore"], timeout: 10_000 }
+      )
+        .toString()
+        .trim()
+      return output || undefined
+    } catch {
+      return undefined
+    }
+  }
+  const dates = {}
+  const set = (key, ...paths) => {
+    const date = gitDate(...paths)
+    if (date) dates[key] = date
+  }
+  set(
+    "src/pages/index.astro|src/components/landing/",
+    "src/pages/index.astro",
+    "src/components/landing/"
+  )
+  set(
+    "src/pages/agents.astro|src/lib/agent-onboarding.ts",
+    "src/pages/agents.astro",
+    "src/lib/agent-onboarding.ts"
+  )
+  set("src/pages/methodology.astro", "src/pages/methodology.astro")
+  set("src/pages/terms.astro", "src/pages/terms.astro")
+  return dates
+}
+
+const SOURCE_DATES = sourceDates()
+
 const configuredSiteUrl = process.env.PUBLIC_SITE_URL || wranglerVar("PUBLIC_SITE_URL")
 const siteUrl = configuredSiteUrl || "http://localhost:4321"
 const indexable =
@@ -281,11 +328,13 @@ export default defineConfig({
         )
       },
       serialize: (item) => {
-        const pathname = new URL(item.url).pathname.replace(/\/$/, "")
+        // "/" is the one URL whose pathname is empty after trailing-slash
+        // normalization; map it back to "/" or the LASTMOD lookup misses and
+        // the homepage sitemap entry loses its lastmod.
+        const rawPathname = new URL(item.url).pathname.replace(/\/$/, "")
+        const pathname = rawPathname === "" ? "/" : rawPathname
         const lastmod = LASTMOD.get(pathname)
-        return lastmod
-          ? { ...item, lastmod: lastmod.toISOString().slice(0, 10) }
-          : item
+        return lastmod ? { ...item, lastmod: lastmod.toISOString().slice(0, 10) } : item
       },
     }),
   ],
@@ -360,6 +409,7 @@ export default defineConfig({
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
       __MARKETING_X_URL__: JSON.stringify(xUrl),
       __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),
+      __MARKETING_SOURCE_DATES__: JSON.stringify(SOURCE_DATES),
     },
   },
 })
