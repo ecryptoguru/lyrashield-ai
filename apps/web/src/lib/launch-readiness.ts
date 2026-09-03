@@ -30,6 +30,18 @@ export interface ReadinessCoverage {
   evaluated: boolean
   /** Operator-facing explanation shown when `evaluated` is false. */
   reason?: string
+  /**
+   * Applicable controls that did not complete (BLOCKED / TIMED_OUT / FAILED /
+   * PARTIAL receipts). NOT_APPLICABLE receipts are excluded by the caller: a
+   * scanner that does not apply to the target says nothing about coverage.
+   *
+   * `evaluated` is binary, so a run where one scanner completed and eleven were
+   * blocked reads identically to a fully covered run and scores 100/100 GO. That
+   * is the same false all-clear `evaluated` exists to prevent, one level up: we
+   * did look, but not at most of it. A partial assessment therefore never issues
+   * a numeric score or an unconditional GO.
+   */
+  unresolvedControls?: number
 }
 
 export interface LaunchReadinessReport {
@@ -60,6 +72,19 @@ const SEVERITY_WEIGHTS: Record<string, number> = {
 }
 
 const BLOCKING_STATUSES = new Set<string>(["OPEN", "FIX_READY"])
+
+/**
+ * Coverage-receipt statuses that mean a scanner applied to the target but did
+ * not finish. NOT_APPLICABLE is deliberately absent (it says nothing about
+ * coverage) and so is COMPLETED. Shared so every readiness caller counts the
+ * same thing; mirrors APPLICABLE_RECEIPT_STATUSES in dashboard-overview.
+ */
+export const INCOMPLETE_APPLICABLE_RECEIPT_STATUSES = [
+  "PARTIAL",
+  "BLOCKED",
+  "TIMED_OUT",
+  "FAILED",
+] as const
 
 export function generateLaunchReadinessReport(
   findings: FindingForReadiness[],
@@ -163,6 +188,21 @@ export function generateLaunchReadinessReportFromAggregate(
     conditions.push("Security score too low for production launch")
   }
 
+  // A partial assessment must not present as a clean one. Findings we did see
+  // still stand (NO_GO keeps its verdict and score), but an otherwise-clean
+  // sheet cannot certify a launch while applicable controls are unestablished.
+  const unresolvedControls = coverage?.unresolvedControls ?? 0
+  let scopeLimited = false
+  if (unresolvedControls > 0) {
+    conditions.push(
+      `${unresolvedControls} applicable control(s) could not be established — resolve them before treating this as a full assessment`
+    )
+    if (verdict === "GO") {
+      verdict = "GO_WITH_CONDITIONS"
+      scopeLimited = true
+    }
+  }
+
   if (total > 0 && verified === 0) {
     recommendations.push(
       "No findings have been verified — run a deeper scan to confirm vulnerabilities"
@@ -179,11 +219,13 @@ export function generateLaunchReadinessReportFromAggregate(
     )
   }
 
-  const summary = `${total} finding(s) detected, ${verified} verified. Security score: ${score}/100. Verdict: ${verdict}.`
+  const summary = scopeLimited
+    ? `${total} finding(s) detected, ${verified} verified. ${unresolvedControls} applicable control(s) could not be established, so this assessment is scope-limited and no security score is issued. Verdict: ${verdict}.`
+    : `${total} finding(s) detected, ${verified} verified. Security score: ${score}/100. Verdict: ${verdict}.`
 
   return {
     verdict,
-    score,
+    score: scopeLimited ? null : score,
     summary,
     blockingFindings,
     totalFindings: total,

@@ -4,7 +4,10 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
 import { logger } from "@lyrashield/logger"
-import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
+import {
+  INCOMPLETE_APPLICABLE_RECEIPT_STATUSES,
+  generateLaunchReadinessReportFromAggregate,
+} from "@/lib/launch-readiness"
 
 export async function GET(request: Request) {
   try {
@@ -18,46 +21,63 @@ export async function GET(request: Request) {
 
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
 
-    const [groups, completedScanCount, evaluatedCoverageCount] = await Promise.all([
-      prisma.finding.groupBy({
-        by: ["severity", "status", "verified"],
-        where: {
-          workspaceId,
-          deletedAt: null,
-          ...(targetId ? { targetId } : {}),
-        },
-        _count: { _all: true },
-      }),
-      prisma.scan.count({
-        where: {
-          workspaceId,
-          status: "COMPLETED",
-          deletedAt: null,
-          ...(targetId ? { targetId } : {}),
-        },
-      }),
-      // Whether any completed scan actually evaluated the target. Zero findings
-      // with zero coverage must not read as a pass.
-      withWorkspaceRLS(workspaceId, (tx) =>
-        tx.scanCoverageReceipt.count({
+    const [groups, completedScanCount, evaluatedCoverageCount, unresolvedCoverageCount] =
+      await Promise.all([
+        prisma.finding.groupBy({
+          by: ["severity", "status", "verified"],
           where: {
-            status: "COMPLETED",
-            scan: {
-              workspaceId,
-              status: "COMPLETED",
-              deletedAt: null,
-              ...(targetId ? { targetId } : {}),
-            },
+            workspaceId,
+            deletedAt: null,
+            ...(targetId ? { targetId } : {}),
           },
-        })
-      ),
-    ])
+          _count: { _all: true },
+        }),
+        prisma.scan.count({
+          where: {
+            workspaceId,
+            status: "COMPLETED",
+            deletedAt: null,
+            ...(targetId ? { targetId } : {}),
+          },
+        }),
+        // Whether any completed scan actually evaluated the target. Zero findings
+        // with zero coverage must not read as a pass.
+        withWorkspaceRLS(workspaceId, (tx) =>
+          tx.scanCoverageReceipt.count({
+            where: {
+              status: "COMPLETED",
+              scan: {
+                workspaceId,
+                status: "COMPLETED",
+                deletedAt: null,
+                ...(targetId ? { targetId } : {}),
+              },
+            },
+          })
+        ),
+        // Applicable controls that did not complete. Without this a run where one
+        // scanner completed and the rest were blocked scores a clean 100/100 GO.
+        withWorkspaceRLS(workspaceId, (tx) =>
+          tx.scanCoverageReceipt.count({
+            where: {
+              status: { in: [...INCOMPLETE_APPLICABLE_RECEIPT_STATUSES] },
+              scan: {
+                workspaceId,
+                status: "COMPLETED",
+                deletedAt: null,
+                ...(targetId ? { targetId } : {}),
+              },
+            },
+          })
+        ),
+      ])
 
     const report = generateLaunchReadinessReportFromAggregate(
       groups.map((group) => ({ ...group, count: group._count._all })),
       completedScanCount > 0,
       {
         evaluated: evaluatedCoverageCount > 0,
+        unresolvedControls: unresolvedCoverageCount,
         reason:
           "No scanner successfully evaluated this target. Open the latest run's coverage notice for the specific reason.",
       }
