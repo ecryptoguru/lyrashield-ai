@@ -62,7 +62,7 @@ Native WebMCP path (headed Chrome 149+ or ChatGPT in-app browser):
 
 ChatGPT Site tools discovers only top-level imperative tools; declarative forms and iframe tools remain Chrome-only test cases.
 
-Authenticated dashboard path is pending an ordinary isolated judge account. Credentials, if needed, will be placed only in Devpost private testing instructions after normal registration and email verification—not in this repository, screenshots, or video.
+Authenticated dashboard testing will use the founder-designated existing test account, subject to fresh verification of email/password login, all active memberships, workspace isolation, and least privilege. Do not create a replacement identity or delete the existing account after judging. Credentials belong only in verified private testing instructions, never this repository, screenshots, or video. The [September 3 closeout plan](docs/hackathon-build/webmcp-closeout-plan.md) owns this gate and the updated release/media sequence.
 
 ## Public Demo Link
 
@@ -109,7 +109,7 @@ Verify this history with `git log --since=2026-08-25 -- packages/security/src/we
 - The Devpost draft project is [LyraShield AI — WebMCP Assurance](https://devpost.com/software/lyrashield-ai-webmcp-assurance) (ID `1405030`). On Sep 2 it remained an authenticated 2/5-step draft; it is not published or submitted.
 - Required submission form answers include submitter type, country, app status, live URL, public repo, supported agents/clients tested, AI tools used, learning level, and career-value confirmation.
 - Live Devpost requirements also require a public video under three minutes and a public repository URL.
-- The deployed revision is complete. Do not mark native-client inspection, judge account, authenticated-dashboard proof, video, screenshots, or final Devpost form answers complete until their receipts exist.
+- September 3 source review is bound to `cf2099321769f01256bb2ca96ad74816b363776e`, with successful CI/release workflows and fresh public HTTP readiness checks recorded in the closeout plan. Do not mark runtime image identity, native-client inspection, existing-account isolation, authenticated-dashboard proof, video, screenshots, or final Devpost form answers complete until their distinct receipts exist.
 
 ## Known Limitations
 
@@ -122,8 +122,9 @@ Verify this history with `git log --since=2026-08-25 -- packages/security/src/we
 
 ## TODO Official Form Fields
 
-- Submitter type: confirm whether this entry is an Individual or Organization.
-- Country of residence: confirm final required selection(s).
+- Submitter type: `Individual` (founder-confirmed; verify the saved form).
+- Country of residence: `India` (founder-confirmed; verify the saved form).
+- Learning: `Significant`; career value: `Yes` (founder-confirmed; verify the saved form).
 - App status: `Existing`, because the underlying LyraShield platform predates the window; describe only the submission-period additions in the table above.
 - Existing-project explanation: use the two Sep 2 rows above, including both merge revisions and exact-main deployment evidence.
 - Exact live URL, native-client test record, judge testing instructions, final video URL, and final Devpost answer text.

@@ -2,6 +2,8 @@
 
 ## Scope and status
 
+The [September 3 closeout plan](webmcp-closeout-plan.md) owns current release evidence, the founder-designated existing test account, entitlement checks, and the revised first-15-second timing. Follow it where this older recording plan differs; do not create a new judge identity.
+
 This is a recording plan, not a published video. Keep the Devpost project as a draft until a real public YouTube URL exists and all required form fields are reviewed.
 
 For the HyperFrames composition, tracks, visual identity, real-capture policy, and render gates, use [webmcp-hyperframes-production-plan.md](webmcp-hyperframes-production-plan.md).
