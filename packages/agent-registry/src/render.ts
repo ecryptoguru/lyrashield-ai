@@ -72,7 +72,7 @@ function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string
   // Code) instead of the standard command string + args + env triple.
   if (agent.stdioStyle === "array-command-environment") {
     const entry: Record<string, unknown> = {
-      command: ["npx", "-y", "@lyrashield/mcp@0.2.2"],
+      command: ["npx", "-y", "@lyrashield/mcp@0.2.4"],
       environment: env,
       enabled: true,
     }
@@ -88,14 +88,14 @@ function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string
     entry = {
       [agent.commandWrapperKey]: {
         path: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.2"],
+        args: ["-y", "@lyrashield/mcp@0.2.4"],
         env,
       },
     }
   } else {
     entry = {
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.2"],
+      args: ["-y", "@lyrashield/mcp@0.2.4"],
     }
     if (agent.credential.kind === "env-names") {
       entry[agent.credential.field] = env

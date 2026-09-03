@@ -26,7 +26,7 @@ exports[`renderConfig snapshot — every agent × every transport > antigravity 
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -58,7 +58,7 @@ exports[`renderConfig snapshot — every agent × every transport > claude-code 
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -82,7 +82,7 @@ exports[`renderConfig snapshot — every agent × every transport > codebuff × 
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -114,7 +114,7 @@ exports[`renderConfig snapshot — every agent × every transport > copilot-cli 
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -147,7 +147,7 @@ exports[`renderConfig snapshot — every agent × every transport > cursor × st
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -171,7 +171,7 @@ exports[`renderConfig snapshot — every agent × every transport > devin-cli ×
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -189,7 +189,7 @@ exports[`renderConfig snapshot — every agent × every transport > gemini-cli �
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -220,7 +220,7 @@ exports[`renderConfig snapshot — every agent × every transport > hermes × st
     command: "npx"
     args:
       - "-y"
-      - "@lyrashield/mcp@0.2.2"
+      - "@lyrashield/mcp@0.2.4"
     env:
       LYRASHIELD_API_URL: "https://app.lyrashieldai.com"
       LYRASHIELD_API_KEY: "lsk_test_lyrashield_api_key""
@@ -255,7 +255,7 @@ exports[`renderConfig snapshot — every agent × every transport > mimo-code ×
       "command": [
         "npx",
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "environment": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -289,7 +289,7 @@ exports[`renderConfig snapshot — every agent × every transport > oh-my-pi × 
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -303,7 +303,7 @@ exports[`renderConfig snapshot — every agent × every transport > oh-my-pi × 
 exports[`renderConfig snapshot — every agent × every transport > openai-codex × stdio 1`] = `
 "[mcp_servers.lyrashield]
 command = "npx"
-args = ["-y", "@lyrashield/mcp@0.2.2"]
+args = ["-y", "@lyrashield/mcp@0.2.4"]
 
 [mcp_servers.lyrashield.env_vars]
 LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
@@ -337,7 +337,7 @@ exports[`renderConfig snapshot — every agent × every transport > opencode × 
       "command": [
         "npx",
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "environment": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -373,7 +373,7 @@ exports[`renderConfig snapshot — every agent × every transport > roo-code × 
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -405,7 +405,7 @@ exports[`renderConfig snapshot — every agent × every transport > vscode × st
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.2"
+        "@lyrashield/mcp@0.2.4"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -427,7 +427,7 @@ exports[`renderConfig snapshot — every agent × every transport > zed × stdio
         "path": "npx",
         "args": [
           "-y",
-          "@lyrashield/mcp@0.2.2"
+          "@lyrashield/mcp@0.2.4"
         ],
         "env": {
           "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",

@@ -264,7 +264,7 @@ describe("exported validator", () => {
       '"command": "npx"',
       '"env": {"LYRASHIELD_API_URL":"https://app.lyrashieldai.com"}, "command": "npx"',
     ],
-    ["gemini-extension.json", "@lyrashield/mcp@0.2.2", "@lyrashield/mcp"],
+    ["gemini-extension.json", "@lyrashield/mcp@0.2.4", "@lyrashield/mcp"],
     ["codebuff/lyrashield-review.ts", '"read_files"', '"run_terminal_command", "read_files"'],
     ["openclaw/SKILL.md", "nothing is applied automatically.", "changes apply automatically."],
   ])("rejects unsafe distribution drift in %s", async (file, before, after) => {

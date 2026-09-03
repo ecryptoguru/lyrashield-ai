@@ -325,7 +325,7 @@ Annual Cloud commission is flat 25%; 30% tier applies only to monthly. No commis
 - `packages/agent-registry` owns client install metadata.
 - `packages/agent-plugin` generates marketplace/plugin artifacts and verified client shims.
 
-Current package/runtime contract: `lyrashield` CLI `0.2.0` supports Node 22–24; `@lyrashield/mcp` `0.2.2` and `@lyrashield/agent-plugin` `0.1.18` require Node 24+. MCP uses SDK `1.30` and Zod 4. Registry contains 30 entries and resolves 26 preferred client surfaces: 13 config-file installs, one vendor CLI, seven guided-manual clients, and five Agent Plugin installs for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Registry retains three legacy config-file alternatives for plugin-preferred clients. Four generated client-specific shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root plugin manifest. VS Code stays on its verified config-file path.
+Current package/runtime contract: `lyrashield` CLI `0.2.0` supports Node 22–24; `@lyrashield/mcp` `0.2.4` and `@lyrashield/agent-plugin` `0.1.18` require Node 24+. MCP uses SDK `1.30` and Zod 4. Registry contains 30 entries and resolves 26 preferred client surfaces: 13 config-file installs, one vendor CLI, seven guided-manual clients, and five Agent Plugin installs for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Registry retains three legacy config-file alternatives for plugin-preferred clients. Four generated client-specific shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root plugin manifest. VS Code stays on its verified config-file path.
 
 Hosted OAuth is read-only by default. Write scope still requires permission and per-action approval.
 
