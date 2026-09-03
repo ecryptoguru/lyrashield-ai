@@ -194,7 +194,7 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
   expect(await menu.evaluate((element) => element.scrollHeight)).toBeLessThanOrEqual(
     await menu.evaluate((element) => element.clientHeight)
   )
-  for (const name of ["For agents", "How it works", "Free scan", "Pricing"]) {
+  for (const name of ["For agents", "WebMCP", "Free scan", "Pricing"]) {
     const link = menu.getByRole("link", { name, exact: true })
     await expect(link).toBeInViewport()
     const linkBounds = await link.boundingBox()
