@@ -49,8 +49,7 @@ export const CHAPTER_POSTER_ALT: Readonly<Record<EvidenceChapterId, string>> = {
     "Abstract 3D artwork for the opening chapter: a glowing cyan sphere on a pedestal with a white rail looping through dark pillars on a deep teal background.",
   target:
     "Abstract 3D artwork for the target chapter: a glowing faceted orb connected by white cables to a row of colored panels and a dark console.",
-  scan:
-    "Abstract 3D artwork for the review chapter: glowing pale-blue arches framing four colored panels beneath a floating console in a dark void.",
+  scan: "Abstract 3D artwork for the review chapter: glowing pale-blue arches framing four colored panels beneath a floating console in a dark void.",
   "evidence-state":
     "Abstract 3D artwork for the evidence chapter: four vertical panels in slate, mint, yellow and rose connected by a light beam to a dark console.",
   "fix-proposal":
