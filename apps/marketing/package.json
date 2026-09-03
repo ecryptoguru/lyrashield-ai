@@ -46,13 +46,13 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@cloudflare/workers-types": "^5.20260823.1",
+    "@cloudflare/workers-types": "^5.20260830.1",
     "@tailwindcss/typography": "^0.5.20",
     "@types/node": "^24.0.0",
     "tsx": "^4.23.12",
     "typescript": "^6.0.0",
     "webmcp-types": "^0.1.5",
-    "wrangler": "^4.125.0"
+    "wrangler": "^4.127.1"
   },
   "engines": {
     "node": ">=24.0.0"
