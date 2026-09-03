@@ -234,7 +234,7 @@ describe("marketing SEO metadata", () => {
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
     expect(source("../components/landing/FinalCta.astro")).toContain('href="/methodology"')
     expect(scanner).toContain(
-      'const title = "Free AI App Security Check — Passive URL Scan | LyraShield AI"'
+      'const title = "Free AI app security check — URL scan | LyraShield AI"'
     )
     expect(scanner).toContain(
       'const description = "Run a free, passive URL security check for AI-built apps.'
