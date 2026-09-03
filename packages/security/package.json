@@ -40,7 +40,7 @@
     "@noble/hashes": "2.2.0",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "parse5": "^7.2.1",
+    "parse5": "^8.0.1",
     "typescript": "^6.0.0",
     "undici": "8.10.0"
   },
