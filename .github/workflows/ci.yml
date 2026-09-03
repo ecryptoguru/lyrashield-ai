@@ -33,7 +33,11 @@ jobs:
 
       - name: Setup pnpm
         if: needs.changes.outputs.docs-only != 'true'
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          # Every workflow runs pnpm install as an explicit step; the
+          # successor action's install default is true, so opt out.
+          install: false
 
       - name: Setup Node.js
         if: needs.changes.outputs.docs-only != 'true'
@@ -48,7 +52,27 @@ jobs:
 
       - name: Dependency vulnerability scan
         if: needs.changes.outputs.docs-only != 'true'
-        run: pnpm audit --audit-level=high --prod
+        # Bounded retry around the registry round-trip: on 2026-09-03 an npm
+        # degraded-performance incident made pnpm audit's advisory POST time
+        # out (after already reporting 0 vulnerabilities), failing green
+        # builds on infra blips. Real vulnerability findings still fail
+        # immediately on every attempt — the retry only re-runs on the
+        # registry-transport errors pnpm exits 1 with when the audit
+        # endpoint is unreachable.
+        run: |
+          for attempt in 1 2 3; do
+            echo "pnpm audit attempt ${attempt}/3"
+            if pnpm audit --audit-level=high --prod; then
+              exit 0
+            fi
+            code=$?
+            if [ "$attempt" = "3" ]; then
+              echo "::error::pnpm audit failed on all 3 attempts (exit ${code})"
+              exit "$code"
+            fi
+            echo "::warning::pnpm audit attempt ${attempt} failed (exit ${code}) — retrying in 30s"
+            sleep 30
+          done
 
       - name: Secret scan (gitleaks)
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
@@ -196,7 +220,11 @@ jobs:
 
       - name: Setup pnpm
         if: needs.changes.outputs.docs-only != 'true'
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          # Every workflow runs pnpm install as an explicit step; the
+          # successor action's install default is true, so opt out.
+          install: false
 
       - name: Setup Node.js
         if: needs.changes.outputs.docs-only != 'true'
@@ -451,7 +479,11 @@ jobs:
             "${{ github.repository_owner }}/lyrashield-engine"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          # Every workflow runs pnpm install as an explicit step; the
+          # successor action's install default is true, so opt out.
+          install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -524,7 +556,11 @@ jobs:
 
       - name: Setup pnpm
         if: needs.changes.outputs.docs-only != 'true'
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          # Every workflow runs pnpm install as an explicit step; the
+          # successor action's install default is true, so opt out.
+          install: false
 
       - name: Setup Node.js
         if: needs.changes.outputs.docs-only != 'true'
@@ -611,7 +647,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          # Every workflow runs pnpm install as an explicit step; the
+          # successor action's install default is true, so opt out.
+          install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -819,7 +859,11 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          # Every workflow runs pnpm install as an explicit step; the
+          # successor action's install default is true, so opt out.
+          install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
