@@ -164,4 +164,54 @@ describe("generateLaunchReadinessReport", () => {
       expect(report.verdict).toBe("NOT_EVALUATED")
     })
   })
+
+  /**
+   * Observed live in production on 2026-09-03: a passive Surface Review of a
+   * URL target produced 57 coverage receipts of which only 4 completed — the
+   * rest were NOT_APPLICABLE or BLOCKED — and Launch Readiness reported
+   * "GO, 100/100". `evaluated` was true (one scanner did complete), so the
+   * binary flag let a mostly-unchecked target certify a launch.
+   */
+  describe("partial coverage gating", () => {
+    it("never issues a bare GO with a perfect score when applicable controls are unestablished", () => {
+      const report = generateLaunchReadinessReportFromAggregate([], true, {
+        evaluated: true,
+        unresolvedControls: 11,
+      })
+
+      expect(report.verdict).toBe("GO_WITH_CONDITIONS")
+      // The critical assertion: no number for a user to read as a pass.
+      expect(report.score).toBeNull()
+      expect(report.summary).toContain("scope-limited")
+      expect(report.conditions.join(" ")).toContain("11 applicable control(s)")
+    })
+
+    it("keeps GO and the score when every applicable control completed", () => {
+      const report = generateLaunchReadinessReportFromAggregate([], true, {
+        evaluated: true,
+        unresolvedControls: 0,
+      })
+
+      expect(report.verdict).toBe("GO")
+      expect(report.score).toBe(100)
+    })
+
+    it("leaves NO_GO intact — finding something bad is conclusive regardless of coverage", () => {
+      const report = generateLaunchReadinessReportFromAggregate(
+        [{ severity: "CRITICAL", status: "OPEN", verified: true, count: 1 }],
+        true,
+        { evaluated: true, unresolvedControls: 5 }
+      )
+
+      expect(report.verdict).toBe("NO_GO")
+      expect(report.score).not.toBeNull()
+      expect(report.conditions.join(" ")).toContain("5 applicable control(s)")
+    })
+
+    it("is unchanged when the caller reports no unresolved controls", () => {
+      const report = generateLaunchReadinessReportFromAggregate([], true, { evaluated: true })
+      expect(report.verdict).toBe("GO")
+      expect(report.score).toBe(100)
+    })
+  })
 })

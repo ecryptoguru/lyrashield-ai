@@ -3,7 +3,10 @@ import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { Rocket } from "lucide-react"
 import { LaunchReadinessClient } from "./launch-readiness-client"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
-import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
+import {
+  INCOMPLETE_APPLICABLE_RECEIPT_STATUSES,
+  generateLaunchReadinessReportFromAggregate,
+} from "@/lib/launch-readiness"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 
@@ -28,30 +31,42 @@ export default async function LaunchReadinessPage() {
     )
   }
 
-  const [groups, completedScanCount, evaluatedCoverageCount] = await Promise.all([
-    prisma.finding.groupBy({
-      by: ["severity", "status", "verified"],
-      where: { workspaceId, deletedAt: null },
-      _count: { _all: true },
-    }),
-    prisma.scan.count({
-      where: { workspaceId, status: "COMPLETED", deletedAt: null },
-    }),
-    withWorkspaceRLS(workspaceId, (tx) =>
-      tx.scanCoverageReceipt.count({
-        where: {
-          status: "COMPLETED",
-          scan: { workspaceId, status: "COMPLETED", deletedAt: null },
-        },
-      })
-    ),
-  ])
+  const [groups, completedScanCount, evaluatedCoverageCount, unresolvedCoverageCount] =
+    await Promise.all([
+      prisma.finding.groupBy({
+        by: ["severity", "status", "verified"],
+        where: { workspaceId, deletedAt: null },
+        _count: { _all: true },
+      }),
+      prisma.scan.count({
+        where: { workspaceId, status: "COMPLETED", deletedAt: null },
+      }),
+      withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scanCoverageReceipt.count({
+          where: {
+            status: "COMPLETED",
+            scan: { workspaceId, status: "COMPLETED", deletedAt: null },
+          },
+        })
+      ),
+      // Applicable controls that did not complete — a scope-limited assessment
+      // must not render as a clean 100/100 GO.
+      withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scanCoverageReceipt.count({
+          where: {
+            status: { in: [...INCOMPLETE_APPLICABLE_RECEIPT_STATUSES] },
+            scan: { workspaceId, status: "COMPLETED", deletedAt: null },
+          },
+        })
+      ),
+    ])
 
   const initialReport = generateLaunchReadinessReportFromAggregate(
     groups.map((g) => ({ ...g, count: g._count._all })),
     completedScanCount > 0,
     {
       evaluated: evaluatedCoverageCount > 0,
+      unresolvedControls: unresolvedCoverageCount,
       reason:
         "No scanner successfully evaluated this target. Open the latest run's coverage notice for the specific reason.",
     }
