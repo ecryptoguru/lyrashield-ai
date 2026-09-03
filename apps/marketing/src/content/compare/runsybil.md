@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs RunSybil — Release Assurance vs AI-Native Black-Box Offensive Testing"
+title: "LyraShield vs RunSybil — release assurance compared"
 description: "How LyraShield AI compares to RunSybil for AI black-box pentest. Evidence model, verification approach, coverage framework, and deployment model differences."
 competitor: "Runsybil"
 heading: "LyraShield AI vs Runsybil"

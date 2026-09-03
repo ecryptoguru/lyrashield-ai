@@ -38,6 +38,29 @@ export interface MotionMediaManifest {
   chapters: readonly EvidenceWorldChapter[]
 }
 
+/**
+ * Descriptive alt text for each chapter's poster frames. The posters are
+ * abstract 3D artwork, not product UI, so the descriptions say what the
+ * frame actually shows and which story chapter it belongs to. Keyed by
+ * chapter id so a poster can never drift from its chapter copy.
+ */
+export const CHAPTER_POSTER_ALT: Readonly<Record<EvidenceChapterId, string>> = {
+  gateway:
+    "Abstract 3D artwork for the opening chapter: a glowing cyan sphere on a pedestal with a white rail looping through dark pillars on a deep teal background.",
+  target:
+    "Abstract 3D artwork for the target chapter: a glowing faceted orb connected by white cables to a row of colored panels and a dark console.",
+  scan:
+    "Abstract 3D artwork for the review chapter: glowing pale-blue arches framing four colored panels beneath a floating console in a dark void.",
+  "evidence-state":
+    "Abstract 3D artwork for the evidence chapter: four vertical panels in slate, mint, yellow and rose connected by a light beam to a dark console.",
+  "fix-proposal":
+    "Abstract 3D artwork for the fix chapter: a pale-yellow card with curled tabs layered over dark panels, with a cyan ribbon extending off-screen.",
+  retest:
+    "Abstract 3D artwork for the retest chapter: cyan and green orbital rings circling a dark core, with a light beam rising into a console showing data bars.",
+  report:
+    "Abstract 3D artwork for the report chapter: a dark floating console panel with colored indicator bars and a pale-blue beam extending downward.",
+}
+
 const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "portraitPoster">> = [
   {
     id: "gateway",

@@ -2,6 +2,7 @@
 import Base from "@layouts/Base.astro"
 import PremiumHero from "@components/landing/PremiumHero.astro"
 import HeroProductFrame from "@components/landing/HeroProductFrame.astro"
+import ProblemStats from "@components/landing/ProblemStats.astro"
 import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
 import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
 import EvidenceVaultPromo from "@components/landing/EvidenceVaultPromo.astro"
@@ -11,15 +12,18 @@ import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
 import { tools } from "../lib/tools"
+import { buildDateFor } from "../lib/build-date"
 
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = new URL("/", siteOrigin).toString()
+const buildDate =
+  buildDateFor("src/pages/index.astro", "src/components/landing/") ?? undefined
 const renderHash = import.meta.env.PUBLIC_MOTION_RENDER_HASH as string
 const mediaUrl = renderHash === "local" ? "/media-local" : import.meta.env.PUBLIC_MEDIA_URL
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
 
 const description =
-  "Ship AI-built apps with evidence, not hope: one record of what you checked, fixed, and retested before release. Open beta."
+  "Review the code your agents wrote and the tools your app exposes to agents. Get one shareable release record before you ship. Open beta, no card needed."
 
 const faqItems = [
   {
@@ -65,7 +69,7 @@ const jsonLd = [
     description,
     url: pageUrl,
     inLanguage: "en-US",
-    dateModified: "2026-08-15",
+    ...(buildDate ? { dateModified: buildDate } : {}),
     isPartOf: { "@id": `${siteOrigin}/#website` },
     about: { "@id": `${pageUrl}#application` },
     mainEntity: { "@id": `${pageUrl}#faq` },
@@ -99,12 +103,19 @@ const jsonLd = [
 ---
 
 <Base
-  title="LyraShield AI — Ship AI-built apps with evidence, not hope"
+  title="LyraShield AI — The launch gate for AI-built apps"
   description={description}
   canonical={pageUrl}
   jsonLd={jsonLd}
 >
   <PremiumHero />
+  <p class="mx-auto max-w-7xl px-4 pt-8 text-lg leading-8 text-text-muted sm:px-6 lg:px-8">
+    LyraShield is a release-assurance platform for apps built with AI coding agents. You point it
+    at an authorized repository, URL or API and it returns one record: what was in scope, what it
+    found, what state of proof each finding carries, which fixes you approved and what a fresh
+    retest confirmed. It also reviews the tools your app exposes back to AI agents.
+  </p>
+  <ProblemStats />
   <HeroProductFrame />
   <div id="how-it-works" aria-hidden="true" style="scroll-margin-top: 4.5rem"></div>
   <div class="cinematic-threshold cinematic-threshold--to-dark" aria-hidden="true"></div>

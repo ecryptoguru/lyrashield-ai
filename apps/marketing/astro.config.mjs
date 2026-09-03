@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs"
+import { execSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { dirname, extname, relative } from "node:path"
 import { defineConfig, envField } from "astro/config"
@@ -25,7 +26,9 @@ function wranglerVar(name) {
 // Real freshness signals only. Every sitemap entry previously carried just <loc>, so with
 // 100+ posts crawlers had nothing to prioritise on. lastmod is emitted only where an actual
 // date exists — stamping build time on every URL would claim the whole site changed on each
-// deploy, which is worse than saying nothing.
+// deploy, which is worse than saying nothing. The git layer inside contentLastmod() applies
+// the same rule to non-blog routes: the last commit that touched a page's source, and
+// nothing at all when no real date can be derived.
 function contentLastmod() {
   const map = new Map()
 
@@ -110,6 +113,97 @@ function contentLastmod() {
     }
   } catch {}
 
+  // Git layer: for routes with a resolvable source file, the last commit that
+  // touched that file is the page's real freshness signal. Only fills entries
+  // the content layers above did not already set with a more specific date.
+  // URLs whose source cannot be mapped to a file are deliberately left
+  // without lastmod — see the comment above contentLastmod().
+  const appRoot = fileURLToPath(new URL(".", import.meta.url))
+  const gitDate = (...paths) => {
+    try {
+      const output = execSync(
+        `git log -1 --format=%cI -- ${paths.map((p) => JSON.stringify(p)).join(" ")}`,
+        { cwd: appRoot, stdio: ["ignore", "pipe", "ignore"], timeout: 10_000 }
+      )
+        .toString()
+        .trim()
+      const date = output ? new Date(output) : undefined
+      return date && !Number.isNaN(date.valueOf()) ? date : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const setIfAbsent = (pathname, ...paths) => {
+    if (map.has(pathname)) return
+    const date = gitDate(...paths)
+    if (date) map.set(pathname, date)
+  }
+
+  // Static top-level pages: one .astro source each.
+  for (const page of [
+    "about",
+    "agents",
+    "ai-safety",
+    "evidence-vault",
+    "methodology",
+    "pricing",
+    "privacy",
+    "research",
+    "scan",
+    "security-reporting",
+    "support",
+    "vibe-security-50",
+  ]) {
+    setIfAbsent(`/${page}`, `src/pages/${page}.astro`)
+  }
+  // Homepage: the landing components carry most of its content.
+  setIfAbsent("/", "src/pages/index.astro", "src/components/landing/")
+  // Blog hub: index template plus the content collection it renders.
+  setIfAbsent("/blog", "src/pages/blog/[...page].astro", "src/content/blog/")
+  // Blog pagination pages are generated from the same sources, so their
+  // freshness equals the collection's, not a per-URL commit.
+  const blogDate = map.get("/blog")
+  if (blogDate) {
+    for (let n = 2; n <= 40; n++) {
+      const key = `/blog/${n}`
+      if (!map.has(key)) map.set(key, blogDate)
+    }
+  }
+  // Tag archive routes: template plus collection plus category registry.
+  for (const tag of [
+    "access-control",
+    "agent-security",
+    "supply-chain",
+    "verification",
+    "vibe-coding-security",
+    "web-security",
+  ]) {
+    setIfAbsent(
+      `/blog/tags/${tag}`,
+      "src/pages/blog/tags/[tag].astro",
+      "src/content/blog/",
+      "src/lib/blog-categories.ts"
+    )
+  }
+  // Compare hub and children: program manifest, collection, template.
+  setIfAbsent(
+    "/compare",
+    "src/pages/compare/index.astro",
+    "src/content/compare-program.json",
+    "src/components/ComparisonPricingLadder.astro",
+    "../../packages/pricing/src/plans.ts"
+  )
+  for (const entry of readdirSync(new URL("./src/content/compare/", import.meta.url))) {
+    if (!/\.mdx?$/.test(entry)) continue
+    setIfAbsent(
+      `/compare/${entry.replace(/\.mdx?$/, "")}`,
+      `src/content/compare/${entry}`,
+      "src/pages/compare/[slug].astro"
+    )
+  }
+  // Editorial policy page.
+  setIfAbsent("/blog/editorial-policy", "src/pages/blog/editorial-policy.astro")
+
   return map
 }
 
@@ -189,7 +283,9 @@ export default defineConfig({
       serialize: (item) => {
         const pathname = new URL(item.url).pathname.replace(/\/$/, "")
         const lastmod = LASTMOD.get(pathname)
-        return lastmod ? { ...item, lastmod: lastmod.toISOString() } : item
+        return lastmod
+          ? { ...item, lastmod: lastmod.toISOString().slice(0, 10) }
+          : item
       },
     }),
   ],

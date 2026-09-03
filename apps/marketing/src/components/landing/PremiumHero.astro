@@ -12,7 +12,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       src={premiumHeroJpeg.src}
       width={premiumHeroJpeg.width}
       height={premiumHeroJpeg.height}
-      alt=""
+      alt="Abstract 3D scene of glowing cyan rails and geometric shapes on a dark navy background, behind the LyraShield hero headline"
       loading="eager"
       fetchpriority="high"
       decoding="async"
@@ -41,10 +41,17 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       >
         Create account
       </a>
-      <a class="premium-hero__secondary" href="#free-scan" data-cta-id="premium-hero-lite-check">
-        Run Lite Check
-      </a>
     </div>
+    <p class="premium-hero__trial-note">
+      No card needed. The trial includes 100 agent-minutes, enough for a full review of one repo
+      or live URL.
+    </p>
+    <a
+      class="premium-hero__lite-link"
+      href="#free-scan" data-cta-id="premium-hero-lite-check"
+    >
+      Or try the free Lite Check first — no account needed
+    </a>
     <a
       class="premium-hero__agent-link"
       href="/agents"
@@ -224,6 +231,29 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     gap: 1.5rem;
     color: #edf6fb;
     background: rgba(8, 17, 28, 0.62);
+  }
+
+  .premium-hero__trial-note {
+    margin: 0.7rem 0 0;
+    color: #b8c9d6;
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+
+  .premium-hero__lite-link {
+    display: inline-flex;
+    margin-top: 0.55rem;
+    color: var(--hero-cyan);
+    font-size: 0.85rem;
+    font-weight: 650;
+    text-decoration: underline;
+    text-decoration-color: rgba(84, 214, 223, 0.45);
+    text-underline-offset: 0.3rem;
+  }
+
+  .premium-hero__lite-link:hover,
+  .premium-hero__lite-link:focus-visible {
+    color: #edf6fb;
   }
 
   .premium-hero__agent-link {
@@ -510,6 +540,15 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   :global(:root[data-theme="light"]) .premium-hero__secondary {
     color: #102235;
     background: rgba(255, 255, 255, 0.82);
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__trial-note {
+    color: #3c5568;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__lite-link:hover,
+  :global(:root[data-theme="light"]) .premium-hero__lite-link:focus-visible {
+    color: #102235;
   }
 
   :global(:root[data-theme="light"]) .premium-hero__artifact-card {

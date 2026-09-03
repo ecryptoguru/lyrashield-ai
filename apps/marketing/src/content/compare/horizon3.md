@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs Horizon3 NodeZero — Release Assurance vs Autonomous Production Pentest"
+title: "LyraShield vs Horizon3 NodeZero — compared"
 description: "How LyraShield AI compares to Horizon3.ai for autonomous infra pentest. Approach, evidence model, coverage framework, and deployment model differences."
 competitor: "Horizon3.ai"
 heading: "LyraShield AI vs Horizon3.ai"

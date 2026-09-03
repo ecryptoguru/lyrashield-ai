@@ -14,7 +14,11 @@ export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
 const { page } = Astro.props
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL(page.currentPage === 1 ? "/blog" : page.url.current, origin).toString()
+// Paginated pages 2+ share the index's description with a page suffix, which
+// reads as near-duplicate content to crawlers. Canonical to /blog and keep the
+// pages crawlable via noindex, follow so internal links still resolve.
+const isPaginationPage = page.currentPage > 1
+const canonical = new URL("/blog", origin).toString()
 const title =
   page.currentPage === 1
     ? "AI App Security Resources | LyraShield AI"
@@ -39,7 +43,7 @@ const jsonLd = [
 ]
 ---
 
-<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd} noindex={isPaginationPage}>
   <section class="blog-index">
     <header class="blog-index__hero">
       <div>

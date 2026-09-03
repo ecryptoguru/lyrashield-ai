@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs Semgrep — Release Assurance vs Pattern-Based Scanning"
+title: "LyraShield vs Semgrep — release assurance compared"
 description: "How LyraShield AI compares to Semgrep for AI-built application security. Evidence states, coverage framework, MCP integration, and custom rules differences."
 competitor: "Semgrep"
 heading: "LyraShield AI vs Semgrep"

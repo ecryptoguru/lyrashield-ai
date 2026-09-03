@@ -1,12 +1,17 @@
 ---
 import Base from "@layouts/Base.astro"
 import { agentOnboarding } from "../lib/agent-onboarding"
+import { buildDateFor } from "../lib/build-date"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/agents", origin).toString()
 const pageUrl = canonical
-const title = "LyraShield AI for Coding Agents — MCP Setup & Approval-Gated Tools"
+const title = "LyraShield AI for coding agents — MCP and agent tools"
 const description = agentOnboarding.description
+const buildDate = buildDateFor("src/pages/agents.astro", "src/lib/agent-onboarding.ts")
+
+const answerFirst =
+  "LyraShield runs as an MCP server inside 26 coding agents including Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro. The agent can request a review of an authorized target and read the findings back with their evidence state. Every fix proposal is approval-gated, so nothing reaches your repository without your explicit review. Setup is one command: npx lyrashield init."
 
 const howToSteps = [
   {
@@ -46,7 +51,7 @@ const jsonLd = [
     headline: title,
     description,
     url: pageUrl,
-    dateModified: "2026-08-15",
+    ...(buildDate ? { dateModified: buildDate } : {}),
     author: { "@id": `${origin}/#organization` },
     publisher: { "@id": `${origin}/#organization` },
     inLanguage: "en-US",
@@ -59,6 +64,29 @@ const jsonLd = [
       "Start with OAuth, then run the Agent Plugin installer. Read-only tools are available after authentication; mutations need a write scope and human out-of-band approval.",
     step: howToSteps,
     totalTime: "PT2M",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title,
+    description,
+    url: pageUrl,
+    ...(buildDate ? { dateModified: buildDate } : {}),
+    isPartOf: { "@id": `${origin}/#website` },
+    about: { "@id": `${origin}/#application` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "@id": `${pageUrl}#application`,
+    name: "LyraShield AI",
+    applicationCategory: "SecurityApplication",
+    operatingSystem: "Web",
+    description,
+    url: pageUrl,
+    provider: { "@id": `${origin}/#organization` },
+    isPartOf: { "@id": `${origin}/#website` },
   },
 ]
 ---
@@ -76,7 +104,7 @@ const jsonLd = [
         Release assurance your coding agent can act on.
       </h1>
       <p class="mt-5 max-w-2xl text-lg leading-8 text-text-muted" data-reveal>
-        {description}
+        {answerFirst}
       </p>
       <a
         href="/docs/integrations/agent-plugins"

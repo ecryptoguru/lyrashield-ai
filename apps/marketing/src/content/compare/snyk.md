@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs Snyk — Release Assurance vs Vulnerability Scanning"
+title: "LyraShield vs Snyk — release assurance compared"
 description: "How LyraShield AI compares to Snyk for AI-built application security. Evidence states, retest workflows, coverage framework, and deployment model differences."
 competitor: "Snyk"
 heading: "LyraShield AI vs Snyk"

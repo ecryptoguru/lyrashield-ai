@@ -68,7 +68,9 @@ describe("marketing SEO metadata", () => {
     expect(home).toContain('"@id": `${pageUrl}#application`')
     expect(home).toContain('"@id": `${pageUrl}#faq`')
     expect(home).toContain('inLanguage: "en-US"')
-    expect(methodology).toContain('dateModified: "2026-07-29"')
+    // Methodology's dateModified is derived from git at build time
+    // (src/lib/build-date.ts), not a hardcoded literal.
+    expect(methodology).toContain('import { buildDateFor } from "../lib/build-date"')
     // The 43/7 split is derived from the same control registry
     // vibe-security-50.astro builds its own counts from, not a hardcoded
     // literal here — hardcoding it as separate prose would let this file

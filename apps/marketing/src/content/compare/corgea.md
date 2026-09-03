@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs Corgea — Release Assurance vs AI AppSec with Pentest"
+title: "LyraShield vs Corgea — release assurance compared"
 description: "How LyraShield AI compares to Corgea for LLM-core SAST and auto-fix. Evidence states, retest workflows, coverage framework, and approval-gated fix differences."
 competitor: "Corgea"
 heading: "LyraShield AI vs Corgea"
