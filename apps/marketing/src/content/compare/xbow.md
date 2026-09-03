@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs XBOW — Release Assurance vs Autonomous Exploit Validation"
+title: "LyraShield vs XBOW — compared"
 description: "How LyraShield AI compares to XBOW for autonomous web-app pentest. Evidence states, coverage framework, deterministic retest, and deployment model differences."
 competitor: "XBOW"
 heading: "LyraShield AI vs XBOW"

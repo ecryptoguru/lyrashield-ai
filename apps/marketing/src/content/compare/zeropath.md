@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs ZeroPath — Release Assurance vs AI-Native AppSec Scanning"
+title: "LyraShield vs ZeroPath — release assurance compared"
 description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto-fix. Evidence states, deterministic retest, coverage framework, and deployment model."
 competitor: "ZeroPath"
 heading: "LyraShield AI vs ZeroPath"

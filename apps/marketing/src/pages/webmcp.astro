@@ -19,9 +19,12 @@ const controls = [...WEBMCP_CONTROLS].sort(
   (a, b) => severityOrder[a.severity] - severityOrder[b.severity]
 )
 const controlCount = controls.length
-const title = `WebMCP Assurance — Definition, Risks, and ${controlCount} Security Controls`
+const title = "WebMCP Assurance — risks and 14 security controls"
 const description =
   `What WebMCP is, why browser-native agent tools need review, the ${controlCount} WebMCP assurance controls, and how to check your source locally before release.`
+
+const answerFirst =
+  "WebMCP is an emerging browser protocol that lets a web page expose tools an AI agent can call directly, through registerTool or declarative form attributes. If a tool's annotation does not match what it actually does, an agent can trigger a durable change believing it is read-only, send data to an unexpected origin or skip a confirmation step. LyraShield checks 14 published controls against your source, in your browser."
 
 const faq = [
   {
@@ -74,7 +77,7 @@ const jsonLd = [
       "@type": "ListItem",
       position: index + 1,
       name: control.id,
-      description: control.title,
+      description: `${control.description} What to do: ${control.remediationTemplate}`,
       url: `${canonical}#${control.id.toLowerCase()}`,
     })),
   },
@@ -103,7 +106,7 @@ const jsonLd = [
     <header data-reveal-group>
       <p class="font-mono text-xs font-semibold uppercase tracking-[.18em] text-accent" data-reveal>WebMCP Assurance</p>
       <h1 class="mt-3 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>{title}</h1>
-      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>{description}</p>
+      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>{answerFirst}</p>
       <div class="mt-8 flex flex-wrap gap-3" data-reveal>
         <a href={checkerUrl} class="lift inline-flex min-h-12 items-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open the free WebMCP Security Checker</a>
         <a href={`${appUrl}/sign-up?source=webmcp`} class="lift inline-flex min-h-12 items-center rounded-lg border border-border bg-bg-raised px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free LyraShield AI account</a>
@@ -135,13 +138,41 @@ const jsonLd = [
 
     <section class="mt-16" data-reveal="scale">
       <div class="mb-6 flex items-center justify-between gap-3">
-        <h2 class="text-2xl font-semibold text-text">The {controlCount} WebMCP controls</h2>
+        <h2 class="text-2xl font-semibold text-text">The {controlCount} WebMCP controls at a glance</h2>
         <a href={controlsUrl} class="text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Machine-readable registry</a>
       </div>
       <p class="leading-7 text-text-muted">Each control has a stable ID, severity, and evidence state. A result is a signal for review, not a claim that the condition is exploitable. The registry is versioned as {WEBMCP_DETECTOR_VERSION}.</p>
+      <div class="mt-6 overflow-x-auto rounded-xl border border-border bg-bg-raised">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-border">
+              <th scope="col" class="px-4 py-3 font-semibold text-text">Control ID</th>
+              <th scope="col" class="px-4 py-3 font-semibold text-text">What it catches</th>
+              <th scope="col" class="px-4 py-3 font-semibold text-text">What to do</th>
+            </tr>
+          </thead>
+          <tbody>
+            {controls.map((control) => (
+              <tr id={control.id.toLowerCase()} class="border-b border-border last:border-b-0 align-top">
+                <td class="px-4 py-3">
+                  <span class="font-mono font-semibold text-text">{control.id}</span>
+                  <span class="mt-1 block text-xs text-text-muted">{control.severity}</span>
+                </td>
+                <td class="px-4 py-3 leading-6 text-text-muted">{control.description}</td>
+                <td class="px-4 py-3 leading-6 text-text-muted">{control.remediationTemplate}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mt-16" data-reveal="scale">
+      <h2 class="text-2xl font-semibold text-text">Control detail</h2>
+      <p class="mt-4 leading-7 text-text-muted">The full definition of each control, including the negative evidence that closes it and the false-positive notes that bound it.</p>
       <div class="mt-6 divide-y divide-border rounded-xl border border-border bg-bg-raised">
         {controls.map((control) => (
-          <article id={control.id.toLowerCase()} class="p-4" data-reveal>
+          <article id={`${control.id.toLowerCase()}-detail`} class="p-4" data-reveal>
             <div class="flex items-start justify-between gap-3">
               <h3 class="text-lg font-semibold text-text">{control.id} · {control.title}</h3>
               <span class="rounded border border-border bg-bg px-2 py-0.5 text-xs font-semibold text-text-muted">{control.severity}</span>

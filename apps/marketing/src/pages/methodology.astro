@@ -1,10 +1,12 @@
 ---
 import Base from "@layouts/Base.astro"
 import ProductShot from "@components/ProductShot.astro"
+import { buildDateFor } from "../lib/build-date"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/methodology", origin).toString()
 const title = "AI app security evidence methodology | LyraShield AI"
+const buildDate = buildDateFor("src/pages/methodology.astro")
 const description =
   "How LyraShield AI records authorized scan scope, coverage, finding evidence, independent verification, retest outcomes, and every known limitation."
 const evidenceStates = [
@@ -50,7 +52,7 @@ const jsonLd = [
     name: "LyraShield AI security evidence methodology",
     description,
     url: canonical,
-    dateModified: "2026-07-29",
+    ...(buildDate ? { dateModified: buildDate } : {}),
     reviewedBy: { "@id": `${origin}/#organization` },
     isPartOf: { "@id": `${origin}/#website` },
     about: [
@@ -106,7 +108,11 @@ const jsonLd = [
         A security result should say what it knows—and what it does not.
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        LyraShield AI preserves scope, coverage, evidence provenance, and retest state as separate facts. It does not turn scanner confidence or missing evidence into a universal security verdict.
+        An evidence state records how strongly a security finding is supported. LyraShield uses
+        four. Detected candidate means a scanner saw a signal. Independently verified means a
+        separate receipt supports it. Retest-confirmed means a server-owned retest found the
+        condition absent after a fix. Inconclusive means the evidence cannot establish the
+        condition is gone. These are never blended into a single score.
       </p>
       <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
         <p class="font-semibold text-text">TL;DR</p>

@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs Mobb — Release Assurance vs SAST-Result Remediation"
+title: "LyraShield vs Mobb — release assurance compared"
 description: "How LyraShield AI compares to Mobb for remediation-first auto-fix. Evidence states, coverage framework, approval-gated fixes, and deployment model differences."
 competitor: "Mobb"
 heading: "LyraShield AI vs Mobb"

@@ -1,8 +1,10 @@
 ---
 import Base from "@layouts/Base.astro"
+import { buildDateFor } from "../lib/build-date"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/terms", origin).toString()
 const abuseEmail = (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || ""
+const buildDate = buildDateFor("src/pages/terms.astro")
 const description =
   "Read the authorization, passive-use, privacy, result-limit, and abuse-reporting terms for LyraShield AI's free public security tools."
 const jsonLd = [
@@ -12,7 +14,7 @@ const jsonLd = [
     name: "LyraShield AI free tools terms and acceptable use",
     description,
     url: canonical,
-    dateModified: "2026-07-16",
+    ...(buildDate ? { dateModified: buildDate } : {}),
     isPartOf: { "@id": `${origin}/#website` },
   },
   {

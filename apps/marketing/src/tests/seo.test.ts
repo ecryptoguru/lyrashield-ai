@@ -68,7 +68,9 @@ describe("marketing SEO metadata", () => {
     expect(home).toContain('"@id": `${pageUrl}#application`')
     expect(home).toContain('"@id": `${pageUrl}#faq`')
     expect(home).toContain('inLanguage: "en-US"')
-    expect(methodology).toContain('dateModified: "2026-07-29"')
+    // Methodology's dateModified is derived from git at build time
+    // (src/lib/build-date.ts), not a hardcoded literal.
+    expect(methodology).toContain('import { buildDateFor } from "../lib/build-date"')
     // The 43/7 split is derived from the same control registry
     // vibe-security-50.astro builds its own counts from, not a hardcoded
     // literal here — hardcoding it as separate prose would let this file
@@ -232,7 +234,7 @@ describe("marketing SEO metadata", () => {
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
     expect(source("../components/landing/FinalCta.astro")).toContain('href="/methodology"')
     expect(scanner).toContain(
-      'const title = "Free AI App Security Check — Passive URL Scan | LyraShield AI"'
+      'const title = "Free AI app security check — URL scan | LyraShield AI"'
     )
     expect(scanner).toContain(
       'const description = "Run a free, passive URL security check for AI-built apps.'

@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs GitHub Advanced Security — Release Assurance vs Code Scanning"
+title: "LyraShield vs GitHub Advanced Security — compared"
 description: "How LyraShield AI compares to GitHub Advanced Security (GHAS). Evidence states, coverage framework, MCP integration, and deployment model differences."
 competitor: "GitHub Advanced Security"
 heading: "LyraShield AI vs GitHub Advanced Security"

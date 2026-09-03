@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs Pixee — Release Assurance vs Downstream Triage and Fixing"
+title: "LyraShield vs Pixee — release assurance compared"
 description: "How LyraShield AI compares to Pixee for remediation-first security layers. Approach, evidence states, approval-gated fixes, and coverage framework differences."
 competitor: "Pixee"
 heading: "LyraShield AI vs Pixee"

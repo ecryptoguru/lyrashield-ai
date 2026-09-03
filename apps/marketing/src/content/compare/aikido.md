@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs Aikido — Release Assurance vs Unified Code-to-Runtime AppSec"
+title: "LyraShield vs Aikido — release assurance compared"
 description: "How LyraShield AI compares to Aikido for developer-centric CI/CD security. Approach, evidence states, coverage framework, and deployment model differences."
 competitor: "Aikido"
 heading: "LyraShield AI vs Aikido"

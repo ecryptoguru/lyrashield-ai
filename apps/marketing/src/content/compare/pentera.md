@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs Pentera — Release Assurance vs Automated Security Validation"
+title: "LyraShield vs Pentera — release assurance compared"
 description: "How LyraShield AI compares to Pentera for enterprise security validation. Approach, evidence states, retest workflows, and deployment model differences."
 competitor: "Pentera"
 heading: "LyraShield AI vs Pentera"

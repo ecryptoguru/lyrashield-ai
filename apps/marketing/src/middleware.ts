@@ -8,7 +8,7 @@ const SECURITY_HEADERS = {
   "Permissions-Policy":
     "tools=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=()",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
 } as const
@@ -21,6 +21,7 @@ const PERMANENT_REDIRECTS: Record<string, string> = {
   "/resources": "/blog",
   "/how-it-works": "/#how-it-works",
   "/docs/integrations/windsurf": "/docs/integrations/devin",
+  "/sitemap.xml": "/sitemap-index.xml",
 }
 
 export const onRequest = defineMiddleware(async ({ url }, next) => {

@@ -1,5 +1,6 @@
 ---
 import type { MotionMediaManifest } from "../../lib/motion-manifest"
+import { CHAPTER_POSTER_ALT } from "../../lib/motion-manifest"
 
 interface Props {
   manifest: MotionMediaManifest
@@ -15,7 +16,7 @@ const { manifest } = Astro.props
         manifest.chapters.map((chapter, index) => (
           <picture class:list={["evidence-world__poster", { "is-active": index === 0 }]} data-poster-index={index}>
             <source media="(max-width: 767px)" srcset={chapter.portraitPoster} />
-            <img src={chapter.desktopPoster} data-poster-chapter={chapter.id} alt="" width="1600" height="900" loading={index === 0 ? "eager" : "lazy"} decoding="async" />
+            <img src={chapter.desktopPoster} data-poster-chapter={chapter.id} alt={CHAPTER_POSTER_ALT[chapter.id]} width="1600" height="900" loading={index === 0 ? "eager" : "lazy"} decoding="async" />
           </picture>
         ))
       }

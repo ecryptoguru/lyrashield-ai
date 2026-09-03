@@ -1,5 +1,5 @@
 ---
-title: "LyraShield AI vs SonarQube — Release Assurance vs Code Quality Analysis"
+title: "LyraShield vs SonarQube — release assurance compared"
 description: "How LyraShield AI compares to SonarQube for AI-built application security. Evidence states, coverage framework, and quality gate differences."
 competitor: "SonarQube"
 heading: "LyraShield AI vs SonarQube"
