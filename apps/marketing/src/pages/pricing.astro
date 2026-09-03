@@ -102,10 +102,10 @@ const appUrl =
   <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
     <!-- Header -->
     <div class="text-center">
-      <h1 class="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
+      <h1 class="text-4xl font-bold tracking-tight text-text sm:text-5xl">
         Pricing
       </h1>
-      <p class="mt-4 text-lg text-gray-600 dark:text-gray-400">
+      <p class="mt-4 text-lg text-text-muted">
         Cloud subscriptions and local licenses. Start with a free trial — no credit card required.
       </p>
     </div>
@@ -113,21 +113,21 @@ const appUrl =
     <!-- Cloud / Local Toggle -->
     <div class="mt-8 flex justify-center">
       <div
-        class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800"
+        class="inline-flex rounded-lg border border-border bg-bg-raised p-1"
         role="group"
         aria-label="Product mode"
       >
         <button
           id="tab-cloud"
           aria-pressed="true"
-          class="rounded-md px-4 py-2 text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+          class="rounded-md px-4 py-2 text-sm font-medium transition-colors bg-bg text-text shadow-sm"
         >
           Cloud
         </button>
         <button
           id="tab-local"
           aria-pressed="false"
-          class="rounded-md px-4 py-2 text-sm font-medium transition-colors text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          class="rounded-md px-4 py-2 text-sm font-medium transition-colors text-text-muted hover:text-text"
         >
           Local
         </button>
@@ -139,38 +139,38 @@ const appUrl =
       <!-- Currency + Billing Toggle -->
       <div class="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center sm:gap-8">
         <div
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800"
+          class="inline-flex rounded-lg border border-border bg-bg-raised p-1"
           role="group"
           aria-label="Currency"
         >
           <button
             id="cur-usd"
             aria-pressed="true"
-            class="currency-btn rounded-md px-3 py-1.5 text-sm font-medium bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+            class="currency-btn rounded-md px-3 py-1.5 text-sm font-medium bg-bg text-text shadow-sm"
             >USD</button
           >
           <button
             id="cur-inr"
             aria-pressed="false"
-            class="currency-btn rounded-md px-3 py-1.5 text-sm font-medium text-gray-500 dark:text-gray-400"
+            class="currency-btn rounded-md px-3 py-1.5 text-sm font-medium text-text-muted"
             >INR</button
           >
         </div>
         <div
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800"
+          class="inline-flex rounded-lg border border-border bg-bg-raised p-1"
           role="group"
           aria-label="Billing interval"
         >
           <button
             id="int-monthly"
             aria-pressed="true"
-            class="interval-btn rounded-md px-3 py-1.5 text-sm font-medium bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+            class="interval-btn rounded-md px-3 py-1.5 text-sm font-medium bg-bg text-text shadow-sm"
             >Monthly</button
           >
           <button
             id="int-annual"
             aria-pressed="false"
-            class="interval-btn rounded-md px-3 py-1.5 text-sm font-medium text-gray-500 dark:text-gray-400"
+            class="interval-btn rounded-md px-3 py-1.5 text-sm font-medium text-text-muted"
             >Annual</button
           >
         </div>
@@ -180,52 +180,52 @@ const appUrl =
       <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
         {
           cloudPlans.map((plan) => (
-            <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{plan.name}</h3>
-              <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">{tierIntents[plan.id]}</p>
+            <div class="rounded-xl border border-border bg-bg-raised p-6 shadow-sm">
+              <h3 class="text-lg font-semibold text-text">{plan.name}</h3>
+              <p class="mt-2 text-sm text-text-muted">{tierIntents[plan.id]}</p>
               <div class="mt-4">
                 <span
-                  class="price-usd-monthly price text-3xl font-bold text-gray-900 dark:text-white"
+                  class="price-usd-monthly price text-3xl font-bold text-text"
                   data-monthly={plan.price.usd.monthly}
                   data-annual={plan.price.usd.annual}
                 >
                   ${plan.price.usd.monthly}
                 </span>
-                <span class="price-usd-monthly text-sm text-gray-500 dark:text-gray-400">/mo</span>
+                <span class="price-usd-monthly text-sm text-text-muted">/mo</span>
                 <span
-                  class="price-usd-annual hidden text-3xl font-bold text-gray-900 dark:text-white"
+                  class="price-usd-annual hidden text-3xl font-bold text-text"
                   data-monthly={plan.price.usd.monthly}
                   data-annual={plan.price.usd.annual}
                 >
                   ${plan.price.usd.annual}
                 </span>
-                <span class="price-usd-annual hidden text-sm text-gray-500 dark:text-gray-400">
+                <span class="price-usd-annual hidden text-sm text-text-muted">
                   /yr
                 </span>
-                <span class="price-inr-monthly hidden text-3xl font-bold text-gray-900 dark:text-white">
+                <span class="price-inr-monthly hidden text-3xl font-bold text-text">
                   ₹{plan.price.inr.monthly.toLocaleString("en-IN")}
                 </span>
-                <span class="price-inr-monthly hidden text-sm text-gray-500 dark:text-gray-400">
+                <span class="price-inr-monthly hidden text-sm text-text-muted">
                   /mo
                 </span>
-                <span class="price-inr-annual hidden text-3xl font-bold text-gray-900 dark:text-white">
+                <span class="price-inr-annual hidden text-3xl font-bold text-text">
                   ₹{plan.price.inr.annual.toLocaleString("en-IN")}
                 </span>
-                <span class="price-inr-annual hidden text-sm text-gray-500 dark:text-gray-400">
+                <span class="price-inr-annual hidden text-sm text-text-muted">
                   /yr
                 </span>
               </div>
-              <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              <p class="mt-2 text-sm text-text-muted">
                 {plan.agentMinutes.toLocaleString()} agent-minutes / month
               </p>
               {plan.deepAllowed && (
-                <p class="mt-1 text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                <p class="mt-1 text-sm font-medium text-accent">
                   Deep / Custom scans enabled
                 </p>
               )}
               <ul class="mt-4 space-y-2">
                 {plan.features.map((feature) => (
-                  <li class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <li class="flex items-start gap-2 text-sm text-text-muted">
                     <svg
                       class="h-4 w-4 flex-shrink-0 text-green-500"
                       fill="none"
@@ -241,7 +241,7 @@ const appUrl =
               </ul>
               <a
                 href={`${appUrl}/sign-up?plan=${plan.id}`}
-                class="mt-6 block w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+                class="mt-6 block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg hover:bg-accent/90 transition-colors"
               >
                 Start with {plan.name}
               </a>
@@ -252,21 +252,21 @@ const appUrl =
 
       <!-- Minute Packs Section -->
       <div class="mt-16">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Minute Packs</h2>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <h2 class="text-2xl font-bold text-text">Minute Packs</h2>
+        <p class="mt-2 text-sm text-text-muted">
           Add prepaid agent-minutes to any plan. Packs are valid for 6 months and are consumed after
           your monthly pool.
         </p>
         <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {
             minutePacks.map((pack) => (
-              <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-                <h3 class="font-semibold text-gray-900 dark:text-white">{pack.name}</h3>
-                <p class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+              <div class="rounded-lg border border-border bg-bg-raised p-4">
+                <h3 class="font-semibold text-text">{pack.name}</h3>
+                <p class="mt-2 text-2xl font-bold text-text">
                   USD ${pack.priceUsd}
                 </p>
-                <p class="text-sm text-gray-600 dark:text-gray-400">{pack.minutes} agent-minutes</p>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-500">Valid for 6 months</p>
+                <p class="text-sm text-text-muted">{pack.minutes} agent-minutes</p>
+                <p class="mt-1 text-xs text-text-muted">Valid for 6 months</p>
               </div>
             ))
           }
@@ -275,31 +275,31 @@ const appUrl =
 
       <!-- Enterprise Contact-Led -->
       <div
-        class="mt-12 rounded-xl border border-gray-200 bg-gray-50 p-8 dark:border-gray-700 dark:bg-gray-800/50"
+        class="mt-12 rounded-xl border border-border bg-bg-raised p-8"
       >
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Enterprise</h2>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">{tierIntents.ENTERPRISE}</p>
+        <h2 class="text-2xl font-bold text-text">Enterprise</h2>
+        <p class="mt-2 text-sm text-text-muted">{tierIntents.ENTERPRISE}</p>
         <p class="mt-3">
-          <span class="price-usd-monthly text-2xl font-bold text-gray-900 dark:text-white"
+          <span class="price-usd-monthly text-2xl font-bold text-text"
             >From ${enterprisePlan.price.usd.monthly.toLocaleString("en-US")}/mo</span
           >
-          <span class="price-usd-annual hidden text-2xl font-bold text-gray-900 dark:text-white"
+          <span class="price-usd-annual hidden text-2xl font-bold text-text"
             >From ${enterprisePlan.price.usd.monthly.toLocaleString("en-US")}/mo</span
           >
-          <span class="price-inr-monthly hidden text-2xl font-bold text-gray-900 dark:text-white"
+          <span class="price-inr-monthly hidden text-2xl font-bold text-text"
             >From ₹{enterprisePlan.price.inr.monthly.toLocaleString("en-IN")}/mo</span
           >
-          <span class="price-inr-annual hidden text-2xl font-bold text-gray-900 dark:text-white"
+          <span class="price-inr-annual hidden text-2xl font-bold text-text"
             >From ₹{enterprisePlan.price.inr.monthly.toLocaleString("en-IN")}/mo</span
           >
         </p>
-        <p class="mt-2 text-gray-600 dark:text-gray-400">
+        <p class="mt-2 text-text-muted">
           Custom agent-minute pools, custom target limits and dedicated support. SSO/SAML and
           multi-workspace management are on the roadmap.
         </p>
         <a
           href="/support"
-          class="mt-4 inline-block rounded-lg border border-indigo-600 px-6 py-2.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+          class="mt-4 inline-block rounded-lg border border-accent px-6 py-2.5 text-sm font-semibold text-accent hover:bg-accent-dim/40 transition-colors"
         >
           Contact Sales
         </a>
@@ -307,23 +307,23 @@ const appUrl =
 
       <!-- Trial CTA -->
       <div class="mt-12 text-center">
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+        <h2 class="text-xl font-semibold text-text">
           Not sure yet? Start with a free trial.
         </h2>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <p class="mt-2 text-sm text-text-muted">
           100 agent-minutes, up to 3 targets, 14 days. No credit card required.
         </p>
         <a
           href={`${appUrl}/sign-up`}
-          class="mt-4 inline-block rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+          class="mt-4 inline-block rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-bg hover:bg-accent/90 transition-colors"
         >
           Start Free Trial
         </a>
       </div>
 
       <!-- Free trial -->
-      <div class="mt-12 rounded-lg bg-green-50 p-4 text-center dark:bg-green-900/20">
-        <p class="text-sm text-green-800 dark:text-green-400">
+      <div class="mt-12 rounded-lg bg-accent-dim/30 p-4 text-center">
+        <p class="text-sm text-text-muted">
           Start with a 14-day free trial — no credit card required.
         </p>
       </div>
@@ -333,30 +333,30 @@ const appUrl =
     <div id="local-pricing" class="mt-12 hidden">
       <div class="mx-auto max-w-xl">
         <div
-          class="rounded-xl border border-indigo-200 bg-white p-6 shadow-sm dark:border-indigo-800 dark:bg-gray-800"
+          class="rounded-xl border border-accent/40 bg-bg-raised p-6 shadow-sm"
         >
           <p
-            class="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400"
+            class="text-xs font-semibold uppercase tracking-wider text-accent"
           >
             Launch offer
           </p>
-          <h3 class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">
+          <h3 class="mt-2 text-xl font-semibold text-text">
             {localLaunch.name}
           </h3>
-          <p class="mt-3 text-3xl font-bold text-gray-900 dark:text-white">
+          <p class="mt-3 text-3xl font-bold text-text">
             {formatUSD(localLaunch.priceUsd)}
-            <span class="text-base font-normal text-gray-500 dark:text-gray-400"> globally</span>
+            <span class="text-base font-normal text-text-muted"> globally</span>
           </p>
-          <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+          <p class="mt-1 text-lg font-semibold text-text">
             {formatINR(localLaunch.priceInr!)}
-            <span class="text-sm font-normal text-gray-500 dark:text-gray-400"
+            <span class="text-sm font-normal text-text-muted"
               >India, GST included</span
             >
           </p>
-          <p class="mt-3 text-sm text-gray-600 dark:text-gray-400">{localLaunch.description}</p>
+          <p class="mt-3 text-sm text-text-muted">{localLaunch.description}</p>
           <a
             href={`${appUrl}/buy/local`}
-            class="mt-6 block w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+            class="mt-6 block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg transition-colors hover:bg-accent/90"
           >
             Buy Local license
           </a>
@@ -365,9 +365,9 @@ const appUrl =
 
       <!-- Local notes -->
       <div class="mt-8 space-y-3">
-        <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-800/50">
-          <h3 class="font-medium text-gray-900 dark:text-white">Local License Details</h3>
-          <ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
+        <div class="rounded-lg bg-bg-raised p-4">
+          <h3 class="font-medium text-text">Local License Details</h3>
+          <ul class="mt-2 space-y-1 text-sm text-text-muted">
             <li>• 3-machine activation limit per seat</li>
             <li>• Perpetual use with 1 year of updates</li>
             <li>
@@ -381,16 +381,16 @@ const appUrl =
 
     <!-- Agent-minute definition -->
     <div
-      class="mt-16 rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+      class="mt-16 rounded-xl border border-border bg-bg-raised p-6"
     >
-      <h2 class="text-xl font-bold text-gray-900 dark:text-white">What is an agent-minute?</h2>
-      <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+      <h2 class="text-xl font-bold text-text">What is an agent-minute?</h2>
+      <p class="mt-2 text-sm text-text-muted">
         An agent-minute is a unit of wall-clock time — the real elapsed time from when a scan phase
         starts to when it ends, measured on the server clock. It is not "active-loop time" or
         "thinking time"; it includes all processing, network I/O and model calls within that phase.
         Deep and Custom scans consume agent-minutes at 3× the standard rate.
       </p>
-      <p class="mt-3 text-sm text-gray-600 dark:text-gray-400">
+      <p class="mt-3 text-sm text-text-muted">
         Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for
         Launch Assurance plans with a spend limit configured. Minute packs are valid for 6 months
         from purchase.
@@ -399,19 +399,19 @@ const appUrl =
 
     <!-- Pricing FAQ -->
     <section aria-labelledby="pricing-faq-heading" class="mt-16">
-      <h2 id="pricing-faq-heading" class="text-2xl font-bold text-gray-900 dark:text-white">
+      <h2 id="pricing-faq-heading" class="text-2xl font-bold text-text">
         Pricing questions
       </h2>
       <div
-        class="mt-6 divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white dark:divide-gray-700 dark:border-gray-700 dark:bg-gray-800"
+        class="mt-6 divide-y divide-border rounded-xl border border-border bg-bg-raised"
       >
         {
           pricingFaqs.map((item) => (
             <details class="p-5">
-              <summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">
+              <summary class="cursor-pointer font-semibold text-text">
                 {item.q}
               </summary>
-              <p class="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">{item.a}</p>
+              <p class="mt-3 text-sm leading-6 text-text-muted">{item.a}</p>
             </details>
           ))
         }
@@ -431,40 +431,32 @@ const appUrl =
       tabLocal?.setAttribute("aria-pressed", String(active === "local"))
       if (active === "cloud") {
         tabCloud?.classList.add(
-          "bg-white",
-          "text-gray-900",
-          "shadow-sm",
-          "dark:bg-gray-700",
-          "dark:text-white"
+          "bg-bg",
+          "text-text",
+          "shadow-sm"
         )
-        tabCloud?.classList.remove("text-gray-500", "dark:text-gray-400")
+        tabCloud?.classList.remove("text-text-muted")
         tabLocal?.classList.remove(
-          "bg-white",
-          "text-gray-900",
-          "shadow-sm",
-          "dark:bg-gray-700",
-          "dark:text-white"
+          "bg-bg",
+          "text-text",
+          "shadow-sm"
         )
-        tabLocal?.classList.add("text-gray-500", "dark:text-gray-400")
+        tabLocal?.classList.add("text-text-muted")
         cloudPricing?.classList.remove("hidden")
         localPricing?.classList.add("hidden")
       } else {
         tabLocal?.classList.add(
-          "bg-white",
-          "text-gray-900",
-          "shadow-sm",
-          "dark:bg-gray-700",
-          "dark:text-white"
+          "bg-bg",
+          "text-text",
+          "shadow-sm"
         )
-        tabLocal?.classList.remove("text-gray-500", "dark:text-gray-400")
+        tabLocal?.classList.remove("text-text-muted")
         tabCloud?.classList.remove(
-          "bg-white",
-          "text-gray-900",
-          "shadow-sm",
-          "dark:bg-gray-700",
-          "dark:text-white"
+          "bg-bg",
+          "text-text",
+          "shadow-sm"
         )
-        tabCloud?.classList.add("text-gray-500", "dark:text-gray-400")
+        tabCloud?.classList.add("text-text-muted")
         localPricing?.classList.remove("hidden")
         cloudPricing?.classList.add("hidden")
       }
@@ -503,23 +495,19 @@ const appUrl =
       // Update button styles
       ;[curUsd, curInr].forEach((btn) => {
         btn?.classList.remove(
-          "bg-white",
-          "text-gray-900",
-          "shadow-sm",
-          "dark:bg-gray-700",
-          "dark:text-white"
+          "bg-bg",
+          "text-text",
+          "shadow-sm"
         )
-        btn?.classList.add("text-gray-500", "dark:text-gray-400")
+        btn?.classList.add("text-text-muted")
       })
       ;[intMonthly, intAnnual].forEach((btn) => {
         btn?.classList.remove(
-          "bg-white",
-          "text-gray-900",
-          "shadow-sm",
-          "dark:bg-gray-700",
-          "dark:text-white"
+          "bg-bg",
+          "text-text",
+          "shadow-sm"
         )
-        btn?.classList.add("text-gray-500", "dark:text-gray-400")
+        btn?.classList.add("text-text-muted")
       })
 
       const activeCur = currency === "usd" ? curUsd : curInr
@@ -528,22 +516,10 @@ const appUrl =
       curInr?.setAttribute("aria-pressed", String(currency === "inr"))
       intMonthly?.setAttribute("aria-pressed", String(interval === "monthly"))
       intAnnual?.setAttribute("aria-pressed", String(interval === "annual"))
-      activeCur?.classList.add(
-        "bg-white",
-        "text-gray-900",
-        "shadow-sm",
-        "dark:bg-gray-700",
-        "dark:text-white"
-      )
-      activeCur?.classList.remove("text-gray-500", "dark:text-gray-400")
-      activeInt?.classList.add(
-        "bg-white",
-        "text-gray-900",
-        "shadow-sm",
-        "dark:bg-gray-700",
-        "dark:text-white"
-      )
-      activeInt?.classList.remove("text-gray-500", "dark:text-gray-400")
+      activeCur?.classList.add("bg-bg", "text-text", "shadow-sm")
+      activeCur?.classList.remove("text-text-muted")
+      activeInt?.classList.add("bg-bg", "text-text", "shadow-sm")
+      activeInt?.classList.remove("text-text-muted")
     }
 
     let currentCurrency: Currency = "usd"
