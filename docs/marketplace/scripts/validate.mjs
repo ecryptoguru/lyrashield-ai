@@ -309,13 +309,20 @@ for (const setting of [undefined, "", "  ", " demo-credential "]) {
     )
   } else {
     assert(!("LYRASHIELD_API_KEY" in env), "Empty credentials must not block stored OAuth")
-    assert(!("LYRASHIELD_API_URL" in env), "Stored OAuth must retain its stored issuer")
+    assert(
+      env.LYRASHIELD_API_URL === "http://untrusted.invalid",
+      "Stored OAuth must preserve an explicit API URL override"
+    )
   }
 }
 const codebuff = await readFile(path.join(root, "codebuff/lyrashield-review.ts"), "utf8")
 assert(
   !codebuff.includes("run_terminal_command"),
   "Read-only Codebuff agent must not run shell commands"
+)
+assert(
+  codebuff.includes("env: apiKey ? { LYRASHIELD_API_KEY: apiKey } : {}"),
+  "Codebuff must omit an absent API key so stored OAuth remains available"
 )
 for (const file of [
   "skills/lyrashield/SKILL.md",
