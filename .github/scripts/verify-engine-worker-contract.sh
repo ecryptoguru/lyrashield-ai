@@ -20,8 +20,10 @@ if ! git -C "$app_checkout" merge-base --is-ancestor "$reviewed_app_sha" HEAD; t
   echo "Current app does not descend from engine-reviewed consumer $reviewed_app_sha." >&2
   exit 2
 fi
-if [[ -n "$(git -C "$app_checkout" status --porcelain --untracked-files=no)" ]]; then
+tracked_changes="$(git -C "$app_checkout" status --porcelain --untracked-files=no)"
+if [[ -n "$tracked_changes" ]]; then
   echo "Worker-consumer checkout has tracked modifications." >&2
+  echo "$tracked_changes" >&2
   exit 2
 fi
 
