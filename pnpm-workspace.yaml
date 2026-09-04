@@ -54,6 +54,23 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   workerd: true
+# pnpm 12: keep the CI toolchain literal. globalShims (default on in pnpm 12)
+# would make a globally installed node follow the version pinned by whatever
+# project the working directory is in — unwelcome on CI agents that run one
+# fixed Node toolchain provisioned by pnpm/setup + actions/setup-node.
+globalShims: false
+
+# pnpm 12 records the packageManager pin in pnpm-lock.yaml
+# (packageManagerDependencies env document) on every command and enforces it
+# on frozen installs. Version enforcement for CI is already handled by the
+# pnpm/setup action, which installs exactly the packageManager pin — so the
+# in-lockfile recording is redundant here. It dirties the tree on any
+# pnpm invocation (breaking the engine-worker contract job's cleanliness
+# check) and fails frozen installs until the lockfile is regenerated. Turn
+# the in-pnpm enforcement off; the packageManager field still pins the
+# version for every tool that reads it (pnpm/setup, corepack, dev machines).
+pmOnFail: ignore
+
 minimumReleaseAge: 7
 minimumReleaseAgeExclude:
   - "@turbo/darwin-64@2.10.3"
