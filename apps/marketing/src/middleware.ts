@@ -24,17 +24,13 @@ const PERMANENT_REDIRECTS: Record<string, string> = {
   "/sitemap.xml": "/sitemap-index.xml",
 }
 
-// Trailing-slash canonicalisation. wrangler.jsonc sets
-// assets.run_worker_first to true, so EVERY request reaches this middleware
-// before the asset layer — the platform's drop-trailing-slash
-// canonicalisation (a 307 Temporary Redirect, which is what /pricing/
-// used to return) never gets a chance to run for these paths. Every
-// canonical URL on this site is slash-less, so any request whose path
-// ends in "/" (except the homepage itself) is redirected here with a
-// permanent 301. /index.html requests are canonicalised the same way.
-// Non-redirect requests flow through the adapter handler unchanged,
-// which serves prerendered pages via env.ASSETS.fetch — that binding
-// still applies html_handling internally, so page routing is untouched.
+// NOTE: trailing-slash and /index.html canonicalisation for prerendered
+// pages lives in public/_redirects (the Workers asset-layer routing
+// rules), NOT here — Astro middleware never runs for statically rendered
+// pages and the worker's matchStaticAsset short-circuits the pipeline for
+// them. This middleware handles the SSR API routes: the permanent
+// redirects below and the security headers for every response that does
+// flow through Astro's pipeline.
 export const onRequest = defineMiddleware(async ({ url }, next) => {
   const redirectTarget = PERMANENT_REDIRECTS[url.pathname]
   if (redirectTarget) {
@@ -46,33 +42,6 @@ export const onRequest = defineMiddleware(async ({ url }, next) => {
         "X-Robots-Tag": "noindex",
       },
     })
-  }
-
-  // Trailing-slash and index.html canonicalisation (301). Must run before
-  // next() so it wins over any remaining asset-layer behavior. Query and
-  // hash are preserved (hash never reaches the server; query is reattached).
-  const pathname = url.pathname
-  const hasTrailingSlash = pathname.length > 1 && pathname.endsWith("/")
-  const isIndexHtml = pathname.length > 1 && /\/index\.html$/.test(pathname)
-  if (hasTrailingSlash || isIndexHtml) {
-    let canonicalPath = pathname
-    if (isIndexHtml) {
-      // /pricing/index.html -> /pricing ; /blog/index.html -> /blog
-      canonicalPath = pathname.replace(/\/index\.html$/, "")
-    }
-    canonicalPath = canonicalPath.replace(/\/+$/, "")
-    if (canonicalPath === "") canonicalPath = "/"
-    if (canonicalPath !== pathname) {
-      const location = canonicalPath + url.search
-      return new Response(null, {
-        status: 301,
-        headers: {
-          Location: location,
-          "Cache-Control": "public, max-age=31536000",
-          "X-Robots-Tag": "noindex",
-        },
-      })
-    }
   }
 
   const response = await next()

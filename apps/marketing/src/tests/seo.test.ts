@@ -151,14 +151,17 @@ describe("marketing SEO metadata", () => {
       vars: { PUBLIC_SITE_URL: string; PUBLIC_APP_URL: string; PUBLIC_INDEXABLE: string }
     }>(wranglerConfig)
 
-    // run_worker_first: true — every request reaches the Worker middleware
-    // before the asset layer, so trailing-slash and /index.html paths get
-    // middleware 301s instead of the platform layer's 307 (the
-    // drop-trailing-slash default below still governs env.ASSETS.fetch
-    // inside the adapter, so page routing is unchanged). The status: 301
-    // assertion below covers the middleware canonicalisation.
-    expect(wranglerConfig).toContain('"run_worker_first": true')
+    // Trailing-slash 301s for prerendered pages are asset-layer _redirects
+    // rules (asserted below) — the one layer that sees asset-served requests.
+    // The platform's drop-trailing-slash 307 only fires for requests that
+    // fall through rule matching, so an explicit rule wins. Astro middleware
+    // and src/fetch.ts cannot do this: Astro skips middleware for statically
+    // rendered routes. The worker's matchStaticAsset short-circuits the
+    // pipeline for prerendered pages.
     expect(wranglerConfig).toContain('"html_handling": "drop-trailing-slash"')
+    expect(wranglerConfig).not.toContain("run_worker_first")
+    expect(redirects).toContain("/pricing/ /pricing 301")
+    expect(redirects).toContain("/blog/ /blog 301")
     expect(parsed.vars.PUBLIC_SITE_URL).toBe("https://lyrashieldai.com")
     expect(parsed.vars.PUBLIC_APP_URL).toBe("https://app.lyrashieldai.com")
     expect(parsed.vars.PUBLIC_INDEXABLE).toBe("true")
