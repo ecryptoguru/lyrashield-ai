@@ -364,6 +364,14 @@ jobs:
         if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm --filter @lyrashield/marketing compare:validate
 
+      - name: Validate redirects coverage
+        # Drift guard for the asset-layer trailing-slash 301s (PR #592
+        # architecture): every prerendered route must carry an explicit
+        # _redirects rule or its slash variant silently falls back to the
+        # platform 307. Runs the same enumeration the e2e suite asserts.
+        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        run: pnpm --filter @lyrashield/marketing validate-redirects
+
       - name: Test affected suites
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         env:
