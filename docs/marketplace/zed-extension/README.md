@@ -27,11 +27,11 @@ For CI or an environment that cannot complete OAuth, add an API key under
 }
 ```
 
-Stored OAuth uses the credential store's API URL. Inherited URL and credential overrides are
-removed before MCP starts. An explicit API key uses `https://app.lyrashieldai.com` only.
+Stored OAuth preserves an explicit `LYRASHIELD_API_URL` override. Inherited credential overrides
+are removed before MCP starts. An explicit API key uses `https://app.lyrashieldai.com` only.
 
-Published MCP 0.2.4 refreshes expired OAuth tokens before startup and atomically persists rotated
-credentials. Run `lyrashield login --oauth` again only if refresh fails or access is revoked.
+Published MCP 0.2.4 refreshes expired stored OAuth credentials before the stdio server starts,
+including with an explicit API URL override.
 
 See `configuration/installation_instructions.md` for full setup and troubleshooting.
 

@@ -5,9 +5,9 @@ credential store. Add the `gemini-cli-extension` topic to the public repository 
 publishing a release tag, as required by the Gemini CLI gallery.
 
 Run `lyrashield login --oauth` first, and leave the extension API-key setting empty to use
-that local credential store. The launcher removes inherited URL and credential overrides,
-preserving the stored OAuth issuer. An optional explicit extension API key uses
+that local credential store. The launcher removes inherited credential overrides while preserving
+`LYRASHIELD_API_URL`; an optional explicit extension API key uses
 `https://app.lyrashieldai.com` only.
 
-Published MCP 0.2.4 refreshes expired OAuth tokens before startup and atomically persists rotated
-credentials. Log in again only if refresh fails or access is revoked.
+Published MCP 0.2.4 refreshes expired stored OAuth credentials before the stdio server starts,
+including with an explicit API URL override.
