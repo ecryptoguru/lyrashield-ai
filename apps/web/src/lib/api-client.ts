@@ -58,10 +58,43 @@ async function request<T>(url: string, options: FetchOptions<T> = {}): Promise<T
     else init.signal.addEventListener("abort", onParentAbort, { once: true })
   }
 
-  let res: Response
   try {
-    res = await fetch(url, { ...init, signal: controller.signal })
+    const res = await fetch(url, { ...init, signal: controller.signal })
+
+    if (!parseJson) {
+      if (!res.ok) {
+        throw new ApiError("HTTP_ERROR", `Request failed with status ${res.status}`, res.status)
+      }
+      return undefined as T
+    }
+
+    let json: ApiResponse<T>
+    try {
+      json = await res.json()
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") throw err
+      throw new ApiError(
+        "PARSE_ERROR",
+        `Failed to parse response (status ${res.status})`,
+        res.status
+      )
+    }
+
+    if (!json.success) {
+      const code = json.error?.code ?? "UNKNOWN_ERROR"
+      const message = json.error?.message ?? "An unknown error occurred"
+      const err = new ApiError(code, message, res.status)
+      err.details = json.error?.details
+      throw err
+    }
+
+    if (schema) {
+      return parseWithSchema(json.data, schema, res.status)
+    }
+
+    return json.data as T
   } catch (err) {
+    if (err instanceof ApiError) throw err
     if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
       if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)
       throw new ApiError("TIMEOUT", `Request timed out after ${requestTimeoutMs}ms`, 0)
@@ -69,38 +102,8 @@ async function request<T>(url: string, options: FetchOptions<T> = {}): Promise<T
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)
   } finally {
     clearTimeout(timeoutId)
-    if (init.signal) {
-      init.signal.removeEventListener("abort", onParentAbort)
-    }
+    init.signal?.removeEventListener("abort", onParentAbort)
   }
-
-  if (!parseJson) {
-    if (!res.ok) {
-      throw new ApiError("HTTP_ERROR", `Request failed with status ${res.status}`, res.status)
-    }
-    return undefined as T
-  }
-
-  let json: ApiResponse<T>
-  try {
-    json = await res.json()
-  } catch {
-    throw new ApiError("PARSE_ERROR", `Failed to parse response (status ${res.status})`, res.status)
-  }
-
-  if (!json.success) {
-    const code = json.error?.code ?? "UNKNOWN_ERROR"
-    const message = json.error?.message ?? "An unknown error occurred"
-    const err = new ApiError(code, message, res.status)
-    err.details = json.error?.details
-    throw err
-  }
-
-  if (schema) {
-    return parseWithSchema(json.data, schema, res.status)
-  }
-
-  return json.data as T
 }
 
 export async function apiGet<T>(url: string, options?: FetchOptions<T>): Promise<T> {
@@ -162,7 +165,8 @@ export async function apiGetConditional<T>(
     let json: ApiResponse<T>
     try {
       json = (await res.json()) as ApiResponse<T>
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") throw err
       throw new ApiError(
         "PARSE_ERROR",
         `Failed to parse response (status ${res.status})`,
