@@ -25,17 +25,16 @@ const PERMANENT_REDIRECTS: Record<string, string> = {
 }
 
 // Trailing-slash canonicalisation. wrangler.jsonc sets
-// assets.html_handling to "none" so the platform layer performs NO
-// built-in HTML handling (with the drop-trailing-slash default it
-// canonicalised with a 307, which is not cacheable as permanently moved).
-// Every canonical URL on this site is slash-less, so any request whose
-// path ends in "/" (except the homepage itself) is redirected here with a
-// permanent 301. This also covers direct asset-shaped requests
-// ("/pricing/index.html") that html_handling "none" would otherwise 404
-// per Cloudflare's docs table (workers-sdk#7422): with html_handling
-// disabled, folder index files only resolve via their exact
-// /folder/index.html form, which this canonicalisation redirects to the
-// page route the Astro app manifest serves.
+// assets.run_worker_first to true, so EVERY request reaches this middleware
+// before the asset layer — the platform's drop-trailing-slash
+// canonicalisation (a 307 Temporary Redirect, which is what /pricing/
+// used to return) never gets a chance to run for these paths. Every
+// canonical URL on this site is slash-less, so any request whose path
+// ends in "/" (except the homepage itself) is redirected here with a
+// permanent 301. /index.html requests are canonicalised the same way.
+// Non-redirect requests flow through the adapter handler unchanged,
+// which serves prerendered pages via env.ASSETS.fetch — that binding
+// still applies html_handling internally, so page routing is untouched.
 export const onRequest = defineMiddleware(async ({ url }, next) => {
   const redirectTarget = PERMANENT_REDIRECTS[url.pathname]
   if (redirectTarget) {
