@@ -58,21 +58,38 @@ jobs:
         # builds on infra blips. Real vulnerability findings still fail
         # immediately on every attempt — the retry only re-runs on the
         # registry-transport errors pnpm exits 1 with when the audit
-        # endpoint is unreachable.
+        # endpoint is unreachable. The exit code is captured INSIDE the
+        # else branch (an `if cmd; then` construct otherwise clobbers $?
+        # with the if's own status), and the exhausted loop falls through
+        # to a hard failure — a persistent outage can never fail open. The
+        # 5-attempt budget with growing backoff outlasts the npm incident
+        # windows seen on 2026-09-03/04 (three degraded-registry periods;
+        # the worst outlasted 3 attempts x 30s).
         run: |
-          for attempt in 1 2 3; do
-            echo "pnpm audit attempt ${attempt}/3"
+          code=1
+          attempt=1
+          max_attempts=5
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "pnpm audit attempt ${attempt}/${max_attempts}"
             if pnpm audit --audit-level=high --prod; then
               exit 0
+            else
+              code=$?
             fi
-            code=$?
-            if [ "$attempt" = "3" ]; then
-              echo "::error::pnpm audit failed on all 3 attempts (exit ${code})"
+            if [ "$attempt" = "$max_attempts" ]; then
+              echo "::error::pnpm audit failed on all ${max_attempts} attempts (exit ${code})"
               exit "$code"
             fi
-            echo "::warning::pnpm audit attempt ${attempt} failed (exit ${code}) — retrying in 30s"
-            sleep 30
+            # Backoff: 30s, 60s, 120s, 240s between attempts.
+            wait_seconds=$((30 * (1 << (attempt - 1))))
+            echo "::warning::pnpm audit attempt ${attempt} failed (exit ${code}) — retrying in ${wait_seconds}s"
+            sleep "$wait_seconds"
+            attempt=$((attempt + 1))
           done
+          # Unreachable in practice (the last attempt exits above);
+          # belt-and-braces so the step can never end green after a failed
+          # audit.
+          exit "$code"
 
       - name: Secret scan (gitleaks)
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
