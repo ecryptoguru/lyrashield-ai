@@ -1,10 +1,13 @@
 import { expect, test } from "@playwright/test"
 
-// Routing and freshness regression coverage for the run_worker_first routing
-// change (PR #591). Every canonical URL on this site is slash-less; the
-// middleware 301s trailing-slash and /index.html requests before the asset
-// layer. The platform's drop-trailing-slash 307 must never appear for
-// these paths. Pages must continue to serve 200 with the security headers
+// Routing and freshness regression coverage for the trailing-slash
+// canonicalisation work (PR #591 + follow-ups). Every canonical URL on this
+// site is slash-less. The 301s for prerendered pages are asset-layer
+// _redirects rules — the one layer that sees asset-served requests (Astro
+// middleware never runs for statically rendered routes. The worker's
+// matchStaticAsset short-circuits the pipeline for prerendered pages). The
+// platform's drop-trailing-slash 307 must never appear for paths with an
+// explicit rule. Pages must continue to serve 200 with the security headers
 // the middleware attaches. dateModified must be present on the pages whose
 // freshness is git-derived (the workerd execSync bug dropped it sitewide
 // once already).
@@ -51,12 +54,8 @@ test("trailing-slash URLs redirect 301 to the canonical slash-less URL", async (
 test("/index.html requests redirect 301 to the page route", async ({ page }) => {
   for (const path of ["/pricing/index.html", "/blog/index.html"]) {
     const res = await page.request.get(path, { maxRedirects: 0 })
-    // Canonical hygiene: the index.html form must never serve content directly.
-    // 301 = middleware or asset-layer canonicalisation fired.
-    expect([301, 308], `${path} must redirect, not serve`).toContain(res.status())
-    if (res.status() === 301) {
-      expect(res.headers()["location"]).toBe(path.replace(/\/index\.html$/, ""))
-    }
+    expect(res.status(), `${path} must be 301`).toBe(301)
+    expect(res.headers()["location"]).toBe(path.replace(/\/index\.html$/, ""))
   }
 })
 

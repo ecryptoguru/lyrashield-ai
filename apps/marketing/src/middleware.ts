@@ -24,12 +24,13 @@ const PERMANENT_REDIRECTS: Record<string, string> = {
   "/sitemap.xml": "/sitemap-index.xml",
 }
 
-// NOTE: trailing-slash and /index.html canonicalisation lives in
-// src/fetch.ts (the Astro 7 advanced-routing entrypoint), NOT here —
-// Astro middleware never runs for prerendered pages, so it cannot see
-// /pricing/ style requests. This middleware handles the SSR API routes:
-// the permanent redirects below and the security headers for every
-// response that does flow through Astro's pipeline.
+// NOTE: trailing-slash and /index.html canonicalisation for prerendered
+// pages lives in public/_redirects (the Workers asset-layer routing
+// rules), NOT here — Astro middleware never runs for statically rendered
+// pages and the worker's matchStaticAsset short-circuits the pipeline for
+// them. This middleware handles the SSR API routes: the permanent
+// redirects below and the security headers for every response that does
+// flow through Astro's pipeline.
 export const onRequest = defineMiddleware(async ({ url }, next) => {
   const redirectTarget = PERMANENT_REDIRECTS[url.pathname]
   if (redirectTarget) {
