@@ -1,4 +1,4 @@
-import { astro, type FetchState } from "astro/fetch"
+import { astro, FetchState } from "astro/fetch"
 
 /**
  * Advanced-routing entrypoint (Astro 7: enabled by default, src/fetch.ts is
