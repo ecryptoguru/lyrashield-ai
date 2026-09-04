@@ -54,6 +54,12 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   workerd: true
+# pnpm 12: keep the CI toolchain literal. globalShims (default on in pnpm 12)
+# would make a globally installed node follow the version pinned by whatever
+# project the working directory is in — unwelcome on CI agents that run one
+# fixed Node toolchain provisioned by pnpm/setup + actions/setup-node.
+globalShims: false
+
 minimumReleaseAge: 7
 minimumReleaseAgeExclude:
   - "@turbo/darwin-64@2.10.3"
