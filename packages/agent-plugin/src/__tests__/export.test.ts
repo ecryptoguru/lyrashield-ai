@@ -18,6 +18,21 @@ afterEach(async () => {
 })
 
 describe("exportMarketplace", () => {
+  it("does not let documented placeholders hide other credentials on the same line", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    const probe = path.join(output, "probe.txt")
+    await writeFile(probe, "Examples: <YOUR_API_KEY> lsk_… lsk_...\n")
+    await execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
+    for (const secret of ["lsk" + "_" + "A".repeat(24), "gh" + "p_" + "A".repeat(36)]) {
+      await writeFile(probe, `Example: <YOUR_API_KEY> lsk_… actual: ${secret}\n`)
+      await expect(
+        execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
+      ).rejects.toThrow(/detected at probe.txt:1/)
+    }
+  }, 15000)
+
   it("launches optional credentials through npm and embedded Zed preload without inherited overrides", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield extension "))
     outputs.push(output)

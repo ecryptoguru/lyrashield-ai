@@ -109,7 +109,6 @@ export class LyraShieldClient {
           signal: controller.signal,
         })
         lastStatus = res.status
-        clearTimeout(timeout)
 
         if (res.status === 304) {
           const etag = this.getHeader(res, "etag") ?? options?.etag ?? undefined
@@ -128,6 +127,8 @@ export class LyraShieldClient {
             : 2 ** attempt * RETRY_BASE_DELAY_MS
           const jitter = Math.random() * RETRY_BASE_DELAY_MS
           const delay = Math.min(baseDelay + jitter, MAX_RETRY_DELAY_MS)
+          clearTimeout(timeout)
+          await res.body?.cancel()
           await new Promise((resolve) => setTimeout(resolve, delay))
           continue
         }
@@ -159,7 +160,6 @@ export class LyraShieldClient {
 
         return (options?.parse ? options.parse(envelope.data) : envelope.data) as T
       } catch (err) {
-        clearTimeout(timeout)
         if (err instanceof LyraShieldError) throw err
         if (err instanceof Error && err.name === "AbortError") {
           throw new LyraShieldError({
@@ -183,6 +183,8 @@ export class LyraShieldClient {
           })
         }
         throw err
+      } finally {
+        clearTimeout(timeout)
       }
     }
 
@@ -224,6 +226,7 @@ export class LyraShieldClient {
     try {
       return await res.json()
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") throw err
       const message = err instanceof Error ? err.message : "Invalid JSON response"
       throw new SyntaxError(message)
     }
@@ -245,7 +248,8 @@ export class LyraShieldClient {
         if (parsed.data.error?.message) message = parsed.data.error.message
         if (parsed.data.error?.code) code = parsed.data.error.code
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") throw err
       // fall through
     }
     return { message, code }

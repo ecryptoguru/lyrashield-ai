@@ -71,7 +71,6 @@ const PRIVATE_KEY_PATTERN = /-----BEGIN (?:RSA )?PRIVATE KEY-----/
 const PEM_PATTERN = /-----BEGIN (?:CERTIFICATE|PRIVATE KEY|PUBLIC KEY)-----/
 const PROVIDER_TOKEN_PATTERN =
   /(?:ghp_|gho_|github_pat_|sk-[A-Za-z0-9]{20,}|sk_live_[A-Za-z0-9]{20,})/
-const PLACEHOLDER_PATTERN = /lsk_[….]|<YOUR_/
 async function scanSecrets(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (entry.name === ".git" || entry.name === "node_modules") continue
@@ -99,7 +98,6 @@ async function scanSecrets(dir) {
       if (!textish) continue
       const content = await readFile(full, "utf8")
       for (const [index, line] of content.split("\n").entries()) {
-        if (PLACEHOLDER_PATTERN.test(line)) continue
         const location = `${path.relative(root, full)}:${index + 1}`
         if (KEY_PATTERN.test(line))
           throw new Error(`real LyraShield API key detected at ${location}`)

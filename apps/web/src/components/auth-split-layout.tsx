@@ -15,7 +15,7 @@ const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashie
 )
 
 const PROOF_POINTS = [
-  "Verified findings, not scanner noise",
+  "Findings with clear verification states",
   "Approval-bound fixes — nothing merges without your sign-off",
   "Tamper-evident evidence record you can share",
 ] as const
@@ -49,9 +49,9 @@ export function AuthSplitLayout({
               Know what was tested before you ship.
             </h2>
             <p className="text-muted-foreground mt-3 max-w-md text-sm leading-relaxed">
-              Release assurance for AI-built apps. LyraShield scans your target, verifies the real
-              vulnerabilities, and stages approval-bound fixes — so you ship with evidence, not
-              hope.
+              Release assurance for AI-built apps. LyraShield scans your target, records findings
+              and their verification state, and stages approval-bound fixes to support your release
+              decision.
             </p>
           </div>
           <ul className="flex flex-col gap-3">

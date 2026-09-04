@@ -31,6 +31,39 @@ function mockResponse({
 }
 
 describe("LyraShieldClient", () => {
+  it.each([200, 400])(
+    "keeps the timeout active through a stalled %i response body",
+    async (status) => {
+      vi.useFakeTimers()
+      let signal: AbortSignal | undefined
+      const fetchFn = vi.fn(async (_url: unknown, init: RequestInit) => {
+        signal = init.signal as AbortSignal
+        return {
+          ...mockResponse({ status, ok: status === 200 }),
+          json: () =>
+            new Promise((_resolve, reject) => {
+              signal!.addEventListener(
+                "abort",
+                () => reject(new DOMException("Aborted", "AbortError")),
+                { once: true }
+              )
+            }),
+        }
+      })
+      try {
+        const client = new LyraShieldClient({ apiKey: "synthetic", fetchFn: makeFetch(fetchFn) })
+        const outcome = client.request("GET", "/workspaces").catch((error: unknown) => error)
+        await vi.advanceTimersByTimeAsync(30000)
+        expect(signal?.aborted).toBe(true)
+        expect(await outcome).toMatchObject({ code: "REQUEST_TIMEOUT" })
+        expect(fetchFn).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
+
   let mockFetch: ReturnType<typeof vi.fn>
   let client: LyraShieldClient
 

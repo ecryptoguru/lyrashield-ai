@@ -19,7 +19,7 @@
  * being re-implemented per package.
  */
 import { randomUUID } from "node:crypto"
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 
@@ -222,16 +222,16 @@ export async function readCredentialsFile(): Promise<StoredCredentials | undefin
 /** Persist shared CLI/MCP credentials atomically with user-only permissions. */
 export async function writeCredentialsFile(credentials: StoredCredentials): Promise<void> {
   await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 })
-  const temporary = `${CREDENTIALS_FILE}.tmp`
-  await writeFile(temporary, JSON.stringify(normalizeCredentials(credentials), null, 2), {
-    mode: 0o600,
-  })
+  const temporary = `${CREDENTIALS_FILE}.${randomUUID()}.tmp`
   try {
-    await chmod(temporary, 0o600)
-  } catch {
-    // Platforms without POSIX permissions still receive the atomic replacement.
+    await writeFile(temporary, JSON.stringify(normalizeCredentials(credentials), null, 2), {
+      mode: 0o600,
+      flag: "wx",
+    })
+    await rename(temporary, CREDENTIALS_FILE)
+  } finally {
+    await rm(temporary, { force: true })
   }
-  await rename(temporary, CREDENTIALS_FILE)
 }
 
 /**

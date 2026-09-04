@@ -20,15 +20,8 @@ if ! git -C "$app_checkout" merge-base --is-ancestor "$reviewed_app_sha" HEAD; t
   echo "Current app does not descend from engine-reviewed consumer $reviewed_app_sha." >&2
   exit 2
 fi
-# pnpm 12 records the resolved package-manager pin in pnpm-lock.yaml
-# (packageManagerDependencies env document) from EVERY pnpm command's
-# pre-command block — including the `pnpm --version` probe the pnpm/setup
-# action runs after installing pnpm. That setup-time sync legitimately
-# dirties the tracked lockfile before this script runs. The contract
-# verifies the COMMITTED consumer state, so restore tracked files to
-# HEAD first. Tool-setup mutations are not contract-relevant and the
-# contract install below runs after this check anyway.
-git -C "$app_checkout" restore --source=HEAD -- .
+# Verify the caller's committed tree without discarding local work. Tool setup
+# drift must be resolved explicitly before this check, never by restoring files.
 tracked_changes="$(git -C "$app_checkout" status --porcelain --untracked-files=no)"
 if [[ -n "$tracked_changes" ]]; then
   echo "Worker-consumer checkout has tracked modifications." >&2

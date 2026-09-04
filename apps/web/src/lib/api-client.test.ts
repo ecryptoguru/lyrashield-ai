@@ -28,6 +28,57 @@ function jsonResponse(data: unknown, success = true, status = 200) {
 }
 
 describe("api-client", () => {
+  it.each([apiGet, apiGetConditional])(
+    "times out while consuming a response body (%#)",
+    async (get) => {
+      vi.useFakeTimers()
+      let signal: AbortSignal | undefined
+      mockFetch.mockImplementation(async (_url, init) => {
+        signal = init.signal
+        return {
+          ...jsonResponse(null),
+          headers: new Headers(),
+          json: () =>
+            new Promise((_resolve, reject) => {
+              signal!.addEventListener(
+                "abort",
+                () => reject(new DOMException("Aborted", "AbortError")),
+                { once: true }
+              )
+            }),
+        }
+      })
+      try {
+        const outcome = get("/api/test", { timeout: 100 }).catch((error: unknown) => error)
+        await vi.advanceTimersByTimeAsync(100)
+        expect(signal?.aborted).toBe(true)
+        expect(await outcome).toMatchObject({ code: "TIMEOUT" })
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
+
+  it.each([apiGet, apiGetConditional])(
+    "preserves caller cancellation during response parsing (%#)",
+    async (get) => {
+      const controller = new AbortController()
+      mockFetch.mockImplementation(async (_url, init) => ({
+        ...jsonResponse(null),
+        headers: new Headers(),
+        json: async () => {
+          controller.abort()
+          expect(init.signal.aborted).toBe(true)
+          throw new DOMException("Aborted", "AbortError")
+        },
+      }))
+      await expect(get("/api/test", { signal: controller.signal })).rejects.toMatchObject({
+        code: "ABORTED",
+      })
+    }
+  )
+
   it("sends domain verification as a validated PUT through the shared request helper", async () => {
     mockFetch.mockResolvedValue(jsonResponse({ status: "VERIFIED" }))
     await expect(
