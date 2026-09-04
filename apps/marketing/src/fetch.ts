@@ -38,7 +38,7 @@ function canonicalise(pathname: string, search: string): string | undefined {
   return canonical + search
 }
 
-export default {
+const pipeline = {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
     const location = canonicalise(url.pathname, url.search)
@@ -51,3 +51,5 @@ export default {
     return astro(new FetchState(request))
   },
 }
+
+export default pipeline
