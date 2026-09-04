@@ -2,10 +2,28 @@ import { existsSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { parseJsonc } from "../lib/jsonc"
 import { tools } from "../lib/tools"
+import { allRoutes } from "../../scripts/redirects-lib.mjs"
 
 function source(path: string): string {
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   return readFileSync(new URL(path, import.meta.url), "utf8")
+}
+
+interface RedirectRule {
+  source: string
+  target: string
+  code: string
+}
+
+function parseRedirectRules(redirectsFile: string): RedirectRule[] {
+  const rules: RedirectRule[] = []
+  for (const line of redirectsFile.split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
+    const parts = trimmed.split(/\s+/)
+    if (parts.length >= 3) rules.push({ source: parts[0], target: parts[1], code: parts[2] })
+  }
+  return rules
 }
 
 describe("marketing SEO metadata", () => {
@@ -160,8 +178,27 @@ describe("marketing SEO metadata", () => {
     // pipeline for prerendered pages.
     expect(wranglerConfig).toContain('"html_handling": "drop-trailing-slash"')
     expect(wranglerConfig).not.toContain("run_worker_first")
-    expect(redirects).toContain("/pricing/ /pricing 301")
-    expect(redirects).toContain("/blog/ /blog 301")
+    // THE invariant, not spot-checks: every enumerated route carries a
+    // correct trailing-slash rule and no orphan rules exist. The route
+    // enumeration is the same scripts/redirects-lib.mjs the CI
+    // validate-redirects step and the --write regenerator use.
+    const redirectsRules = parseRedirectRules(redirects)
+    const ruleBySource = new Map(redirectsRules.map((rule) => [rule.source, rule]))
+    for (const route of allRoutes()) {
+      const rule = ruleBySource.get(`${route}/`)
+      expect(rule, `missing trailing-slash rule for ${route}/`).toBeDefined()
+      expect(rule?.target, `wrong target for ${route}/`).toBe(route)
+      expect(rule?.code, `wrong status for ${route}/`).toBe("301")
+    }
+    const routeSlashForms = new Set(allRoutes().map((route) => `${route}/`))
+    for (const rule of redirectsRules) {
+      if (rule.source.endsWith("/") && !rule.source.includes("index.html")) {
+        expect(
+          routeSlashForms.has(rule.source),
+          `orphan trailing-slash rule (no such route): ${rule.source}`
+        ).toBe(true)
+      }
+    }
     expect(parsed.vars.PUBLIC_SITE_URL).toBe("https://lyrashieldai.com")
     expect(parsed.vars.PUBLIC_APP_URL).toBe("https://app.lyrashieldai.com")
     expect(parsed.vars.PUBLIC_INDEXABLE).toBe("true")
