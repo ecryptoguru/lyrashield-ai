@@ -3,3 +3,24 @@
 /how-it-works /#how-it-works 301
 /docs/integrations/windsurf /docs/integrations/devin 301
 /sitemap.xml /sitemap-index.xml 301
+
+# Trailing-slash canonicalisation for prerendered pages. Astro's trailingSlash
+# config only redirects on-demand rendered routes; prerendered pages are the
+# hosting platform's job (Astro docs: "You cannot use Astro redirects for this
+# use case"). These explicit 301 rules run at the Workers static-assets layer.
+/pricing/ /pricing 301
+/webmcp/ /webmcp 301
+/agents/ /agents 301
+/methodology/ /methodology 301
+/about/ /about 301
+/tools/ /tools 301
+/blog/ /blog 301
+/scan/ /scan 301
+/compare/ /compare 301
+/research/ /research 301
+/privacy/ /privacy 301
+/support/ /support 301
+/ai-safety/ /ai-safety 301
+/evidence-vault/ /evidence-vault 301
+/vibe-security-50/ /vibe-security-50 301
+/security-reporting/ /security-reporting 301

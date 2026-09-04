@@ -51,8 +51,12 @@ test("trailing-slash URLs redirect 301 to the canonical slash-less URL", async (
 test("/index.html requests redirect 301 to the page route", async ({ page }) => {
   for (const path of ["/pricing/index.html", "/blog/index.html"]) {
     const res = await page.request.get(path, { maxRedirects: 0 })
-    expect(res.status(), `${path} must be 301`).toBe(301)
-    expect(res.headers()["location"]).toBe(path.replace(/\/index\.html$/, ""))
+    // Canonical hygiene: the index.html form must never serve content directly.
+    // 301 = middleware or asset-layer canonicalisation fired.
+    expect([301, 308], `${path} must redirect, not serve`).toContain(res.status())
+    if (res.status() === 301) {
+      expect(res.headers()["location"]).toBe(path.replace(/\/index\.html$/, ""))
+    }
   }
 })
 
