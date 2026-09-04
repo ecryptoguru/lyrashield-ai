@@ -33,7 +33,7 @@ describe("exportMarketplace", () => {
     }
   }, 15000)
 
-  it("launches optional credentials through npm and embedded Zed preload without inherited overrides", async () => {
+  it("preserves explicit API URL overrides for stored OAuth in npm and embedded Zed launchers", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield extension "))
     outputs.push(output)
     await exportMarketplace(output)
@@ -52,14 +52,14 @@ describe("exportMarketplace", () => {
       const env = {
         PATH: process.env.PATH,
         HOME: output,
-        LYRASHIELD_API_URL: "http://untrusted.invalid",
+        LYRASHIELD_API_URL: "https://override.example.test",
         LYRASHIELD_API_KEY: "inherited-credential",
         LYRASHIELD_OAUTH_ACCESS_TOKEN: "inherited-token",
         ...(setting === undefined ? {} : { LYRASHIELD_EXTENSION_CRED: setting }),
       }
       const expected = setting?.trim()
         ? { key: "demo-credential", url: "https://app.lyrashieldai.com" }
-        : {}
+        : { url: "https://override.example.test" }
       // npm's own Node option forwarding and paths with spaces are part of the
       // Gemini launch contract. This uses the installed Node, with no download.
       const geminiResult = await execFileAsync(
