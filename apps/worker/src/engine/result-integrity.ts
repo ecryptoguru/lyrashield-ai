@@ -28,6 +28,7 @@ type ResultManifestInput = {
   webMcpCoverage?: WebMcpCoverageReceipt | null
   matchedControlRanks?: number[]
   urlExecution?: UrlExecutionSummary
+  sourceExecution?: { kind: "deterministic_retest"; sourceRevision: string }
   engineExecution?: {
     model?: string
     reasoningEffort?: string
@@ -65,7 +66,7 @@ type ResultManifestInput = {
 
 type FindingInput = EngineVulnerability | NormalizedFinding
 
-const MANIFEST_VERSION = 6
+const MANIFEST_VERSION = 7
 const SCANNER_CONTRACT_VERSION = "2026-08-29"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
@@ -108,6 +109,8 @@ function checksum(value: unknown): string {
 function receiptIdentityCoverageIssues(input: ResultManifestInput): ScannerCoverageIssue[] {
   if (
     input.target.type !== "REPO" ||
+    (input.sourceExecution?.kind === "deterministic_retest" &&
+      /^[a-f0-9]{40}$/i.test(input.sourceExecution.sourceRevision)) ||
     input.coverageIssues.some((issue) => issue.scanner === "engine")
   ) {
     return []
@@ -189,7 +192,14 @@ function scannerStatus(
 
 export function buildCoverageReceipts(input: ResultManifestInput) {
   const repositoryTarget = input.target.type === "REPO"
-  const engineStatus = scannerStatus("engine", repositoryTarget, input.coverageIssues)
+  const engineStatus =
+    input.sourceExecution?.kind === "deterministic_retest"
+      ? {
+          status: "NOT_APPLICABLE" as const,
+          reason: "Model analysis was intentionally outside this deterministic retest scope.",
+          metadata: { outcome: "NOT_ASSESSED" },
+        }
+      : scannerStatus("engine", repositoryTarget, input.coverageIssues)
   const urlStatus = scannerStatus("url", Boolean(input.target.url), input.coverageIssues)
   const familyReceipts: FamilyReceipt[] = [
     {
@@ -349,6 +359,7 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     scannerContractVersion: SCANNER_CONTRACT_VERSION,
     urlExecution: input.urlExecution ?? null,
     engineExecution: input.engineExecution ?? null,
+    sourceExecution: input.sourceExecution ?? null,
     accounting: input.accounting ?? null,
     // Exact product/image/engine identity of the worker that produced this
     // result. Bound into the checksum so a manifest cannot be re-attributed.
@@ -554,9 +565,10 @@ function storedManifestIdentity(
   if (!manifest) return null
   const raw = manifest.manifest as {
     engineExecution?: { sourceRevision?: unknown } | null
+    sourceExecution?: { sourceRevision?: unknown } | null
     target?: { urlChecksum?: unknown } | null
   }
-  const sourceRevision = raw.engineExecution?.sourceRevision
+  const sourceRevision = raw.sourceExecution?.sourceRevision ?? raw.engineExecution?.sourceRevision
   const targetUrlChecksum = raw.target?.urlChecksum
   return {
     scanId,
@@ -766,8 +778,16 @@ export async function completeRetestsForScan(params: {
         baselineIdentity?.manifestChecksum !== undefined &&
         retestIdentity?.manifestChecksum !== undefined
 
+      const terminalReceiptsComplete = [baselineManifest, retestManifest].every((stored) => {
+        const receipt = stored?.manifest as { terminalOutcome?: { status?: string } } | undefined
+        return receipt?.terminalOutcome?.status === "COMPLETED"
+      })
       const canValidate =
-        identityValid && coverageComplete && revisionIdentityValid && urlIdentityValid
+        identityValid &&
+        coverageComplete &&
+        revisionIdentityValid &&
+        urlIdentityValid &&
+        terminalReceiptsComplete
 
       if (canValidate) {
         const reason =
@@ -835,6 +855,8 @@ export async function completeRetestsForScan(params: {
       if (!revisionIdentityValid) missingParts.push("exact repository revision identity")
       if (!urlIdentityValid) missingParts.push("URL identity checksum")
       if (!coverageComplete) missingParts.push("complete originating-scanner coverage")
+      if (!terminalReceiptsComplete)
+        missingParts.push("completed baseline and retest terminal receipts")
       const reason = `The finding was not detected, but validation evidence is incomplete: ${missingParts.join(", ")}.`
       const idempotencyKey = checksum({
         retestId: retest.id,

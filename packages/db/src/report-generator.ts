@@ -872,7 +872,7 @@ export function generateReportHTML(data: ReportData): string {
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;">
             ${f.verified ? "✅ Verified" : `⚠️ ${escapeHtml((f.verificationStatus ?? "DETECTED").replaceAll("_", " "))}`}<br>
-            <span style="color:#6b7280;">${escapeHtml(f.confidence)}</span>
+            <span style="color:#6b7280;">${escapeHtml(f.confidence)} evidence strength (heuristic; not verification)</span>
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;">
             ${f.fixStatus !== "none" ? `Fix: ${escapeHtml(f.fixStatus)}` : "No fix yet"}

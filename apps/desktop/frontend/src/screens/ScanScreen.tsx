@@ -13,8 +13,11 @@ export function ScanScreen({ onScanStarted }: Props) {
   const [branch, setBranch] = useState("")
   const [mode, setMode] = useState<ScanMode>("standard")
   const [instruction, setInstruction] = useState("")
+  const [maxBudgetUsd, setMaxBudgetUsd] = useState("3.20")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const budget = Number(maxBudgetUsd)
+  const budgetValid = Number.isFinite(budget) && budget >= 0.01 && budget <= 100
 
   async function handleStart() {
     setLoading(true)
@@ -27,7 +30,11 @@ export function ScanScreen({ onScanStarted }: Props) {
             ? { type: "url", url }
             : { type: "local_path", path }
 
-      const scanId = await startScan(target, mode, instruction || undefined)
+      if (!budgetValid) {
+        setError("Enter a BYOK budget between $0.01 and $100.00.")
+        return
+      }
+      const scanId = await startScan(target, mode, instruction || undefined, budget)
       onScanStarted(scanId)
     } catch (e) {
       setError(String(e))
@@ -55,11 +62,14 @@ export function ScanScreen({ onScanStarted }: Props) {
 
         <div className="space-y-4">
           <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">Target type</label>
-            <div className="flex gap-2">
+            <p id="scan-target-type" className="mb-2 block text-sm font-medium text-foreground">
+              Target type
+            </p>
+            <div role="group" aria-labelledby="scan-target-type" className="flex flex-wrap gap-2">
               {(["local_path", "repo", "url"] as const).map((t) => (
                 <button
                   key={t}
+                  aria-pressed={targetType === t}
                   onClick={() => setTargetType(t)}
                   className={`rounded-md border px-3 py-1.5 text-sm ${
                     targetType === t
@@ -75,9 +85,12 @@ export function ScanScreen({ onScanStarted }: Props) {
 
           {targetType === "url" ? (
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">URL</label>
+              <label htmlFor="scan-url" className="mb-1 block text-sm font-medium text-foreground">
+                URL
+              </label>
               <input
-                type="text"
+                id="scan-url"
+                type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com"
@@ -86,10 +99,11 @@ export function ScanScreen({ onScanStarted }: Props) {
             </div>
           ) : (
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">
+              <label htmlFor="scan-path" className="mb-1 block text-sm font-medium text-foreground">
                 {targetType === "repo" ? "Repository path or URL" : "Local path"}
               </label>
               <input
+                id="scan-path"
                 type="text"
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
@@ -105,10 +119,14 @@ export function ScanScreen({ onScanStarted }: Props) {
 
           {targetType === "repo" && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">
+              <label
+                htmlFor="scan-branch"
+                className="mb-1 block text-sm font-medium text-foreground"
+              >
                 Branch (optional)
               </label>
               <input
+                id="scan-branch"
                 type="text"
                 value={branch}
                 onChange={(e) => setBranch(e.target.value)}
@@ -119,11 +137,14 @@ export function ScanScreen({ onScanStarted }: Props) {
           )}
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">Scan mode</label>
-            <div className="flex flex-wrap gap-2">
+            <p id="scan-mode" className="mb-2 block text-sm font-medium text-foreground">
+              Scan mode
+            </p>
+            <div role="group" aria-labelledby="scan-mode" className="flex flex-wrap gap-2">
               {modes.map((m) => (
                 <button
                   key={m.value}
+                  aria-pressed={mode === m.value}
                   onClick={() => setMode(m.value)}
                   className={`rounded-md border px-3 py-1.5 text-sm ${
                     mode === m.value
@@ -138,10 +159,38 @@ export function ScanScreen({ onScanStarted }: Props) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
+            <label htmlFor="scan-budget" className="mb-1 block text-sm font-medium text-foreground">
+              BYOK maximum model budget (USD)
+            </label>
+            <input
+              id="scan-budget"
+              type="number"
+              min="0.01"
+              max="100"
+              step="any"
+              inputMode="decimal"
+              value={maxBudgetUsd}
+              onChange={(e) => setMaxBudgetUsd(e.target.value)}
+              aria-describedby="scan-budget-help"
+              aria-invalid={!budgetValid}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
+            />
+            <p id="scan-budget-help" className="mt-1 text-xs text-muted-foreground">
+              Enter $0.01–$100.00. This limits estimated model spending for this scan using the
+              engine’s rate card. Your provider’s actual bill may differ. Changing scan mode keeps
+              your chosen budget. The model is resolved by your installed engine configuration.
+            </p>
+          </div>
+
+          <div>
+            <label
+              htmlFor="scan-instruction"
+              className="mb-1 block text-sm font-medium text-foreground"
+            >
               Custom instruction (optional)
             </label>
             <textarea
+              id="scan-instruction"
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               placeholder="Focus on authentication and input validation..."
@@ -150,11 +199,17 @@ export function ScanScreen({ onScanStarted }: Props) {
             />
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
 
           <button
             onClick={handleStart}
-            disabled={loading || (targetType === "url" ? !url : !path)}
+            disabled={
+              loading || (targetType === "url" ? !url.trim() : !path.trim()) || !budgetValid
+            }
             className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? "Starting scan…" : "Start Scan"}

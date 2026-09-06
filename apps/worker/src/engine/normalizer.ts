@@ -5,6 +5,7 @@ export interface NormalizedFinding extends EngineVulnerability {
   normalizedSeverity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
   normalizedCwe: string | null
   normalizedCvss: number | null
+  /** Evidence-completeness heuristic for ordering; not verification probability. */
   confidenceScore: number
   falsePositiveRisk: "low" | "medium" | "high"
   dedupeKey: string
@@ -177,6 +178,8 @@ export function calculateCvssFromSeverity(severity: string): number {
 }
 
 export function calculateConfidenceScore(vuln: EngineVulnerability): number {
+  // This ranks supplied evidence completeness for triage only. It is not a
+  // calibrated probability and must never be used to claim verification.
   let score = 0
 
   if (vuln.poc_script_code && vuln.poc_description) {
@@ -340,8 +343,11 @@ export function getFindingStats(findings: NormalizedFinding[]): {
     total: findings.length,
     bySeverity,
     byConfidence,
-    verified: findings.filter((f) => f.confidenceScore >= 50).length,
-    unverified: findings.filter((f) => f.confidenceScore < 50).length,
+    // Normalization has no immutable verification receipt. A high evidence
+    // score is useful for triage, but cannot turn generated evidence into a
+    // verified finding.
+    verified: 0,
+    unverified: findings.length,
     falsePositiveRisk: fpRisk,
   }
 }

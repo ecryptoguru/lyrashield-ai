@@ -19,6 +19,14 @@ const completeUsage = vi.hoisted(() => ({
   long_output_tokens: 0,
 }))
 const systemScanFindUnique = vi.hoisted(() => vi.fn())
+vi.mock("../engine/deterministic-retest", () => ({
+  authorizeDeterministicRetest: vi.fn(),
+  checkoutDeterministicRetest: vi.fn(),
+}))
+import {
+  authorizeDeterministicRetest,
+  checkoutDeterministicRetest,
+} from "../engine/deterministic-retest"
 
 vi.mock("@lyrashield/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/config")>()
@@ -196,7 +204,9 @@ import {
   extractActualCostUsd,
   engineRoutingCoverageIssue,
   extractUsageSummary,
+  persistEngineUsageCheckpoint,
   processScanJob,
+  resolveEngineRuntimeBudgetMs,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
   shouldRecordAgentMinutes,
@@ -250,6 +260,7 @@ function mockStoredScanAuthority(
     goal: string
     mode: string
     policyId: string | null
+    determinismMode: string
   }> = {}
 ) {
   systemScanFindUnique.mockResolvedValue({
@@ -271,6 +282,7 @@ const mockRepoTarget = {
   type: "REPO",
   url: null,
   repoFullName: "acme/test-target",
+  repoProvider: "github",
   deletedAt: null,
 }
 
@@ -282,6 +294,30 @@ const mockUrlTarget = {
 }
 
 describe("shouldRecordAgentMinutes", () => {
+  it("retains known counters without reconciling an incomplete provider checkpoint", async () => {
+    const result = await persistEngineUsageCheckpoint({
+      scanId: "partial-triage",
+      maxBudgetUsd: 1.2,
+      usageExpected: true,
+      llmUsage: { ...completeUsage, accountingComplete: false },
+    })
+    expect(result).toMatchObject({
+      costReconciled: false,
+      billedCostUsd: null,
+      reconciliationReason: expect.stringContaining("no final usage receipt"),
+    })
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "partial-triage",
+      "llm_usage",
+      "info",
+      expect.any(String),
+      expect.objectContaining({
+        inputTokens: 1000,
+        accountingComplete: false,
+        reconciliationStatus: "incomplete_provider_receipts",
+      })
+    )
+  })
   it("does not bill an engine failure that has no provider-work receipt", () => {
     expect(shouldRecordAgentMinutes("scan-1", "FAILED", null)).toBe(false)
     expect(
@@ -373,6 +409,19 @@ describe("resolveScanRuntimeBudgetMs", () => {
 
   it("uses the deterministic URL profile limit instead of repository limits", () => {
     expect(resolveScanRuntimeBudgetMs("DEEP", 60, "WEB_APP")).toBe(3 * 60 * 1000)
+  })
+})
+
+describe("resolveEngineRuntimeBudgetMs", () => {
+  it("preserves the repository scanner reserve inside the total deadline", () => {
+    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 15 * 60 * 1000, 0)).toBe(12 * 60 * 1000)
+    expect(resolveEngineRuntimeBudgetMs("DEEP", "REPO", 45 * 60 * 1000, 0)).toBe(40 * 60 * 1000)
+  })
+
+  it("reduces the engine allowance when preflight consumed the total envelope", () => {
+    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 15 * 60 * 1000, 5 * 60 * 1000)).toBe(
+      7 * 60 * 1000
+    )
   })
 })
 
@@ -614,6 +663,51 @@ describe("processScanJob", () => {
       )
     }
   )
+  it("runs trusted deterministic retests without engine spend and cleans their independent checkout", async () => {
+    mockStoredScanAuthority({ determinismMode: "targeted_scanner" })
+    const cleanup = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(authorizeDeterministicRetest).mockResolvedValue(undefined)
+    vi.mocked(checkoutDeterministicRetest).mockResolvedValue({
+      checkoutPath: "/tmp/independent/source",
+      sourceRevision: "a".repeat(40),
+      cleanup,
+    })
+    const result = await processScanJob(mockJob)
+    expect(result.status).toBe("completed")
+    expect(authorizeDeterministicRetest).toHaveBeenCalledWith("scan-1", "ws-1", "target-1")
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceExecution: { kind: "deterministic_retest", sourceRevision: "a".repeat(40) },
+        accounting: expect.objectContaining({
+          maxBudgetUsd: 0,
+          billedCostUsd: null,
+          reconciled: true,
+        }),
+      })
+    )
+    expect(cleanup).toHaveBeenCalledOnce()
+  })
+  it.each(["gitlab", null])(
+    "rejects deterministic checkout for provider %s",
+    async (repoProvider) => {
+      mockStoredScanAuthority({ determinismMode: "targeted_scanner" })
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        ...mockRepoTarget,
+        repoProvider,
+      } as never)
+      await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
+      expect(checkoutDeterministicRetest).not.toHaveBeenCalled()
+      expect(runEngine).not.toHaveBeenCalled()
+    }
+  )
+  it("fails closed when deterministic retest lineage is invalid", async () => {
+    mockStoredScanAuthority({ determinismMode: "targeted_scanner" })
+    vi.mocked(authorizeDeterministicRetest).mockRejectedValueOnce(new Error("Invalid lineage"))
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
+    expect(runEngine).not.toHaveBeenCalled()
+  })
   it("completes successfully when engine returns exit code 0", async () => {
     const result = await processScanJob(mockJob)
 
@@ -658,6 +752,25 @@ describe("processScanJob", () => {
       expect.stringContaining("43 code/URL review controls"),
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
     )
+  })
+
+  it("does not seal evidence or bill after finding persistence exhausts finalization grace", async () => {
+    let now = 0
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now)
+    vi.mocked(persistFindings).mockImplementationOnce(async ({ assertCanStart }) => {
+      assertCanStart?.()
+      now += 120_000
+      return []
+    })
+    try {
+      const result = await processScanJob(mockJob)
+      expect(result).toMatchObject({ status: "failed", errorCategory: "TIMEOUT" })
+      expect(persistResultManifest).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(completeScanWithScore).not.toHaveBeenCalled()
+    } finally {
+      clock.mockRestore()
+    }
   })
   it.each(["account lookup", "intent insert"])(
     "fails closed when %s fails once before a durable billing obligation exists",
@@ -1962,6 +2075,7 @@ describe("processScanJob", () => {
       })
     )
     expect(persistFindings).toHaveBeenCalledWith({
+      assertCanStart: expect.any(Function),
       scanId: "scan-1",
       workspaceId: "ws-1",
       targetId: "target-1",
@@ -2304,11 +2418,11 @@ describe("REPO scan wall-clock budget enforcement", () => {
     await processScanJob(policyJob)
 
     const timeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
-    // SAFE profile caps at 15 minutes; the timeout must be the REMAINING budget
-    // after preflight, bounded by (never exceeding) the full budget.
+    // SAFE keeps its three-minute deterministic scanner reserve inside the
+    // fifteen-minute total budget.
     expect(typeof timeoutMs).toBe("number")
     expect(timeoutMs).toBeGreaterThan(0)
-    expect(timeoutMs).toBeLessThanOrEqual(15 * 60 * 1000)
-    expect(timeoutMs).toBeGreaterThanOrEqual(15 * 60 * 1000 - 60_000)
+    expect(timeoutMs).toBeLessThanOrEqual(12 * 60 * 1000)
+    expect(timeoutMs).toBeGreaterThanOrEqual(12 * 60 * 1000 - 60_000)
   })
 })

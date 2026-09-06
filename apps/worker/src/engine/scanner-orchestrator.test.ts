@@ -579,26 +579,32 @@ describe("runScannerOrchestrator", () => {
     )
   })
 
-  it("fails the scanner phase and records an event when the phase times out", async () => {
+  it("preserves completed families and marks only pending families when the phase times out", async () => {
     vi.mocked(scanSca).mockImplementationOnce(
       ({ signal }) =>
         new Promise((_, reject) => {
           signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true })
         }) as never
     )
-    await expect(
-      runScannerOrchestrator({
-        scanId: "scan-timeout",
-        workspaceId: "ws-1",
-        targetId: "target-1",
-        target: { id: "target-1", type: "REPO", name: "Test" },
-        goal: "TEST_APP",
-        mode: "STANDARD",
-        engineFindings: [],
-        scannerPhaseTimeoutMs: 1,
-        workspaceDir: sourceCheckout,
-      })
-    ).rejects.toThrow("Scanner phase timed out")
+    const result = await runScannerOrchestrator({
+      scanId: "scan-timeout",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "REPO", name: "Test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+      scannerPhaseTimeoutMs: 1,
+      workspaceDir: sourceCheckout,
+    })
+    expect(result.secretsFindings).toHaveLength(1)
+    expect(result.coverageIssues).toEqual([
+      expect.objectContaining({
+        scanner: "sca",
+        status: "partial",
+        reason: expect.stringContaining("Scanner phase timed out"),
+      }),
+    ])
     expect(addScanEvent).toHaveBeenCalledWith(
       "scan-timeout",
       "scanner",
@@ -606,6 +612,102 @@ describe("runScannerOrchestrator", () => {
       "Scanner phase timed out",
       { timeoutMs: 1 }
     )
+  })
+
+  it.each(["resolve", "reject"])(
+    "bounds hung advisory preparation with late %s and never restarts scanners",
+    async (outcome) => {
+      let release!: () => void
+      vi.mocked(queryOsvWithCache).mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            release = () =>
+              outcome === "resolve"
+                ? resolve(undefined as never)
+                : reject(new Error("late OSV failure"))
+          })
+      )
+      const result = await runScannerOrchestrator({
+        scanId: "scan-hung-advisory",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        target: { id: "target-1", type: "REPO", name: "Test" },
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        engineFindings,
+        workspaceDir: sourceCheckout,
+        scannerPhaseTimeoutMs: 10,
+      })
+      expect(result.engineFindings).toHaveLength(1)
+      expect(result.secretsFindings).toHaveLength(1)
+      expect(result.coverageIssues.map((issue) => issue.scanner)).toEqual([
+        "sca",
+        "ai_app_security",
+      ])
+      const receipt = structuredClone(result)
+      release()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(scanSca).not.toHaveBeenCalled()
+      expect(scanAiAppSecurity).not.toHaveBeenCalled()
+      expect(result).toEqual(receipt)
+    }
+  )
+
+  it("does not launch advisory requests or dependent scanners after cancellation during inventory", async () => {
+    let release!: () => void
+    vi.mocked(resolveExactDependencies).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({ packages: [{ name: "package", version: "1", ecosystem: "npm" }] } as never)
+        })
+    )
+    await expect(
+      runScannerOrchestrator({
+        scanId: "scan-cancel-preparation",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        target: { id: "target-1", type: "REPO", name: "Test" },
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        engineFindings: [],
+        workspaceDir: sourceCheckout,
+        isCancelled: async () => true,
+      })
+    ).rejects.toThrow("Scanner phase cancelled")
+    release()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(queryOsvWithCache).not.toHaveBeenCalled()
+    expect(scanSca).not.toHaveBeenCalled()
+    expect(scanAiAppSecurity).not.toHaveBeenCalled()
+  })
+
+  it("isolates final coverage from a detector that writes after its deadline", async () => {
+    let release!: () => void
+    vi.mocked(scanSca).mockImplementationOnce(
+      ({ coverageIssues }) =>
+        new Promise((resolve) => {
+          release = () => {
+            coverageIssues?.push({ scanner: "sca", status: "partial", reason: "late evidence" })
+            resolve([])
+          }
+        })
+    )
+    const result = await runScannerOrchestrator({
+      scanId: "scan-late",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "REPO", name: "Test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+      workspaceDir: sourceCheckout,
+      scannerPhaseTimeoutMs: 10,
+    })
+    const receipt = structuredClone(result)
+    release()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(result).toEqual(receipt)
   })
 
   it("stops deterministic scanners when the scan has been cancelled", async () => {

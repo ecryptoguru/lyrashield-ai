@@ -82,49 +82,51 @@ export interface ScannerOrchestratorResult {
   webMcpCoverage?: WebMcpCoverageReceipt | null
 }
 
-async function withScannerPhaseTimeout<T>(
+async function withScannerPhaseTimeout(
   scanId: string,
-  start: (signal: AbortSignal) => Promise<T>,
+  start: (signal: AbortSignal) => Promise<unknown>[],
   timeoutMs: number,
   isCancelled?: () => Promise<boolean>
-): Promise<T> {
+): Promise<PromiseSettledResult<unknown>[]> {
   const controller = new AbortController()
-  const phase = start(controller.signal)
   let timer: ReturnType<typeof setTimeout> | undefined
   let cancellationTimer: ReturnType<typeof setInterval> | undefined
   let settled = false
+  let cancellationRequested = false
   try {
-    return await Promise.race([
-      phase,
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          controller.abort()
-          void addScanEvent(scanId, "scanner", "error", "Scanner phase timed out", {
-            timeoutMs,
-          }).catch(() => undefined)
-          reject(new Error(`Scanner phase timed out after ${timeoutMs}ms`))
-        }, timeoutMs)
-        if (isCancelled) {
-          const checkCancellation = () => {
-            void isCancelled()
-              .then((cancelled) => {
-                if (settled || !cancelled) return
-                controller.abort()
-                reject(new Error("Scanner phase cancelled"))
-              })
-              .catch(() => undefined)
-          }
-          checkCancellation()
-          cancellationTimer = setInterval(checkCancellation, 1000)
+    const interruption = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error(`Scanner phase timed out after ${timeoutMs}ms`)
+        reject(error)
+        controller.abort(error)
+        void addScanEvent(scanId, "scanner", "error", "Scanner phase timed out", {
+          timeoutMs,
+        }).catch(() => undefined)
+      }, timeoutMs)
+      if (isCancelled) {
+        const checkCancellation = () => {
+          void isCancelled()
+            .then((cancelled) => {
+              if (settled || !cancelled) return
+              cancellationRequested = true
+              reject(new Error("Scanner phase cancelled"))
+              controller.abort(new Error("Scanner phase cancelled"))
+            })
+            .catch(() => undefined)
         }
-      }),
-    ])
+        checkCancellation()
+        cancellationTimer = setInterval(checkCancellation, 1000)
+      }
+    })
+    const results = await Promise.allSettled(
+      start(controller.signal).map((scanner) => Promise.race([scanner, interruption]))
+    )
+    if (cancellationRequested) throw new Error("Scanner phase cancelled")
+    return results
   } finally {
     settled = true
     if (timer) clearTimeout(timer)
     if (cancellationTimer) clearInterval(cancellationTimer)
-    // Do not await an uncooperative phase after timing out; that defeats the deadline.
-    void phase.catch(() => undefined)
   }
 }
 
@@ -361,8 +363,6 @@ export async function runScannerOrchestrator(
   }
   const hasSourceCheckout = target.type === "REPO" && Boolean(workspaceDir)
   const coverageIssues: ScannerCoverageIssue[] = []
-  let dependencyInventory: ResolvedDependencyInventory | undefined
-  let advisoryBatch: AdvisoryBatchResult | undefined
   if (target.type === "REPO" && !hasSourceCheckout) {
     const reason = "Validated engine source checkout unavailable for repository target"
     for (const scanner of [
@@ -396,40 +396,55 @@ export async function runScannerOrchestrator(
       }
     )
   }
-  if (hasSourceCheckout) {
-    try {
-      dependencyInventory = await resolveExactDependencies({
-        repoPath: absWorkspace,
-        coverageIssues,
-      })
-      if (dependencyInventory.packages.length > 0) {
-        advisoryBatch = await queryOsvWithCache(dependencyInventory.packages)
-      }
-    } catch (error) {
-      recordCoverageIssue(coverageIssues, {
-        scanner: "sca",
-        status: "partial",
-        reason:
-          error instanceof Error
-            ? error.message.slice(0, 500)
-            : "Dependency advisory preparation failed",
-      })
-    }
-  }
+  // Detectors may ignore abort. Never expose their mutable buffers as final evidence.
+  const phaseCoverageIssues: ScannerCoverageIssue[] = []
   const scannerResults = await withScannerPhaseTimeout(
     scanId,
-    (signal) =>
-      Promise.allSettled([
+    (signal) => {
+      const coverageIssues = phaseCoverageIssues
+      const dependencyPreparation = hasSourceCheckout
+        ? (async () => {
+            try {
+              const dependencyInventory = await resolveExactDependencies({
+                repoPath: absWorkspace,
+                coverageIssues,
+                signal,
+              })
+              signal.throwIfAborted()
+              const advisoryBatch =
+                dependencyInventory.packages.length > 0
+                  ? await queryOsvWithCache(dependencyInventory.packages)
+                  : undefined
+              signal.throwIfAborted()
+              return { dependencyInventory, advisoryBatch }
+            } catch (error) {
+              signal.throwIfAborted()
+              recordCoverageIssue(coverageIssues, {
+                scanner: "sca",
+                status: "partial",
+                reason:
+                  error instanceof Error
+                    ? error.message.slice(0, 500)
+                    : "Dependency advisory preparation failed",
+              })
+              return { dependencyInventory: undefined, advisoryBatch: undefined }
+            }
+          })()
+        : Promise.resolve({ dependencyInventory: undefined, advisoryBatch: undefined })
+      return [
         hasSourceCheckout
-          ? runScaScan(
-              scanId,
-              absWorkspace,
-              coverageIssues,
-              signal,
-              dependencyInventory,
-              advisoryBatch,
-              egressProxyFetchFn
-            )
+          ? dependencyPreparation.then(({ dependencyInventory, advisoryBatch }) => {
+              signal.throwIfAborted()
+              return runScaScan(
+                scanId,
+                absWorkspace,
+                coverageIssues,
+                signal,
+                dependencyInventory,
+                advisoryBatch,
+                egressProxyFetchFn
+              )
+            })
           : Promise.resolve([] as EngineVulnerability[]),
         hasSourceCheckout
           ? runSecretsScan(scanId, absWorkspace, coverageIssues, signal)
@@ -450,15 +465,18 @@ export async function runScannerOrchestrator(
           ? runAgentConfigScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
         hasSourceCheckout
-          ? runAiAppSecurityScan(
-              scanId,
-              absWorkspace,
-              coverageIssues,
-              signal,
-              config.mode,
-              dependencyInventory,
-              advisoryBatch
-            )
+          ? dependencyPreparation.then(({ dependencyInventory, advisoryBatch }) => {
+              signal.throwIfAborted()
+              return runAiAppSecurityScan(
+                scanId,
+                absWorkspace,
+                coverageIssues,
+                signal,
+                config.mode,
+                dependencyInventory,
+                advisoryBatch
+              )
+            })
           : Promise.resolve({
               findings: [],
               aiScanResult: {
@@ -526,10 +544,12 @@ export async function runScannerOrchestrator(
         hasSourceCheckout
           ? runMlSupplyChainScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
-      ]),
+      ]
+    },
     scannerPhaseTimeoutMs,
     config.isCancelled
   )
+  coverageIssues.push(...structuredClone(phaseCoverageIssues))
 
   const scannerNames = [
     "sca",

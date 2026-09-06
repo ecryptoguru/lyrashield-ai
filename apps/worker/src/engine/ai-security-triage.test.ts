@@ -17,7 +17,9 @@ const signal = {
 describe("engine AI-security triage selection", () => {
   it("sends only bounded deterministic evidence without a source path", () => {
     const input = buildEngineTriageInput([signal], "b".repeat(40))
-    expect(input).toMatchObject({ candidates: [{ findingIdentity: "a".repeat(64) }] })
+    expect(input).toMatchObject({
+      candidates: [{ findingIdentity: "a".repeat(64), selectionReason: "MEDIUM_SEVERITY" }],
+    })
     expect(JSON.stringify(input)).not.toContain("file")
   })
 
