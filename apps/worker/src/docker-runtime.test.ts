@@ -328,7 +328,9 @@ describe("worker Docker runtime", () => {
   })
 
   it("shares engine work and temp paths with the host Docker daemon", () => {
-    expect(workerRunner).toContain("--tmpfs /lyrashield-retests:rw,nosuid,nodev,noexec,size=1g,mode=1777")
+    expect(workerRunner).toContain(
+      "--tmpfs /lyrashield-retests:rw,nosuid,nodev,noexec,size=1g,mode=1777"
+    )
     expect(workerRunner).toContain("worker_shared_root=/var/lib/lyrashield/worker")
     expect(workerRunner).toContain('--env LYRASHIELD_ENGINE_WORK_ROOT="$worker_shared_root"')
     expect(workerRunner).toContain('--env TMPDIR="$worker_shared_root/tmp"')
