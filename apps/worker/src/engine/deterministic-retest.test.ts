@@ -64,7 +64,11 @@ describe("deterministic retest authority", () => {
     vi.mocked(prisma.scanCoverageReceipt.findMany).mockResolvedValue([
       { controlId: "secrets", status: "COMPLETED" },
     ] as never)
-    const manifest = { target: { id: "t" }, engineExecution: { sourceRevision: "a".repeat(40) } }
+    const manifest = {
+      terminalOutcome: { status: "COMPLETED" },
+      target: { id: "t" },
+      engineExecution: { sourceRevision: "a".repeat(40) },
+    }
     vi.mocked(prisma.scanResultManifest.findFirst).mockResolvedValue({
       manifest,
       checksum: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
@@ -82,7 +86,7 @@ describe("deterministic retest authority", () => {
     ] as never)
     await expect(authorizeDeterministicRetest("s", "w", "t")).rejects.toThrow("provenance")
   })
-  it("rejects missing lineage and modified receipts", async () => {
+  it("rejects missing lineage and malformed receipt metadata", async () => {
     vi.mocked(prisma.scanResultManifest.findFirst).mockResolvedValue({
       manifest: {},
       checksum: "bad",
@@ -91,6 +95,21 @@ describe("deterministic retest authority", () => {
     vi.mocked(prisma.retest.findMany).mockResolvedValue([])
     await expect(authorizeDeterministicRetest("s", "w", "t")).rejects.toThrow("lineage")
   })
+  it.each(["PARTIAL", "FAILED", undefined])(
+    "rejects baseline terminal outcome %s before checkout",
+    async (status) => {
+      vi.mocked(prisma.scanResultManifest.findFirst).mockResolvedValue({
+        checksum: "a".repeat(64),
+        manifest: {
+          target: { id: "t" },
+          engineExecution: { sourceRevision: "a".repeat(40) },
+          terminalOutcome: status ? { status } : undefined,
+        },
+      } as never)
+      await expect(authorizeDeterministicRetest("s", "w", "t")).rejects.toThrow("provenance")
+      expect(gitMock).not.toHaveBeenCalled()
+    }
+  )
   it.each(["../bad/repo", "https://other/repo", "-bad/repo"])(
     "rejects unsafe repository %s before transport",
     async (repoFullName) => {

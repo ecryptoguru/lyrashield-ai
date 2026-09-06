@@ -37,6 +37,7 @@ const URL_HASH_B = "2".repeat(64)
 
 function manifestRow(scanId: string, targetId: string, targetType: string, overrides: object = {}) {
   const defaultManifest = {
+    terminalOutcome: { status: "COMPLETED" },
     target: { id: targetId, type: targetType },
     engineExecution: { sourceRevision: REV_A },
   }
@@ -663,6 +664,38 @@ describe("result integrity", () => {
             expect.objectContaining({ data: expect.objectContaining({ status: "FIXED" }) })
           )
         else expect(prisma.finding.update).not.toHaveBeenCalled()
+      }
+    )
+    it.each(["PARTIAL", "FAILED", undefined])(
+      "does not validate an engine baseline with %s terminal status",
+      async (status) => {
+        mockRepoRetestState({
+          baselineManifest: manifestRow("scan-1", "target-1", "REPO", {
+            terminalOutcome: status ? { status } : undefined,
+          }),
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining("completed baseline and retest terminal receipts"),
+            }),
+          })
+        )
+      }
+    )
+    it.each(["PARTIAL", "FAILED", undefined])(
+      "does not validate an engine retest with %s terminal status",
+      async (status) => {
+        mockRepoRetestState({
+          retestManifest: manifestRow("scan-2", "target-1", "REPO", {
+            terminalOutcome: status ? { status } : undefined,
+          }),
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        expect(prisma.finding.update).not.toHaveBeenCalled()
       }
     )
     it("validates a changed-revision retest because a fix normally changes the SHA", async () => {

@@ -778,16 +778,16 @@ export async function completeRetestsForScan(params: {
         baselineIdentity?.manifestChecksum !== undefined &&
         retestIdentity?.manifestChecksum !== undefined
 
+      const terminalReceiptsComplete = [baselineManifest, retestManifest].every((stored) => {
+        const receipt = stored?.manifest as { terminalOutcome?: { status?: string } } | undefined
+        return receipt?.terminalOutcome?.status === "COMPLETED"
+      })
       const canValidate =
         identityValid &&
         coverageComplete &&
         revisionIdentityValid &&
         urlIdentityValid &&
-        [baselineManifest, retestManifest].every((stored) => {
-          const receipt = stored?.manifest as
-            { sourceExecution?: unknown; terminalOutcome?: { status?: string } } | undefined
-          return !receipt?.sourceExecution || receipt.terminalOutcome?.status === "COMPLETED"
-        })
+        terminalReceiptsComplete
 
       if (canValidate) {
         const reason =
@@ -855,6 +855,8 @@ export async function completeRetestsForScan(params: {
       if (!revisionIdentityValid) missingParts.push("exact repository revision identity")
       if (!urlIdentityValid) missingParts.push("URL identity checksum")
       if (!coverageComplete) missingParts.push("complete originating-scanner coverage")
+      if (!terminalReceiptsComplete)
+        missingParts.push("completed baseline and retest terminal receipts")
       const reason = `The finding was not detected, but validation evidence is incomplete: ${missingParts.join(", ")}.`
       const idempotencyKey = checksum({
         retestId: retest.id,

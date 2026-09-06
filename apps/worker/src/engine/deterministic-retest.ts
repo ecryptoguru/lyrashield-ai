@@ -57,10 +57,15 @@ export async function authorizeDeterministicRetest(
           target?: { id?: string }
           engineExecution?: { sourceRevision?: string }
           sourceExecution?: { sourceRevision?: string }
+          terminalOutcome?: { status?: string }
         }
       | undefined
     const revision =
       receipt?.sourceExecution?.sourceRevision ?? receipt?.engineExecution?.sourceRevision
+    // The stored digest identifies the producer's original serialized receipt.
+    // JSONB does not preserve key order, so hashing JSON.stringify(receipt) here
+    // would reject valid historical receipts. This trusts the tenant-scoped,
+    // application-insert-only store; it is not protection against DB tampering.
     if (
       !candidates.length ||
       candidates.some(
@@ -69,6 +74,7 @@ export async function authorizeDeterministicRetest(
           !coverage.some((row) => row.controlId === scannerSource && row.status === "COMPLETED")
       ) ||
       receipt?.target?.id !== targetId ||
+      receipt.terminalOutcome?.status !== "COMPLETED" ||
       !revision ||
       !/^[a-f0-9]{40}$/i.test(revision) ||
       !/^[a-f0-9]{64}$/i.test(baseline?.checksum ?? "")

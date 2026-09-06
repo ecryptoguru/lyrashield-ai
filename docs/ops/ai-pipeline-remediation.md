@@ -10,6 +10,8 @@ Triage retains its existing schema and adds private `llmUsage.accountingComplete
 
 Deterministic repository retests use persisted finding lineage and complete baseline scanner receipts. They run the deterministic repository suite with a separately established source revision and a versioned private source execution receipt. They do not invoke the AI engine or optional AI triage. Unsupported source material or missing lineage remains an explicit failure/inconclusive outcome. Ordinary AI findings continue through the normal source-tier scan.
 
+Both baseline and retest manifests must explicitly declare a completed terminal outcome before a missing finding can be validated as fixed. Historical receipts without that outcome remain readable but inconclusive. Stored checksums identify the producer's original serialized bytes; recomputing them from PostgreSQL JSONB can change key order. Authorization trusts tenant-scoped, application-insert-only records, not database tamper resistance. A future canonical-checksum migration must version the writer and reader together.
+
 The normalizer's score describes evidence completeness, not calibrated accuracy or verification. Only separate evidence verification can establish a verified finding. Desktop budgets belong to the customer's BYOK account and use the installed engine's routing and rate configuration; those estimates are not a provider invoice guarantee.
 
 ## Verification and boundaries
