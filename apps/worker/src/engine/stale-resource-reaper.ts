@@ -7,6 +7,7 @@ import { logger } from "@lyrashield/logger"
 import {
   ENGINE_CHECKOUT_ROOT as CHECKOUT_ROOT,
   ENGINE_WORK_ROOT as RUN_ROOT,
+  RETEST_CHECKOUT_ROOT,
 } from "./workspace-path"
 
 const execFileAsync = promisify(execFile)
@@ -110,19 +111,21 @@ export async function listOwnedScanDirectories(activeIds: Set<string>): Promise<
     // No run directory yet is normal for a new worker.
   }
 
-  try {
-    // CHECKOUT_ROOT is the engine's fixed temporary root.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    for (const entry of await readdir(CHECKOUT_ROOT)) {
-      const match = /^repo_(c[a-z0-9]{24})_/.exec(entry)
-      const activeScanId = [...activeIds].find((scanId) => entry.startsWith(`repo_${scanId}_`))
-      const scanId = activeScanId ?? match?.[1]
-      if (!scanId || (!activeScanId && !CUID_RUN_ID.test(scanId))) continue
-      const item = await ownedDirectory(join(CHECKOUT_ROOT, entry), scanId)
-      if (item) result.push(item)
+  for (const checkoutRoot of [CHECKOUT_ROOT, RETEST_CHECKOUT_ROOT]) {
+    try {
+      // Both roots are fixed worker-owned checkout locations.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      for (const entry of await readdir(checkoutRoot)) {
+        const match = /^repo_(c[a-z0-9]{24})_/.exec(entry)
+        const activeScanId = [...activeIds].find((scanId) => entry.startsWith(`repo_${scanId}_`))
+        const scanId = activeScanId ?? match?.[1]
+        if (!scanId || (!activeScanId && !CUID_RUN_ID.test(scanId))) continue
+        const item = await ownedDirectory(join(checkoutRoot, entry), scanId)
+        if (item) result.push(item)
+      }
+    } catch {
+      // The engine creates this temporary root only after the first repository clone.
     }
-  } catch {
-    // The engine creates this temporary root only after the first repository clone.
   }
   return result
 }

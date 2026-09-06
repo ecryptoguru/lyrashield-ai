@@ -1,5 +1,5 @@
 import type { Job } from "bullmq"
-import { boundedCleanup, scanElapsedClock } from "../engine/scan-deadline"
+import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
@@ -1816,6 +1816,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
+      const grace = finalizationGrace()
       const finalization = await withScanFinalizationClaim(scanId, workspaceId, async () => {
         // 5. Persist normalized findings
         const persistedFindings = await persistFindings({
@@ -1823,12 +1824,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           workspaceId,
           targetId,
           vulnerabilities: orchestratorResult.allFindings,
+          assertCanStart: grace.assertRemaining,
           // Stamp the scanned revision on every finding so fix patches apply
           // against exactly the commit that was analyzed.
           ...(engineResult.sourceRevision ? { sourceRevision: engineResult.sourceRevision } : {}),
         })
 
         const newFindings = persistedFindings.filter((f) => f.isNew).length
+        grace.assertRemaining()
         const dupFindings = persistedFindings.length - newFindings
 
         // engineResult.output.summary describes only the agentic engine's own
@@ -1878,6 +1881,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           data: { summary: scanSummary },
         })
         const finishEvidence = async () => {
+          // Once sealing starts, await the whole evidence/retest/settlement
+          // sequence. Interrupting between its writes could promote an
+          // incomplete retest or abandon an unsettled billing transaction.
+          grace.assertRemaining()
           await persistResultManifest({
             scanId,
             target: {
@@ -2010,6 +2017,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
       const { persistedFindings, newFindings, scanSummary, terminalResult } = finalization.value
+      if (grace.remaining() <= 0) {
+        log.warn("Finalization grace exhausted; optional follow-up work skipped", { scanId })
+        return terminalResult ?? { status: "completed", summary: scanSummary }
+      }
       if (terminalResult) {
         if (terminalResult.errorCategory !== "BUDGET_EXCEEDED") {
           try {

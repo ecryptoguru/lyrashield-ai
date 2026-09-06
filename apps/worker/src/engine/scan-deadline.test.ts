@@ -1,9 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { boundedCleanup, scanElapsedClock } from "./scan-deadline"
+import { boundedCleanup, finalizationGrace, scanElapsedClock } from "./scan-deadline"
 
 afterEach(() => vi.useRealTimers())
 
 describe("scan execution deadline", () => {
+  it("stops admitting finalization at the exact grace deadline", () => {
+    let now = 10
+    const grace = finalizationGrace(100, () => now)
+    now = 109
+    expect(grace.remaining()).toBe(1)
+    expect(() => grace.assertRemaining()).not.toThrow()
+    now = 110
+    expect(grace.remaining()).toBe(0)
+    expect(() => grace.assertRemaining()).toThrow("finalization exceeded")
+  })
   it("retains persisted elapsed time and advances with monotonic time", () => {
     let tick = 50
     const elapsed = scanElapsedClock(new Date(1_000), 6_000, () => tick)

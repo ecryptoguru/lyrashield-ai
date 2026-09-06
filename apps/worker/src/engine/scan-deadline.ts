@@ -13,6 +13,25 @@ export function scanElapsedClock(
   return () => priorElapsed + Math.max(0, monotonicNow() - origin)
 }
 
+/** Bounds admission of finalization work; already-started mutations must settle. */
+export function finalizationGrace(
+  timeoutMs = 120_000,
+  now: () => number = () => performance.now()
+) {
+  const deadline = now() + timeoutMs
+  const remaining = () => Math.max(0, deadline - now())
+  return {
+    remaining,
+    assertRemaining() {
+      if (remaining() <= 0) {
+        const error = new Error("Scan finalization exceeded its grace period")
+        error.name = "TimeoutError"
+        throw error
+      }
+    },
+  }
+}
+
 /** Detach only cleanup I/O; never use this to abandon a money/evidence transaction. */
 export async function boundedCleanup(work: Promise<void>, timeoutMs = 30_000): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined

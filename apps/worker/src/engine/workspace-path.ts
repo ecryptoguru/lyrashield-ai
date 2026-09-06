@@ -10,6 +10,9 @@ const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 export const ENGINE_WORK_ROOT = resolve(configuredRoot, "lyrashield_runs")
 export const ENGINE_TEMP_ROOT = resolve(tmpdir())
 export const ENGINE_CHECKOUT_ROOT = resolve(ENGINE_TEMP_ROOT, "strix_repos")
+// Deterministic scanners run inside the worker and need no host Docker bind.
+export const RETEST_CHECKOUT_ROOT =
+  env.NODE_ENV === "production" ? "/lyrashield-retests" : "/tmp/lyrashield-retests"
 
 export async function assertEngineTempRootReady(): Promise<void> {
   // The host Docker daemon consumes checkout paths from this directory. A

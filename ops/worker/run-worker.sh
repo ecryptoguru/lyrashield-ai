@@ -231,6 +231,7 @@ docker create \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=bind,src="$worker_shared_root",dst="$worker_shared_root" \
   --tmpfs /tmp:rw,nosuid,nodev,size=4g \
+  --tmpfs /lyrashield-retests:rw,nosuid,nodev,noexec,size=1g,mode=1777 \
   --security-opt no-new-privileges=true \
   --cap-drop ALL \
   --memory 3g \

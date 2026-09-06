@@ -32,6 +32,45 @@ import { deleteEncryptedArtifact, uploadEvidence } from "./evidence-storage"
 import { generateDedupeKey } from "./output-parser"
 
 describe("persistFindings", () => {
+  it("stops new findings on grace exhaustion and waits for admitted writes", async () => {
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    let expired = false
+    let release!: () => void
+    const inFlight = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    vi.mocked(prisma.finding.create).mockImplementation(async () => {
+      await inFlight
+      return { id: "finding-1" } as never
+    })
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    let settled = false
+    const work = persistFindings({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: Array.from({ length: 10 }, (_, i) => ({
+        id: `v${i}`,
+        title: `Issue ${i}`,
+        severity: "high",
+        timestamp: "2026-09-06T00:00:00Z",
+      })),
+      assertCanStart: () => {
+        if (expired) throw new Error("grace exhausted")
+      },
+    }).finally(() => {
+      settled = true
+    })
+    const assertion = expect(work).rejects.toThrow("grace exhausted")
+    await vi.waitFor(() => expect(prisma.finding.create).toHaveBeenCalledTimes(5))
+    expired = true
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    release()
+    await assertion
+    expect(prisma.finding.create).toHaveBeenCalledTimes(5)
+    expect(prisma.findingCandidate.upsert).toHaveBeenCalledTimes(5)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(prisma.evidence.findMany).mockResolvedValue([])

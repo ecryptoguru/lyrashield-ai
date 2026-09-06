@@ -1,18 +1,29 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { mkdtemp, rm, readdir, lstat, mkdir, open } from "node:fs/promises"
+import { mkdtemp, rm, readdir, lstat, mkdir, open, statfs } from "node:fs/promises"
 import { constants } from "node:fs"
 import { join } from "node:path"
 import { prisma } from "@lyrashield/db"
 import { getInstallationToken } from "@lyrashield/integrations"
-import {
-  ENGINE_CHECKOUT_ROOT,
-  assertEngineTempRootReady,
-  engineWorkspacePath,
-} from "./workspace-path"
+import { env } from "@lyrashield/config"
+import { RETEST_CHECKOUT_ROOT, engineWorkspacePath } from "./workspace-path"
 
 const execute = promisify(execFile)
 const SCANNERS = new Set(["sca", "secrets", "agent_config", "ai_app_security", "ml_supply_chain"])
+export function assertRetestFilesystemCapacity(filesystem: {
+  type: number
+  blocks: number
+  bsize: number
+}): void {
+  const capacity = filesystem.blocks * filesystem.bsize
+  if (
+    filesystem.type !== 0x01021994 ||
+    !Number.isFinite(capacity) ||
+    capacity <= 0 ||
+    capacity > 1024 ** 3
+  )
+    throw new Error("Deterministic retests require the dedicated capped tmpfs mount")
+}
 
 /** Authorization comes from persisted lineage, never from queue instructions. */
 export async function authorizeDeterministicRetest(
@@ -99,24 +110,28 @@ export async function checkoutDeterministicRetest(params: {
       params.branch.includes(".."))
   )
     throw new Error("Invalid repository branch")
-  await assertEngineTempRootReady()
   engineWorkspacePath(params.scanId)
   // Reuse the existing owned-checkout naming contract so the stale-resource
   // reaper can recover process-kill leftovers using persisted scan ownership.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  await mkdir(ENGINE_CHECKOUT_ROOT, { recursive: true })
+  await mkdir(RETEST_CHECKOUT_ROOT, { recursive: true })
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const checkoutRootStat = await lstat(ENGINE_CHECKOUT_ROOT)
+  const checkoutRootStat = await lstat(RETEST_CHECKOUT_ROOT)
   if (!checkoutRootStat.isDirectory() || checkoutRootStat.isSymbolicLink())
     throw new Error("Unsafe checkout root")
-  const root = await mkdtemp(join(ENGINE_CHECKOUT_ROOT, `repo_${params.scanId}_`))
+  if (env.NODE_ENV === "production") {
+    const filesystem = await statfs(RETEST_CHECKOUT_ROOT)
+    assertRetestFilesystemCapacity(filesystem)
+  }
+  const root = await mkdtemp(join(RETEST_CHECKOUT_ROOT, `repo_${params.scanId}_`))
   const checkoutPath = join(root, "source")
   const home = join(root, "home")
   // Worker-generated private directory, never a target-supplied path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(home)
   const abort = new AbortController()
-  // This is a sampled soft bound; the worker's tmpfs quota remains the hard disk limit.
+  // Per-scan 512 MiB is sampled; production's dedicated 1 GiB tmpfs is a shared
+  // hard limit across retests. Local development only has the sampled bound.
   let checkingSize = false
   const measure = async (directory: string): Promise<number> => {
     let size = 0

@@ -35,9 +35,9 @@ describe("desktop setup accessibility", () => {
     expect(scan).toContain('id="scan-budget-help"')
     expect(scan).toContain('min="0.01"')
     expect(scan).toContain('max="100"')
-    expect(scan).toContain('aria-invalid={!budgetValid}')
+    expect(scan).toContain("aria-invalid={!budgetValid}")
     expect(scan).toContain('role="alert"')
-    expect(scan).toContain('onClick={() => setMode(m.value)}')
+    expect(scan).toContain("onClick={() => setMode(m.value)}")
     for (const id of ["scan-url", "scan-path", "scan-branch", "scan-instruction"]) {
       expect(scan).toContain(`htmlFor="${id}"`)
       expect(scan).toContain(`id="${id}"`)

@@ -753,6 +753,25 @@ describe("processScanJob", () => {
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
     )
   })
+
+  it("does not seal evidence or bill after finding persistence exhausts finalization grace", async () => {
+    let now = 0
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now)
+    vi.mocked(persistFindings).mockImplementationOnce(async ({ assertCanStart }) => {
+      assertCanStart?.()
+      now += 120_000
+      return []
+    })
+    try {
+      const result = await processScanJob(mockJob)
+      expect(result).toMatchObject({ status: "failed", errorCategory: "TIMEOUT" })
+      expect(persistResultManifest).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(completeScanWithScore).not.toHaveBeenCalled()
+    } finally {
+      clock.mockRestore()
+    }
+  })
   it.each(["account lookup", "intent insert"])(
     "fails closed when %s fails once before a durable billing obligation exists",
     async (stage) => {
@@ -2056,6 +2075,7 @@ describe("processScanJob", () => {
       })
     )
     expect(persistFindings).toHaveBeenCalledWith({
+      assertCanStart: expect.any(Function),
       scanId: "scan-1",
       workspaceId: "ws-1",
       targetId: "target-1",

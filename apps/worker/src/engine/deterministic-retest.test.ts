@@ -23,12 +23,27 @@ import { getInstallationToken } from "@lyrashield/integrations"
 import { listOwnedScanDirectories } from "./stale-resource-reaper"
 import {
   authorizeDeterministicRetest,
+  assertRetestFilesystemCapacity,
   checkoutDeterministicRetest as checkout,
 } from "./deterministic-retest"
 const checkoutDeterministicRetest = (params: Omit<Parameters<typeof checkout>[0], "scanId">) =>
   checkout({ ...params, scanId: "cabcdefghijklmnopqrstuvwx" })
 
 describe("deterministic retest authority", () => {
+  it("requires a finite production tmpfs cap rather than host-bind storage", () => {
+    expect(() =>
+      assertRetestFilesystemCapacity({ type: 0x01021994, blocks: 262144, bsize: 4096 })
+    ).not.toThrow()
+    expect(() =>
+      assertRetestFilesystemCapacity({ type: 0xef53, blocks: 262144, bsize: 4096 })
+    ).toThrow("capped tmpfs")
+    expect(() =>
+      assertRetestFilesystemCapacity({ type: 0x01021994, blocks: 524288, bsize: 4096 })
+    ).toThrow("capped tmpfs")
+    expect(() =>
+      assertRetestFilesystemCapacity({ type: 0x01021994, blocks: NaN, bsize: 4096 })
+    ).toThrow("capped tmpfs")
+  })
   beforeEach(() => {
     vi.resetAllMocks()
     gitMock.mockImplementation(async (_file: string, args: string[]) => {

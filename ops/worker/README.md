@@ -35,6 +35,8 @@ GHCR_USERNAME=<github-username-or-bot>
 
 `run-worker.sh` bind-mounts `/var/lib/lyrashield/worker` at the same absolute path in the worker. Engine workspaces and `TMPDIR` must remain below this shared root because the worker uses the host Docker daemon: sandbox bind sources created only inside the worker container are invisible to that daemon and fail closed before model execution.
 
+Deterministic retests run inside the worker without a sandbox bind. Their checkout lives on `/lyrashield-retests`, a separate 1 GiB tmpfs shared across retests. Production rejects an absent or uncapped mount before fetching credentials or source. Each checkout also has a sampled 512 MiB limit; concurrent retests can exhaust the shared cap sooner. Local development uses `/tmp/lyrashield-retests` with the sampled limit only. The stale-resource reaper covers both checkout roots.
+
 ## Promote a verified worker release
 
 Digest pinning prevents silent updates; it does not freeze the worker. After the application repository's main deployment verifies a SHA-only worker image, its exact digest, and its OCI labels, the production workflow stops admission, proves the database and both queues are idle, pre-pulls the digest, atomically installs the image-owned host scripts and systemd units with rollback copies, updates only `LYRASHIELD_WORKER_IMAGE`, restarts the service, verifies provenance and readiness, then resumes admission. This keeps host startup behavior bound to the reviewed worker digest instead of the VM's bootstrap date. The launcher also pulls an immutable image when it is absent locally, so an empty VM cache cannot break a reviewed promotion.

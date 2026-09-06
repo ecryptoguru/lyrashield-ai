@@ -25,6 +25,8 @@ export interface PersistFindingsParams {
    * Optional and additive — callers without a checkout (URL/API targets) omit it.
    */
   sourceRevision?: string
+  /** Stop admitting findings after the grace period; await in-flight writes. */
+  assertCanStart?: () => void
 }
 
 export interface PersistedFinding {
@@ -164,6 +166,7 @@ async function persistEvidence(
 
 export async function persistFindings(params: PersistFindingsParams): Promise<PersistedFinding[]> {
   const { scanId, workspaceId, targetId, vulnerabilities, sourceRevision } = params
+  params.assertCanStart?.()
   const results: PersistedFinding[] = []
 
   if (vulnerabilities.length === 0) {
@@ -391,6 +394,12 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     while (true) {
       const index = cursor++
       if (index >= vulnerabilities.length) return
+      try {
+        params.assertCanStart?.()
+      } catch (err) {
+        errors.push(err instanceof Error ? err : new Error(String(err)))
+        return
+      }
       try {
         ordered[index] = await persistOne(vulnerabilities[index]!)
       } catch (err) {

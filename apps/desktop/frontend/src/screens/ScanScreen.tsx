@@ -62,7 +62,9 @@ export function ScanScreen({ onScanStarted }: Props) {
 
         <div className="space-y-4">
           <div>
-            <p id="scan-target-type" className="mb-2 block text-sm font-medium text-foreground">Target type</p>
+            <p id="scan-target-type" className="mb-2 block text-sm font-medium text-foreground">
+              Target type
+            </p>
             <div role="group" aria-labelledby="scan-target-type" className="flex flex-wrap gap-2">
               {(["local_path", "repo", "url"] as const).map((t) => (
                 <button
@@ -83,7 +85,9 @@ export function ScanScreen({ onScanStarted }: Props) {
 
           {targetType === "url" ? (
             <div>
-              <label htmlFor="scan-url" className="mb-1 block text-sm font-medium text-foreground">URL</label>
+              <label htmlFor="scan-url" className="mb-1 block text-sm font-medium text-foreground">
+                URL
+              </label>
               <input
                 id="scan-url"
                 type="url"
@@ -115,7 +119,10 @@ export function ScanScreen({ onScanStarted }: Props) {
 
           {targetType === "repo" && (
             <div>
-              <label htmlFor="scan-branch" className="mb-1 block text-sm font-medium text-foreground">
+              <label
+                htmlFor="scan-branch"
+                className="mb-1 block text-sm font-medium text-foreground"
+              >
                 Branch (optional)
               </label>
               <input
@@ -130,7 +137,9 @@ export function ScanScreen({ onScanStarted }: Props) {
           )}
 
           <div>
-            <p id="scan-mode" className="mb-2 block text-sm font-medium text-foreground">Scan mode</p>
+            <p id="scan-mode" className="mb-2 block text-sm font-medium text-foreground">
+              Scan mode
+            </p>
             <div role="group" aria-labelledby="scan-mode" className="flex flex-wrap gap-2">
               {modes.map((m) => (
                 <button
@@ -174,7 +183,10 @@ export function ScanScreen({ onScanStarted }: Props) {
           </div>
 
           <div>
-            <label htmlFor="scan-instruction" className="mb-1 block text-sm font-medium text-foreground">
+            <label
+              htmlFor="scan-instruction"
+              className="mb-1 block text-sm font-medium text-foreground"
+            >
               Custom instruction (optional)
             </label>
             <textarea
@@ -187,14 +199,16 @@ export function ScanScreen({ onScanStarted }: Props) {
             />
           </div>
 
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
 
           <button
             onClick={handleStart}
             disabled={
-              loading ||
-              (targetType === "url" ? !url.trim() : !path.trim()) ||
-              !budgetValid
+              loading || (targetType === "url" ? !url.trim() : !path.trim()) || !budgetValid
             }
             className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
