@@ -16,7 +16,7 @@ export function resolveRetestProfile(sourceMode: string, scannerSources: readonl
         mode: "SAFE" as const,
         determinismMode: "targeted_scanner" as const,
         reason:
-          "Targeted retest queued with the bounded Safe review cap because the finding originated from a deterministic scanner.",
+          "Targeted deterministic retest queued. Repository retests use an independently checked out source revision without model analysis; other review coverage is outside this retest scope.",
       }
     : {
         mode: sourceMode,

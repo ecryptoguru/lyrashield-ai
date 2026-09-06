@@ -9,6 +9,14 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
 static CHILDREN: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<Child>>>>> = OnceLock::new();
+
+pub fn validate_max_budget_usd(value: f64) -> Result<f64, String> {
+    if !value.is_finite() || value < 0.01 || value > 100.0 {
+        return Err("BYOK scan budget must be a finite amount between $0.01 and $100.00".into());
+    }
+    Ok(value)
+}
+
 fn children() -> &'static Mutex<HashMap<String, Arc<tokio::sync::Mutex<Child>>>> {
     CHILDREN.get_or_init(|| Mutex::new(HashMap::new()))
 }
@@ -312,6 +320,7 @@ pub async fn create_scan_record(app: AppHandle, config: &ScanConfig) -> Result<(
 }
 
 pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, String> {
+    validate_max_budget_usd(config.max_budget_usd)?;
     let scan_id = config.scan_id.clone();
     // Durable identity BEFORE spawn — persistence failure prevents spawn
     create_scan_record(app.clone(), &config)
@@ -364,6 +373,7 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
     // Spawn engine with BYOK env only in child
     let engine_cmd = crate::runtime::resolve_engine_bin()?;
 
+    let max_budget_usd = validate_max_budget_usd(config.max_budget_usd)?;
     let mut args: Vec<String> = vec![
         "--non-interactive".into(),
         "--run-name".into(),
@@ -372,6 +382,8 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
         config.target.target_arg(),
         "--scan-mode".into(),
         config.mode.engine_arg().into(),
+        "--max-budget-usd".into(),
+        max_budget_usd.to_string(),
     ];
     if let Some(instruction) = &config.instruction {
         if !instruction.is_empty() {
@@ -728,5 +740,16 @@ mod tests {
     fn ordinary_progress_text_is_unchanged() {
         let line = "Scanned 200 files; no credential-shaped output";
         assert_eq!(redact_credentials(line), line);
+    }
+
+    #[test]
+    fn local_budget_is_positive_and_bounded() {
+        assert_eq!(validate_max_budget_usd(3.2).unwrap(), 3.2);
+        assert_eq!(validate_max_budget_usd(0.015).unwrap().to_string(), "0.015");
+        assert!(validate_max_budget_usd(0.009).is_err());
+        assert!(validate_max_budget_usd(f64::INFINITY).is_err());
+        assert!(validate_max_budget_usd(0.0).is_err());
+        assert!(validate_max_budget_usd(f64::NAN).is_err());
+        assert!(validate_max_budget_usd(101.0).is_err());
     }
 }

@@ -58,6 +58,7 @@ pub struct ScanConfig {
     pub target: ScanTarget,
     pub mode: ScanMode,
     pub instruction: Option<String>,
+    pub max_budget_usd: f64,
 }
 
 /// A single finding from the engine.

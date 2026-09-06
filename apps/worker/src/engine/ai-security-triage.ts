@@ -13,7 +13,7 @@ export type EngineTriageInput = {
     controlId: string
     ruleId: string
     severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
-    selectionReason: "MEDIUM_CONFIDENCE"
+    selectionReason: "MEDIUM_SEVERITY"
     evidenceChecksum: string
     evidenceExcerpt: string
   }>
@@ -49,7 +49,7 @@ export function buildEngineTriageInput(
       controlId: signal.controlId,
       ruleId: signal.ruleId,
       severity: signal.severity,
-      selectionReason: "MEDIUM_CONFIDENCE" as const,
+      selectionReason: "MEDIUM_SEVERITY" as const,
       evidenceChecksum: signal.evidenceChecksum,
       evidenceExcerpt: Buffer.from(signal.snippet ?? "", "utf8")
         .subarray(0, 4096)

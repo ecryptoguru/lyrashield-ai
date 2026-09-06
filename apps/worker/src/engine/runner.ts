@@ -1368,12 +1368,16 @@ export async function runEngineTriage(params: {
     })
     return { artifact: null, ...processResult }
   }
+  const rawUsage = isTriageUsage(rawArtifact) ? rawArtifact.llmUsage : undefined
   const artifact = parseEngineTriageArtifact(rawArtifact)
   if (!artifact) {
     logger.warn("AI security triage artifact violated its versioned contract", { scanId })
-    return { artifact: null, ...processResult }
+    return {
+      artifact: null,
+      ...(isTriageUsage(rawUsage) ? { llmUsage: rawUsage } : {}),
+      ...processResult,
+    }
   }
-  const rawUsage = isTriageUsage(rawArtifact) ? rawArtifact.llmUsage : undefined
   return {
     artifact,
     ...(isTriageUsage(rawUsage) ? { llmUsage: rawUsage } : {}),

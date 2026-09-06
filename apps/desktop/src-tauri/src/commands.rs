@@ -125,6 +125,7 @@ pub async fn start_scan(
     target: ScanTarget,
     mode: ScanMode,
     instruction: Option<String>,
+    max_budget_usd: f64,
 ) -> Result<String, String> {
     // Single guard before scan side effects validates signature, machine membership, and revocation.
     // Must be before any subprocess spawn.
@@ -138,6 +139,7 @@ pub async fn start_scan(
         target,
         mode,
         instruction,
+        max_budget_usd,
     };
     scan::start_scan(app, config).await
 }

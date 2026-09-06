@@ -1,7 +1,12 @@
 import type { Job } from "bullmq"
+import { boundedCleanup, scanElapsedClock } from "../engine/scan-deadline"
 import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
+import {
+  authorizeDeterministicRetest,
+  checkoutDeterministicRetest,
+} from "../engine/deterministic-retest"
 import {
   recordAgentMinutes,
   hasUnsettledScanIntent,
@@ -335,6 +340,23 @@ export function resolveScannerPhaseTimeoutMs(
   return Math.max(0, Math.min(env.SCANNER_PHASE_TIMEOUT_MS, globalScanBudgetMs - elapsedMs))
 }
 
+export function resolveEngineRuntimeBudgetMs(
+  mode: ScanJobData["mode"],
+  targetType: TargetType,
+  scanRuntimeBudgetMs: number,
+  elapsedMs: number
+): number {
+  if (targetType !== "REPO") return Math.max(0, scanRuntimeBudgetMs - elapsedMs)
+  try {
+    const profile = resolveScanProfile({ targetType, mode })
+    const engineCapMs = profile.maxEngineMinutes * 60 * 1000
+    const scannerReserveMs = profile.scannerReserveMinutes * 60 * 1000
+    return Math.max(0, Math.min(engineCapMs, scanRuntimeBudgetMs - elapsedMs - scannerReserveMs))
+  } catch {
+    return Math.max(0, scanRuntimeBudgetMs - elapsedMs)
+  }
+}
+
 function requireEngineModel(model: string | undefined): string {
   if (!model) {
     throw new Error("A GPT-5.6 Terra or Luna deployment must be configured for repository scans")
@@ -466,6 +488,7 @@ export async function persistEngineUsageCheckpoint(params: {
   }
 
   const costsMatch =
+    llmUsage["accountingComplete"] !== false &&
     rateCardCostUsd !== null &&
     (usage.engineReportedCostUsd === null ||
       Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001)
@@ -483,15 +506,18 @@ export async function persistEngineUsageCheckpoint(params: {
         : usage.engineReportedCostUsd !== null
           ? "engine_reported_unreconciled"
           : "unavailable"
-  const reconciliationStatus = modelMixUnpriceable
-    ? "model_mix_unpriceable"
-    : rateCardCostUsd === null
-      ? "unavailable"
-      : usage.engineReportedCostUsd === null
-        ? "rate_card_only"
-        : costsMatch
-          ? "matched"
-          : "mismatch"
+  const reconciliationStatus =
+    llmUsage["accountingComplete"] === false
+      ? "incomplete_provider_receipts"
+      : modelMixUnpriceable
+        ? "model_mix_unpriceable"
+        : rateCardCostUsd === null
+          ? "unavailable"
+          : usage.engineReportedCostUsd === null
+            ? "rate_card_only"
+            : costsMatch
+              ? "matched"
+              : "mismatch"
 
   try {
     await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
@@ -501,6 +527,7 @@ export async function persistEngineUsageCheckpoint(params: {
       billedCostUsd,
       costSource,
       reconciliationStatus,
+      accountingComplete: llmUsage["accountingComplete"] !== false,
       ...(rateCardCostUsd !== null
         ? {
             pricingEffectiveDate: GPT_56_PRICING_EFFECTIVE_DATE,
@@ -566,9 +593,11 @@ export async function persistEngineUsageCheckpoint(params: {
       ? {}
       : {
           reconciliationReason:
-            rateCardCostUsd === null
-              ? "Complete per-request GPT-5.6 usage buckets were unavailable"
-              : "Engine-reported cost did not match the GPT-5.6 rate-card calculation",
+            llmUsage["accountingComplete"] === false
+              ? "Some started provider requests have no final usage receipt"
+              : rateCardCostUsd === null
+                ? "Complete per-request GPT-5.6 usage buckets were unavailable"
+                : "Engine-reported cost did not match the GPT-5.6 rate-card calculation",
         }),
   }
 }
@@ -639,6 +668,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         goal: true,
         mode: true,
         policyId: true,
+        determinismMode: true,
+        startedAt: true,
       },
     })
   } catch (err) {
@@ -677,6 +708,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     }
   }
   const workspaceId = scanRecord.workspaceId
+  const elapsedScanMs = scanElapsedClock(scanRecord.startedAt)
 
   // Wrap the entire job in workspace context so the Prisma client extension's
   // auto-scoping safety net is active for all DB queries. Without this, a
@@ -694,6 +726,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
     let engineModel: string | undefined
     let durableFinalizationResult: ScanJobResult | null = null
+    let deterministicCheckout: Awaited<ReturnType<typeof checkoutDeterministicRetest>> | undefined
     try {
       // A manifest is the immutable checkpoint after findings and retests have
       // been persisted. If an infrastructure error interrupted only the final
@@ -835,6 +868,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           repoFullName: true,
           branch: true,
           apiSpecUrl: true,
+          installationId: true,
+          repoProvider: true,
         },
       })
 
@@ -907,7 +942,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         : null
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
-      const scanStartedAtMs = Date.now()
       scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(
         mode,
         policy?.maxDurationMinutes,
@@ -915,7 +949,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       )
 
       const hasGlobalScanTimeout = (): boolean => {
-        if (Date.now() - scanStartedAtMs >= scanRuntimeBudgetMs) {
+        if (elapsedScanMs() >= scanRuntimeBudgetMs) {
           globalScanTimeoutReached = true
           return true
         }
@@ -968,8 +1002,44 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       let engineResult: EngineRunResult
       let engineStartedAtMs: number | null = null
       let maxBudgetUsd = 0
+      const deterministicRetest =
+        target.type === "REPO" && scanRecord.determinismMode === "targeted_scanner"
 
-      if (target.type === "REPO") {
+      if (deterministicRetest) {
+        if (target.repoProvider !== "github") {
+          throw new Error("Deterministic repository retests require a GitHub source target")
+        }
+        await authorizeDeterministicRetest(scanId, workspaceId, targetId)
+        deterministicCheckout = await checkoutDeterministicRetest({
+          scanId,
+          repoFullName: target.repoFullName,
+          branch: target.branch,
+          installationId: target.installationId,
+          timeoutMs: Math.max(0, scanRuntimeBudgetMs - elapsedScanMs()),
+          isCancelled: isScanCancelled,
+        })
+        engineResult = {
+          exitCode: 0,
+          cancelled: false,
+          timedOut: false,
+          sourceCheckoutPath: deterministicCheckout.checkoutPath,
+          sourceRevision: deterministicCheckout.sourceRevision,
+          output: {
+            vulnerabilities: [],
+            runRecord: null,
+            findingCount: 0,
+            summary:
+              "Deterministic repository retest completed; model analysis was outside this retest scope.",
+            findingsComplete: true,
+          },
+        }
+        await addScanEvent(
+          scanId,
+          "engine_skipped",
+          "info",
+          "Deterministic repository retest uses an independent checkout and no model calls"
+        )
+      } else if (target.type === "REPO") {
         maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
         if (maxBudgetUsd <= 0) {
           const errorMessage = "Protected run limit is zero"
@@ -1033,11 +1103,18 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         )
         billablePhaseStarted = true
 
-        // The policy's maxDurationMinutes is a paid-plan cost control and must
-        // bound the most expensive scan class too: pass the REMAINING wall-clock
-        // budget to the engine runner so a REPO scan cannot outlive it even when
-        // its self-reported spend and liveness keep advancing.
-        const engineTimeoutMs = Math.max(0, scanRuntimeBudgetMs - (Date.now() - scanStartedAtMs))
+        // Keep the profile's deterministic-scanner reserve available even when
+        // the model is healthy until its own wall-clock cap.
+        const engineTimeoutMs = resolveEngineRuntimeBudgetMs(
+          mode,
+          target.type,
+          scanRuntimeBudgetMs,
+          elapsedScanMs()
+        )
+        if (engineTimeoutMs <= 0) {
+          globalScanTimeoutReached = true
+          throw new Error("Scan analysis deadline exhausted before engine execution")
+        }
 
         engineStartedAtMs = Date.now()
         engineResult = await runEngine(
@@ -1251,7 +1328,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           maxBudgetUsd,
           llmUsage: engineResult.output.runRecord?.llm_usage,
           webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
-          usageExpected: target.type === "REPO",
+          usageExpected: target.type === "REPO" && !deterministicRetest,
         })
       const engineExecution =
         engineWorkObserved && engineProfile && engineModel
@@ -1457,6 +1534,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       } else if (
         !engineTerminalError &&
+        !deterministicRetest &&
         target.type === "REPO" &&
         (!engineResult.output.findingsComplete ||
           !runRecord ||
@@ -1515,10 +1593,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
-      const scannerPhaseTimeoutMs =
-        target.type === "REPO"
-          ? env.SCANNER_PHASE_TIMEOUT_MS
-          : resolveScannerPhaseTimeoutMs(scanRuntimeBudgetMs, Date.now() - scanStartedAtMs)
+      const scannerPhaseTimeoutMs = resolveScannerPhaseTimeoutMs(
+        scanRuntimeBudgetMs,
+        elapsedScanMs()
+      )
 
       const orchestratorResult = await runScannerOrchestrator({
         scanId,
@@ -1555,7 +1633,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         | undefined
       const triageInput = buildEngineTriageInput(aiSecuritySignals, engineResult.sourceRevision)
       const triageFeatureEnabled =
-        !agentMinuteTerminalError && env.LYRASHIELD_AI_TRIAGE_ENABLED === "1"
+        !deterministicRetest &&
+        !agentMinuteTerminalError &&
+        !hasGlobalScanTimeout() &&
+        env.LYRASHIELD_AI_TRIAGE_ENABLED === "1"
       const workspacePlan =
         triageFeatureEnabled && triageInput
           ? await prisma.workspace
@@ -1575,23 +1656,30 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         triageCapUsd: env.LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD,
       })
       let triageTerminalReason = triageEligibility.reason
-      if (target.type === "REPO" && triageInput && triageEligibility.eligible) {
+      if (
+        target.type === "REPO" &&
+        triageInput &&
+        triageEligibility.eligible &&
+        !hasGlobalScanTimeout()
+      ) {
         try {
           const triageResult = await runEngineTriage({
             scanId,
             profile: resolveEngineProfile("STANDARD"),
             input: triageInput,
             maxBudgetUsd: triageEligibility.maxBudgetUsd!,
-            timeoutMs: env.SCANNER_PHASE_TIMEOUT_MS,
-            shouldCancel: isScanCancelled,
+            timeoutMs: resolveScannerPhaseTimeoutMs(scanRuntimeBudgetMs, elapsedScanMs()),
+            shouldCancel: async () => hasGlobalScanTimeout() || (await isScanCancelled()),
           })
           const artifact = triageResult.artifact
-          if (artifact && triageResult.llmUsage) {
+          if (triageResult.llmUsage) {
             const mergedUsage = mergeLlmUsage(
               engineResult.output.runRecord?.llm_usage,
               triageResult.llmUsage
             )
             if (mergedUsage) {
+              if (triageResult.llmUsage["accountingComplete"] === false)
+                mergedUsage["accountingComplete"] = false
               const updatedAccounting = await persistEngineUsageCheckpoint({
                 scanId,
                 maxBudgetUsd,
@@ -1603,28 +1691,44 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               billedCostUsd = updatedAccounting.billedCostUsd
               costReconciled = updatedAccounting.costReconciled
               reconciliationReason = updatedAccounting.reconciliationReason
-              aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
-              triageSnapshot = {
-                status: artifact.status,
-                terminalReason: artifact.terminalReason,
-                policyVersion: artifact.policyVersion,
-                modelRoute: artifact.modelRoute,
-                inputChecksum: artifact.inputChecksum,
-                redactionReceipt: artifact.redactionReceipt.inputChecksum,
-                resultCount: artifact.results.length,
+              if (artifact) {
+                aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
+                triageSnapshot = {
+                  status: artifact.status,
+                  terminalReason: artifact.terminalReason,
+                  policyVersion: artifact.policyVersion,
+                  modelRoute: artifact.modelRoute,
+                  inputChecksum: artifact.inputChecksum,
+                  redactionReceipt: artifact.redactionReceipt.inputChecksum,
+                  resultCount: artifact.results.length,
+                }
               }
             } else {
-              triageSnapshot = {
-                status: "FAILED",
-                terminalReason: "TRIAGE_ACCOUNTING_UNAVAILABLE",
-                policyVersion: artifact.policyVersion,
-                modelRoute: artifact.modelRoute,
-                inputChecksum: artifact.inputChecksum,
-                redactionReceipt: artifact.redactionReceipt.inputChecksum,
-                resultCount: 0,
+              if (!artifact) {
+                triageTerminalReason = "TRIAGE_ARTIFACT_UNAVAILABLE"
+              } else {
+                triageSnapshot = {
+                  status: "FAILED",
+                  terminalReason: "TRIAGE_ACCOUNTING_UNAVAILABLE",
+                  policyVersion: artifact.policyVersion,
+                  modelRoute: artifact.modelRoute,
+                  inputChecksum: artifact.inputChecksum,
+                  redactionReceipt: artifact.redactionReceipt.inputChecksum,
+                  resultCount: 0,
+                }
               }
             }
           } else if (artifact) {
+            const updatedAccounting = await persistEngineUsageCheckpoint({
+              scanId,
+              maxBudgetUsd,
+              webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
+              usageExpected: true,
+            })
+            budgetExceeded = updatedAccounting.budgetExceeded
+            billedCostUsd = updatedAccounting.billedCostUsd
+            costReconciled = updatedAccounting.costReconciled
+            reconciliationReason = updatedAccounting.reconciliationReason
             triageSnapshot = {
               status: artifact.status,
               terminalReason: artifact.terminalReason,
@@ -1634,6 +1738,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               redactionReceipt: artifact.redactionReceipt.inputChecksum,
               resultCount: 0,
             }
+          } else {
+            const updatedAccounting = await persistEngineUsageCheckpoint({
+              scanId,
+              maxBudgetUsd,
+              webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
+              usageExpected: true,
+            })
+            budgetExceeded = updatedAccounting.budgetExceeded
+            billedCostUsd = updatedAccounting.billedCostUsd
+            costReconciled = updatedAccounting.costReconciled
+            reconciliationReason = updatedAccounting.reconciliationReason
           }
           triageTerminalReason = triageSnapshot?.terminalReason ?? "TRIAGE_ARTIFACT_UNAVAILABLE"
         } catch {
@@ -1783,6 +1898,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             matchedControlRanks: coverage.matchedControlRanks,
             urlExecution: orchestratorResult.urlExecution,
             engineExecution,
+            ...(deterministicCheckout
+              ? {
+                  sourceExecution: {
+                    kind: "deterministic_retest" as const,
+                    sourceRevision: deterministicCheckout.sourceRevision,
+                  },
+                }
+              : {}),
             accounting: {
               maxBudgetUsd,
               billedCostUsd,
@@ -2097,7 +2220,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
       try {
-        await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
+        await boundedCleanup(
+          (async () => {
+            await deterministicCheckout?.cleanup()
+            await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
+          })()
+        )
       } catch (cleanupError) {
         const error = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
         log.error("Engine workspace cleanup requires operator attention", { scanId, error })

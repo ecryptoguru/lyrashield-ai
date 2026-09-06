@@ -65,9 +65,10 @@ export async function getByokStatus(): Promise<ByokStatus> {
 export async function startScan(
   target: ScanTarget,
   mode: ScanMode,
-  instruction?: string
+  instruction: string | undefined,
+  maxBudgetUsd: number
 ): Promise<string> {
-  return invoke("start_scan", { target, mode, instruction: instruction ?? null })
+  return invoke("start_scan", { target, mode, instruction: instruction ?? null, maxBudgetUsd })
 }
 export async function cancelScan(scanId: string): Promise<void> {
   return invoke("cancel_scan", { scanId })

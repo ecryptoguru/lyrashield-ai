@@ -536,8 +536,8 @@ describe("result integrity", () => {
     const failed = await persist("FAILED")
 
     expect(completed).toMatchObject({
-      version: 6,
-      manifest: { version: 6, terminalOutcome: { status: "COMPLETED" } },
+      version: 7,
+      manifest: { version: 7, terminalOutcome: { status: "COMPLETED" } },
     })
     expect(failed.checksum).not.toBe(completed.checksum)
   })
@@ -647,6 +647,24 @@ describe("result integrity", () => {
       )
     })
 
+    it.each(["COMPLETED", "PARTIAL"])(
+      "reads v7 deterministic source receipts with %s outcome",
+      async (status) => {
+        mockRepoRetestState({
+          retestManifest: manifestRow("scan-2", "target-1", "REPO", {
+            engineExecution: { sourceRevision: null },
+            sourceExecution: { kind: "deterministic_retest", sourceRevision: REV_B },
+            terminalOutcome: { status },
+          }),
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        if (status === "COMPLETED")
+          expect(prisma.finding.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining({ status: "FIXED" }) })
+          )
+        else expect(prisma.finding.update).not.toHaveBeenCalled()
+      }
+    )
     it("validates a changed-revision retest because a fix normally changes the SHA", async () => {
       mockRepoRetestState({ baselineRevision: REV_A, retestRevision: REV_B })
 

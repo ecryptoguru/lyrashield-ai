@@ -96,7 +96,7 @@ async function ownedDirectory(path: string, scanId: string): Promise<StaleDirect
   }
 }
 
-async function directories(activeIds: Set<string>): Promise<StaleDirectory[]> {
+export async function listOwnedScanDirectories(activeIds: Set<string>): Promise<StaleDirectory[]> {
   const result: StaleDirectory[] = []
   try {
     // RUN_ROOT is fixed by worker configuration, never scan input.
@@ -142,7 +142,7 @@ const defaults: StaleResourceReaperDependencies = {
   activeScanIds,
   containers,
   removeContainer,
-  directories,
+  directories: listOwnedScanDirectories,
   removeDirectory,
 }
 

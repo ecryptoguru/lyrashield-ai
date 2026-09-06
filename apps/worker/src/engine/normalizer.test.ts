@@ -252,7 +252,8 @@ describe("getFindingStats", () => {
     expect(stats.bySeverity["CRITICAL"]).toBe(1)
     expect(stats.bySeverity["HIGH"]).toBe(1)
     expect(stats.bySeverity["LOW"]).toBe(1)
-    expect(stats.verified).toBeGreaterThanOrEqual(1)
+    expect(stats.verified).toBe(0)
+    expect(stats.unverified).toBe(stats.total)
   })
 })
 

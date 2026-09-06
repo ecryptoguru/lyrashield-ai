@@ -1291,7 +1291,9 @@ function FindingDetailDrawer({
               ) : (
                 <Badge variant="muted">{finding.verificationStatus.replaceAll("_", " ")}</Badge>
               )}
-              {finding.confidence && <Badge variant="muted">{finding.confidence} confidence</Badge>}
+              {finding.confidence && (
+                <Badge variant="muted">{finding.confidence} evidence strength (heuristic)</Badge>
+              )}
             </div>
 
             {/* "View scan" cross-link when scanId is available */}
