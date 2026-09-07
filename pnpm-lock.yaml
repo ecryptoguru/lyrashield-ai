@@ -627,7 +627,7 @@ importers:
         specifier: ^2.2.5
         version: 2.2.5
       '@lyrashield/agent-plugin':
-        specifier: ^0.1.21
+        specifier: ^0.1.22
         version: link:../agent-plugin
       jsonc-parser:
         specifier: ^3.3.1

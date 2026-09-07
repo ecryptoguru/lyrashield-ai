@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.22
+
+- Validate the pristine generated tree before the secret scanner writes its SARIF report.
+
 ## 0.1.21
 
 - Make marketplace export ordering identical across macOS and Linux.
