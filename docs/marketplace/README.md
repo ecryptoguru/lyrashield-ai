@@ -10,14 +10,14 @@ root plugin with `source: "./"`, so the marketplace root and the plugin root are
 
 Claude Code marketplace commands:
 
-```
+```shell
 claude plugin marketplace add ecryptoguru/lyrashield-marketplace
 claude plugin install lyrashield@lyrashield-ai
 ```
 
 GitHub Copilot CLI uses the same marketplace identity through its own commands:
 
-```
+```shell
 copilot plugin marketplace add ecryptoguru/lyrashield-marketplace
 copilot plugin install lyrashield@lyrashield-ai
 ```

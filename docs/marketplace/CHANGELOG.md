@@ -4,6 +4,8 @@
 
 - Package Codex under a dedicated marketplace root using its native `streamable-http` MCP schema.
 - Register and install Codex through `codex plugin` so desktop discovery is explicit.
+- Use Cline's resolver-backed CLI settings path and document its override.
+- Clarify that OAuth refresh uses the stored issuer before API URL overrides apply.
 
 ## 0.1.23
 
