@@ -1,7 +1,9 @@
 # Cline MCP Install — LyraShield AI
 
 1. Open Cline and click **MCP Servers** → **Configure MCP Servers**.
-2. Add the LyraShield server to `~/.cline/mcp.json` for Cline CLI, or to the IDE extension's settings JSON opened from MCP Servers → Configure:
+2. Add the LyraShield server to `~/.cline/data/settings/cline_mcp_settings.json` for Cline CLI
+   (`CLINE_MCP_SETTINGS_PATH` can override it), or to the IDE extension's settings JSON opened
+   from MCP Servers → Configure:
 
 ```json
 {
