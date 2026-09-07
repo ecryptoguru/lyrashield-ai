@@ -17,7 +17,7 @@ faq:
     a: Yes. Add the LyraShield GitHub Action to your workflow with the diff aware gate so only changed code is scanned on each pull request. Output is SARIF, which GitHub renders in the security tab.
 ---
 
-To connect Antigravity to LyraShield, run npx lyrashield install antigravity so the CLI writes the MCP server entry to your config, then run npx lyrashield doctor to verify the connection and credentials. Antigravity is the Google successor to Gemini CLI and reuses the same ~/.gemini/ path, so the server entry lands where existing config already lives. This workflow covers the install, manual fallback, verification, an inline check, a CI gate, and a rules snippet.
+To connect Antigravity to LyraShield, run `npx lyrashield install antigravity` so the CLI writes the MCP server entry to its dedicated config, then run `npx lyrashield doctor` to verify it. Antigravity uses `~/.gemini/config/mcp_config.json` globally and `.agents/mcp_config.json` per workspace.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. Wiring LyraShield into Antigravity puts release assurance inside the agent session, so a scan runs before a change reaches a pull request rather than only after. The steps below assume you have Node installed and an active LyraShield account.
 
@@ -60,7 +60,7 @@ For a local stdio server, use the package directly:
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"]
+      "args": ["-y", "@lyrashield/mcp@0.2.5"]
     }
   }
 }
@@ -112,4 +112,4 @@ A rules file states intent. The approval gate enforces it. A prompt can be chang
 
 Antigravity accelerates implementation inside the agent session. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest, and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when, and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
-As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://lyrashieldai.com) to start, or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Gemini CLI security checklist](/blog/gemini-cli-app-security-checklist) covers the predecessor tool if your team is mid migration.
+As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://lyrashieldai.com) to start, or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Gemini CLI security checklist](/blog/gemini-cli-app-security-checklist) covers that separately supported client.

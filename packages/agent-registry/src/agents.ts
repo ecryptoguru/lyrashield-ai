@@ -1,7 +1,7 @@
 import type { AgentEntry, RegistryAgentEntry } from "./types"
 import { API_URL_PLACEHOLDER } from "./render"
 
-const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-08-13"
+const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-09-08"
 
 const claudeCode: AgentEntry = {
   id: "claude-code",
@@ -30,8 +30,8 @@ const claudeCode: AgentEntry = {
   },
   gotchas: [
     "The project `.mcp.json` is shared by convention with the team; never inline a literal API key into it.",
-    "`claude mcp add` flag syntax is ambiguous between docs and upstream README; verify the current form before shelling out.",
-    "Claude Code also supports `claude mcp add` as a global alternative to editing the shared project file.",
+    "For stdio, `claude mcp add <name> -- <command> [args...]`; for HTTP, `claude mcp add --transport http <name> <url>`.",
+    "Use `--scope user` for a global alternative to the shared project file.",
   ],
 }
 
@@ -84,7 +84,7 @@ const devin: AgentEntry = {
   },
   rulesFiles: [],
   source: {
-    checkedOn: "2026-08-13",
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
     url: "https://docs.devin.ai/work-with-devin/mcp",
   },
   gotchas: [
@@ -140,14 +140,14 @@ const openaiCodex: AgentEntry = {
     },
   ],
   transports: ["stdio"],
-  credential: { kind: "env-names", field: "env_vars" },
+  credential: { kind: "inline-env" },
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
     url: "https://developers.openai.com/codex/mcp",
   },
   gotchas: [
-    "OpenAI Codex uses `env_vars`, not `env` — a separate TOML sub-table `[mcp_servers.lyrashield.env_vars]`. Using `env` is silently ignored.",
+    "Explicit values belong in `[mcp_servers.lyrashield.env]`. Codex reserves `env_vars` for an array of environment-variable names inherited from the parent process.",
   ],
 }
 
@@ -155,10 +155,16 @@ const cline: AgentEntry = {
   id: "cline",
   displayName: "Cline",
   docsSlug: "cline",
-  installStrategy: "guided-manual",
-  format: null,
-  rootKey: null,
-  locations: [],
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcpServers",
+  locations: [
+    {
+      scope: "global",
+      path: "~/.cline/mcp.json",
+      sharedByConvention: false,
+    },
+  ],
   transports: ["stdio", "remote-http"],
   credential: { kind: "inline-env" },
   transportFields: {
@@ -167,10 +173,10 @@ const cline: AgentEntry = {
   rulesFiles: [".clinerules"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://docs.cline.bot/mcp/mcp-marketplace",
+    url: "https://docs.cline.bot/mcp/mcp-overview",
   },
   gotchas: [
-    "The `cline_mcp_settings.json` path is not verified; Cline is documented as managed via the panel.",
+    "Cline CLI reads `~/.cline/mcp.json`; IDE extensions expose their own MCP settings JSON through the Cline panel.",
     'Cline defaults to legacy SSE when `type` is omitted; the remote endpoint needs `type: "streamableHttp"` explicitly.',
   ],
 }
@@ -202,11 +208,12 @@ const opencode: AgentEntry = {
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://dev.opencode.ai/docs/mcp-servers/",
+    url: "https://opencode.ai/docs/mcp-servers/",
   },
   gotchas: [
     "OpenCode uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
     'OpenCode local entries use `type: "local"`, a command array, and `environment`; remote entries use `type: "remote"`.',
+    "OpenCode stores servers under the top-level `mcp` object and uses `enabled: false` to disable an entry.",
   ],
 }
 
@@ -276,7 +283,7 @@ const zed: AgentEntry = {
 
 const geminiCli: AgentEntry = {
   id: "gemini-cli",
-  displayName: "Gemini CLI (legacy → Antigravity)",
+  displayName: "Gemini CLI",
   docsSlug: "gemini-cli",
   installStrategy: "config-file",
   format: "json",
@@ -288,18 +295,20 @@ const geminiCli: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
-  credential: { kind: "inline-env" },
-  forceInlineEnv: true,
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "interpolated-env", syntax: "$LYRASHIELD_API_KEY" },
+  transportFields: {
+    "remote-http": { httpUrl: API_URL_PLACEHOLDER },
+  },
   serverNamePattern: "^lyrashield$",
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://github.com/google-gemini/gemini-cli/blob/HEAD/docs/tools/mcp-server.md",
+    url: "https://geminicli.com/docs/tools/mcp-server/",
   },
   gotchas: [
-    "Gemini CLI is being transitioned to Antigravity CLI (agy). Free/Pro/Ultra stopped June 2026; enterprise/Code Assist licenses are unaffected. For new setups use the `antigravity` entry — Antigravity auto-migrates Gemini CLI configs (skills, MCP servers, gemini.md). This entry remains for enterprise-legacy Gemini CLI only.",
-    "Gemini CLI strips env vars whose names contain KEY, TOKEN or SECRET from subprocess environments; LYRASHIELD_API_KEY must be declared inline in the entry's env block.",
+    "Gemini CLI expands `$VAR_NAME` and `${VAR_NAME}` references in MCP `env` and `headers`; use a reference instead of a literal secret.",
+    "Streamable HTTP servers use `httpUrl`; the `url` field is for SSE endpoints.",
     "Server name must not contain underscores; use `lyrashield`, never `lyra_shield`.",
   ],
 }
@@ -341,7 +350,7 @@ const amp: AgentEntry = {
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://ampcode.com/manual/mcp.md",
+    url: "https://ampcode.com/docs/customize/mcp",
   },
   gotchas: [
     "Amp takes no --env flags; the key must be exported in the user's shell profile and inherited by the Amp CLI.",
@@ -358,14 +367,16 @@ const picode: AgentEntry = {
   rootKey: null,
   locations: [],
   transports: ["stdio"],
-  credential: { kind: "inline-env" },
+  credential: { kind: "shell-env" },
+  manualInstructions:
+    "Pi does not include MCP in core. Run `lyrashield check-diff` or `lyrashield gate --verdict` beside Pi, or use a separately reviewed Pi extension that implements MCP.",
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: null,
+    url: "https://pi.dev/docs/latest/usage",
   },
   gotchas: [
-    "PiCode's config file path is not documented in our docs; the `mcpServers` shape is known but the path is not.",
+    "Do not create `.mcp.json`, `.pi/mcp.json`, or another MCP file for Pi core; those paths belong to third-party adapters rather than Pi's official contract.",
   ],
 }
 
@@ -385,11 +396,11 @@ const openclaw: AgentEntry = {
   rulesFiles: ["OpenClaw skill.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://docs.openclaw.ai/gateway/configuration-reference",
+    url: "https://docs.openclaw.ai/cli/mcp",
   },
   gotchas: [
     "OpenClaw manages client-side servers with `openclaw mcp add`, `set`, and `configure`, or in its Control UI at /settings/mcp. Do not use mcporter configuration for OpenClaw-managed servers.",
-    'For a local server, declare `transport: stdio` explicitly. For Streamable HTTP, use `transport: "streamable-http"`; then run `openclaw mcp doctor --probe` for a live tool-list check.',
+    'Local entries use `command` and repeated `--arg` flags. For Streamable HTTP, use `transport: "streamable-http"`; then run `openclaw mcp doctor --probe` for a live tool-list check.',
   ],
 }
 
@@ -402,7 +413,7 @@ const hermes: AgentEntry = {
   rootKey: "mcp_servers",
   locations: [{ scope: "global", path: "~/.hermes/config.yaml", sharedByConvention: false }],
   transports: ["stdio", "remote-http"],
-  credential: { kind: "inline-env" },
+  credential: { kind: "interpolated-env", syntax: "${env:LYRASHIELD_API_KEY}" },
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -425,7 +436,7 @@ const antigravity: AgentEntry = {
     {
       scope: "global",
       path: "~/.gemini/config/mcp_config.json",
-      sharedByConvention: true,
+      sharedByConvention: false,
     },
     {
       scope: "project",
@@ -507,7 +518,7 @@ const goose: AgentEntry = {
   rulesFiles: [".goosehints"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://block-goose.mintlify.app/guides/mcp-integration",
+    url: "https://github.com/aaif-goose/goose/blob/main/documentation/docs/getting-started/using-extensions.md",
   },
   gotchas: [
     "Goose configures MCP servers as `extensions` in ~/.config/goose/config.yaml (YAML, nested map) — not a `mcpServers` JSON dict. Stdio entry: {type: stdio, cmd, args}; remote: {type: streamable_http, uri, headers}.",
@@ -523,16 +534,18 @@ const aider: AgentEntry = {
   format: null,
   rootKey: null,
   locations: [],
-  transports: ["stdio", "remote-http"],
-  credential: { kind: "inline-env" },
+  transports: ["stdio"],
+  credential: { kind: "shell-env" },
+  manualInstructions:
+    "Aider does not document native MCP client support. Run `lyrashield check-diff` or `lyrashield gate --verdict` as a separate repository check; do not add an `mcp-servers` key to Aider configuration.",
   rulesFiles: [],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://modelpiper.com/blog/aider-mcp-setup",
+    url: "https://aider.chat/docs/config/aider_conf.html",
   },
   gotchas: [
-    "Aider's MCP is configured as a YAML list under `mcp-servers` in ~/.aider.conf.yml (or a `--mcp-servers '<json>'` CLI flag) — not a `mcpServers` JSON dict. Remote entries use `transport: http` + `url`.",
-    "Aider has no MCP rules file.",
+    "Aider's official configuration reference has no `mcp-servers` setting or `--mcp-servers` CLI option.",
+    "Use LyraShield's standalone CLI and CI paths until Aider ships an official MCP client contract.",
   ],
 }
 
@@ -556,7 +569,7 @@ const devinCli: AgentEntry = {
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://cognitionai.mintlify.app/cli/extensibility/mcp/overview",
+    url: "https://docs.devin.ai/cli/extensibility/mcp/configuration",
   },
   gotchas: [
     "Devin CLI (separate from Devin Desktop) uses .devin/config.local.json (gitignored) with a mcpServers object; stdio only.",
@@ -599,7 +612,7 @@ const mimoCode: AgentEntry = {
   displayName: "MiMo Code",
   docsSlug: "mimo-code",
   installStrategy: "config-file",
-  format: "json",
+  format: "jsonc",
   rootKey: "mcp",
   locations: [
     { scope: "project", path: ".mimicode/mimocode.jsonc", sharedByConvention: false },
@@ -632,22 +645,22 @@ const codebuff: AgentEntry = {
   format: "json",
   rootKey: "mcpServers",
   locations: [
-    {
-      scope: "project",
-      path: ".agents/mcp.json",
-      sharedByConvention: true,
-    },
+    { scope: "project", path: ".agents/mcp.json", sharedByConvention: true },
+    { scope: "global", path: "~/.agents/mcp.json", sharedByConvention: false },
   ],
-  transports: ["stdio"],
-  credential: { kind: "inline-env" },
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "interpolated-env", syntax: "$LYRASHIELD_API_KEY" },
+  transportFields: {
+    "remote-http": { type: "http", url: API_URL_PLACEHOLDER },
+  },
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://www.codebuff.com/",
+    url: "https://www.codebuff.com/docs/tips/mcp-servers",
   },
   gotchas: [
-    "Config lives at `.agents/mcp.json` with a `mcpServers` object of `{ command, args, env }`; open-source terminal agent installed via `npm i -g codebuff`.",
-    "Only stdio transport is documented, so this entry is stdio-only. Supports `/init` and `/publish` and an agent store.",
+    "Codebuff searches project `.agents/mcp.json`, then a parent `.agents/mcp.json`, then global `~/.agents/mcp.json`; later locations override earlier ones.",
+    "Codebuff resolves `$VAR_NAME` references from the launching shell. Never put a literal key in a shared `.agents/mcp.json`.",
   ],
 }
 
@@ -679,7 +692,7 @@ const ohMyPi: AgentEntry = {
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://omp.sh",
+    url: "https://github.com/can1357/oh-my-pi/blob/main/docs/mcp-config.md",
   },
   gotchas: [
     "Project config is `.omp/mcp.json`; user config is `~/.omp/agent/mcp.json` (profile-aware at `~/.omp/profiles/<profile>/agent/mcp.json`). Oh-My-Pi also auto-discovers MCP servers from other tools like Claude Code and Cursor.",
@@ -704,6 +717,8 @@ const claudeCodePlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
+  manualInstructions:
+    "Install through Claude Code's marketplace flow: `claude plugin marketplace add ecryptoguru/lyrashield-marketplace`, then `claude plugin install lyrashield@lyrashield-ai`. Use `claude --plugin-dir <path>` only for a temporary local test.",
   rulesFiles: ["CLAUDE.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -760,9 +775,11 @@ const vscodePlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
+  manualInstructions:
+    "VS Code Agent Plugins must be installed from Customize, Install from Source, or an approved team marketplace. Use `lyrashield install vscode` for the supported `.vscode/mcp.json` path.",
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
-    checkedOn: "2026-08-12",
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
     url: "https://code.visualstudio.com/docs/agent-customization/agent-plugins",
   },
   gotchas: [
@@ -818,6 +835,8 @@ const githubCopilotPlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
+  manualInstructions:
+    "Install through Copilot CLI's marketplace flow: `copilot plugin marketplace add ecryptoguru/lyrashield-marketplace`, then `copilot plugin install lyrashield@lyrashield-ai`.",
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -846,6 +865,8 @@ const kiroPlugin: AgentEntry = {
   ],
   transports: ["stdio"],
   credential: { kind: "shell-env" },
+  manualInstructions:
+    "Run `lyrashield login --oauth`, then merge the `lyrashield` entry from the package's `.mcp.kiro.json` into `.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json`. The staged plugin directory alone is not a Kiro MCP install.",
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -858,6 +879,7 @@ const kiroPlugin: AgentEntry = {
 }
 
 const EXPERIMENTAL_AGENT_IDS = new Set([
+  "aider",
   "picode",
   "vscode-agent-plugin",
   "github-copilot-agent-plugin",
@@ -901,12 +923,7 @@ export const AGENTS: readonly RegistryAgentEntry[] = [
   githubCopilotPlugin,
   kiroPlugin,
 ].map((agent) => {
-  const supportTier =
-    agent.id === "gemini-cli"
-      ? "DEPRECATED"
-      : EXPERIMENTAL_AGENT_IDS.has(agent.id)
-        ? "EXPERIMENTAL"
-        : "COMPATIBLE"
+  const supportTier = EXPERIMENTAL_AGENT_IDS.has(agent.id) ? "EXPERIMENTAL" : "COMPATIBLE"
   const evidence = PACKAGE_CONFORMANCE_AGENT_IDS.has(agent.id)
     ? "PACKAGE_CONFORMANCE"
     : "DOCUMENTATION"

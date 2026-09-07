@@ -8,18 +8,18 @@ draft: false
 heroImage: agent-security-21
 faq:
   - q: "Where does OpenClaw store MCP config?"
-    a: "Global ~/.openclaw/openclaw.json under mcp.servers. Use transport stdio for local npx -y @lyrashield/mcp and streamable-http for remote https://app.lyrashieldai.com/api/mcp with bearer header. openclaw mcp add can also create entries."
+    a: "Global ~/.openclaw/openclaw.json under mcp.servers. Use command and repeated --arg flags for local stdio, or transport streamable-http for the remote endpoint."
   - q: "How do I filter exposed tools?"
-    a: "Use a toolFilter allow list with lyrashield_scan_target, lyrashield_get_findings, lyrashield_list_targets, lyrashield_generate_fix_plan, and lyrashield_verify_fix. This keeps the agent surface minimal and focused on evidence-backed review."
+    a: "Use toolFilter.include with exact LyraShield tool names and toolFilter.exclude for unwanted globs."
   - q: "Does OpenClaw support bearer auth for remote MCP?"
-    a: "Yes. Set transport streamable-http, url https://app.lyrashieldai.com/api/mcp, and headers.Authorization to Bearer ${env:LYRASHIELD_API_KEY}."
+    a: "Yes. Prefer auth oauth with openclaw mcp login so a token is not stored in the config."
   - q: "How do I verify the LyraShield connection works in OpenClaw?"
     a: "Restart OpenClaw, then use the MCP panel to list servers and tools. Expect the lyrashield entry with lyrashield_scan_target, lyrashield_get_findings, and lyrashield_list_targets exposed. Run npx lyrashield doctor to confirm the config is valid, the server entry is present, and your credentials resolve before you run a scan."
 ---
 
-Fastest path: run `npx lyrashield init` to detect OpenClaw and write its MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference. The `openclaw mcp add` commands shown later are OpenClaw's own vendor CLI, not the LyraShield CLI.
+Run `npx lyrashield init --agent openclaw` to print the current guided setup, then use OpenClaw's own `mcp add` commands below. LyraShield does not edit OpenClaw's client-owned registry automatically. This preserves OpenClaw's validation, OAuth storage, and server lifecycle behavior and gives you a clear command to review before it changes the registry.
 
-You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, findings with explicit evidence states, and reviewable fix proposals inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
+You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, findings with explicit evidence states, and reviewable fix proposals inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp@0.2.5 plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
 OpenClaw is built to run many tools in parallel and to coordinate long lived sessions. That parallelism accelerates vibe coding and also expands attack surface quickly, which is why verification close to generation helps. Keep the [vibe coding security guide](/blog/vibe-coding-security-guide) open as your policy reference, then map findings to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) so triage has a shared vocabulary. Teams that generate large microservice surfaces in one session benefit most from this pairing, because otherwise review struggles to keep up with generation speed.
 
@@ -27,7 +27,7 @@ LyraShield follows a loop of Target to Scan to Evidence State to Fix Proposal to
 
 ## 1. Prerequisites and workspace baseline
 
-You need Node.js 20 or newer which you can verify via [Node.js docs](https://nodejs.org/en/docs), OpenClaw CLI installed, Git with PR workflow, and a LyraShield key in form lsk\_... Export LYRASHIELD_API_KEY in your shell. OpenClaw reads `${env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of checked in json.
+You need Node.js 20 or newer, OpenClaw CLI, Git, and a LyraShield login. Run `lyrashield login --oauth` for local stdio. For remote mode, use OpenClaw's MCP OAuth flow so the config does not contain a token.
 
 LyraShield v1 is designed to cover agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Its current MCP flow can generate and record a fix proposal and queue a retest; editing code, creating a branch, and opening a pull request remain developer-controlled steps. For protocol context, see [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro).
 
@@ -51,8 +51,9 @@ OpenClaw stores MCP servers under mcp.servers inside ~/.openclaw/openclaw.json. 
 CLI options:
 
 ```bash
-openclaw mcp add lyrashield --transport stdio --command npx --args "-y @lyrashield/mcp" --env LYRASHIELD_API_KEY=$LYRASHIELD_API_KEY
-openclaw mcp add lyrashield-remote --transport streamable-http --url https://app.lyrashieldai.com/api/mcp --header "Authorization: Bearer $LYRASHIELD_API_KEY"
+openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.5
+openclaw mcp add lyrashield-remote --url https://app.lyrashieldai.com/api/mcp --transport streamable-http --auth oauth
+openclaw mcp login lyrashield-remote
 ```
 
 JSON option with tool filtering:
@@ -62,14 +63,10 @@ JSON option with tool filtering:
   "mcp": {
     "servers": {
       "lyrashield": {
-        "transport": "stdio",
         "command": "npx",
-        "args": ["-y", "@lyrashield/mcp"],
-        "env": {
-          "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
-        },
+        "args": ["-y", "@lyrashield/mcp@0.2.5"],
         "toolFilter": {
-          "allow": [
+          "include": [
             "lyrashield_scan_target",
             "lyrashield_get_findings",
             "lyrashield_list_targets",
@@ -81,11 +78,9 @@ JSON option with tool filtering:
       "lyrashield-remote": {
         "transport": "streamable-http",
         "url": "https://app.lyrashieldai.com/api/mcp",
-        "headers": {
-          "Authorization": "Bearer ${env:LYRASHIELD_API_KEY}"
-        },
+        "auth": "oauth",
         "toolFilter": {
-          "allow": ["lyrashield_scan_target", "lyrashield_get_findings", "lyrashield_list_targets"]
+          "include": ["lyrashield_scan_target", "lyrashield_get_findings", "lyrashield_list_targets"]
         }
       }
     }
@@ -93,13 +88,13 @@ JSON option with tool filtering:
 }
 ```
 
-This satisfies the product requirement to pin local to npx -y @lyrashield/mcp and remote to https://app.lyrashieldai.com/api/mcp with bearer header. The canonical reference lives in [OpenClaw integration guide](/docs/integrations/openclaw). Keep toolFilter tight so the agent only sees verification tools. Avoid storing raw keys in committed files. Tight filtering also reduces tool confusion when OpenClaw runs many servers in parallel, since the model only sees security tools it actually needs for this workflow.
+The canonical reference lives in [OpenClaw integration guide](/docs/integrations/openclaw). Keep `toolFilter.include` tight so the agent sees only the tools required for this workflow.
 
-If you share a single OpenClaw host across projects, keep the global config and let each repo reference LYRASHIELD_API_KEY from its own secret store via env. That keeps rotation simple and prevents cross project leakage.
+If you share one OpenClaw host across projects, keep authentication in OpenClaw's OAuth credential store and scope LyraShield access to the intended workspace.
 
 ## 3. Verify connection and list security tools
 
-Restart OpenClaw or reload MCP servers after editing ~/.openclaw/openclaw.json. Open the MCP view and expect lyrashield and lyrashield-remote to show connected. If local fails, confirm Node can resolve npx and that ~/.openclaw/openclaw.json parses as valid json. If remote shows unauthorized, confirm the header uses Bearer `${env:LYRASHIELD_API_KEY}` and that the launch shell exported the key. OpenClaw can be launched from a desktop shortcut that inherits a different env than your terminal, which often causes bearer failures that look like server issues but are actually env issues.
+Run `openclaw mcp doctor lyrashield --probe` and `openclaw mcp doctor lyrashield-remote --probe`. If local fails, confirm Node can resolve npx and that the LyraShield OAuth credential store is current. If remote needs authorization, repeat `openclaw mcp login lyrashield-remote`.
 
 Ask OpenClaw to enumerate tools:
 
@@ -111,7 +106,7 @@ Show transport type, command or url, and filtered tool list.
 Expected:
 
 ```text
-lyrashield (stdio via npx -y @lyrashield/mcp):
+lyrashield (stdio via npx -y @lyrashield/mcp@0.2.5):
 - lyrashield_scan_target(targetId, mode)
 - lyrashield_get_findings(workspaceId)
 - lyrashield_list_targets(workspaceId)
@@ -186,7 +181,7 @@ Add a local rules file that OpenClaw loads at session start, such as openclaw.md
 - For high severity findings, use lyrashield_generate_fix_plan for read-only guidance, have a developer apply the reviewed change, record the proposal, and queue a retest.
 - On PRs, ensure lyrashield security gate passed and SARIF uploaded.
 - Reference OWASP Top 10 and internal vibe coding security guide in PR body when relevant.
-- Never log raw secrets. Use ${env:LYRASHIELD_API_KEY}.
+- Never log raw secrets. Use the LyraShield local credential store or OpenClaw MCP OAuth.
 ```
 
 This encodes the loop Target to Scan to Evidence State to Fix Proposal to Retest to Report as daily behavior. Store it in version control so new OpenClaw sessions inherit the same guardrails. Consistent rules across clones also mean that when OpenClaw runs in autonomous mode, it still follows the same verification steps a human developer would have taken.

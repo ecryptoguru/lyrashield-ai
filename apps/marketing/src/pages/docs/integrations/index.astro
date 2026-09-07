@@ -42,7 +42,7 @@ const faqItems = [
   },
   {
     q: "Is the @lyrashield/mcp package available on npm now?",
-    a: "Yes — @lyrashield/mcp is published on npm. Run npx -y @lyrashield/mcp (Node.js 24+) with your LYRASHIELD_API_KEY set, or add it to your editor's MCP config as shown in each guide.",
+    a: "Yes — @lyrashield/mcp is published on npm. Run npx -y @lyrashield/mcp@0.2.5 (Node.js 24+) with your LYRASHIELD_API_KEY set, or add it to your editor's MCP config as shown in each guide.",
   },
   {
     q: "Can I use LyraShield in a CI pipeline without an AI editor?",
@@ -58,7 +58,7 @@ const faqItems = [
   },
   {
     q: "What is the Agent Plugin?",
-    a: "The Agent Plugin is a portable plugin following the open Agent Plugins v1.0.0 standard (agent-plugins.org). It bundles LyraShield's MCP server and a security skill into one installable package. npx lyrashield init prefers the plugin for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro; other clients, VS Code among them, use the verified config-file or vendor-CLI path in their guide. See the Agent Plugins guide at /docs/integrations/agent-plugins.",
+    a: "The Agent Plugin is a portable package with LyraShield's MCP descriptor and security skill. npx lyrashield init uses direct local copies only for clients that document them, and prints the required marketplace or MCP settings step for the others. See the Agent Plugins guide at /docs/integrations/agent-plugins.",
   },
 ]
 
@@ -117,9 +117,9 @@ const jsonLd: unknown[] = [
 
   <h2>Fastest path: the CLI</h2>
   <p>
-    Run <code>npx lyrashield init</code> from your project root. It detects which of the agents below
-    are installed and configures each one automatically — no per-agent config-file editing required
-    for most of them. <code>npx lyrashield doctor</code> reports what's configured at any time.
+    Run <code>npx lyrashield init</code> from your project root. It detects installed agents, writes
+    supported config files, and prints an exact recovery step when the client must complete a
+    marketplace, UI, or settings flow. <code>npx lyrashield doctor</code> reports local state.
   </p>
   <pre><code>npx lyrashield login --oauth
 npx lyrashield init</code></pre>
@@ -145,15 +145,14 @@ npx lyrashield init</code></pre>
 
   <h2>Agent Plugin (Agent Plugins v1.0.0)</h2>
   <p>
-    LyraShield ships a portable plugin that follows the open Agent Plugins v1.0.0 standard
-    (agent-plugins.org). The plugin bundles the LyraShield MCP server and a security skill that
-    teaches the agent when to run LyraShield checks, so a supported client gets both the tools and
-    the guidance in a single install — no hand-edited config required.
+    LyraShield ships a portable package following the open Agent Plugins v1.0.0 format. It bundles
+    the LyraShield MCP descriptor and security guidance. Each client still controls activation
+    through its documented local, marketplace, or MCP settings path.
   </p>
   <p>
-    <code>npx lyrashield init</code> prefers the plugin for Claude Code, Cursor, OpenAI Codex,
-    GitHub Copilot, and Kiro. For the other supported clients, VS Code among them, it uses the
-    verified config-file, vendor-CLI, or guided-manual path documented below. Full detail is in the{" "}
+    <code>npx lyrashield init</code> copies the package directly for Cursor and OpenAI Codex. It
+    prints marketplace commands for Claude Code and GitHub Copilot, and the documented MCP merge
+    for Kiro. Other clients use their config-file, vendor-CLI, or guided-manual path. Full detail is in the{" "}
     <a href="/docs/integrations/agent-plugins">Agent Plugins guide</a>.
   </p>
   <div class="callout">
@@ -196,7 +195,7 @@ npx lyrashield init</code></pre>
   <h2>Local MCP server (stdio)</h2>
   <p>
     For editors that can run local processes, install the LyraShield MCP server via <code
-      >npx -y @lyrashield/mcp</code
+      >npx -y @lyrashield/mcp@0.2.5</code
     >. The server uses stdio transport and exposes LyraShield tools directly inside your AI
     assistant.
   </p>

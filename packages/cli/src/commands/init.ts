@@ -24,11 +24,10 @@ export async function handleInit(args: string[], output: Output): Promise<number
   const parsed = minimist(args, {
     boolean: ["dry-run", "all", "global", "project", "inline-secret", "yes"],
     string: ["agent", "transport"],
-    default: { transport: "stdio" },
   })
 
-  const transport = parsed.transport as Transport
-  if (!["stdio", "remote-http"].includes(transport)) {
+  const requestedTransport = parsed.transport as Transport | undefined
+  if (requestedTransport && !["stdio", "remote-http"].includes(requestedTransport)) {
     output.error("--transport must be stdio or remote-http")
     return 2
   }
@@ -87,7 +86,7 @@ export async function handleInit(args: string[], output: Output): Promise<number
   for (const agent of orderedAgents) {
     const result = await installAgent({
       agent,
-      transport,
+      transport: requestedTransport ?? agent.transports[0]!,
       apiUrl: creds.apiUrl,
       apiKey: creds.credentialKind === "api-key" ? creds.apiKey : undefined,
       useCredentialStore: creds.credentialKind === "oauth",

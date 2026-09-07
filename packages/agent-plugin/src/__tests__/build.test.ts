@@ -53,6 +53,14 @@ describe("buildPlugin", () => {
       if (client === "codex") expect(JSON.parse(content).skills).toBe("./skills/")
     }
 
+    const codexManifest = JSON.parse(
+      await readFile(path.join(pluginRoot, ".codex-plugin", "plugin.json"), "utf-8")
+    )
+    expect(codexManifest.mcpServers).toBe("./.mcp.codex.json")
+    expect(JSON.parse(await readFile(path.join(pluginRoot, ".mcp.codex.json"), "utf-8"))).toEqual({
+      lyrashield: { url: "https://app.lyrashieldai.com/api/mcp" },
+    })
+
     // Marketplace catalog: makes the exported repo addressable for `/plugin marketplace add`
     // and VS Code's "Install Plugin From Source". `source: "./"` resolves to the marketplace
     // root — the directory holding `.claude-plugin/` — which is where plugin.json lives.

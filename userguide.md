@@ -535,12 +535,12 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 `login` writes `~/.lyrashield/credentials.json` with `0o600` permissions. If the browser-based OAuth device flow is unavailable, it falls back to `LYRASHIELD_API_KEY` from the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com` and is resolved consistently by `packages/credentials`, which is the single source of truth for the credentials file.
 
-`init`/`install <agent>` choose an install strategy based on the agent. `packages/agent-registry` contains 30 entries and resolves them into 26 preferred client surfaces. Package compatibility is explicit: CLI `0.2.0` supports Node 22–24; MCP `0.2.4` and Agent Plugin `0.1.18` require Node 24 or newer.
+`init`/`install <agent>` choose an install strategy based on the agent. `packages/agent-registry` contains 30 entries and resolves them into 26 preferred client surfaces. CLI `0.2.3`, MCP `0.2.5`, and Agent Plugin `0.1.23` require Node 24 or newer.
 
-- **Agent Plugin** — for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro, the CLI prefers a portable plugin install from `@lyrashield/agent-plugin` (currently v0.1.18). Generated client shims cover Claude Code, Cursor, OpenAI Codex, and Kiro; GitHub Copilot uses the portable root manifest. Plugin files never inline a raw API key. VS Code stays on its verified config-file strategy.
+- **Agent Plugin package** — Cursor and OpenAI Codex accept the generated local plugin directly. Claude Code and GitHub Copilot require their marketplace install commands. Kiro uses the generated stdio entry through `.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json`; copying a plugin directory alone is not an install. Plugin files never inline a raw API key. VS Code stays on its config-file strategy.
 - **Config-file** — the registry provides 16 writable config variants; 13 are preferred client paths and three remain explicit legacy alternatives for plugin-preferred clients. The CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
-- **Guided manual** — for the seven clients whose tooling has no writable config file — Devin, Cline, JetBrains AI & Junie, PiCode, OpenClaw, Goose, and Aider — `install` prints exact copy-paste command/argument/environment values, generated from the same source of truth the writable installers use.
+- **Guided manual** — Devin, JetBrains AI & Junie, PiCode, OpenClaw, Goose, Aider, and Codebuff receive client-specific instructions. Pi core and Aider do not expose native MCP configuration, and Codebuff does not document the previously claimed `.agents/mcp.json`; their supported LyraShield path is the standalone CLI until a reviewed native extension exists. Cline now uses its documented `~/.cline/mcp.json` file.
 
 `uninstall <agent>` removes the LyraShield entry from the chosen agent's config or plugin directory.
 

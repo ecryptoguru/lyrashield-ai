@@ -6,8 +6,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/cline", origin).toString()
 const title = "LyraShield MCP for Cline — Setup Guide"
 const description =
-  'Connect LyraShield to Cline (VS Code extension). Configure cline_mcp_settings.json with the stdio server for local use, or use "type":"streamableHttp" for the remote endpoint.'
-const updatedDate = "2026-07-31"
+  'Connect LyraShield to Cline CLI through ~/.cline/mcp.json, or use Cline IDE\'s MCP panel. Remote entries require "type":"streamableHttp".'
+const updatedDate = "2026-09-08"
 
 const jsonLd: unknown[] = [
   {
@@ -48,18 +48,17 @@ const jsonLd: unknown[] = [
 >
   <h1>Cline</h1>
   <p>
-    Cline reads MCP servers from <code>cline_mcp_settings.json</code>, which you can edit directly
-    in VS Code via the Cline MCP settings panel.
+    Cline CLI reads MCP servers from <code>~/.cline/mcp.json</code>. Cline IDE extensions expose
+    their own MCP settings JSON through the MCP Servers panel.
   </p>
 
   <h2>Get the exact values with the CLI</h2>
   <p>
-    There's no config file LyraShield can safely write for Cline yet. Run{" "}
-    <code>npx lyrashield install cline</code> anyway — it won't write anything, but it prints the
-    exact command, arguments, and environment values below, generated from the current registry, so
-    this page can't drift out of sync with what you actually need to paste in.
+    Run <code>npx lyrashield install cline --global</code> to merge the LyraShield entry into the
+    Cline CLI config while preserving other servers. For the IDE extension, copy the generated entry
+    into the JSON opened by Cline's MCP Servers panel.
   </p>
-  <pre><code>npx lyrashield install cline</code></pre>
+  <pre><code>npx lyrashield install cline --global</code></pre>
 
   <h2>Local stdio setup</h2>
   <AgentSnippet agentId="cline" transport="stdio" />
@@ -87,6 +86,6 @@ const jsonLd: unknown[] = [
   <div class="callout callout--warn">
     <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The
     <code>@lyrashield/mcp</code> package is published on npm, so
-    <code>npx -y @lyrashield/mcp</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.5</code> resolves directly.
   </div>
 </DocsLayout>

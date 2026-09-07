@@ -6,7 +6,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/troubleshooting", origin).toString()
 const title = "LyraShield MCP Troubleshooting & Gotchas"
 const description =
-  "Fix common LyraShield MCP integration problems: VS Code uses 'servers' not 'mcpServers', Gemini CLI strips KEY/TOKEN/SECRET env vars, Zed uses context_servers, OpenCode uses {env:VAR} interpolation."
+  "Fix common LyraShield MCP integration problems: VS Code uses 'servers' not 'mcpServers', Gemini CLI uses httpUrl for Streamable HTTP, Zed uses context_servers, and OpenCode uses {env:VAR} interpolation."
 const updatedDate = "2026-07-31"
 
 const agents = listAgents()
@@ -14,7 +14,7 @@ const agents = listAgents()
 const faqItems = [
   {
     q: "The MCP server connects but no tools appear",
-    a: "This usually means the package has not resolved via npx or the API key is missing or invalid. Check that LYRASHIELD_API_KEY is set in the env block (not just the shell), that your key starts with lsk_, and that your network can reach the npm registry (a corporate proxy or offline mirror can block it).",
+    a: "This usually means the package has not resolved via npx or the API key is missing or invalid. Check that LYRASHIELD_API_KEY is available to the launching process or credential store, that your key starts with lsk_, and that your network can reach the npm registry.",
   },
   {
     q: "VS Code does not show my MCP server",
@@ -22,7 +22,7 @@ const faqItems = [
   },
   {
     q: "Gemini CLI does not pass my API key to the server",
-    a: 'Gemini CLI strips environment variables whose names contain KEY, TOKEN, or SECRET from subprocess environments. You must declare LYRASHIELD_API_KEY explicitly in the env block inside the server entry in ~/.gemini/settings.json. Inheriting it from the shell is not sufficient.',
+    a: 'Gemini CLI MCP config expands $VAR_NAME and ${VAR_NAME} references in env and headers. Use $LYRASHIELD_API_KEY in ~/.gemini/settings.json instead of writing the raw secret. For Streamable HTTP use httpUrl; url is the SSE field.',
   },
   {
     q: "OpenCode or Kilo Code passes the literal string {env:VAR} instead of my key",
@@ -34,15 +34,15 @@ const faqItems = [
   },
   {
     q: "OpenAI Codex ignores my API key",
-    a: 'OpenAI Codex TOML config uses a separate sub-table for environment variables: `[mcp_servers.lyrashield.env_vars]`. A top-level `env` key in the table is silently ignored.',
+    a: 'OpenAI Codex uses `[mcp_servers.lyrashield.env]` for explicit values. The separate `env_vars` field is an array of variable names inherited from the parent process.',
   },
   {
     q: "Cline connects but uses the wrong transport type",
-    a: 'For the remote LyraShield endpoint, set "type": "streamableHttp" explicitly in cline_mcp_settings.json. Omitting the type defaults to legacy SSE transport, which is not compatible with the LyraShield remote endpoint.',
+    a: 'For Cline CLI, edit ~/.cline/mcp.json. In an IDE extension, open its settings JSON from MCP Servers → Configure. Set "type": "streamableHttp" for the remote endpoint; omitting it defaults to legacy SSE.',
   },
   {
     q: "The npx install fails with a package not found error",
-    a: "The @lyrashield/mcp package is published on npm. If npx -y @lyrashield/mcp fails to resolve, check that you're on Node.js 24+, that your npm registry is set to the public registry (npm config get registry), and that a corporate proxy or mirror isn't blocking scoped packages.",
+    a: "The @lyrashield/mcp package is published on npm. If npx -y @lyrashield/mcp@0.2.5 fails to resolve, check that you're on Node.js 24+, that your npm registry is set to the public registry (npm config get registry), and that a corporate proxy or mirror isn't blocking scoped packages.",
   },
 ]
 
@@ -168,7 +168,7 @@ const jsonLd: unknown[] = [
     </li>
     <li>
       Try running the server manually to see raw output: <code>
-        LYRASHIELD_API_KEY=lsk_... npx -y @lyrashield/mcp
+        LYRASHIELD_API_KEY=lsk_... npx -y @lyrashield/mcp@0.2.5
       </code>.
     </li>
     <li>

@@ -25,7 +25,19 @@ Install Node so the `npx` commands resolve, then run `npx lyrashield login` to s
 
 ## 2. Register the MCP server with Copilot CLI
 
-Use the `copilot mcp add` command to register the LyraShield server consistently, rather than hand editing the JSON, because malformed config can break the agent or leak settings into logs. For a local server use type local with stdio transport running `npx -y @lyrashield/mcp`. For a remote server use type http with the endpoint `https://app.lyrashieldai.com/api/mcp` and a Bearer token prefixed `lsk_`. The global config file at the user level applies to every project, while a project level file scopes the server to one repository, so prefer the project file for anything repository specific and keep the global file free of tokens. For a local stdio server, run `copilot mcp add lyrashield --transport stdio --command npx --args "-y @lyrashield/mcp"` so the agent spawns the MCP process inline with no network hop. For a remote server, run `copilot mcp add lyrashield-remote --transport http --url https://app.lyrashieldai.com/api/mcp --header "Authorization: Bearer lsk_..."` to use the managed endpoint with a bearer key. Choose local when you can run a Node process in your environment, and remote when you want a central key your team shares. The [GitHub Copilot CLI documentation](https://docs.github.com/en/copilot) describes the config locations and the add command. The canonical LyraShield wiring is in the [Copilot CLI integration guide](/docs/integrations/copilot-cli). Decide between local and remote based on whether you can run a Node process in your environment, since the remote path removes the local runtime dependency. After you run `copilot mcp add`, open the resulting config file once to confirm the entry landed in the scope you intended, because a server meant for one project that lands in the global file becomes available everywhere.
+Use Copilot CLI's documented separator form for local stdio:
+
+```bash
+copilot mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.5
+```
+
+For remote HTTP, options precede the server name and URL:
+
+```bash
+copilot mcp add --transport http --header "Authorization: Bearer YOUR-TOKEN" lyrashield-remote https://app.lyrashieldai.com/api/mcp
+```
+
+The user file is `~/.copilot/mcp-config.json`; project files are `.mcp.json` or `.github/mcp.json`. Never put a raw header in a committed project file. See the [official Copilot CLI MCP guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers) and [LyraShield guide](/docs/integrations/copilot-cli).
 
 ## 3. Set the tools allowlist and the manual path
 
@@ -72,5 +84,9 @@ Before finishing a feature, run a LyraShield security check and attach the findi
 | CI gate         | GitHub Action on diff | Block on new findings     |
 
 ## Why pair Copilot CLI with LyraShield AI
+
+Keep installation, authentication, and security results as separate acceptance checks. `copilot mcp list` establishes that Copilot loaded the server definition. A read-only LyraShield target query establishes authenticated tool use. A recorded scan establishes only its declared target, revision, and coverage. The runner-local Action establishes its own diff result and cannot be substituted for the hosted receipt. Record all four when reviewing an exact release.
+
+Recheck the server after upgrading Copilot CLI or the LyraShield package. Confirm the config location, transport, allowed tools, and credential source, then repeat one read-only query before enabling any approval-gated mutation. If access is revoked or the workspace role changes, the next call must fail rather than reuse a previous successful response. This bounded sequence gives reviewers useful evidence without claiming broader desktop acceptance than was exercised.
 
 LyraShield AI gives you release assurance for AI built apps through a target, review, evidence, fix, retest, report loop. For Copilot CLI it contributes agentic pentest, software composition analysis, and secrets scanning, then writes each finding to an immutable assurance record that separates detection from proof. Approval gated fix proposals are proposals requiring review, so a human stays in the loop before anything ships. The platform is live with open registration, so you can [create an account](https://lyrashieldai.com) and pair it with the [AI app security checklist tool](/tools/ai-app-security-checklist). For a review focused companion, see the [Codex security workflow](/blog/codex-security-workflow) post. Running the workflow on every Copilot CLI session means a security check happens before code reaches review, not after a finding slips into production. Treat the local check and the CI gate as two layers of the same workflow, because together they cover the prompt to merge path. A consistent tools allowlist across your project and global config keeps the agent from calling a write or network tool you did not intend to expose during a fast scaffold, and it travels with the repo when a teammate clones it.

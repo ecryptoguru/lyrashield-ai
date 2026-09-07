@@ -17,7 +17,7 @@ describe("marketplace fixtures", () => {
     const cline = JSON.parse(
       await readFile(path.join(marketplaceRoot, "cline", "submission.json"), "utf8")
     ) as Record<string, unknown>
-    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.22" })
+    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.23" })
     expect(gemini.mcpServers).toBeTruthy()
     expect(cline).toMatchObject({
       license: "Apache-2.0",

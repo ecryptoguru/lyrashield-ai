@@ -227,7 +227,7 @@ describe("renderEntry returns correct structural patch", () => {
     })
   })
 
-  it("openai-codex — root is `mcp_servers` and uses `env_vars`", () => {
+  it("openai-codex — puts explicit values in `env`, not the `env_vars` name list", () => {
     const agent = getAgent("openai-codex")!
     const opts = testOptions(agent, "stdio")
     const entry = renderEntry(agent, opts)
@@ -235,11 +235,12 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.value).toMatchObject({
       command: "npx",
       args: ["-y", "@lyrashield/mcp@0.2.5"],
-      env_vars: {
+      env: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
         LYRASHIELD_API_URL: TEST_BASE_URL,
       },
     })
+    expect(entry.value).not.toHaveProperty("env_vars")
   })
 
   it("opencode — root is `mcp` and uses `{env:VAR}` interpolation", () => {
@@ -253,6 +254,37 @@ describe("renderEntry returns correct structural patch", () => {
       environment: {
         LYRASHIELD_API_KEY: "{env:LYRASHIELD_API_KEY}",
         LYRASHIELD_API_URL: TEST_BASE_URL,
+      },
+    })
+  })
+
+  it("gemini-cli — uses env references locally and httpUrl for Streamable HTTP", () => {
+    const agent = getAgent("gemini-cli")!
+    const stdioEntry = renderEntry(agent, testOptions(agent, "stdio"))
+    expect(stdioEntry.value).toMatchObject({
+      command: "npx",
+      args: ["-y", "@lyrashield/mcp@0.2.5"],
+      env: { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY" },
+    })
+
+    const remoteEntry = renderEntry(agent, testOptions(agent, "remote-http"))
+    expect(remoteEntry.value).toMatchObject({
+      httpUrl: TEST_MCP_URL,
+      headers: { Authorization: "Bearer $LYRASHIELD_API_KEY" },
+    })
+    expect(remoteEntry.value).not.toHaveProperty("url")
+  })
+
+  it("codebuff — writes its documented project MCP entry", () => {
+    const agent = getAgent("codebuff")!
+    expect(agent.installStrategy).toBe("config-file")
+    expect(agent.locations[0]?.path).toBe(".agents/mcp.json")
+    expect(renderEntry(agent, testOptions(agent, "stdio"))).toMatchObject({
+      rootKey: "mcpServers",
+      value: {
+        command: "npx",
+        args: ["-y", "@lyrashield/mcp@0.2.5"],
+        env: { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY" },
       },
     })
   })
@@ -304,15 +336,15 @@ describe("gotchas from §3.4 are represented", () => {
   const gotchaMarkers = [
     "VS Code uses `servers`, not `mcpServers`",
     "Zed uses `context_servers`",
-    "OpenAI Codex uses `env_vars`, not `env`",
+    "Codex reserves `env_vars` for an array",
     "single-brace `{env:VAR}`",
-    "Gemini CLI strips env vars whose names contain KEY, TOKEN or SECRET",
+    "Gemini CLI expands `$VAR_NAME`",
     "Cline defaults to legacy SSE",
     "Settings → MCP Marketplace → Add Your Own",
     "Kilo Code's file is JSONC",
     "Amp takes no --env flags",
     "JetBrains has no file we can write",
-    "declare `transport: stdio` explicitly",
+    "repeated `--arg` flags",
   ]
 
   for (const marker of gotchaMarkers) {

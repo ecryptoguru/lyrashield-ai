@@ -44,6 +44,8 @@ export interface InstallAgentResult {
 }
 
 function renderManualInstructions(agent: AgentEntry, opts: InstallAgentOptions): string {
+  if (agent.manualInstructions) return agent.manualInstructions
+
   const serverName = opts.serverName ?? "lyrashield"
   const command = "npx"
   const args = ["-y", "@lyrashield/mcp@0.2.5"]
@@ -152,6 +154,15 @@ async function runVendorCli(
   }
 
   const args = [...agent.vendorCli.args]
+  if (opts.dryRun) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "DELEGATED",
+      message: `Would run ${command} ${args.join(" ")}`,
+    }
+  }
+
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...(opts.useCredentialStore ? {} : { LYRASHIELD_API_URL: opts.apiUrl }),

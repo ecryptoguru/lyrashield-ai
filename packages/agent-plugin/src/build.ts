@@ -93,6 +93,21 @@ ${SKILL_APPENDIX}
     )
   )
 
+  // Codex accepts a direct server map (or a wrapped `mcp_servers` map), not the
+  // Agent Plugins `mcpServers` envelope used by the portable descriptor.
+  await writeGeneratedFile(
+    path.join(pluginRoot, ".mcp.codex.json"),
+    JSON.stringify(
+      {
+        lyrashield: {
+          url: `${LYRASHIELD_API_URL}/api/mcp`,
+        },
+      },
+      null,
+      2
+    )
+  )
+
   for (const client of CLIENTS) {
     const shimDir = path.join(pluginRoot, `.${client}-plugin`)
     await mkdir(shimDir, { recursive: true })
@@ -113,7 +128,7 @@ ${SKILL_APPENDIX}
                 version,
                 description,
                 skills: "./skills/",
-                mcpServers: "./.mcp.json",
+                mcpServers: "./.mcp.codex.json",
                 ...metadata,
               }
             })()

@@ -77,7 +77,7 @@ Local stdio alternative:
   "amp.mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
+      "args": ["-y", "@lyrashield/mcp@0.2.5"],
       "env": {}
     }
   }
@@ -124,7 +124,7 @@ Target state for Amp-built PRs:
 
 Amp configuration deserves the same review discipline as application code. Use the [OWASP Top 10](https://owasp.org/www-project-top-ten/) to frame authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) when secrets may enter configuration, and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) to confirm transport and tool contracts. These sources do not certify an Amp setup. They give reviewers stable vocabulary for checking which tools can run, where credentials resolve, and whether a workflow retains enough evidence for a release decision. Record the configuration revision you reviewed, then retest after changing an orb, skill, MCP server, or approval boundary.
 
-Amp gives you orchestration across models, remote persistence via orbs, and a clean extension model, ideal for shipping full features from a single prompt. LyraShield complements that with release assurance for AI-built apps that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action that is diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's focus is verified findings tied to evidence, fix, retest, report so AI-generated code does not reintroduce CWE-20/287/798 across sessions. Every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
+Amp gives you orchestration across models, remote persistence via orbs, and a clean extension model, ideal for shipping full features from a single prompt. LyraShield complements that with release assurance for AI-built apps that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp@0.2.5` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action that is diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's focus is verified findings tied to evidence, fix, retest, report so AI-generated code does not reintroduce CWE-20/287/798 across sessions. Every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
 The platform is live in open beta with open registration; create an account at [lyrashieldai.com](https://lyrashieldai.com) for docs at [amp integration guide](/docs/integrations/amp) and hub at [integrations hub](/docs/integrations). If you are comparing Amp to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) or [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist), the pattern holds: Amp owns generation, LyraShield owns verification and release evidence.
 

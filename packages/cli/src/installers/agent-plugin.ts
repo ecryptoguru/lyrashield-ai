@@ -36,6 +36,15 @@ export async function installAgentPlugin(
   opts: InstallAgentPluginOptions
 ): Promise<InstallAgentResult> {
   const { agent } = opts
+  if (agent.manualInstructions) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "MANUAL_REQUIRED",
+      message: agent.manualInstructions,
+    }
+  }
+
   const pluginLocations = agent.pluginLocations ?? []
 
   if (pluginLocations.length === 0) {
@@ -47,7 +56,12 @@ export async function installAgentPlugin(
     }
   }
 
-  if (!(await credentialsFileExists()) && !process.env.LYRASHIELD_API_KEY) {
+  const needsLocalCredentials = agent.transports.includes("stdio")
+  if (
+    needsLocalCredentials &&
+    !(await credentialsFileExists()) &&
+    !process.env.LYRASHIELD_API_KEY
+  ) {
     return {
       agent: agent.id,
       displayName: agent.displayName,
@@ -161,6 +175,14 @@ export async function uninstallAgentPlugin(
   opts: InstallAgentPluginOptions
 ): Promise<InstallAgentResult> {
   const { agent } = opts
+  if (agent.manualInstructions) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "MANUAL_REQUIRED",
+      message: `LyraShield did not install this integration directly. Remove it through ${agent.displayName}'s marketplace or MCP settings.`,
+    }
+  }
   const pluginLocations = agent.pluginLocations ?? []
   const loc =
     pluginLocations.find((l) => !opts.scope || l.scope === opts.scope) ?? pluginLocations[0]

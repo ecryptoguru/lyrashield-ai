@@ -172,6 +172,18 @@ for (const [name, config] of Object.entries({ portableMcp, claudeMcp })) {
   assert(!("headers" in server), `${name} must allow the hosted OAuth flow to authenticate`)
 }
 
+const codexPlugin = await readJson(".codex-plugin/plugin.json")
+const codexMcp = await readJson(".mcp.codex.json")
+assert(
+  codexPlugin.mcpServers === "./.mcp.codex.json",
+  ".codex-plugin/plugin.json must reference the Codex-specific MCP descriptor"
+)
+assert(
+  codexMcp.lyrashield?.url === "https://app.lyrashieldai.com/api/mcp",
+  ".mcp.codex.json must contain a direct LyraShield server map"
+)
+assert(!("mcpServers" in codexMcp), ".mcp.codex.json must not use the Agent Plugins envelope")
+
 // Cursor shim inlines MCP config — same invariants as root configs.
 const cursorPlugin = await readJson(".cursor-plugin/plugin.json")
 const cursorServer = cursorPlugin.mcpServers?.lyrashield

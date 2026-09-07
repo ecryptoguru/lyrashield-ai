@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.1.22
+## 0.1.23
 
+- Give Codex its documented direct-map MCP descriptor instead of the portable Agent Plugins envelope.
 - Validate the pristine generated tree before the secret scanner writes its SARIF report.
 - Pin MCP 0.2.5 so stdio logs cannot corrupt JSON-RPC stdout.
 

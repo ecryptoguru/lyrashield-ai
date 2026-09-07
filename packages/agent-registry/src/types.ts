@@ -53,13 +53,14 @@ export interface AgentEntry {
   stdioStyle?: "array-command-environment"
   vendorCli?: { command: string; args: string[] }
   rulesFiles: string[]
-  forceInlineEnv?: boolean
   serverNamePattern?: string
   /**
    * Client-specific directories where the Agent Plugin package should be
    * installed. Only used when installStrategy is "agent-plugin".
    */
   pluginLocations?: ConfigLocation[]
+  /** Exact guidance for clients without a native config or installer contract. */
+  manualInstructions?: string
   source?: { url?: string | null; checkedOn?: string }
   /** Registry exports always populate these fields; optional keeps fixture authors lightweight. */
   supportTier?: SupportTier

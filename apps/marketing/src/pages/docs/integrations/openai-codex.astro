@@ -36,13 +36,13 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the [mcp_servers.lyrashield] table",
-        text: "Add a [mcp_servers.lyrashield] table with command, args, and env_vars fields.",
+        text: "Add a [mcp_servers.lyrashield] table with command and args fields.",
       },
       {
         "@type": "HowToStep",
         position: 3,
-        name: "Set your API key in env_vars",
-        text: "Set LYRASHIELD_API_KEY in the env_vars table within the mcp_servers.lyrashield block.",
+        name: "Authenticate LyraShield",
+        text: "Run lyrashield login --oauth so the MCP package can use the local credential store without writing a key into config.toml.",
       },
     ],
   },
@@ -95,30 +95,27 @@ const jsonLd: unknown[] = [
     tools and the guidance in one step.
   </p>
   <p>
-    <code>npx lyrashield install openai-codex</code> now installs the plugin by default. Run{" "}
-    <code>npx lyrashield login --oauth</code> first so the MCP server can read credentials without
-    inlining a key in any config file.
+    <code>npx lyrashield install openai-codex</code> installs the plugin into Codex's documented local
+    plugin directory. The remote MCP connection completes hosted OAuth inside Codex.
   </p>
-  <pre><code>npx lyrashield login --oauth
-npx lyrashield install openai-codex</code></pre>
+  <pre><code>npx lyrashield install openai-codex</code></pre>
   <div class="callout">
-    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
-    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
-    <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
+    <strong>No credential in committed files:</strong> the generated descriptor contains only the
+    hosted MCP URL. Codex handles OAuth when it connects.
   </div>
 
   <h2>Configuration</h2>
   <p>
     Open or create <code>~/.codex/config.toml</code> and add the following block. The{" "}
-    <code>env_vars</code> key (not <code>env</code>) is the correct field name for environment
-    variables in Codex TOML config.
+    <code>env</code> sub-table stores explicit values. The separate <code>env_vars</code> field accepts
+    an array of names to inherit from Codex's parent process.
   </p>
 
   <AgentSnippet agentId="openai-codex" transport="stdio" />
 
   <div class="callout">
-    <strong>env_vars vs. env:</strong> OpenAI Codex uses <code>env_vars</code> in its TOML config,
-    not <code>env</code>. Using <code>env</code> will be silently ignored.
+    <strong>env_vars vs. env:</strong> use <code>[mcp_servers.lyrashield.env]</code> for explicit
+    values. Use <code>env_vars = ["NAME"]</code> only to inherit named variables.
   </div>
 
   <h2>Verify the connection</h2>
@@ -130,6 +127,6 @@ npx lyrashield install openai-codex</code></pre>
   <div class="callout callout--warn">
     <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace OAuth login. The
     <code>@lyrashield/mcp</code> package is published on npm, so
-    <code>npx -y @lyrashield/mcp</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.5</code> resolves directly.
   </div>
 </DocsLayout>

@@ -1,130 +1,67 @@
 ---
-title: Pi Coding Agent MCP security workflow for fast scans
-description: Connect Pi Coding Agent to LyraShield AI via MCP to verify generated code with target aware scans and diff aware CI gating.
+title: LyraShield security workflow alongside Pi Coding Agent
+description: Run LyraShield beside Pi Coding Agent with target-aware CLI scans and a diff-aware CI gate without claiming native MCP support.
 pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-20
 faq:
-  - q: "Where does Pi store MCP config?"
-    a: "Project .mcp.json or global ~/.pi/mcp.json under mcpServers. Use hostConfigDiscovery false, reference ${VAR} for secrets, and pin command npx -y @lyrashield/mcp plus remote https://app.lyrashieldai.com/api/mcp."
-  - q: "How do I verify the LyraShield MCP connection?"
-    a: "Restart Pi, use the MCP panel to list servers and tools. Expect lyrashield stdio with lyrashield_scan_target, lyrashield_get_findings, lyrashield_list_targets and lyrashield-remote http with bearer header."
+  - q: "Does Pi Coding Agent include native MCP support?"
+    a: "No. Pi core deliberately excludes MCP. Community extensions may add it, but their config and behavior must be reviewed as separate third-party integrations."
+  - q: "How do I run LyraShield after Pi edits?"
+    a: "Authenticate with npx lyrashield login, verify with npx lyrashield doctor, and run npx lyrashield scan from the project root. This proves the standalone CLI path."
   - q: "Does this support PR gating?"
-    a: "Yes. Add the LyraShield GitHub Action with diff mode true, upload SARIF, and require the security job in branch protection."
-  - q: "Where does Pi Coding Agent read MCP config from?"
-    a: "Pi reads MCP servers from its settings file under mcpServers with local stdio and remote http entries. Use the pinned npx -y @lyrashield/mcp command for local and the remote endpoint with a Bearer lsk_ key for team or CI use. Keep the key in an env reference, never as a literal in the committed config."
+    a: "Yes. Add the LyraShield GitHub Action, upload SARIF, and require the security job in branch protection. The runner-local action remains distinct from a recorded hosted assessment."
+  - q: "Will LyraShield create Pi MCP configuration?"
+    a: "No. lyrashield init treats Pi as guided standalone and does not write .mcp.json or .pi/mcp.json files owned by third-party adapters."
 ---
 
-Fastest path: run `npx lyrashield init` to auto-detect Pi and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store your credentials. The manual config below is what the CLI writes, kept here for reference.
+Pi Coding Agent is fast and deliberately small. Its core does not include native MCP support, so the correct LyraShield workflow today uses the standalone CLI after Pi changes and the GitHub Action at pull-request time. Community extensions can add MCP, but they create a separate trust and compatibility boundary. Do not treat an adapter's `.mcp.json`, `.pi/mcp.json`, discovery rules, or environment syntax as Pi's official contract.
 
-You can attach Pi Coding Agent to LyraShield AI via MCP to scan generated code, get findings with evidence states with file evidence, and gate pull requests with SARIF. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp and remote at https://app.lyrashieldai.com/api/mcp in Pi style .mcp.json, verify tool discovery, run a tight inline check, and wire a diff aware GitHub Action with SARIF upload.
+This guide preserves a clear evidence boundary. A successful CLI call proves LyraShield authentication and the selected scan. It does not prove that Pi discovered tools in its own interface. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why generated code still needs independent checks, and the [Pi integration guide](/docs/integrations/picode) records the current supported path.
 
-Pi is built for speed and terminal centric workflows. Fast scaffolding is valuable, but speed also produces more code that needs verification. Use the [vibe coding security guide](/blog/vibe-coding-security-guide) as your baseline policy and map issues to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) so triage stays grounded in industry definitions. When Pi generates a full stack feature in one turn, you want a single command that highlights findings in that new code while preserving their recorded evidence states, not a dashboard you must remember to open later.
+The companion [Pi Coding Agent app security checklist](/blog/pi-coding-agent-app-security-checklist) covers package, extension, skill, credential, and tool review. Use both records when a release needs source-change evidence and a review of the agent environment that produced it.
 
-LyraShield is designed to follow Target to Scan to Evidence State to Fix Proposal to Retest to Report, keeping human review central while automation matures.
+Repeat the local scan after Pi, an extension, or a dependency changes the source. If the repository revision changes between the scan and release, treat the earlier result as historical and assess the new revision. Keep incomplete coverage visible, and never let a successful doctor command stand in for a completed assessment.
 
-## 1. Prerequisites and workspace baseline
+## 1. Prepare the project and authenticate
 
-You need Node.js 20 or newer which you can check via [Node.js docs](https://nodejs.org/en/docs), Pi installed via pi.dev instructions, Git with PR workflow, and a LyraShield API key of form lsk\_... Export LYRASHIELD_API_KEY in your shell. Pi resolves `${VAR}` from env, so you can keep keys out of checked in .mcp.json files.
+Use Node.js 24 or newer, Git, Pi installed from its official instructions, and an authorized LyraShield workspace. From the repository root, run `npx lyrashield login` so credentials are stored in `~/.lyrashield/credentials.json`. Then run `npx lyrashield doctor` to confirm the API is reachable and the credentials resolve.
 
-LyraShield v1 is designed to cover agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF output. `lyrashield_generate_fix_plan` provides read-only remediation guidance; a developer reviews and applies changes, then records the proposal and queues a retest. It does not mutate the repository or open a branch. For protocol background, see [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro).
+Do not put a LyraShield token in Pi prompts, package source, skill files, shell transcripts committed to the repository, or a third-party extension config. If a key may have entered any of those surfaces, rotate it. The doctor result confirms CLI connectivity only; it does not claim a native Pi tool or community extension is installed.
 
-Quick sanity steps:
+Record the Pi version, enabled packages and extensions, active skills, project revision, LyraShield CLI version, and the target you intend to scan. These details make later results reproducible and reveal when an extension upgrade changed the agent's authority.
 
-```bash
-node -v
-npm view @lyrashield/mcp version
-ls -la .mcp.json ~/.pi/mcp.json || echo "no global yet"
-env | grep LYRASHIELD_API_KEY
+## 2. Run the standalone LyraShield check after Pi edits
+
+Let Pi make the authorized code change, inspect the diff, and run `npx lyrashield scan` from the same project root before committing. Request the exact target and scope that the current credentials may access. Review the returned scan identity and every finding's recorded evidence state, location, and limitation.
+
+A finding marked detected remains a candidate for triage. An inconclusive result remains uncertain. Independent verification requires a separate accepted receipt, and a fix requires a fresh retest. Pi can help edit code in response to reviewed guidance, but its confidence does not change LyraShield's evidence state.
+
+Use a short project instruction such as:
+
+```markdown
+After changing authentication, input handling, secrets, dependencies, or deployment code, stop for a LyraShield CLI scan. Report the scan identity and preserve each finding's recorded evidence state. Do not call a detected finding verified and do not claim a fix until a fresh retest completes.
 ```
 
-Keep a concrete checklist reference open such as [Pi Coding Agent app security checklist](/blog/pi-coding-agent-app-security-checklist) while you work, so you have fix patterns handy when findings appear. The Pi workflow is most effective when local .mcp.json is committed with only variable references, so new clones get identical behavior without leaking secrets.
+This instruction helps the human remember the check. The CLI and CI commands provide the actual evidence.
 
-Define your target naming early. LyraShield uses target as the unit of verification, for example staging Pi web, production API, or preview deployment id. Consistent naming prevents confusion when you later add both stdio and remote servers and start sharing reports across team members.
+## 3. Treat community MCP extensions as separate integrations
 
-## 2. Configure LyraShield MCP server in Pi
+Pi's official extension model lets third-party packages register new behavior. If your team wants inline MCP, choose one extension deliberately and review its source, release history, config paths, server lifecycle, environment inheritance, approval UI, and tool-name collision behavior. Pin the exact version and test it in an isolated profile before granting access to a real workspace.
 
-Pi reads MCP servers from project local .mcp.json and from global ~/.pi/mcp.json at ~/.config/pi or similar depending on install under key mcpServers. Set hostConfigDiscovery to false for deterministic cloning, pin local to npx -y @lyrashield/mcp, and point remote to https://app.lyrashieldai.com/api/mcp with bearer header using `${VAR}`.
+Do not rely on a blog post that assigns Pi a standard MCP file. Pi core has no such file. An extension may read `.mcp.json`, `.pi/mcp.json`, another agent's config, or its own settings, but that behavior belongs to the named extension and version. Acceptance evidence must identify both. A terminal-only LyraShield scan cannot be relabeled as inline Pi acceptance.
 
-```json
-{
-  "mcpServers": {
-    "lyrashield": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": {
-        "LYRASHIELD_API_KEY": "${VAR:LYRASHIELD_API_KEY}"
-      },
-      "hostConfigDiscovery": false,
-      "description": "LyraShield local target aware scans"
-    },
-    "lyrashield-remote": {
-      "type": "http",
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer ${VAR:LYRASHIELD_API_KEY}"
-      },
-      "hostConfigDiscovery": false,
-      "description": "LyraShield remote MCP via bearer"
-    }
-  }
-}
-```
+`npx lyrashield init` therefore returns guided standalone instructions for Pi rather than writing an adapter-specific file. This fail-honest behavior avoids silently creating ignored configuration and avoids exposing credentials to an extension the user did not choose.
 
-If your Pi version uses bare `${VAR}` without type prefix, replace `${VAR:LYRASHIELD_API_KEY}` with `${LYRASHIELD_API_KEY}`. The canonical reference lives in [Pi integration guide](/docs/integrations/picode). Do not store raw keys in checked in files. The remote server must stay bearer based so the key can rotate without config churn. Keeping hostConfigDiscovery false avoids Pi auto injecting host wide servers that could shadow your intended verification config.
+## 4. Review the result and complete the fix loop
 
-For teams, store project .mcp.json in version control with only `${VAR}` references and require developers to set LYRASHIELD_API_KEY in their shell profile. This balances ease of use with secret hygiene, since rotation only requires updating the env, not editing committed files.
+Group findings by authorization, injection, secrets, and dependency handling. Compare code weaknesses with [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), and dependency advisories with [OSV](https://osv.dev/). Keep each result tied to the scan, target, source revision, and coverage receipt.
 
-## 3. Verify connection and list security tools
+Use `lyrashield_generate_fix_plan` only where that authenticated interface is available; it provides read-only remediation guidance. A developer or coding agent applies the reviewed change. Record the proposal through an approved surface, queue a new retest, and wait for the resulting receipt before calling the issue remediated. Neither a Pi edit nor disappearance from an incomplete scan proves resolution.
 
-Restart Pi after editing .mcp.json. Open the MCP panel and expect lyrashield and lyrashield-remote to show connected. If lyrashield shows load error, confirm Node can resolve npx and that npm did not install @lyrashield/mcp into a non standard prefix outside PATH. If remote shows unauthorized, confirm the header uses Bearer `${LYRASHIELD_API_KEY}` and that the shell exporting the key is the same shell that launched Pi. Pi sometimes inherits a different env when launched from a GUI versus a terminal, which can cause confusing auth failures if you set the key only in your shell rc file.
-
-Ask Pi to list tools:
-
-```text
-Prompt: List MCP servers from mcpServers and tools from lyrashield and lyrashield-remote.
-Show transport, command or url, and tool names.
-```
-
-Expected:
-
-```text
-lyrashield (stdio via npx -y @lyrashield/mcp):
-- lyrashield_scan_target(target, scope)
-- lyrashield_get_findings(id)
-- lyrashield_list_targets()
-- lyrashield_create_report(target_id)
-- lyrashield_generate_fix_plan(finding_id)
-
-lyrashield-remote (http at https://app.lyrashieldai.com/api/mcp):
-- lyrashield_scan_target, lyrashield_get_findings, lyrashield_list_targets
-```
-
-For supply chain context, skim [OSV database](https://osv.dev/) and for CI wiring see [GitHub Actions docs](https://docs.github.com/en/actions). These help you interpret both appsec and dependency findings that surface together. When both servers list core tools, you know the local package and remote endpoint are reachable under the same identity.
-
-## 4. Run an inline security check from Pi
-
-With tools confirmed, run a scoped scan without leaving Pi. Keep scope limited to changed code for fast feedback. Tight scope also prevents the agent from scanning generated build artifacts that you did not intend to verify.
-
-```text
-Prompt for Pi agent:
-Use lyrashield_scan_target for target staging-pi-web.
-Scope: src/app/api, src/lib.
-Exclude: tests, .next, node_modules.
-Return only findings with evidence states with CWE, evidence, file and line, severity.
-Include OWASP mapping if present.
-Persist report id for PR gate.
-```
-
-A useful response should include finding id, severity, recorded evidence state, CWE, file path plus line, evidence snippet, limitations, and suggested patch location. Prioritize independently verified findings only when a separate receipt exists, while retaining detected and inconclusive items for triage. Reference [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) when reviewing injection or access control patterns.
-
-Since v1 includes secrets scanning alongside SCA, one scan can reveal both hardcoded credentials and vulnerable packages. Treat inline scanning as early signal and keep PR gating as mandatory, because local checks can be skipped by a developer under time pressure.
-
-A fix proposal records remediation intent; it does not edit code, open a branch, or create a pull request. Apply the change through the approved development workflow, add tests, then queue and poll the retest.
-
+If the CLI cannot establish target identity, coverage, or fresh evidence, preserve the insufficient state. Do not convert an unavailable or incomplete result into a clean gate simply because the source diff looks safe.
 ## 5. Wire a diff aware GitHub Action gate
 
 Local Pi checks are fast, but you need PR enforcement that survives skipped local steps. Add the official LyraShield GitHub Action in diff aware mode and upload SARIF for native annotations.
@@ -155,32 +92,32 @@ jobs:
 
 Require the security job in branch protection. The runner-local Action uploads advisory SARIF annotations for changed files; it does not reproduce Pi's hosted finding IDs or evidence states. Use a separate recorded scan when you need retained evidence and retest semantics. For workflow reuse, see [GitHub Actions docs](https://docs.github.com/en/actions), and for protocol context see [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro).
 
-## 6. Add agent rules for consistent secure coding
+## 6. Add project guidance for consistent secure coding
 
-Add a repo rules file that Pi reads, such as pi.md, CLAUDE.md, or .pi/rules.md depending on your Pi convention.
+Add reviewed project guidance through the Pi mechanism your team already uses. Do not invent a canonical rules path when the project has not chosen one.
 
 ```markdown
 # Pi security rules
 
-- Before finishing a feature, call lyrashield_scan_target on changed scope.
+- Before finishing a feature, stop so a developer can run `npx lyrashield scan` on the changed scope.
 - Surface findings with their evidence states, CWE, file evidence, and limitations.
-- For high severity findings, use lyrashield_generate_fix_plan for read-only guidance, have a developer apply the reviewed change, record the proposal, and queue a retest.
+- For high severity findings, have a developer review remediation guidance, apply the change, record the proposal through an approved surface, and queue a retest.
 - On PRs, ensure lyrashield security gate passed and SARIF uploaded.
 - Reference OWASP Top 10 and internal vibe coding security guide in PR body when relevant.
-- Never log raw secrets. Use ${VAR:LYRASHIELD_API_KEY} or ${LYRASHIELD_API_KEY}.
+- Never log or commit raw secrets. Keep LyraShield credentials in the CLI credential store.
 ```
 
-This file encodes Target to Scan to Evidence State to Fix Proposal to Retest to Report as daily behavior. Store it in version control so new Pi sessions inherit consistent guardrails. Teams that commit this file see identical verification across fresh clones, which reduces drift between what the local agent checks and what CI enforces later in the pull request.
+This guidance encodes Target to Scan to Evidence State to Fix Proposal to Retest to Report as daily behavior. Store it through your chosen project guidance mechanism so new Pi sessions receive consistent guardrails. Teams that commit this file see identical verification across fresh clones, which reduces drift between what the local agent checks and what CI enforces later in the pull request.
 
 | Stage            | Pi agent behavior                             | LyraShield contribution                                                | Proof artifact               |
 | ---------------- | --------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
 | Local generation | Scaffolds API and UI from terminal prompts    | N/A                                                                    | Prompt plus diff             |
-| Inline check     | Calls lyrashield_scan_target with tight scope | Findings with evidence states plus SCA plus secrets with file evidence | Finding ids with CWE         |
+| Local check      | Pauses for the standalone CLI                | Findings with evidence states plus SCA plus secrets with file evidence | Scan and finding identifiers |
 | PR gate          | Pushes diff to GitHub                         | Diff aware scan plus SARIF plus fail on high                           | GitHub check and annotations |
 | Fix loop         | Developer applies a reviewed remediation      | Recorded proposal plus server-owned retest                             | Retest outcome and scan ref  |
 
 ## Why pair Pi with LyraShield
 
-Pi gives you terminal speed and tight control, but speed without verification raises risk. LyraShield adds findings with evidence states with evidence rather than speculative warnings, maps issues to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), gives dependency context via [OSV database](https://osv.dev/), and keeps the loop inside MCP so you avoid context switching. The v1 scope stays honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not billed as live today. For Pi teams that ship often, this means fast local feedback plus mandatory PR protection, which is the simplest combination that preserves velocity while adding a clear evidence trail that reviewers trust.
+Pi gives you terminal speed and tight control, but speed without verification raises risk. LyraShield adds findings with evidence states with evidence rather than speculative warnings, maps issues to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), gives dependency context via [OSV database](https://osv.dev/), and keeps a repeatable CLI and CI loop beside the agent. The v1 scope stays honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not billed as live today. For Pi teams that ship often, this means fast local feedback plus mandatory PR protection, which is the simplest combination that preserves velocity while adding a clear evidence trail that reviewers trust.
 
-Close by running [AI app security checklist](/tools/ai-app-security-checklist) on the candidate build and confirming your json matches [Pi integration guide](/docs/integrations/picode). When ready to evaluate managed scans, [create an account at LyraShield AI](https://lyrashieldai.com) and keep the required security check as your source of truth.
+Close by running [AI app security checklist](/tools/ai-app-security-checklist) on the candidate build and confirming your workflow matches the [Pi integration guide](/docs/integrations/picode). When ready to evaluate managed scans, [create an account at LyraShield AI](https://lyrashieldai.com) and keep the required security check as your source of truth.

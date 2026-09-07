@@ -19,34 +19,35 @@ The canonical plugin lives in the `plugin/` directory:
 
 ## Client manifest shims
 
-`buildPlugin()` generates a copy of `plugin.json` into a per-client directory so each
-launch client can find the plugin in the location it expects:
+`buildPlugin()` generates client-specific descriptors. Their presence in the package does not
+create a discovery path; each client still controls activation:
 
 - `.claude-plugin/` — Claude Code
 - `.cursor-plugin/` — Cursor
 - `.codex-plugin/` — Codex
 - `.kiro-plugin/` — Kiro
 
-Each shim directory contains a copy of `plugin.json` pointing back at the canonical
-`plugin/` contents.
+Codex points to `.mcp.codex.json`, whose top level is the direct server map required by Codex.
+Claude and GitHub Copilot use marketplace installation. Kiro consumes the generated stdio entry
+through its workspace or user MCP settings file.
 
 ## Compatibility status
 
-| Client         | Package artifact       | Current evidence                                 | Recommended setup                             |
-| -------------- | ---------------------- | ------------------------------------------------ | --------------------------------------------- |
-| Claude Code    | `.claude-plugin/`      | Package-conformance tests                        | Agent Plugin                                  |
-| Cursor         | `.cursor-plugin/`      | Package-conformance tests                        | Agent Plugin                                  |
-| OpenAI Codex   | `.codex-plugin/`       | Package-conformance tests                        | Agent Plugin                                  |
-| Kiro           | `.kiro-plugin/`        | Package-conformance tests                        | Agent Plugin after `lyrashield login --oauth` |
-| VS Code        | Portable root manifest | Experimental; no retained client-runtime receipt | `lyrashield install vscode`                   |
-| GitHub Copilot | Portable root manifest | Experimental; no retained client-runtime receipt | Agent Plugin via the CLI                      |
+| Client         | Package artifact       | Current evidence                                 | Recommended setup                        |
+| -------------- | ---------------------- | ------------------------------------------------ | ---------------------------------------- |
+| Claude Code    | `.claude-plugin/`      | Package-conformance tests                        | Claude marketplace commands              |
+| Cursor         | `.cursor-plugin/`      | Package-conformance tests                        | Agent Plugin                             |
+| OpenAI Codex   | `.codex-plugin/`       | Package-conformance tests                        | Agent Plugin                             |
+| Kiro           | `.mcp.kiro.json`       | Package-conformance tests                        | Merge into Kiro MCP settings after login |
+| VS Code        | Portable root manifest | Experimental; no retained client-runtime receipt | `lyrashield install vscode`              |
+| GitHub Copilot | Portable root manifest | Experimental; no retained client-runtime receipt | Copilot marketplace commands             |
 
 Package-conformance means the generated manifest, schema, transport, version, and export
 boundary passed repository tests. It does not mean every client version has completed an
 authenticated runtime matrix. The wider registry contains 30 install entries resolving to 26
-preferred client surfaces; use `lyrashield init` or `lyrashield install <agent>` rather than copying
-another client's config shape. GitHub Copilot's preferred CLI path uses the portable root manifest,
-but remains `EXPERIMENTAL` until a retained client-runtime receipt exists.
+preferred client surfaces; use `lyrashield init` or `lyrashield install <agent>` to receive the
+correct direct install or client-owned next step. GitHub Copilot remains `EXPERIMENTAL` until a
+retained client-runtime receipt exists.
 
 ## API
 
@@ -71,7 +72,7 @@ endpoint without embedding a secret. The client follows hosted OAuth discovery, 
 workspace, and receives read scope by default. Write scope is optional, and every mutation
 still requires exact-argument approval.
 
-Kiro uses the local `npx -y @lyrashield/mcp` stdio adapter. Run `lyrashield login --oauth`
+Kiro uses the local `npx -y @lyrashield/mcp@0.2.5` stdio adapter. Run `lyrashield login --oauth`
 first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
 variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
 Headless writes without an approval channel fail closed.
@@ -82,7 +83,7 @@ Headless writes without an approval channel fail closed.
 
 ## Version and release receipts
 
-- Package: `@lyrashield/agent-plugin` 0.1.22; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/agent-plugin` 0.1.23; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions, and the public export boundary.
@@ -97,5 +98,5 @@ or live-tested it. Public listings remain separate vendor-controlled submissions
 - [`packages/mcp/README.md`](../mcp/README.md) — the MCP server this plugin packages.
 - [`packages/agent-registry/README.md`](../agent-registry/README.md) — the agent catalog
   and install strategies, including `agent-plugin`.
-- [`packages/cli/README.md`](../cli/README.md) — the `lyrashield` CLI, which installs the
-  plugin to supported agents via `init` / `install`.
+- [`packages/cli/README.md`](../cli/README.md) — the `lyrashield` CLI, which installs direct
+  integrations or prints the client-owned marketplace/settings step.

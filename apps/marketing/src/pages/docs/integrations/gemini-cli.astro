@@ -6,7 +6,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/gemini-cli", origin).toString()
 const title = "LyraShield MCP for Gemini CLI — Setup Guide"
 const description =
-  "Connect LyraShield to Gemini CLI (legacy). Two important gotchas: declare LYRASHIELD_API_KEY in the env block (Gemini CLI strips env vars containing KEY/TOKEN/SECRET from subprocesses) and avoid underscores in the server name. New setups should use Antigravity instead."
+  "Connect LyraShield to Gemini CLI. Declare LYRASHIELD_API_KEY in the env block because Gemini filters sensitive inherited names, and avoid underscores in the server name."
 const updatedDate = "2026-08-07"
 
 const jsonLd: unknown[] = [
@@ -46,17 +46,15 @@ const jsonLd: unknown[] = [
   updatedDate={updatedDate}
   currentPath="/docs/integrations/gemini-cli"
 >
-  <h1>Gemini CLI (legacy → Antigravity)</h1>
+  <h1>Gemini CLI</h1>
   <p>
     Gemini CLI reads MCP servers from <code>~/.gemini/settings.json</code> under the{" "}
     <code>mcpServers</code> key.
   </p>
 
-  <div class="callout callout--warn">
-    <strong>Gemini CLI is being transitioned to Antigravity.</strong> New setups should use the{" "}
-    <a href="/docs/integrations/antigravity">Antigravity guide</a> instead — it uses the same{" "}
-    <code>~/.gemini/</code> config directory, so existing LyraShield entries continue to work. This
-    guide remains for legacy Gemini CLI users.
+  <div class="callout">
+    Gemini CLI and Antigravity have separate current MCP contracts. Use the{" "}
+    <a href="/docs/integrations/antigravity">Antigravity guide</a> when that is the client you run.
   </div>
 
   <h2>Install with the CLI (fastest)</h2>
@@ -70,14 +68,12 @@ const jsonLd: unknown[] = [
   <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
 
   <div class="callout callout--warn">
-    <strong>Two critical gotchas for Gemini CLI:</strong>
+    <strong>Two configuration details for Gemini CLI:</strong>
     <ol>
       <li>
-        <strong>Env var stripping:</strong> Gemini CLI strips environment variables whose names
-        contain <code>KEY</code>, <code>TOKEN</code>, or <code>SECRET</code> from subprocess
-        environments as a security measure. You <em>must</em> declare <code>LYRASHIELD_API_KEY</code>
-        explicitly in the <code>env</code> block inside the server entry — inheriting it from the shell
-        is not sufficient.
+        <strong>Environment references:</strong> use <code>$LYRASHIELD_API_KEY</code> in MCP
+        <code>env</code> or headers. Gemini CLI resolves the reference from the launching shell, so
+        the raw key does not need to be stored in <code>settings.json</code>.
       </li>
       <li>
         <strong>No underscores in server name:</strong> Use a name without underscores (e.g.{" "}
@@ -88,12 +84,17 @@ const jsonLd: unknown[] = [
 
   <h2>Configuration</h2>
   <p>
-    Open or create <code>~/.gemini/settings.json</code> and add the following. Note the{" "}
-    <code>LYRASHIELD_API_KEY</code> is declared in the <code>env</code> block, not inherited from
-    the environment.
+    Open or create <code>~/.gemini/settings.json</code> and add the following local entry.
   </p>
 
   <AgentSnippet agentId="gemini-cli" transport="stdio" />
+
+  <h2>Remote HTTP setup</h2>
+  <p>
+    Gemini CLI uses <code>httpUrl</code> for Streamable HTTP. The separate <code>url</code> field is
+    for SSE endpoints.
+  </p>
+  <AgentSnippet agentId="gemini-cli" transport="remote-http" secondary />
 
   <h2>Verify the connection</h2>
   <p>
@@ -105,6 +106,6 @@ const jsonLd: unknown[] = [
   <div class="callout callout--warn">
     <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The
     <code>@lyrashield/mcp</code> package is published on npm, so
-    <code>npx -y @lyrashield/mcp</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.5</code> resolves directly.
   </div>
 </DocsLayout>

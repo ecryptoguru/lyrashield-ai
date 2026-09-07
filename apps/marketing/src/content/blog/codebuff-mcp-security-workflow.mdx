@@ -17,13 +17,13 @@ faq:
     a: Yes. Add the LyraShield GitHub Action to your workflow with the diff aware gate so only changed code is scanned on each pull request. Output is SARIF, which GitHub renders in the security tab.
 ---
 
-To connect Codebuff to LyraShield, run npx lyrashield install codebuff so the CLI writes the MCP server entry to .agents/mcp.json, then run npx lyrashield doctor to verify the connection and credentials. Codebuff is an open source terminal agent with a published agent store, and only stdio transport is documented for its MCP config. This workflow covers the install, manual fallback, verification, an inline check, a CI gate, and a rules snippet.
+To connect Codebuff to LyraShield, run npx lyrashield install codebuff so the CLI writes the MCP server entry to .agents/mcp.json, then run npx lyrashield doctor to verify the connection and credentials. Codebuff is an open source terminal agent with a published agent store, and its official MCP config supports local stdio and remote HTTP. This workflow covers the install, manual fallback, verification, an inline check, a CI gate, and a rules snippet.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. Wiring LyraShield into Codebuff puts release assurance inside the terminal session, so a scan runs before a change reaches a pull request rather than only after. The steps below assume you have Node installed and an active LyraShield account.
 
 | Step          | Command or file                       | Purpose                          |
 | ------------- | ------------------------------------- | -------------------------------- |
-| Prerequisites | Node 20 plus, git, LyraShield account | Prepare the environment          |
+| Prerequisites | Node 24 plus, git, LyraShield account | Prepare the environment          |
 | Install       | npx lyrashield install codebuff       | Write the MCP server entry       |
 | Manual path   | .agents/mcp.json                      | Fallback if CLI is unavailable   |
 | Verify        | npx lyrashield doctor                 | Check config and credentials     |
@@ -32,13 +32,13 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 
 ## 1. Meet the prerequisites
 
-Install Node 20 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://lyrashieldai.com) if you do not have one, because the MCP server needs credentials to authenticate. Run npx lyrashield login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
+Install Node 24 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://lyrashieldai.com) if you do not have one, because the MCP server needs credentials to authenticate. Run npx lyrashield login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
 
 Codebuff supports an agent store where published agents can be added to a project, and the CLI offers /init and /publish commands. Review any agent store entry before adding it, because a published agent can expose a write action or network call under an innocent name. Keep your credentials file outside the working tree, and never paste a token directly into a config file the agent can read.
 
 ## 2. Add the LyraShield MCP server
 
-Run npx lyrashield install codebuff. The CLI writes the server entry to .agents/mcp.json with a root mcpServers key. Each entry holds command, args, and env, and only stdio transport is documented in the official guide. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines the transport and tool exposure contract.
+Run npx lyrashield install codebuff. The CLI writes the server entry to .agents/mcp.json with a root mcpServers key. Each entry holds command, args, and env, and local stdio and remote HTTP transports are documented in the official guide. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines the transport and tool exposure contract.
 
 If the CLI is unavailable, add the entry manually. This is the manual path, and it is exactly what the CLI writes:
 
@@ -47,8 +47,8 @@ If the CLI is unavailable, add the entry manually. This is the manual path, and 
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": { "LYRASHIELD_API_KEY": "lsk_YOUR_TOKEN" }
+      "args": ["-y", "@lyrashield/mcp@0.2.5"],
+      "env": { "LYRASHIELD_API_KEY": "$LYRASHIELD_API_KEY" }
     }
   }
 }

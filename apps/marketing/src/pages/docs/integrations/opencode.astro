@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/opencode", origin).toString()
 const title = "LyraShield MCP for OpenCode — Setup Guide"
 const description =
   'Connect LyraShield to OpenCode. Configure opencode.json with the mcp key and type:"local". Note: OpenCode uses single-brace env interpolation {env:VAR} — not ${VAR}.'
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-09-08"
 
 const jsonLd: unknown[] = [
   {
@@ -70,6 +70,12 @@ const jsonLd: unknown[] = [
     instead of the variable value.
   </div>
 
+  <div class="callout">
+    <strong>Version binding:</strong> OpenCode's current documentation uses a top-level <code>mcp</code>
+    object and per-server <code>enabled</code> flag. Record the client version with runtime evidence
+    and revalidate this schema after upgrades.
+  </div>
+
   <h2>Local stdio setup</h2>
   <AgentSnippet agentId="opencode" transport="stdio" />
 
@@ -90,6 +96,6 @@ const jsonLd: unknown[] = [
   <div class="callout callout--warn">
     <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The
     <code>@lyrashield/mcp</code> package is published on npm, so
-    <code>npx -y @lyrashield/mcp</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.5</code> resolves directly.
   </div>
 </DocsLayout>

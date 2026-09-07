@@ -1,83 +1,39 @@
 ---
-import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/picode", origin).toString()
-const title = "LyraShield MCP for PiCode — Setup Guide"
-const description =
-  "Connect LyraShield to PiCode using the standard mcpServers configuration. Add the npx stdio server entry with your API key to enable inline security checks."
-const updatedDate = "2026-07-31"
-
-const jsonLd: unknown[] = [
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: title,
-    description,
-    url: canonical,
-    dateModified: updatedDate,
-    author: { "@id": `${origin}/#organization` },
-    publisher: { "@id": `${origin}/#organization` },
-    inLanguage: "en-US",
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: "Integrations",
-        item: `${origin}/docs/integrations`,
-      },
-      { "@type": "ListItem", position: 3, name: "PiCode", item: canonical },
-    ],
-  },
-]
+const title = "LyraShield for Pi — Standalone CLI Guide"
+const description = "Use LyraShield alongside Pi through the standalone CLI and CI. Pi core does not document native MCP client support."
+const updatedDate = "2026-09-08"
+const jsonLd = [{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  headline: title,
+  description,
+  url: canonical,
+  dateModified: updatedDate,
+  author: { "@id": `${origin}/#organization` },
+  publisher: { "@id": `${origin}/#organization` },
+  inLanguage: "en-US",
+}]
 ---
 
-<DocsLayout
-  title={`${title} | LyraShield AI`}
-  description={description}
-  canonical={canonical}
-  jsonLd={jsonLd}
-  updatedDate={updatedDate}
-  currentPath="/docs/integrations/picode"
->
-  <h1>PiCode</h1>
+<DocsLayout title={`${title} | LyraShield AI`} description={description} canonical={canonical} jsonLd={jsonLd} updatedDate={updatedDate} currentPath="/docs/integrations/picode">
+  <h1>Pi</h1>
   <p>
-    PiCode uses the standard <code>mcpServers</code> configuration format. Add the LyraShield entry
-    to your PiCode MCP settings file.
+    Pi's official documentation describes packages, extensions, and skills, but does not define a
+    native MCP client configuration. LyraShield does not create <code>.mcp.json</code> or
+    <code>.pi/mcp.json</code> for Pi core.
   </p>
-
-  <h2>Get the exact values with the CLI</h2>
+  <h2>Use the supported standalone workflow</h2>
+  <pre><code>npx lyrashield login --oauth
+npx lyrashield check-diff
+npx lyrashield gate --verdict --commit "$(git rev-parse HEAD)"</code></pre>
   <p>
-    There's no config file LyraShield can safely write for PiCode yet. Run{" "}
-    <code>npx lyrashield install picode</code> anyway — it won't write anything, but it prints the
-    exact command, arguments, and environment values below, generated from the current registry, so
-    this page can't drift out of sync with what you actually need to paste in.
+    If you adopt a third-party Pi MCP extension, review its code and configuration contract first;
+    its behavior is not evidence of native Pi support. Oh My Pi is a separate client with its own
+    documented MCP configuration.
   </p>
-  <pre><code>npx lyrashield install picode</code></pre>
-
-  <h2>Configuration</h2>
-  <AgentSnippet agentId="picode" />
-
-  <div class="callout">
-    <strong>API key:</strong> Create a workspace key under Settings → API keys in the LyraShield
-    app. Keys begin with <code>lsk_</code>. Use a read-only key for inspection tools.
-  </div>
-
-  <h2>Verify the connection</h2>
-  <p>
-    Reload PiCode and confirm the lyrashield server appears in the MCP servers list. Ask the AI
-    assistant to list available tools to verify the connection.
-  </p>
-
-  <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The
-    <code>@lyrashield/mcp</code> package is published on npm, so
-    <code>npx -y @lyrashield/mcp</code> resolves directly.
-  </div>
+  <p><a href="https://pi.dev/docs/latest">Pi official documentation</a></p>
 </DocsLayout>

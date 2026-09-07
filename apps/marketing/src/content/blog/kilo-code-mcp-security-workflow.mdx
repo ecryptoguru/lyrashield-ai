@@ -8,18 +8,18 @@ draft: false
 heroImage: agent-security-17
 faq:
   - q: "Where does Kilo Code store MCP server config?"
-    a: "Project local kilo.jsonc or global ~/.kilo/kilo.jsonc under mcp.servers. Use type local for stdio with pinned npx -y @lyrashield/mcp and type remote for https://app.lyrashieldai.com/api/mcp."
+    a: "Project kilo.jsonc or .kilo/kilo.jsonc, or global ~/.config/kilo/kilo.jsonc, under the top-level mcp key. Use type local for stdio and type remote for HTTP."
   - q: "Do I need to expose my API key in config?"
     a: "No. Reference {env:LYRASHIELD_API_KEY} in env or headers. Kilo Code resolves env at runtime so the key stays out of checked in files."
   - q: "Can this gate pull requests?"
     a: "Yes. Wire the LyraShield GitHub Action in diff aware mode to comment on PRs and upload SARIF, then require the check in branch protection."
   - q: "Where does Kilo Code read MCP server config from?"
-    a: "Kilo Code reads MCP servers from its settings under mcpServers with local and remote transports. Use the CLI installer to write the LyraShield entry with the correct transport type and auth fields, and keep the lsk_ key in an env reference so the literal never lands in the committed config file."
+    a: "Kilo Code reads MCP servers from the top-level mcp object. Use the CLI installer to write the entry with the correct transport and keep the lsk_ key in an environment reference."
 ---
 
 Fastest path: run `npx lyrashield init` to auto-detect Kilo Code and write the correct entry, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
 
-You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states, and fix proposals inside your normal agent loop without leaving the editor. In this guide you will configure the local stdio server using pinned npx -y @lyrashield/mcp plus the remote endpoint at https://app.lyrashieldai.com/api/mcp, verify tools are listed, run an inline check, and wire a diff aware GitHub Action gate with SARIF upload.
+You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states, and fix proposals inside your normal agent loop. This guide uses the current Kilo contract and the pinned `@lyrashield/mcp@0.2.5` package.
 
 Vibe coding moves fast and security debt can accumulate when large batches of routes, components, and queries are generated in one pass. If your team uses Kilo Code to scaffold features, you want verification that matches that speed. A good starting policy is the [vibe coding security guide](/blog/vibe-coding-security-guide) which frames prompt hygiene, review checkpoints, and supply chain checks. For context on what to look for, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), both of which confirm injection, broken access control, and vulnerable dependencies remain top risks in generated web apps.
 
@@ -46,57 +46,34 @@ Also confirm that your repository has a clear target definition. LyraShield uses
 
 ## 2. Configure LyraShield MCP server in Kilo Code
 
-Kilo Code reads MCP servers from kilo.jsonc at project root or from the global file at ~/.kilo/kilo.jsonc under mcp.servers. Use type local for stdio and type remote for remote. Include permission globs, environment indirection, and tool allow lists.
+Kilo Code reads MCP servers from `kilo.jsonc` or `.kilo/kilo.jsonc` in a project and `~/.config/kilo/kilo.jsonc` globally. Entries live directly under the top-level `mcp` key. Local servers use a command array and `environment`; remote servers use `url` and `headers`.
 
 ```json
 {
   "mcp": {
-    "servers": {
-      "lyrashield": {
-        "type": "local",
-        "command": "npx",
-        "args": ["-y", "@lyrashield/mcp"],
-        "env": {
-          "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
-        },
-        "permissions": {
-          "fs": ["read:./src/**", "read:./app/**", "read:./packages/**"],
-          "net": ["allow:api.lyrashieldai.com"],
-          "tools": [
-            "lyrashield_scan_target",
-            "lyrashield_get_findings",
-            "lyrashield_list_targets",
-            "lyrashield_get_scan_status",
-            "lyrashield_generate_fix_plan",
-            "lyrashield_record_fix_proposal"
-          ]
-        }
+    "lyrashield": {
+      "type": "local",
+      "command": ["npx", "-y", "@lyrashield/mcp@0.2.5"],
+      "environment": {
+        "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
       },
-      "lyrashield-remote": {
-        "type": "remote",
-        "url": "https://app.lyrashieldai.com/api/mcp",
-        "headers": {
-          "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
-        },
-        "permissions": {
-          "tools": [
-            "lyrashield_scan_target",
-            "lyrashield_get_findings",
-            "lyrashield_list_targets",
-            "lyrashield_get_scan_status",
-            "lyrashield_generate_fix_plan",
-            "lyrashield_record_fix_proposal"
-          ]
-        }
-      }
+      "enabled": true
+    },
+    "lyrashield-remote": {
+      "type": "remote",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
+      },
+      "enabled": true
     }
   }
 }
 ```
 
-This satisfies the product requirement to pin stdio to npx -y @lyrashield/mcp and to expose remote at https://app.lyrashieldai.com/api/mcp via bearer header. The canonical reference lives in [Kilo Code integration guide](/docs/integrations/kilo-code). Keep hostConfigDiscovery style defaults off for deterministic clones and ensure permission globs cover only source roots you intend to share.
+The canonical reference lives in [Kilo Code integration guide](/docs/integrations/kilo-code). Kilo permissions are configured separately under the top-level `permission` key with exact tool names or globs; they do not belong inside an MCP server entry.
 
-If you manage config centrally, store the global file at ~/.kilo/kilo.jsonc with the same shape and let projects inherit it, which gives platform teams consistent verification across many repos.
+If you manage config centrally, store the global file at `~/.config/kilo/kilo.jsonc` with the same shape and let projects inherit it.
 
 ## 3. Verify connection and list security tools
 
