@@ -113,7 +113,9 @@ async function listExportFiles(
 ): Promise<Array<{ path: string; sha256: string; mode: number }>> {
   const entries = await readdir(directory, { withFileTypes: true })
   const files: Array<{ path: string; sha256: string; mode: number }> = []
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+  for (const entry of entries.sort((left, right) =>
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  )) {
     const fullPath = path.join(directory, entry.name)
     const relative = path.relative(root, fullPath).split(path.sep).join("/")
     const stat = await lstat(fullPath)

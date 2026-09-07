@@ -4,7 +4,7 @@ const apiKey = process.env.LYRASHIELD_API_KEY?.trim()
 
 const definition: AgentDefinition = {
   id: "lyrashield-review",
-  version: "0.1.20",
+  version: "0.1.21",
   publisher: "lyrashield",
   displayName: "LyraShield Review",
   model: "anthropic/claude-sonnet-4.5",

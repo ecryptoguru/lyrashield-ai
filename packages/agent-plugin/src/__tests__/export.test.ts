@@ -152,9 +152,16 @@ describe("exportMarketplace", () => {
     expect(manifest.forbidden).toContain("apps/worker")
     expect(manifest.manifestSchemaVersion).toBe("marketplace-export/2")
     expect(manifest.sourceCommit).toMatch(/^[a-f0-9]{40}$/)
-    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.20" })
+    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.21" })
     expect(manifest.publication?.status).toBe("unpublished")
     expect(manifest.files?.some((file) => file.path === "manifest.json")).toBe(false)
+    const exportedPaths = manifest.files?.map((file) => file.path) ?? []
+    expect(exportedPaths.indexOf("CHANGELOG.md")).toBeLessThan(
+      exportedPaths.indexOf("assets/lyrashield-400.png")
+    )
+    expect(exportedPaths.indexOf("gemini-extension/GEMINI.md")).toBeLessThan(
+      exportedPaths.indexOf("gemini-extension.json")
+    )
     await expect(readFile(path.join(output, "README.md"), "utf8")).resolves.toContain(
       "marketplace release"
     )
@@ -185,7 +192,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.20",
+      version: "0.1.21",
     })
     // The marketplace catalog is what makes the exported repo addressable via
     // `/plugin marketplace add` and VS Code's "Install Plugin From Source".
@@ -201,14 +208,14 @@ describe("exportMarketplace", () => {
     expect(marketplace).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-marketplace.json",
       name: "lyrashield-ai",
-      version: "0.1.20",
+      version: "0.1.21",
       owner: { name: "LyraShield AI" },
     })
     expect(marketplace.plugins).toHaveLength(1)
     expect(marketplace.plugins?.[0]).toMatchObject({
       name: "lyrashield",
       source: "./",
-      version: "0.1.20",
+      version: "0.1.21",
       license: "Apache-2.0",
     })
     const codexManifest = JSON.parse(
@@ -242,7 +249,7 @@ describe("exportMarketplace", () => {
     ).resolves.toContain("lyrashield-mcp")
     await expect(
       readFile(path.join(output, "codebuff", "lyrashield-review.ts"), "utf8")
-    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.20"[\s\S]*mcpServers:/)
+    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.21"[\s\S]*mcpServers:/)
     await expect(
       readFile(path.join(output, "gemini-extension", "gemini-extension.json"), "utf8")
     ).resolves.toContain("lyrashield-ai")
@@ -320,10 +327,10 @@ describe("exportMarketplace", () => {
 
     // Manifest versions must match each artifact's own source-of-truth file.
     expect(manifest.artifactVersions).toEqual({
-      zed: "0.1.20",
-      gemini: "0.1.20",
-      codebuff: "0.1.20",
-      openclaw: "0.1.20",
+      zed: "0.1.21",
+      gemini: "0.1.21",
+      codebuff: "0.1.21",
+      openclaw: "0.1.21",
     })
   })
 })
