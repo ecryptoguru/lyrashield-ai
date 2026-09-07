@@ -1,7 +1,10 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises"
+import { cp, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { execFile } from "node:child_process"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
 import { MUTATING_TOOL_NAMES } from "@lyrashield/mcp/tool-policy"
 import { buildPlugin } from "./build.js"
 import { getPluginDir } from "./index.js"
@@ -44,6 +47,12 @@ const GENERATED_FILES = [
   "LICENSE",
   ...MARKETPLACE_ARTIFACTS,
 ] as const
+const execFileAsync = promisify(execFile)
+
+export interface MarketplaceExportOptions {
+  /** Release exports require a clean source checkout; ordinary local exports stay unpublished. */
+  publish?: boolean
+}
 
 /** Gemini excludes exactly the catalog's mutating tools; the list is never hardcoded here. */
 const GEMINI_EXCLUDED_TOOLS: readonly string[] = MUTATING_TOOL_NAMES
@@ -93,13 +102,63 @@ async function writeGeminiManifest(
   )
 }
 
+async function git(repoRoot: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", ["-C", repoRoot, ...args])
+  return stdout.trim()
+}
+
+async function listExportFiles(
+  root: string,
+  directory = root
+): Promise<Array<{ path: string; sha256: string; mode: number }>> {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const files: Array<{ path: string; sha256: string; mode: number }> = []
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    const fullPath = path.join(directory, entry.name)
+    const relative = path.relative(root, fullPath).split(path.sep).join("/")
+    const stat = await lstat(fullPath)
+    if (stat.isSymbolicLink()) throw new Error(`Marketplace export rejects symlink: ${relative}`)
+    if (stat.isDirectory()) {
+      files.push(...(await listExportFiles(root, fullPath)))
+    } else if (stat.isFile()) {
+      if (relative === "manifest.json") continue
+      files.push({
+        path: relative,
+        sha256: createHash("sha256")
+          .update(await readFile(fullPath))
+          .digest("hex"),
+        mode: stat.mode & 0o777,
+      })
+    } else {
+      throw new Error(`Marketplace export rejects unsupported entry: ${relative}`)
+    }
+  }
+  return files
+}
+
+async function assertEmptyDestination(destination: string): Promise<void> {
+  await mkdir(destination, { recursive: true })
+  if ((await readdir(destination)).length > 0) {
+    throw new Error("Marketplace export destination must be empty")
+  }
+}
+
 /** Export only installable client artifacts; hosted service code never crosses this boundary. */
-export async function exportMarketplace(destination: string): Promise<void> {
+export async function exportMarketplace(
+  destination: string,
+  { publish = false }: MarketplaceExportOptions = {}
+): Promise<void> {
   const pluginRoot = getPluginDir()
   const repoRoot = path.resolve(pluginRoot, "../../..")
   const marketplaceDocs = path.join(repoRoot, "docs", "marketplace")
+  const [sourceCommit, dirtySource] = await Promise.all([
+    git(repoRoot, ["rev-parse", "HEAD"]),
+    git(repoRoot, ["status", "--porcelain", "--untracked-files=all"]),
+  ])
+  if (publish && dirtySource)
+    throw new Error("Marketplace publication requires a clean source checkout")
   await buildPlugin()
-  await mkdir(destination, { recursive: true })
+  await assertEmptyDestination(destination)
 
   for (const relative of PUBLIC_FILES) {
     const source =
@@ -132,11 +191,12 @@ export async function exportMarketplace(destination: string): Promise<void> {
     })
   }
 
-  const plugin = JSON.parse(await readFile(path.join(pluginRoot, "plugin.json"), "utf8")) as {
-    name?: string
-    version?: string
-    license?: string
-  }
+  const [pluginContent, generatorContent] = await Promise.all([
+    readFile(path.join(pluginRoot, "plugin.json"), "utf8"),
+    readFile(path.resolve(pluginRoot, "..", "package.json"), "utf8"),
+  ])
+  const plugin = JSON.parse(pluginContent) as { name?: string; version?: string; license?: string }
+  const generator = JSON.parse(generatorContent) as { version?: string }
   if (plugin.license !== "Apache-2.0") throw new Error("Marketplace plugin must be Apache-2.0")
 
   const [artifactVersions] = await Promise.all([
@@ -144,6 +204,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
     writeGeminiManifest(marketplaceDocs, destination, destination),
   ])
 
+  const files = await listExportFiles(destination)
   await writeFile(
     path.join(destination, "manifest.json"),
     `${JSON.stringify(
@@ -152,6 +213,14 @@ export async function exportMarketplace(destination: string): Promise<void> {
         version: plugin.version,
         license: plugin.license,
         source: "@lyrashield/agent-plugin",
+        manifestSchemaVersion: "marketplace-export/2",
+        sourceCommit,
+        generator: { package: "@lyrashield/agent-plugin", version: generator.version },
+        publication: {
+          status: publish ? "release-candidate" : "unpublished",
+          sourceClean: !dirtySource,
+        },
+        files,
         generatedFiles: GENERATED_FILES,
         artifactVersions,
         mutatingTools: [...GEMINI_EXCLUDED_TOOLS],
@@ -172,7 +241,8 @@ export async function exportMarketplace(destination: string): Promise<void> {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const destination = process.argv[2] ?? path.resolve(process.cwd(), "marketplace-export")
-  await exportMarketplace(destination)
+  const [destinationArg, ...args] = process.argv.slice(2)
+  const destination = destinationArg ?? path.resolve(process.cwd(), "marketplace-export")
+  await exportMarketplace(destination, { publish: args.includes("--publish") })
   console.log(`Exported LyraShield marketplace artifacts to ${destination}`)
 }

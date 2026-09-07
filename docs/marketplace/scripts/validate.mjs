@@ -1,4 +1,5 @@
-import { access, readFile, readdir } from "node:fs/promises"
+import { access, lstat, readFile, readdir } from "node:fs/promises"
+import { createHash } from "node:crypto"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -24,10 +25,60 @@ function assert(condition, message) {
 }
 
 const manifest = await readJson("manifest.json")
+assert(manifest.manifestSchemaVersion === "marketplace-export/2", "unsupported manifest schema")
+assert(
+  typeof manifest.sourceCommit === "string" && /^[a-f0-9]{40}$/i.test(manifest.sourceCommit),
+  "manifest.sourceCommit must be a commit SHA"
+)
+assert(
+  manifest.publication?.status === "unpublished" ||
+    manifest.publication?.status === "release-candidate",
+  "manifest.publication.status is invalid"
+)
 assert(Array.isArray(manifest.generatedFiles), "manifest.generatedFiles must be an array")
 for (const relative of manifest.generatedFiles) {
   assert(await exists(relative), `missing generated artifact: ${relative}`)
 }
+
+async function exportedFiles(dir = root) {
+  const files = []
+  for (const entry of (await readdir(dir, { withFileTypes: true })).sort((a, b) =>
+    a.name.localeCompare(b.name)
+  )) {
+    const full = path.join(dir, entry.name)
+    const relative = path.relative(root, full).split(path.sep).join("/")
+    const stat = await lstat(full)
+    if (stat.isSymbolicLink()) throw new Error(`symlink present in export: ${relative}`)
+    if (stat.isDirectory()) files.push(...(await exportedFiles(full)))
+    else if (stat.isFile() && relative !== "manifest.json") {
+      files.push({
+        path: relative,
+        sha256: createHash("sha256")
+          .update(await readFile(full))
+          .digest("hex"),
+        mode: stat.mode & 0o777,
+      })
+    } else if (!stat.isFile()) throw new Error(`unsupported entry in export: ${relative}`)
+  }
+  return files
+}
+
+assert(Array.isArray(manifest.files), "manifest.files must be an array")
+const listedFiles = manifest.files
+assert(
+  listedFiles.every(
+    (file) =>
+      typeof file?.path === "string" &&
+      /^[a-f0-9]{64}$/i.test(file.sha256) &&
+      Number.isInteger(file.mode)
+  ),
+  "manifest.files contains an invalid entry"
+)
+const actualFiles = await exportedFiles()
+assert(
+  JSON.stringify(listedFiles) === JSON.stringify(actualFiles),
+  "export file set or hash differs from manifest"
+)
 
 assert(!(await exists("plugin")), "portable plugin artifacts must live at the repository root")
 
