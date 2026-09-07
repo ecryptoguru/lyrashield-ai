@@ -154,15 +154,18 @@ model OauthClient {
   id                               String                @id
   clientId                         String
   clientSecret                     String?
+  clientDiscoveryId                String?
   disabled                         Boolean?              @default(false)
   skipConsent                      Boolean?
   enableEndSession                 Boolean?
   subjectType                      String?
   scopes                           String[]
+  clientCredentialsScopes          String[]              @default([])
   userId                           String?
   user                             User?                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt                        DateTime?
   updatedAt                        DateTime?
+  expiresAt                        DateTime?
   name                             String?
   uri                              String?
   icon                             String?
@@ -181,6 +184,7 @@ model OauthClient {
   jwksUri                          String?
   grantTypes                       String[]
   responseTypes                    String[]
+  applicationType                  String?
   public                           Boolean?
   type                             String?
   requirePKCE                      Boolean?
