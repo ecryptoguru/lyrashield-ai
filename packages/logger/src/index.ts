@@ -113,7 +113,8 @@ function log(level: LogLevel, message: string, meta?: Record<string, unknown>) {
 
   const formatted = safeStringify(entry)
 
-  if (level === "error") {
+  const stderrOnly = getProcessEnv()?.LYRASHIELD_LOG_DESTINATION === "stderr"
+  if (level === "error" || stderrOnly) {
     console.error(formatted)
   } else if (level === "warn") {
     console.warn(formatted)

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest"
-import { __test } from "./index"
+import { describe, it, expect, vi } from "vitest"
+import { __test, logger } from "./index"
 
 const { redact, safeStringify, isSensitiveKey } = __test
 
@@ -64,5 +64,26 @@ describe("logger — redaction", () => {
     const err = out.err as Record<string, unknown>
     expect(err.name).toBe("Error")
     expect(err.message).toBe("boom")
+  })
+})
+
+describe("logger — destination", () => {
+  it("keeps protocol stdout clean when stderr is requested", () => {
+    const previous = process.env.LYRASHIELD_LOG_DESTINATION
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    process.env.LYRASHIELD_LOG_DESTINATION = "stderr"
+
+    try {
+      logger.info("stdio ready")
+
+      expect(stdout).not.toHaveBeenCalled()
+      expect(stderr).toHaveBeenCalledOnce()
+    } finally {
+      stdout.mockRestore()
+      stderr.mockRestore()
+      if (previous === undefined) delete process.env.LYRASHIELD_LOG_DESTINATION
+      else process.env.LYRASHIELD_LOG_DESTINATION = previous
+    }
   })
 })

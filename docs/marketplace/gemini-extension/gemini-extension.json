@@ -1,6 +1,6 @@
 {
   "name": "lyrashield-ai",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Evidence-backed release assurance for AI-built software.",
   "settings": [
     {
@@ -16,7 +16,7 @@
       "args": [
         "-y",
         "--node-options=--require=\"${extensionPath}/mcp-env.cjs\"",
-        "@lyrashield/mcp@0.2.4"
+        "@lyrashield/mcp@0.2.5"
       ],
       "env": {
         "LYRASHIELD_EXTENSION_CRED": "${GEMINI_LYRASHIELD_CRED}"

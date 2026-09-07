@@ -6,7 +6,7 @@ Zed extension for the [LyraShield AI](https://lyrashieldai.com) MCP server. Adds
 
 Requires Node.js 24 or newer.
 
-The `@lyrashield/mcp` package is pinned to version 0.2.4; releases deliberately update this pin.
+The `@lyrashield/mcp` package is pinned to version 0.2.5; releases deliberately update this pin.
 
 Run `lyrashield login --oauth` once in a terminal, select one workspace, then restart Zed. The
 extension starts the local MCP server with that user-only credential store; no secret goes into Zed
@@ -30,7 +30,7 @@ For CI or an environment that cannot complete OAuth, add an API key under
 Stored OAuth preserves an explicit `LYRASHIELD_API_URL` override. Inherited credential overrides
 are removed before MCP starts. An explicit API key uses `https://app.lyrashieldai.com` only.
 
-Published MCP 0.2.4 refreshes expired stored OAuth credentials before the stdio server starts,
+Published MCP 0.2.5 refreshes expired stored OAuth credentials before the stdio server starts,
 including with an explicit API URL override.
 
 See `configuration/installation_instructions.md` for full setup and troubleshooting.

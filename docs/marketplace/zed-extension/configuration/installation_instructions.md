@@ -43,13 +43,13 @@ Open your Zed settings and add:
 Stored OAuth preserves an explicit `LYRASHIELD_API_URL` override. Inherited credential overrides
 are removed before MCP starts. An explicit API key uses `https://app.lyrashieldai.com` only.
 
-Published MCP 0.2.4 refreshes expired stored OAuth credentials before the stdio server starts,
+Published MCP 0.2.5 refreshes expired stored OAuth credentials before the stdio server starts,
 including with an explicit API URL override.
 
 ## Requirements
 
 - **Node.js** v24 or newer (Zed provides its own Node binary; you do not need to install one manually).
-- The `@lyrashield/mcp` package is pinned to version 0.2.4; releases deliberately update this pin.
+- The `@lyrashield/mcp` package is pinned to version 0.2.5; releases deliberately update this pin.
 
 ## Available tools
 
