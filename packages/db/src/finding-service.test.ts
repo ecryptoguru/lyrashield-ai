@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("./client", () => ({
   prisma: {
     finding: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    evidence: { findMany: vi.fn(), count: vi.fn() },
+    findingVerification: { findMany: vi.fn(), count: vi.fn() },
+    fixProposal: { findMany: vi.fn(), count: vi.fn() },
+    retest: { findMany: vi.fn(), count: vi.fn() },
   },
 }))
 
@@ -14,6 +18,7 @@ import { prisma } from "./client"
 import {
   acceptRisk,
   getFinding,
+  getFindingHistoryPage,
   listFindings,
   markFalsePositive,
   updateFindingStatus,
@@ -41,6 +46,7 @@ describe("getFinding", () => {
       ],
       fixProposals: [],
       retests: [],
+      _count: { evidence: 1, verificationReceipts: 1, fixProposals: 0, retests: 0 },
     } as never)
 
     const finding = await getFinding("finding-1", "workspace-1")
@@ -49,7 +55,10 @@ describe("getFinding", () => {
       expect.objectContaining({
         where: { id: "finding-1", workspaceId: "workspace-1", deletedAt: null },
         include: expect.objectContaining({
-          evidence: { select: { id: true, type: true, redactionStatus: true } },
+          evidence: expect.objectContaining({
+            select: { id: true, type: true, redactionStatus: true, createdAt: true },
+            take: 26,
+          }),
           verificationReceipts: expect.objectContaining({
             select: expect.objectContaining({
               scanId: true,
@@ -65,6 +74,89 @@ describe("getFinding", () => {
     expect(serialized).not.toContain("storageUri")
     expect(serialized).not.toContain("s3://")
     expect(serialized).toContain('"sourceRevision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"')
+  })
+
+  it.each([100, 10_000, 100_000])(
+    "returns a bounded initial history preview for %i records",
+    async (total) => {
+      const createdAt = new Date("2026-09-07T00:00:00Z")
+      vi.mocked(prisma.finding.findFirst).mockResolvedValue({
+        id: "finding-1",
+        evidence: Array.from({ length: 26 }, (_, index) => ({
+          id: `evidence-${index}`,
+          type: "finding",
+          redactionStatus: "complete",
+          createdAt,
+        })),
+        verificationReceipts: [],
+        fixProposals: [],
+        retests: [],
+        _count: { evidence: total, verificationReceipts: 0, fixProposals: 0, retests: 0 },
+      } as never)
+
+      const finding = await getFinding("finding-1", "workspace-1")
+
+      expect(finding?.evidence).toHaveLength(25)
+      expect(finding?.historyPagination.evidence.total).toBe(total)
+      expect(finding?.historyPagination.evidence.nextCursor).toBeTruthy()
+    }
+  )
+})
+
+describe("getFindingHistoryPage", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("uses a stable createdAt/id cursor and caps pages at 100", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue(
+      Array.from({ length: 101 }, (_, index) => ({
+        id: `evidence-${String(100 - index).padStart(3, "0")}`,
+        type: "finding",
+        redactionStatus: "complete",
+        createdAt: new Date("2026-09-07T00:00:00Z"),
+      })) as never
+    )
+    vi.mocked(prisma.evidence.count).mockResolvedValue(100000)
+
+    const first = await getFindingHistoryPage("finding-1", "workspace-1", "evidence", {
+      limit: 1000,
+    })
+    expect(first.items).toHaveLength(100)
+    expect(first.total).toBe(100000)
+    expect(first.nextCursor).toBeTruthy()
+
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([])
+    await getFindingHistoryPage("finding-1", "workspace-1", "evidence", {
+      cursor: first.nextCursor!,
+    })
+    expect(prisma.evidence.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          findingId: "finding-1",
+          OR: expect.any(Array),
+        }),
+      })
+    )
+  })
+
+  it("rejects a cursor bound to another finding", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+      ...Array.from({ length: 26 }, (_, index) => ({
+        id: `evidence-${index}`,
+        type: "finding",
+        redactionStatus: "complete",
+        createdAt: new Date("2026-09-07T00:00:00Z"),
+      })),
+    ] as never)
+    vi.mocked(prisma.evidence.count).mockResolvedValue(26)
+    const first = await getFindingHistoryPage("finding-1", "workspace-1", "evidence")
+
+    await expect(
+      getFindingHistoryPage("finding-2", "workspace-1", "evidence", {
+        cursor: first.nextCursor!,
+      })
+    ).rejects.toThrow("Invalid finding history cursor")
   })
 })
 

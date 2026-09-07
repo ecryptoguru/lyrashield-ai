@@ -31,9 +31,9 @@ import {
   getCachedDashboardOverview,
 } from "@/lib/cache"
 import { TrustCommandCenter } from "@/components/trust-command-center"
-import { applyTargetCoverageToVerdict } from "@/lib/dashboard-overview"
 import { deriveHomeNextAction } from "@/lib/home-next-action"
-import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
+import { projectGateReadinessReport } from "@/lib/launch-readiness"
+import { getGateReadinessTargets } from "@/lib/launch-readiness-server"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
@@ -75,13 +75,17 @@ export default async function DashboardPage() {
 
   // One coherent read model: every headline below describes the same evidence
   // scope instead of independently-selected workspace aggregates.
-  const overview = await getCachedDashboardOverview(workspaceId)
+  const [overview, gateTargets] = await Promise.all([
+    getCachedDashboardOverview(workspaceId),
+    // Release decisions use an uncached applicability read even though the
+    // surrounding dashboard aggregates are cached.
+    getGateReadinessTargets(workspaceId),
+  ])
   const {
     targets,
     openIssues,
     openIssuesBySeverity,
     findingGroups,
-    completedRunCount,
     scoreHistory,
     reportCount,
     project,
@@ -92,34 +96,15 @@ export default async function DashboardPage() {
   } = overview
 
   const targetCount = targets.total
-  const readinessBase = generateLaunchReadinessReportFromAggregate(
+  const readiness = projectGateReadinessReport(
     findingGroups.map((group) => ({
       severity: group.severity,
       status: group.status,
       verified: group.verified,
       count: group.count,
     })),
-    completedRunCount > 0,
-    {
-      evaluated: targets.assessed + targets.partiallyAssessed > 0,
-      reason:
-        "No scanner successfully evaluated a target in this workspace. Open the latest run's coverage notice for the specific reason.",
-    }
+    gateTargets
   )
-  // A positive verdict is refused while any active target has no usable,
-  // non-expired evidence — a clean finding sheet is not a launch decision for
-  // targets nobody has been able to inspect.
-  const { verdict, coverageCondition } = applyTargetCoverageToVerdict(
-    readinessBase.verdict,
-    targets
-  )
-  const readiness = {
-    ...readinessBase,
-    verdict,
-    conditions: coverageCondition
-      ? [...readinessBase.conditions, coverageCondition]
-      : readinessBase.conditions,
-  }
 
   const primaryAction = dashboardPrimaryAction(targetCount)
   const nextAction = deriveHomeNextAction(

@@ -2,6 +2,50 @@ import { prisma } from "./client"
 import type { Finding, FindingSeverity, FindingStatus } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 
+const HISTORY_PREVIEW_LIMIT = 25
+
+export type FindingHistoryCollection =
+  "evidence" | "verificationReceipts" | "fixProposals" | "retests"
+
+export interface FindingHistoryPage<T = unknown> {
+  items: T[]
+  nextCursor: string | null
+  total: number
+}
+
+interface HistoryCursor {
+  findingId: string
+  collection: FindingHistoryCollection
+  createdAt: string
+  id: string
+}
+
+function encodeHistoryCursor(cursor: HistoryCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url")
+}
+
+function decodeHistoryCursor(
+  value: string | undefined,
+  findingId: string,
+  collection: FindingHistoryCollection
+): HistoryCursor | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as HistoryCursor
+    if (
+      parsed.findingId !== findingId ||
+      parsed.collection !== collection ||
+      typeof parsed.id !== "string" ||
+      Number.isNaN(Date.parse(parsed.createdAt))
+    ) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 export interface ListFindingsParams {
   workspaceId: string
   targetId?: string
@@ -102,18 +146,26 @@ export async function getFinding(
       }[]
       fixProposals: { id: string; status: string; summary: string }[]
       retests: { id: string; scanId: string; status: string; createdAt: Date }[]
+      historyPagination: Record<
+        FindingHistoryCollection,
+        { total: number; nextCursor: string | null }
+      >
     })
   | null
 > {
-  return prisma.finding.findFirst({
+  const finding = await prisma.finding.findFirst({
     where: { id: findingId, workspaceId, deletedAt: null },
     include: {
       evidence: {
+        where: { redactionStatus: { not: "deleted" } },
         select: {
           id: true,
           type: true,
           redactionStatus: true,
+          createdAt: true,
         },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: HISTORY_PREVIEW_LIMIT + 1,
       },
       verificationReceipts: {
         select: {
@@ -127,7 +179,8 @@ export async function getFinding(
           evidence: true,
           createdAt: true,
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: HISTORY_PREVIEW_LIMIT + 1,
       },
       fixProposals: {
         where: { deletedAt: null },
@@ -135,7 +188,10 @@ export async function getFinding(
           id: true,
           status: true,
           summary: true,
+          createdAt: true,
         },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: HISTORY_PREVIEW_LIMIT + 1,
       },
       retests: {
         select: {
@@ -144,10 +200,183 @@ export async function getFinding(
           status: true,
           createdAt: true,
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: HISTORY_PREVIEW_LIMIT + 1,
+      },
+      _count: {
+        select: {
+          evidence: { where: { redactionStatus: { not: "deleted" } } },
+          verificationReceipts: true,
+          fixProposals: { where: { deletedAt: null } },
+          retests: true,
+        },
       },
     },
   })
+  if (!finding) return null
+
+  const buildPreview = <T extends { id: string; createdAt?: Date }>(
+    collection: FindingHistoryCollection,
+    rows: T[],
+    total: number
+  ) => {
+    const items = rows.slice(0, HISTORY_PREVIEW_LIMIT)
+    const last = items.at(-1)
+    const nextCursor =
+      rows.length > HISTORY_PREVIEW_LIMIT && last?.createdAt
+        ? encodeHistoryCursor({
+            findingId,
+            collection,
+            createdAt: last.createdAt.toISOString(),
+            id: last.id,
+          })
+        : null
+    return { items, pagination: { total, nextCursor } }
+  }
+
+  const evidence = buildPreview("evidence", finding.evidence, finding._count.evidence)
+  const verificationReceipts = buildPreview(
+    "verificationReceipts",
+    finding.verificationReceipts,
+    finding._count.verificationReceipts
+  )
+  const fixProposals = buildPreview(
+    "fixProposals",
+    finding.fixProposals,
+    finding._count.fixProposals
+  )
+  const retests = buildPreview("retests", finding.retests, finding._count.retests)
+
+  const { _count, ...baseFinding } = finding
+  void _count
+  return {
+    ...baseFinding,
+    evidence: evidence.items,
+    verificationReceipts: verificationReceipts.items,
+    fixProposals: fixProposals.items,
+    retests: retests.items,
+    historyPagination: {
+      evidence: evidence.pagination,
+      verificationReceipts: verificationReceipts.pagination,
+      fixProposals: fixProposals.pagination,
+      retests: retests.pagination,
+    },
+  }
+}
+
+export async function getFindingReference(findingId: string, workspaceId: string) {
+  return prisma.finding.findFirst({
+    where: { id: findingId, workspaceId, deletedAt: null },
+    select: { id: true, scanId: true, targetId: true },
+  })
+}
+
+export async function getFindingHistoryPage(
+  findingId: string,
+  workspaceId: string,
+  collection: FindingHistoryCollection,
+  options: { cursor?: string; limit?: number } = {}
+): Promise<FindingHistoryPage> {
+  const limit = Math.min(Math.max(options.limit ?? HISTORY_PREVIEW_LIMIT, 1), 100)
+  const cursor = decodeHistoryCursor(options.cursor, findingId, collection)
+  if (options.cursor && !cursor) throw new Error("Invalid finding history cursor")
+
+  const finding = await prisma.finding.findFirst({
+    where: { id: findingId, workspaceId, deletedAt: null },
+    select: { id: true },
+  })
+  if (!finding) throw new Error("Finding not found")
+
+  const after = cursor
+    ? {
+        OR: [
+          { createdAt: { lt: new Date(cursor.createdAt) } },
+          { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } },
+        ],
+      }
+    : {}
+  const page = <T extends { id: string; createdAt: Date }>(rows: T[], total: number) => {
+    const items = rows.slice(0, limit)
+    const last = items.at(-1)
+    return {
+      items,
+      total,
+      nextCursor:
+        rows.length > limit && last
+          ? encodeHistoryCursor({
+              findingId,
+              collection,
+              createdAt: last.createdAt.toISOString(),
+              id: last.id,
+            })
+          : null,
+    }
+  }
+
+  switch (collection) {
+    case "evidence": {
+      const where = { findingId, redactionStatus: { not: "deleted" }, ...after }
+      const [rows, total] = await Promise.all([
+        prisma.evidence.findMany({
+          where,
+          select: { id: true, type: true, redactionStatus: true, createdAt: true },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+        }),
+        prisma.evidence.count({ where: { findingId, redactionStatus: { not: "deleted" } } }),
+      ])
+      return page(rows, total)
+    }
+    case "verificationReceipts": {
+      const where = { findingId, workspaceId, ...after }
+      const [rows, total] = await Promise.all([
+        prisma.findingVerification.findMany({
+          where,
+          select: {
+            id: true,
+            status: true,
+            method: true,
+            reason: true,
+            scanId: true,
+            sourceRevision: true,
+            verifierVersion: true,
+            evidence: true,
+            createdAt: true,
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+        }),
+        prisma.findingVerification.count({ where: { findingId, workspaceId } }),
+      ])
+      return page(rows, total)
+    }
+    case "fixProposals": {
+      const where = { findingId, deletedAt: null, ...after }
+      const [rows, total] = await Promise.all([
+        prisma.fixProposal.findMany({
+          where,
+          select: { id: true, status: true, summary: true, createdAt: true },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+        }),
+        prisma.fixProposal.count({ where: { findingId, deletedAt: null } }),
+      ])
+      return page(rows, total)
+    }
+    case "retests": {
+      const where = { findingId, workspaceId, ...after }
+      const [rows, total] = await Promise.all([
+        prisma.retest.findMany({
+          where,
+          select: { id: true, scanId: true, status: true, createdAt: true },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+        }),
+        prisma.retest.count({ where: { findingId, workspaceId } }),
+      ])
+      return page(rows, total)
+    }
+  }
 }
 
 export async function updateFindingStatus(

@@ -275,7 +275,10 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         new Request(`http://localhost/api/launch-readiness?workspaceId=${workspaceId}`)
       )
       expect(own.status).toBe(200)
-      expect((await own.json()).data.verdict).not.toMatch(/INCONCLUSIVE|NOT_EVALUATED/)
+      expect((await own.json()).data).toMatchObject({
+        state: "INSUFFICIENT_EVIDENCE",
+        verdict: "INCONCLUSIVE",
+      })
       const foreign = await GET(
         new Request(
           `http://localhost/api/launch-readiness?workspaceId=${otherWorkspaceId}&targetId=${targetId}`

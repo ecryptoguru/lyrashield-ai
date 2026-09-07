@@ -137,16 +137,16 @@ export async function evaluateScanEntitlement(
       // S14: Also verify remaining overage spend budget > 0.
       // Query current cycle overage minutes and compute the remaining budget.
       const cycleStart = billingAccount?.currentPeriodStart ?? new Date(0)
-      const overageRecords = await prisma.usageRecord.findMany({
+      const overageAggregate = await prisma.usageRecord.aggregate({
         where: {
           workspaceId,
           kind: "overage_minutes",
           deletedAt: null,
           cycleStart: { gte: cycleStart },
         },
-        select: { quantity: true },
+        _sum: { quantity: true },
       })
-      const currentOverageMinutes = overageRecords.reduce((sum, r) => sum + r.quantity, 0)
+      const currentOverageMinutes = overageAggregate._sum.quantity ?? 0
       const overagePerMinuteCents = Math.round(STANDARD_OVERAGE_PER_MINUTE_USD * 100)
       const currentOverageCostCents = currentOverageMinutes * overagePerMinuteCents
       const remainingBudgetCents = (billingAccount?.spendLimitCents ?? 0) - currentOverageCostCents

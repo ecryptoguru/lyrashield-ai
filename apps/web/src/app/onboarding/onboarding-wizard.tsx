@@ -93,6 +93,14 @@ export function OnboardingWizard({
     return "50+"
   }
 
+  function bucketDuration(ms: number): string {
+    if (ms < 250) return "under_250ms"
+    if (ms < 1000) return "250ms_1s"
+    if (ms < 3000) return "1s_3s"
+    if (ms < 10000) return "3s_10s"
+    return "10s_plus"
+  }
+
   function friendlyTargetError(cause: unknown): string {
     if (cause instanceof ApiError) {
       if (cause.code === "SSRF_BLOCKED") {
@@ -116,12 +124,13 @@ export function OnboardingWizard({
     if (!data.workspaceId) return
     setLoading(true)
     setError(null)
+    const startedAt = performance.now()
     try {
       const res = await fetchRepos()
       setRepos(res)
       track("repos_loaded", {
         repo_count_bucket: bucketCount(res.length),
-        load_ms_bucket: "unknown",
+        load_ms_bucket: bucketDuration(performance.now() - startedAt),
       })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load repositories.")
@@ -133,12 +142,13 @@ export function OnboardingWizard({
   useEffect(() => {
     if (step !== 2 || autoFetchAttempted.current || !data.workspaceId) return
     autoFetchAttempted.current = true
+    const startedAt = performance.now()
     fetchRepos()
       .then((res) => {
         setRepos(res)
         track("repos_loaded", {
           repo_count_bucket: bucketCount(res.length),
-          load_ms_bucket: "unknown",
+          load_ms_bucket: bucketDuration(performance.now() - startedAt),
         })
       })
       .catch((cause) => {
@@ -186,14 +196,13 @@ export function OnboardingWizard({
         "/api/integrations/github/install",
         {
           workspaceId: data.workspaceId,
+          returnTo: "onboarding",
         },
         { schema: installUrlSchema }
       )
+      await persist({ currentStep: 2, skipped: false })
       track("github_connect_started")
-      window.open(res.installUrl, "_blank", "noopener,noreferrer")
-      setPath("github")
-      const next = nextStepForPath("github")
-      if (next !== null) setStep(next)
+      window.location.assign(res.installUrl)
     } catch {
       // The GitHub App is not configured (or the endpoint otherwise failed). Do
       // not strand the user: mark the path unavailable and keep them on the
@@ -646,7 +655,7 @@ export function OnboardingWizard({
                 <p className="text-sm">
                   {error
                     ? "We couldn't load repositories. You may need to reconnect GitHub or check the installation."
-                    : "After you finish the GitHub install in the new tab, click below to load repositories."}
+                    : "After you finish the GitHub install, click below to load repositories."}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="secondary" onClick={loadRepos} disabled={loading}>

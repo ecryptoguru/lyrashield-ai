@@ -45,6 +45,8 @@ export interface ReadinessCoverage {
 }
 
 export interface LaunchReadinessReport {
+  /** Canonical Gate v2 state. Legacy helpers omit this compatibility field. */
+  state?: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
   verdict: ReadinessVerdict
   score: number | null
   summary: string
@@ -54,6 +56,21 @@ export interface LaunchReadinessReport {
   bySeverity: Record<string, number>
   conditions: string[]
   recommendations: string[]
+}
+
+export type CanonicalLaunchReadinessReport = Omit<LaunchReadinessReport, "score"> & {
+  state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
+  score: null
+  triageScore: number | null
+}
+
+export interface GateReadinessTarget {
+  targetId: string
+  targetName: string
+  state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
+  applicable: boolean
+  blockingFindings: number
+  reasons: { code: string; message: string }[]
 }
 
 export interface FindingReadinessAggregate {
@@ -71,7 +88,13 @@ const SEVERITY_WEIGHTS: Record<string, number> = {
   INFO: 0,
 }
 
-const BLOCKING_STATUSES = new Set<string>(["OPEN", "FIX_READY"])
+const BLOCKING_STATUSES = new Set<string>([
+  "OPEN",
+  "FIX_READY",
+  "PR_OPENED",
+  "TICKET_CREATED",
+  "FIXED_PENDING_RETEST",
+])
 
 /**
  * Coverage-receipt statuses that mean a scanner applied to the target but did
@@ -233,5 +256,80 @@ export function generateLaunchReadinessReportFromAggregate(
     bySeverity,
     conditions,
     recommendations,
+  }
+}
+
+/**
+ * Present the canonical Gate v2 result with score data retained only as triage
+ * context. This adapter does not make a readiness decision from scores or
+ * finding workflow states.
+ */
+export function projectGateReadinessReport(
+  groups: FindingReadinessAggregate[],
+  targets: GateReadinessTarget[]
+): CanonicalLaunchReadinessReport {
+  const triage = generateLaunchReadinessReportFromAggregate(groups, targets.length > 0)
+  if (targets.length === 0) {
+    return {
+      ...triage,
+      state: "INSUFFICIENT_EVIDENCE",
+      verdict: "NOT_EVALUATED",
+      score: null,
+      triageScore: triage.score,
+      summary: "No active target is available for a launch assessment.",
+      conditions: ["Add a target and complete a scoped assessment."],
+    }
+  }
+
+  const blockingFindings = targets.reduce((sum, target) => sum + target.blockingFindings, 0)
+  const notReady = targets.filter((target) => target.state === "NOT_READY")
+  const insufficient = targets.filter(
+    (target) => target.state === "INSUFFICIENT_EVIDENCE" || !target.applicable
+  )
+  const conditions = targets.flatMap((target) =>
+    target.reasons.map((reason) => `${target.targetName}: ${reason.message}`)
+  )
+
+  if (notReady.length > 0) {
+    return {
+      ...triage,
+      state: "NOT_READY",
+      verdict: "NO_GO",
+      score: null,
+      triageScore: triage.score,
+      blockingFindings,
+      summary: `${notReady.length} target assessment(s) are not ready under LyraShield Gate v2.`,
+      conditions:
+        conditions.length > 0
+          ? conditions
+          : ["Resolve the blocking Gate v2 findings and complete a trusted retest."],
+    }
+  }
+
+  if (insufficient.length > 0) {
+    return {
+      ...triage,
+      state: "INSUFFICIENT_EVIDENCE",
+      verdict: "INCONCLUSIVE",
+      score: null,
+      triageScore: triage.score,
+      blockingFindings,
+      summary: `${insufficient.length} of ${targets.length} target assessment(s) lack applicable Gate v2 evidence.`,
+      conditions:
+        conditions.length > 0
+          ? conditions
+          : ["Run a current assessment bound to the release commit or artifact digest."],
+    }
+  }
+
+  return {
+    ...triage,
+    state: "READY",
+    verdict: "GO",
+    score: null,
+    triageScore: triage.score,
+    blockingFindings,
+    summary: `All ${targets.length} active target assessment(s) are READY and currently applicable under LyraShield Gate v2.`,
+    conditions: [],
   }
 }

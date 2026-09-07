@@ -1,5 +1,11 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
-import { getFinding, updateFindingStatus, markFalsePositive, acceptRisk } from "@lyrashield/db"
+import {
+  getFinding,
+  getFindingReference,
+  updateFindingStatus,
+  markFalsePositive,
+  acceptRisk,
+} from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
@@ -107,7 +113,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
 
     const { session } = await requirePermission(workspaceId, requiredPermission)
 
-    const finding = await getFinding(id, workspaceId)
+    const finding = await getFindingReference(id, workspaceId)
     if (!finding) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }

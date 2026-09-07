@@ -13,6 +13,16 @@ import {
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { createInstallState, verifyInstallState } from "../../../../../lib/github-install-state"
+import { z } from "zod"
+
+const InstallRequestSchema = z.object({
+  workspaceId: z.string().min(1),
+  returnTo: z.enum(["onboarding", "integrations"]).default("integrations"),
+})
+
+function installReturnPath(returnTo: "onboarding" | "integrations"): string {
+  return returnTo === "onboarding" ? "/onboarding" : "/dashboard/integrations"
+}
 
 /**
  * Returns the canonical, browser-safe app origin for post-install redirects.
@@ -94,6 +104,7 @@ export async function GET(request: NextRequest) {
     )
   }
   const workspaceId = stateResult.workspaceId
+  const returnPath = installReturnPath(stateResult.returnTo)
 
   try {
     const { session: authSession } = await requirePermission(
@@ -156,7 +167,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (!ownershipProven) {
-        const redirectUrl = new URL("/dashboard/integrations", getAppOrigin(request))
+        const redirectUrl = new URL(returnPath, getAppOrigin(request))
         redirectUrl.searchParams.set("github", "verification_required")
         return NextResponse.redirect(redirectUrl)
       }
@@ -211,7 +222,7 @@ export async function GET(request: NextRequest) {
         firstTimeBind: !existing,
       })
 
-      const redirectUrl = new URL("/dashboard/integrations", getAppOrigin(request))
+      const redirectUrl = new URL(returnPath, getAppOrigin(request))
       redirectUrl.searchParams.set("connected", "github")
       return NextResponse.redirect(redirectUrl)
     } catch (err) {
@@ -222,7 +233,7 @@ export async function GET(request: NextRequest) {
           installationId: canonicalInstallationId,
           workspaceId,
         })
-        const redirectUrl = new URL("/dashboard/integrations", getAppOrigin(request))
+        const redirectUrl = new URL(returnPath, getAppOrigin(request))
         redirectUrl.searchParams.set("github", "already_claimed")
         return NextResponse.redirect(redirectUrl)
       }
@@ -267,13 +278,20 @@ async function post(request: NextRequest) {
     )
   }
 
-  const { workspaceId } = body as { workspaceId?: string }
-  if (!workspaceId) {
+  const parsed = InstallRequestSchema.safeParse(body)
+  if (!parsed.success) {
     return NextResponse.json(
-      { success: false, error: { code: "VALIDATION_ERROR", message: "workspaceId is required" } },
+      {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: parsed.error.issues[0]?.message ?? "Invalid input",
+        },
+      },
       { status: 400 }
     )
   }
+  const { workspaceId, returnTo } = parsed.data
 
   try {
     await requirePermission(workspaceId, PERMISSIONS.integration.manage)
@@ -281,7 +299,7 @@ async function post(request: NextRequest) {
     const installUrl = getInstallAppUrl()
     const url = new URL(installUrl)
     // Signed, expiring, workspace-bound state (verified in the GET callback). (S2)
-    url.searchParams.set("state", createInstallState(workspaceId))
+    url.searchParams.set("state", createInstallState(workspaceId, returnTo))
 
     return NextResponse.json({ success: true, data: { installUrl: url.toString() } })
   } catch (error) {
