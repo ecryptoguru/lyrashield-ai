@@ -21,12 +21,22 @@ const VALID_STATUSES = [
   "DUPLICATE",
 ] as const
 
-const PatchFindingSchema = z.object({
-  workspaceId: z.string().min(1),
-  action: z.enum(["false_positive", "accept_risk", "update_status"]),
-  status: z.enum(VALID_STATUSES).optional(),
-  reason: z.string().max(1000).optional(),
-})
+const PatchFindingSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    action: z.enum(["false_positive", "accept_risk", "update_status"]),
+    status: z.enum(VALID_STATUSES).optional(),
+    reason: z.string().max(1000).optional(),
+    canonicalFindingId: z.string().min(1).optional(),
+  })
+  .superRefine((value, context) => {
+    if (
+      (value.action === "false_positive" || value.action === "accept_risk") &&
+      !value.reason?.trim()
+    ) {
+      context.addIssue({ code: "custom", path: ["reason"], message: "reason is required" })
+    }
+  })
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -106,7 +116,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
 
     switch (action) {
       case "false_positive": {
-        const updated = await markFalsePositive(id, workspaceId, reason)
+        const updated = await markFalsePositive(id, workspaceId, reason, session.userId)
         await prisma.auditLog.create({
           data: {
             workspaceId,
@@ -120,7 +130,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
         return apiSuccess({ id: updated.id, status: updated.status })
       }
       case "accept_risk": {
-        const updated = await acceptRisk(id, workspaceId, reason)
+        const updated = await acceptRisk(id, workspaceId, reason, session.userId)
         await prisma.auditLog.create({
           data: {
             workspaceId,
@@ -138,7 +148,13 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
         if (!status) {
           return apiError("MISSING_PARAM", "status is required for update_status action", 400)
         }
-        const updated = await updateFindingStatus(id, workspaceId, status, reason)
+        const updated = await updateFindingStatus(
+          id,
+          workspaceId,
+          status,
+          reason,
+          parsed.data.canonicalFindingId
+        )
         await prisma.auditLog.create({
           data: {
             workspaceId,

@@ -192,9 +192,11 @@ export {
 } from "./retest-service"
 export {
   evaluateGateForTarget,
+  getCurrentGateVerdict,
   getLatestGateVerdict,
   handleFixPrMergedAndReevaluate,
   type GateEvaluationResult,
+  type GateApplicabilityOptions,
   type FixPrMergeOutcome,
 } from "./gate-service"
 export {

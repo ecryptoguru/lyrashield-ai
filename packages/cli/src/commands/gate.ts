@@ -9,7 +9,7 @@ import { listAll, FindingSchema } from "@lyrashield/sdk"
 
 export async function handleGate(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["fail-on", "sarif", "base", "head", "target"],
+    string: ["fail-on", "sarif", "base", "head", "target", "commit", "artifact-digest"],
     boolean: ["staged", "verdict"],
     default: { "fail-on": "HIGH" },
     alias: { t: "target" },
@@ -21,7 +21,12 @@ export async function handleGate(args: string[], output: Output): Promise<number
   // insufficient-evidence / error. The verdict reflects the named readiness
   // standard — it never means "secure".
   if (parsed.verdict) {
-    return runVerdictGate(parsed.target as string | undefined, output)
+    return runVerdictGate(
+      parsed.target as string | undefined,
+      parsed.commit as string | undefined,
+      parsed["artifact-digest"] as string | undefined,
+      output
+    )
   }
 
   const threshold = ((parsed["fail-on"] as string) ?? "HIGH").toUpperCase()
@@ -180,7 +185,28 @@ export async function handleGate(args: string[], output: Output): Promise<number
  * or any error. The verdict is a gate result against the named readiness
  * standard (lyrashield-gate/1.0.0) — it never means the app is "secure".
  */
-async function runVerdictGate(target: string | undefined, output: Output): Promise<number> {
+async function runVerdictGate(
+  target: string | undefined,
+  commit: string | undefined,
+  artifactDigest: string | undefined,
+  output: Output
+): Promise<number> {
+  if (commit && artifactDigest) {
+    output.error("Pass only one of --commit or --artifact-digest.", 2)
+    return 2
+  }
+  if (!commit && !artifactDigest) {
+    output.error("The verdict gate requires --commit or --artifact-digest.", 2)
+    return 2
+  }
+  if (commit && !/^[a-f0-9]{40}$/i.test(commit)) {
+    output.error("--commit must be a 40-character Git commit SHA.", 2)
+    return 2
+  }
+  if (artifactDigest && !/^sha256:[a-f0-9]{64}$/i.test(artifactDigest)) {
+    output.error("--artifact-digest must be a sha256 digest.", 2)
+    return 2
+  }
   const creds = await getEffectiveCredentials()
   if (!creds.apiKey) {
     output.error("The verdict gate requires an API key. Run `lyrashield login` first.", 2)
@@ -202,11 +228,12 @@ async function runVerdictGate(target: string | undefined, output: Output): Promi
 
   try {
     const client = await createClient()
-    const res = (await client.request(
-      "GET",
-      `/gate/${encodeURIComponent(targetId)}?workspaceId=${encodeURIComponent(workspaceId)}`
-    )) as {
+    const query = new URLSearchParams({ workspaceId })
+    if (commit) query.set("commit", commit)
+    if (artifactDigest) query.set("artifactDigest", artifactDigest)
+    const res = (await client.request("GET", `/gate/${encodeURIComponent(targetId)}?${query}`)) as {
       state?: string
+      applicability?: { applicable?: boolean }
       blockingReasons?: unknown[]
       nonCoverage?: unknown[]
       staleness?: { current?: boolean; reason?: string | null }
@@ -215,12 +242,13 @@ async function runVerdictGate(target: string | undefined, output: Output): Promi
 
     const state = res?.state ?? "INSUFFICIENT_EVIDENCE"
     const stale = res?.staleness && res.staleness.current === false
+    const applicable = res.applicability?.applicable === true
 
     if (output.json) {
       output.result(res)
-    } else if (state === "READY") {
+    } else if (state === "READY" && applicable) {
       output.log(`Gate verdict: READY${stale ? " (stale — re-run the gate)" : ""}`)
-    } else if (state === "NOT_READY") {
+    } else if (state === "NOT_READY" && applicable) {
       const blockers = Array.isArray(res?.blockingReasons) ? res.blockingReasons.length : 0
       output.error(
         `Gate verdict: NOT READY — ${blockers} blocking finding(s) against ${res?.standardVersion ?? "the readiness standard"}${stale ? " (stale)" : ""}`,
@@ -233,7 +261,7 @@ async function runVerdictGate(target: string | undefined, output: Output): Promi
       )
     }
 
-    return state === "READY" ? 0 : state === "NOT_READY" ? 1 : 2
+    return state === "READY" && applicable ? 0 : state === "NOT_READY" && applicable ? 1 : 2
   } catch (err) {
     output.error(`Gate verdict unavailable: ${err instanceof Error ? err.message : String(err)}`, 2)
     return 2

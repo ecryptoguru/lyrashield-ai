@@ -25,6 +25,17 @@
 
 export const GATE_STANDARD_VERSION = "lyrashield-gate/2.0.0"
 
+export {
+  GATE_ASSESSMENT_VERSION,
+  GATE_FRESHNESS_MS,
+  evaluateGateApplicability,
+  type GateApplicabilityInput,
+  type GateApplicabilityReason,
+  type GateApplicabilityResult,
+  type GateAssessmentIdentity,
+  type GateAssessmentSnapshot,
+} from "./applicability"
+
 // ─── Input types (evidence in; no Prisma imports — the DB layer adapts) ──────
 
 export type GateFindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
@@ -95,6 +106,8 @@ export interface GateEvidenceInput {
   targetTypeCovered: boolean
   /** A policy fingerprint makes policy changes invalidate later applicability. */
   policyFingerprint?: string | null
+  /** A supported manifest and source identity bind this assessment to a release. */
+  assessmentIdentityComplete?: boolean
 }
 
 // ─── Output types ────────────────────────────────────────────────────────────
@@ -169,6 +182,12 @@ function isBlocking(f: GateFindingInput): boolean {
   // lifecycle status has not yet flipped (the retest closed the loop).
   if (f.retestConfirmedResolved || f.hasApplicableDisposition) return false
   if (f.status === "DUPLICATE") return !f.duplicateCanonicalResolved
+  // Historical direct FIXED values and unbound human dispositions are visible
+  // history, not a v2 resolution. They need a trusted retest or an applicable
+  // disposition bound to this assessment before they can stop enforcement.
+  if (f.status === "FIXED" || f.status === "ACCEPTED_RISK" || f.status === "FALSE_POSITIVE") {
+    return true
+  }
   return BLOCKING_STATUSES.has(f.status)
 }
 
@@ -238,6 +257,17 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   const receipts = input.coverageReceipts
   const nonCoverage: NonCoverageItem[] = []
   let coverageStatement: string[] = []
+  const assessmentIdentityIncomplete = input.assessmentIdentityComplete === false
+  if (assessmentIdentityIncomplete) {
+    nonCoverage.push({
+      controlId: "assessment-identity",
+      scanner: "assessment-identity",
+      status: "NOT_RUN",
+      reason: "The completed assessment lacks a supported immutable manifest and release identity.",
+      reasonCode: "ASSESSMENT_IDENTITY_INCOMPLETE",
+      recoveryAction: "Run a new assessment with a complete immutable result manifest.",
+    })
+  }
 
   // GATE-0 — Target-type coverage (the registry gate). A target type the
   // standard does not yet cover (deferred: no registry requirements exist)
@@ -349,7 +379,7 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   const staleness = evaluateStaleness(input)
 
   // Resolution order: GATE-1 -> GATE-2/3 -> GATE-4 -> READY. GATE-5 annotates.
-  if (!anyCompleted || missingRequired.length > 0) {
+  if (!anyCompleted || missingRequired.length > 0 || assessmentIdentityIncomplete) {
     return {
       standardVersion: GATE_STANDARD_VERSION,
       state: "INSUFFICIENT_EVIDENCE",

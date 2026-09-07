@@ -118,6 +118,14 @@ describe("computeGateVerdict", () => {
     expect(result.coverageStatement).not.toContain("secrets (not applicable)")
   })
 
+  it("INSUFFICIENT_EVIDENCE with a diagnostic when immutable assessment identity is missing", () => {
+    const result = computeGateVerdict(baseInput({ assessmentIdentityComplete: false }))
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(result.nonCoverage).toContainEqual(
+      expect.objectContaining({ reasonCode: "ASSESSMENT_IDENTITY_INCOMPLETE", status: "NOT_RUN" })
+    )
+  })
+
   it("NOT_READY on an unresolved CRITICAL finding, traceable to the finding", () => {
     const result = computeGateVerdict(
       baseInput({
@@ -156,6 +164,34 @@ describe("computeGateVerdict", () => {
       })
     )
     expect(result.state).toBe("READY")
+  })
+
+  it("does not let an unbound accepted-risk or direct FIXED record satisfy v2", () => {
+    const result = computeGateVerdict(
+      baseInput({
+        findings: [
+          {
+            id: "legacy-risk",
+            severity: "MEDIUM",
+            status: "ACCEPTED_RISK",
+            verificationStatus: "DETECTED",
+            hasPositiveEvidence: false,
+            retestConfirmedResolved: false,
+            lastSeenAtMs: 900_000,
+          },
+          {
+            id: "legacy-fixed",
+            severity: "LOW",
+            status: "FIXED",
+            verificationStatus: "DETECTED",
+            hasPositiveEvidence: false,
+            retestConfirmedResolved: false,
+            lastSeenAtMs: 900_000,
+          },
+        ],
+      })
+    )
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
   })
 
   it("does not improve READY when a MEDIUM finding is weakened", () => {
@@ -385,7 +421,7 @@ describe("evidenceSummary per-severity unresolved counts", () => {
     )
     expect(verdict.state).toBe("NOT_READY")
     expect(verdict.evidenceSummary.unresolvedCritical).toBe(1)
-    expect(verdict.evidenceSummary.unresolvedHigh).toBe(1) // f2 unresolved; f3 is FIXED so not blocking
+    expect(verdict.evidenceSummary.unresolvedHigh).toBe(2) // direct FIXED needs a trusted retest
     expect(verdict.evidenceSummary.unresolvedMedium).toBe(1)
     expect(verdict.evidenceSummary.unresolvedLow).toBe(1)
   })

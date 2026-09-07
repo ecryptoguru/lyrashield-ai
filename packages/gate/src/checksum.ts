@@ -52,6 +52,7 @@ export function computeInputChecksum(input: GateEvidenceInput): string {
     requiredScanners: [...input.requiredScanners].sort(),
     targetTypeCovered: input.targetTypeCovered,
     policyFingerprint: input.policyFingerprint ?? null,
+    assessmentIdentityComplete: input.assessmentIdentityComplete ?? null,
     findings,
     coverageReceipts: receipts,
   })
