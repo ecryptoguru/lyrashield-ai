@@ -248,6 +248,17 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   // requirements" and "deferred".
   if (!input.targetTypeCovered) {
     const evidence = summarizeEvidence(input.findings)
+    const blockingReasons: BlockingReason[] = input.findings
+      .filter(
+        (finding) =>
+          isBlocking(finding) && (finding.severity === "CRITICAL" || finding.severity === "HIGH")
+      )
+      .sort((left, right) => severityRank(right.severity) - severityRank(left.severity))
+      .map((finding) => ({
+        findingId: finding.id,
+        severity: finding.severity,
+        verificationStatus: finding.verificationStatus,
+      }))
     return {
       standardVersion: GATE_STANDARD_VERSION,
       state: "INSUFFICIENT_EVIDENCE",
@@ -262,7 +273,7 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
         },
       ],
       coverageStatement: [],
-      blockingReasons: [],
+      blockingReasons,
       evidenceSummary: evidence,
       staleness: {
         current: false,
@@ -313,7 +324,11 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
       (receipt) => receipt.status !== "COMPLETED" && receipt.status !== "NOT_APPLICABLE"
     )
   })
-  coverageStatement = coverageStatement.filter((scanner) => !missingRequired.includes(scanner))
+  coverageStatement = coverageStatement.filter(
+    (scanner) =>
+      !missingRequired.includes(scanner) &&
+      !missingRequired.some((required) => scanner === `${required} (not applicable)`)
+  )
 
   // GATE-2 / GATE-3 — only CRITICAL and HIGH blockers fail the gate. MEDIUM/LOW
   // with a blocking lifecycle status are surfaced in evidenceSummary but do NOT
@@ -364,9 +379,7 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   // scoped positive receipt or an applicable recorded disposition.
   const unresolvedWithoutEvidence = input.findings.some(
     (finding) =>
-      isBlocking(finding) &&
-      !finding.hasPositiveEvidence &&
-      !finding.hasApplicableDisposition
+      isBlocking(finding) && !finding.hasPositiveEvidence && !finding.hasApplicableDisposition
   )
 
   if (unresolvedWithoutEvidence) {
