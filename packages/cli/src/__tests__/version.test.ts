@@ -21,5 +21,10 @@ describe("CLI version", () => {
       Object.keys(packageJson.dependencies).filter((name) => name.startsWith("@lyrashield/"))
     ).toEqual([])
     expect(packageJson.devDependencies["@lyrashield/security"]).toBe("workspace:*")
+
+    const targetsPath = fileURLToPath(new URL("../commands/targets.ts", import.meta.url))
+    await expect(readFile(targetsPath, "utf-8")).resolves.toContain(
+      'from "@lyrashield/security/domain-proof"'
+    )
   })
 })

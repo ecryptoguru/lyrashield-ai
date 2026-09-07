@@ -2,7 +2,7 @@ import minimist from "minimist"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import type { Output } from "../output.js"
-import { normalizeDomainForProof } from "@lyrashield/security"
+import { normalizeDomainForProof } from "@lyrashield/security/domain-proof"
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
