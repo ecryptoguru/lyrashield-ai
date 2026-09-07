@@ -10,10 +10,14 @@ describe("CLI version", () => {
     const packageJson = JSON.parse(await readFile(packagePath, "utf-8")) as {
       version: string
       engines: { node: string }
+      dependencies: Record<string, string>
+      devDependencies: Record<string, string>
     }
 
     expect(CLI_VERSION).toBe("0.2.0")
     expect(packageJson.version).toBe(CLI_VERSION)
     expect(packageJson.engines.node).toBe(">=22.0.0 <25.0.0")
+    expect(Object.keys(packageJson.dependencies).filter((name) => name.startsWith("@lyrashield/"))).toEqual([])
+    expect(packageJson.devDependencies["@lyrashield/security"]).toBe("workspace:*")
   })
 })

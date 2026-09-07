@@ -37,7 +37,6 @@
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "@lyrashield/security": "workspace:*",
     "jsonc-parser": "^3.3.1",
     "minimist": "^1.2.8",
     "yaml": "^2.7.1"
@@ -47,6 +46,7 @@
     "@lyrashield/agent-registry": "workspace:*",
     "@lyrashield/agent-rules": "workspace:*",
     "@lyrashield/credentials": "workspace:*",
+    "@lyrashield/security": "workspace:*",
     "@lyrashield/sdk": "workspace:*",
     "@types/iarna__toml": "^2.0.5",
     "@types/minimist": "^1.2.5",
