@@ -9,12 +9,17 @@ import type { AgentEntry } from "@lyrashield/agent-registry"
 // Hoist the mock so vi.mock can reference it. Most tests need the real plugin
 // dir; the copy-failure test overrides it to a non-existent path so `cp`
 // fails naturally without spying on ESM exports.
-const { getPluginDirMock } = vi.hoisted(() => ({
+const { credentialsFileExistsMock, getPluginDirMock } = vi.hoisted(() => ({
+  credentialsFileExistsMock: vi.fn(),
   getPluginDirMock: vi.fn(),
 }))
 
 vi.mock("@lyrashield/agent-plugin", () => ({
   getPluginDir: getPluginDirMock,
+}))
+
+vi.mock("../../credentials.js", () => ({
+  credentialsFileExists: credentialsFileExistsMock,
 }))
 
 import { installAgentPlugin, uninstallAgentPlugin } from "../../installers/agent-plugin.js"
@@ -28,6 +33,7 @@ let pluginSourceDir: string
 beforeEach(async () => {
   process.env = { ...ORIGINAL_ENV }
   process.env.LYRASHIELD_API_KEY = "lsk_test"
+  credentialsFileExistsMock.mockResolvedValue(false)
   // Use an isolated source so the Agent Plugin generator can run in parallel
   // without renaming files while this suite copies them.
   pluginSourceDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-source-"))

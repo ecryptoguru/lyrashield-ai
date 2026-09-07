@@ -4,7 +4,7 @@ import type { Output } from "../output.js"
 
 export async function handleUse(args: string[], output: Output): Promise<number> {
   const [workspaceId] = args
-  if (!workspaceId) {
+  if (!workspaceId || workspaceId.startsWith("-")) {
     output.error("usage: lyrashield use <workspace>")
     return 2
   }
