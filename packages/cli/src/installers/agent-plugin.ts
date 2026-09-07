@@ -1,5 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { cp, mkdir, rename, rm, stat } from "node:fs/promises"
+import { execFile } from "node:child_process"
 import { homedir } from "node:os"
 import path from "node:path"
 import process from "node:process"
@@ -14,6 +15,51 @@ export interface InstallAgentPluginOptions {
   cwd?: string
   dryRun?: boolean
   yes?: boolean
+}
+
+const CODEX_PLUGIN_ID = "lyrashield@lyrashield-ai"
+const CODEX_MARKETPLACE = "ecryptoguru/lyrashield-marketplace"
+
+function runCodexPluginCommand(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile("codex", args, { env: process.env, windowsHide: true }, (error) => {
+      if (error) reject(error)
+      else resolve()
+    })
+  })
+}
+
+async function installCodexPlugin(dryRun?: boolean): Promise<InstallAgentResult> {
+  const commands = [
+    `codex plugin marketplace add ${CODEX_MARKETPLACE}`,
+    `codex plugin add ${CODEX_PLUGIN_ID}`,
+  ]
+  if (dryRun) {
+    return {
+      agent: "openai-codex-agent-plugin",
+      displayName: "OpenAI Codex (Agent Plugin)",
+      outcome: "DELEGATED",
+      message: commands.map((command) => `Would run ${command}`).join("\n"),
+    }
+  }
+
+  try {
+    await runCodexPluginCommand(["plugin", "marketplace", "add", CODEX_MARKETPLACE])
+    await runCodexPluginCommand(["plugin", "add", CODEX_PLUGIN_ID])
+    return {
+      agent: "openai-codex-agent-plugin",
+      displayName: "OpenAI Codex (Agent Plugin)",
+      outcome: "DELEGATED",
+      message: `Installed ${CODEX_PLUGIN_ID}. Restart the ChatGPT desktop app to load it.`,
+    }
+  } catch (error) {
+    return {
+      agent: "openai-codex-agent-plugin",
+      displayName: "OpenAI Codex (Agent Plugin)",
+      outcome: "FAILED",
+      message: `Codex plugin install failed: ${(error as Error).message}`,
+    }
+  }
 }
 
 function resolvePluginLocation(
@@ -36,6 +82,8 @@ export async function installAgentPlugin(
   opts: InstallAgentPluginOptions
 ): Promise<InstallAgentResult> {
   const { agent } = opts
+  if (agent.id === "openai-codex-agent-plugin") return installCodexPlugin(opts.dryRun)
+
   if (agent.manualInstructions) {
     return {
       agent: agent.id,
@@ -175,6 +223,33 @@ export async function uninstallAgentPlugin(
   opts: InstallAgentPluginOptions
 ): Promise<InstallAgentResult> {
   const { agent } = opts
+  if (agent.id === "openai-codex-agent-plugin") {
+    if (opts.dryRun) {
+      return {
+        agent: agent.id,
+        displayName: agent.displayName,
+        outcome: "DELEGATED",
+        message: `Would run codex plugin remove ${CODEX_PLUGIN_ID}`,
+      }
+    }
+    try {
+      await runCodexPluginCommand(["plugin", "remove", CODEX_PLUGIN_ID])
+      return {
+        agent: agent.id,
+        displayName: agent.displayName,
+        outcome: "DELEGATED",
+        message: `Removed ${CODEX_PLUGIN_ID}.`,
+      }
+    } catch (error) {
+      return {
+        agent: agent.id,
+        displayName: agent.displayName,
+        outcome: "FAILED",
+        message: `Codex plugin removal failed: ${(error as Error).message}`,
+      }
+    }
+  }
+
   if (agent.manualInstructions) {
     return {
       agent: agent.id,

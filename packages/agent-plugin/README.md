@@ -27,9 +27,9 @@ create a discovery path; each client still controls activation:
 - `.codex-plugin/` — Codex
 - `.kiro-plugin/` — Kiro
 
-Codex points to `.mcp.codex.json`, whose top level is the direct server map required by Codex.
-Claude and GitHub Copilot use marketplace installation. Kiro consumes the generated stdio entry
-through its workspace or user MCP settings file.
+Codex installs from the dedicated `codex-plugin/` marketplace root, whose `.mcp.json` uses the
+native `streamable-http` transport. Claude and GitHub Copilot use marketplace installation. Kiro
+consumes the generated stdio entry through its workspace or user MCP settings file.
 
 ## Compatibility status
 
@@ -83,7 +83,7 @@ Headless writes without an approval channel fail closed.
 
 ## Version and release receipts
 
-- Package: `@lyrashield/agent-plugin` 0.1.23; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/agent-plugin` 0.1.24; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions, and the public export boundary.

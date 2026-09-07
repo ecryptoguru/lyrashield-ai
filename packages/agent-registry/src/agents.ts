@@ -813,7 +813,8 @@ const openaiCodexPlugin: AgentEntry = {
     url: "https://developers.openai.com/codex/plugins/build",
   },
   gotchas: [
-    "Codex recognizes root `plugin.json` files using the Agent Plugins 1.0 schema and maps them to Codex plugin manifests.",
+    "Copying a plugin directory does not register it. The installer adds `ecryptoguru/lyrashield-marketplace`, then installs `lyrashield@lyrashield-ai` through `codex plugin`.",
+    "Restart the ChatGPT desktop app after installation so the desktop host reloads marketplace plugins.",
     "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
   ],
 }

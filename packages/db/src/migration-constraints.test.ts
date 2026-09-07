@@ -38,4 +38,20 @@ describe("forward database constraints", () => {
       expect(sql).toContain(`REVOKE ALL PRIVILEGES ON TABLE "${table}" FROM app_runtime_prod`)
     }
   })
+
+  it("adds every OAuth Provider 1.7 dynamic-registration field", () => {
+    const sql = migration(
+      "../prisma/migrations/20260908043000_oauth_client_provider_fields/migration.sql"
+    )
+
+    for (const column of [
+      "clientDiscoveryId",
+      "clientCredentialsScopes",
+      "expiresAt",
+      "applicationType",
+    ]) {
+      expect(sql).toContain(`ADD COLUMN "${column}"`)
+    }
+    expect(sql).toContain('"clientCredentialsScopes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]')
+  })
 })

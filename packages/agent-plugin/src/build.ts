@@ -108,6 +108,30 @@ ${SKILL_APPENDIX}
     )
   )
 
+  // Codex must install from its own marketplace root. If the portable root is
+  // installed, Codex discovers Agent Plugins' `mcp.json` first and rejects its
+  // `type: "http"`; Codex names that transport `streamable-http`.
+  const codexRoot = path.join(pluginRoot, "codex-plugin")
+  await mkdir(path.join(codexRoot, ".codex-plugin"), { recursive: true })
+  await mkdir(path.join(codexRoot, "skills", "lyrashield"), { recursive: true })
+  await writeGeneratedFile(
+    path.join(codexRoot, "skills", "lyrashield", "SKILL.md"),
+    skillBody.replace(/\n+\s*$/, "\n")
+  )
+  await writeGeneratedFile(
+    path.join(codexRoot, ".mcp.json"),
+    JSON.stringify(
+      {
+        lyrashield: {
+          type: "streamable-http",
+          url: `${LYRASHIELD_API_URL}/api/mcp`,
+        },
+      },
+      null,
+      2
+    )
+  )
+
   for (const client of CLIENTS) {
     const shimDir = path.join(pluginRoot, `.${client}-plugin`)
     await mkdir(shimDir, { recursive: true })
@@ -164,6 +188,43 @@ ${SKILL_APPENDIX}
       JSON.stringify(clientManifest, null, 2)
     )
   }
+
+  await writeGeneratedFile(
+    path.join(codexRoot, ".codex-plugin", "plugin.json"),
+    JSON.stringify(
+      {
+        ...JSON.parse(
+          await readFile(path.join(pluginRoot, ".codex-plugin", "plugin.json"), "utf-8")
+        ),
+        mcpServers: "./.mcp.json",
+      },
+      null,
+      2
+    )
+  )
+
+  const codexMarketplaceDir = path.join(pluginRoot, ".agents", "plugins")
+  await mkdir(codexMarketplaceDir, { recursive: true })
+  await writeGeneratedFile(
+    path.join(codexMarketplaceDir, "marketplace.json"),
+    JSON.stringify(
+      {
+        name: MARKETPLACE_NAME,
+        interface: { displayName: "LyraShield AI" },
+        plugins: [
+          {
+            name: manifest.name,
+            version: manifest.version,
+            source: { source: "local", path: "./codex-plugin" },
+            policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+            category: "Security",
+          },
+        ],
+      },
+      null,
+      2
+    )
+  )
 
   // Marketplace catalog. This is what turns the exported repository into an addressable
   // plugin marketplace (`/plugin marketplace add`, and VS Code's "Install Plugin From

@@ -60,6 +60,22 @@ describe("buildPlugin", () => {
     expect(JSON.parse(await readFile(path.join(pluginRoot, ".mcp.codex.json"), "utf-8"))).toEqual({
       lyrashield: { url: "https://app.lyrashieldai.com/api/mcp" },
     })
+    expect(
+      JSON.parse(await readFile(path.join(pluginRoot, "codex-plugin", ".mcp.json"), "utf-8"))
+    ).toEqual({
+      lyrashield: {
+        type: "streamable-http",
+        url: "https://app.lyrashieldai.com/api/mcp",
+      },
+    })
+    const codexMarketplace = JSON.parse(
+      await readFile(path.join(pluginRoot, ".agents", "plugins", "marketplace.json"), "utf-8")
+    )
+    expect(codexMarketplace.plugins[0]).toMatchObject({
+      name: "lyrashield",
+      source: { source: "local", path: "./codex-plugin" },
+      policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+    })
 
     // Marketplace catalog: makes the exported repo addressable for `/plugin marketplace add`
     // and VS Code's "Install Plugin From Source". `source: "./"` resolves to the marketplace

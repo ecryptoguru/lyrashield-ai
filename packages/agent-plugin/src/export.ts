@@ -18,12 +18,14 @@ const PUBLIC_FILES = [
   "skills",
   ".claude-plugin/plugin.json",
   ".claude-plugin/marketplace.json",
+  ".agents/plugins/marketplace.json",
   ".codex-plugin/plugin.json",
   ".cursor-plugin/plugin.json",
   ".kiro-plugin/plugin.json",
   ".mcp.json",
   ".mcp.codex.json",
   ".mcp.kiro.json",
+  "codex-plugin",
 ] as const
 
 const MARKETPLACE_ARTIFACTS = [
