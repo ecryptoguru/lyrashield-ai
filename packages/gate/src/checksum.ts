@@ -14,7 +14,7 @@
 
 import { createHash } from "node:crypto"
 
-import type { GateEvidenceInput, GateVerdictResult } from "./index"
+import { GATE_STANDARD_VERSION, type GateEvidenceInput, type GateVerdictResult } from "./index"
 
 /** Stable stringify: sorts object keys recursively so the hash is order-independent. */
 function canonicalize(value: unknown): unknown {
@@ -45,9 +45,11 @@ export function computeInputChecksum(input: GateEvidenceInput): string {
   )
   return sha256({
     targetId: input.targetId,
-    standardVersion: "lyrashield-gate/1.0.0",
+    standardVersion: GATE_STANDARD_VERSION,
     latestCompletedScan: input.latestCompletedScan,
     requiredScanners: [...input.requiredScanners].sort(),
+    targetTypeCovered: input.targetTypeCovered,
+    policyFingerprint: input.policyFingerprint ?? null,
     findings,
     coverageReceipts: receipts,
   })

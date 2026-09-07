@@ -36,7 +36,7 @@ function baseInput(overrides: Partial<GateEvidenceInput> = {}): GateEvidenceInpu
 
 describe("gate standard versioning", () => {
   it("is named and versioned", () => {
-    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/1.0.0")
+    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/2.0.0")
   })
 
   it("derives required scanners per target type", () => {
@@ -97,7 +97,7 @@ describe("computeGateVerdict", () => {
     ])
   })
 
-  it("does NOT block on MEDIUM in v1.0.0 (founder-confirmed)", () => {
+  it("permits a positively evidenced MEDIUM without making it a blocker", () => {
     const result = computeGateVerdict(
       baseInput({
         findings: [
@@ -106,6 +106,7 @@ describe("computeGateVerdict", () => {
             severity: "MEDIUM",
             status: "OPEN",
             verificationStatus: "VERIFIED",
+            hasPositiveEvidence: true,
             retestConfirmedResolved: false,
             lastSeenAtMs: 900_000,
           },
@@ -113,6 +114,63 @@ describe("computeGateVerdict", () => {
       })
     )
     expect(result.state).toBe("READY")
+  })
+
+  it("does not improve READY when a MEDIUM finding is weakened", () => {
+    const detected = baseInput({
+      findings: [
+        {
+          id: "f-med",
+          severity: "MEDIUM",
+          status: "OPEN",
+          verificationStatus: "DETECTED",
+          retestConfirmedResolved: false,
+          hasPositiveEvidence: false,
+          lastSeenAtMs: 900_000,
+        },
+      ],
+    })
+    const inconclusive = {
+      ...detected,
+      findings: detected.findings.map((finding) => ({
+        ...finding,
+        verificationStatus: "INCONCLUSIVE" as const,
+      })),
+    }
+
+    expect(computeGateVerdict(detected).state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(computeGateVerdict(inconclusive).state).toBe("INSUFFICIENT_EVIDENCE")
+  })
+
+  it("names a missing required control and keeps known blockers visible", () => {
+    const result = computeGateVerdict(
+      baseInput({
+        coverageReceipts: fullCoverage().filter((receipt) => receipt.scanner !== "secrets"),
+        findings: [
+          {
+            id: "f-crit",
+            severity: "CRITICAL",
+            status: "OPEN",
+            verificationStatus: "VERIFIED",
+            hasPositiveEvidence: true,
+            retestConfirmedResolved: false,
+            lastSeenAtMs: 900_000,
+          },
+        ],
+      })
+    )
+
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(result.nonCoverage).toContainEqual(
+      expect.objectContaining({
+        scanner: "secrets",
+        status: "MISSING",
+        reasonCode: "REQUIRED_CONTROL_MISSING",
+      })
+    )
+    expect(result.blockingReasons).toEqual([
+      { findingId: "f-crit", severity: "CRITICAL", verificationStatus: "VERIFIED" },
+    ])
   })
 
   it("a retest-confirmed-resolved finding stops blocking", () => {
