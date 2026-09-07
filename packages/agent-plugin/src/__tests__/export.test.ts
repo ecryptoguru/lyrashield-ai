@@ -1,5 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -11,6 +12,19 @@ import { exportMarketplace } from "../export.js"
 
 const execFileAsync = promisify(execFile)
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..")
+
+async function updateManifestHash(output: string, relative: string): Promise<void> {
+  const manifestPath = path.join(output, "manifest.json")
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    files: Array<{ path: string; sha256: string }>
+  }
+  const file = manifest.files.find((entry) => entry.path === relative)
+  if (!file) throw new Error(`Missing manifest entry for ${relative}`)
+  file.sha256 = createHash("sha256")
+    .update(await readFile(path.join(output, relative)))
+    .digest("hex")
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
+}
 
 const outputs: string[] = []
 afterEach(async () => {
@@ -37,12 +51,29 @@ describe("exportMarketplace", () => {
     }
   })
 
+  it("does not let documented placeholders hide other credentials on the same line", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    const probe = path.join(output, "README.md")
+    const original = await readFile(probe, "utf8")
+    await writeFile(probe, `${original}\nExamples: <YOUR_API_KEY> lsk_… lsk_...\n`)
+    await updateManifestHash(output, "README.md")
+    await execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
+    for (const secret of ["lsk" + "_" + "A".repeat(24), "gh" + "p_" + "A".repeat(36)]) {
+      await writeFile(probe, `${original}\nExample: <YOUR_API_KEY> lsk_… actual: ${secret}\n`)
+      await updateManifestHash(output, "README.md")
+      await expect(
+        execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
+      ).rejects.toThrow(/detected at README.md/)
+    }
+  }, 15000)
+
   it("rejects undeclared files added after export", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
     outputs.push(output)
     await exportMarketplace(output)
-    const probe = path.join(output, "probe.txt")
-    await writeFile(probe, "Examples: <YOUR_API_KEY> lsk_… lsk_...\n")
+    await writeFile(path.join(output, "probe.txt"), "untracked\n")
     await expect(
       execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
     ).rejects.toThrow(/file set or hash differs/)
