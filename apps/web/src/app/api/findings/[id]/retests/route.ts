@@ -190,7 +190,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         scanId: scan.id,
         error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
       })
-      revalidateDashboardAggregates()
+      revalidateDashboardAggregates(workspaceId)
       return apiError(
         "SCAN_SERVICE_UNAVAILABLE",
         "Retesting became unavailable while starting. Please try again shortly.",
@@ -208,7 +208,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       },
     })
 
-    revalidateDashboardAggregates()
+    revalidateDashboardAggregates(workspaceId)
     return apiSuccess({ retest, scan: { id: scan.id, status: scan.status } }, 201)
   } catch (error) {
     const authErr = authErrorResponse(error)

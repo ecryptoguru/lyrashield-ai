@@ -292,7 +292,7 @@ async function post(request: Request) {
         errorCategory: "QUEUE",
         errorMessage: "Scan worker became unavailable while queueing the scan",
       })
-      revalidateDashboardAggregates()
+      revalidateDashboardAggregates(workspaceId)
       return apiError(
         "SCAN_SERVICE_UNAVAILABLE",
         "Scanning became unavailable while starting this scan. Please try again shortly.",
@@ -316,7 +316,7 @@ async function post(request: Request) {
       targetId: data.targetId,
     })
 
-    revalidateDashboardAggregates()
+    revalidateDashboardAggregates(workspaceId)
 
     // Return the same shape the list endpoint returns. The client prepends this
     // straight into its scan list and validates it against the list-item schema,

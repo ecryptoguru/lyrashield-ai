@@ -126,7 +126,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
             resourceId: id,
           },
         })
-        revalidateDashboardAggregates()
+        revalidateDashboardAggregates(workspaceId)
         return apiSuccess({ id: updated.id, status: updated.status })
       }
       case "accept_risk": {
@@ -140,7 +140,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
             resourceId: id,
           },
         })
-        revalidateDashboardAggregates()
+        revalidateDashboardAggregates(workspaceId)
         return apiSuccess({ id: updated.id, status: updated.status })
       }
       case "update_status": {
@@ -164,7 +164,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
             resourceId: id,
           },
         })
-        revalidateDashboardAggregates()
+        revalidateDashboardAggregates(workspaceId)
         return apiSuccess({ id: updated.id, status: updated.status })
       }
     }
