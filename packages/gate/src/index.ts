@@ -59,6 +59,8 @@ export interface GateFindingInput {
   hasPositiveEvidence?: boolean
   /** A current, policy-allowed accepted-risk or false-positive disposition. */
   hasApplicableDisposition?: boolean
+  /** The human disposition counted in the assessment disclosure. */
+  applicableDisposition?: "ACCEPTED_RISK" | "FALSE_POSITIVE" | null
   /** DUPLICATE findings inherit the canonical finding's unresolved state. */
   duplicateCanonicalResolved?: boolean
   /** lastSeenAt as epoch ms — drives staleness. */
@@ -147,6 +149,8 @@ export interface EvidenceSummary {
   unresolvedHigh: number
   unresolvedMedium: number
   unresolvedLow: number
+  acceptedRisk: number
+  falsePositive: number
 }
 
 export interface StalenessSignal {
@@ -204,6 +208,8 @@ function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
     unresolvedHigh: 0,
     unresolvedMedium: 0,
     unresolvedLow: 0,
+    acceptedRisk: 0,
+    falsePositive: 0,
   }
   for (const f of findings) {
     switch (f.verificationStatus) {
@@ -223,6 +229,12 @@ function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
         break
     }
     if (f.retestConfirmedResolved) summary.retestConfirmed++
+    if (f.hasApplicableDisposition && f.applicableDisposition === "ACCEPTED_RISK") {
+      summary.acceptedRisk++
+    }
+    if (f.hasApplicableDisposition && f.applicableDisposition === "FALSE_POSITIVE") {
+      summary.falsePositive++
+    }
     if (isBlocking(f) && !f.hasPositiveEvidence) summary.insufficientPositiveEvidence++
     if (isBlocking(f) && f.verificationStatus === "DETECTED") summary.blockingUnverified++
     if (isBlocking(f) && f.severity === "CRITICAL") summary.unresolvedCritical++

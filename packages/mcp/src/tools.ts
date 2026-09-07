@@ -356,21 +356,29 @@ export function createGetLaunchReadinessTool(context: ToolHandlerContext): McpTo
     name: "lyrashield_get_launch_readiness",
     mutating: false,
     description:
-      "Get a launch-readiness verdict (GO / GO_WITH_CONDITIONS / NO_GO) based on open findings.",
+      "Get the versioned release-gate result for one target. READY is enforceable only when a matching commit or artifact digest is supplied.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
-        targetId: { type: "string", description: "Optional target ID filter" },
+        targetId: { type: "string", description: "Target ID" },
+        commit: { type: "string", description: "Optional 40-character release commit SHA" },
+        artifactDigest: { type: "string", description: "Optional sha256 artifact digest" },
       },
-      required: ["workspaceId"],
+      required: ["workspaceId", "targetId"],
     },
     handler: async (args) => {
       try {
         const params = new URLSearchParams({ workspaceId: args.workspaceId as string })
-        if (args.targetId) params.set("targetId", args.targetId as string)
+        if (typeof args.commit === "string") params.set("commit", args.commit)
+        if (typeof args.artifactDigest === "string")
+          params.set("artifactDigest", args.artifactDigest)
 
-        const data = await apiCall(context, "GET", `/api/launch-readiness?${params.toString()}`)
+        const data = await apiCall(
+          context,
+          "GET",
+          `/api/gate/${encodeURIComponent(args.targetId as string)}?${params.toString()}`
+        )
         return makeToolResult(data)
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
@@ -770,32 +778,38 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
     name: "lyrashield_create_pr_security_recap",
     mutating: false,
     description:
-      "Assemble a PR-ready current-state security recap (Markdown) for a workspace/target: the launch-readiness verdict plus all currently open findings by severity. Read-only — paste the result into a PR comment.",
+      "Assemble a PR-ready security recap for one target: the effective release-gate result and unresolved findings by severity. Read-only — paste the result into a PR comment.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
-        targetId: { type: "string", description: "Optional target ID to scope the recap" },
+        targetId: { type: "string", description: "Target ID to scope the recap" },
+        commit: { type: "string", description: "Optional 40-character release commit SHA" },
+        artifactDigest: { type: "string", description: "Optional sha256 artifact digest" },
       },
-      required: ["workspaceId"],
+      required: ["workspaceId", "targetId"],
     },
     handler: async (args) => {
       try {
         const wsParam = new URLSearchParams({ workspaceId: args.workspaceId as string })
-        if (args.targetId) wsParam.set("targetId", args.targetId as string)
+        const targetId = args.targetId as string
+        const gateParams = new URLSearchParams(wsParam)
+        if (typeof args.commit === "string") gateParams.set("commit", args.commit)
+        if (typeof args.artifactDigest === "string")
+          gateParams.set("artifactDigest", args.artifactDigest)
 
         const readiness = await apiCall(
           context,
           "GET",
-          `/api/launch-readiness?${wsParam.toString()}`
+          `/api/gate/${encodeURIComponent(targetId)}?${gateParams.toString()}`
         )
 
         const items: Array<Record<string, unknown>> = []
         let cursor: string | undefined
         do {
           const findingParams = new URLSearchParams(wsParam)
-          findingParams.set("status", "OPEN")
           findingParams.set("limit", "100")
+          findingParams.set("targetId", targetId)
           if (cursor) findingParams.set("cursor", cursor)
           const page = (await apiCall(
             context,
@@ -805,7 +819,19 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
             items?: Array<Record<string, unknown>>
             nextCursor?: string | null
           }
-          if (Array.isArray(page.items)) items.push(...page.items)
+          if (Array.isArray(page.items)) {
+            items.push(
+              ...page.items.filter((finding) =>
+                [
+                  "OPEN",
+                  "FIX_READY",
+                  "PR_OPENED",
+                  "TICKET_CREATED",
+                  "FIXED_PENDING_RETEST",
+                ].includes(String(finding.status))
+              )
+            )
+          }
           cursor = page.nextCursor ?? undefined
         } while (cursor)
 
@@ -816,7 +842,7 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
           const sev = String(f.severity ?? "UNKNOWN")
           bySeverity[sev] = (bySeverity[sev] ?? 0) + 1
         }
-        const verdict = String(readinessObj.verdict ?? readinessObj.status ?? "UNKNOWN")
+        const verdict = String(readinessObj.state ?? "INSUFFICIENT_EVIDENCE")
         const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
         const sevLines = order
           .filter((s) => bySeverity[s])
@@ -830,7 +856,7 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
           ``,
           sevLines ? `**Open findings by severity:**\n${sevLines}` : `**Open findings:** none`,
           ``,
-          `_This is a current workspace/target snapshot, not a single-scan report. Findings retain their recorded evidence states; scan detection alone is not independent verification or exploit validation._`,
+          `_This is a target-scoped release-gate snapshot. Findings retain their recorded evidence states; scan detection alone is not independent verification or exploit validation._`,
         ].join("\n")
 
         return makeToolResult({ markdown, verdict, bySeverity, findingCount: items.length })

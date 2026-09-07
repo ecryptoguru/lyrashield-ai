@@ -37,20 +37,24 @@ describe("buildLaunchReportPayload — the disclosure allowlist", () => {
     expect(payload.counts.unresolvedMedium).toBe(7)
     expect(payload.counts.unresolvedLow).toBe(2)
     expect(payload.notEvaluatedSeverities).toEqual([])
-    expect(payload.payloadVersion).toBe("lyrashield-launch-report/1.1.0")
+    expect(payload.payloadVersion).toBe("lyrashield-launch-report/2.0.0")
   })
   it("emits exactly the allowed key set (regression guard)", () => {
     const payload = buildLaunchReportPayload(verdict())
     expect(Object.keys(payload).sort()).toEqual([
       "appDisplayName",
+      "assessmentDate",
       "counts",
       "coverageStatement",
+      "dispositionCounts",
       "evaluatedAt",
+      "expiresAt",
       "issuedAt",
       "nonCoverage",
       "notEvaluatedSeverities",
       "payloadVersion",
       "reportChecksum",
+      "scopeCommitment",
       "stale",
       "standardVersion",
       "verdictLabel",
@@ -162,6 +166,26 @@ describe("buildLaunchReportPayload — the disclosure allowlist", () => {
 
   it("marks stale when the verdict is not current", () => {
     expect(buildLaunchReportPayload(verdict({ staleness: { current: false } })).stale).toBe(true)
+  })
+
+  it("records the immutable assessment expiry and human dispositions", () => {
+    const payload = buildLaunchReportPayload(
+      verdict({
+        evidenceSummary: {
+          verified: 4,
+          retestConfirmed: 2,
+          unresolvedCritical: 0,
+          unresolvedHigh: 0,
+          acceptedRisk: 2,
+          falsePositive: 1,
+        },
+      })
+    )
+    expect(payload.assessmentDate).toBe(payload.evaluatedAt)
+    expect(new Date(payload.expiresAt).getTime() - new Date(payload.evaluatedAt).getTime()).toBe(
+      24 * 60 * 60 * 1000
+    )
+    expect(payload.dispositionCounts).toEqual({ acceptedRisk: 2, falsePositive: 1 })
   })
 
   it("records the standard and payload versions", () => {

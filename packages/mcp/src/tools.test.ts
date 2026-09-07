@@ -156,13 +156,26 @@ describe("createGetFindingsTool", () => {
 describe("createGetLaunchReadinessTool", () => {
   it("fetches launch readiness verdict", async () => {
     mockFetch.mockResolvedValueOnce(
-      makeApiResponse({ verdict: "GO", score: 100, blockingFindings: 0 })
+      makeApiResponse({
+        schemaVersion: "lyrashield-gate-response/2.0.0",
+        state: "READY",
+        applicability: { applicable: true, reasons: [] },
+        historical: { state: "READY", standardVersion: "lyrashield-gate/2.0.0" },
+      })
     )
     const tool = createGetLaunchReadinessTool(context)
-    const result = await tool.handler({ workspaceId: "ws-1" })
+    const result = await tool.handler({
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      commit: "a".repeat(40),
+    })
     expect(result.isError).toBeUndefined()
     const data = JSON.parse(result.content[0]!.text)
-    expect(data.verdict).toBe("GO")
+    expect(data.state).toBe("READY")
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/gate/target-1?workspaceId=ws-1&commit="),
+      expect.anything()
+    )
   })
 })
 
@@ -179,9 +192,16 @@ describe("createCreateReportTool", () => {
 })
 
 describe("createPrSecurityRecapTool", () => {
-  it("paginates all open findings and labels the result as a current-state snapshot", async () => {
+  it("paginates canonical unresolved findings and labels the result as target-scoped", async () => {
     mockFetch
-      .mockResolvedValueOnce(makeApiResponse({ verdict: "HOLD" }))
+      .mockResolvedValueOnce(
+        makeApiResponse({
+          schemaVersion: "lyrashield-gate-response/2.0.0",
+          state: "INSUFFICIENT_EVIDENCE",
+          applicability: { applicable: false, reasons: [{ code: "EXPECTED_IDENTITY_REQUIRED" }] },
+          historical: { state: "READY", standardVersion: "lyrashield-gate/2.0.0" },
+        })
+      )
       .mockResolvedValueOnce(
         makeApiResponse({
           items: [{ id: "f-1", severity: "HIGH", status: "OPEN" }],
@@ -203,13 +223,13 @@ describe("createPrSecurityRecapTool", () => {
     expect(data.findingCount).toBe(2)
     expect(data.bySeverity).toEqual({ HIGH: 1, MEDIUM: 1 })
     expect(data.markdown).toContain("**Open findings by severity:**")
-    expect(data.markdown).toContain("current workspace/target snapshot")
+    expect(data.markdown).toContain("target-scoped release-gate snapshot")
     expect(data.markdown).not.toContain("latest completed scan")
 
     const firstFindingsUrl = String(mockFetch.mock.calls[1]![0])
     const secondFindingsUrl = String(mockFetch.mock.calls[2]![0])
     expect(firstFindingsUrl).toContain("targetId=target-1")
-    expect(firstFindingsUrl).toContain("status=OPEN")
+    expect(firstFindingsUrl).not.toContain("status=OPEN")
     expect(firstFindingsUrl).toContain("limit=100")
     expect(firstFindingsUrl).not.toContain("cursor=")
     expect(secondFindingsUrl).toContain("cursor=f-1")

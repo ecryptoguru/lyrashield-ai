@@ -284,6 +284,9 @@ export async function evaluateGateForTarget(
         retestConfirmedResolved: entry.finding.status === "FIXED" && entry.trustedRetest,
         hasPositiveEvidence: entry.positiveReceipt || entry.trustedRetest,
         hasApplicableDisposition: entry.applicableDisposition,
+        applicableDisposition: entry.applicableDisposition
+          ? (entry.finding.disposition as "ACCEPTED_RISK" | "FALSE_POSITIVE")
+          : null,
         duplicateCanonicalResolved: duplicateResolved(entry),
         lastSeenAtMs: entry.finding.lastSeenAt.getTime(),
       })),

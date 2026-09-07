@@ -15,8 +15,9 @@
  */
 
 import { createHash } from "node:crypto"
+import { GATE_FRESHNESS_MS } from "@lyrashield/gate"
 
-export const LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/1.1.0"
+export const LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/2.0.0"
 
 /** The neutral default shown for the app when the customer has not opted in to naming it. */
 export const NEUTRAL_APP_LABEL = "a protected application"
@@ -35,6 +36,12 @@ export interface LaunchReportShareablePayload {
   appDisplayName: string
   /** ISO date the verdict was evaluated. */
   evaluatedAt: string
+  /** ISO date for the assessment the report represents. */
+  assessmentDate?: string
+  /** Assessment applicability expiry. An old signed report is historical only. */
+  expiresAt?: string
+  /** Opaque public commitment to the assessed scope; it never exposes the repository. */
+  scopeCommitment?: string
   /** ISO date this report was issued. */
   issuedAt: string
   /** Positive coverage claim: scanner classes that were evaluated. */
@@ -51,6 +58,11 @@ export interface LaunchReportShareablePayload {
     independentlyVerified: number
   }
   notEvaluatedSeverities: string[]
+  /** Explicit policy dispositions are human decisions, not technical verification. */
+  dispositionCounts?: {
+    acceptedRisk: number
+    falsePositive: number
+  }
   /** Whether the verdict was stale at issue (new code/findings since evaluation). */
   stale: boolean
   /** SHA-256 over the canonical payload (verification). */
@@ -80,6 +92,8 @@ export interface LaunchReportSource {
     unresolvedHigh: number
     unresolvedMedium?: number
     unresolvedLow?: number
+    acceptedRisk?: number
+    falsePositive?: number
   }
   staleness: { current: boolean }
   verdictChecksum: string
@@ -138,6 +152,9 @@ export function buildLaunchReportPayload(
     standardVersion: source.standardVersion,
     appDisplayName: opts.appDisplayName?.trim() ? opts.appDisplayName.trim() : NEUTRAL_APP_LABEL,
     evaluatedAt: source.evaluatedAt.toISOString(),
+    assessmentDate: source.evaluatedAt.toISOString(),
+    expiresAt: new Date(source.evaluatedAt.getTime() + GATE_FRESHNESS_MS).toISOString(),
+    scopeCommitment: "One target and the retained evidence for this named assessment.",
     issuedAt: issuedAt.toISOString(),
     coverageStatement: source.coverageStatement,
     nonCoverage,
@@ -154,6 +171,10 @@ export function buildLaunchReportPayload(
       ...(source.evidenceSummary.unresolvedMedium == null ? ["MEDIUM"] : []),
       ...(source.evidenceSummary.unresolvedLow == null ? ["LOW"] : []),
     ],
+    dispositionCounts: {
+      acceptedRisk: source.evidenceSummary.acceptedRisk ?? 0,
+      falsePositive: source.evidenceSummary.falsePositive ?? 0,
+    },
     stale: !source.staleness.current,
   }
 

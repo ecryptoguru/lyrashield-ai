@@ -67,6 +67,8 @@ export async function generateLaunchReport(
       retestConfirmed: storedSummary.retestConfirmed,
       unresolvedMedium: storedSummary.unresolvedMedium,
       unresolvedLow: storedSummary.unresolvedLow,
+      acceptedRisk: storedSummary.acceptedRisk,
+      falsePositive: storedSummary.falsePositive,
       unresolvedCritical:
         typeof storedSummary.unresolvedCritical === "number"
           ? storedSummary.unresolvedCritical
@@ -148,6 +150,13 @@ export async function getSharedLaunchReport(
       select: { contentJson: true, type: true },
     })
     if (!report || report.type !== "launch_readiness") return null
-    return report.contentJson as unknown as LaunchReportShareablePayload
+    const payload = report.contentJson as unknown as LaunchReportShareablePayload
+    const expiresAtMs = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
+    // Stored bytes and their signature remain immutable. This is a read-time
+    // presentation flag so legacy or expired reports never render as current.
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+      return { ...payload, stale: true }
+    }
+    return payload
   })
 }
