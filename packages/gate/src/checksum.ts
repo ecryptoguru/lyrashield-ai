@@ -41,7 +41,9 @@ function sha256(value: unknown): string {
 export function computeInputChecksum(input: GateEvidenceInput): string {
   const findings = [...input.findings].sort((a, b) => a.id.localeCompare(b.id))
   const receipts = [...input.coverageReceipts].sort((a, b) =>
-    `${a.scanner}:${a.controlId}`.localeCompare(`${b.scanner}:${b.controlId}`)
+    JSON.stringify([a.scanner, a.controlId, a.status, a.reason ?? ""]).localeCompare(
+      JSON.stringify([b.scanner, b.controlId, b.status, b.reason ?? ""])
+    )
   )
   return sha256({
     targetId: input.targetId,

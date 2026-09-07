@@ -76,6 +76,48 @@ describe("computeGateVerdict", () => {
     expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
   })
 
+  it("retains known blockers when the target type is unsupported", () => {
+    const result = computeGateVerdict(
+      baseInput({
+        targetTypeCovered: false,
+        findings: [
+          {
+            id: "f-crit",
+            severity: "CRITICAL",
+            status: "OPEN",
+            verificationStatus: "VERIFIED",
+            retestConfirmedResolved: false,
+            lastSeenAtMs: 900_000,
+          },
+        ],
+      })
+    )
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(result.blockingReasons).toEqual([
+      { findingId: "f-crit", severity: "CRITICAL", verificationStatus: "VERIFIED" },
+    ])
+  })
+
+  it("does not claim a scanner covered when it is both not applicable and failed", () => {
+    const result = computeGateVerdict(
+      baseInput({
+        coverageReceipts: [
+          ...fullCoverage().filter((receipt) => receipt.scanner !== "secrets"),
+          { controlId: "secrets-a", scanner: "secrets", status: "NOT_APPLICABLE", reason: null },
+          {
+            controlId: "secrets-b",
+            scanner: "secrets",
+            status: "FAILED",
+            reason: "checkout unavailable",
+          },
+        ],
+      })
+    )
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(result.coverageStatement).not.toContain("secrets")
+    expect(result.coverageStatement).not.toContain("secrets (not applicable)")
+  })
+
   it("NOT_READY on an unresolved CRITICAL finding, traceable to the finding", () => {
     const result = computeGateVerdict(
       baseInput({
@@ -264,6 +306,16 @@ describe("reproducibility (load-bearing determinism guarantee)", () => {
     const reversed = [...receipts].reverse()
     expect(computeInputChecksum(baseInput({ coverageReceipts: receipts }))).toBe(
       computeInputChecksum(baseInput({ coverageReceipts: reversed }))
+    )
+  })
+
+  it("input checksum totally orders receipts sharing one scanner and control", () => {
+    const receipts = [
+      { controlId: "secrets", scanner: "secrets", status: "FAILED" as const, reason: "retry" },
+      { controlId: "secrets", scanner: "secrets", status: "BLOCKED" as const, reason: "offline" },
+    ]
+    expect(computeInputChecksum(baseInput({ coverageReceipts: receipts }))).toBe(
+      computeInputChecksum(baseInput({ coverageReceipts: [...receipts].reverse() }))
     )
   })
 
