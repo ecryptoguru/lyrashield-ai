@@ -126,6 +126,98 @@ exports[`conformance: renderConfig round-trips through the format parser > claud
 }"
 `;
 
+exports[`conformance: renderConfig round-trips through the format parser > cline × remote-http — inline secret may contain the literal key > cline × remote-http — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_testkey123"
+      },
+      "type": "streamableHttp"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > cline × remote-http — interpolated secret is safe > cline × remote-http — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <LYRASHIELD_API_KEY>"
+      },
+      "type": "streamableHttp"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > cline × stdio — inline secret may contain the literal key > cline × stdio — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp@0.2.5"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_testkey123"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > cline × stdio — interpolated secret is safe > cline × stdio — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp@0.2.5"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > codebuff × remote-http — inline secret may contain the literal key > codebuff × remote-http — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_testkey123"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > codebuff × remote-http — interpolated secret is safe > codebuff × remote-http — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer $LYRASHIELD_API_KEY"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
 exports[`conformance: renderConfig round-trips through the format parser > codebuff × stdio — inline secret may contain the literal key > codebuff × stdio — inline 1`] = `
 "{
   "mcpServers": {
@@ -155,7 +247,7 @@ exports[`conformance: renderConfig round-trips through the format parser > codeb
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
-        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+        "LYRASHIELD_API_KEY": "$LYRASHIELD_API_KEY"
       }
     }
   }
@@ -328,6 +420,32 @@ exports[`conformance: renderConfig round-trips through the format parser > devin
 }"
 `;
 
+exports[`conformance: renderConfig round-trips through the format parser > gemini-cli × remote-http — inline secret may contain the literal key > gemini-cli × remote-http — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "httpUrl": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_testkey123"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > gemini-cli × remote-http — interpolated secret is safe > gemini-cli × remote-http — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "httpUrl": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer $LYRASHIELD_API_KEY"
+      }
+    }
+  }
+}"
+`;
+
 exports[`conformance: renderConfig round-trips through the format parser > gemini-cli × stdio — inline secret may contain the literal key > gemini-cli × stdio — inline 1`] = `
 "{
   "mcpServers": {
@@ -357,7 +475,7 @@ exports[`conformance: renderConfig round-trips through the format parser > gemin
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
-        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+        "LYRASHIELD_API_KEY": "$LYRASHIELD_API_KEY"
       }
     }
   }
@@ -377,7 +495,7 @@ exports[`conformance: renderConfig round-trips through the format parser > herme
   lyrashield:
     url: "https://app.lyrashieldai.com/api/mcp"
     headers:
-      Authorization: "Bearer <LYRASHIELD_API_KEY>""
+      Authorization: "Bearer \${env:LYRASHIELD_API_KEY}""
 `;
 
 exports[`conformance: renderConfig round-trips through the format parser > hermes × stdio — inline secret may contain the literal key > hermes × stdio — inline 1`] = `
@@ -401,7 +519,7 @@ exports[`conformance: renderConfig round-trips through the format parser > herme
       - "@lyrashield/mcp@0.2.5"
     env:
       LYRASHIELD_API_URL: "https://app.lyrashieldai.com"
-      LYRASHIELD_API_KEY: "<LYRASHIELD_API_KEY>""
+      LYRASHIELD_API_KEY: "\${env:LYRASHIELD_API_KEY}""
 `;
 
 exports[`conformance: renderConfig round-trips through the format parser > kilo-code × remote-http — inline secret may contain the literal key > kilo-code × remote-http — inline 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
@@ -412,73 +530,13 @@ exports[`conformance: renderConfig round-trips through the format parser > kilo-
 
 exports[`conformance: renderConfig round-trips through the format parser > kilo-code × stdio — interpolated secret is safe > kilo-code × stdio — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
-exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — inline secret may contain the literal key > mimo-code × remote-http — inline 1`] = `
-"{
-  "mcp": {
-    "lyrashield": {
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer lsk_testkey123"
-      },
-      "type": "remote"
-    }
-  }
-}"
-`;
+exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — inline secret may contain the literal key > mimo-code × remote-http — inline 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
-exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — interpolated secret is safe > mimo-code × remote-http — interpolated 1`] = `
-"{
-  "mcp": {
-    "lyrashield": {
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer <LYRASHIELD_API_KEY>"
-      },
-      "type": "remote"
-    }
-  }
-}"
-`;
+exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — interpolated secret is safe > mimo-code × remote-http — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
-exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — inline secret may contain the literal key > mimo-code × stdio — inline 1`] = `
-"{
-  "mcp": {
-    "lyrashield": {
-      "command": [
-        "npx",
-        "-y",
-        "@lyrashield/mcp@0.2.5"
-      ],
-      "environment": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
-        "LYRASHIELD_API_KEY": "lsk_testkey123"
-      },
-      "enabled": true,
-      "type": "local"
-    }
-  }
-}"
-`;
+exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — inline secret may contain the literal key > mimo-code × stdio — inline 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
-exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — interpolated secret is safe > mimo-code × stdio — interpolated 1`] = `
-"{
-  "mcp": {
-    "lyrashield": {
-      "command": [
-        "npx",
-        "-y",
-        "@lyrashield/mcp@0.2.5"
-      ],
-      "environment": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
-        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
-      },
-      "enabled": true,
-      "type": "local"
-    }
-  }
-}"
-`;
+exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — interpolated secret is safe > mimo-code × stdio — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
 exports[`conformance: renderConfig round-trips through the format parser > oh-my-pi × remote-http — inline secret may contain the literal key > oh-my-pi × remote-http — inline 1`] = `
 "{
@@ -549,7 +607,7 @@ exports[`conformance: renderConfig round-trips through the format parser > opena
 command = "npx"
 args = ["-y", "@lyrashield/mcp@0.2.5"]
 
-[mcp_servers.lyrashield.env_vars]
+[mcp_servers.lyrashield.env]
 LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
 LYRASHIELD_API_KEY = "lsk_testkey123""
 `;
@@ -559,7 +617,7 @@ exports[`conformance: renderConfig round-trips through the format parser > opena
 command = "npx"
 args = ["-y", "@lyrashield/mcp@0.2.5"]
 
-[mcp_servers.lyrashield.env_vars]
+[mcp_servers.lyrashield.env]
 LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
 LYRASHIELD_API_KEY = "<LYRASHIELD_API_KEY>""
 `;

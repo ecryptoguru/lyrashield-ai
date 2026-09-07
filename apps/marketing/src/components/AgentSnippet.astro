@@ -41,7 +41,7 @@ const effectiveTransport: Transport =
   transport && safeAgent.transports.includes(transport) ? transport : (safeAgent.transports[0] ?? "stdio")
 
 const defaultSecretMode: InstallOptions["secretMode"] =
-  effectiveTransport === "stdio" ? "shell" : safeAgent.forceInlineEnv ? "inline" : "interpolated"
+  effectiveTransport === "stdio" ? "shell" : "interpolated"
 
 const effectiveSecretMode: InstallOptions["secretMode"] = secretMode ?? defaultSecretMode
 
@@ -56,7 +56,7 @@ function buildKeyNote(snippet: string): string {
 }
 
 function buildManualCommand(): string {
-  return `LYRASHIELD_API_KEY=${apiKey} LYRASHIELD_API_URL=${API_URL} npx -y @lyrashield/mcp`
+  return `LYRASHIELD_API_KEY=${apiKey} LYRASHIELD_API_URL=${API_URL} npx -y @lyrashield/mcp@0.2.5`
 }
 
 function buildRemoteManualCommand(agent: AgentEntry): string {
@@ -87,9 +87,6 @@ const strategyNotes: Record<string, string> = {
   jetbrains:
     "JetBrains AI & Junie: UI-only. Open Settings → Tools → AI Assistant → MCP Servers and add a new server using the values below.",
   amp: "Amp: export the variables in the shell where Amp runs, then add the server with the CLI command below.",
-  cline: "Cline: add the server from the MCP settings panel; Cline manages the configuration file.",
-  picode:
-    "PiCode: manual. The exact config file path is not documented; use the command below as a reference and verify with PiCode's docs.",
   openclaw:
     "OpenClaw: add the server in Settings → MCP or with openclaw mcp, then verify it with openclaw mcp doctor --probe.",
 }
@@ -138,7 +135,10 @@ if (safeAgent.installStrategy === "config-file") {
     `${safeAgent.displayName}: configured through its vendor CLI.`
 } else {
   // guided-manual
-  if (effectiveTransport === "remote-http" && safeAgent.transportFields?.["remote-http"]) {
+  if (safeAgent.manualInstructions) {
+    snippet = safeAgent.manualInstructions
+    notePrefix = "none"
+  } else if (effectiveTransport === "remote-http" && safeAgent.transportFields?.["remote-http"]) {
     snippet = buildRemoteManualCommand(safeAgent)
     notePrefix = "remote"
     note = buildKeyNote(snippet)
@@ -147,8 +147,9 @@ if (safeAgent.installStrategy === "config-file") {
     notePrefix = "manual"
     note = buildKeyNote(snippet)
   }
-  strategyNote =
-    strategyNotes[safeAgent.id] ?? `${safeAgent.displayName}: requires manual configuration.`
+  strategyNote = safeAgent.manualInstructions
+    ? "No verified native MCP configuration is available for this client."
+    : (strategyNotes[safeAgent.id] ?? `${safeAgent.displayName}: requires manual configuration.`)
 }
 ---
 

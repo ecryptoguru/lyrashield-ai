@@ -42,7 +42,7 @@ describe("conformance: install/uninstall round-trips", () => {
     await rm(cwd, { recursive: true, force: true })
   })
 
-  it("prints an executable stdio command for guided-manual agents", async () => {
+  it("does not invent native MCP configuration for unsupported guided clients", async () => {
     const result = await installAgent({
       agent: aider,
       transport: "stdio",
@@ -51,8 +51,8 @@ describe("conformance: install/uninstall round-trips", () => {
     })
 
     expect(result.outcome).toBe("MANUAL_REQUIRED")
-    expect(result.message).toContain("Command:     npx")
-    expect(result.message).toContain('Args:        ["-y","@lyrashield/mcp@0.2.5"]')
+    expect(result.message).toContain("does not document native MCP client support")
+    expect(result.message).not.toContain("Command:     npx")
   })
 
   it("claude-code merge-safety keeps foreign servers and unrelated keys", async () => {

@@ -15,7 +15,7 @@ faq:
   - q: Do VS Code prompt files need security review?
     a: Yes. Treat .github/prompts as code. Review for overbroad file patterns, disallowed commands and missing auth requirements before merging to main.
   - q: Where does VS Code store MCP server config?
-    a: VS Code stores MCP servers in the user or workspace settings json under mcp.servers. Workspace scope shares the entry with the team via the repo, user scope stays local. Use the pinned npx command and reference the key through env so the literal never lands in the committed file.
+    a: VS Code stores workspace MCP servers in .vscode/mcp.json under the top-level servers key. Use MCP Open User Configuration for profile-local servers.
 ---
 
 VS Code with GitHub Copilot Chat and MCP can edit across your workspace and call external tools quickly, so you must harden .vscode/mcp.json with servers and inputs, scope Copilot permissions and capture SARIF before release. This checklist covers secure inputs for tokens, least privilege agent settings and repeatable release evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) plus VS Code specific steps below.
@@ -26,7 +26,7 @@ Copilot Chat agent mode can read, edit and run commands across your workspace wh
 
 Common review misses include debug endpoints that bypass auth, error handlers that log secrets and package additions with install scripts that run code. Explicit policy and verifiable evidence reduce that risk.
 
-Frame findings with standard references. OWASP Top Ten at [OWASP Top Ten](https://owasp.org/www-project-top-ten/) covers injection and misconfiguration seen in AI generated back ends. Hardcoded credential weakness maps to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html) and traversal to [CWE 22 for path traversal](https://cwe.mitre.org/data/definitions/22.html). MCP transport and auth are defined at [MCP spec](https://modelcontextprotocol.io/specification/2025-06-18) and [MCP authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). VS Code specifics are documented at [VS Code MCP docs](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) and variable handling at [VS Code inputs](https://code.visualstudio.com/docs/reference/variables-reference). For consistent language across builders, see our [Lovable app security checklist](/blog/lovable-app-security-checklist).
+Frame findings with standard references. OWASP Top Ten at [OWASP Top Ten](https://owasp.org/www-project-top-ten/) covers injection and misconfiguration seen in AI generated back ends. Hardcoded credential weakness maps to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html) and traversal to [CWE 22 for path traversal](https://cwe.mitre.org/data/definitions/22.html). MCP transport and auth are defined at [MCP spec](https://modelcontextprotocol.io/specification/2025-06-18) and [MCP authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). VS Code specifics are documented in the [official MCP servers guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers) and variable handling at [VS Code inputs](https://code.visualstudio.com/docs/reference/variables-reference). For consistent language across builders, see our [Lovable app security checklist](/blog/lovable-app-security-checklist).
 
 ## Harden MCP in .vscode/mcp.json with inputs
 
@@ -42,7 +42,7 @@ Secure example with no raw secrets committed:
     "lyrashield-local": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
+      "args": ["-y", "@lyrashield/mcp@0.2.5"],
       "env": {
         "LYRASHIELD_API_KEY": "${input:lyrashieldKey}"
       }
@@ -74,7 +74,7 @@ Hardening for review:
 - Validate in CI that mcp dot json files contain no raw sk or lsk literals and that input ids match expected env. Run secret scanning on every pull request.
 - Require pull request review for any server addition. Treat new MCP servers like new production dependencies with owner and review date.
 
-Discovery of servers from mcp dot json is covered at [VS Code MCP discovery](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
+Discovery of servers from mcp dot json is covered in the [VS Code MCP servers guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
 
 ## Scope agent and Copilot Chat permissions
 
@@ -132,7 +132,7 @@ Keep a short changelog for MCP additions and dependency exceptions to speed futu
 
 LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP fits VS Code design. Local stdio via npx -y @lyrashield/mcp with inputs avoids raw keys, remote https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key via inputs. GitHub Action diff aware scan and SARIF output target pull request review.
+MCP fits VS Code design. Local stdio via npx -y @lyrashield/mcp@0.2.5 with inputs avoids raw keys, remote https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key via inputs. GitHub Action diff aware scan and SARIF output target pull request review.
 
 Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. VS Code uses the supported config-file integration, and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 

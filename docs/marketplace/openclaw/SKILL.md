@@ -1,7 +1,7 @@
 ---
 name: lyrashield
 description: Review LyraShield release-assurance evidence through an OAuth-first MCP connection.
-version: 0.1.22
+version: 0.1.23
 license: MIT-0
 metadata:
   category: security

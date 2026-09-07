@@ -22,6 +22,7 @@ const PUBLIC_FILES = [
   ".cursor-plugin/plugin.json",
   ".kiro-plugin/plugin.json",
   ".mcp.json",
+  ".mcp.codex.json",
   ".mcp.kiro.json",
 ] as const
 

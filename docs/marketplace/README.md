@@ -1,6 +1,6 @@
 # LyraShield AI marketplace release source
 
-Current exported Agent Plugin version: `0.1.22`. Channel-specific listing versions and review
+Current exported Agent Plugin version: `0.1.23`. Channel-specific listing versions and review
 states below may lag this repository release.
 
 ## Install from this repository
@@ -8,11 +8,18 @@ states below may lag this repository release.
 This repository is an addressable plugin marketplace: `.claude-plugin/marketplace.json` catalogs the
 root plugin with `source: "./"`, so the marketplace root and the plugin root are the same directory.
 
-Clients with marketplace commands:
+Claude Code marketplace commands:
 
 ```
-/plugin marketplace add ecryptoguru/lyrashield-marketplace
-/plugin install lyrashield@lyrashield-ai
+claude plugin marketplace add ecryptoguru/lyrashield-marketplace
+claude plugin install lyrashield@lyrashield-ai
+```
+
+GitHub Copilot CLI uses the same marketplace identity through its own commands:
+
+```
+copilot plugin marketplace add ecryptoguru/lyrashield-marketplace
+copilot plugin install lyrashield@lyrashield-ai
 ```
 
 VS Code: run **Chat: Install Plugin From Source** from the Command Palette and paste
@@ -30,8 +37,9 @@ decision instead, add this to `.claude/settings.json` or `.github/copilot/settin
 }
 ```
 
-Neither path inlines a credential. Run `lyrashield login --oauth` once per machine; the MCP server
-reads the selected workspace credential from `~/.lyrashield/credentials.json`.
+Neither marketplace path inlines a credential. Their remote MCP connection completes hosted OAuth
+inside the client. The Kiro stdio adapter is the path that reads
+`~/.lyrashield/credentials.json` after `lyrashield login --oauth`.
 
 LyraShield is not yet listed in a published VS Code plugin marketplace, so there is no one-click
 marketplace install for VS Code today. Install-from-source and the marketplace-by-URL paths above
@@ -68,7 +76,7 @@ reviewer pack. The Gemini repository must additionally carry the `gemini-cli-ext
    disconnect/revocation, CLI API-key fallback, Zed, Codebuff, and the generated marketplace fixtures.
 5. Submit the shared listing to OpenAI/Codex, Claude, Cursor, Kiro, Cline, Kilo, Zed, Codebuff,
    Gemini CLI, and ClawHub according to each channel's current intake. Verify GitHub Copilot through
-   its direct Agent Plugin install path; Awesome Copilot is not a product-listing channel.
+   its plugin marketplace path; Awesome Copilot is not a product-listing channel.
 
 Marketplace availability is claimed only for channels with a visible public listing, never merely a
 submitted application. Direct adapter guides remain available for clients without a verified

@@ -50,9 +50,9 @@ export const agentEntrySchema = z
       })
       .optional(),
     rulesFiles: z.array(z.string().min(1)),
-    forceInlineEnv: z.boolean().optional(),
     serverNamePattern: z.string().optional(),
     pluginLocations: z.array(configLocationSchema).optional(),
+    manualInstructions: z.string().min(1).optional(),
     source: z
       .object({
         url: z.string().nullable().optional(),

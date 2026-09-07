@@ -1,4 +1,4 @@
-# LyraShield CLI 0.2.2
+# LyraShield CLI 0.2.3
 
 The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
 
@@ -32,9 +32,9 @@ lyrashield <command> [args] [--json]
 ### Agent installation
 
 - `agents` — list the complete registry with detection state, evidence-backed support tier, and verification metadata
-- `init` — detect and configure all installed agents. For agents that support the Agent Plugins v1.0.0 standard today (Claude Code, Cursor, OpenAI Codex, GitHub Copilot, Kiro), `init` prefers an **Agent Plugin** install; for all others it falls back to config-file edits.
-- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. For agents supporting the `agent-plugin` strategy, this installs the portable plugin (from `@lyrashield/agent-plugin`) to the agent's plugin directory; `--dry-run` still works and previews the install without writing.
-- `uninstall <agent>` — remove the LyraShield entry from a single agent's config. For `agent-plugin`-strategy agents, this removes the plugin from the agent's plugin directory.
+- `init` — detect and configure all installed agents using that client's documented transport and install path. When a client requires its own marketplace, UI, or config merge, `init` prints the exact next step instead of copying files into an unrecognized directory.
+- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. Cursor and Codex accept a local Agent Plugin copy; Claude Code and GitHub Copilot use their marketplace commands; Kiro uses its documented MCP settings file. `--dry-run` previews every path without executing vendor CLIs or writing files.
+- `uninstall <agent>` — remove a CLI-managed LyraShield config or plugin. Marketplace and UI installs return client-specific removal guidance.
 - `rules add <agent>|remove <agent>|check` — add, remove, or validate an agent rules file (`AGENTS.md`, `CLAUDE.md`, etc.)
 
 `install` refuses to write raw secrets into shared-by-convention files unless you pass `--inline-secret` and the file is gitignored. Use `--dry-run` to preview the config change without writing it.

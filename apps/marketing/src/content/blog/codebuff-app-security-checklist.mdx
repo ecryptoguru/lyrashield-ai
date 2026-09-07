@@ -10,7 +10,7 @@ faq:
   - q: Is Codebuff safe because it is open source
     a: Open source means you can audit the code, not that someone already audited your app. You still need to review what data entered the agent, verify dependencies, scan for secrets, and test authorization before launch.
   - q: Where does Codebuff keep its MCP config
-    a: Codebuff uses .agents/mcp.json with a root mcpServers key holding command, args, and env for each server. Only stdio transport is documented in the official guide.
+    a: Codebuff uses .agents/mcp.json with a root mcpServers key holding command, args, and env for each server. Codebuff documents local stdio and remote HTTP servers.
   - q: What is the main risk with Codebuff agent store tools
     a: A published agent can expose a write action or network call under an innocent name. Review each agent before adding it, disable unused tools, and scope credentials to the current task.
   - q: Should I commit the Codebuff MCP config
@@ -38,7 +38,7 @@ That is a data handling review, not an application security result. Do not pipe 
 
 ## 2. Protect the config and agent store tools
 
-Codebuff stores MCP server configuration in .agents/mcp.json with a root mcpServers key. Each server entry holds command, args, and env, and only stdio transport is documented in the official guide. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how these servers expose tools to an agent. Codebuff also supports an agent store where published agents can be added to a project, and the Codebuff CLI offers /init and /publish commands.
+Codebuff stores MCP server configuration in .agents/mcp.json with a root mcpServers key. Each server entry holds command, args, and env, and local stdio and remote HTTP transports are documented in the official guide. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how these servers expose tools to an agent. Codebuff also supports an agent store where published agents can be added to a project, and the Codebuff CLI offers /init and /publish commands.
 
 Treat every config file and agent store entry as policy bearing code. Review which MCP servers are enabled, what tools each exposes, and what credentials back them. A published agent can expose a write action or network call under an innocent name, so review each one before adding it to your project. Disable unused tools. Scope credentials to the current task. Version control .agents/mcp.json so the team shares the same server set, and require a security owner for changes to agent configuration.
 

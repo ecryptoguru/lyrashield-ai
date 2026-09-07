@@ -108,3 +108,20 @@ describe("vendor CLI allowlist", () => {
     expect(result.message).toMatch(/exit code 1/)
   })
 })
+
+it("does not execute an allowlisted vendor CLI during a dry run", async () => {
+  vi.clearAllMocks()
+  const result = await installAgent({
+    agent: fakeVendorAgent("amp"),
+    transport: "stdio",
+    apiUrl: API_URL,
+    apiKey: API_KEY,
+    dryRun: true,
+  })
+
+  expect(result).toMatchObject({
+    outcome: "DELEGATED",
+    message: "Would run amp mcp add",
+  })
+  expect(mockedExec).not.toHaveBeenCalled()
+})

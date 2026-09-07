@@ -14,12 +14,12 @@ faq:
   - q: "Can I gate PRs from Hermes workflows?"
     a: "Yes. Add the LyraShield GitHub Action in diff aware mode with SARIF upload and require the security job in branch protection."
   - q: "Where does Hermes read MCP server config from?"
-    a: "Hermes reads MCP servers from its settings file under mcpServers with local stdio and remote entries. Use the pinned npx -y @lyrashield/mcp command for local and the remote endpoint with a Bearer lsk_ key for shared team or CI use. Keep the key in an env reference, never as a literal in the committed config."
+    a: "Hermes reads MCP servers from its settings file under mcpServers with local stdio and remote entries. Use the pinned npx -y @lyrashield/mcp@0.2.5 command for local and the remote endpoint with a Bearer lsk_ key for shared team or CI use. Keep the key in an env reference, never as a literal in the committed config."
 ---
 
 Fastest path: run `npx lyrashield init` to auto-detect Hermes and write the config, or `npx lyrashield install hermes` for the CLI-managed path, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
 
-You can pair Hermes AI with LyraShield AI over MCP to get target aware scans, recorded evidence states, and fix proposals without leaving your agent workflow. In this guide you will add the local server using pinned npx -y @lyrashield/mcp plus the remote endpoint at https://app.lyrashieldai.com/api/mcp inside ~/.hermes/config.yaml, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
+You can pair Hermes AI with LyraShield AI over MCP to get target aware scans, recorded evidence states, and fix proposals without leaving your agent workflow. In this guide you will add the local server using pinned npx -y @lyrashield/mcp@0.2.5 plus the remote endpoint at https://app.lyrashieldai.com/api/mcp inside ~/.hermes/config.yaml, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
 Fast generation from Hermes is powerful, but without review you can ship injection flaws, broken access control, and vulnerable deps. Use the [vibe coding security guide](/blog/vibe-coding-security-guide) as your policy spine, then map categories to the [OWASP Top 10](https://owasp.org/www-project-top-ten/) official standard and [CWE Top 25](https://cwe.mitre.org/top25/) for concrete weakness definitions that justify your triage order. Bounded scans with explicit evidence states keep agents productive while preserving the limitations security teams need to see.
 
@@ -53,7 +53,7 @@ mcp_servers:
   lyrashield:
     transport: stdio
     command: npx
-    args: ["-y", "@lyrashield/mcp"]
+    args: ["-y", "@lyrashield/mcp@0.2.5"]
     env:
       LYRASHIELD_API_KEY: ${env:LYRASHIELD_API_KEY}
     tools:
@@ -78,7 +78,7 @@ mcp_servers:
     ssl_verify: true
 ```
 
-This pins local to npx -y @lyrashield/mcp and remote to https://app.lyrashieldai.com/api/mcp with bearer header. The canonical copy lives in [Hermes integration guide](/docs/integrations/hermes). Use `${env:VAR}` rather than raw keys. Keep tools.include explicit so only verification tools are exposed to the Hermes agent. Explicit includes also reduce accidental exposure of auxiliary tools that you do not want the agent to call without review.
+This pins local to npx -y @lyrashield/mcp@0.2.5 and remote to https://app.lyrashieldai.com/api/mcp with bearer header. The canonical copy lives in [Hermes integration guide](/docs/integrations/hermes). Use `${env:VAR}` rather than raw keys. Keep tools.include explicit so only verification tools are exposed to the Hermes agent. Explicit includes also reduce accidental exposure of auxiliary tools that you do not want the agent to call without review.
 
 If you run Hermes inside a shared container, mount the config file from a secure volume and ensure LYRASHIELD_API_KEY is injected via secret manager rather than baked into the image. That keeps rotation simple and avoids leaking keys into image layers.
 
@@ -96,7 +96,7 @@ Show transport, url or command, and tool names for lyrashield entries.
 Expected output:
 
 ```text
-lyrashield (stdio via npx -y @lyrashield/mcp):
+lyrashield (stdio via npx -y @lyrashield/mcp@0.2.5):
 - lyrashield_scan_target(targetId, goal, mode)
 - lyrashield_get_findings(targetId)
 - lyrashield_list_targets()

@@ -80,6 +80,19 @@ function makeAgent(pluginPath: string): AgentEntry {
 }
 
 describe("installAgentPlugin", () => {
+  it("returns exact activation guidance instead of copying to an undiscovered path", async () => {
+    const agent = {
+      ...makeAgent("~/.example/plugins/lyrashield"),
+      manualInstructions: "Install through the client marketplace.",
+    }
+
+    const result = await installAgentPlugin({ agent })
+    expect(result).toMatchObject({
+      outcome: "MANUAL_REQUIRED",
+      message: "Install through the client marketplace.",
+    })
+  })
+
   it("copies the canonical plugin directory to the destination with --yes", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
     const dest = path.join(tempDir, "lyrashield")
@@ -113,6 +126,19 @@ describe("installAgentPlugin", () => {
     const result = await installAgentPlugin({ agent, yes: true })
     expect(result.outcome).toBe("MANUAL_REQUIRED")
     expect(result.message).toContain("lyrashield login")
+
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it("installs a remote OAuth plugin before client authentication", async () => {
+    delete process.env.LYRASHIELD_API_KEY
+    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
+    const dest = path.join(tempDir, "lyrashield")
+    const agent: AgentEntry = { ...makeAgent(dest), transports: ["remote-http"] }
+
+    const result = await installAgentPlugin({ agent })
+    expect(result.outcome).toBe("CONFIGURED")
+    await expect(access(path.join(dest, "plugin.json"))).resolves.toBeUndefined()
 
     await rm(tempDir, { recursive: true, force: true })
   })
@@ -198,6 +224,23 @@ describe("installAgentPlugin", () => {
 })
 
 describe("uninstallAgentPlugin", () => {
+  it("does not delete a client-managed marketplace or MCP install", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
+    const dest = path.join(tempDir, "lyrashield")
+    const agent = {
+      ...makeAgent(dest),
+      manualInstructions: "Install through the client marketplace.",
+    }
+    await mkdir(dest, { recursive: true })
+    await writeFile(path.join(dest, "client-owned.txt"), "keep", "utf-8")
+
+    const result = await uninstallAgentPlugin({ agent })
+    expect(result.outcome).toBe("MANUAL_REQUIRED")
+    await expect(access(path.join(dest, "client-owned.txt"))).resolves.toBeUndefined()
+
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
   it("removes the plugin directory", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
     const dest = path.join(tempDir, "lyrashield")

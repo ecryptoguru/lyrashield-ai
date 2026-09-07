@@ -46,9 +46,7 @@ export async function resolveSecretMode(opts: SecretModeOptions): Promise<Resolv
   }
 
   let mode: ResolvedSecretMode["mode"]
-  if (agent.forceInlineEnv) {
-    mode = "inline"
-  } else if (agent.credential.kind === "interpolated-env") {
+  if (agent.credential.kind === "interpolated-env") {
     mode = "interpolated"
   } else if (agent.credential.kind === "shell-env") {
     mode = "shell"

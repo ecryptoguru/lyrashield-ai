@@ -3,10 +3,10 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/kiro", origin).toString()
-const title = "LyraShield Agent Plugin for Kiro — Setup Guide"
+const title = "LyraShield MCP for Kiro — Setup Guide"
 const description =
-  "Install the LyraShield Agent Plugin for Kiro. The portable plugin bundles the MCP server and a security skill into a single installable package following the Agent Plugins v1.0.0 standard."
-const updatedDate = "2026-08-12"
+  "Connect LyraShield to Kiro through its documented workspace or user MCP settings file."
+const updatedDate = "2026-09-08"
 
 const jsonLd: unknown[] = [
   {
@@ -23,7 +23,7 @@ const jsonLd: unknown[] = [
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
-    name: "Install the LyraShield Agent Plugin for Kiro",
+    name: "Configure LyraShield MCP for Kiro",
     step: [
       {
         "@type": "HowToStep",
@@ -34,14 +34,14 @@ const jsonLd: unknown[] = [
       {
         "@type": "HowToStep",
         position: 2,
-        name: "Install the plugin",
-        text: "Run npx lyrashield install kiro to install the Agent Plugin into ~/.kiro/plugins/lyrashield.",
+        name: "Add the MCP entry",
+        text: "Merge the LyraShield entry into .kiro/settings/mcp.json or ~/.kiro/settings/mcp.json.",
       },
       {
         "@type": "HowToStep",
         position: 3,
-        name: "Verify the install",
-        text: "Run npx lyrashield doctor to confirm the plugin is installed and credentials are present.",
+        name: "Verify the connection",
+        text: "Restart Kiro and run a read-only LyraShield workspace query.",
       },
     ],
   },
@@ -70,51 +70,45 @@ const jsonLd: unknown[] = [
   updatedDate={updatedDate}
   currentPath="/docs/integrations/kiro"
 >
-  <h1>Kiro (Agent Plugin)</h1>
+  <h1>Kiro</h1>
   <p>
-    Kiro supports the open <strong>Agent Plugins v1.0.0</strong> standard (agent-plugins.org). The
-    LyraShield Agent Plugin bundles the MCP server and a security skill into a single installable
-    package, so Kiro gets both the tools and the guidance for when to run them in one step — no
-    hand-edited config required.
+    Kiro reads MCP servers from <code>.kiro/settings/mcp.json</code> for one workspace or{" "}
+    <code>~/.kiro/settings/mcp.json</code> for the current user. LyraShield supplies the server
+    entry; copying a plugin folder alone does not activate it.
   </p>
 
-  <h2>Install with the CLI (fastest)</h2>
+  <h2>Configure LyraShield</h2>
   <p>
-    Run <code>npx lyrashield login --oauth</code> first to select one workspace and save the OAuth
-    credential to <code>~/.lyrashield/credentials.json</code>. Then install the plugin:
+    Log in locally, then merge the entry below into one of Kiro's documented settings files:
   </p>
-  <pre><code>npx lyrashield login --oauth
-npx lyrashield install kiro</code></pre>
+  <pre><code>npx lyrashield login --oauth</code></pre>
+  <pre><code>{`{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp@0.2.5"]
+    }
+  }
+}`}</code></pre>
   <p>
-    The plugin is installed to <code>~/.kiro/plugins/lyrashield</code>. Kiro discovers plugins from{" "}
-    <code>~/.kiro/plugins/</code>; the portable <code>plugin.json</code> at the plugin root is the
-    manifest. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
-    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+    <code>npx lyrashield install kiro</code> prints this exact recovery path. It preserves existing
+    Kiro servers and does not write credentials into the settings file.
   </p>
 
   <div class="callout">
     <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
-    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
+    local MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
     <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
   </div>
 
-  <h2>What the plugin includes</h2>
-  <ul>
-    <li><strong>MCP server:</strong> the full LyraShield tool surface (scan triggers, finding inspection, report creation) via stdio transport.</li>
-    <li><strong>Security skill:</strong> guidance for when to run LyraShield checks during coding sessions.</li>
-    <li><strong>Rules file:</strong> writes <code>AGENTS.md</code> with LyraShield usage guidance.</li>
-  </ul>
-
   <h2>Verify the connection</h2>
   <p>
-    Run <code>npx lyrashield doctor</code> to confirm the plugin is installed and credentials are
-    present. Then ask Kiro: <em>"What LyraShield tools do you have access to?"</em> to confirm the
-    server is connected.
+    Restart Kiro or reconnect MCP servers, then run a read-only LyraShield workspace query. Treat
+    an install receipt separately from authenticated tool execution.
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace OAuth login. Run{" "}
-    <code>npx lyrashield login --oauth</code> before installing so the MCP stdio server can read
-    credentials.
+    <strong>Requirement:</strong> Node.js 24+ and a LyraShield workspace OAuth login. Kiro launches
+    the local MCP package over stdio; the package reads the user-only credential store.
   </div>
 </DocsLayout>

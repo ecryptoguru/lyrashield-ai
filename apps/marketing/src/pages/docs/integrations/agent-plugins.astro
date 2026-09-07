@@ -3,57 +3,57 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/agent-plugins", origin).toString()
-const title = "LyraShield Agent Plugin — One-Install Setup for Coding Agents"
+const title = "LyraShield Agent Plugin — Coding Agent Setup"
 const description =
-  "Install LyraShield as a portable Agent Plugin (Agent Plugins v1.0.0). One package bundles the MCP server and the security skill for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro."
-const updatedDate = "2026-08-26"
+  "Install the LyraShield Agent Plugin through each coding client's documented local, marketplace, or MCP activation path."
+const updatedDate = "2026-09-08"
 
 // Kept in the same order as the launch-client table below.
 const launchClients = [
   {
     name: "Claude Code",
     slug: "claude-code",
-    path: "~/.claude/plugins/lyrashield",
-    cliDefault: true,
+    path: "Claude marketplace",
+    cliDefault: "Guided marketplace",
   },
   {
     name: "Cursor",
     slug: "cursor",
     path: "~/.cursor/plugins/local/lyrashield",
-    cliDefault: true,
+    cliDefault: "Direct local copy",
   },
   {
     name: "OpenAI Codex",
     slug: "openai-codex",
     path: "~/.codex/plugins/lyrashield",
-    cliDefault: true,
+    cliDefault: "Direct local copy",
   },
   {
     name: "GitHub Copilot",
     slug: "github-copilot",
-    path: "~/.copilot/plugins/lyrashield",
-    cliDefault: true,
+    path: "Copilot marketplace",
+    cliDefault: "Guided marketplace",
   },
   {
     name: "Kiro",
     slug: "kiro",
-    path: "~/.kiro/plugins/lyrashield",
-    cliDefault: true,
+    path: ".kiro/settings/mcp.json",
+    cliDefault: "Guided MCP merge",
   },
 ]
 
 const faqItems = [
   {
     q: "What is the LyraShield Agent Plugin?",
-    a: "It is a portable plugin that follows the open Agent Plugins v1.0.0 standard published at agent-plugins.org. A single package carries both the LyraShield MCP server and a security skill that tells the agent when to run LyraShield checks, so a supported client gets the tools and the guidance from one install instead of a hand-edited MCP config.",
+    a: "It is a portable package that carries the LyraShield MCP descriptor and security guidance. Each client still controls activation through its own documented local, marketplace, or MCP settings path.",
   },
   {
     q: "Which clients can install the Agent Plugin?",
-    a: "Five launch clients: Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Every other supported agent uses the verified config-file, vendor-CLI, or guided-manual path documented in its own guide. VS Code and Windsurf use config-file installation.",
+    a: "The package has descriptors for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Cursor and Codex accept a local copy; Claude and Copilot use marketplaces; Kiro uses its MCP settings file. Other agents follow their own guide.",
   },
   {
     q: "Do I need to log in before installing the plugin?",
-    a: "Yes. Run npx lyrashield login --oauth first. The bundled MCP server runs over stdio and reads the selected workspace credential from ~/.lyrashield/credentials.json, so installing before you log in leaves the plugin with no credential to use. The CLI reports this rather than writing a broken install.",
+    a: "Kiro's local stdio path needs npx lyrashield login --oauth first. Remote plugin paths complete hosted OAuth inside the client when the connection starts.",
   },
   {
     q: "Does the plugin let the agent change my code on its own?",
@@ -117,46 +117,40 @@ const jsonLd: unknown[] = [
     <a href="https://agent-plugins.org" target="_blank" rel="noopener noreferrer"
       >Agent Plugins v1.0.0</a
     >{" "}
-    standard. One package bundles two things: the LyraShield MCP server, which gives your agent the
+    format. One package bundles two things: the LyraShield MCP server, which gives your agent the
     scan, finding, fix-plan, and verify tools, and a security skill that tells the agent when to
-    reach for them. For the five launch clients below, this replaces hand-editing an MCP config file.
+    reach for them. Each client still activates the package through its own supported path.
   </p>
 
-  <h2>Install in two commands</h2>
+  <h2>Start with the LyraShield CLI</h2>
   <p>
-    Log in first. The bundled MCP server runs over stdio and reads your selected workspace
-    credential from <code>~/.lyrashield/credentials.json</code>, so the login has to come before the
-    install or the plugin has no credential to read.
+    Run the installer for the client you use. It copies the package only where the client documents
+    a local discovery path; otherwise it prints the exact marketplace or MCP settings step.
   </p>
-  <pre><code>npx lyrashield login --oauth
-npx lyrashield install &lt;agent&gt;</code></pre>
+  <pre><code>npx lyrashield install &lt;agent&gt;
+npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
   <p>
-    Prefer to let the CLI decide? <code>npx lyrashield init</code> detects the agents you have
-    installed and picks the plugin for the clients that support it, falling back to the verified
-    config-file or vendor-CLI path for the rest. Run <code>npx lyrashield doctor</code> afterwards to
-    confirm what is configured, and add <code>--dry-run</code> to any install to preview the change
-    without writing.
+    <code>npx lyrashield init</code> detects installed clients and follows the same rules. A dry run
+    executes no vendor command and writes no file.
   </p>
 
   <div class="callout">
-    <strong>No credential in committed files:</strong> the plugin never writes your credential into
-    a project file. The MCP server reads it from <code>~/.lyrashield/credentials.json</code>, which
-    is user-only. A workspace API key in <code>LYRASHIELD_API_KEY</code> remains the fallback for CI
-    and clients that cannot complete OAuth. Do not commit either credential.
+    <strong>No credential in committed files:</strong> remote clients use hosted OAuth. Kiro's local
+    stdio server reads <code>~/.lyrashield/credentials.json</code>. A workspace API key remains the
+    explicit CI fallback; do not commit it.
   </div>
 
   <h2>The five launch clients</h2>
   <p>
-    An Agent Plugin exists for these five clients only. Every other agent LyraShield supports uses
-    the config-file, vendor-CLI, or guided-manual path in its own guide, and those guides stay the
-    reference for exactly what gets written.
+    The package contains client artifacts for these five clients. Every other agent LyraShield
+    supports uses the config-file, vendor-CLI, or guided-manual path in its own guide.
   </p>
   <table>
     <thead>
       <tr>
         <th>Client</th>
-        <th>Plugin location</th>
-        <th>CLI default</th>
+        <th>Activation</th>
+        <th>CLI behavior</th>
       </tr>
     </thead>
     <tbody>
@@ -164,7 +158,7 @@ npx lyrashield install &lt;agent&gt;</code></pre>
         <tr>
           <td><a href={`/docs/integrations/${client.slug}`}>{client.name}</a></td>
           <td><code>{client.path}</code></td>
-          <td>{client.cliDefault ? "Agent Plugin" : "MCP config file"}</td>
+          <td>{client.cliDefault}</td>
         </tr>
       ))}
     </tbody>
@@ -197,8 +191,8 @@ npx lyrashield install &lt;agent&gt;</code></pre>
 
   <h2>Uninstall</h2>
   <p>
-    Removing the plugin is the reverse of installing it. The CLI deletes the plugin directory it
-    created and leaves the rest of your agent's configuration untouched.
+    The CLI removes only files or configuration it manages. Marketplace and UI installations must
+    be removed through that client's own plugin manager.
   </p>
   <pre><code>npx lyrashield uninstall &lt;agent&gt;</code></pre>
 
