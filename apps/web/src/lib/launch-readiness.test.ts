@@ -76,6 +76,8 @@ describe("projectGateReadinessReport", () => {
       ]
     )
     expect(report.verdict).toBe("GO")
+    expect(report.score).toBeNull()
+    expect(report.triageScore).toBe(100)
   })
 })
 

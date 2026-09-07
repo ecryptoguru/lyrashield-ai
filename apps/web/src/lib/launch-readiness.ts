@@ -58,8 +58,10 @@ export interface LaunchReadinessReport {
   recommendations: string[]
 }
 
-export type CanonicalLaunchReadinessReport = LaunchReadinessReport & {
+export type CanonicalLaunchReadinessReport = Omit<LaunchReadinessReport, "score"> & {
   state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
+  score: null
+  triageScore: number | null
 }
 
 export interface GateReadinessTarget {
@@ -273,6 +275,7 @@ export function projectGateReadinessReport(
       state: "INSUFFICIENT_EVIDENCE",
       verdict: "NOT_EVALUATED",
       score: null,
+      triageScore: triage.score,
       summary: "No active target is available for a launch assessment.",
       conditions: ["Add a target and complete a scoped assessment."],
     }
@@ -292,6 +295,8 @@ export function projectGateReadinessReport(
       ...triage,
       state: "NOT_READY",
       verdict: "NO_GO",
+      score: null,
+      triageScore: triage.score,
       blockingFindings,
       summary: `${notReady.length} target assessment(s) are not ready under LyraShield Gate v2.`,
       conditions:
@@ -307,6 +312,7 @@ export function projectGateReadinessReport(
       state: "INSUFFICIENT_EVIDENCE",
       verdict: "INCONCLUSIVE",
       score: null,
+      triageScore: triage.score,
       blockingFindings,
       summary: `${insufficient.length} of ${targets.length} target assessment(s) lack applicable Gate v2 evidence.`,
       conditions:
@@ -320,6 +326,8 @@ export function projectGateReadinessReport(
     ...triage,
     state: "READY",
     verdict: "GO",
+    score: null,
+    triageScore: triage.score,
     blockingFindings,
     summary: `All ${targets.length} active target assessment(s) are READY and currently applicable under LyraShield Gate v2.`,
     conditions: [],

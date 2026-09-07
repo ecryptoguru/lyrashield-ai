@@ -65,7 +65,7 @@ export async function GET(request: Request) {
     )
 
     const response = apiSuccess(report)
-    response.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=60")
+    response.headers.set("Cache-Control", "no-store")
     return response
   } catch (error) {
     const authErr = authErrorResponse(error)

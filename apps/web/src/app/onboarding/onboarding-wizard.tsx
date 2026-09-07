@@ -192,7 +192,6 @@ export function OnboardingWizard({
     setLoading(true)
     setError(null)
     try {
-      await persist({ currentStep: 2, skipped: false })
       const res = await apiPost(
         "/api/integrations/github/install",
         {
@@ -201,6 +200,7 @@ export function OnboardingWizard({
         },
         { schema: installUrlSchema }
       )
+      await persist({ currentStep: 2, skipped: false })
       track("github_connect_started")
       window.location.assign(res.installUrl)
     } catch {
@@ -655,7 +655,7 @@ export function OnboardingWizard({
                 <p className="text-sm">
                   {error
                     ? "We couldn't load repositories. You may need to reconnect GitHub or check the installation."
-                    : "After you finish the GitHub install in the new tab, click below to load repositories."}
+                    : "After you finish the GitHub install, click below to load repositories."}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="secondary" onClick={loadRepos} disabled={loading}>

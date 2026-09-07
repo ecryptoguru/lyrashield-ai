@@ -44,4 +44,30 @@ describe("getGateReadinessTargets", () => {
     })
     expect(result[0]).toMatchObject({ state: "READY", applicable: true })
   })
+
+  it("preserves every target in order while bounding verdict reads", async () => {
+    const targets = Array.from({ length: 10 }, (_, index) => ({
+      id: `target-${index}`,
+      name: `Target ${index}`,
+    }))
+    mocks.findMany.mockResolvedValue(targets)
+    let active = 0
+    let peak = 0
+    mocks.getCurrentGateVerdict.mockImplementation(async () => {
+      active += 1
+      peak = Math.max(peak, active)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      active -= 1
+      return {
+        state: "READY",
+        applicability: { applicable: true, reasons: [] },
+        historical: { blockingReasons: [] },
+      }
+    })
+
+    const result = await getGateReadinessTargets("workspace-1")
+
+    expect(peak).toBeLessThanOrEqual(4)
+    expect(result.map((target) => target.targetId)).toEqual(targets.map((target) => target.id))
+  })
 })

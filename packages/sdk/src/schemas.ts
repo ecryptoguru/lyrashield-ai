@@ -209,6 +209,7 @@ export const LaunchReadinessSchema = z
     state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
     verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
     score: z.number().nullable(),
+    triageScore: z.number().nullable(),
     summary: z.string(),
     blockingFindings: z.number(),
     totalFindings: z.number(),

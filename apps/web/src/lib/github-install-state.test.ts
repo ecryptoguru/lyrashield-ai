@@ -66,10 +66,12 @@ describe("github install state (S2)", () => {
     expect(result.valid).toBe(false)
   })
 
-  it("rejects an arbitrary signed-looking return destination", () => {
+  it("rejects a disallowed return destination", () => {
     const state = createInstallState("ws_abc123", "onboarding")
     const parts = state.split(".")
-    parts[1] = "https://attacker.example"
-    expect(verifyInstallState(parts.join(".")).valid).toBe(false)
+    parts[1] = "attacker"
+    const result = verifyInstallState(parts.join("."))
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.reason).toBe("malformed")
   })
 })

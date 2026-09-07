@@ -1073,7 +1073,10 @@ function FindingDetailDrawer({
   const [creatingRetest, setCreatingRetest] = useState(false)
   const [retestError, setRetestError] = useState<string | null>(null)
   const [queuedRetestScanId, setQueuedRetestScanId] = useState<string | null>(null)
-  const [historyLoading, setHistoryLoading] = useState<string | null>(null)
+  const historyLoadingRef = useRef(new Set<keyof typeof historyItemSchemas>())
+  const [historyLoading, setHistoryLoading] = useState(
+    () => new Set<keyof typeof historyItemSchemas>()
+  )
   const [historyError, setHistoryError] = useState<string | null>(null)
 
   // Status transitions
@@ -1137,9 +1140,11 @@ function FindingDetailDrawer({
   async function loadMoreHistory(
     collection: "evidence" | "verificationReceipts" | "fixProposals" | "retests"
   ) {
+    if (historyLoadingRef.current.has(collection)) return
     const cursor = detail?.historyPagination?.[collection]?.nextCursor
     if (!cursor) return
-    setHistoryLoading(collection)
+    historyLoadingRef.current.add(collection)
+    setHistoryLoading((current) => new Set(current).add(collection))
     setHistoryError(null)
     try {
       const params = new URLSearchParams({ workspaceId, collection, cursor })
@@ -1160,7 +1165,12 @@ function FindingDetailDrawer({
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : "Could not load more history.")
     } finally {
-      setHistoryLoading(null)
+      historyLoadingRef.current.delete(collection)
+      setHistoryLoading((current) => {
+        const next = new Set(current)
+        next.delete(collection)
+        return next
+      })
     }
   }
 
@@ -1785,10 +1795,10 @@ function FindingDetailDrawer({
                         className="mt-2"
                         variant="outline"
                         size="sm"
-                        disabled={historyLoading === "evidence"}
+                        disabled={historyLoading.has("evidence")}
                         onClick={() => void loadMoreHistory("evidence")}
                       >
-                        {historyLoading === "evidence" ? <Spinner /> : null}
+                        {historyLoading.has("evidence") ? <Spinner /> : null}
                         Load more evidence
                       </Button>
                     )}
@@ -1863,10 +1873,10 @@ function FindingDetailDrawer({
                         className="mt-2"
                         variant="outline"
                         size="sm"
-                        disabled={historyLoading === "retests"}
+                        disabled={historyLoading.has("retests")}
                         onClick={() => void loadMoreHistory("retests")}
                       >
-                        {historyLoading === "retests" ? <Spinner /> : null}
+                        {historyLoading.has("retests") ? <Spinner /> : null}
                         Load more retests
                       </Button>
                     )}
@@ -1900,10 +1910,10 @@ function FindingDetailDrawer({
                         className="mt-2"
                         variant="outline"
                         size="sm"
-                        disabled={historyLoading === "fixProposals"}
+                        disabled={historyLoading.has("fixProposals")}
                         onClick={() => void loadMoreHistory("fixProposals")}
                       >
-                        {historyLoading === "fixProposals" ? <Spinner /> : null}
+                        {historyLoading.has("fixProposals") ? <Spinner /> : null}
                         Load more proposals
                       </Button>
                     )}
@@ -2021,10 +2031,10 @@ function FindingDetailDrawer({
                         className="mt-2"
                         variant="outline"
                         size="sm"
-                        disabled={historyLoading === "verificationReceipts"}
+                        disabled={historyLoading.has("verificationReceipts")}
                         onClick={() => void loadMoreHistory("verificationReceipts")}
                       >
-                        {historyLoading === "verificationReceipts" ? <Spinner /> : null}
+                        {historyLoading.has("verificationReceipts") ? <Spinner /> : null}
                         Load more receipts
                       </Button>
                     )}

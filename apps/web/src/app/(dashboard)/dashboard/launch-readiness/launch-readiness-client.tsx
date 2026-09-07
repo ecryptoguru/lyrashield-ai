@@ -22,6 +22,7 @@ export interface LaunchReadinessReport {
   state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
   verdict: "NOT_EVALUATED" | "INCONCLUSIVE" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
   score: number | null
+  triageScore: number | null
   summary: string
   blockingFindings: number
   totalFindings: number
@@ -36,6 +37,7 @@ const launchReadinessReportSchema = z
     state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
     verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
     score: z.number().nullable(),
+    triageScore: z.number().nullable(),
     summary: z.string(),
     blockingFindings: z.number(),
     totalFindings: z.number(),
@@ -209,7 +211,7 @@ export function LaunchReadinessClient({
       {/* Verdict Card */}
       <Card className={`p-6 ${config.bg} ${config.border}`}>
         <div className="flex flex-col items-center gap-6 sm:flex-row">
-          <ScoreGauge score={report.score} />
+          <ScoreGauge score={report.triageScore} />
           <div className="flex-1 text-center sm:text-left">
             <div className="mb-2 flex items-center justify-center gap-2 sm:justify-start">
               <VerdictIcon className={`h-7 w-7 ${config.color}`} aria-hidden="true" />
@@ -218,7 +220,9 @@ export function LaunchReadinessClient({
             <p className="text-muted-foreground mb-4 text-sm">{report.summary}</p>
             <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
               <Badge variant={config.badgeVariant}>
-                {report.score === null ? "Score pending" : `Score: ${report.score}/100`}
+                {report.triageScore === null
+                  ? "Triage score pending"
+                  : `Triage score: ${report.triageScore}/100`}
               </Badge>
               <Badge variant="muted">{report.totalFindings} total findings</Badge>
               <Badge variant="muted">{report.blockingFindings} blocking</Badge>
