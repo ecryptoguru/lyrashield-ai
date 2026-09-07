@@ -1,10 +1,27 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { evaluateGateForTarget, getLatestGateVerdict } from "@lyrashield/db"
+import { evaluateGateForTarget, getCurrentGateVerdict } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { z } from "zod"
+
+const GateQuerySchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    commit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/i)
+      .optional(),
+    artifactDigest: z
+      .string()
+      .regex(/^sha256:[a-f0-9]{64}$/i)
+      .optional(),
+  })
+  .refine((value) => !(value.commit && value.artifactDigest), {
+    message: "commit and artifactDigest are mutually exclusive",
+  })
 
 /**
  * GET /api/gate/[targetId]?workspaceId=… — read the latest persisted Launch
@@ -14,11 +31,26 @@ import { apiError, apiSuccess } from "../../../../lib/api-response"
 export async function GET(request: Request, { params }: { params: Promise<{ targetId: string }> }) {
   try {
     const { targetId } = await params
-    const workspaceId = new URL(request.url).searchParams.get("workspaceId")
-    if (!workspaceId) return apiError("MISSING_PARAM", "workspaceId is required", 400)
+    const searchParams = new URL(request.url).searchParams
+    const parsed = GateQuerySchema.safeParse({
+      workspaceId: searchParams.get("workspaceId"),
+      commit: searchParams.get("commit") ?? undefined,
+      artifactDigest: searchParams.get("artifactDigest") ?? undefined,
+    })
+    if (!parsed.success) {
+      return apiError(
+        "INVALID_PARAM",
+        parsed.error.issues[0]?.message ?? "Invalid gate request",
+        400
+      )
+    }
+    const { workspaceId, commit, artifactDigest } = parsed.data
 
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
-    const verdict = await getLatestGateVerdict(workspaceId, targetId)
+    const verdict = await getCurrentGateVerdict(workspaceId, targetId, {
+      expectedCommit: commit,
+      expectedArtifactDigest: artifactDigest,
+    })
     if (!verdict) {
       return apiError("NOT_EVALUATED", "No gate verdict has been computed for this target yet", 404)
     }

@@ -199,4 +199,38 @@ describe("updateFindingStatus", () => {
       },
     })
   })
+
+  it("binds a human disposition to the finding's source assessment", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({
+      id: "finding-1",
+      scanId: "scan-1",
+    } as never)
+    vi.mocked(prisma.finding.update).mockResolvedValue({
+      id: "finding-1",
+      scanId: "scan-1",
+    } as never)
+
+    await acceptRisk("finding-1", "workspace-1", "Accepted by owner", "user-1")
+
+    expect(prisma.finding.update).toHaveBeenCalledWith({
+      where: { id: "finding-1" },
+      data: expect.objectContaining({
+        disposition: "ACCEPTED_RISK",
+        dispositionActorUserId: "user-1",
+        dispositionAssessmentId: "scan-1",
+        dispositionAt: expect.any(Date),
+      }),
+    })
+  })
+
+  it("requires a same-target canonical finding for a duplicate", async () => {
+    vi.mocked(prisma.finding.findFirst)
+      .mockResolvedValueOnce({ id: "finding-1", targetId: "target-1" } as never)
+      .mockResolvedValueOnce(null)
+
+    await expect(
+      updateFindingStatus("finding-1", "workspace-1", "DUPLICATE", undefined, "finding-2")
+    ).rejects.toThrow("Canonical finding not found on this target")
+    expect(prisma.finding.update).not.toHaveBeenCalled()
+  })
 })

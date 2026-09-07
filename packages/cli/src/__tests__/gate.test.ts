@@ -128,6 +128,7 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
       blockingReasons: [],
       nonCoverage: [],
       staleness: { current: true, reason: null },
+      applicability: { applicable: true },
       standardVersion: "lyrashield-gate/1.0.0",
       ...extra,
     }))
@@ -140,7 +141,10 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
     vi.mocked(createClient).mockResolvedValue({ request } as never)
 
     const output = makeOutput()
-    const exitCode = await handleGate(["--verdict", "--target", "t-1"], output)
+    const exitCode = await handleGate(
+      ["--verdict", "--target", "t-1", "--commit", "a".repeat(40)],
+      output
+    )
 
     expect(exitCode).toBe(0)
     expect(output.log).toHaveBeenCalledWith(expect.stringContaining("READY"))
@@ -153,7 +157,10 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
     vi.mocked(createClient).mockResolvedValue({ request } as never)
 
     const output = makeOutput()
-    const exitCode = await handleGate(["--verdict", "--target", "t-1"], output)
+    const exitCode = await handleGate(
+      ["--verdict", "--target", "t-1", "--commit", "a".repeat(40)],
+      output
+    )
 
     expect(exitCode).toBe(1)
   })
@@ -165,7 +172,10 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
     vi.mocked(createClient).mockResolvedValue({ request } as never)
 
     const output = makeOutput()
-    const exitCode = await handleGate(["--verdict", "--target", "t-1"], output)
+    const exitCode = await handleGate(
+      ["--verdict", "--target", "t-1", "--commit", "a".repeat(40)],
+      output
+    )
 
     expect(exitCode).toBe(2)
   })
@@ -175,5 +185,24 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
     const output = makeOutput()
     const exitCode = await handleGate(["--verdict", "--target", "t-1"], output)
     expect(exitCode).toBe(2)
+  })
+
+  it("fails closed before an API request without one valid release identity", async () => {
+    const output = makeOutput()
+    expect(await handleGate(["--verdict", "--target", "t-1"], output)).toBe(2)
+    expect(
+      await handleGate(
+        [
+          "--verdict",
+          "--target",
+          "t-1",
+          "--commit",
+          "a".repeat(40),
+          "--artifact-digest",
+          `sha256:${"b".repeat(64)}`,
+        ],
+        output
+      )
+    ).toBe(2)
   })
 })
