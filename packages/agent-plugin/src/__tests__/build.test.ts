@@ -6,6 +6,17 @@ import { access, readFile } from "node:fs/promises"
 import path from "node:path"
 
 describe("buildPlugin", () => {
+  it("publishes without unpublished workspace dependencies", async () => {
+    const pluginRoot = getPluginDir()
+    const packageJson = JSON.parse(
+      await readFile(path.resolve(pluginRoot, "..", "package.json"), "utf-8")
+    ) as { dependencies: Record<string, string> }
+
+    expect(
+      Object.keys(packageJson.dependencies).filter((name) => name.startsWith("@lyrashield/"))
+    ).toEqual([])
+  })
+
   it("generates SKILL.md and client shims", async () => {
     await buildPlugin()
     const pluginRoot = getPluginDir()
