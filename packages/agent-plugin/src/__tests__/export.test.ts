@@ -1,7 +1,9 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
@@ -9,6 +11,20 @@ import { createAllTools } from "@lyrashield/mcp"
 import { exportMarketplace } from "../export.js"
 
 const execFileAsync = promisify(execFile)
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..")
+
+async function updateManifestHash(output: string, relative: string): Promise<void> {
+  const manifestPath = path.join(output, "manifest.json")
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    files: Array<{ path: string; sha256: string }>
+  }
+  const file = manifest.files.find((entry) => entry.path === relative)
+  if (!file) throw new Error(`Missing manifest entry for ${relative}`)
+  file.sha256 = createHash("sha256")
+    .update(await readFile(path.join(output, relative)))
+    .digest("hex")
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
+}
 
 const outputs: string[] = []
 afterEach(async () => {
@@ -18,19 +34,49 @@ afterEach(async () => {
 })
 
 describe("exportMarketplace", () => {
+  it("rejects release-candidate exports from a dirty source checkout", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    const dirtyMarker = path.join(
+      repoRoot,
+      `.marketplace-export-dirty-${process.pid}-${Date.now()}`
+    )
+    outputs.push(output)
+    await writeFile(dirtyMarker, "test marker\n", "utf8")
+    try {
+      await expect(exportMarketplace(output, { publish: true })).rejects.toThrow(
+        /requires a clean source checkout/
+      )
+    } finally {
+      await rm(dirtyMarker, { force: true })
+    }
+  })
+
   it("does not let documented placeholders hide other credentials on the same line", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
     outputs.push(output)
     await exportMarketplace(output)
-    const probe = path.join(output, "probe.txt")
-    await writeFile(probe, "Examples: <YOUR_API_KEY> lsk_… lsk_...\n")
+    const probe = path.join(output, "README.md")
+    const original = await readFile(probe, "utf8")
+    await writeFile(probe, `${original}\nExamples: <YOUR_API_KEY> lsk_… lsk_...\n`)
+    await updateManifestHash(output, "README.md")
     await execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
     for (const secret of ["lsk" + "_" + "A".repeat(24), "gh" + "p_" + "A".repeat(36)]) {
-      await writeFile(probe, `Example: <YOUR_API_KEY> lsk_… actual: ${secret}\n`)
+      await writeFile(probe, `${original}\nExample: <YOUR_API_KEY> lsk_… actual: ${secret}\n`)
+      await updateManifestHash(output, "README.md")
       await expect(
         execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
-      ).rejects.toThrow(/detected at probe.txt:1/)
+      ).rejects.toThrow(/detected at README.md/)
     }
+  }, 15000)
+
+  it("rejects undeclared files added after export", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    await writeFile(path.join(output, "probe.txt"), "untracked\n")
+    await expect(
+      execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
+    ).rejects.toThrow(/file set or hash differs/)
   }, 15000)
 
   it("preserves explicit API URL overrides for stored OAuth in npm and embedded Zed launchers", async () => {
@@ -92,6 +138,11 @@ describe("exportMarketplace", () => {
       generatedFiles: string[]
       artifactVersions?: Record<string, string>
       mutatingTools?: string[]
+      manifestSchemaVersion?: string
+      sourceCommit?: string
+      generator?: { package?: string; version?: string }
+      publication?: { status?: string }
+      files?: { path: string; sha256: string; mode: number }[]
     }
     const plugin = JSON.parse(await readFile(path.join(output, "plugin.json"), "utf8")) as {
       license: string
@@ -99,6 +150,11 @@ describe("exportMarketplace", () => {
     expect(plugin.license).toBe("Apache-2.0")
     expect(manifest.license).toBe("Apache-2.0")
     expect(manifest.forbidden).toContain("apps/worker")
+    expect(manifest.manifestSchemaVersion).toBe("marketplace-export/2")
+    expect(manifest.sourceCommit).toMatch(/^[a-f0-9]{40}$/)
+    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.18" })
+    expect(manifest.publication?.status).toBe("unpublished")
+    expect(manifest.files?.some((file) => file.path === "manifest.json")).toBe(false)
     await expect(readFile(path.join(output, "README.md"), "utf8")).resolves.toContain(
       "marketplace release"
     )
@@ -314,9 +370,7 @@ describe("exported validator", () => {
     manifest.artifactVersions.zed = "9.9.9"
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
 
-    await expect(runValidator(output)).rejects.toThrow(
-      /manifest\.artifactVersions\.zed \(9\.9\.9\) must match/
-    )
+    await expect(runValidator(output)).rejects.toThrow(/manifest\.artifactVersions\.zed/)
   })
 
   it("fails when a nested forbidden credential file enters the export", async () => {
@@ -328,7 +382,7 @@ describe("exported validator", () => {
     await mkdir(nested, { recursive: true })
     await writeFile(path.join(nested, ".env.production"), "TOKEN=placeholder\n", "utf8")
 
-    await expect(runValidator(output)).rejects.toThrow(/forbidden file present \(nested\)/)
+    await expect(runValidator(output)).rejects.toThrow(/file set or hash differs/)
   })
 
   it("fails when the exported gemini excludeTools drift from the manifest", async () => {
@@ -341,7 +395,18 @@ describe("exported validator", () => {
     gemini.excludeTools = [...gemini.excludeTools.slice(0, -1)]
     await writeFile(geminiPath, `${JSON.stringify(gemini, null, 2)}\n`, "utf8")
 
-    await expect(runValidator(output)).rejects.toThrow(/excludeTools must equal/)
+    await expect(runValidator(output)).rejects.toThrow(/file set or hash differs/)
+  })
+
+  it("produces identical clean exports from one source commit", async () => {
+    const first = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    const second = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(first, second)
+    await exportMarketplace(first)
+    await exportMarketplace(second)
+    expect(await readFile(path.join(first, "manifest.json"), "utf8")).toBe(
+      await readFile(path.join(second, "manifest.json"), "utf8")
+    )
   })
 })
 

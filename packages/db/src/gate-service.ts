@@ -11,11 +11,15 @@ import {
   computeGateVerdict,
   computeInputChecksum,
   computeVerdictChecksum,
+  GATE_ASSESSMENT_VERSION,
+  evaluateGateApplicability,
   requiredScannersForTarget,
   isTargetTypeCovered,
+  type GateAssessmentSnapshot,
   type GateEvidenceInput,
   type GateVerdictResult,
 } from "@lyrashield/gate"
+import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import {
   resolveRetestProfile,
@@ -35,6 +39,96 @@ export interface GateEvaluationResult {
 
 function toEpochMs(value: Date | null | undefined): number | null {
   return value ? value.getTime() : null
+}
+
+const SUPPORTED_MANIFEST_VERSION = 7
+const COMMIT_PATTERN = /^[a-f0-9]{40}$/i
+const ARTIFACT_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/i
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, canonicalize(child)])
+    )
+  }
+  return value
+}
+
+function fingerprintPolicy(policy: Record<string, unknown> | null): string | null {
+  if (!policy) return null
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalize(policy)))
+    .digest("hex")
+}
+
+function snapshotFromManifest(input: {
+  scanId: string
+  endedAt: Date | null
+  policyId: string | null
+  policyFingerprint: string | null
+  manifest: { version: number; checksum: string; manifest: unknown } | null
+}): GateAssessmentSnapshot | null {
+  const manifest = input.manifest
+  if (
+    !manifest ||
+    manifest.version !== SUPPORTED_MANIFEST_VERSION ||
+    !input.endedAt ||
+    !input.policyId ||
+    !input.policyFingerprint
+  ) {
+    return null
+  }
+  const raw = manifest.manifest as {
+    engineExecution?: { sourceRevision?: unknown } | null
+    sourceExecution?: { sourceRevision?: unknown } | null
+    target?: { artifactDigest?: unknown } | null
+  }
+  const revision = raw.sourceExecution?.sourceRevision ?? raw.engineExecution?.sourceRevision
+  const artifactDigest = raw.target?.artifactDigest
+  const identity =
+    typeof revision === "string" && COMMIT_PATTERN.test(revision)
+      ? { kind: "COMMIT" as const, value: revision }
+      : typeof artifactDigest === "string" && ARTIFACT_DIGEST_PATTERN.test(artifactDigest)
+        ? { kind: "ARTIFACT_DIGEST" as const, value: artifactDigest }
+        : null
+  if (!identity) return null
+  return {
+    version: GATE_ASSESSMENT_VERSION,
+    scanId: input.scanId,
+    completedAtMs: input.endedAt.getTime(),
+    manifestChecksum: manifest.checksum,
+    manifestVersion: manifest.version,
+    policyId: input.policyId,
+    policyFingerprint: input.policyFingerprint,
+    identity,
+  }
+}
+
+function isTrustedRetestReceipt(
+  receipt: {
+    status: string
+    method: string
+    scanId: string
+    verifierVersion: string | null
+    evidence: unknown
+  },
+  sourceScanId: string
+): boolean {
+  if (
+    receipt.status !== "VALIDATED" ||
+    receipt.method !== "RETEST" ||
+    !receipt.verifierVersion?.startsWith("result-integrity-")
+  ) {
+    return false
+  }
+  const evidence = receipt.evidence as {
+    baseline?: { scanId?: unknown } | null
+    retest?: { scanId?: unknown } | null
+  } | null
+  return evidence?.baseline?.scanId === sourceScanId && evidence.retest?.scanId === receipt.scanId
 }
 
 /**
@@ -58,8 +152,47 @@ export async function evaluateGateForTarget(
     const latestCompletedScan = await tx.scan.findFirst({
       where: { workspaceId, targetId, status: "COMPLETED", deletedAt: null },
       orderBy: { endedAt: "desc" },
-      select: { id: true, endedAt: true, status: true },
+      select: {
+        id: true,
+        endedAt: true,
+        status: true,
+        policyId: true,
+        resultManifest: { select: { version: true, checksum: true, manifest: true } },
+      },
     })
+
+    const policy = latestCompletedScan?.policyId
+      ? await tx.policy.findFirst({
+          where: { id: latestCompletedScan.policyId, workspaceId, deletedAt: null },
+          select: {
+            id: true,
+            workspaceId: true,
+            name: true,
+            description: true,
+            scanWindow: true,
+            blockedPaths: true,
+            allowedDomains: true,
+            rateLimit: true,
+            networkEgressPolicy: true,
+            destructiveTestsAllowed: true,
+            approvalRequired: true,
+            maxBudgetUsd: true,
+            maxDurationMinutes: true,
+            piiRedactionEnabled: true,
+            evidenceRetentionDays: true,
+          },
+        })
+      : null
+    const policyFingerprint = fingerprintPolicy(policy as Record<string, unknown> | null)
+    const assessmentSnapshot = latestCompletedScan
+      ? snapshotFromManifest({
+          scanId: latestCompletedScan.id,
+          endedAt: latestCompletedScan.endedAt,
+          policyId: latestCompletedScan.policyId,
+          policyFingerprint,
+          manifest: latestCompletedScan.resultManifest,
+        })
+      : null
 
     const coverageReceipts = latestCompletedScan
       ? await tx.scanCoverageReceipt.findMany({
@@ -75,10 +208,58 @@ export async function evaluateGateForTarget(
         severity: true,
         status: true,
         verificationStatus: true,
-        verificationMethod: true,
         lastSeenAt: true,
+        scanId: true,
+        disposition: true,
+        dispositionActorUserId: true,
+        dispositionReason: true,
+        dispositionAssessmentId: true,
+        dispositionAt: true,
+        canonicalFindingId: true,
+        verificationReceipts: {
+          select: {
+            status: true,
+            method: true,
+            scanId: true,
+            verifierVersion: true,
+            evidence: true,
+          },
+        },
       },
     })
+
+    const preparedFindings = findings.map((finding) => {
+      const trustedRetest = finding.verificationReceipts.some((receipt) =>
+        isTrustedRetestReceipt(receipt, finding.scanId)
+      )
+      const positiveReceipt = latestCompletedScan
+        ? finding.verificationReceipts.some(
+            (receipt) =>
+              receipt.scanId === latestCompletedScan.id &&
+              (receipt.status === "VALIDATED" || receipt.status === "VERIFIED") &&
+              Boolean(receipt.method)
+          )
+        : false
+      const applicableDisposition =
+        Boolean(finding.dispositionActorUserId) &&
+        Boolean(finding.dispositionReason) &&
+        Boolean(finding.dispositionAt) &&
+        finding.dispositionAssessmentId === latestCompletedScan?.id &&
+        (finding.disposition === "ACCEPTED_RISK" || finding.disposition === "FALSE_POSITIVE")
+      return { finding, trustedRetest, positiveReceipt, applicableDisposition }
+    })
+    const byFindingId = new Map(preparedFindings.map((entry) => [entry.finding.id, entry]))
+    const duplicateResolved = (
+      entry: (typeof preparedFindings)[number],
+      seen = new Set<string>()
+    ): boolean => {
+      if (entry.trustedRetest || entry.applicableDisposition) return true
+      if (entry.finding.status !== "DUPLICATE" || !entry.finding.canonicalFindingId) return false
+      if (seen.has(entry.finding.id)) return false
+      seen.add(entry.finding.id)
+      const canonical = byFindingId.get(entry.finding.canonicalFindingId)
+      return canonical ? duplicateResolved(canonical, seen) : false
+    }
 
     const evidence: GateEvidenceInput = {
       targetId,
@@ -95,22 +276,26 @@ export async function evaluateGateForTarget(
         status: r.status as GateEvidenceInput["coverageReceipts"][number]["status"],
         reason: r.reason,
       })),
-      findings: findings.map((f) => ({
-        id: f.id,
-        severity: f.severity,
-        status: f.status,
-        verificationStatus: f.verificationStatus,
-        // Retest-confirmed resolution: a RETEST-method verification that reached
-        // a resolved lifecycle state. The gate treats it as loop-closed.
-        retestConfirmedResolved:
-          f.verificationMethod === "RETEST" &&
-          (f.status === "FIXED" || f.status === "FALSE_POSITIVE" || f.status === "ACCEPTED_RISK"),
-        lastSeenAtMs: f.lastSeenAt.getTime(),
+      findings: preparedFindings.map((entry) => ({
+        id: entry.finding.id,
+        severity: entry.finding.severity,
+        status: entry.finding.status,
+        verificationStatus: entry.finding.verificationStatus,
+        retestConfirmedResolved: entry.finding.status === "FIXED" && entry.trustedRetest,
+        hasPositiveEvidence: entry.positiveReceipt || entry.trustedRetest,
+        hasApplicableDisposition: entry.applicableDisposition,
+        applicableDisposition: entry.applicableDisposition
+          ? (entry.finding.disposition as "ACCEPTED_RISK" | "FALSE_POSITIVE")
+          : null,
+        duplicateCanonicalResolved: duplicateResolved(entry),
+        lastSeenAtMs: entry.finding.lastSeenAt.getTime(),
       })),
       requiredScanners: isTargetTypeCovered(target.type)
         ? requiredScannersForTarget(target.type)
         : [],
       targetTypeCovered: isTargetTypeCovered(target.type),
+      policyFingerprint,
+      assessmentIdentityComplete: Boolean(assessmentSnapshot),
     }
 
     const verdict = computeGateVerdict(evidence)
@@ -131,6 +316,8 @@ export async function evaluateGateForTarget(
         staleness: verdict.staleness,
         inputChecksum,
         verdictChecksum,
+        assessmentVersion: assessmentSnapshot?.version ?? null,
+        assessmentSnapshot: assessmentSnapshot ?? undefined,
       },
       select: { id: true },
     })
@@ -152,6 +339,127 @@ export async function getLatestGateVerdict(workspaceId: string, targetId: string
       // ordering by timestamp alone would make the "latest" nondeterministic.
       orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
     })
+  })
+}
+
+function parseAssessmentSnapshot(value: unknown): GateAssessmentSnapshot | null {
+  if (!value || typeof value !== "object") return null
+  const snapshot = value as Partial<GateAssessmentSnapshot>
+  if (
+    snapshot.version !== GATE_ASSESSMENT_VERSION ||
+    typeof snapshot.scanId !== "string" ||
+    typeof snapshot.completedAtMs !== "number" ||
+    typeof snapshot.manifestChecksum !== "string" ||
+    snapshot.manifestVersion !== SUPPORTED_MANIFEST_VERSION ||
+    typeof snapshot.policyId !== "string" ||
+    typeof snapshot.policyFingerprint !== "string" ||
+    !snapshot.identity ||
+    (snapshot.identity.kind !== "COMMIT" && snapshot.identity.kind !== "ARTIFACT_DIGEST") ||
+    typeof snapshot.identity.value !== "string"
+  ) {
+    return null
+  }
+  return snapshot as GateAssessmentSnapshot
+}
+
+export interface GateApplicabilityOptions {
+  expectedCommit?: string | null
+  expectedArtifactDigest?: string | null
+  now?: Date
+}
+
+/**
+ * Reads immutable verdict history and applies it to the release identity being
+ * enforced. A failed current read is deliberately an error, never cached READY.
+ */
+export async function getCurrentGateVerdict(
+  workspaceId: string,
+  targetId: string,
+  options: GateApplicabilityOptions = {}
+) {
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const historical = await tx.gateVerdict.findFirst({
+      where: { workspaceId, targetId },
+      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
+    })
+    if (!historical) return null
+
+    const snapshot = parseAssessmentSnapshot(historical.assessmentSnapshot)
+    const policy = snapshot
+      ? await tx.policy.findFirst({
+          where: { id: snapshot.policyId, workspaceId, deletedAt: null },
+          select: {
+            id: true,
+            workspaceId: true,
+            name: true,
+            description: true,
+            scanWindow: true,
+            blockedPaths: true,
+            allowedDomains: true,
+            rateLimit: true,
+            networkEgressPolicy: true,
+            destructiveTestsAllowed: true,
+            approvalRequired: true,
+            maxBudgetUsd: true,
+            maxDurationMinutes: true,
+            piiRedactionEnabled: true,
+            evidenceRetentionDays: true,
+          },
+        })
+      : null
+    const [newerAssessmentAttempt, findingChanged, verificationChanged] = snapshot
+      ? await Promise.all([
+          tx.scan.findFirst({
+            where: {
+              workspaceId,
+              targetId,
+              deletedAt: null,
+              id: { not: snapshot.scanId },
+              createdAt: { gt: new Date(snapshot.completedAtMs) },
+            },
+            select: { id: true },
+          }),
+          tx.finding.findFirst({
+            where: {
+              workspaceId,
+              targetId,
+              deletedAt: null,
+              updatedAt: { gt: historical.evaluatedAt },
+            },
+            select: { id: true },
+          }),
+          tx.findingVerification.findFirst({
+            where: {
+              workspaceId,
+              createdAt: { gt: historical.evaluatedAt },
+              finding: { targetId, deletedAt: null },
+            },
+            select: { id: true },
+          }),
+        ])
+      : [null, null, null]
+    const applicability = evaluateGateApplicability(
+      historical.state as GateVerdictResult["state"],
+      {
+        snapshot,
+        expectedCommit: options.expectedCommit,
+        expectedArtifactDigest: options.expectedArtifactDigest,
+        policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
+        nowMs: (options.now ?? new Date()).getTime(),
+        newerAssessmentAttempt: Boolean(newerAssessmentAttempt),
+        evidenceChanged: Boolean(findingChanged || verificationChanged),
+      }
+    )
+
+    return {
+      schemaVersion: "lyrashield-gate-response/2.0.0",
+      state: applicability.effectiveState,
+      applicability: {
+        applicable: applicability.applicable,
+        reasons: applicability.reasons,
+      },
+      historical,
+    }
   })
 }
 

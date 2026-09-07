@@ -207,7 +207,7 @@ async function post(request: Request) {
 
     logger.info("Target created", { targetId: target.id, workspaceId, type: target.type })
 
-    revalidateDashboardAggregates()
+    revalidateDashboardAggregates(workspaceId)
 
     return NextResponse.json({
       success: true,

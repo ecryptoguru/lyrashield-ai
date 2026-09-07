@@ -24,6 +24,11 @@ export interface FindingStats {
   unverified: number
 }
 
+type FindingDispositionInput = {
+  kind: "ACCEPTED_RISK" | "FALSE_POSITIVE"
+  actorUserId: string
+}
+
 export async function listFindings(params: ListFindingsParams): Promise<{
   items: (Finding & {
     _count?: { evidence: number; fixProposals: number }
@@ -149,7 +154,9 @@ export async function updateFindingStatus(
   findingId: string,
   workspaceId: string,
   status: FindingStatus,
-  reason?: string
+  reason?: string,
+  canonicalFindingId?: string,
+  disposition?: FindingDispositionInput
 ): Promise<Finding> {
   const finding = await prisma.finding.findFirst({
     where: { id: findingId, workspaceId, deletedAt: null },
@@ -167,6 +174,33 @@ export async function updateFindingStatus(
   if (reason !== undefined) {
     updateData.statusReason = reason
   }
+  if (resolvedStatus === "DUPLICATE") {
+    if (!canonicalFindingId || canonicalFindingId === findingId || !finding.targetId) {
+      throw new Error(
+        "A duplicate finding requires a different canonical finding on the same target"
+      )
+    }
+    const canonical = await prisma.finding.findFirst({
+      where: {
+        id: canonicalFindingId,
+        workspaceId,
+        targetId: finding.targetId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })
+    if (!canonical) {
+      throw new Error("Canonical finding not found on this target")
+    }
+    updateData.canonicalFindingId = canonical.id
+  }
+  if (disposition) {
+    updateData.disposition = disposition.kind
+    updateData.dispositionActorUserId = disposition.actorUserId
+    updateData.dispositionReason = reason ?? null
+    updateData.dispositionAssessmentId = finding.scanId
+    updateData.dispositionAt = new Date()
+  }
 
   const updated = await prisma.finding.update({
     where: { id: findingId },
@@ -180,17 +214,33 @@ export async function updateFindingStatus(
 export async function markFalsePositive(
   findingId: string,
   workspaceId: string,
-  reason?: string
+  reason?: string,
+  actorUserId?: string
 ): Promise<Finding> {
-  return updateFindingStatus(findingId, workspaceId, "FALSE_POSITIVE", reason)
+  return updateFindingStatus(
+    findingId,
+    workspaceId,
+    "FALSE_POSITIVE",
+    reason,
+    undefined,
+    actorUserId ? { kind: "FALSE_POSITIVE", actorUserId } : undefined
+  )
 }
 
 export async function acceptRisk(
   findingId: string,
   workspaceId: string,
-  reason?: string
+  reason?: string,
+  actorUserId?: string
 ): Promise<Finding> {
-  return updateFindingStatus(findingId, workspaceId, "ACCEPTED_RISK", reason)
+  return updateFindingStatus(
+    findingId,
+    workspaceId,
+    "ACCEPTED_RISK",
+    reason,
+    undefined,
+    actorUserId ? { kind: "ACCEPTED_RISK", actorUserId } : undefined
+  )
 }
 
 export async function getFindingStats(

@@ -923,6 +923,15 @@ model Finding {
   baseCommit         String?
   status             FindingStatus              @default(OPEN)
   statusReason       String?
+  /** Versioned human disposition. Unbound legacy values remain visible but do
+   * not satisfy gate v2 enforcement. */
+  disposition        String?
+  dispositionActorUserId String?
+  dispositionReason  String?
+  dispositionAssessmentId String?
+  dispositionAt      DateTime?
+  /** Canonical finding for DUPLICATE status. Service code binds workspace and target. */
+  canonicalFindingId String?
   dedupeKey          String
   ownerUserId        String?
   ownerTeam          String?
@@ -944,6 +953,8 @@ model Finding {
   fixProposals         FixProposal[]
   tickets              Ticket[]
   retests              Retest[]
+  canonicalFinding     Finding?              @relation("FindingCanonical", fields: [canonicalFindingId], references: [id], onDelete: SetNull)
+  duplicates           Finding[]             @relation("FindingCanonical")
 
   @@unique([targetId, dedupeKey])
   @@index([workspaceId])
@@ -955,6 +966,7 @@ model Finding {
   @@index([workspaceId, status, severity])
   @@index([workspaceId, severity, createdAt])
   @@index([workspaceId, createdAt])
+  @@index([workspaceId, targetId, canonicalFindingId])
 }
 
 model Evidence {
@@ -1259,6 +1271,9 @@ model GateVerdict {
   inputChecksum   String
   /** SHA-256 over the rendered verdict payload (tamper-evidence). */
   verdictChecksum String
+  /** Versioned, secret-free assessment binding for current applicability. */
+  assessmentVersion Int?
+  assessmentSnapshot Json?
   evaluatedAt     DateTime @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

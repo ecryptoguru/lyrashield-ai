@@ -180,3 +180,41 @@ export const LaunchReadinessSchema = z
     verdict: z.string(),
   })
   .passthrough()
+
+export const GateVerdictQuerySchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    commit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/i)
+      .optional(),
+    artifactDigest: z
+      .string()
+      .regex(/^sha256:[a-f0-9]{64}$/i)
+      .optional(),
+  })
+  .refine((value) => !(value.commit && value.artifactDigest), {
+    message: "commit and artifactDigest are mutually exclusive",
+  })
+
+export const GateVerdictResponseSchema = z
+  .object({
+    schemaVersion: z.literal("lyrashield-gate-response/2.0.0"),
+    state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
+    applicability: z.object({
+      applicable: z.boolean(),
+      reasons: z.array(
+        z.object({
+          code: z.string(),
+          message: z.string(),
+        })
+      ),
+    }),
+    historical: z
+      .object({
+        state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
+        standardVersion: z.string(),
+      })
+      .passthrough(),
+  })
+  .passthrough()

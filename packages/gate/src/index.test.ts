@@ -36,7 +36,7 @@ function baseInput(overrides: Partial<GateEvidenceInput> = {}): GateEvidenceInpu
 
 describe("gate standard versioning", () => {
   it("is named and versioned", () => {
-    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/1.0.0")
+    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/2.0.0")
   })
 
   it("derives required scanners per target type", () => {
@@ -76,6 +76,56 @@ describe("computeGateVerdict", () => {
     expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
   })
 
+  it("retains known blockers when the target type is unsupported", () => {
+    const result = computeGateVerdict(
+      baseInput({
+        targetTypeCovered: false,
+        findings: [
+          {
+            id: "f-crit",
+            severity: "CRITICAL",
+            status: "OPEN",
+            verificationStatus: "VERIFIED",
+            retestConfirmedResolved: false,
+            lastSeenAtMs: 900_000,
+          },
+        ],
+      })
+    )
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(result.blockingReasons).toEqual([
+      { findingId: "f-crit", severity: "CRITICAL", verificationStatus: "VERIFIED" },
+    ])
+  })
+
+  it("does not claim a scanner covered when it is both not applicable and failed", () => {
+    const result = computeGateVerdict(
+      baseInput({
+        coverageReceipts: [
+          ...fullCoverage().filter((receipt) => receipt.scanner !== "secrets"),
+          { controlId: "secrets-a", scanner: "secrets", status: "NOT_APPLICABLE", reason: null },
+          {
+            controlId: "secrets-b",
+            scanner: "secrets",
+            status: "FAILED",
+            reason: "checkout unavailable",
+          },
+        ],
+      })
+    )
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(result.coverageStatement).not.toContain("secrets")
+    expect(result.coverageStatement).not.toContain("secrets (not applicable)")
+  })
+
+  it("INSUFFICIENT_EVIDENCE with a diagnostic when immutable assessment identity is missing", () => {
+    const result = computeGateVerdict(baseInput({ assessmentIdentityComplete: false }))
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(result.nonCoverage).toContainEqual(
+      expect.objectContaining({ reasonCode: "ASSESSMENT_IDENTITY_INCOMPLETE", status: "NOT_RUN" })
+    )
+  })
+
   it("NOT_READY on an unresolved CRITICAL finding, traceable to the finding", () => {
     const result = computeGateVerdict(
       baseInput({
@@ -97,7 +147,7 @@ describe("computeGateVerdict", () => {
     ])
   })
 
-  it("does NOT block on MEDIUM in v1.0.0 (founder-confirmed)", () => {
+  it("permits a positively evidenced MEDIUM without making it a blocker", () => {
     const result = computeGateVerdict(
       baseInput({
         findings: [
@@ -106,6 +156,7 @@ describe("computeGateVerdict", () => {
             severity: "MEDIUM",
             status: "OPEN",
             verificationStatus: "VERIFIED",
+            hasPositiveEvidence: true,
             retestConfirmedResolved: false,
             lastSeenAtMs: 900_000,
           },
@@ -113,6 +164,91 @@ describe("computeGateVerdict", () => {
       })
     )
     expect(result.state).toBe("READY")
+  })
+
+  it("does not let an unbound accepted-risk or direct FIXED record satisfy v2", () => {
+    const result = computeGateVerdict(
+      baseInput({
+        findings: [
+          {
+            id: "legacy-risk",
+            severity: "MEDIUM",
+            status: "ACCEPTED_RISK",
+            verificationStatus: "DETECTED",
+            hasPositiveEvidence: false,
+            retestConfirmedResolved: false,
+            lastSeenAtMs: 900_000,
+          },
+          {
+            id: "legacy-fixed",
+            severity: "LOW",
+            status: "FIXED",
+            verificationStatus: "DETECTED",
+            hasPositiveEvidence: false,
+            retestConfirmedResolved: false,
+            lastSeenAtMs: 900_000,
+          },
+        ],
+      })
+    )
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+  })
+
+  it("does not improve READY when a MEDIUM finding is weakened", () => {
+    const detected = baseInput({
+      findings: [
+        {
+          id: "f-med",
+          severity: "MEDIUM",
+          status: "OPEN",
+          verificationStatus: "DETECTED",
+          retestConfirmedResolved: false,
+          hasPositiveEvidence: false,
+          lastSeenAtMs: 900_000,
+        },
+      ],
+    })
+    const inconclusive = {
+      ...detected,
+      findings: detected.findings.map((finding) => ({
+        ...finding,
+        verificationStatus: "INCONCLUSIVE" as const,
+      })),
+    }
+
+    expect(computeGateVerdict(detected).state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(computeGateVerdict(inconclusive).state).toBe("INSUFFICIENT_EVIDENCE")
+  })
+
+  it("names a missing required control and keeps known blockers visible", () => {
+    const result = computeGateVerdict(
+      baseInput({
+        coverageReceipts: fullCoverage().filter((receipt) => receipt.scanner !== "secrets"),
+        findings: [
+          {
+            id: "f-crit",
+            severity: "CRITICAL",
+            status: "OPEN",
+            verificationStatus: "VERIFIED",
+            hasPositiveEvidence: true,
+            retestConfirmedResolved: false,
+            lastSeenAtMs: 900_000,
+          },
+        ],
+      })
+    )
+
+    expect(result.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(result.nonCoverage).toContainEqual(
+      expect.objectContaining({
+        scanner: "secrets",
+        status: "MISSING",
+        reasonCode: "REQUIRED_CONTROL_MISSING",
+      })
+    )
+    expect(result.blockingReasons).toEqual([
+      { findingId: "f-crit", severity: "CRITICAL", verificationStatus: "VERIFIED" },
+    ])
   })
 
   it("a retest-confirmed-resolved finding stops blocking", () => {
@@ -209,6 +345,16 @@ describe("reproducibility (load-bearing determinism guarantee)", () => {
     )
   })
 
+  it("input checksum totally orders receipts sharing one scanner and control", () => {
+    const receipts = [
+      { controlId: "secrets", scanner: "secrets", status: "FAILED" as const, reason: "retry" },
+      { controlId: "secrets", scanner: "secrets", status: "BLOCKED" as const, reason: "offline" },
+    ]
+    expect(computeInputChecksum(baseInput({ coverageReceipts: receipts }))).toBe(
+      computeInputChecksum(baseInput({ coverageReceipts: [...receipts].reverse() }))
+    )
+  })
+
   it("checksum changes when evidence changes (tamper-evident)", () => {
     const clean = baseInput()
     const withFinding = baseInput({
@@ -275,7 +421,7 @@ describe("evidenceSummary per-severity unresolved counts", () => {
     )
     expect(verdict.state).toBe("NOT_READY")
     expect(verdict.evidenceSummary.unresolvedCritical).toBe(1)
-    expect(verdict.evidenceSummary.unresolvedHigh).toBe(1) // f2 unresolved; f3 is FIXED so not blocking
+    expect(verdict.evidenceSummary.unresolvedHigh).toBe(2) // direct FIXED needs a trusted retest
     expect(verdict.evidenceSummary.unresolvedMedium).toBe(1)
     expect(verdict.evidenceSummary.unresolvedLow).toBe(1)
   })
