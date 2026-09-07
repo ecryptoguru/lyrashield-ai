@@ -1,6 +1,6 @@
 {
   "name": "lyrashield",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "LyraShield AI CLI — install, scan, and gate your AI coding agents.",
   "license": "Apache-2.0",
   "type": "module",
@@ -36,7 +36,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@lyrashield/agent-plugin": "workspace:^",
+    "@lyrashield/agent-plugin": "^0.1.21",
     "@iarna/toml": "^2.2.5",
     "jsonc-parser": "^3.3.1",
     "minimist": "^1.2.8",
