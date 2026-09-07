@@ -10,6 +10,7 @@ describe("CLI version", () => {
     const packageJson = JSON.parse(await readFile(packagePath, "utf-8")) as {
       version: string
       engines: { node: string }
+      bin: { lyrashield: string }
       dependencies: Record<string, string>
       devDependencies: Record<string, string>
     }
@@ -17,6 +18,7 @@ describe("CLI version", () => {
     expect(CLI_VERSION).toBe("0.2.0")
     expect(packageJson.version).toBe(CLI_VERSION)
     expect(packageJson.engines.node).toBe(">=22.0.0 <25.0.0")
+    expect(packageJson.bin.lyrashield).toBe("bin/lyrashield.mjs")
     expect(
       Object.keys(packageJson.dependencies).filter((name) => name.startsWith("@lyrashield/"))
     ).toEqual([])
