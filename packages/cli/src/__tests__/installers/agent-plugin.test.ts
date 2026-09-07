@@ -9,10 +9,13 @@ import type { AgentEntry } from "@lyrashield/agent-registry"
 // Hoist the mock so vi.mock can reference it. Most tests need the real plugin
 // dir; the copy-failure test overrides it to a non-existent path so `cp`
 // fails naturally without spying on ESM exports.
-const { credentialsFileExistsMock, getPluginDirMock } = vi.hoisted(() => ({
+const { credentialsFileExistsMock, getPluginDirMock, execFileMock } = vi.hoisted(() => ({
   credentialsFileExistsMock: vi.fn(),
   getPluginDirMock: vi.fn(),
+  execFileMock: vi.fn(),
 }))
+
+vi.mock("node:child_process", () => ({ execFile: execFileMock }))
 
 vi.mock("@lyrashield/agent-plugin", () => ({
   getPluginDir: getPluginDirMock,
@@ -79,7 +82,40 @@ function makeAgent(pluginPath: string): AgentEntry {
   }
 }
 
+function makeCodexAgent(): AgentEntry {
+  return {
+    ...makeAgent("~/.codex/plugins/lyrashield"),
+    id: "openai-codex-agent-plugin",
+    displayName: "OpenAI Codex (Agent Plugin)",
+    transports: ["remote-http"],
+  }
+}
+
 describe("installAgentPlugin", () => {
+  it("registers the official marketplace before installing the Codex plugin", async () => {
+    execFileMock.mockImplementation(
+      (_command: unknown, _args: unknown, _options: unknown, callback: unknown) => {
+        if (typeof callback === "function") callback(null, "", "")
+      }
+    )
+
+    const result = await installAgentPlugin({ agent: makeCodexAgent() })
+
+    expect(result.outcome).toBe("DELEGATED")
+    expect(execFileMock.mock.calls.map((call) => call.slice(0, 2))).toEqual([
+      ["codex", ["plugin", "marketplace", "add", "ecryptoguru/lyrashield-marketplace"]],
+      ["codex", ["plugin", "add", "lyrashield@lyrashield-ai"]],
+    ])
+  })
+
+  it("does not run Codex plugin commands during a dry run", async () => {
+    const result = await installAgentPlugin({ agent: makeCodexAgent(), dryRun: true })
+
+    expect(result.outcome).toBe("DELEGATED")
+    expect(result.message).toContain("Would run codex plugin marketplace add")
+    expect(execFileMock).not.toHaveBeenCalled()
+  })
+
   it("returns exact activation guidance instead of copying to an undiscovered path", async () => {
     const agent = {
       ...makeAgent("~/.example/plugins/lyrashield"),
@@ -224,6 +260,24 @@ describe("installAgentPlugin", () => {
 })
 
 describe("uninstallAgentPlugin", () => {
+  it("removes the Codex plugin through its marketplace manager", async () => {
+    execFileMock.mockImplementation(
+      (_command: unknown, _args: unknown, _options: unknown, callback: unknown) => {
+        if (typeof callback === "function") callback(null, "", "")
+      }
+    )
+
+    const result = await uninstallAgentPlugin({ agent: makeCodexAgent() })
+
+    expect(result.outcome).toBe("DELEGATED")
+    expect(execFileMock).toHaveBeenCalledWith(
+      "codex",
+      ["plugin", "remove", "lyrashield@lyrashield-ai"],
+      expect.objectContaining({ windowsHide: true }),
+      expect.any(Function)
+    )
+  })
+
   it("does not delete a client-managed marketplace or MCP install", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
     const dest = path.join(tempDir, "lyrashield")
