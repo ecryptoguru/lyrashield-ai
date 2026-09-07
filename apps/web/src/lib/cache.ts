@@ -77,12 +77,14 @@ export const getCachedPendingApprovals = cache(
   }
 )
 
-export const DASHBOARD_CACHE_TAG = "dashboard-aggregates"
+export function dashboardCacheTag(workspaceId: string) {
+  return `dashboard-aggregates:${workspaceId}`
+}
 
-export function revalidateDashboardAggregates() {
+export function revalidateDashboardAggregates(workspaceId: string) {
   // Mutations need the next dashboard request to see the new state. The
   // default profile serves stale data while revalidating in the background.
-  revalidateTag(DASHBOARD_CACHE_TAG, { expire: 0 })
+  revalidateTag(dashboardCacheTag(workspaceId), { expire: 0 })
 }
 
 export const getCachedUnreadNotifications = cache(
@@ -99,8 +101,10 @@ export const getCachedUnreadNotifications = cache(
   }
 )
 
-export const getCachedDashboardOverview = unstable_cache(
-  async (workspaceId: string) => getDashboardOverview(workspaceId),
-  ["dashboard-overview"],
-  { revalidate: 30, tags: [DASHBOARD_CACHE_TAG] }
-)
+export function getCachedDashboardOverview(workspaceId: string) {
+  return unstable_cache(
+    async () => getDashboardOverview(workspaceId),
+    ["dashboard-overview", workspaceId],
+    { revalidate: 30, tags: [dashboardCacheTag(workspaceId)] }
+  )()
+}

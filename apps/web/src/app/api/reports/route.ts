@@ -74,7 +74,7 @@ async function post(request: Request) {
       createdById: session.userId,
     })
 
-    revalidateDashboardAggregates()
+    revalidateDashboardAggregates(workspaceId)
 
     return apiSuccess({ id: report.id, title: report.title, status: report.status }, 201)
   } catch (error) {

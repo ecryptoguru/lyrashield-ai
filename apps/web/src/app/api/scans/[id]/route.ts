@@ -90,7 +90,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     }
 
     const cancelled = await cancelScan(id, workspaceId)
-    revalidateDashboardAggregates()
+    revalidateDashboardAggregates(workspaceId)
     return apiSuccess({
       id: cancelled.id,
       status: cancelled.status,
@@ -137,7 +137,7 @@ async function remove(request: Request, { params }: { params: Promise<{ id: stri
         resourceId: id,
       },
     })
-    revalidateDashboardAggregates()
+    revalidateDashboardAggregates(workspaceId)
     return apiSuccess({ id, removed: true })
   } catch (error) {
     const authErr = authErrorResponse(error)
