@@ -6,7 +6,7 @@
  * @lyrashield/score: the math is pure and versioned; the database layer owns
  * persistence and never the verdict logic.
  *
- * Standard: lyrashield-gate/1.0.0 (see STANDARD.md / the WP2 proposal).
+ * Standard: lyrashield-gate/2.0.0.
  *
  * Verdict states:
  * - READY — every check passes against current evidence.
@@ -23,7 +23,7 @@
  * actually run.
  */
 
-export const GATE_STANDARD_VERSION = "lyrashield-gate/1.0.0"
+export const GATE_STANDARD_VERSION = "lyrashield-gate/2.0.0"
 
 // ─── Input types (evidence in; no Prisma imports — the DB layer adapts) ──────
 
@@ -44,12 +44,19 @@ export interface GateFindingInput {
   verificationStatus: GateVerificationStatus
   /** Retest-confirmed resolution (verificationMethod RETEST + resolved). */
   retestConfirmedResolved: boolean
+  /** A receipt scoped to this assessment establishes VALIDATED or VERIFIED. */
+  hasPositiveEvidence?: boolean
+  /** A current, policy-allowed accepted-risk or false-positive disposition. */
+  hasApplicableDisposition?: boolean
+  /** DUPLICATE findings inherit the canonical finding's unresolved state. */
+  duplicateCanonicalResolved?: boolean
   /** lastSeenAt as epoch ms — drives staleness. */
   lastSeenAtMs: number
 }
 
 export type GateCoverageStatus =
   "COMPLETED" | "PARTIAL" | "NOT_APPLICABLE" | "BLOCKED" | "TIMED_OUT" | "FAILED"
+export type GateNonCoverageStatus = GateCoverageStatus | "MISSING" | "NOT_RUN"
 
 export interface GateCoverageReceiptInput {
   /** Scanner family / control id (e.g. "engine", "sca", "secrets", "url"). */
@@ -86,6 +93,8 @@ export interface GateEvidenceInput {
    * empty-list-means-deferred at the call site.
    */
   targetTypeCovered: boolean
+  /** A policy fingerprint makes policy changes invalidate later applicability. */
+  policyFingerprint?: string | null
 }
 
 // ─── Output types ────────────────────────────────────────────────────────────
@@ -95,8 +104,10 @@ export type GateVerdictState = "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
 export interface NonCoverageItem {
   controlId: string
   scanner: string
-  status: GateCoverageStatus
+  status: GateNonCoverageStatus
   reason: string | null
+  reasonCode: string
+  recoveryAction: string
 }
 
 export interface BlockingReason {
@@ -111,6 +122,7 @@ export interface EvidenceSummary {
   verified: number
   retestConfirmed: number
   inconclusive: number
+  insufficientPositiveEvidence: number
   /** Blocking findings still resting on bare DETECTED — the weak spot. */
   blockingUnverified: number
   /**
@@ -155,7 +167,9 @@ const BLOCKING_STATUSES: ReadonlySet<string> = new Set([
 function isBlocking(f: GateFindingInput): boolean {
   // A retest-confirmed-resolved finding is no longer blocking even if its
   // lifecycle status has not yet flipped (the retest closed the loop).
-  return BLOCKING_STATUSES.has(f.status) && !f.retestConfirmedResolved
+  if (f.retestConfirmedResolved || f.hasApplicableDisposition) return false
+  if (f.status === "DUPLICATE") return !f.duplicateCanonicalResolved
+  return BLOCKING_STATUSES.has(f.status)
 }
 
 function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
@@ -165,6 +179,7 @@ function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
     verified: 0,
     retestConfirmed: 0,
     inconclusive: 0,
+    insufficientPositiveEvidence: 0,
     blockingUnverified: 0,
     unresolvedCritical: 0,
     unresolvedHigh: 0,
@@ -189,6 +204,7 @@ function summarizeEvidence(findings: GateFindingInput[]): EvidenceSummary {
         break
     }
     if (f.retestConfirmedResolved) summary.retestConfirmed++
+    if (isBlocking(f) && !f.hasPositiveEvidence) summary.insufficientPositiveEvidence++
     if (isBlocking(f) && f.verificationStatus === "DETECTED") summary.blockingUnverified++
     if (isBlocking(f) && f.severity === "CRITICAL") summary.unresolvedCritical++
     if (isBlocking(f) && f.severity === "HIGH") summary.unresolvedHigh++
@@ -221,7 +237,7 @@ function evaluateStaleness(input: GateEvidenceInput): StalenessSignal {
 export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult {
   const receipts = input.coverageReceipts
   const nonCoverage: NonCoverageItem[] = []
-  const coverageStatement: string[] = []
+  let coverageStatement: string[] = []
 
   // GATE-0 — Target-type coverage (the registry gate). A target type the
   // standard does not yet cover (deferred: no registry requirements exist)
@@ -235,7 +251,16 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
     return {
       standardVersion: GATE_STANDARD_VERSION,
       state: "INSUFFICIENT_EVIDENCE",
-      nonCoverage,
+      nonCoverage: [
+        {
+          controlId: "target-type",
+          scanner: "target-type",
+          status: "NOT_RUN",
+          reason: "This target type is not covered by the readiness standard yet.",
+          reasonCode: "UNSUPPORTED_TARGET_TYPE",
+          recoveryAction: "Use a target type covered by this standard or extend the standard.",
+        },
+      ],
       coverageStatement: [],
       blockingReasons: [],
       evidenceSummary: evidence,
@@ -248,18 +273,22 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
 
   // GATE-1 — Coverage sufficiency (the honesty gate).
   let anyCompleted = false
-  const receiptByScanner = new Map<string, GateCoverageReceiptInput>()
+  const receiptsByScanner = new Map<string, GateCoverageReceiptInput[]>()
   for (const r of receipts) {
-    receiptByScanner.set(r.scanner, r)
+    const grouped = receiptsByScanner.get(r.scanner) ?? []
+    grouped.push(r)
+    receiptsByScanner.set(r.scanner, grouped)
     if (r.status === "COMPLETED") {
       anyCompleted = true
-      coverageStatement.push(r.scanner)
+      if (!coverageStatement.includes(r.scanner)) coverageStatement.push(r.scanner)
     } else if (r.status !== "NOT_APPLICABLE") {
       nonCoverage.push({
         controlId: r.controlId,
         scanner: r.scanner,
         status: r.status,
         reason: r.reason ?? null,
+        reasonCode: "CONTROL_INCOMPLETE",
+        recoveryAction: "Resolve the control failure and run a new assessment.",
       })
     } else {
       // NOT_APPLICABLE counts as evaluated-but-out-of-scope; disclosed, not failed.
@@ -268,9 +297,23 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   }
 
   const missingRequired = input.requiredScanners.filter((scanner) => {
-    const receipt = receiptByScanner.get(scanner)
-    return !receipt || (receipt.status !== "COMPLETED" && receipt.status !== "NOT_APPLICABLE")
+    const scannerReceipts = receiptsByScanner.get(scanner)
+    if (!scannerReceipts?.length) {
+      nonCoverage.push({
+        controlId: scanner,
+        scanner,
+        status: "MISSING",
+        reason: "The required control produced no coverage receipt.",
+        reasonCode: "REQUIRED_CONTROL_MISSING",
+        recoveryAction: "Run an assessment that completes this required control.",
+      })
+      return true
+    }
+    return scannerReceipts.some(
+      (receipt) => receipt.status !== "COMPLETED" && receipt.status !== "NOT_APPLICABLE"
+    )
   })
+  coverageStatement = coverageStatement.filter((scanner) => !missingRequired.includes(scanner))
 
   // GATE-2 / GATE-3 — only CRITICAL and HIGH blockers fail the gate. MEDIUM/LOW
   // with a blocking lifecycle status are surfaced in evidenceSummary but do NOT
@@ -297,7 +340,7 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
       state: "INSUFFICIENT_EVIDENCE",
       nonCoverage,
       coverageStatement,
-      blockingReasons: [],
+      blockingReasons,
       evidenceSummary,
       staleness,
     }
@@ -316,22 +359,23 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
     }
   }
 
-  // GATE-4 — Evidence-state floor: READY may not rest on DETECTED-only findings.
-  // (MEDIUM/LOW with blocking statuses do NOT block in v1.0.0 — they surface in
-  // the score/report layers — so no openMediumPlus carve-out is needed here.)
-  const anyVerifiedOrRetest = evidenceSummary.verified + evidenceSummary.retestConfirmed > 0
-  const allDetectedOnly =
-    input.findings.length > 0 &&
-    input.findings.every((f) => f.verificationStatus === "DETECTED") &&
-    !anyVerifiedOrRetest
+  // GATE-4 — A non-blocking severity remains nonblocking, but READY is still a
+  // positive claim. Every unresolved MEDIUM/LOW finding therefore needs a
+  // scoped positive receipt or an applicable recorded disposition.
+  const unresolvedWithoutEvidence = input.findings.some(
+    (finding) =>
+      isBlocking(finding) &&
+      !finding.hasPositiveEvidence &&
+      !finding.hasApplicableDisposition
+  )
 
-  if (allDetectedOnly) {
+  if (unresolvedWithoutEvidence) {
     return {
       standardVersion: GATE_STANDARD_VERSION,
       state: "INSUFFICIENT_EVIDENCE",
       nonCoverage,
       coverageStatement,
-      blockingReasons: [],
+      blockingReasons,
       evidenceSummary,
       staleness,
     }
