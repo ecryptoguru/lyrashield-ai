@@ -1,6 +1,6 @@
 {
   "name": "@lyrashield/agent-plugin",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "LyraShield Agent Plugin package",
   "license": "Apache-2.0",
   "type": "module",
@@ -29,11 +29,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@lyrashield/agent-rules": "workspace:*",
-    "@lyrashield/mcp": "workspace:*",
     "ajv": "^8.17.1"
   },
   "devDependencies": {
+    "@lyrashield/agent-rules": "workspace:*",
+    "@lyrashield/mcp": "workspace:*",
     "@types/node": "^24.0.0",
     "tsup": "^8.5.1",
     "tsx": "^4.23.12",

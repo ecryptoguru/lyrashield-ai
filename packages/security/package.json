@@ -15,6 +15,11 @@
       "import": "./src/ai-security/index.ts",
       "default": "./src/ai-security/index.ts"
     },
+    "./domain-proof": {
+      "types": "./src/domain-proof.ts",
+      "import": "./src/domain-proof.ts",
+      "default": "./src/domain-proof.ts"
+    },
     "./webmcp": {
       "types": "./src/webmcp/index.ts",
       "import": "./src/webmcp/index.ts",

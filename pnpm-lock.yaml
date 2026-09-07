@@ -477,16 +477,16 @@ importers:
 
   packages/agent-plugin:
     dependencies:
+      ajv:
+        specifier: ^8.17.1
+        version: 8.20.0
+    devDependencies:
       '@lyrashield/agent-rules':
         specifier: workspace:*
         version: link:../agent-rules
       '@lyrashield/mcp':
         specifier: workspace:*
         version: link:../mcp
-      ajv:
-        specifier: ^8.17.1
-        version: 8.20.0
-    devDependencies:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -626,9 +626,6 @@ importers:
       '@iarna/toml':
         specifier: ^2.2.5
         version: 2.2.5
-      '@lyrashield/security':
-        specifier: workspace:*
-        version: link:../security
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
@@ -654,6 +651,9 @@ importers:
       '@lyrashield/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@lyrashield/security':
+        specifier: workspace:*
+        version: link:../security
       '@types/iarna__toml':
         specifier: ^2.0.5
         version: 2.0.5
