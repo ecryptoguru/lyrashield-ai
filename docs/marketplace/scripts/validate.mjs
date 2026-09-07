@@ -184,6 +184,31 @@ assert(
 )
 assert(!("mcpServers" in codexMcp), ".mcp.codex.json must not use the Agent Plugins envelope")
 
+const codexMarketplace = await readJson(".agents/plugins/marketplace.json")
+const codexMarketplaceEntry = codexMarketplace.plugins?.find(
+  (plugin) => plugin.name === "lyrashield"
+)
+assert(
+  codexMarketplaceEntry?.source?.path === "./codex-plugin",
+  "Codex marketplace must install the dedicated Codex plugin root"
+)
+assert(
+  codexMarketplaceEntry?.policy?.installation === "AVAILABLE" &&
+    codexMarketplaceEntry?.policy?.authentication === "ON_INSTALL",
+  "Codex marketplace install policy is invalid"
+)
+const installedCodexManifest = await readJson("codex-plugin/.codex-plugin/plugin.json")
+const installedCodexMcp = await readJson("codex-plugin/.mcp.json")
+assert(
+  installedCodexManifest.mcpServers === "./.mcp.json",
+  "installed Codex manifest must reference its native MCP descriptor"
+)
+assert(
+  installedCodexMcp.lyrashield?.type === "streamable-http" &&
+    installedCodexMcp.lyrashield?.url === "https://app.lyrashieldai.com/api/mcp",
+  "installed Codex MCP descriptor must use the native streamable-http transport"
+)
+
 // Cursor shim inlines MCP config — same invariants as root configs.
 const cursorPlugin = await readJson(".cursor-plugin/plugin.json")
 const cursorServer = cursorPlugin.mcpServers?.lyrashield

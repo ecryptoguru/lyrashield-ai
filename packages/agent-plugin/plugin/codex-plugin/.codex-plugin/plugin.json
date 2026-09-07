@@ -3,7 +3,7 @@
   "version": "0.1.24",
   "description": "LyraShield AI security and release-assurance plugin",
   "skills": "./skills/",
-  "mcpServers": "./.mcp.codex.json",
+  "mcpServers": "./.mcp.json",
   "author": {
     "name": "LyraShield AI",
     "url": "https://lyrashieldai.com"
