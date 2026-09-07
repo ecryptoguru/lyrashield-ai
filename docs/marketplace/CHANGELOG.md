@@ -3,6 +3,7 @@
 ## 0.1.22
 
 - Validate the pristine generated tree before the secret scanner writes its SARIF report.
+- Pin MCP 0.2.5 so stdio logs cannot corrupt JSON-RPC stdout.
 
 ## 0.1.21
 

@@ -189,7 +189,7 @@ Read-only tools never prompt. A read-only key is additionally rejected server-si
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.4; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/mcp` 0.2.5; runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,

@@ -3,6 +3,9 @@ import { createLyraShieldServer } from "./create-server"
 import { resolveMcpCredentials } from "./credentials"
 import { logger } from "@lyrashield/logger"
 
+// Stdio is reserved for MCP JSON-RPC; route every structured log to stderr.
+process.env.LYRASHIELD_LOG_DESTINATION = "stderr"
+
 /**
  * LyraShield MCP server entrypoint (stdio). All wiring — SDK server, security
  * engine, prompt-injection guard, and the elicitation/TTY approval gate — lives
