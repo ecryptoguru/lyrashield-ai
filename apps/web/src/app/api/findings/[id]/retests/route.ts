@@ -1,7 +1,7 @@
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import {
   createScan,
-  getFinding,
+  getFindingReference,
   prisma,
   updateScanStatus,
   WorkspaceScanConcurrencyLimitError,
@@ -43,7 +43,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.retest.create)
 
-    const finding = await getFinding(id, workspaceId)
+    const finding = await getFindingReference(id, workspaceId)
     if (!finding) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }

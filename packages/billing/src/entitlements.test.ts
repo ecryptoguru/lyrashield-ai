@@ -20,6 +20,9 @@ vi.mock("@lyrashield/db", () => ({
         currentPeriodStart: new Date(),
       }),
     },
+    usageRecord: {
+      aggregate: vi.fn(),
+    },
   },
 }))
 
@@ -138,6 +141,36 @@ describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
     const result = await assertScanAllowed("ws-empty", "STANDARD")
 
     expect(result.allowed).toBe(false)
+  })
+
+  it("uses a database aggregate for current-cycle overage", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
+      plan: "LAUNCH_ASSURANCE",
+      deepAllowed: true,
+      trialStartedAt: null,
+    })
+    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 0 })
+    vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
+      currentPlan: "LAUNCH_ASSURANCE",
+      spendLimitCents: 1500,
+      currentPeriodStart: new Date("2026-09-01T00:00:00Z"),
+    } as never)
+    vi.mocked(prisma.usageRecord.aggregate).mockResolvedValue({
+      _sum: { quantity: 10 },
+    } as never)
+
+    const result = await assertScanAllowed("ws-overage", "STANDARD")
+
+    expect(result.allowed).toBe(true)
+    expect(prisma.usageRecord.aggregate).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "ws-overage",
+        kind: "overage_minutes",
+        deletedAt: null,
+        cycleStart: { gte: new Date("2026-09-01T00:00:00Z") },
+      },
+      _sum: { quantity: true },
+    })
   })
 
   it("blocks STANDARD on an expired trial (TRIAL_EXPIRED)", async () => {

@@ -9,7 +9,7 @@ vi.mock("next/cache", () => ({
   cacheTag: vi.fn(),
 }))
 
-const getFinding = vi.fn()
+const getFindingReference = vi.fn()
 const createScan = vi.fn()
 const requirePermission = vi.fn()
 const enqueueScanJob = vi.fn()
@@ -26,7 +26,7 @@ const prisma = {
 }
 
 vi.mock("@lyrashield/db", () => ({
-  getFinding,
+  getFindingReference,
   createScan,
   updateScanStatus,
   WorkspaceScanConcurrencyLimitError,
@@ -47,7 +47,11 @@ describe("POST /api/findings/[id]/retests", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
-    getFinding.mockResolvedValue({ id: "finding-1", targetId: "target-1", scanId: "source-scan" })
+    getFindingReference.mockResolvedValue({
+      id: "finding-1",
+      targetId: "target-1",
+      scanId: "source-scan",
+    })
     prisma.scan.findFirst.mockResolvedValue({
       id: "source-scan",
       targetId: "target-1",

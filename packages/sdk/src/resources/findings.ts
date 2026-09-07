@@ -1,6 +1,6 @@
 import type { LyraShieldClient } from "../client"
 import { z } from "zod"
-import { FindingListSchema, FindingSchema } from "../schemas"
+import { FindingHistoryPageSchema, FindingListSchema, FindingSchema } from "../schemas"
 
 export interface FindingQuery {
   workspaceId?: string
@@ -13,6 +13,12 @@ export interface FindingQuery {
 
 export interface GetFindingQuery {
   workspaceId?: string
+}
+
+export interface FindingHistoryQuery extends GetFindingQuery {
+  collection: "evidence" | "verificationReceipts" | "fixProposals" | "retests"
+  cursor?: string
+  limit?: number
 }
 
 function buildFindingParams(query: FindingQuery, client: LyraShieldClient): URLSearchParams {
@@ -52,5 +58,20 @@ export function getFinding(
     : `/findings/${encodeURIComponent(id)}`
   return client.request("GET", path, {
     parse: (data) => FindingSchema.parse(data),
+  })
+}
+
+export function getFindingHistory(
+  client: LyraShieldClient,
+  id: string,
+  query: FindingHistoryQuery
+): Promise<z.infer<typeof FindingHistoryPageSchema>> {
+  const params = new URLSearchParams({ collection: query.collection })
+  const workspaceId = query.workspaceId ?? client.workspaceId
+  if (workspaceId) params.set("workspaceId", workspaceId)
+  if (query.cursor) params.set("cursor", query.cursor)
+  if (query.limit) params.set("limit", String(query.limit))
+  return client.request("GET", `/findings/${encodeURIComponent(id)}/history?${params.toString()}`, {
+    parse: (data) => FindingHistoryPageSchema.parse(data),
   })
 }

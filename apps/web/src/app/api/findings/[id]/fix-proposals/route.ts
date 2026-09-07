@@ -1,5 +1,5 @@
 import { withCookieMutation } from "../../../../../lib/api-auth"
-import { createFixProposal, getFinding } from "@lyrashield/db"
+import { createFixProposal, getFindingReference } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -32,7 +32,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.fix.create)
 
-    const finding = await getFinding(id, workspaceId)
+    const finding = await getFindingReference(id, workspaceId)
     if (!finding) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }

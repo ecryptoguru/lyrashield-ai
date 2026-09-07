@@ -19,6 +19,7 @@ import { apiGet } from "@/lib/api-client"
 import { ScoreGauge } from "@/components/security-visuals"
 
 export interface LaunchReadinessReport {
+  state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
   verdict: "NOT_EVALUATED" | "INCONCLUSIVE" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
   score: number | null
   summary: string
@@ -32,6 +33,7 @@ export interface LaunchReadinessReport {
 
 const launchReadinessReportSchema = z
   .object({
+    state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
     verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
     score: z.number().nullable(),
     summary: z.string(),

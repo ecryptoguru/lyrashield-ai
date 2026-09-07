@@ -18,6 +18,7 @@ const launchReadinessInputSchema: WebMcpInputSchema = {
 
 const launchReadinessReportSchema = z
   .object({
+    state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
     verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
     score: z.number().nullable(),
     summary: z.string(),
@@ -87,6 +88,7 @@ export function useLaunchReadinessWebMcp({
           : report.recommendations
 
         return {
+          state: report.state,
           verdict: report.verdict,
           score: report.score,
           summary: report.summary,

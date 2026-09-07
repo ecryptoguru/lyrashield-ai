@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
+import { createHmac } from "crypto"
 
 vi.mock("@lyrashield/config", () => ({
   env: { BETTER_AUTH_SECRET: "test-secret-key-at-least-32-characters-long" },
@@ -10,7 +11,29 @@ describe("github install state (S2)", () => {
   it("round-trips a workspace id through sign/verify", () => {
     const state = createInstallState("ws_abc123")
     const result = verifyInstallState(state)
-    expect(result).toEqual({ valid: true, workspaceId: "ws_abc123" })
+    expect(result).toEqual({ valid: true, workspaceId: "ws_abc123", returnTo: "integrations" })
+  })
+
+  it("round-trips an allowlisted onboarding return destination", () => {
+    const state = createInstallState("ws_abc123", "onboarding")
+    expect(verifyInstallState(state)).toEqual({
+      valid: true,
+      workspaceId: "ws_abc123",
+      returnTo: "onboarding",
+    })
+  })
+
+  it("accepts an unexpired legacy state during a mixed-version rollout", () => {
+    const workspace = Buffer.from("ws_abc123").toString("base64url")
+    const payload = `${workspace}.legacy-nonce.${Date.now() + 60_000}`
+    const signature = createHmac("sha256", "test-secret-key-at-least-32-characters-long")
+      .update(payload)
+      .digest("base64url")
+    expect(verifyInstallState(`${payload}.${signature}`)).toEqual({
+      valid: true,
+      workspaceId: "ws_abc123",
+      returnTo: "integrations",
+    })
   })
 
   it("rejects a tampered workspace id (signature mismatch)", () => {
@@ -26,7 +49,7 @@ describe("github install state (S2)", () => {
 
   it("rejects an expired token", () => {
     const past = Date.now() - 60 * 60 * 1000 // signed an hour ago
-    const state = createInstallState("ws_abc123", past)
+    const state = createInstallState("ws_abc123", "integrations", past)
     const result = verifyInstallState(state)
     expect(result.valid).toBe(false)
     if (!result.valid) expect(result.reason).toBe("expired")
@@ -41,5 +64,12 @@ describe("github install state (S2)", () => {
     // Pre-fix callers passed state=<workspaceId> directly; that must no longer verify.
     const result = verifyInstallState("ws_abc123")
     expect(result.valid).toBe(false)
+  })
+
+  it("rejects an arbitrary signed-looking return destination", () => {
+    const state = createInstallState("ws_abc123", "onboarding")
+    const parts = state.split(".")
+    parts[1] = "https://attacker.example"
+    expect(verifyInstallState(parts.join(".")).valid).toBe(false)
   })
 })

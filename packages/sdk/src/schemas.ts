@@ -75,6 +75,35 @@ export const FindingListSchema = z.object({
   nextCursor: z.string().nullable(),
 })
 
+export const FindingHistoryItemSchema = z.union([
+  z.object({ id: z.string(), type: z.string(), redactionStatus: z.string() }).passthrough(),
+  z
+    .object({
+      id: z.string(),
+      status: z.string(),
+      method: z.string(),
+      reason: z.string(),
+      scanId: z.string(),
+      createdAt: z.string().datetime().or(z.string()),
+    })
+    .passthrough(),
+  z.object({ id: z.string(), status: z.string(), summary: z.string() }).passthrough(),
+  z
+    .object({
+      id: z.string(),
+      status: z.string(),
+      scanId: z.string(),
+      createdAt: z.string().datetime().or(z.string()),
+    })
+    .passthrough(),
+])
+
+export const FindingHistoryPageSchema = z.object({
+  items: z.array(FindingHistoryItemSchema),
+  nextCursor: z.string().nullable(),
+  total: z.number().int().nonnegative(),
+})
+
 export const IdSchema = z.object({ id: z.string() }).passthrough()
 
 export const WorkspaceListSchema = z.array(WorkspaceSchema)
@@ -177,7 +206,16 @@ export const RetestCreatedSchema = z
 
 export const LaunchReadinessSchema = z
   .object({
-    verdict: z.string(),
+    state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
+    verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
+    score: z.number().nullable(),
+    summary: z.string(),
+    blockingFindings: z.number(),
+    totalFindings: z.number(),
+    verifiedFindings: z.number(),
+    bySeverity: z.record(z.string(), z.number()),
+    conditions: z.array(z.string()),
+    recommendations: z.array(z.string()),
   })
   .passthrough()
 

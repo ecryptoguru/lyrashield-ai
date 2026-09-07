@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   generateLaunchReadinessReport,
   generateLaunchReadinessReportFromAggregate,
+  projectGateReadinessReport,
 } from "./launch-readiness"
 
 const makeFinding = (
@@ -18,6 +19,64 @@ const makeFinding = (
   confidence: "medium",
   title: "Test finding",
   summary: "Test summary",
+})
+
+describe("projectGateReadinessReport", () => {
+  it("maps Gate v2 NOT_READY without allowing a high score to override it", () => {
+    const report = projectGateReadinessReport(
+      [],
+      [
+        {
+          targetId: "target-1",
+          targetName: "API",
+          state: "NOT_READY",
+          applicable: true,
+          blockingFindings: 1,
+          reasons: [],
+        },
+      ]
+    )
+    expect(report.verdict).toBe("NO_GO")
+    expect(report.blockingFindings).toBe(1)
+  })
+
+  it("maps missing expected identity to inconclusive", () => {
+    const report = projectGateReadinessReport(
+      [],
+      [
+        {
+          targetId: "target-1",
+          targetName: "API",
+          state: "INSUFFICIENT_EVIDENCE",
+          applicable: false,
+          blockingFindings: 0,
+          reasons: [
+            { code: "EXPECTED_IDENTITY_MISSING", message: "Expected identity is required." },
+          ],
+        },
+      ]
+    )
+    expect(report.verdict).toBe("INCONCLUSIVE")
+    expect(report.score).toBeNull()
+    expect(report.conditions).toContain("API: Expected identity is required.")
+  })
+
+  it("maps READY only when every target is applicable", () => {
+    const report = projectGateReadinessReport(
+      [],
+      [
+        {
+          targetId: "target-1",
+          targetName: "API",
+          state: "READY",
+          applicable: true,
+          blockingFindings: 0,
+          reasons: [],
+        },
+      ]
+    )
+    expect(report.verdict).toBe("GO")
+  })
 })
 
 describe("generateLaunchReadinessReport", () => {
@@ -52,6 +111,18 @@ describe("generateLaunchReadinessReport", () => {
     expect(report.verdict).toBe("NO_GO")
     expect(report.blockingFindings).toBe(1)
   })
+
+  it.each(["PR_OPENED", "TICKET_CREATED", "FIXED_PENDING_RETEST"])(
+    "keeps a high %s finding unresolved in triage context",
+    (status) => {
+      const report = generateLaunchReadinessReport(
+        [makeFinding({ severity: "HIGH", status })],
+        true
+      )
+      expect(report.verdict).toBe("NO_GO")
+      expect(report.blockingFindings).toBe(1)
+    }
+  )
 
   it("returns GO when critical findings are fixed", () => {
     const report = generateLaunchReadinessReport(

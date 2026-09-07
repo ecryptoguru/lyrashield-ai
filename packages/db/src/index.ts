@@ -158,8 +158,12 @@ export {
   acceptRisk,
   getFindingStats,
   listFindingsByScan,
+  getFindingReference,
+  getFindingHistoryPage,
   type ListFindingsParams,
   type FindingStats,
+  type FindingHistoryCollection,
+  type FindingHistoryPage,
 } from "./finding-service"
 export {
   createReport,

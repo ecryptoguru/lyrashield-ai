@@ -984,6 +984,7 @@ model Evidence {
 
   @@unique([findingId, checksum])
   @@index([findingId])
+  @@index([findingId, createdAt, id])
 }
 
 /// Durable operational outbox for deleting external artifacts after an explicit
@@ -1087,6 +1088,7 @@ model FindingVerification {
 
   @@index([workspaceId])
   @@index([findingId, createdAt])
+  @@index([findingId, createdAt, id])
   @@index([scanId])
   @@index([candidateId])
   @@index([status])
@@ -1109,6 +1111,7 @@ model FixProposal {
   pullRequests PullRequest[]
 
   @@index([findingId])
+  @@index([findingId, createdAt, id])
 }
 
 model PullRequest {
@@ -1626,6 +1629,7 @@ model Retest {
 
   @@index([workspaceId])
   @@index([findingId])
+  @@index([findingId, createdAt, id])
   @@index([scanId])
 }
 

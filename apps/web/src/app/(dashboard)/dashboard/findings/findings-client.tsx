@@ -838,6 +838,10 @@ interface FindingDetail {
   evidence?: Array<{ id: string; type: string; redactionStatus: string }>
   fixProposals?: Array<{ id: string; status: string; summary: string }>
   retests?: Array<{ id: string; scanId: string; status: string; createdAt: string }>
+  historyPagination?: Record<
+    "evidence" | "verificationReceipts" | "fixProposals" | "retests",
+    { total: number; nextCursor: string | null }
+  >
   scanId?: string | null
   plainLanguage?: PlainLanguage
 }
@@ -887,6 +891,44 @@ const findingPatchResultSchema = z
   })
   .passthrough()
 
+const verificationReceiptSchema = z
+  .object({
+    id: z.string(),
+    status: z.string(),
+    method: z.string(),
+    reason: z.string(),
+    scanId: z.string(),
+    sourceRevision: z.string().nullable(),
+    verifierVersion: z.string().nullable(),
+    evidence: z.unknown(),
+    createdAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const evidenceSchema = z
+  .object({ id: z.string(), type: z.string(), redactionStatus: z.string() })
+  .passthrough()
+
+const fixProposalSchema = z
+  .object({ id: z.string(), status: z.string(), summary: z.string() })
+  .passthrough()
+
+const retestSchema = z
+  .object({
+    id: z.string(),
+    scanId: z.string(),
+    status: z.string(),
+    createdAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const historyItemSchemas = {
+  evidence: evidenceSchema,
+  verificationReceipts: verificationReceiptSchema,
+  fixProposals: fixProposalSchema,
+  retests: retestSchema,
+} as const
+
 const findingDetailSchema = z
   .object({
     id: z.string(),
@@ -904,55 +946,14 @@ const findingDetailSchema = z
     verificationReason: z.string().nullable().optional(),
     statusReason: z.string().nullable().optional(),
     scanId: z.string().nullable().optional(),
-    verificationReceipts: z
-      .array(
-        z
-          .object({
-            id: z.string(),
-            status: z.string(),
-            method: z.string(),
-            reason: z.string(),
-            scanId: z.string(),
-            sourceRevision: z.string().nullable(),
-            verifierVersion: z.string().nullable(),
-            evidence: z.unknown(),
-            createdAt: z.string().datetime().or(z.string()),
-          })
-          .passthrough()
-      )
-      .optional(),
-    evidence: z
-      .array(
-        z
-          .object({
-            id: z.string(),
-            type: z.string(),
-            redactionStatus: z.string(),
-          })
-          .passthrough()
-      )
-      .optional(),
-    fixProposals: z
-      .array(
-        z
-          .object({
-            id: z.string(),
-            status: z.string(),
-            summary: z.string(),
-          })
-          .passthrough()
-      )
-      .optional(),
-    retests: z
-      .array(
-        z
-          .object({
-            id: z.string(),
-            scanId: z.string(),
-            status: z.string(),
-            createdAt: z.string().datetime().or(z.string()),
-          })
-          .passthrough()
+    verificationReceipts: z.array(verificationReceiptSchema).optional(),
+    evidence: z.array(evidenceSchema).optional(),
+    fixProposals: z.array(fixProposalSchema).optional(),
+    retests: z.array(retestSchema).optional(),
+    historyPagination: z
+      .record(
+        z.enum(["evidence", "verificationReceipts", "fixProposals", "retests"]),
+        z.object({ total: z.number(), nextCursor: z.string().nullable() })
       )
       .optional(),
     plainLanguage: z
@@ -968,6 +969,14 @@ const findingDetailSchema = z
       .optional(),
   })
   .passthrough()
+
+function findingHistoryPageSchema(collection: keyof typeof historyItemSchemas) {
+  return z.object({
+    items: z.array(historyItemSchemas[collection]),
+    nextCursor: z.string().nullable(),
+    total: z.number().int().nonnegative(),
+  })
+}
 
 // ---------------------------------------------------------------------------
 // StatusActionConfirm — inline confirm with required comment
@@ -1064,6 +1073,8 @@ function FindingDetailDrawer({
   const [creatingRetest, setCreatingRetest] = useState(false)
   const [retestError, setRetestError] = useState<string | null>(null)
   const [queuedRetestScanId, setQueuedRetestScanId] = useState<string | null>(null)
+  const [historyLoading, setHistoryLoading] = useState<string | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
   // Status transitions
   const [showAcceptRisk, setShowAcceptRisk] = useState(false)
@@ -1122,6 +1133,36 @@ function FindingDetailDrawer({
       })
       .finally(() => setLoading(false))
   }, [fetchDetail])
+
+  async function loadMoreHistory(
+    collection: "evidence" | "verificationReceipts" | "fixProposals" | "retests"
+  ) {
+    const cursor = detail?.historyPagination?.[collection]?.nextCursor
+    if (!cursor) return
+    setHistoryLoading(collection)
+    setHistoryError(null)
+    try {
+      const params = new URLSearchParams({ workspaceId, collection, cursor })
+      const page = await apiGet(`/api/findings/${finding.id}/history?${params.toString()}`, {
+        schema: findingHistoryPageSchema(collection),
+      })
+      setDetail((current) => {
+        if (!current) return current
+        return {
+          ...current,
+          [collection]: [...(current[collection] ?? []), ...page.items],
+          historyPagination: {
+            ...current.historyPagination!,
+            [collection]: { total: page.total, nextCursor: page.nextCursor },
+          },
+        } as FindingDetail
+      })
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Could not load more history.")
+    } finally {
+      setHistoryLoading(null)
+    }
+  }
 
   const latestRetest = detail?.retests?.[0] ?? null
   const hasFixProposal = (detail?.fixProposals?.length ?? 0) > 0
@@ -1719,7 +1760,8 @@ function FindingDetailDrawer({
                 {detail.evidence && detail.evidence.length > 0 && (
                   <div>
                     <h3 className="mb-2 text-sm font-medium">
-                      Evidence ({detail.evidence.length})
+                      Evidence ({detail.historyPagination?.evidence.total ?? detail.evidence.length}
+                      )
                     </h3>
                     <div className="space-y-2">
                       {detail.evidence.map((ev) => (
@@ -1738,6 +1780,18 @@ function FindingDetailDrawer({
                         </div>
                       ))}
                     </div>
+                    {detail.historyPagination?.evidence.nextCursor && (
+                      <Button
+                        className="mt-2"
+                        variant="outline"
+                        size="sm"
+                        disabled={historyLoading === "evidence"}
+                        onClick={() => void loadMoreHistory("evidence")}
+                      >
+                        {historyLoading === "evidence" ? <Spinner /> : null}
+                        Load more evidence
+                      </Button>
+                    )}
                   </div>
                 )}
 
@@ -1775,7 +1829,9 @@ function FindingDetailDrawer({
               <TabsContent value="history" className="mt-4 space-y-4">
                 {detail.retests && detail.retests.length > 0 ? (
                   <div>
-                    <h3 className="mb-2 text-sm font-medium">Retests ({detail.retests.length})</h3>
+                    <h3 className="mb-2 text-sm font-medium">
+                      Retests ({detail.historyPagination?.retests.total ?? detail.retests.length})
+                    </h3>
                     <div className="space-y-2">
                       {detail.retests.map((rt) => (
                         <div key={rt.id} className="flex items-center gap-2 text-sm">
@@ -1802,6 +1858,18 @@ function FindingDetailDrawer({
                         </div>
                       ))}
                     </div>
+                    {detail.historyPagination?.retests.nextCursor && (
+                      <Button
+                        className="mt-2"
+                        variant="outline"
+                        size="sm"
+                        disabled={historyLoading === "retests"}
+                        onClick={() => void loadMoreHistory("retests")}
+                      >
+                        {historyLoading === "retests" ? <Spinner /> : null}
+                        Load more retests
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <p className="text-muted-foreground text-sm">No retests recorded yet.</p>
@@ -1810,7 +1878,8 @@ function FindingDetailDrawer({
                 {detail.fixProposals && detail.fixProposals.length > 0 && (
                   <div>
                     <h3 className="mb-2 text-sm font-medium">
-                      Fix Proposals ({detail.fixProposals.length})
+                      Fix Proposals (
+                      {detail.historyPagination?.fixProposals.total ?? detail.fixProposals.length})
                     </h3>
                     <div className="space-y-2">
                       {detail.fixProposals.map((fp) => (
@@ -1826,13 +1895,28 @@ function FindingDetailDrawer({
                         </div>
                       ))}
                     </div>
+                    {detail.historyPagination?.fixProposals.nextCursor && (
+                      <Button
+                        className="mt-2"
+                        variant="outline"
+                        size="sm"
+                        disabled={historyLoading === "fixProposals"}
+                        onClick={() => void loadMoreHistory("fixProposals")}
+                      >
+                        {historyLoading === "fixProposals" ? <Spinner /> : null}
+                        Load more proposals
+                      </Button>
+                    )}
                   </div>
                 )}
 
                 {detail.verificationReceipts && detail.verificationReceipts.length > 0 && (
                   <div>
                     <h3 className="mb-2 text-sm font-medium">
-                      Verification Receipts ({detail.verificationReceipts.length})
+                      Verification Receipts (
+                      {detail.historyPagination?.verificationReceipts.total ??
+                        detail.verificationReceipts.length}
+                      )
                     </h3>
                     <div className="space-y-2">
                       {detail.verificationReceipts.map((receipt) => {
@@ -1932,6 +2016,18 @@ function FindingDetailDrawer({
                         )
                       })}
                     </div>
+                    {detail.historyPagination?.verificationReceipts.nextCursor && (
+                      <Button
+                        className="mt-2"
+                        variant="outline"
+                        size="sm"
+                        disabled={historyLoading === "verificationReceipts"}
+                        onClick={() => void loadMoreHistory("verificationReceipts")}
+                      >
+                        {historyLoading === "verificationReceipts" ? <Spinner /> : null}
+                        Load more receipts
+                      </Button>
+                    )}
                   </div>
                 )}
 
@@ -1942,6 +2038,11 @@ function FindingDetailDrawer({
                       No history available for this finding yet.
                     </p>
                   )}
+                {historyError && (
+                  <p className="text-destructive text-sm" role="alert">
+                    {historyError}
+                  </p>
+                )}
               </TabsContent>
             </Tabs>
           </div>
