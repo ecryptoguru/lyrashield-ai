@@ -5,7 +5,7 @@ import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import { loadDefaultProject } from "../projects.js"
 import { resolveDiffRange, runDiffChecks, buildSarif, rankSeverity } from "../diff-core.js"
 import type { Output } from "../output.js"
-import { listAll, FindingSchema } from "@lyrashield/sdk"
+import { GateVerdictQuerySchema, listAll, FindingSchema } from "@lyrashield/sdk"
 
 export async function handleGate(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
@@ -199,11 +199,14 @@ async function runVerdictGate(
     output.error("The verdict gate requires --commit or --artifact-digest.", 2)
     return 2
   }
-  if (commit && !/^[a-f0-9]{40}$/i.test(commit)) {
+  if (commit && !GateVerdictQuerySchema.shape.commit.safeParse(commit).success) {
     output.error("--commit must be a 40-character Git commit SHA.", 2)
     return 2
   }
-  if (artifactDigest && !/^sha256:[a-f0-9]{64}$/i.test(artifactDigest)) {
+  if (
+    artifactDigest &&
+    !GateVerdictQuerySchema.shape.artifactDigest.safeParse(artifactDigest).success
+  ) {
     output.error("--artifact-digest must be a sha256 digest.", 2)
     return 2
   }
@@ -232,16 +235,18 @@ async function runVerdictGate(
     if (commit) query.set("commit", commit)
     if (artifactDigest) query.set("artifactDigest", artifactDigest)
     const res = (await client.request("GET", `/gate/${encodeURIComponent(targetId)}?${query}`)) as {
+      schemaVersion?: string
       state?: string
       applicability?: { applicable?: boolean }
-      blockingReasons?: unknown[]
-      nonCoverage?: unknown[]
-      staleness?: { current?: boolean; reason?: string | null }
-      standardVersion?: string
+      historical?: {
+        blockingReasons?: unknown[]
+        staleness?: { current?: boolean; reason?: string | null }
+        standardVersion?: string
+      }
     }
 
     const state = res?.state ?? "INSUFFICIENT_EVIDENCE"
-    const stale = res?.staleness && res.staleness.current === false
+    const stale = res?.historical?.staleness && res.historical.staleness.current === false
     const applicable = res.applicability?.applicable === true
 
     if (output.json) {
@@ -249,9 +254,11 @@ async function runVerdictGate(
     } else if (state === "READY" && applicable) {
       output.log(`Gate verdict: READY${stale ? " (stale — re-run the gate)" : ""}`)
     } else if (state === "NOT_READY" && applicable) {
-      const blockers = Array.isArray(res?.blockingReasons) ? res.blockingReasons.length : 0
+      const blockers = Array.isArray(res?.historical?.blockingReasons)
+        ? res.historical.blockingReasons.length
+        : 0
       output.error(
-        `Gate verdict: NOT READY — ${blockers} blocking finding(s) against ${res?.standardVersion ?? "the readiness standard"}${stale ? " (stale)" : ""}`,
+        `Gate verdict: NOT READY — ${blockers} blocking finding(s) against ${res?.historical?.standardVersion ?? "the readiness standard"}${stale ? " (stale)" : ""}`,
         1
       )
     } else {

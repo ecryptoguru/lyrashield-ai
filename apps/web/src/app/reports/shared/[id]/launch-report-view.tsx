@@ -31,6 +31,8 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
   const tone = VERDICT_TONE[payload.verdictLabel] ?? VERDICT_TONE["Not enough evidence"]!
   const Icon = tone.Icon
   const verifyUrl = `/reports/verify`
+  const historical = payload.stale
+  const dispositionCounts = payload.dispositionCounts ?? { acceptedRisk: 0, falsePositive: 0 }
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
@@ -47,13 +49,13 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
       </div>
 
       {/* Staleness banner — a stale verdict is never presented as current. */}
-      {payload.stale && (
+      {historical && (
         <div
           role="status"
           className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
         >
-          This report reflects an earlier evaluation. The code has changed since — treat this as
-          superseded and ask the team to re-run the gate.
+          This historical report is superseded, expired, or predates current applicability rules.
+          Ask the team to run a current gate assessment.
         </div>
       )}
 
@@ -64,7 +66,7 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
           <div>
             <Badge variant={tone.variant}>{payload.verdictLabel}</Badge>
             <p className="mt-1 text-xs text-muted-foreground">
-              Verdict against the {payload.standardVersion} readiness standard
+              Historical verdict against the {payload.standardVersion} readiness standard
             </p>
           </div>
         </div>
@@ -104,6 +106,11 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
             ? `Evaluated: ${payload.coverageStatement.join(", ")}.`
             : "No scanner completed an evaluation."}
         </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Scope:{" "}
+          {payload.scopeCommitment ??
+            "The original report did not record an explicit scope commitment."}
+        </p>
         {payload.nonCoverage.length > 0 && (
           <>
             <h3 className="mt-4 text-sm font-semibold">What was not covered</h3>
@@ -123,7 +130,9 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
           <div className="flex items-center gap-2">
             <Calendar className="h-3.5 w-3.5" aria-hidden />
             <span>
-              Evaluated {formatDate(payload.evaluatedAt)} · Issued {formatDate(payload.issuedAt)}
+              Assessed {formatDate(payload.assessmentDate ?? payload.evaluatedAt)}
+              {payload.expiresAt ? ` · Expires ${formatDate(payload.expiresAt)}` : ""} · Issued{" "}
+              {formatDate(payload.issuedAt)}
             </span>
           </div>
           <div className="break-all">
@@ -157,6 +166,14 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
           )}
         </p>
       </Card>
+
+      {(dispositionCounts.acceptedRisk > 0 || dispositionCounts.falsePositive > 0) && (
+        <p className="text-xs text-muted-foreground">
+          Recorded human dispositions: {dispositionCounts.acceptedRisk} accepted risk,{" "}
+          {dispositionCounts.falsePositive} false positive. These are policy decisions, not
+          technical verification.
+        </p>
+      )}
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
         A launch-readiness verdict reflects the named standard and the evidence examined — it is not

@@ -15,7 +15,20 @@ vi.mock("../projects.js", () => ({
   loadDefaultProject: vi.fn(),
   saveDefaultProject: vi.fn(),
 }))
-vi.mock("@lyrashield/sdk", () => ({ listAll: vi.fn(), FindingSchema: {} }))
+vi.mock("@lyrashield/sdk", () => ({
+  listAll: vi.fn(),
+  FindingSchema: {},
+  GateVerdictQuerySchema: {
+    shape: {
+      commit: {
+        safeParse: (value: unknown) => ({ success: /^[a-f0-9]{40}$/i.test(String(value)) }),
+      },
+      artifactDigest: {
+        safeParse: (value: unknown) => ({ success: /^sha256:[a-f0-9]{64}$/i.test(String(value)) }),
+      },
+    },
+  },
+}))
 vi.mock("../diff-core.js", () => ({
   resolveDiffRange: vi.fn(() => ({ base: "HEAD~1", head: "HEAD" })),
   runDiffChecks: vi.fn(async () => []),
@@ -124,12 +137,15 @@ describe("handleGate target scoping", () => {
 describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
   function mockClientWithVerdict(state: string, extra: Record<string, unknown> = {}) {
     return vi.fn(async () => ({
+      schemaVersion: "lyrashield-gate-response/2.0.0",
       state,
-      blockingReasons: [],
-      nonCoverage: [],
-      staleness: { current: true, reason: null },
       applicability: { applicable: true },
-      standardVersion: "lyrashield-gate/1.0.0",
+      historical: {
+        state,
+        blockingReasons: [],
+        staleness: { current: true, reason: null },
+        standardVersion: "lyrashield-gate/2.0.0",
+      },
       ...extra,
     }))
   }
@@ -152,7 +168,14 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
 
   it("exits 1 when the gate verdict is NOT_READY", async () => {
     mockGetEffectiveCredentials.mockResolvedValue({ apiKey: "k", workspaceId: "ws-1" } as never)
-    const request = mockClientWithVerdict("NOT_READY", { blockingReasons: [{ findingId: "f1" }] })
+    const request = mockClientWithVerdict("NOT_READY", {
+      historical: {
+        state: "NOT_READY",
+        blockingReasons: [{ findingId: "f1" }],
+        staleness: { current: true, reason: null },
+        standardVersion: "lyrashield-gate/2.0.0",
+      },
+    })
     const { createClient } = await import("../client.js")
     vi.mocked(createClient).mockResolvedValue({ request } as never)
 
