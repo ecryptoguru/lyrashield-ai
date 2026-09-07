@@ -43,7 +43,7 @@ for (const relative of manifest.generatedFiles) {
 async function exportedFiles(dir = root) {
   const files = []
   for (const entry of (await readdir(dir, { withFileTypes: true })).sort((a, b) =>
-    a.name.localeCompare(b.name)
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0
   )) {
     if (dir === root && entry.name === ".git") continue
     const full = path.join(dir, entry.name)

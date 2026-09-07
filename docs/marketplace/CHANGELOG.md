@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.21
+
+- Make marketplace export ordering identical across macOS and Linux.
+
 ## 0.1.20
 
 - Validate exact export hashes inside the marketplace Git repository while excluding repository metadata.
