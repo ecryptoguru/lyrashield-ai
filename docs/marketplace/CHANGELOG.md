@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.20
+
+- Validate exact export hashes inside the marketplace Git repository while excluding repository metadata.
+
 ## 0.1.19
 
 - Add deterministic export provenance with exact source commit, generator version, schema version, file hashes, and executable modes.

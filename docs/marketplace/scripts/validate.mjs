@@ -45,6 +45,7 @@ async function exportedFiles(dir = root) {
   for (const entry of (await readdir(dir, { withFileTypes: true })).sort((a, b) =>
     a.name.localeCompare(b.name)
   )) {
+    if (dir === root && entry.name === ".git") continue
     const full = path.join(dir, entry.name)
     const relative = path.relative(root, full).split(path.sep).join("/")
     const stat = await lstat(full)

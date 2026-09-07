@@ -397,7 +397,7 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 - Managed TLS BullMQ Redis and negative egress proof.
 - Dedicated worker compute, immutable worker promotion, readiness heartbeat, and rollback image.
 - Backup/restore drill.
-- Billing code retains signed-webhook, replay, catalog-map, and disposable-account coverage. Provider-hosted end-to-end Sandbox/Test staging receipts remain outstanding.
+- Billing code retains signed-webhook, replay, catalog-map, and disposable-account coverage. Restricted Polar Sandbox and Razorpay Test Mode proof completed in isolated Azure staging on product `5e6c68ba` under run `33438477364`, including hosted checkout, provider-delivered signed webhooks, application/database effects, replay idempotency, immediate cancellation, redacted receipts, and cleanup. Live charge, settlement, payout, tax, and universal payment-method coverage remain unproven.
 - Read-only Brave provider review on 2026-08-26: Razorpay Live is activated with six matching INR Cloud plans and one enabled eight-event webhook. Polar Live has a production token, fifteen private Cloud/pack/Local products, and an enabled lifecycle webhook. No provider mutation or payment was performed; every purchase admission remains `off`.
 - Cloud billing, usage, Local/Desktop, and affiliate implementations merged.
 - The single adaptive dashboard and the bounded platform-admin console are implemented. Exact-two preflight/apply passed, and both named administrators completed fresh independent Google-plus-TOTP browser proof across every admin destination; bearer-only and workspace-only access remained denied.
@@ -408,11 +408,10 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 ### Remaining before broader paid/untrusted exposure
 
 1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical/OG readback. The temporary internal scorecard otherwise passed cards, badge, referral, privacy, deduplication, LinkedIn unfurl, and revocation checks.
-2. Run restricted Polar Sandbox and Razorpay Test Mode checkout/webhook/refund/cancellation/license/replay proof. Keep every production admission off. Razorpay hosted-checkout methods above INR 15,000 remain transaction-unproven.
-3. Retain longer-window Redis command/capacity evidence; provision RazorpayX and Payoneer payout API access plus tax-form workflow.
-4. Triage the 25 findings from Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted.
-5. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
-6. Capture authenticated client-matrix receipts plus webmaster indexing and answer-engine citation observations; code, simulated crawlers, and one LinkedIn unfurl do not prove universal discovery.
+2. Retain longer-window Redis command/capacity evidence; provision RazorpayX and Payoneer payout API access plus tax-form workflow.
+3. Triage the 25 findings from Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted.
+4. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
+5. Capture authenticated client-matrix receipts plus webmaster indexing and answer-engine citation observations; code, simulated crawlers, and one LinkedIn unfurl do not prove universal discovery.
 
 ### Deferred
 

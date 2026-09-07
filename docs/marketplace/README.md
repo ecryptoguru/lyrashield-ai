@@ -1,6 +1,6 @@
 # LyraShield AI marketplace release source
 
-Current exported Agent Plugin version: `0.1.19`. Channel-specific listing versions and review
+Current exported Agent Plugin version: `0.1.20`. Channel-specific listing versions and review
 states below may lag this repository release.
 
 ## Install from this repository

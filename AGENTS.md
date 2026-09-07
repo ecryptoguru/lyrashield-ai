@@ -40,7 +40,7 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Redis/egress efficiency code is deployed: slower idle BullMQ polling, single-key Lua heartbeat/readiness operations, DB-first reconciliation, proxy-only CISA enrichment, and drain-safe pin rotation. Live Redis command metrics and longer-window capacity evidence remain required.
 - Encrypted backup and isolated restore verified schema, RLS, audit chain, and application startup.
 - Production runtime DB role `app_runtime_prod` was queried on 2026-08-22 and verified `rolsuper=false`, `rolbypassrls=false`.
-- Provider readiness remains bounded. A read-only Brave review on 2026-08-26 confirmed Razorpay Live activation, six matching INR Cloud plans, and one enabled eight-event production webhook. Polar Live has an active production token, fifteen private Cloud/pack/Local products, and an enabled lifecycle webhook. Razorpay hosted-checkout methods above INR 15,000, Polar settlement readiness, restricted Sandbox/Test hosted-checkout receipts, and all live entitlement/usage events remain unproven. No charge, provider mutation, new terms, or admission change occurred; every purchase admission remains `off`.
+- Provider readiness remains bounded. Restricted Polar Sandbox and Razorpay Test Mode proof completed in isolated Azure staging on product `5e6c68ba` under run `33438477364`, including hosted checkout, provider-delivered signed webhooks, application/database effects, replay idempotency, immediate cancellation, redacted receipts, and cleanup. A read-only Brave review on 2026-08-26 confirmed Razorpay Live activation, six matching INR Cloud plans, and one enabled eight-event production webhook. Polar Live has an active production token, fifteen private Cloud/pack/Local products, and an enabled lifecycle webhook. Razorpay hosted-checkout methods above INR 15,000, Polar settlement readiness, and all live entitlement/usage events remain unproven. Staging proof does not establish a live charge, settlement, payout, tax, or universal payment-method coverage.
 - CLI and GitHub Action classify added `eval()`/`exec()` as `HIGH`, so the default `--fail-on HIGH` gate blocks them.
 - Dashboard is one adaptive authenticated surface: a state-derived next action, posture with exact evidence scope, compact metrics, recent activity, and progressive disclosure for technical depth. `GET /api/scans/eligibility` provides an advisory read-only preflight; `POST /api/scans` remains the authoritative gate. No mode switch changes permissions or scan behavior.
 - Platform administration is implemented as a hidden, noindex, cross-workspace read console for overview, users, workspaces, scans, audit, and affiliates. Access requires an allowlisted, verified `PLATFORM_OPERATOR` browser session with recent TOTP; bearer credentials and workspace roles never grant access.
@@ -50,7 +50,7 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - The controlled orphan drill moved synthetic scan `cmta574d50004fef1nbydufai` to `FAILED/QUEUE_ORPHANED` without engine execution or replay, retained verification/cleanup audits, restored the exact worker digest, reconciled both queues to zero, and resumed admission.
 - A temporary internal scorecard passed page, referral, privacy, deduplication, DNT/GPC, three-card, badge, LinkedIn unfurl, and revocation checks. The pass found canonical/OG metadata baked to the scanner origin; this change fixes it with a regression test. Exact-SHA deployment and live canonical readback remain required.
 - Platform-affiliate mutations remain disabled until each write is connected to the one-time action elevation and atomic platform-audit transaction. The current admin console is read-only.
-- Agent distribution now uses CLI `0.2.0`, MCP `0.2.4` on MCP SDK `1.30`, Agent Plugin `0.1.18`, Node 24 support, hosted OAuth/read-only-by-default remote MCP, and 30 registry entries representing 26 preferred client surfaces. Do not update Node 26 types, ESLint 10, ioredis 6, or TypeScript 7 until compatibility migrations are planned.
+- Agent distribution now uses CLI `0.2.0`, MCP `0.2.4` on MCP SDK `1.30`, Agent Plugin `0.1.20`, Node 24 support, hosted OAuth/read-only-by-default remote MCP, and 30 registry entries representing 26 preferred client surfaces. Do not update Node 26 types, ESLint 10, ioredis 6, or TypeScript 7 until compatibility migrations are planned.
 - Marketing ships indexability-gated `robots.txt`, sitemap, dated `llms.txt`, `agents.md`, structured data, canonical integration guides, comparison/research pages, and explicit answer-engine crawler policy. These are SEO/AEO/GEO foundations, not proof of webmaster indexing or answer-engine citation.
 
 Claims boundary: this is bounded runtime/accounting evidence for one target and revision, not proof of universal coverage, independently verified findings, or security.
@@ -58,10 +58,9 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 ## Immediate execution queue
 
 1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical and OG readback on the exact SHA.
-2. Run restricted Polar Sandbox and Razorpay Test Mode billing staging end to end. Keep every production admission `off`; Razorpay hosted-checkout methods above INR 15,000 remain transaction-unproven.
-3. Retain longer-window Redis command/capacity evidence and complete RazorpayX/Payoneer payout plus tax-form operations before paid scale.
-4. Triage the 25 findings retained by current Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted. Keep all unverified results `DETECTED` or `INCONCLUSIVE`.
-5. After founder authorization, run separate controlled Deep/Terra acceptance with exact image, routing, cost, receipts, and terminal proof.
+2. Retain longer-window Redis command/capacity evidence and complete RazorpayX/Payoneer payout plus tax-form operations before paid scale.
+3. Triage the 25 findings retained by current Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted. Keep all unverified results `DETECTED` or `INCONCLUSIVE`.
+4. After founder authorization, run separate controlled Deep/Terra acceptance with exact image, routing, cost, receipts, and terminal proof.
 
 ## Founder decisions
 
