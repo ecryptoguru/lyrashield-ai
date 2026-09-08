@@ -34,6 +34,7 @@ import { verifyInputHash } from "@lyrashield/db"
 
 const TOOL_RESULT = {
   content: [{ type: "text", text: '{"ok":true}' }],
+  structuredContent: { ok: true },
   isError: false,
 }
 
@@ -89,6 +90,39 @@ describe("remote approval gate — claim-before-execution", () => {
       pending: true,
       approvalUrl: "https://app.example.com/dashboard/approvals#approval-ap-1",
     })
+  })
+
+  it("persists structured content for an approved execution", async () => {
+    await makeGate()("run-scan", { approvalId: "ap-1" })
+    expect(dbCompleteApprovalExecution).toHaveBeenCalledWith("ap-1", "ws-1", TOOL_RESULT)
+  })
+
+  it.each([true, false])(
+    "replays schema-valid stored results (structured=%s)",
+    async (structured) => {
+      dbGetApproval.mockResolvedValue(
+        approvalFixture({
+          status: "EXECUTED",
+          result: structured ? TOOL_RESULT : { content: TOOL_RESULT.content, isError: false },
+        })
+      )
+      const decision = await makeGate()("run-scan", { approvalId: "ap-1" })
+      expect(decision).toMatchObject({ approved: true, result: TOOL_RESULT })
+      expect(mcpCallTool).not.toHaveBeenCalled()
+    }
+  )
+
+  it("fails malformed historical replay without executing the action again", async () => {
+    dbGetApproval.mockResolvedValue(
+      approvalFixture({
+        status: "EXECUTED",
+        result: { content: [{ type: "text", text: "not JSON" }] },
+      })
+    )
+    const decision = await makeGate()("run-scan", { approvalId: "ap-1" })
+    expect(decision).toMatchObject({ approved: true, result: { isError: true } })
+    expect(mcpCallTool).not.toHaveBeenCalled()
+    expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
   })
 
   it("two concurrent polls execute the tool exactly once; loser replays the winner's result", async () => {

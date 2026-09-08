@@ -50,11 +50,48 @@ function storedResult(approval: NonNullable<StoredApproval>): {
   approved: true
   result: McpToolResult
 } {
-  const stored = approval.result as { content?: unknown[]; isError?: boolean } | undefined
+  const stored = approval.result as
+    | {
+        content?: unknown[]
+        isError?: boolean
+        structuredContent?: unknown
+      }
+    | undefined
   const content = Array.isArray(stored?.content)
     ? (stored.content as { type: string; text: string }[])
     : [{ type: "text", text: JSON.stringify(stored ?? approval.result) }]
-  return { approved: true, result: { content, isError: stored?.isError } as McpToolResult }
+  let structured = z.record(z.string(), z.unknown()).safeParse(stored?.structuredContent)
+  // Older executions stored only the JSON text projection. Restore its
+  // structured counterpart without rerunning the already executed action.
+  if (!structured.success && content.length === 1 && content[0]?.type === "text") {
+    try {
+      const data: unknown = JSON.parse(content[0].text)
+      structured = z
+        .record(z.string(), z.unknown())
+        .safeParse(data && typeof data === "object" && !Array.isArray(data) ? data : { data })
+    } catch {
+      // Malformed historical results cannot authorize another execution.
+    }
+  }
+  if (!structured.success) {
+    const error = { error: "Stored approval result is unavailable; action will not be rerun." }
+    return {
+      approved: true,
+      result: {
+        content: [{ type: "text", text: JSON.stringify(error) }],
+        structuredContent: error,
+        isError: true,
+      },
+    }
+  }
+  return {
+    approved: true,
+    result: {
+      content,
+      isError: stored?.isError,
+      structuredContent: structured.data,
+    } as McpToolResult,
+  }
 }
 
 function stripApprovalId(args: Record<string, unknown>): Record<string, unknown> {
@@ -176,6 +213,7 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
     const settled = await completeApprovalExecution(approval.id, workspaceId, {
       content: toolResult.content,
       isError: toolResult.isError,
+      structuredContent: toolResult.structuredContent,
     })
 
     if (!settled) {
