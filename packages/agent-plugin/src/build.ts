@@ -22,7 +22,7 @@ async function writeGeneratedFile(file: string, content: string): Promise<void> 
 
 const SKILL_APPENDIX = `## Review-depth guide
 
-Fixes are proposals that require human review and approval; nothing is applied automatically.
+Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge.
 
 Deeper modes consume more compute and take longer. Choose the least intensive goal and mode that answer the user's request.
 

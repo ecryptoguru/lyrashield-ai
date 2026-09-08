@@ -26,6 +26,19 @@ async function post(request: Request) {
       )
     }
 
+    if (session.apiKey || session.oauth) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Workspace-bound credentials cannot create another workspace",
+          },
+        },
+        { status: 403 }
+      )
+    }
+
     let body: unknown
     try {
       body = await request.json()
@@ -165,7 +178,14 @@ export async function GET() {
     }
 
     const members = await prisma.workspaceMember.findMany({
-      where: { userId: session.userId, status: "active" },
+      where: {
+        userId: session.userId,
+        status: "active",
+        ...((session.apiKey?.workspaceId ?? session.oauth?.workspaceId)
+          ? { workspaceId: session.apiKey?.workspaceId ?? session.oauth?.workspaceId }
+          : {}),
+        workspace: { deletedAt: null },
+      },
       include: { workspace: true },
     })
 

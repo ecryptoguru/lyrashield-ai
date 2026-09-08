@@ -191,7 +191,7 @@ export function TeamClient({
     <div>
       <PageHeader
         title="Team Members"
-        description="Manage who has access to this workspace"
+        description="Every active member can run scans, manage findings, create reports, and open fix PRs. Roles control administrative access."
         action={
           canManage ? (
             <Button onClick={() => setShowInvite(!showInvite)}>
@@ -237,11 +237,11 @@ export function TeamClient({
               <Select id="invite-role" value={role} onChange={(e) => setRole(e.target.value)}>
                 <option value="MEMBER">Member</option>
                 <option value="ADMIN">Admin</option>
-                <option value="VIEWER">Viewer</option>
+                <option value="VIEWER">Viewer — operational read/write</option>
                 <option value="SECURITY_ADMIN">Security Admin</option>
                 <option value="APPSEC_MANAGER">AppSec Manager</option>
                 <option value="DEVELOPER">Developer</option>
-                <option value="AUDITOR">Auditor</option>
+                <option value="AUDITOR">Auditor — operational read/write</option>
                 <option value="BILLING_ADMIN">Billing Admin</option>
                 <option value="EXTERNAL_PENTESTER">External Pentester</option>
               </Select>

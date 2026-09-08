@@ -50,8 +50,8 @@ export const PERMISSIONS = {
   fix: {
     create: "fix:create",
     createPr: "fix:create_pr",
-    /** Approve a fix PR for execution. Tighter than fix.create — a member who can
-     * propose a fix may not also authorize writing it to the customer repo. */
+    /** Authorize the exact server-generated patch for execution. Operational
+     * access includes this permission; patch and target checks remain required. */
     approve: "fix:approve",
   },
   retest: {
@@ -307,6 +307,28 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.agent.view,
     PERMISSIONS.aiAssurance.view,
   ],
+}
+
+/** Every active member can operate the product; administration remains role-specific.
+ * Membership, credential scope, target authorization and budgets are enforced separately.
+ */
+export const OPERATIONAL_PERMISSIONS: readonly Permission[] = [
+  ...Object.values(PERMISSIONS.project),
+  ...Object.values(PERMISSIONS.target),
+  ...Object.values(PERMISSIONS.scan),
+  ...Object.values(PERMISSIONS.finding),
+  ...Object.values(PERMISSIONS.fix),
+  ...Object.values(PERMISSIONS.retest),
+  ...Object.values(PERMISSIONS.report),
+  ...Object.values(PERMISSIONS.schedule),
+  ...Object.values(PERMISSIONS.notification),
+  ...Object.values(PERMISSIONS.aiAssurance),
+  PERMISSIONS.agent.view,
+  PERMISSIONS.agent.act,
+]
+
+for (const role of Object.keys(ROLE_PERMISSIONS) as MemberRole[]) {
+  ROLE_PERMISSIONS[role] = [...new Set([...ROLE_PERMISSIONS[role], ...OPERATIONAL_PERMISSIONS])]
 }
 
 export function hasPermission(role: MemberRole, permission: Permission): boolean {

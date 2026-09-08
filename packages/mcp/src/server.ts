@@ -209,7 +209,7 @@ export class McpServer {
           reason: decision.reason,
         })
         const error = {
-          error: "Mutating tool requires human approval",
+          error: "Mutation was not authorized or could not be executed",
           tool: name,
           reason: decision.reason ?? "Approval denied",
         }

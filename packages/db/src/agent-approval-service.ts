@@ -9,6 +9,8 @@ export interface CreateApprovalParams {
   input: Record<string, unknown>
   requestedById: string
   expiresAt?: Date
+  /** Server-established credential authorization, never accepted from tool input. */
+  authorization?: { kind: "oauth-connection" | "api-key"; id: string }
 }
 
 export interface ListApprovalsParams {
@@ -42,6 +44,28 @@ export async function createApproval(params: CreateApprovalParams): Promise<Agen
       expiresAt,
     },
   })
+
+  if (params.authorization) {
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: params.workspaceId,
+        actorUserId: params.requestedById,
+        action: "agent_action.connection_authorized",
+        resourceType: "agent_approval",
+        resourceId: approval.id,
+        metadata: { ...params.authorization, actionName: params.actionName, inputHash },
+      },
+    })
+    const approvedAt = new Date()
+    const updated = await prisma.agentApproval.updateMany({
+      where: { id: approval.id, workspaceId: params.workspaceId, status: "PENDING" },
+      data: { status: "APPROVED", approvedAt },
+    })
+    if (updated.count !== 1)
+      throw new ApprovalMutationError("NOT_PENDING", "Authorization changed before execution")
+    approval.status = "APPROVED"
+    approval.approvedAt = approvedAt
+  }
 
   logger.info("Agent approval created", {
     approvalId: approval.id,

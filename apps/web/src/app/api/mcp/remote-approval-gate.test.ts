@@ -1,11 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const requirePermissionMock = vi.fn().mockResolvedValue({})
+vi.mock("@lyrashield/auth/server", () => ({
+  requirePermission: (...args: unknown[]) => requirePermissionMock(...args),
+}))
+
 const dbGetApproval = vi.fn()
 const dbClaimApprovalExecution = vi.fn()
 const dbCompleteApprovalExecution = vi.fn()
 const dbFailApprovalExecution = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
+  TOOL_OPERATION_MAP: {
+    lyrashield_scan_target: { canonicalOperation: "scan.create" },
+    lyrashield_create_report: { canonicalOperation: "report.create" },
+  },
   getApproval: (...a: unknown[]) => dbGetApproval(...a),
   claimApprovalExecution: (...a: unknown[]) => dbClaimApprovalExecution(...a),
   completeApprovalExecution: (...a: unknown[]) => dbCompleteApprovalExecution(...a),
@@ -42,7 +51,7 @@ function approvalFixture(overrides: Record<string, unknown> = {}) {
   return {
     id: "ap-1",
     workspaceId: "ws-1",
-    actionName: "run-scan",
+    actionName: "lyrashield_scan_target",
     inputHash: "hash-ap-1",
     status: "APPROVED",
     input: {},
@@ -82,9 +91,20 @@ describe("remote approval gate — claim-before-execution", () => {
     mcpCallTool.mockResolvedValue(TOOL_RESULT)
   })
 
+  it("blocks historical replay when current workspace permission is lost", async () => {
+    requirePermissionMock.mockRejectedValueOnce(new Error("FORBIDDEN"))
+    dbGetApproval.mockResolvedValue(approvalFixture({ status: "EXECUTED", result: TOOL_RESULT }))
+    expect(await makeGate()("lyrashield_scan_target", { approvalId: "ap-1" })).toEqual({
+      approved: false,
+      reason: "Current workspace access does not authorize this operation.",
+    })
+    expect(dbGetApproval).not.toHaveBeenCalled()
+    expect(mcpCallTool).not.toHaveBeenCalled()
+  })
+
   it("links pending approval to the existing dashboard review queue", async () => {
     dbGetApproval.mockResolvedValue(approvalFixture({ status: "PENDING" }))
-    const decision = await makeGate()("run-scan", { approvalId: "ap-1" })
+    const decision = await makeGate()("lyrashield_scan_target", { approvalId: "ap-1" })
     expect(decision).toMatchObject({
       approved: false,
       pending: true,
@@ -93,7 +113,7 @@ describe("remote approval gate — claim-before-execution", () => {
   })
 
   it("persists structured content for an approved execution", async () => {
-    await makeGate()("run-scan", { approvalId: "ap-1" })
+    await makeGate()("lyrashield_scan_target", { approvalId: "ap-1" })
     expect(dbCompleteApprovalExecution).toHaveBeenCalledWith("ap-1", "ws-1", TOOL_RESULT)
   })
 
@@ -106,7 +126,7 @@ describe("remote approval gate — claim-before-execution", () => {
           result: structured ? TOOL_RESULT : { content: TOOL_RESULT.content, isError: false },
         })
       )
-      const decision = await makeGate()("run-scan", { approvalId: "ap-1" })
+      const decision = await makeGate()("lyrashield_scan_target", { approvalId: "ap-1" })
       expect(decision).toMatchObject({ approved: true, result: TOOL_RESULT })
       expect(mcpCallTool).not.toHaveBeenCalled()
     }
@@ -119,7 +139,7 @@ describe("remote approval gate — claim-before-execution", () => {
         result: { content: [{ type: "text", text: "not JSON" }] },
       })
     )
-    const decision = await makeGate()("run-scan", { approvalId: "ap-1" })
+    const decision = await makeGate()("lyrashield_scan_target", { approvalId: "ap-1" })
     expect(decision).toMatchObject({ approved: true, result: { isError: true } })
     expect(mcpCallTool).not.toHaveBeenCalled()
     expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
@@ -142,8 +162,8 @@ describe("remote approval gate — claim-before-execution", () => {
 
     const gate = makeGate()
     const [a, b] = await Promise.all([
-      gate("run-scan", { targetId: "t-1", approvalId: "ap-1" }),
-      gate("run-scan", { targetId: "t-1", approvalId: "ap-1" }),
+      gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" }),
+      gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" }),
     ])
 
     expect(mcpCallTool).toHaveBeenCalledTimes(1)
@@ -159,7 +179,10 @@ describe("remote approval gate — claim-before-execution", () => {
     ;(verifyInputHash as ReturnType<typeof vi.fn>).mockReturnValueOnce(false)
 
     const gate = makeGate()
-    const decision = await gate("run-scan", { targetId: "t-EVIL", approvalId: "ap-1" })
+    const decision = await gate("lyrashield_scan_target", {
+      targetId: "t-EVIL",
+      approvalId: "ap-1",
+    })
 
     expect(decision.approved).toBe(false)
     expect((decision as { reason: string }).reason).toMatch(/does not match/)
@@ -171,7 +194,10 @@ describe("remote approval gate — claim-before-execution", () => {
     "rejects a different tool name for a %s approval with identical arguments",
     async (status) => {
       dbGetApproval.mockResolvedValue(approvalFixture({ status, result: TOOL_RESULT }))
-      const decision = await makeGate()("different-tool", { targetId: "t-1", approvalId: "ap-1" })
+      const decision = await makeGate()("lyrashield_create_report", {
+        targetId: "t-1",
+        approvalId: "ap-1",
+      })
       expect(decision.approved).toBe(false)
       expect(decision.reason).toMatch(/does not match/)
       expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
@@ -182,7 +208,7 @@ describe("remote approval gate — claim-before-execution", () => {
   it.each([null, "", 123, {}, []].map((approvalId) => ({ approvalId })))(
     "rejects malformed approval IDs: $approvalId",
     async ({ approvalId }) => {
-      const decision = await makeGate()("run-scan", { targetId: "t-1", approvalId })
+      const decision = await makeGate()("lyrashield_scan_target", { targetId: "t-1", approvalId })
       expect(decision.approved).toBe(false)
       expect(decision.reason).toMatch(/Invalid approvalId/)
       expect(dbGetApproval).not.toHaveBeenCalled()
@@ -199,7 +225,10 @@ describe("remote approval gate — claim-before-execution", () => {
         const expiresAt = new Date("2026-09-08T02:00:00.000Z")
         vi.setSystemTime(expiresAt)
         dbGetApproval.mockResolvedValue(approvalFixture({ status, expiresAt, result: TOOL_RESULT }))
-        const decision = await makeGate()("run-scan", { targetId: "t-1", approvalId: "ap-1" })
+        const decision = await makeGate()("lyrashield_scan_target", {
+          targetId: "t-1",
+          approvalId: "ap-1",
+        })
         expect(decision.approved).toBe(false)
         expect(decision.reason).toMatch(/expired/)
         expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
@@ -217,7 +246,7 @@ describe("remote approval gate — claim-before-execution", () => {
     dbClaimApprovalExecution.mockResolvedValue(false)
 
     const gate = makeGate()
-    const decision = await gate("run-scan", { targetId: "t-1", approvalId: "ap-1" })
+    const decision = await gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
 
     expect(decision.approved).toBe(false)
     expect((decision as { reason: string }).reason).toMatch(/expired/i)
@@ -231,7 +260,7 @@ describe("remote approval gate — claim-before-execution", () => {
     dbGetApproval.mockResolvedValueOnce(approvalFixture()) // pre-check read
 
     const gate = makeGate()
-    const decision = await gate("run-scan", { targetId: "t-1", approvalId: "ap-1" })
+    const decision = await gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
 
     expect(decision.approved).toBe(false)
     expect(dbCompleteApprovalExecution).not.toHaveBeenCalled()
@@ -247,8 +276,8 @@ describe("remote approval gate — claim-before-execution", () => {
     dbGetApproval.mockResolvedValue(stored)
 
     const gate = makeGate()
-    const first = await gate("run-scan", { targetId: "t-1", approvalId: "ap-1" })
-    const second = await gate("run-scan", { targetId: "t-1", approvalId: "ap-1" })
+    const first = await gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
+    const second = await gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
 
     expect(first).toEqual(second)
     expect(first.approved).toBe(true)
@@ -261,7 +290,7 @@ describe("remote approval gate — claim-before-execution", () => {
     mcpCallTool.mockRejectedValue(new Error("upstream timeout"))
 
     const gate = makeGate()
-    const decision = await gate("run-scan", { targetId: "t-1", approvalId: "ap-1" })
+    const decision = await gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
 
     expect(decision.approved).toBe(false)
     expect((decision as { pending?: boolean }).pending).toBe(true)
@@ -275,7 +304,7 @@ describe("remote approval gate — claim-before-execution", () => {
     dbFailApprovalExecution.mockResolvedValue("TERMINAL")
 
     const gate = makeGate()
-    const decision = await gate("run-scan", { targetId: "t-1", approvalId: "ap-1" })
+    const decision = await gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
 
     expect(decision.approved).toBe(false)
     expect((decision as { reason: string }).reason).toMatch(/failed/i)
@@ -287,7 +316,10 @@ describe("remote approval gate — claim-before-execution", () => {
     dbGetApproval.mockResolvedValue(null) // scoped lookup misses foreign-workspace rows
 
     const gate = makeGate()
-    const decision = await gate("run-scan", { targetId: "t-1", approvalId: "ap-foreign" })
+    const decision = await gate("lyrashield_scan_target", {
+      targetId: "t-1",
+      approvalId: "ap-foreign",
+    })
 
     expect(decision.approved).toBe(false)
     expect((decision as { reason: string }).reason).toMatch(/not found/i)
@@ -299,7 +331,7 @@ describe("remote approval gate — claim-before-execution", () => {
     dbGetApproval.mockResolvedValue(approvalFixture({ status: "PENDING" }))
 
     const gate = makeGate()
-    const decision = await gate("run-scan", { targetId: "t-1", approvalId: "ap-1" })
+    const decision = await gate("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
 
     expect(decision.approved).toBe(false)
     expect((decision as { pending?: boolean }).pending).toBe(true)

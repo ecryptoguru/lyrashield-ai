@@ -378,7 +378,7 @@ describe("exported validator", () => {
     ],
     ["gemini-extension.json", "@lyrashield/mcp@0.2.7", "@lyrashield/mcp"],
     ["codebuff/lyrashield-review.ts", '"read_files"', '"run_terminal_command", "read_files"'],
-    ["openclaw/SKILL.md", "nothing is applied automatically.", "changes apply automatically."],
+    ["openclaw/SKILL.md", "pull requests never auto-merge", "pull requests auto-merge"],
   ])("rejects unsafe distribution drift in %s", async (file, before, after) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)

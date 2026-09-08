@@ -15,7 +15,8 @@ vi.mock("@lyrashield/config", () => ({
 const verifyApiKeyMock = vi.fn()
 const userFindUnique = vi.fn()
 const memberFindUnique = vi.fn()
-vi.mock("@lyrashield/db", () => ({
+vi.mock("@lyrashield/db", async () => ({
+  CANONICAL_OPERATIONS: (await import("@lyrashield/types")).CANONICAL_OPERATIONS,
   verifyApiKey: (...args: unknown[]) => verifyApiKeyMock(...args),
   setWorkspaceContext: vi.fn(),
   prisma: {
@@ -36,6 +37,8 @@ function withHeaders(map: Record<string, string>) {
     get: (name: string) => map[name.toLowerCase()] ?? null,
   })
 }
+
+import { verifyOAuthBearer } from "./oauth"
 
 const RAW_KEY = `lsk_${"a".repeat(43)}`
 
@@ -64,7 +67,27 @@ describe("API key bearer auth", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getSessionApi.mockResolvedValue(null)
+    vi.mocked(verifyOAuthBearer).mockResolvedValue(null)
   })
+
+  it.each(["OWNER", "DEVELOPER", "VIEWER", "AUDITOR", "BILLING_ADMIN"])(
+    "allows automatic operational writes for active %s members",
+    async (role) => {
+      withHeaders({ authorization: "Bearer oauth-token" })
+      stubVerifiedKey()
+      stubMembership(role)
+      vi.mocked(verifyOAuthBearer).mockResolvedValue({
+        userId: "user-1",
+        workspaceId: "ws-1",
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        connectionId: "conn-1",
+        allowedOperations: ["fix_pr.create"],
+      })
+      await expect(requirePermission("ws-1", "fix:approve")).resolves.toBeTruthy()
+      memberFindUnique.mockResolvedValue({ id: "member-1", role, status: "inactive" })
+      await expect(requirePermission("ws-1", "fix:approve")).rejects.toThrow("FORBIDDEN")
+    }
+  )
 
   it("authenticates a bearer API key when no cookie session exists", async () => {
     withHeaders({ authorization: `Bearer ${RAW_KEY}` })

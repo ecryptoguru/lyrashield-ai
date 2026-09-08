@@ -29,7 +29,7 @@ describe("McpServer approval gate (S8)", () => {
       targetId: "t1",
     })
     expect(res.isError).toBe(true)
-    expect(res.content[0]!.text).toContain("requires human approval")
+    expect(res.content[0]!.text).toContain("Mutation was not authorized or could not be executed")
     expect(fetchSpy).not.toHaveBeenCalled() // handler never ran
   })
 
@@ -91,7 +91,7 @@ describe("McpServer approval gate (S8)", () => {
       targetId: "t1",
     })
     expect(denied.structuredContent).toMatchObject({
-      error: "Mutating tool requires human approval",
+      error: "Mutation was not authorized or could not be executed",
       tool: "lyrashield_scan_target",
     })
   })

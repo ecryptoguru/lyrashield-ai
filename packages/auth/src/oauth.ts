@@ -59,8 +59,8 @@ export async function verifyOAuthBearer(token: string): Promise<OAuthBearerConte
     const authVersion =
       typeof rawAuthVersion === "number"
         ? rawAuthVersion
-        : typeof rawAuthVersion === "string"
-          ? parseInt(rawAuthVersion, 10)
+        : typeof rawAuthVersion === "string" && /^[1-9]\d*$/.test(rawAuthVersion)
+          ? Number(rawAuthVersion)
           : undefined
 
     let connectionInfo: {
@@ -74,7 +74,8 @@ export async function verifyOAuthBearer(token: string): Promise<OAuthBearerConte
     } = {}
 
     if (connectionId) {
-      if (authVersion === undefined) return null
+      if (authVersion === undefined || !Number.isSafeInteger(authVersion) || authVersion < 1)
+        return null
       const conn = await withWorkspaceRLS(workspaceId, (tx) =>
         tx.agentConnection.findUnique({
           where: { id: connectionId },

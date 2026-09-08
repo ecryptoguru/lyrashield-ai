@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
+  create: vi.fn(),
+  proposal: vi.fn(),
   claim: vi.fn(),
   complete: vi.fn(),
   fail: vi.fn(),
@@ -14,9 +16,9 @@ vi.mock("@lyrashield/db", () => ({
   claimApprovalExecution: mocks.claim,
   completeApprovalExecution: mocks.complete,
   failApprovalExecution: mocks.fail,
-  createApproval: vi.fn(),
+  createApproval: mocks.create,
   findPendingApprovalByHash: vi.fn(),
-  getFixProposal: vi.fn(),
+  getFixProposal: mocks.proposal,
   hashInput: (action: string, input: unknown) => JSON.stringify({ action, input }),
   createPullRequestRecord: mocks.record,
 }))
@@ -36,7 +38,7 @@ vi.mock("@lyrashield/fix", () => ({
   extractFileDiff: vi.fn(),
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn() } }))
-import { executeApprovedFixPr, type FixPrRequest } from "./fix-pr"
+import { requestFixPrApproval, executeApprovedFixPr, type FixPrRequest } from "./fix-pr"
 const request: FixPrRequest & { approvalId: string } = {
   workspaceId: "ws-1",
   fixProposalId: "proposal-1",
@@ -59,6 +61,16 @@ describe("approved fix PR execution", () => {
     mocks.head.mockResolvedValue("scanned-sha")
     mocks.pr.mockResolvedValue({ number: 42, url: "https://github.com/owner/repo/pull/42" })
     mocks.branch.mockResolvedValue(undefined)
+  })
+  it("executes credential-authorized patches through the same atomic hash claim", async () => {
+    mocks.proposal.mockResolvedValue({ id: "proposal-1" })
+    mocks.create.mockResolvedValue({ id: "receipt-1", status: "APPROVED" })
+    const authorization = { kind: "oauth-connection" as const, id: "connection-1" }
+    expect(
+      (await requestFixPrApproval({ ...request, authorization }, "https://app.test")).status
+    ).toBe("opened")
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ authorization }))
+    expect(mocks.claim).toHaveBeenCalledWith("receipt-1", "ws-1", expect.any(String))
   })
   it("claims the exact stored patch and workspace before any provider write", async () => {
     expect((await executeApprovedFixPr(request)).status).toBe("opened")

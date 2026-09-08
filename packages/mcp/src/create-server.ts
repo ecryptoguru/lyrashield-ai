@@ -13,7 +13,7 @@ export const SERVER_DESCRIPTION =
   "Bounded security scans, recorded evidence states, fix proposals, retests, and launch-readiness review."
 export const SERVER_WEBSITE_URL = "https://lyrashieldai.com"
 export const SERVER_INSTRUCTIONS =
-  "Start with lyrashield_list_workspaces and lyrashield_list_targets. Use read-only tools to inspect recorded evidence. Mutating tools require exact-argument human approval. A queued scan ID is a LyraShield domain result, not an MCP protocol task; poll it with lyrashield_get_scan_status."
+  "Start with lyrashield_list_workspaces and lyrashield_list_targets. Use read-only tools to inspect recorded evidence. Authorized mutations run automatically within connection permissions. Reuse an idempotency key only for identical retries; a conflict is not a request for human approval. A queued scan ID is a LyraShield domain result, not an MCP protocol task; poll it with lyrashield_get_scan_status."
 
 export interface RemoteApprovalContext {
   workspaceId: string

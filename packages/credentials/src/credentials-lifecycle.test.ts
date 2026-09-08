@@ -198,6 +198,7 @@ describe("WP-01 Credential Lifecycle and Refresh Regressions", () => {
       {
         installId: "inst-issuer",
         issuer: "https://app.example.com/api/auth",
+        resource: "https://app.example.com/api/mcp",
         oauthRefreshToken: "refresh",
       },
       { fetchFn, retries: 0 }
@@ -205,7 +206,9 @@ describe("WP-01 Credential Lifecycle and Refresh Regressions", () => {
 
     expect(fetchFn).toHaveBeenCalledWith(
       "https://app.example.com/api/auth/oauth2/token",
-      expect.any(Object)
+      expect.objectContaining({
+        body: expect.stringContaining("resource=https%3A%2F%2Fapp.example.com%2Fapi%2Fmcp"),
+      })
     )
   })
 

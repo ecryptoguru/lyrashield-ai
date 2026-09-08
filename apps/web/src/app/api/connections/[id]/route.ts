@@ -17,7 +17,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requireWorkspaceAccess(workspaceId, "DEVELOPER")
+    await requireWorkspaceAccess(workspaceId)
     const connection = await getAgentConnection(id, workspaceId)
     if (!connection) {
       return apiError("NOT_FOUND", "Agent connection not found", 404)

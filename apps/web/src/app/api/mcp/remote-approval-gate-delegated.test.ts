@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const requirePermissionMock = vi.fn().mockResolvedValue({})
+vi.mock("@lyrashield/auth/server", () => ({
+  requirePermission: (...args: unknown[]) => requirePermissionMock(...args),
+}))
+
 const createApprovalMock = vi.fn()
 const findPendingApprovalByHashMock = vi.fn()
 const claimOrGetAgentOperationMock = vi.fn()
@@ -8,6 +13,7 @@ const failAgentOperationMock = vi.fn()
 const callToolMock = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
+  TOOL_OPERATION_MAP: { lyrashield_scan_target: { canonicalOperation: "scan.create" } },
   createApproval: (...args: unknown[]) => createApprovalMock(...args),
   findPendingApprovalByHash: (...args: unknown[]) => findPendingApprovalByHashMock(...args),
   getApproval: vi.fn(),
@@ -76,6 +82,42 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    claimOrGetAgentOperationMock.mockReset()
+  })
+
+  it("denies cached results after live membership or permission loss", async () => {
+    requirePermissionMock.mockRejectedValueOnce(new Error("FORBIDDEN"))
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "REPLAY",
+      operation: { id: "old-op", result: { private: "stored" } },
+    })
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      toolContext,
+      connection: {
+        id: "conn-1",
+        workspaceId: "ws-1",
+        status: "ACTIVE",
+        authorizationVersion: 1,
+        allowedOperations: ["scan.create"],
+        allowedTargetIds: [],
+        allTargets: true,
+        allowedProfiles: ["STANDARD"],
+        expiresAt: null,
+      },
+    })
+    expect(
+      await gate("lyrashield_scan_target", {
+        targetId: "target-1",
+        mode: "STANDARD",
+        idempotencyKey: "old-op",
+      })
+    ).toEqual({
+      approved: false,
+      reason: "Current workspace access does not authorize this operation.",
+    })
+    expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+    expect(callToolMock).not.toHaveBeenCalled()
   })
 
   it("executes seamlessly when delegated connection grant authorizes the tool", async () => {

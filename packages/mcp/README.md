@@ -22,7 +22,7 @@ See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior a
 
 ## What it can do
 
-Every tool calls the LyraShield REST API with a workspace API key or OAuth bearer. OAuth connections are read-only by default. During OAuth consent, users can delegate named workflows for selected targets and scan profiles; calls within that grant run without another LyraShield review and require an idempotency key. Connections without a delegated workflow keep the existing exact-input approval flow.
+Every tool calls the LyraShield REST API with a workspace API key or OAuth bearer. New write-scoped OAuth consent has one Connect action authorizing the displayed workflows for the workspace, including current and future targets and supported scan profiles. Matching hosted calls run without another LyraShield review and require an idempotency key. Read-only requests remain read-only; existing restricted connections are never silently expanded.
 
 | Tool                                  | Kind  | What it does                                                  |
 | ------------------------------------- | ----- | ------------------------------------------------------------- |
@@ -134,7 +134,7 @@ The server gives `LYRASHIELD_API_KEY` or `LYRASHIELD_OAUTH_ACCESS_TOKEN` precede
 
 `@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#github-action) instead.
 
-`lyrashield login` uses an OAuth device flow: it opens a browser to approve the CLI, writes the resulting token to `~/.lyrashield/credentials.json`, and falls back to `LYRASHIELD_API_KEY` from the environment if the browser flow is unavailable. `packages/credentials` is the single source of truth for that file — its location, env-over-file precedence, default API URL, and normalization — shared by the CLI and MCP server so the two cannot drift.
+`lyrashield login --oauth` opens hosted consent using authorization code flow with PKCE and an issuer-bound loopback callback. It saves the selected workspace and tokens only after successful exchange and authenticated workspace discovery. Failed login preserves existing credentials. `lyrashield login` accepts an API key instead. `packages/credentials` owns storage, environment precedence, origin binding, refresh locking, and atomic updates for both CLI and MCP.
 
 ### Remote (Streamable HTTP) — for cloud editors
 
@@ -142,9 +142,9 @@ Point any remote-MCP-capable client at the hosted endpoint. Two authentication m
 
 **OAuth 2.0 (recommended):** remote clients that support OAuth 2.0 (per the MCP spec) can
 authenticate through the hosted OAuth flow at `/oauth/consent` with workspace selection and
-optional write scope. The discovery endpoints are `.well-known/oauth-authorization-server` and
-`.well-known/oauth-protected-resource`. Remote connections are read-only by default. Automation
-requires write scope plus explicit workflow, target, and scan-profile delegation at consent.
+the scopes requested by the client. The discovery endpoints are `.well-known/oauth-authorization-server` and
+`.well-known/oauth-protected-resource`. Read-only scope stays read-only. Write-scoped consent
+clearly discloses automatic workspace access and potential scan usage before connecting.
 
 Register the endpoint without a static authorization header so the client can follow discovery:
 
@@ -173,24 +173,17 @@ Register the endpoint without a static authorization header so the client can fo
 }
 ```
 
-The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. Connections are read-only by default. When OAuth consent delegates a workflow, target, and eligible profile, matching calls execute without a second review and require a caller-supplied idempotency key. The server binds each call to the connection, workspace, user, OAuth client, authorization version, scopes, expiry, operation, target, profile, and canonical input hash. Pausing, revoking, expiring, or changing the connection invalidates subsequent calls immediately. Write scope alone never authorizes an action.
+The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. OAuth automation binds each call to the connection, workspace, user, OAuth client, authorization version, scopes, expiry, operation, target, profile, and canonical input hash. Current membership and role are checked before returning a stored operation result as well as before execution. Pausing, revoking, expiring, or changing a connection invalidates subsequent calls immediately.
 
-## Approval behavior
+## Authorization behavior
 
-- **Delegated OAuth connection:** consent is the approval. Matching workflows run without another review and require `idempotencyKey`.
-- **Connection outside its grant:** the call fails closed and returns a reconnect/settings recovery action.
-- **Legacy editor with elicitation:** the client can still request exact-input approval before a mutation.
-- **Legacy bare terminal with a TTY:** the local server can prompt on the controlling terminal.
-- **Legacy headless process without delegation or an approval channel:** mutations fail closed.
-- **Hosted nondelegated connection:** browser review remains available and uses `approvalId` to resume the exact approved call.
+- **New delegated OAuth connection:** Connect is the authorization. Matching hosted mutations require `idempotencyKey`; reuse it only for identical retries.
+- **Connection outside its grant:** the call fails closed. Reconnect to authorize the required access.
+- **Write-scoped API key or local stdio:** the REST API enforces the credential's scope, current role, target authorization, and budget without a second LyraShield prompt.
+- **Read-only credential:** mutations are denied.
+- **Legacy hosted nondelegated credential:** historical exact-input approval remains supported; reconnect for automatic workflows.
 
-A client must return the required `approve: true` form value after a user accepts an elicitation. An empty accepted form is invalid and does not authorize the action. Client permission dialogs alone do not establish LyraShield approval; use the hosted browser flow if the client cannot return a valid form.
-
-### Operator-only CI opt-out
-
-Remote MCP has no normal-user or marketplace write bypass. OAuth writes always require an active server-side connection grant; operator-only controls are intentionally documented outside this public setup guide.
-
-Read-only tools never prompt. A read-only key is additionally rejected server-side for any write action.
+Coding-agent hosts may impose their own tool permission dialogs. LyraShield cannot suppress those controls. API-key and local stdio calls do not claim the hosted OAuth operation ledger's replay guarantee. Pull requests never auto-merge.
 
 ## Compatibility receipts
 

@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requireWorkspaceAccess(workspaceId, "DEVELOPER")
+    await requireWorkspaceAccess(workspaceId)
     const connections = await listAgentConnections(workspaceId)
     return apiSuccess(connections)
   } catch (error) {

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest"
-import { PERMISSIONS, hasPermission, getRolePermissions } from "./permissions"
+import {
+  PERMISSIONS,
+  hasPermission,
+  getRolePermissions,
+  OPERATIONAL_PERMISSIONS,
+} from "./permissions"
 
 const ALL_ROLES = [
   "OWNER",
@@ -49,4 +54,29 @@ describe("billing management authority", () => {
       )
     }
   })
+})
+
+describe("automatic operational access for every member role", () => {
+  it.each(ALL_ROLES)("grants %s the complete operational set consistently", (role) => {
+    for (const permission of OPERATIONAL_PERMISSIONS) {
+      expect(hasPermission(role, permission), `${role}:${permission}`).toBe(true)
+      expect(getRolePermissions(role)).toContain(permission)
+    }
+    expect(new Set(getRolePermissions(role)).size).toBe(getRolePermissions(role).length)
+  })
+
+  it.each(["VIEWER", "AUDITOR", "MEMBER", "DEVELOPER", "EXTERNAL_PENTESTER"] as const)(
+    "does not promote %s to workspace or credential administrator",
+    (role) => {
+      for (const permission of [
+        ...Object.values(PERMISSIONS.member),
+        ...Object.values(PERMISSIONS.workspace),
+        PERMISSIONS.billing.manage,
+        PERMISSIONS.integration.manage,
+        PERMISSIONS.agent.approve,
+        ...Object.values(PERMISSIONS.policy),
+      ])
+        expect(hasPermission(role, permission), `${role}:${permission}`).toBe(false)
+    }
+  )
 })
