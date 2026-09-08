@@ -13,7 +13,7 @@ import {
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
-import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
+import { PRODUCT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
 import {
   buildUrlTargetPayload,
   ensureOnboardingTargetId,
@@ -22,6 +22,7 @@ import {
   onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
+  targetNameFromUrl,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
 
@@ -70,7 +71,10 @@ export function OnboardingWizard({
   const [repos, setRepos] = useState<Repo[]>([])
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [productName, setProductName] = useState(initialState.targetName ?? "")
-  const [environment, setEnvironment] = useState("STAGING")
+  // W2-03: environment classification left the critical path. The safe default
+  // is metadata on the target and stays editable in target settings; it never
+  // changes scanner eligibility, authorization, or execution here.
+  const environment = "STAGING"
   const [selectedGoal, setSelectedGoal] = useState<string>(
     initialState.selectedGoal ?? "LAUNCH_REVIEW"
   )
@@ -111,6 +115,11 @@ export function OnboardingWizard({
       }
       if (cause.code === "VALIDATION_ERROR") {
         return "We couldn't save your target. Please check the name and URL and try again."
+      }
+      // W2-02: a same-source retry continues with the target that already
+      // exists instead of creating a second one.
+      if (cause.code === "TARGET_EXISTS") {
+        return "A target for this source already exists in your workspace. Open Targets to continue with it — no duplicate was created."
       }
     }
     return cause instanceof Error ? cause.message : "Could not start the review."
@@ -525,7 +534,16 @@ export function OnboardingWizard({
                 id="url-input"
                 type="url"
                 value={urlForm.url}
-                onChange={(e) => setUrlForm({ ...urlForm, url: e.target.value })}
+                onChange={(e) => {
+                  const url = e.target.value
+                  setUrlForm({ ...urlForm, url })
+                  // W2-02: selection and naming are one step — the name prefills
+                  // from the parsed host and stays editable.
+                  if (!productName || productName === "Staging Site" || productName === "Production API") {
+                    const fromHost = targetNameFromUrl(e.target.value)
+                    if (fromHost) setProductName(fromHost)
+                  }
+                }}
                 placeholder={
                   path === "api" ? "https://api.example.com" : "https://staging.example.com"
                 }
@@ -659,7 +677,7 @@ export function OnboardingWizard({
                 {retryingExistingTarget
                   ? `Retry the review for ${productName || `this ${PRODUCT_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
                   : pathNeedsRepo(path)
-                    ? `Name your ${PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.`
+                    ? `Name your ${PRODUCT_SINGULAR.toLowerCase()}. You can classify its environment later in target settings.`
                     : `Reviewing your ${pathLabel(path)}. Name it and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
               </p>
             </div>
@@ -674,37 +692,14 @@ export function OnboardingWizard({
                 </p>
               </div>
             ) : (
-              <>
-                <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
-                  <Input
-                    id="product-name"
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
-                    placeholder="My web app"
-                  />
-                </FormField>
-
-                <fieldset>
-                  <legend className="mb-2 text-sm font-medium">{ENVIRONMENT_SINGULAR}</legend>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {["STAGING", "PRODUCTION", "DEVELOPMENT"].map((env) => (
-                      <button
-                        type="button"
-                        key={env}
-                        onClick={() => setEnvironment(env)}
-                        aria-pressed={environment === env}
-                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                          environment === env
-                            ? "border-primary bg-primary/8 text-primary"
-                            : "hover:bg-accent"
-                        }`}
-                      >
-                        {env.toLowerCase()}
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-              </>
+              <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
+                <Input
+                  id="product-name"
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="My web app"
+                />
+              </FormField>
             )}
 
             <fieldset>
