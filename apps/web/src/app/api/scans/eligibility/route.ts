@@ -34,7 +34,7 @@ function eligibilityResponse(data: unknown, status = 200) {
 }
 
 /**
- * Read-only Trust Run eligibility preflight.
+ * Read-only scan eligibility preflight.
  *
  * Advisory: the composer calls this so Start can be disabled with a reason
  * before submission, but POST /api/scans repeats the authoritative check
