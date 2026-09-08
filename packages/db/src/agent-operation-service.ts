@@ -185,3 +185,56 @@ export async function getAgentOperation(
     tx.agentOperation.findFirst({ where: { id: operationId, workspaceId } })
   )
 }
+
+export interface AgentOperationListItem {
+  id: string
+  operationName: string
+  status: string
+  idempotencyKey: string
+  connectionId: string
+  resultReference: string | null
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Recent operations for a workspace, newest first. Bounded for presentation;
+ * every row stays workspace-scoped under RLS. Used by the operation-activity
+ * destination (W1-09) and the shared operation-status contract (W3-08).
+ */
+export async function listRecentAgentOperations(
+  workspaceId: string,
+  limit = 20
+): Promise<AgentOperationListItem[]> {
+  const boundedLimit = Math.max(1, Math.min(limit, 50))
+  const rows = await withWorkspaceRLS(workspaceId, (tx) =>
+    tx.agentOperation.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "desc" },
+      take: boundedLimit,
+      select: {
+        id: true,
+        operationName: true,
+        status: true,
+        idempotencyKey: true,
+        connectionId: true,
+        resultReference: true,
+        error: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+  )
+  return rows.map((row) => ({
+    id: row.id,
+    operationName: row.operationName,
+    status: row.status,
+    idempotencyKey: row.idempotencyKey,
+    connectionId: row.connectionId,
+    resultReference: row.resultReference,
+    error: row.error,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }))
+}

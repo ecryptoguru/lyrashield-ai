@@ -124,19 +124,20 @@ describe("nav-items workspace destinations", () => {
   })
 })
 
-describe("nav-items conditional Review Queue", () => {
-  it("hides Review Queue when there are no pending approvals", () => {
+describe("nav-items conditional Activity destination (W1-09)", () => {
+  it("hides Activity when there are no pending legacy approvals", () => {
     const nav = resolveNav({ pendingApprovals: 0 })
-    expect(nav.reviewQueue).toBeNull()
+    expect(nav.activity).toBeNull()
     expect(nav.secondary.map((i) => i.href)).not.toContain("/dashboard/approvals")
     expect(nav.more.map((i) => i.href)).not.toContain("/dashboard/approvals")
   })
 
-  it("shows Review Queue with a badge when pending approvals exist", () => {
+  it("shows Activity with a badge when pending legacy approvals exist", () => {
     const nav = resolveNav({ pendingApprovals: 3 })
-    expect(nav.reviewQueue).not.toBeNull()
-    expect(nav.reviewQueue?.href).toBe("/dashboard/approvals")
-    expect(nav.reviewQueue?.badgeCount).toBe(3)
+    expect(nav.activity).not.toBeNull()
+    expect(nav.activity?.href).toBe("/dashboard/approvals")
+    expect(nav.activity?.label).toBe("Activity")
+    expect(nav.activity?.badgeCount).toBe(3)
     expect(nav.secondary.map((i) => i.href)).toContain("/dashboard/approvals")
     expect(nav.more.map((i) => i.href)).toContain("/dashboard/approvals")
   })
@@ -149,7 +150,7 @@ describe("nav-items conditional Review Queue", () => {
     expect(empty.mobilePrimary).toHaveLength(4)
   })
 
-  it("does not duplicate any destination when Review Queue is visible", () => {
+  it("does not duplicate any destination when Activity is visible", () => {
     const nav = resolveNav({ pendingApprovals: 1 })
     const hrefs = nav.items.map((i) => i.href)
     expect(new Set(hrefs).size).toBe(hrefs.length)
@@ -157,12 +158,12 @@ describe("nav-items conditional Review Queue", () => {
 
   it("defaults to zero pending approvals when state is omitted", () => {
     const nav = resolveNav()
-    expect(nav.reviewQueue).toBeNull()
+    expect(nav.activity).toBeNull()
   })
 })
 
 describe("nav-items title lookup", () => {
-  it("includes the Review Queue route for page-title resolution", () => {
+  it("includes the Activity route for page-title resolution", () => {
     const hrefs = NAV_TITLE_ITEMS.map((i) => i.href)
     expect(hrefs).toContain("/dashboard/approvals")
   })

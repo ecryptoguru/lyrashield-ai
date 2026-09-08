@@ -1,14 +1,24 @@
 "use client"
 
 import { useCallback, useState } from "react"
-import { Button, Card, CardContent } from "@lyrashield/ui"
-import { Check, X, ShieldCheck, ClipboardList, AlertCircle } from "lucide-react"
+import { Button, Card, CardContent, Badge } from "@lyrashield/ui"
+import { Check, X, ShieldCheck, AlertCircle, Activity } from "lucide-react"
 import { apiPost } from "@/lib/api-client"
 import { type ApprovalListItem } from "@lyrashield/db"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
+import { formatDateTime } from "@/lib/date-format"
+import type { AgentOperationListItem } from "@lyrashield/db"
 
 interface ApprovalItem extends Omit<ApprovalListItem, "input"> {
   input: Record<string, unknown>
+}
+
+const OPERATION_STATUS_VARIANT: Record<string, "success" | "danger" | "warning" | "info" | "muted"> = {
+  COMPLETED: "success",
+  FAILED: "danger",
+  CONFLICT: "warning",
+  EXECUTING: "info",
+  PENDING: "muted",
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -21,6 +31,8 @@ export interface ApprovalsClientProps {
   workspaceId: string
   approvals: ApprovalListItem[]
   hasProposals: boolean
+  /** Recent durable operations (W1-09): status, result, and recovery. */
+  operations?: AgentOperationListItem[]
 }
 
 function toApprovalItem(approval: ApprovalListItem): ApprovalItem {
@@ -37,7 +49,12 @@ function approvalSummary(actionName: string, input: Record<string, unknown>): st
   return actionLabel.charAt(0).toUpperCase() + actionLabel.slice(1)
 }
 
-export function ApprovalsClient({ workspaceId, approvals, hasProposals }: ApprovalsClientProps) {
+export function ApprovalsClient({
+  workspaceId,
+  approvals,
+  hasProposals,
+  operations = [],
+}: ApprovalsClientProps) {
   const [items, setItems] = useState(() => approvals.map(toApprovalItem))
   const [pending, setPending] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
@@ -86,13 +103,13 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
     [workspaceId]
   )
 
-  if (items.length === 0 && !hasProposals && !notice) {
+  if (items.length === 0 && !hasProposals && !notice && operations.length === 0) {
     return (
       <div className="rounded-xl border border-dashed p-12 text-center">
-        <ClipboardList className="text-muted-foreground mx-auto size-10" />
-        <h2 className="mt-4 text-lg font-semibold">No pending approvals</h2>
+        <Activity className="text-muted-foreground mx-auto size-10" />
+        <h2 className="mt-4 text-lg font-semibold">No operation activity yet</h2>
         <p className="text-muted-foreground text-sm">
-          Agent actions that require approval will appear here.
+          Automated operations and any legacy approvals will appear here.
         </p>
       </div>
     )
@@ -109,11 +126,52 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
           </div>
         </div>
       )}
+      {operations.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold tracking-tight">Operation activity</h2>
+          <p className="text-muted-foreground text-sm">
+            Authorized operations run automatically within their grant. Failed or conflicting
+            operations show their recovery here — retrying with the same idempotency key never
+            duplicates a completed action.
+          </p>
+          <ul className="mt-3 grid gap-2" aria-label="Recent operations">
+            {operations.map((operation) => (
+              <li key={operation.id}>
+                <Card>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div className="min-w-0 flex-1 basis-64">
+                      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                        {operation.operationName}
+                      </p>
+                      <p className="mt-1 truncate font-medium" title={operation.id}>
+                        {operation.id}
+                      </p>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {formatDateTime(operation.createdAt)}
+                        {operation.error ? ` · ${operation.error}` : ""}
+                        {operation.resultReference
+                          ? ` · result: ${operation.resultReference}`
+                          : ""}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={OPERATION_STATUS_VARIANT[operation.status] ?? "muted"}
+                    >
+                      {operation.status.replaceAll("_", " ").toLowerCase()}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {items.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold tracking-tight">Agent actions</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Legacy approvals</h2>
           <p className="text-muted-foreground text-sm">
-            Review and approve actions requested by the agent before they run.
+            These came from credentials created before automatic authorization. New connections do
+            not create these; approve or deny each exact input below.
           </p>
           <div className="mt-3 grid gap-3">
             {items.map((approval) => (
@@ -192,7 +250,7 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
           <div className="mt-3 rounded-lg border border-dashed p-8 text-center">
             <ShieldCheck className="text-muted-foreground mx-auto size-8" />
             <p className="text-muted-foreground mt-2 text-sm">
-              Open an issue to review or apply its generated proposed fix.
+              Open a finding to review or apply its generated proposed fix.
             </p>
           </div>
         </section>
