@@ -27,6 +27,7 @@ describe("approval input disclosure", () => {
       })
     )
     expect(html).toContain("Review exact action input")
+    expect(html).toContain('id="approval-approval-1"')
     expect(html).toContain("nested")
     expect(html).toContain("enabled")
     expect(html).toContain("false")

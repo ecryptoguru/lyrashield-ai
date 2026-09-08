@@ -19,7 +19,7 @@ const approvalIdSchema = z.string().min(1).max(128).optional()
 
 function approvalUrl(approvalId: string): string {
   const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
-  return `${base}/agent-approvals/${approvalId}`
+  return `${base}/dashboard/approvals#approval-${encodeURIComponent(approvalId)}`
 }
 
 function pendingDecision(approvalId: string): {

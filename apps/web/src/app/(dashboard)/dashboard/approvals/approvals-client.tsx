@@ -117,7 +117,11 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
           </p>
           <div className="mt-3 grid gap-3">
             {items.map((approval) => (
-              <Card key={approval.id} className="min-w-0">
+              <Card
+                key={approval.id}
+                id={`approval-${approval.id}`}
+                className="min-w-0 scroll-mt-6"
+              >
                 <CardContent className="flex flex-wrap items-start justify-between gap-4 p-4">
                   <div className="min-w-0 flex-1 basis-64">
                     <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
