@@ -1,6 +1,6 @@
 # Seamless agent integrations evidence ledger — 2026-09-08
 
-Baseline SHA: `76587a358524ce884c43e3e63938d05e499be029`. Working branch: `codex/integration-automation-research-2026-09-08`.
+Baseline SHA: `76587a358524ce884c43e3e63938d05e499be029`. Implementation commit: `e861fda966b008cb47035c267aa8f6a4fb08b3f6`. Pull request: [#630](https://github.com/ecryptoguru/lyrashield-ai/pull/630).
 
 This ledger separates local code evidence from PR, release, deployment, and native-client evidence. The implementation is a branch candidate over the baseline SHA; the pull request records the exact candidate head. The baseline SHA does not contain these changes.
 
@@ -54,15 +54,15 @@ All other registry clients remain `PENDING_EXACT_RELEASE` until their documented
 
 ## Release evidence
 
-| Gate                                   | State                           |
-| -------------------------------------- | ------------------------------- |
-| Commit containing this implementation  | PENDING                         |
-| Pull request and exact-head CI         | PENDING                         |
-| Merged-main CI                         | PENDING                         |
-| Package publication                    | PENDING                         |
-| Database deployment                    | PENDING                         |
-| Application deployment revision/digest | PENDING                         |
-| Live OAuth/API/MCP/WebMCP smoke        | PENDING                         |
-| Native lifecycle matrix                | PENDING/BLOCKED as listed above |
+| Gate                                   | State                                      |
+| -------------------------------------- | ------------------------------------------ |
+| Commit containing this implementation  | `e861fda966b008cb47035c267aa8f6a4fb08b3f6` |
+| Pull request and exact-head CI         | PR #630 open; CI pending                   |
+| Merged-main CI                         | PENDING                                    |
+| Package publication                    | PENDING                                    |
+| Database deployment                    | PENDING                                    |
+| Application deployment revision/digest | PENDING                                    |
+| Live OAuth/API/MCP/WebMCP smoke        | PENDING                                    |
+| Native lifecycle matrix                | PENDING/BLOCKED as listed above            |
 
-The code can proceed to review once committed. It must not be described as deployed, released, or operationally accepted until those separate receipts exist.
+PR #630 is the single review unit. It must not be described as deployed, released, or operationally accepted until those separate receipts exist.
