@@ -382,6 +382,8 @@ export {
   failAgentOperation,
   getAgentOperation,
   hashOperationInput,
+  listRecentAgentOperations,
+  type AgentOperationListItem,
   type ClaimAgentOperationParams,
   type ClaimOperationResult,
 } from "./agent-operation-service"

@@ -19,8 +19,6 @@ import {
   TARGET_PLURAL,
   RUN_PLURAL,
   ISSUE_PLURAL,
-  REVIEW_QUEUE_LABEL,
-  APPROVAL_PLURAL,
   NOTIFICATION_PLURAL,
   INTEGRATION_PLURAL,
   TEAM_PLURAL,
@@ -94,20 +92,22 @@ const LIFECYCLE_NAV_ITEMS: NavItem[] = [
 ]
 
 /**
- * The Review Queue item. It is rendered in the desktop sidebar's Workspace group
- * and the mobile More sheet only when `pendingApprovals > 0`. The route itself
- * remains reachable by URL for authorized users even when the queue is empty.
+ * The Activity item (operation activity, recovery, and legacy approvals). It is
+ * rendered in the desktop sidebar's Workspace group and the mobile More sheet
+ * only when legacy pending approvals exist — new connected workflows do not
+ * create pending review requests (W1-09). The route itself remains reachable
+ * by URL for authorized users even when there is nothing pending.
  */
-const REVIEW_QUEUE_BASE: NavItem = {
+const ACTIVITY_BASE: NavItem = {
   href: "/dashboard/approvals",
-  label: REVIEW_QUEUE_LABEL,
-  shortLabel: APPROVAL_PLURAL,
+  label: "Activity",
+  shortLabel: "Activity",
   icon: ClipboardCheck,
 }
 
-function reviewQueueItem(pendingApprovals: number): NavItem {
+function activityItem(pendingApprovals: number): NavItem {
   return {
-    ...REVIEW_QUEUE_BASE,
+    ...ACTIVITY_BASE,
     badgeCount: pendingApprovals > 0 ? pendingApprovals : undefined,
   }
 }
@@ -191,7 +191,7 @@ export interface NavState {
 function resolveNavItems(state: NavState = {}): NavItem[] {
   const pending = state.pendingApprovals ?? 0
   const items = [...LIFECYCLE_NAV_ITEMS]
-  if (pending > 0) items.push(reviewQueueItem(pending))
+  if (pending > 0) items.push(activityItem(pending))
   if (state.canViewEvidenceVault) items.push(EVIDENCE_VAULT_BASE)
   if (state.canManageBilling) items.push(BILLING_BASE)
   items.push(...WORKSPACE_NAV_ITEMS)
@@ -201,18 +201,18 @@ function resolveNavItems(state: NavState = {}): NavItem[] {
 /**
  * Runtime flat list with no pending approvals. Used by components and tests
  * that cannot access the live pending-approval state. It intentionally omits
- * the conditional Review Queue because the item is only visible when pending
+ * the conditional Activity item because it is only visible when pending
  * approvals exist.
  */
 export const NAV_ITEMS: NavItem[] = resolveNavItems({ pendingApprovals: 0 })
 
 /**
- * All navigation destinations, for page-title lookup. Includes the Review Queue
+ * All navigation destinations, for page-title lookup. Includes Activity
  * regardless of pending count because its route is reachable by URL.
  */
 export const NAV_TITLE_ITEMS: NavItem[] = [
   ...LIFECYCLE_NAV_ITEMS,
-  REVIEW_QUEUE_BASE,
+  ACTIVITY_BASE,
   PLATFORM_ADMIN_BASE,
   BILLING_BASE,
   EVIDENCE_VAULT_BASE,
@@ -230,8 +230,8 @@ export const NAV_TITLE_ITEMS: NavItem[] = [
 export const PRIMARY_NAV_ITEMS: NavItem[] = LIFECYCLE_NAV_ITEMS
 
 /**
- * Desktop sidebar secondary group. Always includes Workspace items; the Review
- * Queue is appended first when pending approvals exist.
+ * Desktop sidebar secondary group. Always includes Workspace items; the
+ * Activity item is appended first when legacy pending approvals exist.
  */
 export const SECONDARY_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS
 
@@ -241,7 +241,7 @@ export const MOBILE_PRIMARY_NAV_ITEMS: NavItem[] = LIFECYCLE_NAV_ITEMS
 /**
  * Everything the mobile bottom bar does not show. Defined as the exact complement
  * of MOBILE_PRIMARY_NAV_ITEMS so a new destination is reachable on mobile by
- * default. The Review Queue is included only when pending approvals exist.
+ * default. Activity is included only when pending approvals exist.
  */
 export const MORE_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS
 
@@ -253,8 +253,8 @@ export interface ResolvedNav {
   secondary: NavItem[]
   mobilePrimary: NavItem[]
   more: NavItem[]
-  /** The Review Queue item, or null when no pending approvals exist. */
-  reviewQueue: NavItem | null
+  /** The Activity item, or null when no legacy pending approvals exist. */
+  activity: NavItem | null
   /** The Evidence Vault item, or null when the active role lacks aiAssurance:view. */
   evidenceVault: NavItem | null
   /** Platform Admin item, or null when platform authorization is absent. */
@@ -263,18 +263,18 @@ export interface ResolvedNav {
 
 /**
  * Resolve navigation for a given state. The layout calls this with the
- * permission-gated pending approval count so the Review Queue and its badge
- * appear only when there is something to review.
+ * permission-gated pending approval count so the Activity item and its badge
+ * appear only when legacy approvals are waiting.
  */
 export function resolveNav(state: NavState = {}): ResolvedNav {
   const pending = state.pendingApprovals ?? 0
-  const reviewQueue = pending > 0 ? reviewQueueItem(pending) : null
+  const activity = pending > 0 ? activityItem(pending) : null
   const evidenceVault = state.canViewEvidenceVault ? EVIDENCE_VAULT_BASE : null
   const platformAdmin = state.platformAdminHref
     ? { ...PLATFORM_ADMIN_BASE, href: state.platformAdminHref }
     : null
   const conditional: NavItem[] = []
-  if (reviewQueue) conditional.push(reviewQueue)
+  if (activity) conditional.push(activity)
   if (evidenceVault) conditional.push(evidenceVault)
   if (platformAdmin) conditional.push(platformAdmin)
   if (state.canManageBilling) conditional.push(BILLING_BASE)
@@ -287,7 +287,7 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
     secondary,
     mobilePrimary: LIFECYCLE_NAV_ITEMS,
     more,
-    reviewQueue,
+    activity,
     evidenceVault,
     platformAdmin,
   }
