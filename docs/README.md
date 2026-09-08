@@ -35,6 +35,8 @@ Use this index to find the owning document and avoid duplicating current truth.
 
 ## Retained source artifacts
 
+- [`plans/2026-09-09-product-simplification-coding-handoff.md`](plans/2026-09-09-product-simplification-coding-handoff.md) — implementation handoff for all three UX/automation simplification waves and the selected all-member operational-access policy; task completion requires separate source, CI, deployment and runtime evidence.
+
 - [`plans/`](plans/) — approved or historically load-bearing design records. A plan is not current implementation truth.
 - [`editorial/`](editorial/) — claim maps, briefs, research, and image manifests consumed by marketing validators. These are publishing inputs, not disposable notes.
 - [`marketplace/`](marketplace/) — marketplace export source, licenses, validator, and reviewer artifacts. The validator runs against a generated export (which adds `manifest.json` and root plugin files), not this source directory; use `pnpm --filter @lyrashield/agent-plugin test` here.
