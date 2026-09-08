@@ -4,16 +4,16 @@ Baseline: `@modelcontextprotocol/sdk` 1.30.0 and `@lyrashield/mcp` 0.2.6.
 
 ## Supported and tested
 
-| Guarantee                                                                                  | Evidence                                                   |
-| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| Latest SDK stable protocol `2025-11-25` negotiates successfully                            | `src/http-transport.test.ts`                               |
-| Previous protocol `2025-06-18` still negotiates successfully                               | `src/http-transport.test.ts`                               |
-| Unsupported protocol headers fail with HTTP 400 and list supported versions                | `src/http-transport.test.ts`                               |
-| Server metadata and instructions are returned during initialization                        | `src/create-server.test.ts`                                |
-| All tools expose title, input/output schemas, annotations, and explicit task semantics     | `src/create-server.test.ts`                                |
-| Success and error results expose both text and structured content                          | `src/create-server.test.ts`, `src/server-approval.test.ts` |
-| Hosted workspace responses are `no-store` and vary by authorization/protocol               | `src/http-transport.test.ts`                               |
-| Read tools bypass approval; write tools remain fail-closed without exact-argument approval | `src/create-server.test.ts`, `src/remote-approval.test.ts` |
+| Guarantee                                                                                                                                                                     | Evidence                                                   |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Latest SDK stable protocol `2025-11-25` negotiates successfully                                                                                                               | `src/http-transport.test.ts`                               |
+| Previous protocol `2025-06-18` still negotiates successfully                                                                                                                  | `src/http-transport.test.ts`                               |
+| Unsupported protocol headers fail with HTTP 400 and list supported versions                                                                                                   | `src/http-transport.test.ts`                               |
+| Server metadata and instructions are returned during initialization                                                                                                           | `src/create-server.test.ts`                                |
+| All tools expose title, input/output schemas, annotations, and explicit task semantics                                                                                        | `src/create-server.test.ts`                                |
+| Success and error results expose both text and structured content                                                                                                             | `src/create-server.test.ts`, `src/server-approval.test.ts` |
+| Hosted workspace responses are `no-store` and vary by authorization/protocol                                                                                                  | `src/http-transport.test.ts`                               |
+| Read tools never prompt; delegated writes require an idempotency key and matching connection grant; nondelegated writes retain exact-input approval and otherwise fail closed | `src/create-server.test.ts`, `src/remote-approval.test.ts` |
 
 ## Intentionally unsupported
 
