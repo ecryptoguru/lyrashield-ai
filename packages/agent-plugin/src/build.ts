@@ -84,7 +84,7 @@ ${SKILL_APPENDIX}
         mcpServers: {
           lyrashield: {
             command: "npx",
-            args: ["-y", "@lyrashield/mcp@0.2.5"],
+            args: ["-y", "@lyrashield/mcp@0.2.6"],
           },
         },
       },

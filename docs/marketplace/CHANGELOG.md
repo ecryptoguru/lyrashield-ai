@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.25
+
+- Pin MCP 0.2.6 with connection-bound OAuth delegation, idempotent writes, and fail-closed lifecycle checks.
+- Keep read-only as the default while allowing users to approve selected workflows, targets, and scan profiles once during OAuth consent.
+- Refresh CLI, MCP, and Agent Plugin release metadata without changing supported client discovery paths.
+
 ## 0.1.24
 
 - Package Codex under a dedicated marketplace root using its native `streamable-http` MCP schema.

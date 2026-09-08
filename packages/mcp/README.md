@@ -18,11 +18,11 @@ This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol
 - Hosted responses use `Cache-Control: no-store` and vary on authorization and MCP protocol version. The server does not advertise unsupported MCP list-cache metadata.
 - The hosted transport remains stateless and fail-closed. It does not advertise durable MCP Tasks because an in-memory task store would make serverless polling, cancellation, and replay unreliable.
 
-See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported draft gaps. Tool annotations are client hints only; the server always enforces prompt-injection and mutation approval independently.
+See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported draft gaps. Tool annotations are client hints only; the server always enforces prompt-injection checks and the connection's server-side authorization independently.
 
 ## What it can do
 
-Every tool calls the LyraShield REST API with a workspace API key or OAuth bearer. **Mutating tools require human approval** — the server asks you in-editor (MCP elicitation) before starting a scan, recording a fix proposal, or queueing a retest.
+Every tool calls the LyraShield REST API with a workspace API key or OAuth bearer. OAuth connections are read-only by default. During OAuth consent, users can delegate named workflows for selected targets and scan profiles; calls within that grant run without another LyraShield review and require an idempotency key. Connections without a delegated workflow keep the existing exact-input approval flow.
 
 | Tool                                  | Kind  | What it does                                                  |
 | ------------------------------------- | ----- | ------------------------------------------------------------- |
@@ -143,8 +143,8 @@ Point any remote-MCP-capable client at the hosted endpoint. Two authentication m
 **OAuth 2.0 (recommended):** remote clients that support OAuth 2.0 (per the MCP spec) can
 authenticate through the hosted OAuth flow at `/oauth/consent` with workspace selection and
 optional write scope. The discovery endpoints are `.well-known/oauth-authorization-server` and
-`.well-known/oauth-protected-resource`. Remote connections are read-only by default; write actions
-require explicit scope and approval.
+`.well-known/oauth-protected-resource`. Remote connections are read-only by default. Automation
+requires write scope plus explicit workflow, target, and scan-profile delegation at consent.
 
 Register the endpoint without a static authorization header so the client can follow discovery:
 
@@ -173,26 +173,28 @@ Register the endpoint without a static authorization header so the client can fo
 }
 ```
 
-The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. Connections are read-only by default. A connection with write scope can request an action, then open the returned `approvalUrl` for human review in LyraShield. After approval, call the same tool with the same arguments plus the returned `approvalId`. The server binds approval to the tool and exact input, checks expiry, and claims execution before running the action. Write scope alone never approves an action.
+The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. Connections are read-only by default. When OAuth consent delegates a workflow, target, and eligible profile, matching calls execute without a second review and require a caller-supplied idempotency key. The server binds each call to the connection, workspace, user, OAuth client, authorization version, scopes, expiry, operation, target, profile, and canonical input hash. Pausing, revoking, expiring, or changing the connection invalidates subsequent calls immediately. Write scope alone never authorizes an action.
 
 ## Approval behavior
 
-- **In an editor that supports elicitation** (Cursor, VS Code, Claude Code, …): you get an in-editor approve/deny prompt before any mutating tool runs.
-- **In a bare terminal with a TTY**: you're prompted on the controlling terminal.
-- **No approval channel available** (e.g. a headless process): mutating tools fail closed.
-- **Hosted remote MCP**: browser approval supports clients without form elicitation. Mutating tool schemas advertise the optional `approvalId` used to resume the exact approved call.
+- **Delegated OAuth connection:** consent is the approval. Matching workflows run without another review and require `idempotencyKey`.
+- **Connection outside its grant:** the call fails closed and returns a reconnect/settings recovery action.
+- **Legacy editor with elicitation:** the client can still request exact-input approval before a mutation.
+- **Legacy bare terminal with a TTY:** the local server can prompt on the controlling terminal.
+- **Legacy headless process without delegation or an approval channel:** mutations fail closed.
+- **Hosted nondelegated connection:** browser review remains available and uses `approvalId` to resume the exact approved call.
 
 A client must return the required `approve: true` form value after a user accepts an elicitation. An empty accepted form is invalid and does not authorize the action. Client permission dialogs alone do not establish LyraShield approval; use the hosted browser flow if the client cannot return a valid form.
 
 ### Operator-only CI opt-out
 
-Remote MCP has no normal-user or marketplace write bypass. OAuth writes always remain scope- and approval-gated; operator-only automation controls are intentionally documented outside this public setup guide.
+Remote MCP has no normal-user or marketplace write bypass. OAuth writes always require an active server-side connection grant; operator-only controls are intentionally documented outside this public setup guide.
 
 Read-only tools never prompt. A read-only key is additionally rejected server-side for any write action.
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.5; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/mcp` 0.2.6; runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,

@@ -90,7 +90,7 @@ describe("conformance: install/uninstall round-trips", () => {
     expect(servers).toHaveProperty("lyrashield")
     const lyra = servers["lyrashield"] as Record<string, unknown>
     expect(lyra).toHaveProperty("command", "npx")
-    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.5"])
+    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.6"])
     expect(lyra).toHaveProperty("env")
   })
 
@@ -304,7 +304,7 @@ args = ["acme-mcp"]`
       serverName: "lyrashield",
       value: {
         command: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.5"],
+        args: ["-y", "@lyrashield/mcp@0.2.6"],
         env: {
           LYRASHIELD_API_KEY: API_KEY,
           LYRASHIELD_API_URL: API_URL,
@@ -326,7 +326,7 @@ args = ["acme-mcp"]`
     expect(acme).toHaveProperty("args", ["acme-mcp"])
     const lyra = servers["lyrashield"] as Record<string, unknown>
     expect(lyra).toHaveProperty("command", "npx")
-    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.5"])
+    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.6"])
     expect(lyra).toHaveProperty("env")
     const env = lyra["env"] as Record<string, unknown>
     expect(env).toEqual({
@@ -351,7 +351,7 @@ mcp_servers:
       serverName: "lyrashield",
       value: {
         command: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.5"],
+        args: ["-y", "@lyrashield/mcp@0.2.6"],
       },
     })
 
@@ -369,6 +369,6 @@ mcp_servers:
     expect(acme).toHaveProperty("args", ["acme-mcp"])
     const lyra = servers["lyrashield"] as Record<string, unknown>
     expect(lyra).toHaveProperty("command", "npx")
-    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.5"])
+    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.6"])
   })
 })

@@ -11,7 +11,7 @@ The canonical plugin lives in the `plugin/` directory:
 - `plugin/plugin.json` — the manifest (name, version, description, author, homepage,
   repository, license, keywords).
 - `plugin/mcp.json` — OAuth-first Streamable HTTP MCP server config. The hosted service
-  performs authorization discovery and keeps write scope approval-gated.
+  performs authorization discovery and keeps write scope bound to the connection grant.
 - `plugin/skills/lyrashield/SKILL.md` — the skill body, generated from the
   `@lyrashield/agent-rules` policy. It now includes a mode/cost guide, example
   user prompts and matching tool calls, and a minute-awareness note so the agent
@@ -69,10 +69,11 @@ pnpm --filter @lyrashield/agent-plugin test
 
 The canonical, Claude, Cursor, and Codex artifacts connect to the hosted Streamable HTTP
 endpoint without embedding a secret. The client follows hosted OAuth discovery, selects one
-workspace, and receives read scope by default. Write scope is optional, and every mutation
-still requires exact-argument approval.
+workspace, and receives read scope by default. Write scope is optional. Consent can delegate named
+workflows for selected targets and scan profiles so matching calls need no additional LyraShield
+review; all other mutations fail closed or use the legacy exact-input approval path.
 
-Kiro uses the local `npx -y @lyrashield/mcp@0.2.5` stdio adapter. Run `lyrashield login --oauth`
+Kiro uses the local `npx -y @lyrashield/mcp@0.2.6` stdio adapter. Run `lyrashield login --oauth`
 first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
 variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
 Headless writes without an approval channel fail closed.
@@ -83,7 +84,7 @@ Headless writes without an approval channel fail closed.
 
 ## Version and release receipts
 
-- Package: `@lyrashield/agent-plugin` 0.1.24; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/agent-plugin` 0.1.25; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions, and the public export boundary.
