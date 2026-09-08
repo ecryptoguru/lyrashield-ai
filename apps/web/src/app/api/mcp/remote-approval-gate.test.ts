@@ -81,6 +81,16 @@ describe("remote approval gate — claim-before-execution", () => {
     mcpCallTool.mockResolvedValue(TOOL_RESULT)
   })
 
+  it("links pending approval to the existing dashboard review queue", async () => {
+    dbGetApproval.mockResolvedValue(approvalFixture({ status: "PENDING" }))
+    const decision = await makeGate()("run-scan", { approvalId: "ap-1" })
+    expect(decision).toMatchObject({
+      approved: false,
+      pending: true,
+      approvalUrl: "https://app.example.com/dashboard/approvals#approval-ap-1",
+    })
+  })
+
   it("two concurrent polls execute the tool exactly once; loser replays the winner's result", async () => {
     // Simulate the DB's atomic claim: only the first caller transitions the row.
     dbClaimApprovalExecution.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
