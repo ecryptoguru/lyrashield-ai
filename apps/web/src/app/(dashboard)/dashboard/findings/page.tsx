@@ -9,22 +9,22 @@ import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
 import { EvidenceList } from "./evidence-list"
-import { ReportsClient } from "../reports/reports-client"
 import { calculateFindingPriority } from "@/lib/finding-priority"
 import { findingFilterToApiQuery, parseFindingListParams } from "@/lib/finding-list-params"
 
 const FINDINGS_TABS: SectionTab[] = [
   // The `issues` tab value is a compatibility URL parameter; the visible label
-  // uses the canonical "Findings" noun.
+  // uses the canonical "Findings" noun. Reports are a direct destination at
+  // /dashboard/reports (W2-10); the old tab route forwards its query scope.
   { value: "issues", label: ISSUE_PLURAL, href: "/dashboard/findings?tab=issues" },
   { value: "evidence", label: "Evidence", href: "/dashboard/findings?tab=evidence" },
-  { value: "reports", label: "Reports", href: "/dashboard/findings?tab=reports" },
 ]
 
-type FindingsTab = "issues" | "evidence" | "reports"
+type FindingsTab = "issues" | "evidence"
 
 function normalizeTab(value: string | undefined): FindingsTab {
-  if (value === "evidence" || value === "reports") return value
+  if (value === "evidence") return value
+  // The legacy reports tab is a permanent redirect to /dashboard/reports.
   return "issues"
 }
 
@@ -84,24 +84,6 @@ export default async function FindingsPage({
           activeTab={tab}
         />
         <EvidenceList workspaceId={workspaceId} />
-      </div>
-    )
-  }
-
-  if (tab === "reports") {
-    return (
-      <div>
-        <DashboardSectionTabs
-          title={ISSUE_PLURAL}
-          description="Create immutable assurance snapshots from completed scan evidence. Reports summarize retained evidence; they do not create new verification."
-          tabs={tabs}
-          activeTab={tab}
-        />
-        <ReportsClient
-          workspaceId={workspaceId}
-          initialScanId={params.scanId}
-          initialTargetId={params.targetId}
-        />
       </div>
     )
   }
