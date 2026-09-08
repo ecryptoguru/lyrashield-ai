@@ -702,28 +702,54 @@ export function OnboardingWizard({
               </FormField>
             )}
 
+            {/* W2-04: one recommended eligible review, with alternatives behind
+                an explicit "Change review" toggle. Essential scope, limitation,
+                and usage information stays outside the collapsed details. */}
             <fieldset>
               <legend className="mb-2 text-sm font-medium">
-                What do you need from this {RUN_SINGULAR.toLowerCase()}?
+                Recommended review for this {pathLabel(path)}
               </legend>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {reviewOptions.map((option) => (
-                  <button
-                    type="button"
-                    key={option.id}
-                    onClick={() => setSelectedGoal(option.goal)}
-                    aria-pressed={selectedReview?.id === option.id}
-                    className={`rounded-lg border p-3 text-left text-sm transition-colors ${
-                      selectedReview?.id === option.id
-                        ? "border-primary bg-primary/8"
-                        : "hover:bg-accent"
-                    }`}
-                  >
-                    <span className="block font-medium">{option.label}</span>
-                    <span className="text-muted-foreground text-xs">{option.description}</span>
-                  </button>
-                ))}
-              </div>
+              {selectedReview && (
+                <div className="border-primary bg-primary/8 rounded-lg border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{selectedReview.label}</span>
+                    <Badge variant="info">
+                      ~{selectedReview.estimate.low}–{selectedReview.estimate.high} min
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-sm">{selectedReview.description}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Depth: {selectedReview.mode.toLowerCase()} · runs within your workspace plan,
+                    budgets, and target authorization. A clean result is not a security guarantee.
+                  </p>
+                </div>
+              )}
+              <details className="mt-2">
+                <summary className="text-muted-foreground cursor-pointer text-sm font-medium">
+                  Change review
+                </summary>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {reviewOptions.map((option) => (
+                    <button
+                      type="button"
+                      key={option.id}
+                      onClick={() => setSelectedGoal(option.goal)}
+                      aria-pressed={selectedReview?.id === option.id}
+                      className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                        selectedReview?.id === option.id
+                          ? "border-primary bg-primary/8"
+                          : "hover:bg-accent"
+                      }`}
+                    >
+                      <span className="block font-medium">{option.label}</span>
+                      <span className="text-muted-foreground text-xs">{option.description}</span>
+                      <span className="text-muted-foreground mt-1 block text-xs">
+                        ~{option.estimate.low}-{option.estimate.high} min · {option.mode.toLowerCase()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </details>
               {path === "api" && (
                 <p className="text-muted-foreground mt-2 text-xs">
                   Add an OpenAPI document after setup to unlock Contract and Contract Behavior
