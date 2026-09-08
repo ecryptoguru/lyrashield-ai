@@ -16,10 +16,11 @@ vi.mock("@lyrashield/auth", () => ({
 }))
 
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("../../../lib/cache", () => ({ revalidateDashboardAggregates: vi.fn() }))
 
 import { POST } from "./route"
 import { prisma, createReport } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 
 describe("POST /api/reports", () => {
   beforeEach(() => {
@@ -45,5 +46,45 @@ describe("POST /api/reports", () => {
     expect(await response.json()).toMatchObject({ error: { code: "SCAN_NOT_FOUND" } })
     expect(response.status).toBe(404)
     expect(createReport).not.toHaveBeenCalled()
+  })
+
+  it("resolves a target-scoped report to its latest completed scan", async () => {
+    vi.mocked(prisma.scan.findFirst).mockResolvedValue({ id: "scan-latest" } as never)
+    vi.mocked(createReport).mockResolvedValue({
+      id: "report-1",
+      title: "Report",
+      status: "generated",
+    } as never)
+
+    const response = await POST(
+      new Request("http://localhost/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          targetId: "target-1",
+          title: "Report",
+        }),
+      })
+    )
+
+    expect(prisma.scan.findFirst).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        status: "COMPLETED",
+        deletedAt: null,
+      },
+      orderBy: [{ endedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      select: { id: true },
+    })
+    expect(createReport).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-1", scanId: "scan-latest" })
+    )
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1" }),
+      "target-1"
+    )
+    expect(response.status).toBe(201)
   })
 })

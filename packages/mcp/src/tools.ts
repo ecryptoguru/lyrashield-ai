@@ -399,12 +399,17 @@ export function createCreateReportTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_create_report",
     mutating: true,
-    description: "Generate a shareable security report from scan findings.",
+    description:
+      "Generate a shareable security report from scan findings. Pass targetId to use that target's latest completed scan, or pass scanId for an exact scan.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         scanId: { type: "string", description: "Optional scan ID to report on" },
+        targetId: {
+          type: "string",
+          description: "Optional target ID; uses its latest completed scan when scanId is omitted",
+        },
         title: { type: "string", description: "Report title" },
         type: { type: "string", description: "Report type: developer, executive, compliance" },
       },
@@ -415,6 +420,7 @@ export function createCreateReportTool(context: ToolHandlerContext): McpTool {
         const data = await apiCall(context, "POST", "/api/reports", {
           workspaceId: args.workspaceId,
           ...(args.scanId ? { scanId: args.scanId } : {}),
+          ...(args.targetId ? { targetId: args.targetId } : {}),
           title: args.title,
           type: args.type ?? "developer",
         })

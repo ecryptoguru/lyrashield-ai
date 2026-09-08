@@ -5,6 +5,7 @@ import { ReportListSchema, ReportSchema } from "../schemas"
 export interface CreateReportInput {
   workspaceId?: string
   scanId?: string
+  targetId?: string
   title: string
   type?: string
 }

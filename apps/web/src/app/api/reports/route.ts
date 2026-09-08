@@ -16,6 +16,7 @@ import { revalidateDashboardAggregates } from "../../../lib/cache"
 const CreateReportSchema = z.object({
   workspaceId: z.string().min(1),
   scanId: z.string().optional(),
+  targetId: z.string().optional(),
   type: z.enum(["developer", "executive", "compliance"]).optional(),
   title: z.string().min(1).max(200),
 })
@@ -52,11 +53,12 @@ async function post(request: Request) {
       return apiError("INVALID_PARAM", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
 
-    const { workspaceId, scanId, type, title } = parsed.data
+    const { workspaceId, scanId, targetId: requestedTargetId, type, title } = parsed.data
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
 
-    let targetId: string | undefined
+    let resolvedScanId = scanId
+    let targetId = requestedTargetId
     if (scanId) {
       const scan = await prisma.scan.findFirst({
         where: { id: scanId, workspaceId, deletedAt: null },
@@ -65,13 +67,35 @@ async function post(request: Request) {
       if (!scan) {
         return apiError("SCAN_NOT_FOUND", "Scan not found in this workspace", 404)
       }
+      if (requestedTargetId && scan.targetId !== requestedTargetId) {
+        return apiError("SCAN_TARGET_MISMATCH", "Scan does not belong to the requested target", 400)
+      }
       targetId = scan.targetId ?? undefined
+    } else if (requestedTargetId) {
+      const scan = await prisma.scan.findFirst({
+        where: {
+          workspaceId,
+          targetId: requestedTargetId,
+          status: "COMPLETED",
+          deletedAt: null,
+        },
+        orderBy: [{ endedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      })
+      if (!scan) {
+        return apiError(
+          "TARGET_SCAN_NOT_FOUND",
+          "No completed scan is available for the requested target",
+          404
+        )
+      }
+      resolvedScanId = scan.id
     }
     assertOAuthDelegatedScope(session, targetId)
 
     const report = await createReport({
       workspaceId,
-      ...(scanId ? { scanId } : {}),
+      ...(resolvedScanId ? { scanId: resolvedScanId } : {}),
       ...(type ? { type } : {}),
       title,
       createdById: session.userId,
