@@ -369,14 +369,14 @@ Trust-boundary rules:
 ### Web and worker
 
 - Auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, OAuth provider values, trusted origins.
-- Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, and a separately scoped `DATABASE_SYSTEM_URL` where a verified cross-workspace path requires it. Production app and worker each receive separately provisioned, bounded system credentials for reviewed global operations; Lite Scanner receives none. Billing staging uses `app_system_staging` only for license operations, while ordinary traffic uses RLS-bound `app_runtime_staging`.
+- Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, and a separately scoped `DATABASE_SYSTEM_URL` where a verified cross-workspace path requires it. Production app and worker each receive separately provisioned, bounded system credentials for reviewed global operations; Lite Scanner receives none.
 - Queue: `REDIS_URL`; production BullMQ requires authenticated `rediss://`.
 - Rate limit: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` only.
 - Engine: `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LYRASHIELD_LLM`, Azure API values.
 - Evidence: `S3_*` plus encryption/key references.
 - Proxy: `LYRASHIELD_EGRESS_PROXY_URL`, `LYRASHIELD_EGRESS_PROXY_SECRET`.
 - Email: `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION`, `BREVO_API_KEY`, sender values.
-- Billing: Polar/Razorpay credentials, price maps, webhook secrets; isolated billing staging additionally requires `LYRASHIELD_DEPLOYMENT_ENVIRONMENT=billing-staging`, `BILLING_STAGING_ADMISSION=restricted`, and the protected access-session secret while every normal purchase admission remains `off`.
+- Billing: Polar/Razorpay credentials, price maps, webhook secrets, and explicit Cloud/Local admission modes.
 - License: Key Vault and signing key identifiers.
 - Optional search: `LYRASHIELD_WEB_SEARCH_*`.
 
@@ -454,8 +454,7 @@ Current command output is authoritative; never copy historical test counts forwa
 - Production evidence storage passed encrypted round-trip, checksum, isolation, tamper-denial, cleanup, and missing-KEK fail-closed probes. Managed-identity license signing passed Key Vault retrieval, denied-identity, in-memory sign/verify, Desktop fingerprint parity, and missing-secret tests; this does not claim non-exportable remote signing.
 - Both administrators acknowledged the Azure test notification. The controlled orphan drill failed synthetic scan `cmta574d50004fef1nbydufai` as `QUEUE_ORPHANED` without execution or replay, then restored the exact worker and reconciled both queues to zero.
 - Exact-two preflight `32925726620` and apply `32925979621` passed. Both operators then completed independent Google-plus-TOTP browser proof across every bounded admin destination; unauthenticated, bearer-only, and workspace-header-only requests remained denied.
-- Production includes PR #426 billing-staging hardening, PR #432 Redis/egress efficiency, and PR #450 secure scan-owned checkout recovery. Purchase admissions remain `off`. Provider catalog/webhook readiness was observed separately on 2026-08-26; deployment still does not prove hosted checkout or entitlement/usage events.
-- Billing staging is a distinct code-only deployment surface: `.github/workflows/deploy-billing-staging.yml` builds `runner` and `workspace-builder` from the dispatched main SHA into the isolated ACR, deploys only immutable digests, invokes image-owned migration/role scripts as exact Container Apps Job commands, and cleans up the jobs. The web proxy gates ordinary staging routes with an opaque HttpOnly same-origin access session while leaving exact health/readiness and signature-validating billing webhook ingress reachable. `BILLING_STAGING_ADMISSION=restricted` requires staging marker/origin plus Sandbox/Test modes and all production admissions off; no execution or live billing proof is implied.
+- Production includes PR #432 Redis/egress efficiency and PR #450 secure scan-owned checkout recovery. Provider catalog/webhook readiness was observed separately on 2026-08-26; deployment still does not prove hosted checkout or entitlement/usage events. The isolated billing test deployment, its application exception, and its Azure/GitHub control plane were removed on 2026-09-08 after the accepted provider receipts were retained.
 
 ### Current Standard scan proof
 

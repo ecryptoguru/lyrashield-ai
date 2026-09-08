@@ -23,7 +23,7 @@ This is the current revision-bound production receipt. The 2026-08-24 status doc
 
 - Razorpay Live is activated with complete account access, six Cloud plans matching the INR catalog and intervals, and one enabled production webhook subscribed to eight events. Hosted-checkout payment-method availability above INR 15,000 remains transaction-unproven.
 - Polar Live has an active production API token, fifteen private products covering six Cloud intervals, three minute packs, and six Local products, plus an enabled production webhook for the expected order, refund, customer, and subscription lifecycle events. Payout settlement readiness was not re-proven.
-- Production sets `POLAR_ENVIRONMENT=production`; every Polar/Razorpay Cloud and Local purchase admission and billing-staging admission remains `off`. No live charge, subscription, refund, provider mutation, or new financial acceptance occurred during this review.
+- Production sets `POLAR_ENVIRONMENT=production`. No live charge, subscription, refund, provider mutation, or new financial acceptance occurred during this review.
 - Restricted Polar Sandbox and Razorpay Test Mode hosted-checkout, signed-webhook, cancellation, refund, license, database-effect, and 100-replay receipts remain a separate staging gate.
 
 ## Public, SEO, and scorecard proof
@@ -38,7 +38,7 @@ This is the current revision-bound production receipt. The 2026-08-24 status doc
 ## Remaining controlled gates
 
 1. Merge and deploy the scorecard-origin fix, then repeat the live canonical/OG readback.
-2. Run restricted billing staging end to end; keep every production purchase admission off until a separate founder go-live decision.
+2. Preserve the historical provider-test receipts; the isolated test environment was retired on 2026-09-08.
 3. Retain longer-window Redis command/capacity evidence and complete payout/tax-form operations before paid scale.
 4. Independently triage the 25 findings from Standard scan `cmt9el7p7000001hdjnjo90wk`; absence in an engine rerun alone remains `INCONCLUSIVE`.
 5. Run the founder-approved Deep/Terra acceptance later with its separate $5/45-minute cap and evidence contract.

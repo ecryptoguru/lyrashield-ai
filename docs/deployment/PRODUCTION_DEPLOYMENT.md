@@ -385,7 +385,7 @@ AZURE_AD_TENANT_ID="common"
 
 # Billing provider configuration is app-only. The deploy workflow validates the
 # complete protected-environment set and still forces all purchase admissions off.
-POLAR_ENVIRONMENT="production" # use sandbox only in isolated billing staging
+POLAR_ENVIRONMENT="production"
 POLAR_ACCESS_TOKEN="..."
 POLAR_ORG_ID="..."
 POLAR_WEBHOOK_SECRET="..."
@@ -412,7 +412,7 @@ expected current or rollback revision is missing.
 
 ### Database boundaries and worker-only configuration
 
-The production worker requires the restricted runtime database URL and a separate system URL for reviewed cross-workspace ownership and recovery operations. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. The production web app also requires its separately provisioned system connection for explicitly reviewed global boundaries such as public share-token resolution, invitation acceptance, license operations, and platform administration; never point it at the ordinary runtime role or expose it to the Lite Scanner. Keep the system role non-superuser, non-replicating, and no broader than those reviewed operations. Billing staging instead binds its no-membership/NOREPLICATION `app_system_staging` role limited to exact license operations and keeps ordinary traffic on `app_runtime_staging` with RLS enforced. The worker also requires the authenticated egress-proxy URL and secret so it cannot accept production URL jobs without the safe fetch boundary.
+The production worker requires the restricted runtime database URL and a separate system URL for reviewed cross-workspace ownership and recovery operations. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. The production web app also requires its separately provisioned system connection for explicitly reviewed global boundaries such as public share-token resolution, invitation acceptance, license operations, and platform administration; never point it at the ordinary runtime role or expose it to the Lite Scanner. Keep the system role non-superuser, non-replicating, and no broader than those reviewed operations. The worker also requires the authenticated egress-proxy URL and secret so it cannot accept production URL jobs without the safe fetch boundary.
 
 ```bash
 DATABASE_URL="postgresql://..." # worker-database-url; RLS-restricted runtime role

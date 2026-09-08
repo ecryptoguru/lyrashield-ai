@@ -6,22 +6,21 @@ import {
   type BillingProvider,
 } from "@lyrashield/billing"
 import { apiError } from "./api-response"
-import { hasBillingStagingAccess } from "./billing-staging-access"
 
 export function getRequestBillingAdmission(
   provider: BillingProvider,
   workspaceId: string,
-  request: Request
+  _request: Request
 ) {
-  return getBillingAdmission(provider, workspaceId, hasBillingStagingAccess(request))
+  return getBillingAdmission(provider, workspaceId)
 }
 
-export function getRequestLocalBillingAdmission(provider: BillingProvider, request: Request) {
-  return getLocalBillingAdmission(provider, hasBillingStagingAccess(request))
+export function getRequestLocalBillingAdmission(provider: BillingProvider, _request: Request) {
+  return getLocalBillingAdmission(provider)
 }
 
 export function resolveRequestBillingProvider(request: Request) {
-  return resolveProvider(request, hasBillingStagingAccess(request))
+  return resolveProvider(request)
 }
 
 export function paymentsUnavailableError(): Response {
