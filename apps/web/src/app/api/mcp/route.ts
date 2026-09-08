@@ -55,6 +55,17 @@ export interface RemoteAuthInfo {
   keyId: string
   prefix: string
   kind: "api-key" | "oauth"
+  connection?: {
+    id: string
+    workspaceId: string
+    status: "ACTIVE"
+    authorizationVersion: number
+    allowedOperations: string[]
+    allowedTargetIds: string[]
+    allTargets: boolean
+    allowedProfiles: string[]
+    expiresAt: Date | null
+  }
 }
 
 async function authenticate(request: Request): Promise<RemoteAuthInfo | null> {
@@ -77,6 +88,19 @@ async function authenticate(request: Request): Promise<RemoteAuthInfo | null> {
     keyId: `oauth:${oauth.clientId ?? "client"}`,
     prefix: "oauth",
     kind: "oauth",
+    connection: oauth.connectionId
+      ? {
+          id: oauth.connectionId,
+          workspaceId: oauth.workspaceId,
+          status: "ACTIVE" as const,
+          authorizationVersion: oauth.authorizationVersion ?? 1,
+          allowedOperations: oauth.allowedOperations ?? [],
+          allowedTargetIds: oauth.allowedTargetIds ?? [],
+          allTargets: oauth.allTargets ?? false,
+          allowedProfiles: oauth.allowedProfiles ?? [],
+          expiresAt: oauth.expiresAt ?? null,
+        }
+      : undefined,
   }
 }
 
@@ -95,12 +119,17 @@ async function handle(request: Request): Promise<Response> {
       toolContext,
       // Only the explicit API-key automation path may bypass OOB approval.
       allowMutations: ALLOW_REMOTE_MUTATIONS && authInfo.kind === "api-key",
+      delegatedAuthorization: authInfo.kind === "oauth" && !!authInfo.connection,
       remoteApprovalContext: {
         workspaceId: authInfo.workspaceId,
         scopes: authInfo.scopes,
         apiKeyInfo: { keyId: authInfo.keyId, createdById: authInfo.createdById },
       },
-      remoteApprovalGate: makeRemoteApprovalGate({ apiKeyInfo: authInfo, toolContext }),
+      remoteApprovalGate: makeRemoteApprovalGate({
+        apiKeyInfo: authInfo,
+        connection: authInfo.connection,
+        toolContext,
+      }),
     })
   } catch (err) {
     logger.error("Remote MCP request failed", {

@@ -44,6 +44,7 @@ const APPROVAL_TTL_MINUTES = 15
 
 export interface FixPrRequest {
   workspaceId: string
+  targetId: string
   fixProposalId: string
   /** The unified diff to apply. Hashed into the approval. */
   diff: string

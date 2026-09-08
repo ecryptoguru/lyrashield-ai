@@ -50,12 +50,16 @@ const COMMANDS: Record<string, CommandThunk> = {
   hook: () => import("./commands/hook.js").then((m) => m.handleHook),
   approvals: () => import("./commands/approvals.js").then((m) => m.handleApprovals),
   mcp: () => import("./commands/mcp.js").then((m) => m.handleMcp),
+  connect: () => import("./commands/connect.js").then((m) => m.handleConnect),
+  connections: () => import("./commands/connections.js").then((m) => m.handleConnections),
 }
 
 function usage(): string {
   return `lyrashield <command> [args]
 
 Commands:
+  connect              Connect an agent with verified setup and read test
+  connections          List, pause, resume, or disconnect agent connections
   login [--oauth]      Store an API key or complete OAuth device login
   logout               Remove stored credentials
   use <workspace>      Set default workspace

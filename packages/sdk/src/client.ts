@@ -13,7 +13,12 @@ const RETRY_BASE_DELAY_MS = 500
 const MAX_RETRY_DELAY_MS = 30000
 
 export interface LyraShieldClientOptions {
-  apiKey: string
+  apiKey?: string
+  /**
+   * Optional dynamic bearer token provider. Invoked before requests and on HTTP 401
+   * for automatic token refresh in long-lived sessions.
+   */
+  getAccessToken?: () => Promise<string | undefined> | string | undefined
   apiUrl?: string
   fetchFn?: typeof fetch
   workspaceId?: string
@@ -49,7 +54,8 @@ type ApiEnvelope = z.infer<typeof ApiEnvelopeSchema>
 const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS"])
 
 export class LyraShieldClient {
-  readonly apiKey: string
+  apiKey?: string
+  readonly getAccessToken?: () => Promise<string | undefined> | string | undefined
   readonly apiUrl: string
   readonly fetchFn: typeof fetch
   readonly workspaceId?: string
@@ -57,10 +63,19 @@ export class LyraShieldClient {
 
   constructor(options: LyraShieldClientOptions) {
     this.apiKey = options.apiKey
+    this.getAccessToken = options.getAccessToken
     this.apiUrl = (options.apiUrl ?? DEFAULT_API_URL).replace(/\/$/, "")
     this.fetchFn = options.fetchFn ?? globalThis.fetch
     this.workspaceId = options.workspaceId
     this.userAgent = options.userAgent ?? `lyrashield-sdk/${VERSION}`
+  }
+
+  private async resolveToken(): Promise<string | undefined> {
+    if (this.getAccessToken) {
+      const dynamic = await this.getAccessToken()
+      return dynamic || undefined
+    }
+    return this.apiKey
   }
 
   request<T = unknown>(
@@ -91,7 +106,8 @@ export class LyraShieldClient {
       "User-Agent": this.userAgent,
       Accept: "application/json",
     }
-    if (this.apiKey) headers["Authorization"] = `Bearer ${this.apiKey}`
+    const effectiveToken = await this.resolveToken()
+    if (effectiveToken) headers["Authorization"] = `Bearer ${effectiveToken}`
     if (body) headers["Content-Type"] = "application/json"
     if (options?.etag) headers["If-None-Match"] = options.etag
     if (options?.headers) Object.assign(headers, options.headers)
@@ -113,6 +129,19 @@ export class LyraShieldClient {
         if (res.status === 304) {
           const etag = this.getHeader(res, "etag") ?? options?.etag ?? undefined
           return new NotModified(etag)
+        }
+
+        if (res.status === 401 && this.getAccessToken && attempt === 0) {
+          clearTimeout(timeout)
+          if (res.body?.cancel) {
+            await Promise.resolve(res.body.cancel()).catch(() => {})
+          }
+          const freshToken = await this.getAccessToken()
+          if (freshToken) {
+            headers["Authorization"] = `Bearer ${freshToken}`
+            continue
+          }
+          delete headers["Authorization"]
         }
 
         if (

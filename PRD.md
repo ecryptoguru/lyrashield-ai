@@ -67,7 +67,7 @@ Implemented:
   sandbox failures remain non-billable.
 - Findings, normalization, CWE/OWASP metadata, SCA, secrets, deterministic URL/API checks, AI App Security checks, evidence states, candidates, receipts, manifests, retests, reports, notifications, and launch readiness.
 - LyraShield Score, private snapshots, public scorecards, cards, badges, privacy-bounded analytics, referrals, and social sharing.
-- Agent actions, exact-input approvals, MCP over stdio and Streamable HTTP, hosted OAuth, CLI login/install/doctor flows, SDK, agent registry, and portable agent plugin.
+- Agent actions, legacy exact-input approvals, connection-bound delegated workflows, MCP over stdio and Streamable HTTP, hosted OAuth, CLI login/connect/install/doctor flows, SDK, agent registry, and portable agent plugin.
 - One adaptive authenticated dashboard for every role: a state-derived next action, current posture with exact evidence scope, compact metrics, recent activity, and progressive disclosure for technical depth. Presentation never changes permissions, scan behavior, or evidence semantics.
 - A hidden platform-operator console for bounded cross-workspace overview, user/workspace/scan lists, platform audit, and affiliate review. It is not a tenant-admin role and is not discoverable by ordinary users.
 - Polar/Razorpay billing, plans, trials, entitlements, usage metering, minute packs, grace, overage logic, checkout, portal, and webhook processing.
@@ -194,7 +194,7 @@ Repository jobs are admitted only while a live worker heartbeat exists. Queue/da
 ### Remediation
 
 - User may create and inspect a fix proposal.
-- Consequential actions require permission and exact-input approval.
+- Consequential actions require current permission and either exact-input approval or a valid browser-confirmed connection grant bound to the workflow, target, profile, and idempotency key.
 - Fix PR endpoint accepts no client patch, branch, title, or body.
 - The full fix-PR pipeline is wired end to end (v14): proposal creation enqueues deterministic patch generation from the engine's structured fix (`fix-generate` job, plan-tiered scope validation, encrypted evidence storage); findings carry the scanned `baseCommit` so patches apply against exactly the commit analyzed; a merged `lyrashield/fix-` branch triggers loop-closure — the PR is marked merged, a REAL retest scan is created and queued (bound to the NEW scan, never the finding's original terminal scan). Nothing auto-merges; every PR is an approval-gated proposal.
 - Retest scope derives from the server-owned source scan, never a client-selected replacement.
@@ -309,7 +309,7 @@ Do not publish or change pricing without founder approval.
 - Model-facing inputs pass `normalizeInput()` and `PromptInjectionGuard`.
 - Read actions require permission; mutating actions require permission and, where consequential, approval.
 - Approval is atomic, single-use, expiry-aware, and bound to exact action name plus input hash.
-- Remote OAuth write scope never bypasses per-action approval.
+- Remote OAuth is read-only by default. A browser-confirmed, connection-bound delegation may authorize selected workflows, targets, and scan profiles without repeated review-queue prompts; execution still rechecks current membership, permission, scope, expiry, and idempotency. Legacy or out-of-grant writes remain fail-closed behind exact-input approval.
 - Fresh GitHub callback state alone cannot create an integration.
 - No automatic merge or client-authored patch execution.
 

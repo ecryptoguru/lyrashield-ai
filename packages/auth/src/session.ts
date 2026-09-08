@@ -1,8 +1,8 @@
 import { headers } from "next/headers"
 import { auth } from "./auth"
-import { prisma, setWorkspaceContext, verifyApiKey } from "@lyrashield/db"
+import { CANONICAL_OPERATIONS, prisma, setWorkspaceContext, verifyApiKey } from "@lyrashield/db"
 import type { MemberRole, WorkspaceMember } from "@lyrashield/db"
-import { hasPermission, hasMinimumRole, type Permission } from "./permissions"
+import { hasPermission, hasMinimumRole, PERMISSIONS, type Permission } from "./permissions"
 import { verifyOAuthBearer, type OAuthBearerContext } from "./oauth"
 import { env } from "@lyrashield/config"
 
@@ -31,6 +31,19 @@ export interface AuthSession {
   apiKey?: ApiKeyAuthContext
   /** Present for a hosted MCP request authenticated with an OAuth bearer token. */
   oauth?: OAuthAuthContext
+}
+
+export function assertOAuthDelegatedScope(
+  session: AuthSession,
+  targetId: string | null | undefined,
+  profile?: string
+): void {
+  const connection = session.oauth
+  if (!connection?.connectionId) return
+  if (!targetId || (!connection.allTargets && !connection.allowedTargetIds?.includes(targetId))) {
+    throw new Error("FORBIDDEN")
+  }
+  if (profile && !connection.allowedProfiles?.includes(profile)) throw new Error("FORBIDDEN")
 }
 
 declare const platformAdminIdentityBrand: unique symbol
@@ -338,6 +351,21 @@ export async function requirePermission(
     session.apiKey?.scopes.includes("write") ?? session.oauth?.scopes.includes("lyrashield.write")
   if ((session.apiKey || session.oauth) && !hasWriteScope) {
     if (!READ_SCOPE_PERMISSIONS.has(permission)) {
+      throw new Error("FORBIDDEN")
+    }
+  }
+
+  // Delegated connection enforcement: mutating actions require delegated grant
+  if (session.oauth?.connectionId && !READ_SCOPE_PERMISSIONS.has(permission)) {
+    const requiredOps: Partial<Record<string, string[]>> = {
+      [PERMISSIONS.scan.create]: [CANONICAL_OPERATIONS.SCAN_CREATE],
+      [PERMISSIONS.retest.create]: [CANONICAL_OPERATIONS.RETEST_CREATE],
+      [PERMISSIONS.fix.create]: [CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE],
+      [PERMISSIONS.fix.createPr]: [CANONICAL_OPERATIONS.FIX_PR_CREATE],
+      [PERMISSIONS.report.create]: [CANONICAL_OPERATIONS.REPORT_CREATE],
+    }
+    const ops = requiredOps[permission]
+    if (!ops || !ops.some((op) => session.oauth!.allowedOperations?.includes(op))) {
       throw new Error("FORBIDDEN")
     }
   }

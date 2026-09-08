@@ -30,6 +30,8 @@ export interface RemoteMcpOptions {
   remoteApprovalContext?: RemoteApprovalContext
   /** Remote out-of-band approval gate callback. */
   remoteApprovalGate?: RemoteApprovalGate
+  /** Advertise the pre-authorized, idempotent mutation contract. */
+  delegatedAuthorization?: boolean
 }
 
 export async function handleRemoteMcpRequest(
@@ -41,6 +43,7 @@ export async function handleRemoteMcpRequest(
     toolContext: options.toolContext,
     approvalMode,
     ...(options.allowMutations ? { allowMutations: true } : {}),
+    ...(options.delegatedAuthorization ? { delegatedAuthorization: true } : {}),
     ...(options.remoteApprovalContext && options.remoteApprovalGate
       ? {
           remoteApprovalContext: options.remoteApprovalContext,

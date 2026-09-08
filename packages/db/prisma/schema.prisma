@@ -38,6 +38,7 @@ model User {
   deviceCodes        DeviceCode[]
   affiliate          Affiliate?
   platformAdminElevations PlatformAdminElevation[]
+  agentConnections   AgentConnection[]
 
   @@map("users")
 }
@@ -68,6 +69,7 @@ model Session {
   userAgent         String?
   userId            String
   activeWorkspaceId String?
+  pendingAgentConnectionId String?
   twoFactorVerifiedAt DateTime?
 
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -573,6 +575,8 @@ model Workspace {
   licenseActivations   LicenseActivation[]
   licenseKeys          LicenseKey[]
   syncCursors          SyncCursor[]
+  agentConnections     AgentConnection[]
+  agentOperations      AgentOperation[]
 }
 
 model WorkspaceMember {
@@ -1670,6 +1674,74 @@ model AgentApproval {
   @@index([workspaceId])
   @@index([status])
   @@index([requestedById])
+}
+
+enum AgentConnectionStatus {
+  ACTIVE
+  PAUSED
+  REVOKED
+}
+
+model AgentConnection {
+  id                   String                @id @default(cuid())
+  workspaceId          String
+  userId               String
+  clientType           String
+  clientName           String?
+  oauthClientId        String?
+  status               AgentConnectionStatus @default(ACTIVE)
+  scopes               String[]              @default([])
+  allowedTargetIds     String[]              @default([])
+  allTargets           Boolean               @default(false)
+  allowedOperations    String[]              @default([])
+  allowedProfiles      String[]              @default([])
+  authorizationVersion Int                   @default(1)
+  expiresAt            DateTime?
+  revokedAt            DateTime?
+  pausedAt             DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operations AgentOperation[]
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([status])
+  @@map("agent_connections")
+}
+
+enum AgentOperationStatus {
+  PENDING
+  EXECUTING
+  COMPLETED
+  FAILED
+  CONFLICT
+}
+
+model AgentOperation {
+  id                   String               @id @default(cuid())
+  workspaceId          String
+  connectionId         String
+  operationName        String
+  idempotencyKey       String
+  inputHash            String
+  authorizationVersion Int                  @default(1)
+  status               AgentOperationStatus @default(PENDING)
+  resultReference      String?
+  result               Json?
+  error                String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection AgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, operationName, idempotencyKey])
+  @@index([workspaceId])
+  @@index([status])
+  @@map("agent_operations")
 }
 
 model OnboardingState {

@@ -99,7 +99,8 @@ describe("resolveMcpCredentials", () => {
       CREDENTIALS_FILE,
       JSON.stringify({
         installId: "install-1",
-        apiUrl: "https://issuer.example.com",
+        issuer: "https://issuer.example.com",
+        apiUrl: "https://override.example.com",
         oauthAccessToken: "expired-oauth-access-token",
         oauthRefreshToken: "old-oauth-refresh-token",
         oauthExpiresAt: "2020-01-01T00:00:00.000Z",

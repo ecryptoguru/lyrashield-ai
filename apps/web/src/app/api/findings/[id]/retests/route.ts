@@ -7,7 +7,7 @@ import {
   WorkspaceScanConcurrencyLimitError,
 } from "@lyrashield/db"
 import { type ScanMode, resolveTargetScanMode } from "@lyrashield/types"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -51,6 +51,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     if (!finding.targetId) {
       return apiError("RETEST_UNAVAILABLE", "This finding has no target to retest", 409)
     }
+    assertOAuthDelegatedScope(session, finding.targetId)
 
     const sourceScan = await prisma.scan.findFirst({
       where: { id: finding.scanId, workspaceId, targetId: finding.targetId, deletedAt: null },

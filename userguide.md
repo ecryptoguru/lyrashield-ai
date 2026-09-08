@@ -528,12 +528,14 @@ The `lyrashield` command-line tool (published on npm; the scoped alias `@lyrashi
 
 ```bash
 npx lyrashield login              # browser-based OAuth device login or workspace API key
+npx lyrashield connect codex      # configure and verify a supported coding agent
+npx lyrashield connections        # inspect saved credential and agent connection state
 npx lyrashield init                # detect installed coding agents and configure them
 npx lyrashield doctor              # check what's configured and what's missing
 npx lyrashield gate                # CI-friendly diff-aware security gate
 ```
 
-`login` writes `~/.lyrashield/credentials.json` with `0o600` permissions. If the browser-based OAuth device flow is unavailable, it falls back to `LYRASHIELD_API_KEY` from the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com` and is resolved consistently by `packages/credentials`, which is the single source of truth for the credentials file.
+`login` writes `~/.lyrashield/credentials.json` with `0o600` permissions. If the browser-based OAuth device flow is unavailable, it falls back to `LYRASHIELD_API_KEY` from the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com` and is resolved consistently by `packages/credentials`, which is the single source of truth for the credentials file. Credential updates are atomic and shared by CLI and MCP, so refresh, logout, and profile changes take effect without restarting a long-running client.
 
 `init`/`install <agent>` choose an install strategy based on the agent. `packages/agent-registry` contains 30 entries and resolves them into 26 preferred client surfaces. CLI `0.2.4`, MCP `0.2.5`, and Agent Plugin `0.1.24` require Node 24 or newer.
 
@@ -589,7 +591,7 @@ Read actions follow API-key scope and workspace permissions. Locally, mutating M
 The remote-HTTP transport supports two authentication methods:
 
 - **Bearer API key** — `Authorization: Bearer lsk_…` with a read-only or read/write key.
-- **OAuth 2.0** — the hosted flow at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` (also under `/api/mcp/`) lets an MCP client authenticate through `/oauth/consent`, select a workspace, and request an optional write scope. Remote connections are **read-only by default**; write actions require the OAuth write scope plus explicit approval. OAuth clients cannot use the operator-only `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS` bypass.
+- **OAuth 2.0** — the hosted flow at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` (also under `/api/mcp/`) lets an MCP client authenticate through `/oauth/consent`, select a workspace, and request an optional write scope. Remote connections are **read-only by default**. When write scope is requested, consent can grant selected workflows for selected targets and scan profiles. Those delegated actions run without another review-queue step while the grant remains valid; every call still checks current membership, permissions, scope, target, profile, expiry, and an idempotency key. Actions outside the grant fail closed and ask the user to update the connection. OAuth clients cannot use the operator-only `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS` bypass.
 
 A pre-authorized trusted-automation opt-in remains available for CI that should never pause for approval. Model-facing inputs pass through the prompt-injection guard in every case.
 

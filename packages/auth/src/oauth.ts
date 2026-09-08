@@ -1,6 +1,9 @@
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client"
+import { withWorkspaceRLS } from "@lyrashield/db"
 import {
   auth,
+  OAUTH_AUTH_VERSION_CLAIM,
+  OAUTH_CONNECTION_CLAIM,
   OAUTH_ISSUER,
   OAUTH_RESOURCE,
   OAUTH_SCOPE_READ,
@@ -14,6 +17,13 @@ export interface OAuthBearerContext {
   scopes: string[]
   clientId?: string
   sessionId?: string
+  connectionId?: string
+  authorizationVersion?: number
+  expiresAt?: Date | null
+  allowedOperations?: string[]
+  allowedTargetIds?: string[]
+  allTargets?: boolean
+  allowedProfiles?: string[]
 }
 
 const resourceClient = oauthProviderResourceClient(auth)
@@ -44,12 +54,86 @@ export async function verifyOAuthBearer(token: string): Promise<OAuthBearerConte
     if (!userId || !workspaceId) return null
     if (!scopes.includes(OAUTH_SCOPE_READ) && !scopes.includes(OAUTH_SCOPE_WRITE)) return null
 
+    const connectionId = stringClaim(payload, OAUTH_CONNECTION_CLAIM)
+    const rawAuthVersion = payload[OAUTH_AUTH_VERSION_CLAIM]
+    const authVersion =
+      typeof rawAuthVersion === "number"
+        ? rawAuthVersion
+        : typeof rawAuthVersion === "string"
+          ? parseInt(rawAuthVersion, 10)
+          : undefined
+
+    let connectionInfo: {
+      connectionId?: string
+      authorizationVersion?: number
+      expiresAt?: Date | null
+      allowedOperations?: string[]
+      allowedTargetIds?: string[]
+      allTargets?: boolean
+      allowedProfiles?: string[]
+    } = {}
+
+    if (connectionId) {
+      if (authVersion === undefined) return null
+      const conn = await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.agentConnection.findUnique({
+          where: { id: connectionId },
+          select: {
+            id: true,
+            workspaceId: true,
+            userId: true,
+            status: true,
+            authorizationVersion: true,
+            allowedOperations: true,
+            allowedTargetIds: true,
+            allTargets: true,
+            scopes: true,
+            allowedProfiles: true,
+            expiresAt: true,
+            oauthClientId: true,
+          },
+        })
+      )
+      if (
+        !conn ||
+        conn.status !== "ACTIVE" ||
+        conn.workspaceId !== workspaceId ||
+        conn.userId !== userId
+      ) {
+        return null
+      }
+      if (conn.oauthClientId && conn.oauthClientId !== payload.azp) return null
+      if (
+        scopes
+          .filter((scope) => scope === OAUTH_SCOPE_READ || scope === OAUTH_SCOPE_WRITE)
+          .some((scope) => !conn.scopes.includes(scope))
+      ) {
+        return null
+      }
+      if (conn.expiresAt && conn.expiresAt.getTime() <= Date.now()) {
+        return null
+      }
+      if (conn.authorizationVersion !== authVersion) {
+        return null
+      }
+      connectionInfo = {
+        connectionId: conn.id,
+        authorizationVersion: conn.authorizationVersion,
+        expiresAt: conn.expiresAt,
+        allowedOperations: conn.allowedOperations,
+        allowedTargetIds: conn.allowedTargetIds,
+        allTargets: conn.allTargets,
+        allowedProfiles: conn.allowedProfiles,
+      }
+    }
+
     return {
       userId,
       workspaceId,
       scopes,
       clientId: typeof payload.azp === "string" ? payload.azp : undefined,
       sessionId: typeof payload.sid === "string" ? `oauth:${payload.sid}` : undefined,
+      ...connectionInfo,
     }
   } catch {
     // Device authorization returns a Better Auth session token rather than a

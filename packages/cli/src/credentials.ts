@@ -20,6 +20,10 @@ import {
   refreshOAuthCredentials,
   resolveCredentials,
   writeCredentialsFile,
+  withCredentialsLock,
+  hasCredentialsChanged,
+  hasUsableOAuthAccessToken,
+  OAuthRefreshError,
   type ResolvedCredentials,
   type StoredCredentials,
 } from "@lyrashield/credentials"
@@ -45,17 +49,21 @@ export async function loadCredentials(): Promise<Credentials | undefined> {
 }
 
 export async function saveCredentials(credentials: Credentials): Promise<void> {
-  const withId: Credentials = { ...credentials, installId: credentials.installId || randomUUID() }
-  await writeCredentialsFile(withId)
+  await withCredentialsLock(async () => {
+    const withId: Credentials = { ...credentials, installId: credentials.installId || randomUUID() }
+    await writeCredentialsFile(withId)
+  })
 }
 
 export async function removeCredentials(): Promise<void> {
-  try {
-    await unlink(CREDENTIALS_FILE)
-  } catch (err) {
-    if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return
-    throw err
-  }
+  await withCredentialsLock(async () => {
+    try {
+      await unlink(CREDENTIALS_FILE)
+    } catch (err) {
+      if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return
+      throw err
+    }
+  })
 }
 
 export async function credentialsFileExists(): Promise<boolean> {
@@ -71,15 +79,44 @@ export async function getEffectiveCredentials(): Promise<EffectiveCredentials> {
   const resolved = await resolveCredentials()
   if (resolved.source !== "file" || resolved.credentialKind !== "oauth") return resolved
 
-  const stored = await loadCredentials()
-  if (!stored?.oauthAccessToken) return resolved
-  const refreshed = await refreshOAuthCredentials(stored)
-  if (refreshed.oauthAccessToken !== stored.oauthAccessToken) await saveCredentials(refreshed)
-  return {
-    ...resolved,
-    apiKey: refreshed.oauthAccessToken,
-    apiUrl: refreshed.apiUrl ?? resolved.apiUrl,
-  }
+  return await withCredentialsLock(async () => {
+    const stored = await loadCredentials()
+    if (!stored?.oauthAccessToken && !stored?.oauthRefreshToken) {
+      return resolveCredentials()
+    }
+
+    try {
+      const refreshed = await refreshOAuthCredentials(stored)
+      if (hasCredentialsChanged(stored, refreshed)) {
+        const current = await loadCredentials()
+        // Do not resurrect if file was removed or token was changed/revoked during in-flight refresh
+        if (current && current.oauthRefreshToken === stored.oauthRefreshToken) {
+          const withId: Credentials = {
+            ...refreshed,
+            installId: current.installId || refreshed.installId || randomUUID(),
+            generation: (current.generation ?? 0) + 1,
+          }
+          await writeCredentialsFile(withId)
+        }
+      }
+      return {
+        ...resolved,
+        apiKey: refreshed.oauthAccessToken ?? resolved.apiKey,
+        apiUrl: refreshed.apiUrl ?? resolved.apiUrl,
+        workspaceId: refreshed.workspaceId ?? resolved.workspaceId,
+      }
+    } catch (err) {
+      if (
+        err instanceof OAuthRefreshError &&
+        err.isTransient &&
+        hasUsableOAuthAccessToken(stored)
+      ) {
+        // Keep usable credentials during transient failures
+        return resolved
+      }
+      throw err
+    }
+  })
 }
 
 export function requireApiKey(creds: EffectiveCredentials): string {

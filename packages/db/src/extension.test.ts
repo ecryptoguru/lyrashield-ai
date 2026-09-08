@@ -230,10 +230,10 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     expect(SOFT_DELETE_MODELS.has("ScanEvent")).toBe(true)
   })
 
-  it("workspace-scoped set contains only auto-scopable models with workspaceId (31)", () => {
-    // 30 → 31: GateVerdict joined the set with its RLS migration
-    // (20260902100000_gateverdict_rls).
-    expect(WORKSPACE_SCOPED_MODELS.size).toBe(31)
+  it("workspace-scoped set contains only auto-scopable models with workspaceId (33)", () => {
+    // 31 → 33: AgentConnection and AgentOperation joined the set with their
+    // RLS migration (20260908120000_agent_connections_operations).
+    expect(WORKSPACE_SCOPED_MODELS.size).toBe(33)
     for (const m of [
       "ScanEvent",
       "Evidence",
@@ -249,5 +249,7 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     expect(WORKSPACE_SCOPED_MODELS.has("AuditLog")).toBe(true)
     expect(WORKSPACE_SCOPED_MODELS.has("AiSecurityScoreSnapshot")).toBe(true)
     expect(WORKSPACE_SCOPED_MODELS.has("MinutePack")).toBe(true)
+    expect(WORKSPACE_SCOPED_MODELS.has("AgentConnection")).toBe(true)
+    expect(WORKSPACE_SCOPED_MODELS.has("AgentOperation")).toBe(true)
   })
 })

@@ -132,6 +132,8 @@ export interface ToolHandlerContext {
   fetchFn?: typeof fetch
   /** Remote MCP servers cannot inspect the coding client's working directory. */
   allowAutoDetect?: boolean
+  /** Dynamic credentials resolver for long-lived servers */
+  getCredentials?: () => Promise<{ apiKey: string; apiUrl?: string }>
 }
 
 function getClient(context: ToolHandlerContext): LyraShieldClient {
@@ -139,6 +141,12 @@ function getClient(context: ToolHandlerContext): LyraShieldClient {
     apiKey: context.apiKey,
     apiUrl: context.apiBaseUrl,
     fetchFn: context.fetchFn,
+    getAccessToken: context.getCredentials
+      ? async () => {
+          const creds = await context.getCredentials!()
+          return creds.apiKey
+        }
+      : undefined,
   })
 }
 

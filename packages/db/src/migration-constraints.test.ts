@@ -7,6 +7,16 @@ function migration(path: string): string {
 }
 
 describe("forward database constraints", () => {
+  it("keeps agent connection and operation RLS closed without workspace context", () => {
+    const sql = migration(
+      "../prisma/migrations/20260908120000_agent_connections_operations/migration.sql"
+    )
+    expect(sql).not.toMatch(/current_workspace_id\(\)\s+IS\s+NULL/i)
+    expect(sql).toContain('"workspaceId" = app.current_workspace_id()')
+    expect(sql).toContain('ALTER TABLE "agent_connections" FORCE ROW LEVEL SECURITY')
+    expect(sql).toContain('ALTER TABLE "agent_operations" FORCE ROW LEVEL SECURITY')
+  })
+
   it("constrains GitHub installation identifiers to positive decimal values", () => {
     const sql = migration(
       "../prisma/migrations/20260716150000_integration_external_id_check/migration.sql"

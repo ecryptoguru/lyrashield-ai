@@ -47,6 +47,8 @@ export interface CreateServerOptions {
   remoteApprovalGate?: RemoteApprovalGate
   /** Authenticated context for the remote approval gate. */
   remoteApprovalContext?: RemoteApprovalContext
+  /** The OAuth token is bound to a pre-authorized AgentConnection grant. */
+  delegatedAuthorization?: boolean
 }
 
 /**
@@ -176,6 +178,13 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
       includeApprovalId:
         !options.allowMutations &&
         options.approvalMode === "remote-oob" &&
+        !options.delegatedAuthorization &&
+        !!options.remoteApprovalGate &&
+        !!options.remoteApprovalContext,
+      requireIdempotencyKey:
+        !options.allowMutations &&
+        options.approvalMode === "remote-oob" &&
+        !!options.delegatedAuthorization &&
         !!options.remoteApprovalGate &&
         !!options.remoteApprovalContext,
     }),

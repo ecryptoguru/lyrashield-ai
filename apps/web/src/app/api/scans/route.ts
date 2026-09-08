@@ -8,7 +8,7 @@ import {
   WorkspaceScanConcurrencyLimitError,
   type ScanListItem,
 } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
   CreateScanSchema,
@@ -109,6 +109,8 @@ async function post(request: Request) {
     if (!target) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
     }
+
+    assertOAuthDelegatedScope(session, data.targetId, data.mode)
 
     // Browser-local tools never enter this route. A paid remote review does,
     // so require one current workspace proof before the first server-side

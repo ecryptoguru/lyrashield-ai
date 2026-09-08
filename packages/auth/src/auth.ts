@@ -3,7 +3,12 @@ import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/a
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { bearer, deviceAuthorization, jwt, twoFactor } from "better-auth/plugins"
 import { oauthProvider } from "@better-auth/oauth-provider"
-import { consumePlatformAdminChallengeAttempt, getSystemPrisma, prisma } from "@lyrashield/db"
+import {
+  consumePlatformAdminChallengeAttempt,
+  getSystemPrisma,
+  prisma,
+  withWorkspaceRLS,
+} from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
@@ -25,6 +30,8 @@ const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_
 const platformAdminEmails = new Set(env.PLATFORM_ADMIN_EMAILS.split(","))
 
 export const OAUTH_WORKSPACE_CLAIM = "https://lyrashieldai.com/workspace_id"
+export const OAUTH_CONNECTION_CLAIM = "https://lyrashieldai.com/connection_id"
+export const OAUTH_AUTH_VERSION_CLAIM = "https://lyrashieldai.com/auth_version"
 export const OAUTH_SCOPE_READ = "lyrashield.read"
 export const OAUTH_SCOPE_WRITE = "lyrashield.write"
 export const OAUTH_RESOURCE = new URL("/api/mcp", env.NEXT_PUBLIC_APP_URL).toString()
@@ -93,12 +100,14 @@ const oauthProviderPlugin = oauthProvider({
       const { user, session, scopes } = context
       const needsWorkspace = scopes.includes(OAUTH_SCOPE_READ) || scopes.includes(OAUTH_SCOPE_WRITE)
       if (!needsWorkspace || !session) return false
-      const workspaceId = await selectedOAuthWorkspaceId({
+      await selectedOAuthWorkspaceId({
         userId: user.id,
         session,
         requestHeaders: (context as unknown as { headers?: Headers }).headers ?? new Headers(),
       })
-      return !workspaceId || session.userId !== user.id
+      // Every authorization gets a connection record. The provider clears this
+      // post-login step for the current signed query after the form continues.
+      return true
     },
     consentReferenceId: async (context) => {
       const { user, session, scopes } = context
@@ -107,17 +116,33 @@ const oauthProviderPlugin = oauthProvider({
       const workspaceId = await selectedOAuthWorkspaceId({
         userId: user.id,
         session,
-        requestHeaders: (context as unknown as { headers?: Headers }).headers ?? new Headers(),
+        requestHeaders: new Headers(),
       })
       if (!workspaceId) throw new Error("OAUTH_WORKSPACE_REQUIRED")
-      return workspaceId
+
+      const connectionId =
+        typeof session.pendingAgentConnectionId === "string"
+          ? session.pendingAgentConnectionId
+          : undefined
+      if (!connectionId) throw new Error("OAUTH_CONNECTION_REQUIRED")
+      const conn = await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.agentConnection.findFirst({
+          where: { id: connectionId, userId: user.id, workspaceId, status: "ACTIVE" },
+        })
+      )
+      if (!conn) throw new Error("OAUTH_CONNECTION_REQUIRED")
+      return `${workspaceId}:${conn.id}`
     },
   },
   customAccessTokenClaims: async ({ user, scopes, referenceId, resources }) => {
     if (!user || !referenceId || !resourcesMatch(resources, OAUTH_RESOURCE)) return {}
 
+    const [workspaceId, connectionId] = referenceId.includes(":")
+      ? referenceId.split(":")
+      : [referenceId, undefined]
+
     const member = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: referenceId, userId: user.id } },
+      where: { workspaceId_userId: { workspaceId, userId: user.id } },
       select: { role: true, status: true },
     })
     if (!member || member.status !== "active") throw new Error("OAUTH_WORKSPACE_ACCESS_REVOKED")
@@ -125,9 +150,34 @@ const oauthProviderPlugin = oauthProvider({
       throw new Error("OAUTH_WRITE_SCOPE_FORBIDDEN")
     }
 
-    return {
-      [OAUTH_WORKSPACE_CLAIM]: referenceId,
+    const claims: Record<string, unknown> = {
+      [OAUTH_WORKSPACE_CLAIM]: workspaceId,
     }
+
+    if (connectionId) {
+      const connection = await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.agentConnection.findUnique({ where: { id: connectionId } })
+      )
+      if (
+        !connection ||
+        connection.status !== "ACTIVE" ||
+        connection.userId !== user.id ||
+        connection.workspaceId !== workspaceId
+      ) {
+        throw new Error("OAUTH_CONNECTION_REVOKED")
+      }
+      if (
+        scopes
+          .filter((scope) => scope === OAUTH_SCOPE_READ || scope === OAUTH_SCOPE_WRITE)
+          .some((scope) => !connection.scopes.includes(scope))
+      ) {
+        throw new Error("OAUTH_CONNECTION_SCOPE_MISMATCH")
+      }
+      claims[OAUTH_CONNECTION_CLAIM] = connection.id
+      claims[OAUTH_AUTH_VERSION_CLAIM] = connection.authorizationVersion
+    }
+
+    return claims
   },
   advertisedMetadata: {
     scopes_supported: oauthScopes,
@@ -141,6 +191,8 @@ const oauthProviderPlugin = oauthProvider({
       "scope",
       "azp",
       OAUTH_WORKSPACE_CLAIM,
+      OAUTH_CONNECTION_CLAIM,
+      OAUTH_AUTH_VERSION_CLAIM,
     ],
   },
 })
@@ -527,6 +579,7 @@ export const auth = betterAuth({
   session: {
     additionalFields: {
       activeWorkspaceId: { type: "string", required: false, input: true },
+      pendingAgentConnectionId: { type: "string", required: false, input: true },
       twoFactorVerifiedAt: {
         type: "date",
         required: false,

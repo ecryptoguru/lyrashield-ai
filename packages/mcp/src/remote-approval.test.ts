@@ -181,6 +181,36 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
     }
   })
 
+  it("advertises idempotent mutations without review-queue fields for delegated OAuth", async () => {
+    const { gate } = makeFakeGate()
+    const res = await handleRemoteMcpRequest(
+      mcpRequest({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+      {
+        toolContext: ctx(fetchStub()),
+        delegatedAuthorization: true,
+        remoteApprovalContext: {
+          workspaceId: "ws-1",
+          scopes: ["write"],
+          apiKeyInfo: { keyId: "oauth:client", createdById: "u-1" },
+        },
+        remoteApprovalGate: gate,
+      }
+    )
+    const body = await readJson(res)
+    const { tools } = body.result as {
+      tools: Array<{
+        annotations: { readOnlyHint: boolean }
+        inputSchema: { properties: Record<string, unknown>; required?: string[] }
+      }>
+    }
+    for (const tool of tools) {
+      if (tool.annotations.readOnlyHint) continue
+      expect(tool.inputSchema.properties).not.toHaveProperty("approvalId")
+      expect(tool.inputSchema.properties.idempotencyKey).toMatchObject({ type: "string" })
+      expect(tool.inputSchema.required).toContain("idempotencyKey")
+    }
+  })
+
   it("returns PENDING for a mutating tool without an approvalId", async () => {
     const fetchFn = fetchStub()
     const { gate } = makeFakeGate()

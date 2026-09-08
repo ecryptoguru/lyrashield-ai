@@ -16,6 +16,10 @@ import {
   resolveCredentials,
   tryReadCredentialsFile,
   writeCredentialsFile,
+  withCredentialsLock,
+  hasCredentialsChanged,
+  hasUsableOAuthAccessToken,
+  OAuthRefreshError,
   type StoredCredentials,
 } from "@lyrashield/credentials"
 
@@ -35,22 +39,40 @@ export class NoApiKeyError extends Error {
 export async function resolveMcpCredentials(): Promise<{ apiKey: string; apiUrl: string }> {
   const { apiKey, apiUrl, source } = await resolveCredentials({ tolerateUnreadableFile: true })
 
-  if (!apiKey) {
-    throw new NoApiKeyError()
+  if (source === "file") {
+    const refreshed = await withCredentialsLock(async () => {
+      const stored = await tryReadCredentialsFile()
+      if ((stored?.oauthAccessToken || stored?.oauthRefreshToken) && !stored?.apiKey) {
+        try {
+          const next = await refreshOAuthCredentials(stored)
+          if (hasCredentialsChanged(stored, next)) {
+            const current = await tryReadCredentialsFile()
+            if (current && current.oauthRefreshToken === stored.oauthRefreshToken) {
+              await writeCredentialsFile({
+                ...next,
+                generation: (current.generation ?? 0) + 1,
+              })
+            }
+          }
+          return next
+        } catch (err) {
+          if (
+            err instanceof OAuthRefreshError &&
+            err.isTransient &&
+            hasUsableOAuthAccessToken(stored)
+          ) {
+            return stored
+          }
+          throw err
+        }
+      }
+      return stored
+    })
+    if (refreshed?.oauthAccessToken) return { apiKey: refreshed.oauthAccessToken, apiUrl }
   }
 
-  // Environment credentials are deliberately immutable from this process. A
-  // stored OAuth device credential can be refreshed and atomically rotated
-  // before the long-lived stdio server starts.
-  if (source === "file") {
-    const stored = await tryReadCredentialsFile()
-    if (stored?.oauthAccessToken && !stored.apiKey) {
-      const refreshed = await refreshOAuthCredentials(stored)
-      if (refreshed.oauthAccessToken !== stored.oauthAccessToken) {
-        await writeCredentialsFile(refreshed)
-      }
-      if (refreshed.oauthAccessToken) return { apiKey: refreshed.oauthAccessToken, apiUrl }
-    }
+  if (!apiKey) {
+    throw new NoApiKeyError()
   }
 
   return { apiKey, apiUrl }

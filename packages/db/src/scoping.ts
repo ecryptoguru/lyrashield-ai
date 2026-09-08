@@ -81,6 +81,8 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "LiveAiSafetyPlan",
   "LiveAiSafetyRun",
   "GateVerdict",
+  "AgentConnection",
+  "AgentOperation",
 ])
 
 export const READ_OPS = new Set<string>([
