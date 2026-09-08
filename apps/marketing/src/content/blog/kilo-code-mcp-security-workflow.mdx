@@ -19,7 +19,7 @@ faq:
 
 Fastest path: run `npx lyrashield init` to auto-detect Kilo Code and write the correct entry, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
 
-You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states, and fix proposals inside your normal agent loop. This guide uses the current Kilo contract and the pinned `@lyrashield/mcp@0.2.5` package.
+You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states, and fix proposals inside your normal agent loop. This guide uses the current Kilo contract and the pinned `@lyrashield/mcp@0.2.7` package.
 
 Vibe coding moves fast and security debt can accumulate when large batches of routes, components, and queries are generated in one pass. If your team uses Kilo Code to scaffold features, you want verification that matches that speed. A good starting policy is the [vibe coding security guide](/blog/vibe-coding-security-guide) which frames prompt hygiene, review checkpoints, and supply chain checks. For context on what to look for, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), both of which confirm injection, broken access control, and vulnerable dependencies remain top risks in generated web apps.
 
@@ -53,7 +53,7 @@ Kilo Code reads MCP servers from `kilo.jsonc` or `.kilo/kilo.jsonc` in a project
   "mcp": {
     "lyrashield": {
       "type": "local",
-      "command": ["npx", "-y", "@lyrashield/mcp@0.2.5"],
+      "command": ["npx", "-y", "@lyrashield/mcp@0.2.7"],
       "environment": {
         "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
       },

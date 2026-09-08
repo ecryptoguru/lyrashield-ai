@@ -9,5 +9,5 @@ that local credential store. The launcher removes inherited credential overrides
 `LYRASHIELD_API_URL`; an optional explicit extension API key uses
 `https://app.lyrashieldai.com` only.
 
-Published MCP 0.2.6 refreshes expired stored OAuth credentials against the stored issuer before the
+Published MCP 0.2.7 refreshes expired stored OAuth credentials against the stored issuer before the
 stdio server starts. An explicit API URL override applies to subsequent LyraShield API calls.

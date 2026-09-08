@@ -42,7 +42,7 @@ Secure example with no raw secrets committed:
     "lyrashield-local": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.5"],
+      "args": ["-y", "@lyrashield/mcp@0.2.7"],
       "env": {
         "LYRASHIELD_API_KEY": "${input:lyrashieldKey}"
       }
@@ -132,7 +132,7 @@ Keep a short changelog for MCP additions and dependency exceptions to speed futu
 
 LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP fits VS Code design. Local stdio via npx -y @lyrashield/mcp@0.2.5 with inputs avoids raw keys, remote https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key via inputs. GitHub Action diff aware scan and SARIF output target pull request review.
+MCP fits VS Code design. Local stdio via npx -y @lyrashield/mcp@0.2.7 with inputs avoids raw keys, remote https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key via inputs. GitHub Action diff aware scan and SARIF output target pull request review.
 
 Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. VS Code uses the supported config-file integration, and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 

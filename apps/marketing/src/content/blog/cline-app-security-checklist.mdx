@@ -38,7 +38,7 @@ First, never put a credential in a repository file. The local LyraShield MCP pac
 
 Second, set allow lists explicitly. Prefer empty auto approve and then include only read only tools you need. If the tool supports trust or codemode flags, disable code execution unless required and require explicit user approval for file writes.
 
-Third, pin versions and audit local servers. For stdio, use `npx -y @lyrashield/mcp@0.2.5` after checking publish provenance. For remote, require TLS and keep Bearer credentials only in the client-owned private settings.
+Third, pin versions and audit local servers. For stdio, use `npx -y @lyrashield/mcp@0.2.7` after checking publish provenance. For remote, require TLS and keep Bearer credentials only in the client-owned private settings.
 
 Fourth, review Cline MCP inventory changes like dependency changes. Cline's official guide documents a CLI user file and IDE-managed settings; it does not define a portable project file to commit.
 
@@ -47,7 +47,7 @@ Fourth, review Cline MCP inventory changes like dependency changes. Cline's offi
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.5"],
+      "args": ["-y", "@lyrashield/mcp@0.2.7"],
       "autoApprove": [],
       "disabled": false
     }
@@ -95,7 +95,7 @@ Supply chain hygiene matters because AI generated code often pulls transitive de
 
 LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with Cline and other AI coding tools. We separate detection from proof: findings come with evidence you can verify, and every result is an immutable assurance record tied to the exact commit and scan.
 
-The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.5` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.7` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 LyraShield sits after your Cline drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval, and retest runs the same scanners on the fix commit to confirm remediation.
 

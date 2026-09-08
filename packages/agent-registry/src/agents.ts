@@ -345,7 +345,7 @@ const amp: AgentEntry = {
   credential: { kind: "shell-env" },
   vendorCli: {
     command: "amp",
-    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.6"],
+    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.7"],
   },
   rulesFiles: ["AGENTS.md"],
   source: {

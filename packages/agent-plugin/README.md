@@ -73,7 +73,7 @@ workspace, and receives read scope by default. Write scope is optional. Consent 
 workflows for selected targets and scan profiles so matching calls need no additional LyraShield
 review; all other mutations fail closed or use the legacy exact-input approval path.
 
-Kiro uses the local `npx -y @lyrashield/mcp@0.2.6` stdio adapter. Run `lyrashield login --oauth`
+Kiro uses the local `npx -y @lyrashield/mcp@0.2.7` stdio adapter. Run `lyrashield login --oauth`
 first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
 variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
 Headless writes without an approval channel fail closed.
@@ -84,7 +84,7 @@ Headless writes without an approval channel fail closed.
 
 ## Version and release receipts
 
-- Package: `@lyrashield/agent-plugin` 0.1.25; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/agent-plugin` 0.1.26; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions, and the public export boundary.

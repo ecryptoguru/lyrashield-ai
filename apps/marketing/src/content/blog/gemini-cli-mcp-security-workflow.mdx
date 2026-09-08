@@ -10,7 +10,7 @@ faq:
   - q: "How does Gemini CLI load MCP servers?"
     a: "Gemini CLI reads settings.json mcpServers with fields like command, args, trust, includeTools, and env. It supports $VAR expansion and mcp.allowed policy."
   - q: "What is the remote endpoint for LyraShield MCP?"
-    a: "Remote endpoint is https://app.lyrashieldai.com/api/mcp with Authorization Bearer lsk_ key. You can use local stdio via npx -y @lyrashield/mcp@0.2.5 or remote HTTP."
+    a: "Remote endpoint is https://app.lyrashieldai.com/api/mcp with Authorization Bearer lsk_ key. You can use local stdio via npx -y @lyrashield/mcp@0.2.7 or remote HTTP."
   - q: "Is scan execution live?"
     a: "Bounded scans, evidence states, fix-proposal recording, retest queueing, and SARIF are available now. No current MCP tool edits code or creates a branch or pull request."
   - q: "How do I restrict which MCP tools Gemini CLI can call?"
@@ -19,9 +19,9 @@ faq:
 
 Fastest path: run `npx lyrashield init` to detect Gemini CLI and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
 
-Secure AI generated apps from your terminal by connecting Gemini CLI to LyraShield AI through MCP, running bounded checks without leaving the CLI, and enforcing the same policy in a diff aware GitHub Action. The server loads from `settings.json` under `mcpServers` and supports local stdio via `npx -y @lyrashield/mcp@0.2.5` plus remote HTTP with a bearer key.
+Secure AI generated apps from your terminal by connecting Gemini CLI to LyraShield AI through MCP, running bounded checks without leaving the CLI, and enforcing the same policy in a diff aware GitHub Action. The server loads from `settings.json` under `mcpServers` and supports local stdio via `npx -y @lyrashield/mcp@0.2.7` plus remote HTTP with a bearer key.
 
-Gemini CLI brings agent assisted development to the command line, but terminal velocity can miss injection, auth, and supply chain risks introduced by scaffolding. The [vibe coding security guide](/blog/vibe-coding-security-guide) calls this unverified generation at scale. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This post shows the exact Gemini CLI config using `npx -y @lyrashield/mcp@0.2.5` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), plus verification and CI wiring. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
+Gemini CLI brings agent assisted development to the command line, but terminal velocity can miss injection, auth, and supply chain risks introduced by scaffolding. The [vibe coding security guide](/blog/vibe-coding-security-guide) calls this unverified generation at scale. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This post shows the exact Gemini CLI config using `npx -y @lyrashield/mcp@0.2.7` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), plus verification and CI wiring. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
 
 ## 1. Prerequisites and setup
 
@@ -40,7 +40,7 @@ Local stdio:
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.5"],
+      "args": ["-y", "@lyrashield/mcp@0.2.7"],
       "env": {
         "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
       },
@@ -149,7 +149,7 @@ This keeps Target to Scan to Evidence State to Fix Proposal to Retest to Assuran
 
 | Setting       | Meaning                 | Recommended                                            |
 | ------------- | ----------------------- | ------------------------------------------------------ |
-| command, args | How to launch MCP       | npx -y @lyrashield/mcp@0.2.5                           |
+| command, args | How to launch MCP       | npx -y @lyrashield/mcp@0.2.7                           |
 | trust         | Auto run without prompt | false for security                                     |
 | includeTools  | Filter tools exposed    | scan, lyrashield_list_targets, lyrashield_get_findings |
 | env, $VAR     | Secret expansion        | LYRASHIELD_API_KEY, LYRASHIELD_MCP_URL                 |
