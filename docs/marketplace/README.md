@@ -73,8 +73,8 @@ reviewer pack. The Gemini repository must additionally carry the `gemini-cli-ext
 2. Create and verify the LyraShield AI publisher identity and sanitized reviewer workspace.
 3. Export and tag the public repository with an immutable version.
 4. Smoke-test OAuth connect, workspace selection, read-only MCP calls, delegated idempotent writes,
-   out-of-grant denial, legacy approval, disconnect/revocation, CLI API-key fallback, Zed, Codebuff,
-   and the generated marketplace fixtures.
+   out-of-grant denial, legacy approval, pause, forced expiry, permission loss, refresh/reconnect,
+   disconnect/revocation, CLI API-key fallback, Zed, Codebuff, and the generated marketplace fixtures.
 5. Submit the shared listing to OpenAI/Codex, Claude, Cursor, Kiro, Cline, Kilo, Zed, Codebuff,
    Gemini CLI, and ClawHub according to each channel's current intake. Verify GitHub Copilot through
    its plugin marketplace path; Awesome Copilot is not a product-listing channel.
