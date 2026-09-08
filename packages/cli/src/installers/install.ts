@@ -48,7 +48,7 @@ function renderManualInstructions(agent: AgentEntry, opts: InstallAgentOptions):
 
   const serverName = opts.serverName ?? "lyrashield"
   const command = "npx"
-  const args = ["-y", "@lyrashield/mcp@0.2.5"]
+  const args = ["-y", "@lyrashield/mcp@0.2.6"]
   const env = opts.useCredentialStore
     ? {}
     : { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY", LYRASHIELD_API_URL: opts.apiUrl }
