@@ -36,7 +36,7 @@ describe("OAuth authorization callbacks", () => {
 
 // Exercise real SDK discovery, client registration, PKCE, callback, and token exchange.
 import { createServer } from "node:http"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { loginWithOAuth } from "../oauth-login.js"
 import { saveCredentials } from "../credentials.js"
 import type { Output } from "../output.js"
@@ -46,6 +46,8 @@ vi.mock("../credentials.js", () => ({
   saveCredentials: vi.fn(),
 }))
 it("completes the hosted OAuth flow once and saves refresh identity", async () => {
+  const accessToken = randomUUID()
+  const refreshToken = randomUUID()
   let base = ""
   let challenge = ""
   let exchanged = false
@@ -85,8 +87,8 @@ it("completes the hosted OAuth flow once and saves refresh identity", async () =
           .digest("base64url") === challenge
       res.end(
         JSON.stringify({
-          access_token: "test-access",
-          refresh_token: "test-refresh",
+          access_token: accessToken,
+          refresh_token: refreshToken,
           token_type: "Bearer",
           expires_in: 3600,
           scope: "lyrashield.read lyrashield.write offline_access",
@@ -121,7 +123,7 @@ it("completes the hosted OAuth flow once and saves refresh identity", async () =
         clientId: "test-client",
         issuer: `${base}/api/auth`,
         resource: `${base}/api/mcp`,
-        oauthRefreshToken: "test-refresh",
+        oauthRefreshToken: refreshToken,
       })
     )
   } finally {

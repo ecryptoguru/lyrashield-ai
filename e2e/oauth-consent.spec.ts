@@ -6,7 +6,7 @@ test("OAuth consent discloses automatic access and recovers from errors on mobil
 }) => {
   const suffix = crypto.randomUUID()
   const email = `oauth-consent-${suffix}@example.com`
-  const password = "Consent-test-password-123!"
+  const password = `${crypto.randomUUID()}-Aa1!`
   const headers = { Origin: "http://127.0.0.1:3100", "x-forwarded-for": "203.0.113.242" }
   await page.setExtraHTTPHeaders({ "x-forwarded-for": headers["x-forwarded-for"] })
   await expect(

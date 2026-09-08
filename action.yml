@@ -112,15 +112,11 @@ runs:
         RESULTS_FILE="$(mktemp)"
         echo "[]" > "$RESULTS_FILE"
 
+        # Aggregate findings are repository-scoped; GitHub requires a location.
         add_result() {
-          local rule_id="$1" level="$2" message="$3" file="$4" entry
-          if [ -n "$file" ]; then
-            entry="$(jq -n --arg ruleId "$rule_id" --arg level "$level" --arg text "$message" --arg file "$file" \
-              '{ruleId:$ruleId,level:$level,message:{text:$text},locations:[{physicalLocation:{artifactLocation:{uri:$file}}}]}')"
-          else
-            entry="$(jq -n --arg ruleId "$rule_id" --arg level "$level" --arg text "$message" \
-              '{ruleId:$ruleId,level:$level,message:{text:$text}}')"
-          fi
+          local rule_id="$1" level="$2" message="$3" file="${4:-.}" entry
+          entry="$(jq -n --arg ruleId "$rule_id" --arg level "$level" --arg text "$message" --arg file "$file" \
+            '{ruleId:$ruleId,level:$level,message:{text:$text},locations:[{physicalLocation:{artifactLocation:{uri:$file}}}]}')"
           jq --argjson e "$entry" '. + [$e]' "$RESULTS_FILE" > "${RESULTS_FILE}.tmp"
           mv "${RESULTS_FILE}.tmp" "$RESULTS_FILE"
         }
