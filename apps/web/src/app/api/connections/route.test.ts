@@ -28,6 +28,13 @@ vi.mock("./connection-auth", () => ({
 
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn(), info: vi.fn() } }))
 
+const verifyOAuthConsentState = vi.fn()
+const connectionGrantMatchesConsent = vi.fn()
+vi.mock("../../../lib/oauth-consent-state", () => ({
+  verifyOAuthConsentState: (...args: unknown[]) => verifyOAuthConsentState(...args),
+  connectionGrantMatchesConsent: (...args: unknown[]) => connectionGrantMatchesConsent(...args),
+}))
+
 import { createAgentConnection, listAgentConnections, prisma } from "@lyrashield/db"
 import { GET, POST } from "./route"
 
@@ -36,6 +43,20 @@ function sessionResult(overrides: Record<string, unknown> = {}) {
     session: { userId: "user-1", ...overrides },
     workspace: { role: "DEVELOPER" },
   }
+}
+
+function validConsent() {
+  verifyOAuthConsentState.mockReturnValue({
+    valid: true,
+    payload: {
+      clientId: "client-cursor",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      userId: "user-1",
+      nonce: "n",
+      exp: Date.now() + 60_000,
+    },
+  })
+  connectionGrantMatchesConsent.mockReturnValue(true)
 }
 
 describe("GET /api/connections", () => {
@@ -86,6 +107,7 @@ describe("POST /api/connections", () => {
     requireWorkspaceAccess.mockResolvedValue(sessionResult())
     requireBrowserConnectionManager.mockResolvedValue(sessionResult())
     vi.mocked(prisma.target.count).mockResolvedValue(1)
+    validConsent()
   })
 
   it("creates a connection, binds it to the session, and records audit log", async () => {
@@ -123,12 +145,14 @@ describe("POST /api/connections", () => {
           allowedTargetIds: ["target-1"],
           allTargets: false,
           allowedProfiles: ["SAFE"],
+          consentState: "signed-state",
         }),
       })
     )
     expect(res.status).toBe(201)
     const body = await res.json()
     expect(body.data.id).toBe("conn-new")
+    expect(verifyOAuthConsentState).toHaveBeenCalledWith("signed-state")
     expect(updateSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: { activeWorkspaceId: "ws-1", pendingAgentConnectionId: "conn-new" },
@@ -144,6 +168,92 @@ describe("POST /api/connections", () => {
     )
   })
 
+  it("rejects a missing consent state before persisting anything", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+        }),
+      })
+    )
+    expect(res.status).toBe(400)
+    expect(createAgentConnection).not.toHaveBeenCalled()
+  })
+
+  it("rejects an invalid consent state", async () => {
+    verifyOAuthConsentState.mockReturnValue({ valid: false, reason: "bad_signature" })
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          consentState: "forged.state",
+        }),
+      })
+    )
+    expect(res.status).toBe(400)
+    expect(createAgentConnection).not.toHaveBeenCalled()
+    expect(updateSessionMock).not.toHaveBeenCalled()
+  })
+
+  it("rejects a consent state issued for a different session", async () => {
+    verifyOAuthConsentState.mockReturnValue({
+      valid: true,
+      payload: {
+        clientId: "client-cursor",
+        scopes: ["lyrashield.read"],
+        userId: "someone-else",
+        nonce: "n",
+        exp: Date.now() + 60_000,
+      },
+    })
+    connectionGrantMatchesConsent.mockReturnValue(true)
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          consentState: "signed-for-other-user",
+        }),
+      })
+    )
+    expect(res.status).toBe(403)
+    expect(createAgentConnection).not.toHaveBeenCalled()
+  })
+
+  it("rejects a grant that does not match the authorization request", async () => {
+    validConsent()
+    connectionGrantMatchesConsent.mockReturnValue(false)
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read", "lyrashield.write"],
+          allowedOperations: ["scan.create"],
+          allTargets: true,
+          allowedProfiles: ["SAFE"],
+          consentState: "signed-but-mismatched",
+        }),
+      })
+    )
+    expect(res.status).toBe(400)
+    expect(createAgentConnection).not.toHaveBeenCalled()
+    expect(updateSessionMock).not.toHaveBeenCalled()
+  })
+
   it("rejects API key callers", async () => {
     requireBrowserConnectionManager.mockRejectedValue(new Error("FORBIDDEN"))
     const res = await POST(
@@ -154,6 +264,7 @@ describe("POST /api/connections", () => {
           clientType: "cursor",
           oauthClientId: "client-cursor",
           scopes: ["lyrashield.read"],
+          consentState: "signed",
         }),
       })
     )
@@ -174,6 +285,7 @@ describe("POST /api/connections", () => {
           allowedOperations: ["scan.create"],
           allowedTargetIds: ["foreign-target"],
           allowedProfiles: ["SAFE"],
+          consentState: "signed",
         }),
       })
     )
@@ -192,6 +304,7 @@ describe("POST /api/connections", () => {
           scopes: ["lyrashield.read"],
           allowedOperations: ["report.create"],
           allTargets: true,
+          consentState: "signed",
         }),
       })
     )
@@ -210,6 +323,7 @@ describe("POST /api/connections", () => {
           scopes: ["lyrashield.read", "lyrashield.write"],
           allowedOperations: ["scan.create"],
           allTargets: true,
+          consentState: "signed",
         }),
       })
     )
