@@ -13,7 +13,7 @@ import type { MemberRole } from "@lyrashield/db"
 import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { buildMicrosoftSocialProvider, isOAuthProviderConfigured } from "./oauth-providers"
-import { activeWorkspaceIdFromCookie } from "./oauth-workspace"
+import { activeWorkspaceIdFromCookie, needsOAuthWorkspaceSelection } from "./oauth-workspace"
 import { resourcesMatch } from "./oauth-resource"
 import { hasPermission, PERMISSIONS } from "./permissions"
 
@@ -100,14 +100,16 @@ const oauthProviderPlugin = oauthProvider({
       const { user, session, scopes } = context
       const needsWorkspace = scopes.includes(OAUTH_SCOPE_READ) || scopes.includes(OAUTH_SCOPE_WRITE)
       if (!needsWorkspace || !session) return false
-      await selectedOAuthWorkspaceId({
+      const workspaceId = await selectedOAuthWorkspaceId({
         userId: user.id,
         session,
         requestHeaders: (context as unknown as { headers?: Headers }).headers ?? new Headers(),
       })
-      // Every authorization gets a connection record. The provider clears this
-      // post-login step for the current signed query after the form continues.
-      return true
+      return needsOAuthWorkspaceSelection(
+        workspaceId,
+        typeof session.userId === "string" ? session.userId : undefined,
+        user.id
+      )
     },
     consentReferenceId: async (context) => {
       const { user, session, scopes } = context
