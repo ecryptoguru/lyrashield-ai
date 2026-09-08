@@ -36,6 +36,7 @@ import { getGateReadinessTargets } from "@/lib/launch-readiness-server"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+import { presentOperationFailure } from "@/lib/operation-failure"
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -459,6 +460,14 @@ function LatestRunAlert({
 }) {
   const active = isActiveScan(run.status)
   const presentation = getScanPresentation(run.status, {})
+  // W1-07: failures present cause, effect, and recovery from structured codes.
+  const failure =
+    !active && (run.userSafeFailure || run.coverageState === "NONE")
+      ? presentOperationFailure(
+          run.userSafeFailure ? (run.status === "STOPPED_BUDGET" ? "NO_MINUTES_REMAINING" : run.status) : "COVERAGE_INCOMPLETE",
+          { targetName: run.targetName }
+        )
+      : null
   const tone = active
     ? "border-primary/30 bg-primary/5"
     : run.status === "FAILED" || run.status === "TIMED_OUT"
@@ -488,12 +497,30 @@ function LatestRunAlert({
               Latest scan: {presentation.label.toLowerCase()}
               {run.targetName ? ` · ${run.targetName}` : ""}
             </h2>
-            <p className="text-muted-foreground mt-0.5 text-sm">
-              {active
-                ? "This scan is still in progress. Findings appear as the scan reaches a reliable state."
-                : (run.userSafeFailure ??
-                  "The latest scan completed but no scanner could evaluate the target, so there is no evidence to judge. This is not a clean result.")}
-            </p>
+            {failure ? (
+              <>
+                <p className="text-muted-foreground mt-0.5 text-sm">{failure.cause}</p>
+                <p className="text-muted-foreground mt-0.5 text-sm">{failure.effect}</p>
+                <p className="text-foreground mt-1 text-sm font-medium">
+                  {failure.recovery}
+                  {failure.recoveryHref ? " " : ""}
+                  {failure.recoveryHref ? (
+                    <Link
+                      href={failure.recoveryHref}
+                      className="text-primary inline-flex items-center gap-1"
+                    >
+                      Take action <ArrowRight className="size-3.5" aria-hidden="true" />
+                    </Link>
+                  ) : null}
+                </p>
+              </>
+            ) : (
+              <p className="text-muted-foreground mt-0.5 text-sm">
+                {active
+                  ? "This scan is still in progress. Findings appear as the scan reaches a reliable state."
+                  : "Review the scan's coverage before relying on this result."}
+              </p>
+            )}
           </div>
         </div>
         <Link
