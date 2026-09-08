@@ -58,12 +58,15 @@ export function OnboardingWizard({
   useEffect(() => {
     rememberPlanIntent(selectedPlan)
   }, [selectedPlan])
-  const [step, setStep] = useState(initialState.currentStep ?? (initialState.workspaceId ? 1 : 0))
+  // W2-01: workspace naming left the critical path. The server reuses an
+  // authorized workspace or creates a default before this renders, so the
+  // wizard always starts at the target chooser (step 1). A stale persisted
+  // step 0 cannot reappear.
+  const [step, setStep] = useState(Math.max(initialState.currentStep ?? 1, 1))
   const [data, setData] = useState(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [workspaceName, setWorkspaceName] = useState("")
   const [repos, setRepos] = useState<Repo[]>([])
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [productName, setProductName] = useState(initialState.targetName ?? "")
@@ -160,31 +163,6 @@ export function OnboardingWizard({
     const next = await apiPatch("/api/onboarding", updates, { schema: onboardingDataSchema })
     setData(next)
     return next
-  }
-
-  async function createWorkspace() {
-    if (!workspaceName.trim()) {
-      setError("Name your workspace to continue.")
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const workspace = await apiPost(
-        "/api/workspaces",
-        {
-          name: workspaceName.trim(),
-          mode: "VIBE",
-        },
-        { schema: idSchema }
-      )
-      await persist({ workspaceId: workspace.id, currentStep: 1, skipped: false })
-      setStep(1)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not create your workspace.")
-    } finally {
-      setLoading(false)
-    }
   }
 
   async function connectGitHub() {
@@ -397,17 +375,18 @@ export function OnboardingWizard({
 
   // The progress bar adapts to the chosen path: GitHub users see a
   // "Select repository" step; URL/API users skip it, so we collapse it
-  // and show "Product details" as the third step instead.
+  // and show "Target details" as the third step instead. Workspace naming is
+  // no longer a step (W2-01): the server provisions the workspace.
   const isGithubFlow = path === "github" || (path === null && step <= 2)
   const steps = isGithubFlow
-    ? ["Workspace", "Add target", "Select repository", `${PRODUCT_SINGULAR} details`]
-    : ["Workspace", "Add target", `${PRODUCT_SINGULAR} details`]
-  const displayStep = isGithubFlow ? step : Math.min(step, steps.length - 1)
+    ? ["Add target", "Select repository", `${PRODUCT_SINGULAR} details`]
+    : ["Add target", `${PRODUCT_SINGULAR} details`]
+  const displayStep = Math.max(step - 1, 0)
 
   return (
     <div className="w-full max-w-2xl">
       <ol
-        className={`mb-2 grid border-y ${steps.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}
+        className={`mb-2 grid border-y ${steps.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}
         aria-label="Getting started progress"
       >
         {steps.map((label, index) => {
@@ -448,47 +427,11 @@ export function OnboardingWizard({
       )}
 
       <section className="rounded-xl border p-5 sm:p-7" aria-live="polite">
-        {step === 0 && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 1
-              </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">Give your work a home</h2>
-              <p className="text-muted-foreground mt-2 text-sm">
-                A workspace keeps your products and reviews together.
-              </p>
-            </div>
-            <FormField label="Workspace name" htmlFor="workspace-name">
-              <Input
-                id="workspace-name"
-                value={workspaceName}
-                onChange={(e) => setWorkspaceName(e.target.value)}
-                onKeyDown={(e) => {
-                  // Enter is how people expect to advance a single-field step.
-                  if (e.key === "Enter" && !loading) {
-                    e.preventDefault()
-                    void createWorkspace()
-                  }
-                }}
-                placeholder="My app security"
-                autoComplete="organization"
-              />
-            </FormField>
-            <div className="flex justify-end">
-              <Button type="button" onClick={createWorkspace} disabled={loading}>
-                {loading ? <Spinner className="mr-2" /> : <ChevronRight className="size-4" />}
-                Continue
-              </Button>
-            </div>
-          </div>
-        )}
-
         {step === 1 && path !== "url" && path !== "api" && (
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 2
+                Step 1
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Add your first target</h2>
               <p className="text-muted-foreground mt-2 text-sm">
@@ -538,12 +481,6 @@ export function OnboardingWizard({
                   Scan an API&apos;s public surface — no repo access needed.
                 </span>
               </button>
-            </div>
-
-            <div className="flex justify-start">
-              <Button type="button" variant="ghost" onClick={() => setStep(0)} disabled={loading}>
-                <ChevronLeft className="size-4" /> Back
-              </Button>
             </div>
           </div>
         )}
@@ -642,7 +579,7 @@ export function OnboardingWizard({
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 3
+                Step 2
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Select a repository</h2>
               <p className="text-muted-foreground mt-2 text-sm">
@@ -715,7 +652,7 @@ export function OnboardingWizard({
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step {pathNeedsRepo(path) ? 4 : 3}
+                Step {pathNeedsRepo(path) ? 3 : 2}
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">{PRODUCT_SINGULAR} details</h2>
               <p className="text-muted-foreground mt-2 text-sm">
