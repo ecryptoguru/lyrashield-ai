@@ -10,12 +10,14 @@ export function OAuthConsentForm({
   clientId,
   scope,
   oauthQuery,
+  consentState,
   workspaces,
 }: {
   clientName: string
   scope: string
   oauthQuery?: string
   clientId: string
+  consentState: string
   workspaces: Workspace[]
 }) {
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "")
@@ -26,6 +28,7 @@ export function OAuthConsentForm({
   async function submit(accept: boolean) {
     setBusy(true)
     setError(null)
+    let createdConnectionId: string | null = null
     try {
       if (accept) {
         if (!workspaceId) throw new Error("Choose a workspace before connecting.")
@@ -52,6 +55,7 @@ export function OAuthConsentForm({
               allowedTargetIds: [],
               allTargets: canAutomate,
               allowedProfiles: canAutomate ? ScanModeSchema.options : [],
+              consentState,
             }),
           })
           if (!connRes.ok) {
@@ -60,6 +64,10 @@ export function OAuthConsentForm({
             } | null
             throw new Error(errData?.error?.message ?? "Failed to configure automated connection.")
           }
+          const connData = (await connRes.json().catch(() => null)) as {
+            data?: { id?: string }
+          } | null
+          createdConnectionId = typeof connData?.data?.id === "string" ? connData.data.id : null
         }
       }
 
@@ -81,6 +89,17 @@ export function OAuthConsentForm({
         throw new Error("The authorization request could not be completed.")
       window.location.assign(destination)
     } catch (cause) {
+      // The connection must not outlive a failed consent: an ACTIVE grant whose
+      // OAuth flow never completed would otherwise linger as a connected client.
+      // The consent endpoint requires the connection to exist while it runs, so
+      // the grant is created first and revoked here on every failure path.
+      if (createdConnectionId) {
+        await fetch(`/api/connections/${encodeURIComponent(createdConnectionId)}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workspaceId }),
+        }).catch(() => undefined)
+      }
       setError(cause instanceof Error ? cause.message : "The authorization request failed.")
       setBusy(false)
     }
