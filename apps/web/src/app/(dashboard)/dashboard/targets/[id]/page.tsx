@@ -131,7 +131,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Crosshair className="text-primary h-4 w-4" aria-hidden="true" />
-            Total Trust Runs
+            Total Scans
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.scans}</p>
         </Card>
@@ -261,10 +261,10 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
       <div
         className="overflow-x-auto rounded-xl border shadow-sm"
         tabIndex={0}
-        aria-label="Recent trust runs"
+        aria-label="Recent scans"
       >
         <div className="border-b p-4">
-          <h2 className="text-lg font-semibold">Recent Trust Runs</h2>
+          <h2 className="text-lg font-semibold">Recent Scans</h2>
         </div>
         {target.scans.length === 0 ? (
           <div className="text-muted-foreground p-8 text-center text-sm">

@@ -78,6 +78,11 @@ export interface DashboardOverview {
     inProgress: number
     riskAccepted: number
   }
+  /**
+   * The newest active (non-terminal) scan, or null. The home decision leads
+   * with its progress instead of recommending a duplicate scan.
+   */
+  activeScan: { id: string; targetName: string | null } | null
 }
 
 export interface DashboardRecentRun {
@@ -208,7 +213,8 @@ const OPEN_ISSUE_EXCLUDED_STATUSES = new Set(["FIXED", "FALSE_POSITIVE", "DUPLIC
 
 /**
  * Build the overview from pre-fetched rows. Split from the query function so
- * the joining/binding rules are unit-testable without a database.
+ * the joining/binding rules are unit-testable without a database. The active
+ * scan is a query-level supplement added by `getDashboardOverview`.
  */
 export function buildDashboardOverview(input: {
   targets: { id: string; name: string }[]
@@ -238,7 +244,7 @@ export function buildDashboardOverview(input: {
     targetName: string | null
   }[]
   now?: Date
-}): DashboardOverview {
+}): Omit<DashboardOverview, "activeScan"> {
   const now = input.now ?? new Date()
   const completedRunCount = input.completedRunCount ?? 0
   const reportCount = input.reportCount ?? 0
@@ -581,6 +587,19 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     count: group._count._all,
   }))
 
+  // The newest active (non-terminal) scan, for the home decision: during an
+  // active scan the header CTA leads with its progress instead of recommending
+  // a duplicate. Bounded by the workspace's three-scan concurrency limit.
+  const activeScanRow = await prisma.scan.findFirst({
+    where: {
+      workspaceId,
+      deletedAt: null,
+      status: { in: ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"] },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, target: { select: { name: true } } },
+  })
+
   const evaluatedCandidates = evaluatedSnapshots
     .filter((snapshot) => snapshot.scan.endedAt && snapshot.scan.target)
     .map((snapshot) => ({
@@ -595,7 +614,7 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
       receiptStatuses: receiptsByScanId.get(snapshot.scanId) ?? [],
     }))
 
-  return buildDashboardOverview({
+  const overview = buildDashboardOverview({
     targets,
     terminalRuns: allTerminalRuns,
     receiptsByScanId,
@@ -612,4 +631,11 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
       targetName: snapshot.scan.target?.name ?? null,
     })),
   })
+
+  return {
+    ...overview,
+    activeScan: activeScanRow
+      ? { id: activeScanRow.id, targetName: activeScanRow.target?.name ?? null }
+      : null,
+  }
 }

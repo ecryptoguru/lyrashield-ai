@@ -14,7 +14,9 @@ import { calculateFindingPriority } from "@/lib/finding-priority"
 import { findingFilterToApiQuery, parseFindingListParams } from "@/lib/finding-list-params"
 
 const FINDINGS_TABS: SectionTab[] = [
-  { value: "issues", label: "Issues", href: "/dashboard/findings?tab=issues" },
+  // The `issues` tab value is a compatibility URL parameter; the visible label
+  // uses the canonical "Findings" noun.
+  { value: "issues", label: ISSUE_PLURAL, href: "/dashboard/findings?tab=issues" },
   { value: "evidence", label: "Evidence", href: "/dashboard/findings?tab=evidence" },
   { value: "reports", label: "Reports", href: "/dashboard/findings?tab=reports" },
 ]
@@ -27,7 +29,7 @@ function normalizeTab(value: string | undefined): FindingsTab {
 }
 
 export const metadata: Metadata = {
-  title: "Issues",
+  title: ISSUE_PLURAL,
 }
 
 export default async function FindingsPage({

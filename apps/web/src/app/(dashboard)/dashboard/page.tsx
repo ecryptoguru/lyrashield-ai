@@ -6,7 +6,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bug,
-  CheckCircle2,
   Crosshair,
   LoaderCircle,
   Plus,
@@ -31,13 +30,12 @@ import {
   getCachedDashboardOverview,
 } from "@/lib/cache"
 import { TrustCommandCenter } from "@/components/trust-command-center"
-import { deriveHomeNextAction } from "@/lib/home-next-action"
+import { deriveHomeDecision } from "@/lib/home-next-action"
 import { projectGateReadinessReport } from "@/lib/launch-readiness"
 import { getGateReadinessTargets } from "@/lib/launch-readiness-server"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
-import { dashboardPrimaryAction } from "@/components/trust-command-center.utils"
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -106,11 +104,17 @@ export default async function DashboardPage() {
     gateTargets
   )
 
-  const primaryAction = dashboardPrimaryAction(targetCount)
-  const nextAction = deriveHomeNextAction(
-    { targets, lastEvaluatedAssessment, remediation, reportCount },
-    openIssues
-  )
+  // W1-02/W1-03: one canonical decision drives BOTH the header CTA and the
+  // next-action panel, consumes the uncached gate result, and leads with an
+  // active scan's progress instead of recommending a duplicate.
+  const decision = deriveHomeDecision({
+    targets,
+    lastEvaluatedAssessment,
+    reportCount,
+    openIssues,
+    gateTargets: gateTargets.map((target) => ({ state: target.state, applicable: target.applicable })),
+    activeScan: overview.activeScan,
+  })
 
   const latestScore =
     lastEvaluatedAssessment &&
@@ -146,9 +150,12 @@ export default async function DashboardPage() {
       ? latestRun
       : null
 
+  const primaryAction = decision.primaryAction
+  const primaryIcon = primaryAction.href.startsWith("/dashboard/targets") ? "plus" : "play"
+
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
-      {/* 1 — workspace label and one primary CTA */}
+      {/* 1 — workspace label and the one primary CTA from the canonical decision */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-primary text-xs font-semibold tracking-[0.15em] uppercase">
@@ -163,7 +170,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <Link href={primaryAction.href} className={buttonVariants()}>
-            {targetCount === 0 ? (
+            {primaryIcon === "plus" ? (
               <Plus className="size-4" aria-hidden="true" />
             ) : (
               <Play className="size-4" aria-hidden="true" />
@@ -173,8 +180,8 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {/* One contextual next action — replaces the previous tour + checklist pair. */}
-      {nextAction && (
+      {/* One contextual next action — same decision model as the header CTA. */}
+      {decision.action && (
         <section
           className="border-primary/30 bg-primary/[0.04] rounded-xl border p-5 sm:p-6"
           aria-labelledby="home-next-action"
@@ -182,66 +189,74 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                {nextAction.eyebrow}
+                {decision.action.eyebrow}
               </p>
               <h2 id="home-next-action" className="mt-1 text-xl font-bold tracking-tight">
-                {nextAction.title}
+                {decision.action.title}
               </h2>
               <p className="text-muted-foreground mt-1.5 max-w-2xl text-sm">
-                {nextAction.description}
+                {decision.action.description}
               </p>
             </div>
             <Link
-              href={nextAction.href}
+              href={decision.action.href}
               className={`${buttonVariants({ className: "shrink-0" })} min-h-11`}
             >
-              {nextAction.cta}
+              {decision.action.cta}
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           </div>
         </section>
       )}
 
-      {/* 2 — current posture and exact evidence scope */}
+      {/* 2 — current posture: gate state and evidence scope before any score (W1-04) */}
       <TrustCommandCenter
         productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
         mode={latestRun?.mode ?? null}
         trustPlanData={project?.trustPlan}
+        gate={{
+          state: readiness.state ?? "INSUFFICIENT_EVIDENCE",
+          coverageLabel,
+        }}
         latestScore={latestScore}
       />
 
       {/* 3 — latest run warning/progress when it needs attention */}
       {latestRunAlert && <LatestRunAlert run={latestRunAlert} />}
 
-      {/* 4 — four compact metrics, each naming its evidence scope */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Workspace metrics">
+      {/* 4 — three compact metrics: blockers, freshness/coverage, activity (W1-05).
+          Score, severity mix, verification counts, and trends remain reachable in
+          the secondary analytics sections below. */}
+      <section className="grid gap-4 sm:grid-cols-3" aria-label="Workspace metrics">
         <MetricCard
-          label="Security score"
-          value={latestScore?.score ?? "—"}
-          detail={
-            latestScore
-              ? `Grade ${latestScore.grade.replace("_PLUS", "+")} · ${latestScore.targetName}`
-              : "No evaluated review yet"
-          }
-          icon={ShieldCheck}
-        />
-        <MetricCard
-          label="Open issues"
-          value={openIssues.total}
+          label="Actionable blockers"
+          value={openIssues.critical + openIssues.high}
           detail={`${openIssuesBySeverity.CRITICAL ?? 0} critical · ${openIssuesBySeverity.HIGH ?? 0} high · workspace-wide`}
           icon={Bug}
         />
         <MetricCard
-          label="Target coverage"
+          label="Assessment coverage"
           value={targetCount === 0 ? "—" : `${targets.assessed}/${targetCount}`}
           detail={coverageLabel}
           icon={Crosshair}
         />
         <MetricCard
-          label="Independently verified"
-          value={openIssues.independentlyVerified}
-          detail="Backed by an independent verification receipt"
-          icon={CheckCircle2}
+          label="Current activity"
+          value={
+            overview.activeScan
+              ? "Scan running"
+              : latestRun
+                ? getScanPresentation(latestRun.status, {}).label
+                : "—"
+          }
+          detail={
+            overview.activeScan
+              ? `${overview.activeScan.targetName ?? "Workspace"} scan in progress`
+              : latestRun
+                ? `Last run ${formatDateTime(latestRun.createdAt)}`
+                : "No scan activity yet"
+          }
+          icon={Activity}
         />
       </section>
 
@@ -250,7 +265,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
           <div>
             <h2 className="font-semibold">Recent activity</h2>
-            <p className="text-muted-foreground mt-1 text-xs">Your most recent runs.</p>
+            <p className="text-muted-foreground mt-1 text-xs">Your most recent scans.</p>
           </div>
           <Link
             href="/dashboard/scans"
@@ -277,7 +292,7 @@ export default async function DashboardPage() {
                       {run.targetName ?? "Workspace scan"}
                     </span>
                     <span className="text-muted-foreground block text-xs">
-                      {formatDateTime(run.createdAt)} · {run.findingCount} retained issue
+                      {formatDateTime(run.createdAt)} · {run.findingCount} retained finding
                       {run.findingCount === 1 ? "" : "s"} on record
                     </span>
                   </span>
@@ -290,7 +305,7 @@ export default async function DashboardPage() {
           <div className="px-5 py-6 sm:px-6">
             <EmptyState
               icon={Activity}
-              title="No run activity yet"
+              title="No scan activity yet"
               description={
                 targetCount === 0
                   ? "Add a target to begin your first review."
@@ -301,7 +316,7 @@ export default async function DashboardPage() {
                   href={primaryAction.href}
                   className={buttonVariants({ variant: "secondary", size: "sm" })}
                 >
-                  {targetCount === 0 ? (
+                  {primaryIcon === "plus" ? (
                     <Plus className="size-4" aria-hidden="true" />
                   ) : (
                     <Play className="size-4" aria-hidden="true" />
@@ -314,7 +329,7 @@ export default async function DashboardPage() {
         )}
       </Card>
 
-      {/* 6 — secondary analytics and remediation details */}
+      {/* 6 — secondary analytics and remediation details (on demand) */}
       <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card className="p-5 sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
@@ -339,11 +354,16 @@ export default async function DashboardPage() {
         </Card>
 
         <Card className="p-5 sm:p-6">
-          <div className="mb-5">
-            <h2 className="font-semibold">Retained issue mix</h2>
-            <p className="text-muted-foreground mt-1 text-xs">
-              All retained issues grouped by severity, workspace-wide.
-            </p>
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold">Retained finding mix</h2>
+              <p className="text-muted-foreground mt-1 text-xs">
+                All retained findings grouped by severity, workspace-wide.
+              </p>
+            </div>
+            <Badge variant="muted">
+              {openIssues.independentlyVerified} independently verified
+            </Badge>
           </div>
           <SeverityDonut values={openIssuesBySeverity} />
         </Card>
@@ -355,7 +375,7 @@ export default async function DashboardPage() {
             <div>
               <h2 className="font-semibold">Remediation flow</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                Current issue movement from review through closure.
+                Current finding movement from review through closure.
               </p>
             </div>
             <Wrench className="text-primary size-5" aria-hidden="true" />
@@ -465,14 +485,14 @@ function LatestRunAlert({
           )}
           <div className="min-w-0">
             <h2 id="latest-run-alert" className="text-sm font-semibold">
-              Latest run: {presentation.label.toLowerCase()}
+              Latest scan: {presentation.label.toLowerCase()}
               {run.targetName ? ` · ${run.targetName}` : ""}
             </h2>
             <p className="text-muted-foreground mt-0.5 text-sm">
               {active
-                ? "This run is still in progress. Findings appear as the run reaches a reliable state."
+                ? "This scan is still in progress. Findings appear as the scan reaches a reliable state."
                 : (run.userSafeFailure ??
-                  "The latest run completed but no scanner could evaluate the target, so there is no evidence to judge. This is not a clean result.")}
+                  "The latest scan completed but no scanner could evaluate the target, so there is no evidence to judge. This is not a clean result.")}
             </p>
           </div>
         </div>

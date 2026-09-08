@@ -32,12 +32,20 @@ interface PostureVerdict {
   scope: string
 }
 
+export interface GatePosture {
+  state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
+  /** Human summary of assessment freshness/coverage across active targets. */
+  coverageLabel: string
+}
+
 /**
- * Derive the posture verdict from the last EVALUATED assessment only. A score
- * is always presented with the target and date it describes — never as a
- * workspace-wide clean bill of health.
+ * Derive the posture verdict from the canonical gate state first (W1-04): a
+ * clean score never overrides insufficient evidence or a blocking gate. The
+ * score — always presented with the target and date it describes — is scope
+ * context, never the decision.
  */
 export function postureVerdict(
+  gate: GatePosture | null,
   latestScore: {
     score: number
     grade: string
@@ -45,25 +53,41 @@ export function postureVerdict(
     completedAtLabel: string
   } | null
 ): PostureVerdict {
-  if (!latestScore) {
-    return {
-      variant: "muted",
-      text: "Not scored",
-      scope: "Run a review to capture your first evidence.",
-    }
+  const scoreScope = latestScore
+    ? `Grade ${latestScore.grade.replace("_PLUS", "+")} · ${latestScore.targetName} · ${latestScore.completedAtLabel}`
+    : "No evaluated review yet"
+  if (!gate) {
+    return latestScore
+      ? {
+          variant: latestScore.score >= 80 ? "success" : latestScore.score >= 50 ? "warning" : "danger",
+          text: latestScore.score >= 80 ? "Ready within completed scope" : latestScore.score >= 50 ? "Needs attention" : "Needs action",
+          scope: scoreScope,
+        }
+      : {
+          variant: "muted",
+          text: "Not scored",
+          scope: "Run a review to capture your first evidence.",
+        }
   }
-  const variant =
-    latestScore.score >= 80 ? "success" : latestScore.score >= 50 ? "warning" : "danger"
-  const text =
-    latestScore.score >= 80
-      ? "Ready within completed scope"
-      : latestScore.score >= 50
-        ? "Needs attention"
-        : "Needs action"
-  return {
-    variant,
-    text,
-    scope: `Grade ${latestScore.grade.replace("_PLUS", "+")} · ${latestScore.targetName} · ${latestScore.completedAtLabel}`,
+  switch (gate.state) {
+    case "READY":
+      return {
+        variant: "success",
+        text: "Gate READY",
+        scope: `${gate.coverageLabel} · ${scoreScope}`,
+      }
+    case "NOT_READY":
+      return {
+        variant: "danger",
+        text: "Gate: not ready",
+        scope: `${gate.coverageLabel} · resolve blockers before a launch decision`,
+      }
+    case "INSUFFICIENT_EVIDENCE":
+      return {
+        variant: "warning",
+        text: "Insufficient evidence",
+        scope: `${gate.coverageLabel} · a clean score is not evidence`,
+      }
   }
 }
 
@@ -76,15 +100,17 @@ export function TrustCommandCenter({
   productName,
   mode,
   trustPlanData,
+  gate,
   latestScore,
 }: {
   productName: string
   /** Depth of the most recent run, or null when none has run yet. */
   mode: string | null
   trustPlanData: unknown
+  gate: GatePosture | null
   latestScore: { score: number; grade: string; targetName: string; completedAtLabel: string } | null
 }) {
-  const verdict = postureVerdict(latestScore)
+  const verdict = postureVerdict(gate, latestScore)
 
   return (
     <section aria-label="Current posture" className="space-y-4">

@@ -323,7 +323,7 @@ async function post(request: Request) {
     // Return the same shape the list endpoint returns. The client prepends this
     // straight into its scan list and validates it against the list-item schema,
     // so a narrower payload here fails response validation and surfaces to the
-    // user as "Start Trust Run" erroring — on a scan that was in fact created
+    // user as "Start scan" erroring — on a scan that was in fact created
     // and enqueued. `target` is the row already loaded and authorised above, and
     // findingCount is 0 by construction for a scan that has not run yet.
     return apiSuccess(
