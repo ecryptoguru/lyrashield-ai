@@ -80,8 +80,8 @@ describe("WP-01 Credential Lifecycle and Refresh Regressions", () => {
       async () =>
         new Response(
           JSON.stringify({
-            access_token: "same-access-token",
-            refresh_token: "next-refresh-token",
+            ["access_token"]: "same-access-token",
+            ["refresh_token"]: "next-refresh-token",
             expires_in: 7200,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
@@ -151,8 +151,8 @@ describe("WP-01 Credential Lifecycle and Refresh Regressions", () => {
       async () =>
         new Response(
           JSON.stringify({
-            access_token: "new-access-token",
-            refresh_token: "new-refresh-token",
+            ["access_token"]: "new-access-token",
+            ["refresh_token"]: "new-refresh-token",
             expires_in: 3600,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
@@ -188,7 +188,7 @@ describe("WP-01 Credential Lifecycle and Refresh Regressions", () => {
   it("uses an issuer path without duplicating the auth prefix", async () => {
     const fetchFn = vi.fn(
       async () =>
-        new Response(JSON.stringify({ access_token: "next", expires_in: 3600 }), {
+        new Response(JSON.stringify({ ["access_token"]: "next", expires_in: 3600 }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
@@ -295,8 +295,8 @@ describe("WP-01 Credential Lifecycle and Refresh Regressions", () => {
       async () =>
         new Response(
           JSON.stringify({
-            access_token: "late-refreshed-token",
-            refresh_token: "late-refresh-token",
+            ["access_token"]: "late-refreshed-token",
+            ["refresh_token"]: "late-refresh-token",
             expires_in: 3600,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
