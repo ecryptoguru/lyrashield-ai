@@ -41,7 +41,7 @@ Secure example with zero raw secrets committed:
   "mcpServers": {
     "lyrashield-local": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.5"],
+      "args": ["-y", "@lyrashield/mcp@0.2.7"],
       "env": {
         "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
       }
@@ -124,7 +124,7 @@ Keep evidence for several releases so you can show trend, exception closure and 
 
 LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp@0.2.5 runs with env var keys, and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. Diff aware GitHub Action and SARIF output surface verified findings in pull requests so review stays in context.
+MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp@0.2.7 runs with env var keys, and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. Diff aware GitHub Action and SARIF output surface verified findings in pull requests so review stays in context.
 
 Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Windsurf uses the supported config-file integration, and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 

@@ -41,7 +41,7 @@ Secure example without inline secrets:
 ```toml
 [mcp_servers.lyrashield]
 command = "npx"
-args = ["-y", "@lyrashield/mcp@0.2.5"]
+args = ["-y", "@lyrashield/mcp@0.2.7"]
 startup_timeout_sec = 20
 tool_timeout_sec = 60
 
@@ -55,7 +55,7 @@ Key hardening for teams:
 
 Use bearer_token_env_var for remote MCP, not inline bearer_token. That keeps secrets in the shell env and out of git, shell history and logs. Keep startup_timeout_sec and tool_timeout_sec conservative so hung tools do not block verification or CI.
 
-For local stdio, use npx -y @lyrashield/mcp@0.2.5 with env vars from shell loaded from your secret manager. The MCP protocol and auth expectations are defined at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18) and [MCP authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
+For local stdio, use npx -y @lyrashield/mcp@0.2.7 with env vars from shell loaded from your secret manager. The MCP protocol and auth expectations are defined at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18) and [MCP authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
 Review Codex CLI config guidance at [Codex CLI repo](https://github.com/openai/codex) and security notes at [OpenAI Codex announcement](https://openai.com/index/openai-codex-system-card/). Require pull request review for any change to config.toml in team dotfiles repos and log which MCP servers were active for a given feature branch in your pull request description. That small log line helps reproduce permission issues later.
 
@@ -112,7 +112,7 @@ That file plus SARIF provides a repeatable proof point for internal review and f
 
 LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration fits Codex config.toml design. Stdio via npx -y @lyrashield/mcp@0.2.5 runs locally with env var secrets, remote at https://app.lyrashieldai.com/api/mcp accepts bearer_token_env_var for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
+MCP integration fits Codex config.toml design. Stdio via npx -y @lyrashield/mcp@0.2.7 runs locally with env var secrets, remote at https://app.lyrashieldai.com/api/mcp accepts bearer_token_env_var for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 
 Build honesty: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. The runner-local Action provides an advisory diff gate with SARIF; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
 

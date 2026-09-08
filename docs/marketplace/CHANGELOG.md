@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.26
+
+- Pin MCP 0.2.7 so target-scoped report creation can select the latest completed scan consistently across hosted and local integrations.
+- Keep OAuth delegation, idempotency, and fail-closed lifecycle behavior unchanged.
+
 ## 0.1.25
 
 - Pin MCP 0.2.6 with connection-bound OAuth delegation, idempotent writes, and fail-closed lifecycle checks.
