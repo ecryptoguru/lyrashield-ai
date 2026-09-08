@@ -30,6 +30,26 @@ export function validateOAuthCallback(url: URL, state: string, issuer: string): 
   return code
 }
 
+const GENERIC_OAUTH_FAILURE =
+  "OAuth connection did not complete. Run `lyrashield login --oauth` to reconnect; existing credentials were preserved."
+
+/**
+ * Map known OAuth, fetch, and credential-store failures to short controlled
+ * messages. Unknown causes keep the generic message: raw provider errors,
+ * stack text, and response bodies must never reach the terminal.
+ */
+export function describeOAuthFailure(cause: unknown): string {
+  if (!(cause instanceof Error)) return GENERIC_OAUTH_FAILURE
+  const message = cause.message
+  if (message.includes("declined"))
+    return "Authorization was declined in the browser. Run `lyrashield login --oauth` to try again; existing credentials were preserved."
+  if (message.includes("timed out"))
+    return "Authorization timed out before it completed. Run `lyrashield login --oauth` to try again; existing credentials were preserved."
+  if (message.includes("workspace"))
+    return "The authorized workspace could not be established. Verify your workspace access, then run `lyrashield login --oauth` to reconnect; existing credentials were preserved."
+  return GENERIC_OAUTH_FAILURE
+}
+
 /** Use the hosted consent flow so the CLI receives the same bound grant as desktop clients. */
 export async function loginWithOAuth(
   apiUrl: string,
@@ -190,10 +210,8 @@ export async function loginWithOAuth(
       "Connected. Authorized actions run automatically within your workspace permissions and budget."
     )
     return 0
-  } catch {
-    output.error(
-      "OAuth connection did not complete. Run `lyrashield login --oauth` to reconnect; existing credentials were preserved."
-    )
+  } catch (cause) {
+    output.error(describeOAuthFailure(cause))
     return 4
   } finally {
     if (timeout) clearTimeout(timeout)

@@ -518,7 +518,7 @@ LyraShield ships three ways to run checks from a coding agent, an editor, or a t
 The `lyrashield` command-line tool (published on npm; the scoped alias `@lyrashield/cli` is deprecated and will be removed in the next major release) installs, configures, and drives scans without hand-editing any config file:
 
 ```bash
-npx lyrashield login              # browser-based OAuth device login or workspace API key
+npx lyrashield login              # hosted PKCE OAuth login or workspace API key
 npx lyrashield connect codex      # configure and verify a supported coding agent
 npx lyrashield connections        # inspect saved credential and agent connection state
 npx lyrashield init                # detect installed coding agents and configure them

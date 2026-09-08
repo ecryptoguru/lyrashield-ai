@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest"
-import { validateOAuthCallback } from "../oauth-login.js"
+import { describeOAuthFailure, validateOAuthCallback } from "../oauth-login.js"
+
+describe("OAuth failure messages", () => {
+  it("maps known failures to short controlled messages", () => {
+    expect(describeOAuthFailure(new Error("Authorization was declined"))).toMatch(/declined/i)
+    expect(describeOAuthFailure(new Error("Authorization timed out"))).toMatch(/timed out/i)
+    expect(describeOAuthFailure(new Error("The authorized workspace could not be established"))).toMatch(
+      /workspace/i
+    )
+  })
+  it("never exposes unknown cause text", () => {
+    const message = describeOAuthFailure(
+      new Error('token endpoint rejected: {"error":"invalid_grant","secret":"hunter2"}')
+    )
+    expect(message).not.toContain("invalid_grant")
+    expect(message).not.toContain("hunter2")
+    expect(message).toMatch(/did not complete/)
+  })
+  it("handles non-Error causes with the generic message", () => {
+    expect(describeOAuthFailure("boom")).toMatch(/did not complete/)
+    expect(describeOAuthFailure(undefined)).toMatch(/did not complete/)
+  })
+})
 
 const issuer = "https://app.lyrashieldai.com/api/auth"
 function callback(query: string) {
