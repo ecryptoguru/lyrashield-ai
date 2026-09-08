@@ -126,7 +126,7 @@ RATE_LIMITED` fires on rapid repeats; `503 PROVIDER_NOT_CONFIGURED` if a
   (STARTER 300 / PRO 1200 / LAUNCH_ASSURANCE 6000); `graceUsedMs` reset to 0.
 - **Annual grants monthly, not lump-sum:** a PRO annual checkout grants
   exactly **1200** minutes, not 14400 (pinned by
-  `e2e/billing/checkout-flows.spec.ts`).
+  the retained provider receipt).
 - Razorpay checkout presents the payment methods and mandate limits available
   for the exact purchase and account. Record the hosted-checkout receipt; do
   not claim fixed UPI/card/netbanking routing without current provider proof.
@@ -158,7 +158,7 @@ Polar and Razorpay; complete payment.
   (`minutes=100`, `remainingMinutes=100`, `expiresAt ≈ now+180d`,
   `externalId=<order/payment id>`), unique `(workspaceId, externalId)`.
 - Replay the same webhook → no duplicate pack (idempotent on
-  `workspaceId+externalId`); `checkout-flows.spec.ts` "idempotency replay
+  `workspaceId+externalId`); retained "idempotency replay
   (100× → 1 effect)" is the reference behavior.
 - Draw order: after the monthly pool is exhausted, consumption decrements
   `MinutePack.remainingMinutes` oldest-first.

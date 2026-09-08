@@ -1,58 +1,6 @@
 import { z } from "zod"
 import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
 
-interface BillingStagingConfig {
-  NODE_ENV: string
-  LYRASHIELD_DEPLOYMENT_ENVIRONMENT: string
-  NEXT_PUBLIC_APP_URL: string
-  POLAR_ENVIRONMENT?: string
-  RAZORPAY_KEY_ID?: string
-  POLAR_BILLING_ADMISSION: string
-  POLAR_LOCAL_BILLING_ADMISSION: string
-  RAZORPAY_BILLING_ADMISSION: string
-  RAZORPAY_LOCAL_BILLING_ADMISSION: string
-  BILLING_STAGING_ADMISSION: string
-  BILLING_STAGING_ACCESS_TOKEN?: string
-  BILLING_STAGING_REGION?: string
-}
-
-export function billingStagingConfigError(value: BillingStagingConfig): string | null {
-  if (value.BILLING_STAGING_ADMISSION === "off") return null
-  if (
-    value.NODE_ENV !== "production" ||
-    value.LYRASHIELD_DEPLOYMENT_ENVIRONMENT !== "billing-staging"
-  ) {
-    return "restricted billing staging admission requires the billing-staging deployment environment"
-  }
-
-  const hostname = new URL(value.NEXT_PUBLIC_APP_URL).hostname.toLowerCase()
-  if (
-    !/^lyrashield-billing-staging\.[a-z0-9-]+\.[a-z0-9-]+\.azurecontainerapps\.io$/.test(hostname)
-  ) {
-    return "restricted billing staging admission requires the isolated Azure staging origin"
-  }
-  if (value.POLAR_ENVIRONMENT !== "sandbox" || !value.RAZORPAY_KEY_ID?.startsWith("rzp_test_")) {
-    return "restricted billing staging admission requires Polar Sandbox and Razorpay Test Mode"
-  }
-  if (
-    [
-      value.POLAR_BILLING_ADMISSION,
-      value.POLAR_LOCAL_BILLING_ADMISSION,
-      value.RAZORPAY_BILLING_ADMISSION,
-      value.RAZORPAY_LOCAL_BILLING_ADMISSION,
-    ].some((admission) => admission !== "off")
-  ) {
-    return "restricted billing staging admission requires every production admission mode to remain off"
-  }
-  if (!value.BILLING_STAGING_ACCESS_TOKEN || value.BILLING_STAGING_ACCESS_TOKEN.length < 32) {
-    return "restricted billing staging admission requires a 32-character access token"
-  }
-  if (value.BILLING_STAGING_REGION !== "usd" && value.BILLING_STAGING_REGION !== "inr") {
-    return "restricted billing staging admission requires an explicit server-side billing region"
-  }
-  return null
-}
-
 const envSchema = z
   .object({
     // Database
@@ -140,10 +88,6 @@ const envSchema = z
 
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
-    LYRASHIELD_DEPLOYMENT_ENVIRONMENT: z
-      .enum(["production", "billing-staging"])
-      .optional()
-      .default("production"),
     NEXT_PUBLIC_MARKETING_URL: z.string().url().optional().or(z.literal("")),
     // Product analytics (PostHog) — mirrors marketing privacy config
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional().or(z.literal("")),
@@ -301,9 +245,6 @@ const envSchema = z
     RAZORPAY_BILLING_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
     RAZORPAY_LOCAL_BILLING_ADMISSION: z.enum(["off", "public"]).default("off"),
     BILLING_CANARY_WORKSPACE_IDS: z.string().optional().default(""),
-    BILLING_STAGING_ADMISSION: z.enum(["off", "restricted"]).default("off"),
-    BILLING_STAGING_ACCESS_TOKEN: z.string().min(32).optional().or(z.literal("")),
-    BILLING_STAGING_REGION: z.enum(["usd", "inr"]).optional().or(z.literal("")),
     // App-only Cloudflare Authenticated Origin Pull enforcement. The proxy
     // validates the Envoy XFCC certificate before it exposes country routing.
     CLOUDFLARE_ORIGIN_MTLS: z.enum(["off", "required"]).default("off"),
@@ -537,8 +478,6 @@ const envSchema = z
     }
   )
   .superRefine((val, ctx) => {
-    const message = billingStagingConfigError(val)
-    if (message) ctx.addIssue({ code: "custom", path: ["BILLING_STAGING_ADMISSION"], message })
     if (
       val.CLOUDFLARE_ORIGIN_MTLS === "required" &&
       (!/^[a-fA-F0-9]{64}$/.test(val.CLOUDFLARE_AOP_CERT_SHA256 ?? "") ||

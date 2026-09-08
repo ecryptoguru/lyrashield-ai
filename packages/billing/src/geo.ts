@@ -4,12 +4,9 @@
  * Determines whether a workspace should use Polar (USD, global) or
  * Razorpay (INR, India). The app proxy accepts country only after validating
  * Cloudflare Authenticated Origin Pulls, then writes its private header.
- *
- * Isolated billing staging may select an explicit server-side region only
- * after the request proves its restricted staging session.
  */
 
-import { billingStagingConfigError, env } from "@lyrashield/config"
+import { env } from "@lyrashield/config"
 
 export type BillingRegion = "usd" | "inr"
 export type BillingProvider = "polar" | "razorpay"
@@ -22,15 +19,7 @@ const DEFAULT_GEO_IP_HEADER = "cf-connecting-ip"
  * evidence of region. Direct Azure ingress does not currently strip and
  * replace a country signal, so normal requests fail closed to USD.
  */
-export function resolveRegion(request: Request, restrictedStagingAccess = false): BillingRegion {
-  if (
-    restrictedStagingAccess &&
-    env.BILLING_STAGING_ADMISSION === "restricted" &&
-    billingStagingConfigError(env) === null &&
-    (env.BILLING_STAGING_REGION === "usd" || env.BILLING_STAGING_REGION === "inr")
-  ) {
-    return env.BILLING_STAGING_REGION
-  }
+export function resolveRegion(request: Request): BillingRegion {
   if (request.headers.get("x-lyrashield-trusted-country") === "IN") return "inr"
   return "usd"
 }
@@ -46,19 +35,15 @@ export function regionToProvider(region: BillingRegion): BillingProvider {
  * Resolve the provider and region from a request.
  *
  * A-L04: Client-controlled region and forwarding headers are ignored. The
- * region is determined only by proxy-authenticated country or a validated,
- * session-bound staging override.
+ * region is determined only by proxy-authenticated country.
  *
  * @param request - The incoming HTTP request
  */
-export function resolveProvider(
-  request: Request,
-  restrictedStagingAccess = false
-): {
+export function resolveProvider(request: Request): {
   region: BillingRegion
   provider: BillingProvider
 } {
-  const region = resolveRegion(request, restrictedStagingAccess)
+  const region = resolveRegion(request)
   return { region, provider: regionToProvider(region) }
 }
 

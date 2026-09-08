@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextRequest } from "next/server"
 
-const stagingAccess = vi.hoisted(() => ({ allowed: false }))
 const affiliate = vi.hoisted(() => ({ detectAttribution: vi.fn() }))
 
 // Mock rate-limit so we don't need Redis in tests
@@ -15,9 +14,6 @@ vi.mock("@/lib/rate-limit", () => ({
   checkLiteScanRateLimit: vi
     .fn()
     .mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
-}))
-vi.mock("@/lib/billing-staging-access", () => ({
-  hasBillingStagingAccess: () => stagingAccess.allowed,
 }))
 vi.mock("@lyrashield/affiliate", () => ({
   detectAttribution: affiliate.detectAttribution,
@@ -70,8 +66,6 @@ function makePublicRequest(pathname: string): NextRequest {
 describe("CSP nonce proxy", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    delete process.env.LYRASHIELD_DEPLOYMENT_ENVIRONMENT
-    stagingAccess.allowed = false
   })
 
   it("sets Content-Security-Policy header on non-API routes", async () => {
@@ -281,31 +275,6 @@ describe("CSP nonce proxy", () => {
     const response = await proxy(makeRequest("/billing/webhook"))
     expect(response.status).toBe(429)
     expect(response.headers.get("Retry-After")).toBe("60")
-  })
-
-  it("protects every staging route except access, signed webhook, and readiness ingress", async () => {
-    process.env.LYRASHIELD_DEPLOYMENT_ENVIRONMENT = "billing-staging"
-    for (const pathname of ["/", "/sign-up", "/dashboard", "/api/auth/get-session"]) {
-      const response = await proxy(makePublicRequest(pathname))
-      expect(response.status, pathname).toBe(404)
-      expect(response.headers.get("Cache-Control"), pathname).toBe("private, no-store")
-    }
-    for (const pathname of [
-      "/staging/access",
-      "/api/staging/access",
-      "/billing/webhook",
-      "/api/health",
-      "/api/ready",
-      "/_next/static/chunks/staging-access.js",
-    ]) {
-      expect((await proxy(makePublicRequest(pathname))).status, pathname).toBe(200)
-    }
-  })
-
-  it("admits a valid HttpOnly staging session to the ordinary application", async () => {
-    process.env.LYRASHIELD_DEPLOYMENT_ENVIRONMENT = "billing-staging"
-    stagingAccess.allowed = true
-    expect((await proxy(makePublicRequest("/dashboard"))).status).toBe(200)
   })
 
   it.each([

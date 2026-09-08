@@ -15,7 +15,6 @@ vi.mock("@lyrashield/affiliate", () => ({
   detectAttribution: vi.fn(),
   parseAffiliateCookie: vi.fn(),
 }))
-vi.mock("@/lib/billing-staging-access", () => ({ hasBillingStagingAccess: () => false }))
 vi.mock("@/lib/scorecard-sharing", () => ({ scorecardTrackingAllowed: () => false }))
 vi.mock("@/lib/rate-limit", () => rateLimit)
 

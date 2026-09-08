@@ -8,7 +8,6 @@ import {
   checkLiteScanRateLimit,
 } from "@/lib/rate-limit"
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
-import { hasBillingStagingAccess } from "@/lib/billing-staging-access"
 import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
 import { assessAppOrigin, isAppHost, isDirectAppOrigin, trustedAppCountry } from "@/lib/app-origin"
 
@@ -29,13 +28,6 @@ const RATE_LIMIT_BYPASS_PATHS = new Set([
   "/api/ready",
   "/api/ready/evidence",
   "/api/ready/scans",
-])
-const BILLING_STAGING_PUBLIC_PATHS = new Set([
-  "/staging/access",
-  "/api/staging/access",
-  "/billing/webhook",
-  "/api/health",
-  "/api/ready",
 ])
 
 function generateNonce(): string {
@@ -252,21 +244,6 @@ export async function proxy(request: NextRequest) {
     requestHeaders.delete("x-lyrashield-country")
     requestHeaders.delete("x-lyrashield-trusted-country")
     if (country) requestHeaders.set("x-lyrashield-trusted-country", country)
-  }
-
-  // The disposable billing-staging app keeps external ingress only because
-  // sandbox/test providers must deliver signed webhooks. Protect every other
-  // application route with a short-lived, HttpOnly same-origin session.
-  if (
-    process.env.LYRASHIELD_DEPLOYMENT_ENVIRONMENT === "billing-staging" &&
-    !BILLING_STAGING_PUBLIC_PATHS.has(pathname) &&
-    !pathname.startsWith("/_next/static/") &&
-    !hasBillingStagingAccess(request)
-  ) {
-    const response = new NextResponse(null, { status: 404 })
-    response.headers.set("Cache-Control", "private, no-store")
-    response.headers.set("Content-Security-Policy", csp)
-    return response
   }
 
   if (pathname === "/billing/webhook") {

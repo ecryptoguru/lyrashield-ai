@@ -955,17 +955,18 @@ jobs:
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --image "${IMAGE}" \
+            --remove-env-vars \
+              LYRASHIELD_DEPLOYMENT_ENVIRONMENT \
+              BILLING_STAGING_ADMISSION \
+              BILLING_STAGING_ACCESS_TOKEN \
+              BILLING_STAGING_REGION \
             --set-env-vars \
               "NEXT_PUBLIC_APP_URL=${{ env.APP_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
-              "LYRASHIELD_DEPLOYMENT_ENVIRONMENT=production" \
               "LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}" \
-              "BILLING_STAGING_ADMISSION=off" \
-              "BILLING_STAGING_ACCESS_TOKEN=" \
-              "BILLING_STAGING_REGION=" \
               "CLOUDFLARE_ORIGIN_MTLS=${{ env.CLOUDFLARE_ORIGIN_MTLS }}" \
               "CLOUDFLARE_AOP_CERT_SHA256=${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}" \
               "DEPLOY_PROBE_CERT_SHA256=${DEPLOY_PROBE_CERT_SHA256}" \
@@ -1061,16 +1062,17 @@ jobs:
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --image "${IMAGE}" \
             --min-replicas 1 \
+            --remove-env-vars \
+              LYRASHIELD_DEPLOYMENT_ENVIRONMENT \
+              BILLING_STAGING_ADMISSION \
+              BILLING_STAGING_ACCESS_TOKEN \
+              BILLING_STAGING_REGION \
             --set-env-vars \
               "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
-              "LYRASHIELD_DEPLOYMENT_ENVIRONMENT=production" \
-              "BILLING_STAGING_ADMISSION=off" \
-              "BILLING_STAGING_ACCESS_TOKEN=" \
-              "BILLING_STAGING_REGION=" \
               "POLAR_BILLING_ADMISSION=${{ env.POLAR_BILLING_ADMISSION }}" \
               "POLAR_LOCAL_BILLING_ADMISSION=${{ env.POLAR_LOCAL_BILLING_ADMISSION }}" \
               "RAZORPAY_BILLING_ADMISSION=${{ env.RAZORPAY_BILLING_ADMISSION }}" \

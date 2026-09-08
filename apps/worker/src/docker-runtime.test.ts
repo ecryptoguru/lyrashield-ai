@@ -157,9 +157,15 @@ describe("worker Docker runtime", () => {
     )
     expect(deployAppStep).toContain("POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}")
     expect(deployAppStep).toContain('"POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"')
-    expect(deployAppStep).toContain('"LYRASHIELD_DEPLOYMENT_ENVIRONMENT=production"')
-    expect(deployAppStep).toContain('"BILLING_STAGING_ADMISSION=off"')
-    expect(deployAppStep).toContain('"BILLING_STAGING_ACCESS_TOKEN="')
+    expect(deployWorkflow.match(/--remove-env-vars/g) ?? []).toHaveLength(2)
+    for (const legacyName of [
+      "LYRASHIELD_DEPLOYMENT_ENVIRONMENT",
+      "BILLING_STAGING_ADMISSION",
+      "BILLING_STAGING_ACCESS_TOKEN",
+      "BILLING_STAGING_REGION",
+    ]) {
+      expect(deployWorkflow.split(`${legacyName} \\`).length - 1).toBe(2)
+    }
     expect(
       deployWorkflow.match(/"PLATFORM_ADMIN_EMAILS=\$\{\{ env\.PLATFORM_ADMIN_EMAILS \}\}"/g) ?? []
     ).toHaveLength(2)
