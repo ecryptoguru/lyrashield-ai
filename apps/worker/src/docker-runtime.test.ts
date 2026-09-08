@@ -164,9 +164,7 @@ describe("worker Docker runtime", () => {
       "BILLING_STAGING_ACCESS_TOKEN",
       "BILLING_STAGING_REGION",
     ]) {
-      expect(deployWorkflow.match(new RegExp(`^\\s+${legacyName} \\\\$`, "gm")) ?? []).toHaveLength(
-        2
-      )
+      expect(deployWorkflow.split(`${legacyName} \\`).length - 1).toBe(2)
     }
     expect(
       deployWorkflow.match(/"PLATFORM_ADMIN_EMAILS=\$\{\{ env\.PLATFORM_ADMIN_EMAILS \}\}"/g) ?? []
