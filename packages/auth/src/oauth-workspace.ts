@@ -15,3 +15,11 @@ export function activeWorkspaceIdFromCookie(cookieHeader: string | null): string
 
   return undefined
 }
+
+export function needsOAuthWorkspaceSelection(
+  workspaceId: string | undefined,
+  sessionUserId: string | undefined,
+  userId: string
+): boolean {
+  return !workspaceId || sessionUserId !== userId
+}
