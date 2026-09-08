@@ -34,7 +34,7 @@ describe("nav-items mobile coverage", () => {
     }
   })
 
-  it("fills exactly the four fixed bottom-bar slots (the fifth is the More trigger)", () => {
+  it("keeps the desktop primary group at five destinations with four mobile slots (W2-10)", () => {
     expect(MOBILE_PRIMARY_NAV_ITEMS).toHaveLength(4)
   })
 
@@ -57,17 +57,18 @@ describe("nav-items mobile coverage", () => {
 })
 
 describe("nav-items lifecycle primary destinations", () => {
-  it("exposes exactly the four lifecycle destinations as primary", () => {
+  it("exposes the lifecycle destinations including Reports as desktop primary (W2-10)", () => {
     const hrefs = PRIMARY_NAV_ITEMS.map((i) => i.href)
     expect(hrefs).toEqual([
       "/dashboard",
       "/dashboard/targets",
       "/dashboard/scans",
       "/dashboard/findings",
+      "/dashboard/reports",
     ])
   })
 
-  it("exposes exactly the four lifecycle destinations as mobile primary", () => {
+  it("keeps the four fixed mobile slots stable with Reports in the More sheet", () => {
     const hrefs = MOBILE_PRIMARY_NAV_ITEMS.map((i) => i.href)
     expect(hrefs).toEqual([
       "/dashboard",
@@ -75,6 +76,7 @@ describe("nav-items lifecycle primary destinations", () => {
       "/dashboard/scans",
       "/dashboard/findings",
     ])
+    expect(MORE_NAV_ITEMS.map((i) => i.href)).toContain("/dashboard/reports")
   })
 })
 
@@ -147,6 +149,7 @@ describe("nav-items conditional Activity destination (W1-09)", () => {
     expect(empty.mobilePrimary).toEqual(withPending.mobilePrimary)
     expect(empty.primary).toEqual(withPending.primary)
     expect(empty.mobilePrimary).toHaveLength(4)
+    expect(empty.primary).toHaveLength(5)
   })
 
   it("does not duplicate any destination when Activity is visible", () => {

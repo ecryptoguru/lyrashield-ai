@@ -8,6 +8,7 @@ import {
   Users,
   Plug,
   ClipboardCheck,
+  FileText,
   ShieldCheck,
   Shield,
   CreditCard,
@@ -74,7 +75,7 @@ const LIFECYCLE_NAV_ITEMS: NavItem[] = [
   {
     href: "/dashboard/scans",
     label: RUN_PLURAL,
-    shortLabel: "Runs",
+    shortLabel: "Scans",
     icon: Radar,
     primary: true,
     mobilePrimary: true,
@@ -86,6 +87,15 @@ const LIFECYCLE_NAV_ITEMS: NavItem[] = [
     icon: Bug,
     primary: true,
     mobilePrimary: true,
+  },
+  // W2-10: Reports is a direct destination on desktop; on mobile it stays
+  // reachable from the More sheet so the bottom bar's four slots stay stable.
+  {
+    href: "/dashboard/reports",
+    label: "Reports",
+    shortLabel: "Reports",
+    icon: FileText,
+    primary: true,
   },
 ]
 
@@ -228,14 +238,23 @@ export const PRIMARY_NAV_ITEMS: NavItem[] = LIFECYCLE_NAV_ITEMS
 export const SECONDARY_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS
 
 /** The four fixed slots in the mobile bottom bar. */
-export const MOBILE_PRIMARY_NAV_ITEMS: NavItem[] = LIFECYCLE_NAV_ITEMS
+// W2-10: the mobile bottom bar keeps its four fixed slots; Reports stays in
+// the More sheet. Filtered by the explicit mobilePrimary flag.
+export const MOBILE_PRIMARY_NAV_ITEMS: NavItem[] = LIFECYCLE_NAV_ITEMS.filter(
+  (item) => item.mobilePrimary
+)
 
 /**
  * Everything the mobile bottom bar does not show. Defined as the exact complement
  * of MOBILE_PRIMARY_NAV_ITEMS so a new destination is reachable on mobile by
  * default. Activity is included only when pending approvals exist.
  */
-export const MORE_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS
+// The exact complement of the four fixed mobile slots: everything else,
+// including Reports (W2-10), is reachable from the More sheet.
+export const MORE_NAV_ITEMS: NavItem[] = [
+  ...LIFECYCLE_NAV_ITEMS.filter((item) => !item.mobilePrimary),
+  ...WORKSPACE_NAV_ITEMS,
+]
 
 // --- State-aware helpers (preferred for new callers) -----------------------
 
@@ -270,14 +289,15 @@ export function resolveNav(state: NavState = {}): ResolvedNav {
   if (evidenceVault) conditional.push(evidenceVault)
   if (platformAdmin) conditional.push(platformAdmin)
   if (state.canManageBilling) conditional.push(BILLING_BASE)
+  const mobileComplement = LIFECYCLE_NAV_ITEMS.filter((item) => !item.mobilePrimary)
   const secondary = [...conditional, ...WORKSPACE_NAV_ITEMS]
-  const more = [...conditional, ...WORKSPACE_NAV_ITEMS]
+  const more = [...conditional, ...mobileComplement, ...WORKSPACE_NAV_ITEMS]
   const items = [...LIFECYCLE_NAV_ITEMS, ...secondary]
   return {
     items,
     primary: LIFECYCLE_NAV_ITEMS,
     secondary,
-    mobilePrimary: LIFECYCLE_NAV_ITEMS,
+    mobilePrimary: LIFECYCLE_NAV_ITEMS.filter((item) => item.mobilePrimary),
     more,
     activity,
     evidenceVault,
