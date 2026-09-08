@@ -172,7 +172,13 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
   })
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
-    tools: engine.listTools(),
+    tools: engine.listTools({
+      includeApprovalId:
+        !options.allowMutations &&
+        options.approvalMode === "remote-oob" &&
+        !!options.remoteApprovalGate &&
+        !!options.remoteApprovalContext,
+    }),
   }))
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {

@@ -123,6 +123,49 @@ describe("remote approval gate — claim-before-execution", () => {
     expect(mcpCallTool).not.toHaveBeenCalled()
   })
 
+  it.each(["PENDING", "APPROVED", "EXECUTED"])(
+    "rejects a different tool name for a %s approval with identical arguments",
+    async (status) => {
+      dbGetApproval.mockResolvedValue(approvalFixture({ status, result: TOOL_RESULT }))
+      const decision = await makeGate()("different-tool", { targetId: "t-1", approvalId: "ap-1" })
+      expect(decision.approved).toBe(false)
+      expect(decision.reason).toMatch(/does not match/)
+      expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
+      expect(mcpCallTool).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([null, "", 123, {}, []].map((approvalId) => ({ approvalId })))(
+    "rejects malformed approval IDs: $approvalId",
+    async ({ approvalId }) => {
+      const decision = await makeGate()("run-scan", { targetId: "t-1", approvalId })
+      expect(decision.approved).toBe(false)
+      expect(decision.reason).toMatch(/Invalid approvalId/)
+      expect(dbGetApproval).not.toHaveBeenCalled()
+      expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
+      expect(mcpCallTool).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(["PENDING", "APPROVED", "EXECUTED"])(
+    "rejects a %s approval at its exact expiry boundary",
+    async (status) => {
+      vi.useFakeTimers()
+      try {
+        const expiresAt = new Date("2026-09-08T02:00:00.000Z")
+        vi.setSystemTime(expiresAt)
+        dbGetApproval.mockResolvedValue(approvalFixture({ status, expiresAt, result: TOOL_RESULT }))
+        const decision = await makeGate()("run-scan", { targetId: "t-1", approvalId: "ap-1" })
+        expect(decision.approved).toBe(false)
+        expect(decision.reason).toMatch(/expired/)
+        expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
+        expect(mcpCallTool).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
+
   it("an expired approval never executes even when raced", async () => {
     dbGetApproval.mockResolvedValue(approvalFixture({ expiresAt: new Date(Date.now() - 1000) }))
     // Even if a concurrent claim somehow raced past the pre-check, the

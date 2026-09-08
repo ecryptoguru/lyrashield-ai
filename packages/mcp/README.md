@@ -173,13 +173,16 @@ Register the endpoint without a static authorization header so the client can fo
 }
 ```
 
-The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. Because a stateless HTTP request has no way to prompt a human, **mutating tools are refused over remote by default** — run those from the local stdio server (which prompts you), or use a pre-authorized trusted automation. Read-only tools work everywhere.
+The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. Connections are read-only by default. A connection with write scope can request an action, then open the returned `approvalUrl` for human review in LyraShield. After approval, call the same tool with the same arguments plus the returned `approvalId`. The server binds approval to the tool and exact input, checks expiry, and claims execution before running the action. Write scope alone never approves an action.
 
 ## Approval behavior
 
 - **In an editor that supports elicitation** (Cursor, VS Code, Claude Code, …): you get an in-editor approve/deny prompt before any mutating tool runs.
 - **In a bare terminal with a TTY**: you're prompted on the controlling terminal.
 - **No approval channel available** (e.g. a headless process): mutating tools fail closed.
+- **Hosted remote MCP**: browser approval supports clients without form elicitation. Mutating tool schemas advertise the optional `approvalId` used to resume the exact approved call.
+
+A client must return the required `approve: true` form value after a user accepts an elicitation. An empty accepted form is invalid and does not authorize the action. Client permission dialogs alone do not establish LyraShield approval; use the hosted browser flow if the client cannot return a valid form.
 
 ### Operator-only CI opt-out
 

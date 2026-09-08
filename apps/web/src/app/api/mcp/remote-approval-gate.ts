@@ -11,9 +11,11 @@ import {
 import { McpServer, type McpToolResult, type RemoteApprovalGate } from "@lyrashield/mcp"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
+import { z } from "zod"
 import { checkApprovalCreateRateLimit } from "../../../lib/rate-limit"
 
 const APPROVAL_TTL_MINUTES = 15
+const approvalIdSchema = z.string().min(1).max(128).optional()
 
 function approvalUrl(approvalId: string): string {
   const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
@@ -80,7 +82,9 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
       return denied("This connection does not have write scope; mutating tools are refused.")
     }
 
-    const approvalIdArg = (args.approvalId as string | undefined) ?? undefined
+    const parsedApprovalId = approvalIdSchema.safeParse(args.approvalId)
+    if (!parsedApprovalId.success) return denied("Invalid approvalId")
+    const approvalIdArg = parsedApprovalId.data
     const toolArgs = stripApprovalId(args)
 
     if (!approvalIdArg) {
@@ -112,11 +116,14 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
       return denied(`Approval not found: ${approvalIdArg}`)
     }
 
-    if (!verifyInputHash(approval.actionName, toolArgs, approval.inputHash)) {
+    if (
+      approval.actionName !== toolName ||
+      !verifyInputHash(toolName, toolArgs, approval.inputHash)
+    ) {
       return denied("Submitted input does not match the requested action")
     }
 
-    if (approval.expiresAt && approval.expiresAt < new Date()) {
+    if (approval.expiresAt && approval.expiresAt <= new Date()) {
       return denied("Approval has expired. Request a new approval.")
     }
 
