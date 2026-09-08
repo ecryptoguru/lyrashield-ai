@@ -26,7 +26,11 @@ async function main() {
   const { apiKey, apiUrl } = await resolveMcpCredentials()
   const { server, engine } = createLyraShieldServer({
     allowMutations,
-    toolContext: { apiBaseUrl: apiUrl, apiKey },
+    toolContext: {
+      apiBaseUrl: apiUrl,
+      apiKey,
+      getCredentials: resolveMcpCredentials,
+    },
   })
   const transport = new StdioServerTransport()
   await server.connect(transport)

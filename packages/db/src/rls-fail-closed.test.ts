@@ -226,7 +226,13 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')`
-    const tenantTables = [...WORKSPACE_SCOPED_MODELS, ...children, ...Object.keys(explicit)]
+    const physicalTableNames: Record<string, string> = {
+      AgentConnection: "agent_connections",
+      AgentOperation: "agent_operations",
+    }
+    const tenantTables = [...WORKSPACE_SCOPED_MODELS, ...children, ...Object.keys(explicit)].map(
+      (model) => physicalTableNames[model] ?? model
+    )
     expect(
       rows
         .filter((row) => row.relrowsecurity)

@@ -289,6 +289,104 @@ describe("LyraShieldClient", () => {
     const result = await client.request("DELETE", "/scans/s-1")
     expect(result).toBeUndefined()
   })
+
+  it("dynamically resolves token using getAccessToken before making requests", async () => {
+    const getAccessToken = vi.fn().mockResolvedValue("dynamic-bearer-token")
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+      json: async () => ({ success: true, data: { status: "ready" } }),
+    })
+
+    const client = new LyraShieldClient({
+      getAccessToken,
+      apiUrl: "https://example.com",
+      fetchFn: makeFetch(mockFetch),
+    })
+
+    const res = await client.request("GET", "/status")
+    expect(res).toEqual({ status: "ready" })
+    expect(getAccessToken).toHaveBeenCalled()
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://example.com/api/v1/status",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer dynamic-bearer-token",
+        }),
+      })
+    )
+  })
+
+  it("does not reuse a previous dynamic token after the provider removes it", async () => {
+    const getAccessToken = vi
+      .fn()
+      .mockResolvedValueOnce("short-lived-token")
+      .mockResolvedValueOnce(undefined)
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(mockResponse({ body: { success: true, data: { ok: true } } }))
+    const dynamicClient = new LyraShieldClient({
+      apiKey: "static-fallback-must-not-win",
+      getAccessToken,
+      fetchFn: makeFetch(fetchFn),
+    })
+
+    await dynamicClient.request("GET", "/workspaces")
+    await dynamicClient.request("GET", "/workspaces")
+
+    const secondHeaders = fetchFn.mock.calls[1]![1].headers as Record<string, string>
+    expect(secondHeaders.Authorization).toBeUndefined()
+  })
+
+  it("retries on HTTP 401 once if getAccessToken provides a refreshed token", async () => {
+    let callCount = 0
+    const getAccessToken = vi.fn().mockImplementation(async () => {
+      callCount++
+      return callCount === 1 ? "stale-token" : "refreshed-fresh-token"
+    })
+
+    // First fetch call returns 401
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      headers: new Headers(),
+      json: async () => ({
+        success: false,
+        error: { code: "INVALID_TOKEN", message: "Token expired" },
+      }),
+      body: { cancel: vi.fn() },
+    })
+
+    // Second fetch call succeeds with refreshed token
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+      json: async () => ({ success: true, data: { ok: true } }),
+    })
+
+    const client = new LyraShieldClient({
+      getAccessToken,
+      apiUrl: "https://example.com",
+      fetchFn: makeFetch(mockFetch),
+    })
+
+    const res = await client.request("GET", "/protected-resource")
+    expect(res).toEqual({ ok: true })
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(mockFetch).toHaveBeenLastCalledWith(
+      "https://example.com/api/v1/protected-resource",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer refreshed-fresh-token",
+        }),
+      })
+    )
+  })
 })
 
 describe("paginate", () => {

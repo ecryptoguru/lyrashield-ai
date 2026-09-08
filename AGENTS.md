@@ -136,7 +136,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Keep validated fallback model and positive policy checks.
 - Deep/Custom are Terra-root/Luna-specialist profiles, not a Luna-to-Terra cascade.
 - Model-facing inputs use `normalizeInput()` and `PromptInjectionGuard`; no ad hoc regex replacement.
-- Remote write scope never bypasses exact-input approval.
+- Remote OAuth is read-only by default. A valid browser-confirmed delegation may authorize only its recorded workflows, targets, and scan profiles without repeated exact-input approval; revalidate membership, permission, connection state, scope, expiry, and idempotency at execution. Legacy or out-of-grant writes remain fail-closed behind exact-input approval.
 
 ### GitHub, public sharing, billing, and licenses
 

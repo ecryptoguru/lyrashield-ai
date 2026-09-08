@@ -76,6 +76,7 @@ export async function resolveFixPrRequest(
   const artifact = await readEncryptedArtifact(proposal.diffRef, workspaceId)
   return {
     workspaceId,
+    targetId: finding.targetId!,
     fixProposalId: proposal.id,
     diff: artifact.content.toString("utf8"),
     anchorFile,

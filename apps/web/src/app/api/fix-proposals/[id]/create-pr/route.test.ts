@@ -10,7 +10,10 @@ const prisma = {
   workspace: { findUnique: vi.fn() },
 }
 
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
+vi.mock("@lyrashield/auth/server", () => ({
+  assertOAuthDelegatedScope: vi.fn(),
+  requirePermission,
+}))
 vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: { fix: { createPr: "fix:create_pr" } },
 }))

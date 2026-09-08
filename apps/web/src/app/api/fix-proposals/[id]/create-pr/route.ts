@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
@@ -20,6 +20,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     const { workspaceId } = parsed.data
     const { session } = await requirePermission(workspaceId, PERMISSIONS.fix.createPr)
     const context = await resolveFixPrRequest(workspaceId, id, session.userId)
+    assertOAuthDelegatedScope(session, context.targetId)
     const outcome = await requestFixPrApproval(context, env.NEXT_PUBLIC_APP_URL)
     if (outcome.status === "rejected")
       return apiError("PATCH_REJECTED", outcome.reason ?? "Patch failed validation", 422)

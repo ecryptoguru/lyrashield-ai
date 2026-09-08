@@ -7,6 +7,7 @@ export {
   getWorkspaceMembership,
   requireWorkspaceAccess,
   requirePermission,
+  assertOAuthDelegatedScope,
   getPlatformAdminNavigationState,
   isPlatformOperator,
   requirePlatformAdminCandidateIdentity,
@@ -31,4 +32,6 @@ export {
   OAUTH_SCOPE_READ,
   OAUTH_SCOPE_WRITE,
   OAUTH_WORKSPACE_CLAIM,
+  OAUTH_CONNECTION_CLAIM,
+  OAUTH_AUTH_VERSION_CLAIM,
 } from "./auth"

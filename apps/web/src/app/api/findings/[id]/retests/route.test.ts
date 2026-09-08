@@ -32,7 +32,10 @@ vi.mock("@lyrashield/db", () => ({
   WorkspaceScanConcurrencyLimitError,
   prisma,
 }))
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
+vi.mock("@lyrashield/auth/server", () => ({
+  assertOAuthDelegatedScope: vi.fn(),
+  requirePermission,
+}))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { retest: { create: "retest:create" } } }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
 vi.mock("../../../../../lib/queue", () => ({

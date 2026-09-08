@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { listReports, createReport, prisma } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -56,15 +56,18 @@ async function post(request: Request) {
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
 
+    let targetId: string | undefined
     if (scanId) {
       const scan = await prisma.scan.findFirst({
         where: { id: scanId, workspaceId, deletedAt: null },
-        select: { id: true },
+        select: { id: true, targetId: true },
       })
       if (!scan) {
         return apiError("SCAN_NOT_FOUND", "Scan not found in this workspace", 404)
       }
+      targetId = scan.targetId ?? undefined
     }
+    assertOAuthDelegatedScope(session, targetId)
 
     const report = await createReport({
       workspaceId,

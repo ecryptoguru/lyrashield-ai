@@ -19,6 +19,8 @@ export {
   AffiliateStatus,
   CommissionStatus,
   PayoutStatus,
+  AgentConnectionStatus,
+  AgentOperationStatus,
 } from "./generated/prisma"
 
 export type {
@@ -72,6 +74,8 @@ export type {
   Commission,
   Payout,
   PayoutItem,
+  AgentConnection,
+  AgentOperation,
 } from "./generated/prisma"
 
 export { ApprovalStatus } from "./generated/prisma"
@@ -349,3 +353,35 @@ export {
   createLiveAiSafetyPlan,
   LiveAiSafetyError,
 } from "./live-ai-safety-service"
+export {
+  CANONICAL_OPERATIONS,
+  AUTOMATION_WORKFLOWS,
+  MUTATING_CANONICAL_OPERATIONS,
+  TOOL_OPERATION_MAP,
+  checkDelegatedOperationAuthorization,
+  type CanonicalOperation,
+  type ToolOperationDescriptor,
+  type AuthorizationDenialReason,
+  type AuthorizationCheckParams,
+  type AuthorizationCheckResult,
+} from "./agent-authorization"
+export {
+  createAgentConnection,
+  getAgentConnection,
+  listAgentConnections,
+  pauseAgentConnection,
+  resumeAgentConnection,
+  revokeAgentConnection,
+  toAgentConnectionDTO,
+  type CreateAgentConnectionParams,
+  type AgentConnectionDTO,
+} from "./agent-connection-service"
+export {
+  claimOrGetAgentOperation,
+  completeAgentOperation,
+  failAgentOperation,
+  getAgentOperation,
+  hashOperationInput,
+  type ClaimAgentOperationParams,
+  type ClaimOperationResult,
+} from "./agent-operation-service"

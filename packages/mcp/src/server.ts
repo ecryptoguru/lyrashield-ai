@@ -70,25 +70,47 @@ export class McpServer {
     this.allowMutations = options?.allowMutations ?? false
   }
 
-  listTools({ includeApprovalId = false }: { includeApprovalId?: boolean } = {}) {
+  listTools({
+    includeApprovalId = false,
+    requireIdempotencyKey = false,
+  }: { includeApprovalId?: boolean; requireIdempotencyKey?: boolean } = {}) {
     return Array.from(this.tools.values()).map((t) => ({
       name: t.name,
       title: (t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name])?.title,
       description: t.description,
       inputSchema:
-        includeApprovalId && t.mutating
+        (includeApprovalId || requireIdempotencyKey) && t.mutating
           ? {
               ...t.inputSchema,
               properties: {
                 ...t.inputSchema.properties,
-                approvalId: {
-                  type: "string",
-                  minLength: 1,
-                  maxLength: 128,
-                  description:
-                    "Approval ID returned by a pending call. After human approval, retry the same tool with identical arguments and this ID.",
-                },
+                ...(requireIdempotencyKey
+                  ? {
+                      idempotencyKey: {
+                        type: "string",
+                        minLength: 1,
+                        maxLength: 128,
+                        description:
+                          "Stable caller-generated ID for this logical mutation. Reuse it only when retrying the same action.",
+                      },
+                    }
+                  : {}),
+                ...(includeApprovalId
+                  ? {
+                      approvalId: {
+                        type: "string",
+                        minLength: 1,
+                        maxLength: 128,
+                        description:
+                          "Approval ID returned by a pending call. After human approval, retry the same tool with identical arguments and this ID.",
+                      },
+                    }
+                  : {}),
               },
+              required: [
+                ...(t.inputSchema.required ?? []),
+                ...(requireIdempotencyKey ? ["idempotencyKey"] : []),
+              ],
             }
           : t.inputSchema,
       annotations: t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name],

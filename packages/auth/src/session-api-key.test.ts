@@ -8,6 +8,9 @@ vi.mock("./auth", () => ({
   auth: { api: { getSession: (...args: unknown[]) => getSessionApi(...args) } },
 }))
 vi.mock("./oauth", () => ({ verifyOAuthBearer: vi.fn().mockResolvedValue(null) }))
+vi.mock("@lyrashield/config", () => ({
+  env: { PLATFORM_ADMIN_EMAILS: "ecryptoguru@gmail.com,ankit@lyrashieldai.com" },
+}))
 
 const verifyApiKeyMock = vi.fn()
 const userFindUnique = vi.fn()
@@ -21,7 +24,12 @@ vi.mock("@lyrashield/db", () => ({
   },
 }))
 
-import { getSession, requireWorkspaceAccess, requirePermission } from "./session"
+import {
+  assertOAuthDelegatedScope,
+  getSession,
+  requireWorkspaceAccess,
+  requirePermission,
+} from "./session"
 
 function withHeaders(map: Record<string, string>) {
   headersMock.mockResolvedValue({
@@ -130,5 +138,41 @@ describe("API key bearer auth", () => {
     stubMembership("OWNER")
 
     await expect(requirePermission("ws-1", "scan:create")).resolves.toBeTruthy()
+  })
+})
+
+describe("OAuth delegated scope", () => {
+  const baseSession = {
+    userId: "user-1",
+    email: "owner@example.com",
+    name: "Owner",
+    sessionId: "oauth:sess-1",
+    oauth: {
+      workspaceId: "ws-1",
+      userId: "user-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      authorizationVersion: 1,
+      allowedOperations: ["scan.run"],
+      allowedTargetIds: ["target-1"],
+      allTargets: false,
+      allowedProfiles: ["STANDARD"],
+    },
+  }
+
+  it("allows only an explicitly granted target and profile", () => {
+    expect(() => assertOAuthDelegatedScope(baseSession, "target-1", "STANDARD")).not.toThrow()
+    expect(() => assertOAuthDelegatedScope(baseSession, "target-2", "STANDARD")).toThrow(
+      "FORBIDDEN"
+    )
+    expect(() => assertOAuthDelegatedScope(baseSession, "target-1", "DEEP")).toThrow("FORBIDDEN")
+  })
+
+  it("allows any target only when the connection explicitly grants all targets", () => {
+    const session = {
+      ...baseSession,
+      oauth: { ...baseSession.oauth, allowedTargetIds: [], allTargets: true },
+    }
+    expect(() => assertOAuthDelegatedScope(session, "target-2", "STANDARD")).not.toThrow()
   })
 })

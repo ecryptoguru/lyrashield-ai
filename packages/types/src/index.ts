@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 export * from "./ai-safety-tests"
+export * from "./agent-operations"
 
 /**
  * Maximum simultaneously-active scans per workspace. Enforced by the scan-create

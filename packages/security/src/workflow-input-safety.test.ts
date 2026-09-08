@@ -1,11 +1,14 @@
-import { readFileSync } from "node:fs"
+/* eslint-disable security/detect-non-literal-fs-filename */
+import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
-const workflow = readFileSync(
+const candidatePaths = [
   resolve(process.cwd(), ".github/workflows/lyrashield-scan.yml"),
-  "utf8"
-)
+  resolve(process.cwd(), "../../.github/workflows/lyrashield-scan.yml"),
+]
+const workflowPath = candidatePaths.find((p) => existsSync(p)) ?? candidatePaths[0]!
+const workflow = readFileSync(workflowPath, "utf8")
 
 function runBlocks(yaml: string): string[] {
   const lines = yaml.split("\n")

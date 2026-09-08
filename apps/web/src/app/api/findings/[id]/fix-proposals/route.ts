@@ -1,7 +1,7 @@
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import { createFixProposal, getFindingReference } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { enqueueFixGenerate } from "@lyrashield/integrations"
@@ -36,6 +36,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     if (!finding) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }
+    assertOAuthDelegatedScope(session, finding.targetId)
 
     const proposal = await createFixProposal({
       findingId: id,
