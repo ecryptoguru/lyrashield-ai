@@ -87,12 +87,11 @@ describe("nav-items workspace destinations", () => {
       }
     }
   })
-  it("keeps coding agents before direct service integrations", () => {
+  it("keeps Connections in the workspace group with agents and integrations reachable (W2-08)", () => {
     expect(SECONDARY_NAV_ITEMS.map((item) => item.href)).toEqual([
       "/dashboard/fixes",
       "/dashboard/notifications",
-      "/dashboard/agents",
-      "/dashboard/integrations",
+      "/dashboard/connections",
       "/dashboard/team",
       "/dashboard/settings",
     ])
