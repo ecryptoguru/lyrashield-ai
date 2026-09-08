@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma } from "@lyrashield/db"
 import { serializeOAuthQuery } from "../oauth-query"
 import { OAuthConsentForm } from "./oauth-consent-form"
 
@@ -25,21 +25,6 @@ export default async function OAuthConsentPage({
     orderBy: { createdAt: "asc" },
   })
 
-  const workspaceIds = memberships.map((m) => m.workspaceId)
-  const targets = (
-    await Promise.all(
-      workspaceIds.map((workspaceId) =>
-        withWorkspaceRLS(workspaceId, (tx) =>
-          tx.target.findMany({
-            where: { workspaceId, deletedAt: null },
-            select: { id: true, name: true, workspaceId: true, type: true },
-            orderBy: { name: "asc" },
-          })
-        )
-      )
-    )
-  ).flat()
-
   return (
     <OAuthConsentForm
       clientName={typeof params.client_name === "string" ? params.client_name : "LyraShield AI"}
@@ -50,7 +35,6 @@ export default async function OAuthConsentPage({
         id: membership.workspaceId,
         name: membership.workspace.name,
       }))}
-      targets={targets}
     />
   )
 }

@@ -9,6 +9,7 @@ const tx = {
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     workspace: { findUnique: vi.fn() },
+    workspaceMember: { findMany: vi.fn().mockResolvedValue([]) },
     auditLog: { create: vi.fn() },
   },
   withWorkspaceRLS: vi.fn((_workspaceId: string, run: (client: typeof tx) => unknown) => run(tx)),
@@ -29,7 +30,8 @@ vi.mock("@lyrashield/billing", () => ({
 
 import { prisma } from "@lyrashield/db"
 import { startTrial } from "@lyrashield/billing"
-import { POST } from "./route"
+import { POST, GET } from "./route"
+import { getSession } from "@lyrashield/auth/server"
 
 describe("POST /api/workspaces", () => {
   beforeEach(() => {
@@ -94,4 +96,40 @@ describe("POST /api/workspaces", () => {
     expect(response.status).toBe(500)
     expect(prisma.auditLog.create).not.toHaveBeenCalled()
   })
+})
+
+describe("workspace-bound bearer discovery", () => {
+  it.each(["apiKey", "oauth"])("limits %s discovery to its authorized workspace", async (kind) => {
+    vi.mocked(getSession).mockResolvedValueOnce({
+      userId: "user-1",
+      [kind]: { workspaceId: "ws-bound" },
+    } as never)
+    expect((await GET()).status).toBe(200)
+    expect(prisma.workspaceMember.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: "user-1",
+          status: "active",
+          workspaceId: "ws-bound",
+          workspace: { deletedAt: null },
+        },
+      })
+    )
+  })
+  it.each(["apiKey", "oauth"])(
+    "does not let %s create a workspace outside its grant",
+    async (kind) => {
+      vi.mocked(getSession).mockResolvedValueOnce({
+        userId: "user-1",
+        [kind]: { workspaceId: "ws-bound" },
+      } as never)
+      const response = await POST(
+        new Request("http://localhost/api/workspaces", {
+          method: "POST",
+          body: JSON.stringify({ name: "New workspace", mode: "VIBE" }),
+        })
+      )
+      expect(response.status).toBe(403)
+    }
+  )
 })

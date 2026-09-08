@@ -50,7 +50,7 @@ describe("GET /api/connections", () => {
     expect(res.status).toBe(400)
   })
 
-  it("requires DEVELOPER and lists connections", async () => {
+  it("requires active membership and lists connections", async () => {
     vi.mocked(listAgentConnections).mockResolvedValue([
       {
         id: "conn-1",
@@ -72,7 +72,7 @@ describe("GET /api/connections", () => {
       },
     ])
     const res = await GET(new Request("http://localhost/api/connections?workspaceId=ws-1"))
-    expect(requireWorkspaceAccess).toHaveBeenCalledWith("ws-1", "DEVELOPER")
+    expect(requireWorkspaceAccess).toHaveBeenCalledWith("ws-1")
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data).toHaveLength(1)

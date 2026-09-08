@@ -15,7 +15,7 @@ vi.mock("@lyrashield/auth/server", () => ({
   requirePermission,
 }))
 vi.mock("@lyrashield/auth", () => ({
-  PERMISSIONS: { fix: { createPr: "fix:create_pr" } },
+  PERMISSIONS: { fix: { createPr: "fix:create_pr", approve: "fix:approve" } },
 }))
 vi.mock("@lyrashield/db", () => ({ getFixProposal, prisma }))
 vi.mock("@lyrashield/evidence-storage", () => ({ readEncryptedArtifact }))
@@ -41,6 +41,19 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
     vi.clearAllMocks()
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
   })
+
+  it.each([{ apiKey: { keyId: "key-1" } }, { oauth: { connectionId: "connection-1" } }])(
+    "does not promote proposal permission into repository write authority",
+    async (credential) => {
+      requirePermission.mockImplementation(async (_workspaceId, permission) => {
+        if (permission === "fix:approve") throw new Error("FORBIDDEN")
+        return { session: { userId: "user-1", ...credential } }
+      })
+      expect((await call()).status).toBe(403)
+      expect(getFixProposal).not.toHaveBeenCalled()
+      expect(requestFixPrApproval).not.toHaveBeenCalled()
+    }
+  )
 
   it("fails closed when the proposal has no server-generated patch (diffRef)", async () => {
     getFixProposal.mockResolvedValue({ id: "proposal-1", findingId: "finding-1", diffRef: null })
@@ -116,34 +129,51 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
     await expect(response.json()).resolves.toMatchObject({ error: { code: "NO_IMPLICATED_FILE" } })
   })
 
-  it("requests approval with the validated patch when everything resolves", async () => {
-    getFixProposal.mockResolvedValue({
-      id: "proposal-1",
-      findingId: "finding-1",
-      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
-    })
-    prisma.finding.findFirst.mockResolvedValue({
-      id: "finding-1",
-      targetId: "target-1",
-      implicatedFiles: ["src/a.ts"],
-      baseCommit: "abc123",
-      target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
-    })
-    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ...") })
-    prisma.workspace.findUnique.mockResolvedValue({ plan: "LAUNCH_ASSURANCE" })
-    requestFixPrApproval.mockResolvedValue({ status: "pending_approval", approvalId: "ap-1" })
+  it.each([
+    { session: { userId: "user-1" }, authorization: undefined },
+    {
+      session: { userId: "user-1", apiKey: { keyId: "key-1" } },
+      authorization: { kind: "api-key", id: "key-1" },
+    },
+    {
+      session: { userId: "user-1", oauth: { connectionId: "connection-1" } },
+      authorization: { kind: "oauth-connection", id: "connection-1" },
+    },
+  ])(
+    "binds execution to the authenticated credential when everything resolves",
+    async ({ session, authorization }) => {
+      requirePermission.mockResolvedValue({ session })
+      getFixProposal.mockResolvedValue({
+        id: "proposal-1",
+        findingId: "finding-1",
+        diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+      })
+      prisma.finding.findFirst.mockResolvedValue({
+        id: "finding-1",
+        targetId: "target-1",
+        implicatedFiles: ["src/a.ts"],
+        baseCommit: "abc123",
+        target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
+      })
+      readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ...") })
+      prisma.workspace.findUnique.mockResolvedValue({ plan: "LAUNCH_ASSURANCE" })
+      requestFixPrApproval.mockResolvedValue({ status: "pending_approval", approvalId: "ap-1" })
 
-    const response = await call()
+      const response = await call()
 
-    expect(response.status).toBe(200)
-    expect(requestFixPrApproval).toHaveBeenCalledOnce()
-    const req = requestFixPrApproval.mock.calls[0]![0]
-    expect(req.plan).toBe("LAUNCH_ASSURANCE")
-    expect(req.anchorFile).toBe("src/a.ts")
-    expect(req.baseCommit).toBe("abc123")
-    expect(req.installationId).toBe(42)
-    expect(req.requestedById).toBe("user-1")
-  })
+      expect(response.status).toBe(200)
+      expect(requestFixPrApproval).toHaveBeenCalledOnce()
+      const req = requestFixPrApproval.mock.calls[0]![0]
+      expect(req.authorization).toEqual(authorization)
+      if (authorization)
+        expect(requirePermission).toHaveBeenCalledWith("workspace-1", "fix:approve")
+      expect(req.plan).toBe("LAUNCH_ASSURANCE")
+      expect(req.anchorFile).toBe("src/a.ts")
+      expect(req.baseCommit).toBe("abc123")
+      expect(req.installationId).toBe(42)
+      expect(req.requestedById).toBe("user-1")
+    }
+  )
 
   it("surfaces a validator rejection as 422 without opening anything", async () => {
     getFixProposal.mockResolvedValue({

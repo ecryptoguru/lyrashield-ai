@@ -15,17 +15,15 @@ import { verifyOAuthBearer } from "@lyrashield/auth/server"
  * re-call the REST API with the same bearer, so workspace and scope enforcement
  * apply uniformly.
  *
- * Mutating tools use the remote out-of-band approval gate. A trusted API-key
- * automation can still opt in process-wide via
- * LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true; OAuth clients never bypass it.
+ * API keys use their existing REST write authorization. OAuth mutations use
+ * the connection grant and idempotency ledger; legacy OAuth retains its old
+ * approval contract until the user reconnects.
  *
  * Rate limiting is applied by the shared /api/* middleware bucket.
  */
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-const ALLOW_REMOTE_MUTATIONS = env.LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS === "true"
 
 function unauthorized(): Response {
   // WWW-Authenticate advertises Bearer so MCP clients know how to authenticate.
@@ -105,10 +103,10 @@ async function authenticate(request: Request): Promise<RemoteAuthInfo | null> {
 }
 
 async function handle(request: Request): Promise<Response> {
-  const authInfo = await authenticate(request)
-  if (!authInfo) return unauthorized()
-
   try {
+    const authInfo = await authenticate(request)
+    if (!authInfo) return unauthorized()
+
     const toolContext = {
       apiBaseUrl: env.NEXT_PUBLIC_APP_URL,
       apiKey: request.headers.get("authorization")!.slice("Bearer ".length).trim(),
@@ -117,8 +115,8 @@ async function handle(request: Request): Promise<Response> {
 
     return await handleRemoteMcpRequest(request, {
       toolContext,
-      // Only the explicit API-key automation path may bypass OOB approval.
-      allowMutations: ALLOW_REMOTE_MUTATIONS && authInfo.kind === "api-key",
+      // API-key creation already grants its REST permissions; MCP uses those same permissions.
+      allowMutations: authInfo.kind === "api-key" && authInfo.scopes.includes("write"),
       delegatedAuthorization: authInfo.kind === "oauth" && !!authInfo.connection,
       remoteApprovalContext: {
         workspaceId: authInfo.workspaceId,

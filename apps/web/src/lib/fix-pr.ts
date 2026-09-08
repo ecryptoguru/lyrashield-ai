@@ -62,6 +62,8 @@ export interface FixPrRequest {
   baseCommit: string
   /** The user requesting execution. */
   requestedById: string
+  /** Present only after the route verifies current credential permissions and target scope. */
+  authorization?: { kind: "oauth-connection" | "api-key"; id: string }
 }
 
 export interface FixPrOutcome {
@@ -78,9 +80,8 @@ function approvalUrl(base: string, approvalId: string): string {
 }
 
 /**
- * Request approval for a fix PR. Validates the diff against the plan's scope
- * policy FIRST (an invalid diff never reaches a human), then creates (or
- * reuses) a pending AgentApproval bound to the exact diff hash.
+ * Validate a fix PR and bind its exact patch to an audited authorization receipt.
+ * Authorized credentials execute immediately; browser requests retain review.
  */
 export async function requestFixPrApproval(
   req: FixPrRequest,
@@ -111,7 +112,9 @@ export async function requestFixPrApproval(
   }
   const inputHash = hashInput(APPROVAL_ACTION, input)
 
-  const existing = await findPendingApprovalByHash(req.workspaceId, APPROVAL_ACTION, inputHash)
+  const existing = req.authorization
+    ? null
+    : await findPendingApprovalByHash(req.workspaceId, APPROVAL_ACTION, inputHash)
   const approval =
     existing ??
     (await createApproval({
@@ -119,8 +122,11 @@ export async function requestFixPrApproval(
       actionName: APPROVAL_ACTION,
       input,
       requestedById: req.requestedById,
+      authorization: req.authorization,
       expiresAt: new Date(Date.now() + APPROVAL_TTL_MINUTES * 60 * 1000),
     }))
+
+  if (req.authorization) return executeApprovedFixPr({ ...req, approvalId: approval.id })
 
   return {
     status: "pending_approval",
@@ -130,7 +136,7 @@ export async function requestFixPrApproval(
 }
 
 /**
- * Execute an approved fix PR. Called after the human approves. Claims the
+ * Execute an authorized fix PR. Claims the
  * approval atomically (hash + expiry + single-winner), pushes the branch,
  * applies the diff file-by-file, and opens the PR. Never merges.
  */
@@ -257,7 +263,7 @@ function prBody(req: FixPrRequest, checksum: string): string {
   return [
     `## LyraShield fix proposal`,
     ``,
-    `Proposed by LyraShield AI. Approval-gated — a reviewer in your workspace approved this exact patch before it was opened. **Nothing auto-merges; review and merge are yours.**`,
+    `Proposed by LyraShield AI. Authorized through your workspace permissions and bound to this exact patch before execution. **Nothing auto-merges; review and merge are yours.**`,
     ``,
     `- Fix proposal: \`${req.fixProposalId}\``,
     `- Base commit: \`${req.baseCommit}\``,

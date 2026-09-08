@@ -194,6 +194,7 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
       }
 
       try {
+        executionController.signal.throwIfAborted()
         const result = await handler(input, { signal: executionController.signal })
         if (executionController.signal.aborted) {
           throw new DOMException("Tool execution was cancelled", "AbortError")

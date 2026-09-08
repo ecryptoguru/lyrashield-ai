@@ -310,6 +310,7 @@ export async function refreshOAuthCredentials(
           grant_type: "refresh_token",
           refresh_token: credentials.oauthRefreshToken,
           client_id: credentials.clientId ?? "lyrashield-cli",
+          ...(credentials.resource ? { resource: credentials.resource } : {}),
         }).toString(),
       })
       if (response.status === 429 || response.status >= 500) {

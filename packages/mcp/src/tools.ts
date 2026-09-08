@@ -724,7 +724,7 @@ export function createRecordFixProposalTool(context: ToolHandlerContext): McpToo
     name: "lyrashield_record_fix_proposal",
     mutating: true,
     description:
-      "Record a fix proposal on a finding (the remediation summary you intend to apply). Requires write scope and human approval.",
+      "Record a fix proposal on a finding (the remediation summary you intend to apply). Requires write scope; current connection permissions apply.",
     inputSchema: {
       type: "object",
       properties: {

@@ -163,7 +163,7 @@ describe("createLyraShieldServer (SDK integration)", () => {
       arguments: { workspaceId: "ws-1", targetId: "t-1" },
     })) as { isError?: boolean; content: Array<{ text: string }> }
     expect(res.isError).toBe(true)
-    expect(res.content[0].text).toContain("human approval")
+    expect(res.content[0].text).toContain("Mutation was not authorized or could not be executed")
     expect(fetchFn).not.toHaveBeenCalled()
     await client.close()
   })

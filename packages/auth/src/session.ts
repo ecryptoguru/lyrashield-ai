@@ -362,6 +362,7 @@ export async function requirePermission(
       [PERMISSIONS.retest.create]: [CANONICAL_OPERATIONS.RETEST_CREATE],
       [PERMISSIONS.fix.create]: [CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE],
       [PERMISSIONS.fix.createPr]: [CANONICAL_OPERATIONS.FIX_PR_CREATE],
+      [PERMISSIONS.fix.approve]: [CANONICAL_OPERATIONS.FIX_PR_CREATE],
       [PERMISSIONS.report.create]: [CANONICAL_OPERATIONS.REPORT_CREATE],
     }
     const ops = requiredOps[permission]

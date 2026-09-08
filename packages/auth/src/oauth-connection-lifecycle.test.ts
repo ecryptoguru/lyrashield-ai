@@ -76,6 +76,21 @@ describe("OAuth Connection Binding & Immediate Revocation Barrier", () => {
     vi.clearAllMocks()
   })
 
+  it.each(["1garbage", "1.5", "01", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects malformed authorization version %s before reading a connection",
+    async (version) => {
+      verifyBearerTokenMock.mockResolvedValueOnce({
+        sub: "user_123",
+        "https://lyrashieldai.com/workspace_id": "ws_123",
+        "https://lyrashieldai.com/connection_id": "conn_456",
+        "https://lyrashieldai.com/auth_version": version,
+        scope: "lyrashield.read lyrashield.write",
+      })
+      expect(await verifyOAuthBearer("signed-token")).toBeNull()
+      expect(prisma.agentConnection.findUnique).not.toHaveBeenCalled()
+    }
+  )
+
   it("verifies and returns active connection context when claims and DB status match", async () => {
     verifyBearerTokenMock.mockResolvedValueOnce({
       sub: "user_123",

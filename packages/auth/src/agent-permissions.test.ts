@@ -33,37 +33,37 @@ describe("Agent Permissions", () => {
     expect(hasPermission("DEVELOPER", PERMISSIONS.agent.approve)).toBe(false)
   })
 
-  it("MEMBER has agent.view but not agent.act or agent.approve", () => {
+  it("MEMBER has operational agent access but not connection administration", () => {
     expect(hasPermission("MEMBER", PERMISSIONS.agent.view)).toBe(true)
-    expect(hasPermission("MEMBER", PERMISSIONS.agent.act)).toBe(false)
+    expect(hasPermission("MEMBER", PERMISSIONS.agent.act)).toBe(true)
     expect(hasPermission("MEMBER", PERMISSIONS.agent.approve)).toBe(false)
   })
 
-  it("VIEWER has agent.view but not agent.act or agent.approve", () => {
+  it("VIEWER has operational agent access but not connection administration", () => {
     expect(hasPermission("VIEWER", PERMISSIONS.agent.view)).toBe(true)
-    expect(hasPermission("VIEWER", PERMISSIONS.agent.act)).toBe(false)
+    expect(hasPermission("VIEWER", PERMISSIONS.agent.act)).toBe(true)
     expect(hasPermission("VIEWER", PERMISSIONS.agent.approve)).toBe(false)
   })
 
-  it("AUDITOR has agent.view but not agent.act or agent.approve", () => {
+  it("AUDITOR has operational agent access but not connection administration", () => {
     expect(hasPermission("AUDITOR", PERMISSIONS.agent.view)).toBe(true)
-    expect(hasPermission("AUDITOR", PERMISSIONS.agent.act)).toBe(false)
+    expect(hasPermission("AUDITOR", PERMISSIONS.agent.act)).toBe(true)
     expect(hasPermission("AUDITOR", PERMISSIONS.agent.approve)).toBe(false)
   })
 
-  it("EXTERNAL_PENTESTER has agent.view but not agent.act or agent.approve", () => {
+  it("EXTERNAL_PENTESTER has operational agent access but not connection administration", () => {
     expect(hasPermission("EXTERNAL_PENTESTER", PERMISSIONS.agent.view)).toBe(true)
-    expect(hasPermission("EXTERNAL_PENTESTER", PERMISSIONS.agent.act)).toBe(false)
+    expect(hasPermission("EXTERNAL_PENTESTER", PERMISSIONS.agent.act)).toBe(true)
     expect(hasPermission("EXTERNAL_PENTESTER", PERMISSIONS.agent.approve)).toBe(false)
   })
 
-  it("BILLING_ADMIN does not have any agent permissions", () => {
-    expect(hasPermission("BILLING_ADMIN", PERMISSIONS.agent.view)).toBe(false)
-    expect(hasPermission("BILLING_ADMIN", PERMISSIONS.agent.act)).toBe(false)
+  it("BILLING_ADMIN has operational agent access but not connection administration", () => {
+    expect(hasPermission("BILLING_ADMIN", PERMISSIONS.agent.view)).toBe(true)
+    expect(hasPermission("BILLING_ADMIN", PERMISSIONS.agent.act)).toBe(true)
     expect(hasPermission("BILLING_ADMIN", PERMISSIONS.agent.approve)).toBe(false)
   })
 
-  it("every role has agent.view except BILLING_ADMIN", () => {
+  it("every role has agent.view", () => {
     const roles: MemberRole[] = [
       "OWNER",
       "ADMIN",
@@ -77,11 +77,7 @@ describe("Agent Permissions", () => {
       "VIEWER",
     ]
     for (const role of roles) {
-      if (role === "BILLING_ADMIN") {
-        expect(hasPermission(role, PERMISSIONS.agent.view)).toBe(false)
-      } else {
-        expect(hasPermission(role, PERMISSIONS.agent.view)).toBe(true)
-      }
+      expect(hasPermission(role, PERMISSIONS.agent.view)).toBe(true)
     }
   })
 })

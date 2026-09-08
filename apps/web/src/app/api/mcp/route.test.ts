@@ -13,6 +13,7 @@ vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
 const verifyOAuthBearer = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
   verifyOAuthBearer: (...args: unknown[]) => verifyOAuthBearer(...args),
+  requirePermission: vi.fn(),
 }))
 
 import { POST } from "./route"
@@ -61,6 +62,16 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
     )
   })
 
+  it("executes write-scoped API-key calls without a second approval", async () => {
+    verifyApiKey.mockResolvedValue({ keyId: "k", workspaceId: "ws-1", scopes: ["read", "write"] })
+    handleRemoteMcpRequest.mockResolvedValue(new Response("{}", { status: 200 }))
+    expect((await POST(req("Bearer lsk_write"))).status).toBe(200)
+    expect(handleRemoteMcpRequest).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.objectContaining({ allowMutations: true })
+    )
+  })
+
   it("accepts an OAuth bearer but never enables the remote-write bypass", async () => {
     verifyOAuthBearer.mockResolvedValue({
       userId: "user-1",
@@ -82,6 +93,17 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
         }),
       })
     )
+  })
+
+  it("returns a structured failure when credential verification is unavailable", async () => {
+    verifyApiKey.mockRejectedValueOnce(new Error("database unavailable"))
+    const response = await POST(req("Bearer lsk_good"))
+    expect(response.status).toBe(500)
+    expect(await response.json()).toMatchObject({
+      jsonrpc: "2.0",
+      error: { code: -32603, message: "Internal error" },
+    })
+    expect(handleRemoteMcpRequest).not.toHaveBeenCalled()
   })
 
   it("returns a JSON-RPC 500 when the engine throws", async () => {

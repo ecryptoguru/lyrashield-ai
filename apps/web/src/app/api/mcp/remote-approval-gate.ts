@@ -1,3 +1,5 @@
+import { requirePermission } from "@lyrashield/auth/server"
+import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import {
   claimApprovalExecution,
   claimOrGetAgentOperation,
@@ -12,12 +14,21 @@ import {
   hashInput,
   verifyInputHash,
   withWorkspaceRLS,
+  TOOL_OPERATION_MAP,
 } from "@lyrashield/db"
 import { McpServer, type McpToolResult, type RemoteApprovalGate } from "@lyrashield/mcp"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { z } from "zod"
 import { checkApprovalCreateRateLimit } from "../../../lib/rate-limit"
+
+const operationPermissions: Partial<Record<string, Permission>> = {
+  "scan.create": PERMISSIONS.scan.create,
+  "report.create": PERMISSIONS.report.create,
+  "fix_proposal.create": PERMISSIONS.fix.create,
+  "retest.create": PERMISSIONS.retest.create,
+  "fix_pr.create": PERMISSIONS.fix.createPr,
+}
 
 const APPROVAL_TTL_MINUTES = 15
 const approvalIdSchema = z.string().min(1).max(128).optional()
@@ -175,6 +186,16 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
   return async (toolName, args) => {
     if (!scopes.includes("write") && !scopes.includes("lyrashield.write")) {
       return denied("This connection does not have write scope; mutating tools are refused.")
+    }
+
+    // Replay bypasses REST handlers, so recheck live membership and role before
+    // returning stored data or claiming an operation, not just before execution.
+    const permission = operationPermissions[TOOL_OPERATION_MAP[toolName]?.canonicalOperation ?? ""]
+    if (!permission) return denied("This operation has no supported permission binding.")
+    try {
+      await requirePermission(workspaceId, permission)
+    } catch {
+      return denied("Current workspace access does not authorize this operation.")
     }
 
     const parsedApprovalId = approvalIdSchema.safeParse(args.approvalId)

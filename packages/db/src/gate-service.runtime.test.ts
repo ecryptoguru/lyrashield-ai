@@ -13,6 +13,7 @@ vi.mock("@lyrashield/config", async (original) => {
     },
   }
 })
+import { createApproval, claimApprovalExecution } from "./agent-approval-service"
 import { handleFixPrMergedAndReevaluate } from "./gate-service"
 import { prisma as runtime } from "./client"
 import {
@@ -88,11 +89,34 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     })
   })
   afterAll(async () => {
-    await owner.workspace.deleteMany({ where: { id } })
-    await owner.user.deleteMany({ where: { id } })
+    // The automatic authorization test writes append-only audit history.
+    // Retain its actor and soft-delete its workspace; the isolated test database is disposable.
+    await owner.workspace.updateMany({ where: { id }, data: { deletedAt: new Date() } })
     await owner.$disconnect()
     await runtime.$disconnect()
   })
+  it("audits automatic authorization under the restricted runtime role before a single execution claim", async () => {
+    const receipt = await createApproval({
+      workspaceId: id,
+      requestedById: id,
+      actionName: "fix_pr.open",
+      input: { targetId, patchChecksum: "test-checksum" },
+      authorization: { kind: "oauth-connection", id: "test-connection" },
+    })
+    expect(receipt.status).toBe("APPROVED")
+    expect(receipt.approvedById).toBeNull()
+    const audit = await owner.auditLog.findFirst({
+      where: {
+        workspaceId: id,
+        resourceId: receipt.id,
+        action: "agent_action.connection_authorized",
+      },
+    })
+    expect(audit?.metadata).toMatchObject({ kind: "oauth-connection", id: "test-connection" })
+    expect(await claimApprovalExecution(receipt.id, id, receipt.inputHash)).toBe(true)
+    expect(await claimApprovalExecution(receipt.id, id, receipt.inputHash)).toBe(false)
+  })
+
   it("creates exactly one scan for concurrent deliveries and resumes it after queue failure", async () => {
     const guard = vi.fn(async () => {})
     const outcomes = await Promise.all([

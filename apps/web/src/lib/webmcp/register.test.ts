@@ -120,6 +120,40 @@ describe("WebMCP registration", () => {
     secondCleanup()
   })
 
+  it.each(["request", "registration"])(
+    "does not invoke a handler after %s cancellation",
+    async (source) => {
+      const store = createWebMcpReceiptStore()
+      const handler = vi.fn().mockResolvedValue({ ok: true })
+      const cleanup = registerWebMcpTool({
+        name: "already_cancelled_tool",
+        title: "Cancelled Tool",
+        description: "Must not execute.",
+        inputSchema: { properties: {} },
+        receiptStore: store,
+        classification: "ui-only",
+        dataClass: "public",
+        untrustedContent: false,
+        uiChanged: true,
+        humanConfirmationRequired: false,
+        handler,
+      })
+      const tool = registerTool.mock.calls[0][0] as {
+        execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
+      }
+      const controller = new AbortController()
+      if (source === "request") controller.abort()
+      else cleanup()
+      expect(await tool.execute({}, { signal: controller.signal })).toMatchObject({
+        ok: false,
+        cancelled: true,
+      })
+      expect(handler).not.toHaveBeenCalled()
+      expect(store.getSnapshot().latest?.status).toBe("cancelled")
+      cleanup()
+    }
+  )
+
   it("forwards execution cancellation to the handler", async () => {
     const store = createWebMcpReceiptStore()
     const handler = vi

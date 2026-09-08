@@ -425,10 +425,10 @@ for (const file of [
     `${file} must use canonical tools`
   )
   assert(
-    text.includes(
-      "Fixes are proposals that require human review and approval; nothing is applied automatically."
-    ),
-    `${file} must preserve human approval`
+    text.includes("Fixes are proposals.") &&
+      text.includes("connection permissions") &&
+      text.includes("pull requests never auto-merge"),
+    `${file} must preserve connection authorization and the no-auto-merge boundary`
   )
 }
 

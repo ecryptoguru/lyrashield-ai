@@ -394,20 +394,11 @@ Personal notifications are visible only to their intended user; workspace-wide n
 
 Open **More → Team** to view active members and pending invitations. Users with invitation permission can invite an email address and assign a role below their own privilege level. Owners may assign any role; non-owners cannot create a peer or higher-privilege role.
 
-Available roles:
+Every active member has operational read/write access: projects and targets, scans, findings and dispositions, fix proposals and fix PRs, retests, reports, schedules, notifications, and AI-assurance workflows. Permitted agent actions run automatically after connection. This includes members with the legacy Viewer, Auditor, and External Pentester role names; those names no longer imply read-only operational access.
 
-- **Owner** — full workspace control, including ownership-sensitive actions.
-- **Admin** — broad operational, governance, integration, member, scan, finding, report, schedule, and agent permissions.
-- **Security Admin** — security operations, policies, audit access, scan/finding workflows, schedules, reports, and agent approval.
-- **AppSec Manager** — operational security workflows without owner/admin governance authority or agent approval.
-- **Billing Admin** — billing management plus finding visibility and report creation/download.
-- **Developer** — targets, scans, findings, fixes, retests, reports, notifications, schedules, and permitted agent actions.
-- **Member** — basic project, target, scan, finding, fix, retest, report, notification, and schedule workflows.
-- **External Pentester** — scan, finding, retest, report, notification, and schedule visibility with limited mutation rights.
-- **Auditor** — read-oriented scan/finding/retest access plus audit export and reports.
-- **Viewer** — read-only scan, finding, retest, report-download, notification, and permitted agent visibility.
+Roles retain their existing administrative differences. Ownership, membership administration, billing, integration credentials, policy configuration, and management of other users' connections are not granted to everyone. Billing remains restricted to Owners and Billing Admins. Audit-log access retains its existing role restrictions.
 
-The server checks permissions for every protected API action. A visible page does not override the role check.
+Active membership, credential scope, target authorization, plan limits, budgets, and revocation are checked on the server. Read-only credentials remain read-only even when their owner has operational write permissions. Removed or inactive members cannot execute actions. Fix PRs never auto-merge.
 
 ### Platform administrators
 
@@ -535,7 +526,7 @@ npx lyrashield doctor              # check what's configured and what's missing
 npx lyrashield gate                # CI-friendly diff-aware security gate
 ```
 
-`login` writes `~/.lyrashield/credentials.json` with `0o600` permissions. If the browser-based OAuth device flow is unavailable, it falls back to `LYRASHIELD_API_KEY` from the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com` and is resolved consistently by `packages/credentials`, which is the single source of truth for the credentials file. Credential updates are atomic and shared by CLI and MCP, so refresh, logout, and profile changes take effect without restarting a long-running client.
+`login --oauth` opens hosted consent with PKCE, then saves tokens and the selected workspace to `~/.lyrashield/credentials.json` with `0o600` permissions. Failed login preserves existing credentials. `login` accepts an API key instead. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`. Shared credential storage keeps refresh, logout, and profile changes consistent between CLI and MCP.
 
 `init`/`install <agent>` choose an install strategy based on the agent. `packages/agent-registry` contains 30 entries and resolves them into 26 preferred client surfaces. CLI `0.2.5`, MCP `0.2.6`, and Agent Plugin `0.1.25` require Node 24 or newer.
 
@@ -586,14 +577,11 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 - `lyrashield_verify_fix` — queue a retest to verify a fix;
 - `lyrashield_create_report` — create an executive, developer, or assurance report. (The internal type value is still `compliance` for backward compatibility; the UI label is "Assurance.")
 
-Read actions follow API-key scope and workspace permissions. Locally, mutating MCP actions require interactive approval on the controlling terminal (or your editor's own approval prompt, where the editor supports MCP elicitation) and fail closed when no approval channel is available.
+Read actions follow credential scope and workspace permissions. Local stdio and write-scoped API keys use the REST API's authorization without another LyraShield review prompt. Read-only credentials cannot mutate data.
 
-The remote-HTTP transport supports two authentication methods:
+The remote HTTP transport supports workspace API keys and OAuth discovery through `/oauth/consent`. New write-scoped OAuth consent uses one Connect action, with an explicit disclosure of automatic workflows, all current and future workspace targets, supported profiles, and potential usage charges. Hosted delegated mutations require a stable idempotency key; identical retries return the original result. Current membership, role, scope, expiry, target authorization, and budget remain enforced. Existing restricted grants are not silently widened; reconnect when broader access is needed. Historical nondelegated hosted credentials retain their existing approval contract.
 
-- **Bearer API key** — `Authorization: Bearer lsk_…` with a read-only or read/write key.
-- **OAuth 2.0** — the hosted flow at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` (also under `/api/mcp/`) lets an MCP client authenticate through `/oauth/consent`, select a workspace, and request an optional write scope. Remote connections are **read-only by default**. When write scope is requested, consent can grant selected workflows for selected targets and scan profiles. Those delegated actions run without another review-queue step while the grant remains valid; every call still checks current membership, permissions, scope, target, profile, expiry, and an idempotency key. Actions outside the grant fail closed and ask the user to update the connection. OAuth clients cannot use the operator-only `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS` bypass.
-
-A pre-authorized trusted-automation opt-in remains available for CI that should never pause for approval. Model-facing inputs pass through the prompt-injection guard in every case.
+Agent hosts may still show their own permission dialogs. WebMCP's `prepare_security_scan` tool only fills the dashboard form; it does not start a scan. These capabilities are distinct from hosted OAuth automation. Model-facing inputs continue through the prompt-injection guard.
 
 The local MCP package uses MCP SDK `1.30` and requires Node 24 or newer. Client-specific install guides remain the authority for whether a client uses stdio, Streamable HTTP, OAuth discovery, a plugin, a config file, or guided manual setup. A package test or generated fixture is not an authenticated receipt from every supported client.
 

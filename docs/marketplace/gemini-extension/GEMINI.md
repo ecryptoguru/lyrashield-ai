@@ -9,4 +9,4 @@ The extension is a community release artifact until the LyraShield AI publisher 
 and Gemini gallery listing are verified.
 
 Use `lyrashield_check_diff` to review changes and `lyrashield_verify_fix` to retest findings.
-Fixes are proposals that require human review and approval; nothing is applied automatically.
+Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge.

@@ -24,7 +24,8 @@ lyrashield <command> [args] [--json]
 
 ### Authentication and setup
 
-- `login` — open a browser-based OAuth device flow and write the resulting token to `~/.lyrashield/credentials.json` with `0o600` permissions; falls back to `LYRASHIELD_API_KEY` from the environment if the device flow is unavailable
+- `login --oauth` — connect through hosted OAuth consent using PKCE, then save the token and selected workspace to `~/.lyrashield/credentials.json` with `0o600` permissions. Failed login preserves existing credentials.
+- `login` — securely enter or pipe a workspace API key. Environment credentials retain precedence; OAuth failures never silently switch authentication methods.
 - `logout` — remove stored credentials
 - `use <workspace>` — set the default workspace for subsequent commands
 - `doctor` — diagnose credentials, API reachability, and locally detected agents

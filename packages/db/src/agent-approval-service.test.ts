@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("./client", () => ({
   prisma: {
+    auditLog: { create: vi.fn() },
     agentApproval: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@lyrashield/logger", () => ({
 import { prisma } from "./client"
 import {
   approveApproval,
+  createApproval,
   claimApprovalExecution,
   completeApprovalExecution,
   consumeApproval,
@@ -243,5 +245,46 @@ describe("approval execution claim state machine", () => {
       },
       data: { status: "EXPIRED" },
     })
+  })
+})
+
+describe("credential-authorized execution receipts", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.agentApproval.create).mockResolvedValue({
+      id: "approval-1",
+      status: "PENDING",
+    } as never)
+    vi.mocked(prisma.agentApproval.updateMany).mockResolvedValue({ count: 1 })
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never)
+  })
+  const input = {
+    workspaceId: "ws-1",
+    actionName: "fix_pr.open",
+    input: { patch: "hash" },
+    requestedById: "user-1",
+    authorization: { kind: "oauth-connection" as const, id: "connection-1" },
+  }
+  it("records credential provenance before enabling execution without claiming human review", async () => {
+    expect((await createApproval(input)).status).toBe("APPROVED")
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "agent_action.connection_authorized",
+          metadata: expect.objectContaining({ kind: "oauth-connection", id: "connection-1" }),
+        }),
+      })
+    )
+    expect(prisma.agentApproval.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "APPROVED", approvedAt: expect.any(Date) } })
+    )
+    expect(vi.mocked(prisma.auditLog.create).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(prisma.agentApproval.updateMany).mock.invocationCallOrder[0]!
+    )
+  })
+  it("leaves the receipt unexecutable when auditing fails", async () => {
+    vi.mocked(prisma.auditLog.create).mockRejectedValue(new Error("audit unavailable"))
+    await expect(createApproval(input)).rejects.toThrow("audit unavailable")
+    expect(prisma.agentApproval.updateMany).not.toHaveBeenCalled()
   })
 })

@@ -11,19 +11,22 @@ const baseProps = {
 }
 
 describe("OAuthConsentForm", () => {
-  it("defaults to least-privilege read access", () => {
+  it("offers one connection action with automatic access and cost disclosure", () => {
     const html = renderToStaticMarkup(
       <OAuthConsentForm {...baseProps} scope="lyrashield.read lyrashield.write" />
     )
-
-    expect(html).toMatch(/<input(?=[^>]*value="read_only")(?=[^>]*checked="")[^>]*\/>/)
-    expect(html).not.toContain("Automated Workflows")
+    expect(html).toContain("Automatic workspace access")
+    expect(html).toContain("current and future targets")
+    expect(html).toContain("incur charges")
+    expect(html).not.toContain('type="radio"')
+    expect(html).not.toContain('type="checkbox"')
+    expect(html).toContain("Connect LyraShield")
   })
 
-  it("does not offer automation when the client requested read scope only", () => {
+  it("does not promote a read-only OAuth request to write access", () => {
     const html = renderToStaticMarkup(<OAuthConsentForm {...baseProps} scope="lyrashield.read" />)
-
-    expect(html).toMatch(/<input(?=[^>]*value="automate")(?=[^>]*disabled="")[^>]*\/>/)
-    expect(html).toContain("Reconnect with write scope to automate workflows.")
+    expect(html).toContain("cannot make changes")
+    expect(html).not.toContain("Automatic workspace access")
+    expect(html).not.toContain('type="radio"')
   })
 })

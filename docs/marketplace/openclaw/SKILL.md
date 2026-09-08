@@ -29,4 +29,4 @@ recreating dashboard UI or copying report contents into prompts.
 Write actions require OAuth `lyrashield.write` plus the exact-argument approval gate.
 
 Use `lyrashield_check_diff` to review changes and `lyrashield_verify_fix` to retest findings.
-Fixes are proposals that require human review and approval; nothing is applied automatically.
+Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge.
