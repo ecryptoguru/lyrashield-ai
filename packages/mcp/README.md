@@ -22,7 +22,7 @@ See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior a
 
 ## What it can do
 
-Every tool calls the LyraShield REST API with a workspace API key or OAuth bearer. New write-scoped OAuth consent has one Connect action authorizing the displayed workflows for the workspace, including current and future targets and supported scan profiles. Matching hosted calls run without another LyraShield review and require an idempotency key. Read-only requests remain read-only; existing restricted connections are never silently expanded.
+Every API-backed tool calls the LyraShield REST API with a workspace API key or OAuth bearer; the local-only `lyrashield_check_diff` tool inspects the working tree directly and needs neither. New write-scoped OAuth consent has one Connect action authorizing the displayed workflows for the workspace, including current and future targets and supported scan profiles. Matching hosted calls run without another LyraShield review and require an idempotency key. Read-only requests remain read-only; existing restricted connections are never silently expanded.
 
 | Tool                                  | Kind  | What it does                                                  |
 | ------------------------------------- | ----- | ------------------------------------------------------------- |

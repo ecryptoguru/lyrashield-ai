@@ -5,7 +5,7 @@ The `lyrashield` command-line interface installs, configures, and drives LyraShi
 ## Quick start
 
 ```sh
-npx lyrashield login --oauth      # browser-based OAuth device login (recommended)
+npx lyrashield login --oauth      # hosted PKCE OAuth login (recommended)
 npx lyrashield use <workspace>
 npx lyrashield project use        # detect the current git repo and set it as the default project
 npx lyrashield scan               # scan the default project (uses default mode)

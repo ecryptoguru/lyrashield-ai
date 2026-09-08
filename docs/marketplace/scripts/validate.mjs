@@ -413,6 +413,38 @@ assert(
   codebuff.includes("env: apiKey ? { LYRASHIELD_API_KEY: apiKey } : {}"),
   "Codebuff must omit an absent API key so stored OAuth remains available"
 )
+
+// The approved authorization statement is validated as one sentence, and
+// contradictory variants that reuse the same nouns (e.g. "not limited by
+// connection permissions") must fail. Self-tested below so drift in either
+// direction is caught, not just absence of the approved wording.
+const CONTRADICTORY_BOUNDARY_PATTERNS = [
+  /not\s+limited\s+by\s+connection\s+permissions/i,
+  /without\s+connection\s+permissions/i,
+  /regardless\s+of\s+connection\s+permissions/i,
+  /bypass(?:es)?\s+connection\s+permissions/i,
+]
+function connectionBoundaryIsIntact(text) {
+  const approved =
+    text.includes("Authorized workflows execute within connection permissions") &&
+    text.includes("pull requests never auto-merge")
+  const contradicts = CONTRADICTORY_BOUNDARY_PATTERNS.some((pattern) => pattern.test(text))
+  return approved && !contradicts
+}
+{
+  const approved = "Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge."
+  assert(connectionBoundaryIsIntact(approved), "self-test: approved statement must validate")
+  const drift = "Fixes are proposals. Authorized workflows are not limited by connection permissions; pull requests never auto-merge."
+  assert(
+    !connectionBoundaryIsIntact(drift),
+    "self-test: contradictory permission wording must fail validation"
+  )
+  const silentDrift = "Fixes are proposals. Workflows run regardless of connection permissions."
+  assert(
+    !connectionBoundaryIsIntact(silentDrift),
+    "self-test: missing no-auto-merge boundary must fail validation"
+  )
+}
 for (const file of [
   "skills/lyrashield/SKILL.md",
   "openclaw/SKILL.md",
@@ -425,9 +457,7 @@ for (const file of [
     `${file} must use canonical tools`
   )
   assert(
-    text.includes("Fixes are proposals.") &&
-      text.includes("connection permissions") &&
-      text.includes("pull requests never auto-merge"),
+    connectionBoundaryIsIntact(text),
     `${file} must preserve connection authorization and the no-auto-merge boundary`
   )
 }
