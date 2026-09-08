@@ -189,6 +189,26 @@ describe("createCreateReportTool", () => {
     expect(data.action).toBe("report_created")
     expect(data.report.id).toBe("r-1")
   })
+
+  it("passes target scope for delegated report authorization", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "r-2", title: "Target Report" }))
+    const tool = createCreateReportTool(context)
+
+    await tool.handler({ workspaceId: "ws-1", targetId: "target-1", title: "Target Report" })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/reports"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          targetId: "target-1",
+          title: "Target Report",
+          type: "developer",
+        }),
+      })
+    )
+  })
 })
 
 describe("createPrSecurityRecapTool", () => {
