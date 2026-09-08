@@ -30,6 +30,7 @@ async function connect(opts: {
   allowMutations?: boolean
   fetchFn: typeof fetch
   elicitation?: (toolName: string) => boolean
+  elicitationContent?: Record<string, string | number | boolean>
 }) {
   const context: ToolHandlerContext = {
     apiBaseUrl: "http://localhost:3000",
@@ -47,7 +48,7 @@ async function connect(opts: {
   if (opts.elicitation) {
     client.setRequestHandler(ElicitRequestSchema, async (req) => {
       const approve = opts.elicitation!(String(req.params.message))
-      return { action: "accept", content: { approve } }
+      return { action: "accept", content: opts.elicitationContent ?? { approve } }
     })
   }
 
@@ -57,6 +58,22 @@ async function connect(opts: {
 }
 
 describe("createLyraShieldServer (SDK integration)", () => {
+  it("denies a host acceptance that omits the required approval field", async () => {
+    const fetchFn = fetchStub()
+    const client = await connect({
+      fetchFn,
+      elicitation: () => true,
+      elicitationContent: {},
+    })
+    const result = await client.callTool({
+      name: "lyrashield_create_report",
+      arguments: { workspaceId: "ws-1", title: "Desktop acceptance", type: "developer" },
+    })
+    expect(result.isError).toBe(true)
+    expect(fetchFn).not.toHaveBeenCalled()
+    await client.close()
+  })
+
   it("advertises the full tool set over tools/list", async () => {
     const client = await connect({ fetchFn: fetchStub() })
     const { tools } = await client.listTools()
@@ -80,6 +97,7 @@ describe("createLyraShieldServer (SDK integration)", () => {
     for (const t of tools) {
       expect(t.title).toBeTruthy()
       expect(t.inputSchema.type).toBe("object")
+      expect(t.inputSchema.properties).not.toHaveProperty("approvalId")
       expect(t.outputSchema?.type).toBe("object")
       expect(t.execution).toEqual({ taskSupport: "forbidden" })
       expect(t.annotations?.readOnlyHint).toBeTypeOf("boolean")

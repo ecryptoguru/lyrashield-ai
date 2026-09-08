@@ -149,6 +149,38 @@ function callWithApprovalId(
 }
 
 describe("handleRemoteMcpRequest (remote-oob approval)", () => {
+  it("advertises optional approvalId only on remote mutating tools", async () => {
+    const { gate } = makeFakeGate()
+    const res = await handleRemoteMcpRequest(
+      mcpRequest({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+      {
+        toolContext: ctx(fetchStub()),
+        remoteApprovalContext: {
+          workspaceId: "ws-1",
+          scopes: ["write"],
+          apiKeyInfo: { keyId: "k-1", createdById: "u-1" },
+        },
+        remoteApprovalGate: gate,
+      }
+    )
+    const body = await readJson(res)
+    const { tools } = body.result as {
+      tools: Array<{
+        annotations: { readOnlyHint: boolean }
+        inputSchema: { properties: Record<string, unknown>; required?: string[] }
+      }>
+    }
+    expect(tools.length).toBeGreaterThan(0)
+    for (const tool of tools) {
+      if (tool.annotations.readOnlyHint) {
+        expect(tool.inputSchema.properties).not.toHaveProperty("approvalId")
+      } else {
+        expect(tool.inputSchema.properties.approvalId).toMatchObject({ type: "string" })
+        expect(tool.inputSchema.required ?? []).not.toContain("approvalId")
+      }
+    }
+  })
+
   it("returns PENDING for a mutating tool without an approvalId", async () => {
     const fetchFn = fetchStub()
     const { gate } = makeFakeGate()

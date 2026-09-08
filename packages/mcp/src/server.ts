@@ -70,12 +70,27 @@ export class McpServer {
     this.allowMutations = options?.allowMutations ?? false
   }
 
-  listTools() {
+  listTools({ includeApprovalId = false }: { includeApprovalId?: boolean } = {}) {
     return Array.from(this.tools.values()).map((t) => ({
       name: t.name,
       title: (t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name])?.title,
       description: t.description,
-      inputSchema: t.inputSchema,
+      inputSchema:
+        includeApprovalId && t.mutating
+          ? {
+              ...t.inputSchema,
+              properties: {
+                ...t.inputSchema.properties,
+                approvalId: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 128,
+                  description:
+                    "Approval ID returned by a pending call. After human approval, retry the same tool with identical arguments and this ID.",
+                },
+              },
+            }
+          : t.inputSchema,
       annotations: t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name],
       outputSchema: t.outputSchema ?? { type: "object", additionalProperties: true },
       // SDK 1.30 supports MCP task declarations, but LyraShield scan IDs are
