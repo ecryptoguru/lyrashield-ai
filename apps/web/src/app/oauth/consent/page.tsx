@@ -41,6 +41,16 @@ export default async function OAuthConsentPage({
     orderBy: { createdAt: "asc" },
   })
 
+  // W3-08 (Deep Review v16 item 1.5): the display name NEVER comes from the
+  // query string — a registered client could present itself under any
+  // product name. Resolve it server-side from the OauthClient record by the
+  // client id the authorization request actually names.
+  const oauthClient = await prisma.oauthClient.findFirst({
+    where: { clientId, disabled: { not: true } },
+    select: { name: true, uri: true },
+  })
+  const resolvedClientName = oauthClient?.name?.trim() || clientId
+
   // W2-05: a user arriving from an OAuth client with no workspace cannot
   // consent yet. Send them through onboarding with a signed, expiring return
   // state bound to this exact authorization request; onboarding returns them
@@ -52,7 +62,7 @@ export default async function OAuthConsentPage({
 
   return (
     <OAuthConsentForm
-      clientName={typeof params.client_name === "string" ? params.client_name : "LyraShield AI"}
+      clientName={resolvedClientName}
       clientId={clientId}
       scope={typeof params.scope === "string" ? params.scope : "lyrashield.read"}
       oauthQuery={oauthQuery}

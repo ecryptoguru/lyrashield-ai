@@ -42,12 +42,17 @@ export function OAuthConsentForm({
         {
           const ops = canAutomate ? AUTOMATION_WORKFLOWS.flatMap((wf) => [...wf.operations]) : []
 
+          // The client identity sent to the API derives from the client id the
+          // authorization request names — never a free-typed display string.
+          // The server independently re-resolves both fields from the
+          // registered OauthClient record, so a forged body cannot relabel
+          // the connection either.
           const connRes = await fetch("/api/connections", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               workspaceId,
-              clientType: clientName,
+              clientType: `oauth:${clientId}`,
               clientName,
               oauthClientId: clientId,
               scopes: canAutomate ? ["lyrashield.read", "lyrashield.write"] : ["lyrashield.read"],

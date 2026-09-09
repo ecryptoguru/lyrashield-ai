@@ -40,6 +40,11 @@ export async function GET(request: Request) {
 
 const CreateConnectionSchema = z.object({
   workspaceId: z.string().min(1),
+  /**
+   * Client identity is RESOLVED SERVER-SIDE from the registered OauthClient
+   * record (W3-08 / v16 item 1.5); these two fields are accepted for
+   * backward compatibility with existing clients and deliberately ignored.
+   */
   clientType: z.string().trim().min(1).max(100),
   clientName: z.string().trim().max(100).optional(),
   oauthClientId: z.string().trim().min(1).max(255),
@@ -61,8 +66,6 @@ async function post(request: Request) {
     }
     const {
       workspaceId,
-      clientType,
-      clientName,
       oauthClientId,
       scopes,
       allowedOperations,
@@ -110,8 +113,7 @@ async function post(request: Request) {
     const automating = scopes.includes("lyrashield.write")
     if (automating && allowedOperations.length === 0) {
       return apiError("VALIDATION_ERROR", "Select at least one workflow to automate", 400)
-    }
-    if (automating && !allTargets && allowedTargetIds.length === 0) {
+    }    if (automating && !allTargets && allowedTargetIds.length === 0) {
       return apiError("VALIDATION_ERROR", "Select at least one target or all targets", 400)
     }
     if (allTargets && allowedTargetIds.length > 0) {
@@ -150,11 +152,26 @@ async function post(request: Request) {
       }
     }
 
+    // W3-08 (Deep Review v16 item 1.5): client identity is resolved
+    // server-side from the registered OauthClient record the consent state
+    // verified — never from the request body. A client can register under
+    // one name and POST any other; the stored label must describe the
+    // registered client.
+    const oauthClient = await prisma.oauthClient.findFirst({
+      where: { clientId: oauthClientId, disabled: { not: true } },
+      select: { name: true, uri: true },
+    })
+    if (!oauthClient) {
+      return apiError("VALIDATION_ERROR", "Unknown or disabled OAuth client", 400)
+    }
+    const resolvedClientName = oauthClient.name?.trim() || null
+    const resolvedClientType = `oauth:${oauthClientId}`
+
     const connection = await createAgentConnection({
       workspaceId,
       userId: session.userId,
-      clientType,
-      clientName,
+      clientType: resolvedClientType,
+      clientName: resolvedClientName,
       oauthClientId,
       scopes,
       allowedOperations,
@@ -172,8 +189,8 @@ async function post(request: Request) {
         resourceType: "agent_connection",
         resourceId: connection.id,
         metadata: {
-          clientType,
-          clientName,
+          clientType: resolvedClientType,
+          clientName: resolvedClientName,
           allowedOperations,
           allowedTargetIds,
           allowedProfiles,
