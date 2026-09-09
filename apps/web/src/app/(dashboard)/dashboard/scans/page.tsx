@@ -103,7 +103,20 @@ export default async function ScansPage({
     }),
   ])
 
-  const initialData = items.map((s) => ({
+  // W2-07 invalidation: a stale target param (deleted target, workspace
+  // switch) must not silently filter the list to nothing.
+  const targetFilterValid = params.target
+    ? targets.some((target) => target.id === params.target)
+    : true
+  let effectiveItems = items
+  let effectiveNextCursor = nextCursor
+  if (params.target && !targetFilterValid) {
+    const unscoped = await listScans({ workspaceId, limit })
+    effectiveItems = unscoped.items
+    effectiveNextCursor = unscoped.nextCursor
+  }
+
+  const initialData = effectiveItems.map((s) => ({
     id: s.id,
     status: s.status,
     goal: s.goal,
@@ -145,13 +158,13 @@ export default async function ScansPage({
           repoFullName: t.repoFullName,
         }))}
         initialData={initialData}
-        initialNextCursor={nextCursor}
+        initialNextCursor={effectiveNextCursor}
         initialShowCreate={autoOpen}
         initialTargetId={recoveryTarget?.id}
         initialGoal={params.goal}
         initialMode={params.mode}
         initialStateFilter={stateFilter}
-        initialTargetFilter={params.target ?? ""}
+        initialTargetFilter={targetFilterValid ? (params.target ?? "") : ""}
         canManageBilling={canManageBilling}
       />
     </div>

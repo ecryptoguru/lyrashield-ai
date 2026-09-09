@@ -114,8 +114,11 @@ export default async function DashboardPage() {
     reportCount,
     openIssues,
     gateTargets: gateTargets.map((target) => ({
+      targetId: target.targetId,
+      targetName: target.targetName,
       state: target.state,
       applicable: target.applicable,
+      blockingFindings: target.blockingFindings,
     })),
     activeScan: overview.activeScan,
   })
