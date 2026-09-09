@@ -163,7 +163,7 @@ export function V2Sidebar({
                 Open beta
               </span>
             </div>
-            <span className="text-muted-foreground block text-[10px] font-semibold tracking-[0.16em] uppercase">
+            <span className="text-muted-foreground block text-xs font-semibold tracking-[0.16em] uppercase">
               Evidence console
             </span>
           </div>
@@ -216,7 +216,7 @@ export function V2Sidebar({
               ))}
             </div>
             <div className="mt-3">
-              <p className="text-muted-foreground px-3 pb-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase">
+              <p className="text-muted-foreground px-3 pb-1.5 text-xs font-semibold tracking-[0.14em] uppercase">
                 Workspace
               </p>
               <div className="flex flex-col">

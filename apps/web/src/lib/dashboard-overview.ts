@@ -114,7 +114,7 @@ const APPLICABLE_RECEIPT_STATUSES = new Set([
 ])
 
 /**
- * Coverage state for one run from its coverage-receipt statuses.
+ * Coverage state for one scan from its coverage-receipt statuses.
  *
  * NOT_APPLICABLE receipts are excluded first: a scanner that does not apply to
  * the target says nothing about coverage. With no applicable receipts the run
@@ -414,15 +414,15 @@ export function buildDashboardOverview(input: {
 export function userSafeRunFailure(status: string, errorCategory: string | null): string {
   switch (status) {
     case "STOPPED_BUDGET":
-      return "The run stopped because its protected limit was reached before completing."
+      return "The scan stopped because its protected limit was reached before completing."
     case "TIMED_OUT":
-      return "The run timed out before completing. Check the target is reachable and retry."
+      return "The scan timed out before completing. Check the target is reachable and retry."
     case "FAILED":
       return errorCategory === "QUEUE"
-        ? "The run could not start because worker capacity was unavailable."
-        : "The run failed before producing a complete result."
+        ? "The scan could not start because worker capacity was unavailable."
+        : "The scan failed before producing a complete result."
     default:
-      return "The run did not produce a complete result."
+      return "The scan did not produce a complete result."
   }
 }
 

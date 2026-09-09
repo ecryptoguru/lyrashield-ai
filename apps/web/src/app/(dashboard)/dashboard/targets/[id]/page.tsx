@@ -11,9 +11,16 @@ import { DomainVerificationCard } from "./domain-verification-card"
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { getTargetDomainStatuses } from "@/lib/target-domain-status"
 import { formatDate, formatDateTime } from "@/lib/date-format"
-import { modeLabel } from "@/lib/labels"
+import { modeLabel, humanizeToken } from "@/lib/labels"
+import { getTargetTypeLabel, getScanGoalLabel, getEnvironmentLabel } from "@/lib/enum-labels"
+import { getScanPresentation } from "@/lib/scan-presentation"
 import { TARGET_SINGULAR } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+
+/** Readable status for the Recent Scans table without the full presentation copy. */
+function scanStatusLabel(status: string): string {
+  return getScanPresentation(status, {}).label
+}
 
 export const metadata: Metadata = {
   title: "Target",
@@ -117,12 +124,14 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             ) : (
               <Globe className="h-3 w-3" aria-hidden="true" />
             )}
-            {target.type}
+            {getTargetTypeLabel(target.type)}
           </Badge>
-          <Badge variant={target.status === "active" ? "success" : "muted"}>{target.status}</Badge>
+          <Badge variant={target.status === "active" ? "success" : "muted"}>
+            {humanizeToken(target.status)}
+          </Badge>
         </div>
         <p className="text-muted-foreground mt-1 text-sm">
-          Environment: {target.environment}
+          Environment: {getEnvironmentLabel(target.environment)}
           {target.project && ` · Project: ${target.project.name}`}
         </p>
       </div>
@@ -138,7 +147,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Bug className="text-primary h-4 w-4" aria-hidden="true" />
-            Total Issues
+            Total findings
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.findings}</p>
         </Card>
@@ -268,17 +277,17 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         </div>
         {target.scans.length === 0 ? (
           <div className="text-muted-foreground p-8 text-center text-sm">
-            No trust runs yet for this {TARGET_SINGULAR.toLowerCase()}.
+            No scans yet for this {TARGET_SINGULAR.toLowerCase()}.
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Goal</th>
-                <th className="px-4 py-3 text-left font-semibold">Mode</th>
-                <th className="px-4 py-3 text-left font-semibold">Status</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Date</th>
-                <th className="px-4 py-3 text-left font-semibold">
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Goal</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Mode</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Status</th>
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Date</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
                   <span className="sr-only">View</span>
                 </th>
               </tr>
@@ -286,7 +295,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             <tbody>
               {target.scans.map((scan) => (
                 <tr key={scan.id} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-medium">{scan.goal}</td>
+                  <td className="px-4 py-3 font-medium">{getScanGoalLabel(scan.goal)}</td>
                   <td className="px-4 py-3">{modeLabel(scan.mode)}</td>
                   <td className="px-4 py-3">
                     <Badge
@@ -302,7 +311,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
                                 : "muted"
                       }
                     >
-                      {scan.status}
+                      {scanStatusLabel(scan.status)}
                     </Badge>
                   </td>
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">

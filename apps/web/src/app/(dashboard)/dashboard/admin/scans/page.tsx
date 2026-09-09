@@ -32,14 +32,14 @@ export default async function PlatformAdminScansPage({
         <table className="w-full min-w-5xl text-left text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">Scan ID</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Mode</th>
-              <th className="px-4 py-3 font-medium">Workspace</th>
-              <th className="px-4 py-3 font-medium">Target</th>
-              <th className="px-4 py-3 font-medium">Created</th>
-              <th className="px-4 py-3 font-medium">Started</th>
-              <th className="px-4 py-3 font-medium">Ended</th>
+              <th scope="col" className="px-4 py-3 font-medium">Scan ID</th>
+              <th scope="col" className="px-4 py-3 font-medium">Status</th>
+              <th scope="col" className="px-4 py-3 font-medium">Mode</th>
+              <th scope="col" className="px-4 py-3 font-medium">Workspace</th>
+              <th scope="col" className="px-4 py-3 font-medium">Target</th>
+              <th scope="col" className="px-4 py-3 font-medium">Created</th>
+              <th scope="col" className="px-4 py-3 font-medium">Started</th>
+              <th scope="col" className="px-4 py-3 font-medium">Ended</th>
             </tr>
           </thead>
           <tbody className="divide-y">

@@ -9,8 +9,10 @@ import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
 import { EvidenceList } from "./evidence-list"
+import { FixesClient } from "./fixes-client"
 import { calculateFindingPriority } from "@/lib/finding-priority"
 import { findingFilterToApiQuery, parseFindingListParams } from "@/lib/finding-list-params"
+import { listFixProposals } from "@lyrashield/db"
 
 const FINDINGS_TABS: SectionTab[] = [
   // The `issues` tab value is a compatibility URL parameter; the visible label
@@ -18,12 +20,16 @@ const FINDINGS_TABS: SectionTab[] = [
   // /dashboard/reports (W2-10); the old tab route forwards its query scope.
   { value: "issues", label: ISSUE_PLURAL, href: "/dashboard/findings?tab=issues" },
   { value: "evidence", label: "Evidence", href: "/dashboard/findings?tab=evidence" },
+  // Deep Review v16 3.2: proposed fixes are a view of findings, not an
+  // independent destination. /dashboard/fixes forwards here.
+  { value: "fixes", label: "Proposed fixes", href: "/dashboard/findings?tab=fixes" },
 ]
 
-type FindingsTab = "issues" | "evidence"
+type FindingsTab = "issues" | "evidence" | "fixes"
 
 function normalizeTab(value: string | undefined): FindingsTab {
   if (value === "evidence") return value
+  if (value === "fixes") return value
   // The legacy reports tab is a permanent redirect to /dashboard/reports.
   return "issues"
 }
@@ -84,6 +90,55 @@ export default async function FindingsPage({
           activeTab={tab}
         />
         <EvidenceList workspaceId={workspaceId} />
+      </div>
+    )
+  }
+
+  if (tab === "fixes") {
+    const { items: fixProposals, nextCursor: fixProposalsCursor } = await listFixProposals({
+      workspaceId,
+      limit: 20,
+    })
+    const initialFixes = fixProposals.map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      summary: p.summary,
+      status: p.status,
+      safetyScore: p.safetyScore,
+      generatedByModel: p.generatedByModel,
+      createdAt: p.createdAt.toISOString(),
+      finding: {
+        id: p.finding.id,
+        title: p.finding.title,
+        severity: p.finding.severity,
+        status: p.finding.status,
+        cwe: p.finding.cwe,
+        target: p.finding.target,
+      },
+      pullRequests: p.pullRequests.map((pr) => ({
+        id: pr.id,
+        provider: pr.provider,
+        repoOwner: pr.repoOwner,
+        repoName: pr.repoName,
+        branchName: pr.branchName,
+        prNumber: pr.prNumber,
+        prUrl: pr.prUrl,
+        status: pr.status,
+      })),
+    }))
+    return (
+      <div>
+        <DashboardSectionTabs
+          title={ISSUE_PLURAL}
+          description="Proposed fixes for these findings, with their pull requests."
+          tabs={tabs}
+          activeTab={tab}
+        />
+        <FixesClient
+          workspaceId={workspaceId}
+          initialData={initialFixes}
+          initialNextCursor={fixProposalsCursor}
+        />
       </div>
     )
   }

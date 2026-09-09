@@ -18,6 +18,8 @@ import { githubReposSchema, paginatedResponseSchema, targetSchema } from "@/lib/
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TARGET_PLURAL, TARGET_SINGULAR, RUN_PLURAL, ISSUE_PLURAL } from "@/lib/terminology"
+import { getTargetTypeLabel } from "@/lib/enum-labels"
+import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
 interface Target {
   id: string
@@ -247,16 +249,7 @@ export function TargetsClient({
   }
 
   if (fetchError) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12">
-        <p className="text-destructive mb-4 text-sm" role="alert">
-          {fetchError}
-        </p>
-        <Button variant="secondary" onClick={() => fetchTargets()}>
-          Retry
-        </Button>
-      </div>
-    )
+    return <DashboardErrorCard message={fetchError} onRetry={() => fetchTargets()} className="" />
   }
 
   return (
@@ -579,20 +572,20 @@ export function TargetsClient({
           <table className="w-full min-w-[40rem] text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Name</th>
-                <th className="px-4 py-3 text-left font-semibold">Type</th>
-                <th className="px-4 py-3 text-left font-semibold">Domain verification</th>
-                <th className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Name</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Type</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Domain verification</th>
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
                   {RUN_PLURAL}
                 </th>
-                <th className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
                   {ISSUE_PLURAL}
                 </th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Status</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Status</th>
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
                   <span className="sr-only">View</span>
                 </th>
-                <th className="sr-only">
+                <th scope="col" className="sr-only">
                   <span className="sr-only">
                     {RUN_PLURAL} and {ISSUE_PLURAL} summary
                   </span>
@@ -622,7 +615,7 @@ export function TargetsClient({
                       ) : (
                         <Globe className="h-3 w-3" aria-hidden="true" />
                       )}
-                      {t.type}
+                      {getTargetTypeLabel(t.type)}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">

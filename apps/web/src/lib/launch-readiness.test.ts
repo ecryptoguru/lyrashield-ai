@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   generateLaunchReadinessReport,
   generateLaunchReadinessReportFromAggregate,
+  gateReasonSentence,
   projectGateReadinessReport,
 } from "./launch-readiness"
 
@@ -58,7 +59,11 @@ describe("projectGateReadinessReport", () => {
     )
     expect(report.verdict).toBe("INCONCLUSIVE")
     expect(report.score).toBeNull()
-    expect(report.conditions).toContain("API: Expected identity is required.")
+    // Reason messages are humanized to plain sentences at the rendering layer
+    // (gateReasonSentence) — the raw gate message never reaches the report.
+    expect(report.conditions).toContain(
+      "API: Name the exact commit or artifact this launch covers so the verdict can be checked against it."
+    )
   })
 
   it("maps READY only when every target is applicable", () => {
@@ -78,6 +83,26 @@ describe("projectGateReadinessReport", () => {
     expect(report.verdict).toBe("GO")
     expect(report.score).toBeNull()
     expect(report.triageScore).toBe(100)
+  })
+})
+
+describe("gateReasonSentence", () => {
+  it("rewrites known gate reason codes as plain sentences", () => {
+    expect(gateReasonSentence({ code: "ASSESSMENT_UNAVAILABLE", message: "ignored" })).toBe(
+      "No completed scan assessment exists yet. Run a scan to create one."
+    )
+    expect(gateReasonSentence({ code: "ASSESSMENT_EXPIRED", message: "ignored" })).toContain(
+      "more than 24 hours old"
+    )
+    expect(gateReasonSentence({ code: "EVIDENCE_CHANGED", message: "ignored" })).toContain(
+      "Run a new scan"
+    )
+  })
+
+  it("keeps the gate's own message for unknown codes instead of inventing one", () => {
+    expect(gateReasonSentence({ code: "SOMETHING_NEW", message: "Raw gate message." })).toBe(
+      "Raw gate message."
+    )
   })
 })
 

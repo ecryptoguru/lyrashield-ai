@@ -55,6 +55,8 @@ import {
   TARGET_SINGULAR,
 } from "@/lib/terminology"
 import { getFindingNextAction } from "@/lib/finding-next-step"
+import { SEVERITY_BADGE } from "@/lib/severity-badge"
+import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import {
   Sheet,
   SheetContent,
@@ -149,14 +151,6 @@ const findingListItemSchema = z
 const findingsPaginatedSchema = paginatedResponseSchema(findingListItemSchema)
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
-
-const SEVERITY_BADGE: Record<string, BadgeVariant> = {
-  CRITICAL: "danger",
-  HIGH: "danger",
-  MEDIUM: "warning",
-  LOW: "info",
-  INFO: "muted",
-}
 
 const STATUS_BADGE: Record<string, BadgeVariant> = {
   OPEN: "danger",
@@ -597,7 +591,7 @@ export function FindingsClient({
             value={query}
             maxLength={120}
             onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Search issues…"
+            placeholder={`Search ${ISSUE_PLURAL.toLowerCase()}…`}
             aria-label={`Search ${ISSUE_PLURAL.toLowerCase()}`}
             className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none lg:w-56"
           />
@@ -641,21 +635,7 @@ export function FindingsClient({
       )}
 
       {error && (
-        <Card className="border-destructive/50 mb-4 p-4">
-          <div className="text-destructive flex items-center gap-2 text-sm">
-            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{error}</span>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="ml-auto"
-              onClick={() => void handleFilterChange(filter)}
-            >
-              Retry
-            </Button>
-          </div>
-        </Card>
+        <DashboardErrorCard message={error} onRetry={() => void handleFilterChange(filter)} />
       )}
 
       {loading && findings.length === 0 ? (
@@ -1370,7 +1350,7 @@ function FindingDetailDrawer({
         {loading ? (
           // Stable skeleton matching the final layout: badges, tabs, and the
           // content blocks the drawer will occupy — no spinner-only state.
-          <div className="space-y-4" aria-busy="true" aria-label="Loading issue details">
+          <div className="space-y-4" aria-busy="true" aria-label="Loading finding details">
             <div className="flex flex-wrap items-center gap-2">
               <Skeleton className="h-5 w-20 rounded-full" />
               <Skeleton className="h-5 w-24 rounded-full" />
@@ -2249,7 +2229,7 @@ function RemediationTimelineSection({
         {events.map((event, index) => (
           <li key={`${event.kind}-${event.at}-${index}`} className="flex items-start gap-2 text-sm">
             <span
-              className={`mt-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium ${TIMELINE_TONE_CLASS[event.tone]}`}
+              className={`mt-0.5 rounded px-1.5 py-0.5 text-xs font-medium ${TIMELINE_TONE_CLASS[event.tone]}`}
             >
               {event.label}
             </span>

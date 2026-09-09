@@ -101,7 +101,7 @@ export function WebMcpActivityDrawer() {
           aria-hidden="true"
         />
         <span className="max-w-40 truncate">{latest?.toolName ?? "Agent"}</span>
-        <Badge variant={status.variant} className="ml-2 text-[10px] uppercase tracking-wide">
+        <Badge variant={status.variant} className="ml-2 text-xs uppercase tracking-wide">
           {status.label}
         </Badge>
       </Button>
@@ -168,7 +168,7 @@ export function WebMcpActivityDrawer() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                          <Badge variant={config.variant} className="text-[10px]">
+                          <Badge variant={config.variant} className="text-xs">
                             <Icon
                               className={cn(
                                 "mr-1 h-3 w-3",
@@ -178,11 +178,11 @@ export function WebMcpActivityDrawer() {
                             />
                             {config.label}
                           </Badge>
-                          <Badge variant="muted" className="text-[10px]">
+                          <Badge variant="muted" className="text-xs">
                             {CLASSIFICATION_LABEL[receipt.classification]}
                           </Badge>
                           {receipt.untrustedContent && (
-                            <Badge variant="warning" className="text-[10px]">
+                            <Badge variant="warning" className="text-xs">
                               Untrusted
                             </Badge>
                           )}
@@ -193,7 +193,7 @@ export function WebMcpActivityDrawer() {
                         <p className="text-muted-foreground line-clamp-2 text-xs">
                           {receipt.summary}
                         </p>
-                        <p className="text-muted-foreground mt-1 text-[10px]">
+                        <p className="text-muted-foreground mt-1 text-xs">
                           {DATA_CLASS_LABEL[receipt.dataClass]}
                           {receipt.humanConfirmationRequired && " · confirmation required"}
                         </p>

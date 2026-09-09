@@ -149,7 +149,10 @@ const BILLING_BASE: NavItem = {
 
 /** Secondary / Workspace destinations that are always present. */
 const WORKSPACE_NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard/fixes", label: "Fixes", shortLabel: "Fixes", icon: Bug },
+  // Deep Review v16 3.2: Fixes is not an independent destination. Proposed
+  // fixes are the "Proposed fixes" tab of Findings (/dashboard/findings?tab=fixes);
+  // the /dashboard/fixes route is a permanent redirect kept for old links and
+  // page-title resolution (NAV_TITLE_ITEMS below).
   {
     href: "/dashboard/notifications",
     label: NOTIFICATION_PLURAL,
@@ -225,6 +228,9 @@ export const NAV_TITLE_ITEMS: NavItem[] = [
     icon: ShieldCheck,
   },
   { href: "/dashboard/projects", label: "Projects", shortLabel: "Projects", icon: Crosshair },
+  // Compatibility route: a permanent redirect to the Findings "Proposed fixes"
+  // tab. Kept here so the mobile page header resolves its title while redirecting.
+  { href: "/dashboard/fixes", label: "Proposed fixes", shortLabel: "Fixes", icon: Bug },
   ...WORKSPACE_NAV_ITEMS,
 ]
 

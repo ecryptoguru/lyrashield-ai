@@ -213,7 +213,7 @@ export function ScoreTrend({ points }: { points: Array<{ label: string; score: n
           />
         ))}
       </svg>
-      <div className="text-muted-foreground mt-1 flex items-center justify-between text-[11px]">
+      <div className="text-muted-foreground mt-1 flex items-center justify-between text-xs">
         <span>{points[0]?.label}</span>
         <span>Latest {points.at(-1)?.score}/100</span>
       </div>

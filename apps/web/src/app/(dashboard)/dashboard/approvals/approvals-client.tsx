@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react"
 import { Button, Card, CardContent, Badge } from "@lyrashield/ui"
 import { Check, X, ShieldCheck, AlertCircle, Activity } from "lucide-react"
+import Link from "next/link"
 import { apiPost } from "@/lib/api-client"
 import { type ApprovalListItem } from "@lyrashield/db"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
@@ -22,6 +23,42 @@ const OPERATION_STATUS_VARIANT: Record<
   CONFLICT: "warning",
   EXECUTING: "info",
   PENDING: "muted",
+}
+
+/** Human action label for a recorded operation ("report.create" -> "Report created"). */
+function operationLabel(operationName: string): string {
+  const verb: Record<string, string> = {
+    "scan.create": "Scan started",
+    "report.create": "Report created",
+    "fix_proposal.create": "Fix proposal created",
+    "retest.create": "Retest started",
+    "fix_pr.create": "Fix PR opened",
+  }
+  if (verb[operationName]) return verb[operationName]!
+  const label = operationName.replace(/[._-]/g, " ").trim()
+  if (!label) return "Operation"
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+/**
+ * Where a completed operation's result is visible in the dashboard, or null
+ * when the result has no page (some results are only API payloads). The
+ * reference itself is a bare id — never shown raw when a link can stand in.
+ */
+function operationResultHref(operation: AgentOperationListItem): string | null {
+  if (!operation.resultReference || operation.status !== "COMPLETED") return null
+  switch (operation.operationName) {
+    case "scan.create":
+      return `/dashboard/scans/${operation.resultReference}`
+    case "report.create":
+      return "/dashboard/reports"
+    case "fix_proposal.create":
+      return "/dashboard/findings?tab=fixes"
+    case "retest.create":
+      return "/dashboard/findings"
+    default:
+      return null
+  }
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -138,30 +175,44 @@ export function ApprovalsClient({
             duplicates a completed action.
           </p>
           <ul className="mt-3 grid gap-2" aria-label="Recent operations">
-            {operations.map((operation) => (
-              <li key={operation.id}>
-                <Card>
-                  <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                    <div className="min-w-0 flex-1 basis-64">
-                      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                        {operation.operationName}
-                      </p>
-                      <p className="mt-1 truncate font-medium" title={operation.id}>
-                        {operation.id}
-                      </p>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {formatDateTime(operation.createdAt)}
-                        {operation.error ? ` · ${operation.error}` : ""}
-                        {operation.resultReference ? ` · result: ${operation.resultReference}` : ""}
-                      </p>
-                    </div>
-                    <Badge variant={OPERATION_STATUS_VARIANT[operation.status] ?? "muted"}>
-                      {operation.status.replaceAll("_", " ").toLowerCase()}
-                    </Badge>
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
+            {operations.map((operation) => {
+              const resultHref = operationResultHref(operation)
+              return (
+                <li key={operation.id}>
+                  <Card>
+                    <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                      <div className="min-w-0 flex-1 basis-64">
+                        <p className="text-xs font-medium tracking-wide uppercase">
+                          {operationLabel(operation.operationName)}
+                        </p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {formatDateTime(operation.createdAt)}
+                          {operation.error ? ` · ${operation.error}` : ""}
+                          {resultHref ? (
+                            <>
+                              {" · "}
+                              <Link
+                                href={resultHref}
+                                className="text-primary font-medium hover:underline"
+                              >
+                                Open result
+                              </Link>
+                            </>
+                          ) : operation.resultReference ? (
+                            " · result recorded"
+                          ) : (
+                            ""
+                          )}
+                        </p>
+                      </div>
+                      <Badge variant={OPERATION_STATUS_VARIANT[operation.status] ?? "muted"}>
+                        {operation.status.replaceAll("_", " ").toLowerCase()}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -181,8 +232,8 @@ export function ApprovalsClient({
               >
                 <CardContent className="flex flex-wrap items-start justify-between gap-4 p-4">
                   <div className="min-w-0 flex-1 basis-64">
-                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                      {approval.actionName}
+                    <p className="text-xs font-medium tracking-wide uppercase">
+                      {operationLabel(approval.actionName)}
                     </p>
                     <p className="mt-1 break-words font-medium">
                       {approvalSummary(approval.actionName, approval.input)}

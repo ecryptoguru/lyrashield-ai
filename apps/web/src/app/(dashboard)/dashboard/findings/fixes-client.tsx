@@ -9,18 +9,10 @@ import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { severityLabel } from "@/lib/labels"
-import { PageHeader } from "@/components/page-header"
+import { severityLabel, humanizeToken } from "@/lib/labels"
+import { SEVERITY_BADGE } from "@/lib/severity-badge"
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
-
-const SEVERITY_BADGE: Record<string, BadgeVariant> = {
-  CRITICAL: "danger",
-  HIGH: "danger",
-  MEDIUM: "warning",
-  LOW: "info",
-  INFO: "muted",
-}
 
 const PROPOSAL_STATUS_BADGE: Record<string, BadgeVariant> = {
   draft: "muted",
@@ -105,6 +97,12 @@ const fixProposalItemSchema = z
 
 const fixProposalsPaginatedSchema = paginatedResponseSchema(fixProposalItemSchema)
 
+/**
+ * The Findings → Proposed fixes tab: every fix proposal in the workspace with
+ * its parent finding, safety score, and pull requests. Formerly the
+ * independent /dashboard/fixes page (Deep Review v16 3.2); the section tabs on
+ * the Findings page own the heading, so this renders the list only.
+ */
 export function FixesClient({
   workspaceId,
   initialData,
@@ -119,19 +117,14 @@ export function FixesClient({
 
   return (
     <div>
-      <PageHeader
-        title="Proposed fixes"
-        description="Review proposed fixes and track pull requests for your issues."
-      />
-
       {proposals.length === 0 && !nextCursor ? (
         <EmptyState
           icon={Wrench}
           title="No proposed fixes yet"
-          description="Open an issue to record a fix proposal. Proposals with a stored patch can request a pull request after human approval. A summary alone does not change your code."
+          description="Open a finding to record a fix proposal. Proposals with a stored patch can request a pull request after human approval. A summary alone does not change your code."
           action={
-            <Link href="/dashboard/findings" className={buttonVariants()}>
-              Review issues
+            <Link href="/dashboard/findings?tab=issues" className={buttonVariants()}>
+              Review findings
             </Link>
           }
         />
@@ -145,7 +138,7 @@ export function FixesClient({
               <div>
                 <div className="mb-2 flex items-center gap-2">
                   <Badge variant={PROPOSAL_STATUS_BADGE[proposal.status] ?? "muted"}>
-                    {proposal.status}
+                    {humanizeToken(proposal.status)}
                   </Badge>
                   <Badge variant={SEVERITY_BADGE[proposal.finding.severity] ?? "muted"}>
                     {severityLabel(proposal.finding.severity)}
@@ -199,6 +192,15 @@ export function FixesClient({
                   <span>{formatDate(proposal.createdAt)}</span>
                 </div>
 
+                {/* Deep link to the finding this proposal patches — the drawer's
+                    `?finding=` contract, same as everywhere else in this app. */}
+                <Link
+                  href={`/dashboard/findings?finding=${encodeURIComponent(proposal.finding.id)}`}
+                  className="text-muted-foreground hover:text-foreground mt-3 inline-flex text-xs underline underline-offset-4"
+                >
+                  View the finding
+                </Link>
+
                 {proposal.pullRequests.length > 0 && (
                   <div className="mt-3 space-y-1">
                     {proposal.pullRequests.map((pr) => {
@@ -234,15 +236,21 @@ export function FixesClient({
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<FixProposalItem>(
-                `/api/fix-proposals`,
-                {
-                  workspaceId,
-                  cursor,
-                },
-                { schema: fixProposalsPaginatedSchema }
-              )
-              return { items: res.items, nextCursor: res.nextCursor }
+              try {
+                const res = await apiGetPaginated<FixProposalItem>(
+                  `/api/fix-proposals`,
+                  {
+                    workspaceId,
+                    cursor,
+                  },
+                  { schema: fixProposalsPaginatedSchema }
+                )
+                return { items: res.items, nextCursor: res.nextCursor }
+              } catch {
+                // Same error pattern as the scans list: a friendly message in
+                // LoadMore's alert instead of a raw API or Zod error string.
+                throw new Error("Failed to load more fix proposals. Try again.")
+              }
             }}
             onItems={(items) => setProposals((prev) => [...prev, ...items])}
             onNextCursor={setNextCursor}

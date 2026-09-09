@@ -64,7 +64,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
       if (outcome.kind === "immutable") {
         return apiError(
           "TARGET_REF_IMMUTABLE",
-          "Branch or tag cannot be changed after the first trust run is created",
+          "Branch or tag cannot be changed after the first scan is created",
           409
         )
       }

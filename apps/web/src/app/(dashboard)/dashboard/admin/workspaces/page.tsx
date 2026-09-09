@@ -32,11 +32,11 @@ export default async function PlatformAdminWorkspacesPage({
         <table className="w-full min-w-3xl text-left text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">Workspace</th>
-              <th className="px-4 py-3 font-medium">Plan</th>
-              <th className="px-4 py-3 font-medium">Members</th>
-              <th className="px-4 py-3 font-medium">Targets</th>
-              <th className="px-4 py-3 font-medium">Created</th>
+              <th scope="col" className="px-4 py-3 font-medium">Workspace</th>
+              <th scope="col" className="px-4 py-3 font-medium">Plan</th>
+              <th scope="col" className="px-4 py-3 font-medium">Members</th>
+              <th scope="col" className="px-4 py-3 font-medium">Targets</th>
+              <th scope="col" className="px-4 py-3 font-medium">Created</th>
             </tr>
           </thead>
           <tbody className="divide-y">

@@ -32,10 +32,10 @@ export default async function PlatformAdminAuditPage({
         <table className="w-full min-w-4xl text-left text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">Action</th>
-              <th className="px-4 py-3 font-medium">Resource</th>
-              <th className="px-4 py-3 font-medium">Actor (current email)</th>
-              <th className="px-4 py-3 font-medium">Time</th>
+              <th scope="col" className="px-4 py-3 font-medium">Action</th>
+              <th scope="col" className="px-4 py-3 font-medium">Resource</th>
+              <th scope="col" className="px-4 py-3 font-medium">Actor (current email)</th>
+              <th scope="col" className="px-4 py-3 font-medium">Time</th>
             </tr>
           </thead>
           <tbody className="divide-y">

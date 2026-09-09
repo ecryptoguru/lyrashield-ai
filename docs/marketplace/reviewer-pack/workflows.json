@@ -2,7 +2,7 @@
   "demoPolicy": "Use a sanitized reviewer workspace with no production data, secrets, customer content, or live write targets.",
   "positiveWorkflows": [
     "Connect through OAuth, select exactly one workspace, and complete a read-only MCP review.",
-    "List recent trust runs and open evidence without exposing credentials to the agent.",
+    "List recent scans and open evidence without exposing credentials to the agent.",
     "Request a write-capable action and observe the explicit scope and approval gate.",
     "Approve the exact pending action in the dashboard and poll its terminal result.",
     "Disconnect/revoke the connection and confirm subsequent MCP requests receive an OAuth challenge."

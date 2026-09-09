@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { z } from "zod"
-import { Calendar, Plus, AlertCircle, Trash2, Power, ChevronDown } from "lucide-react"
+import { Calendar, Plus, Trash2, Power, ChevronDown } from "lucide-react"
 import {
   Button,
   Badge,
@@ -20,6 +20,7 @@ import { formatDate, formatDateTime } from "@/lib/date-format"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getManualScanOptions } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
+import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
 interface ScheduleItem {
   id: string
@@ -386,23 +387,13 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       )}
 
       {error && (
-        <Card className="border-destructive/50 mb-4 p-4">
-          <div className="text-destructive flex items-center gap-2 text-sm" role="alert">
-            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{error}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto"
-              onClick={() => {
-                setError(null)
-                void loadSchedules()
-              }}
-            >
-              Retry
-            </Button>
-          </div>
-        </Card>
+        <DashboardErrorCard
+          message={error}
+          onRetry={() => {
+            setError(null)
+            void loadSchedules()
+          }}
+        />
       )}
 
       {loading && schedules.length === 0 ? (

@@ -75,13 +75,16 @@ export const SCAN_STATUS_LABELS: Record<string, string> = {
 
 // The user-facing surface is TargetEnvironment (LOCAL/PREVIEW/STAGING/
 // PRODUCTION in the Prisma schema and @lyrashield/types). "EnvironmentKind"
-// is kept as an alias key-set below so callers using either name resolve.
+// and the TARGET_ENVIRONMENT_LABELS alias are kept so callers using either
+// name resolve.
 export const ENVIRONMENT_KIND_LABELS: Record<string, string> = {
   LOCAL: "Local",
   PREVIEW: "Preview",
   STAGING: "Staging",
   PRODUCTION: "Production",
 }
+
+export const TARGET_ENVIRONMENT_LABELS: Record<string, string> = ENVIRONMENT_KIND_LABELS
 
 export const WORKSPACE_PLAN_LABELS: Record<string, string> = {
   FREE: "Free",
@@ -159,4 +162,8 @@ export function describeEnum(value: string): string | undefined {
     if (label !== undefined) return label
   }
   return undefined
+}
+
+export function getEnvironmentLabel(value: string): string {
+  return TARGET_ENVIRONMENT_LABELS[value] ?? value
 }
