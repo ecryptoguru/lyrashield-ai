@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { ShieldCheck } from "lucide-react"
 import { OnboardingWizard } from "./onboarding-wizard"
 import { ReferralClaim } from "./referral-claim"
@@ -7,7 +8,6 @@ import { SignOutButton } from "./sign-out-button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { InvitationAcceptBridge } from "@/components/invitation-accept-bridge"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
-import { withWorkspaceRLS } from "@lyrashield/db"
 import { cookies } from "next/headers"
 import { parsePlanIntent, planIntentPath, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
 
@@ -32,21 +32,42 @@ export default async function OnboardingPage({
     redirect(selectedPlan ? planIntentPath("/dashboard/billing", selectedPlan) : "/dashboard")
   }
 
+  // W2-01: workspace naming is not part of the critical setup path. Reuse an
+  // authorized active workspace when one exists. When none exists, the wizard
+  // creates a default lazily — at the moment the user picks a target path —
+  // so merely visiting onboarding (or skipping it) never creates a workspace
+  // or trial the user did not ask for.
+  let workspaceId = state.workspaceId
+  if (!workspaceId) {
+    const memberships = await prisma.workspaceMember.findMany({
+      where: { userId: session.userId, status: "active", workspace: { deletedAt: null } },
+      orderBy: { createdAt: "asc" },
+      select: { workspaceId: true },
+    })
+    if (memberships.length > 0) {
+      workspaceId = memberships[0]!.workspaceId
+      await prisma.onboardingState.update({
+        where: { userId: session.userId },
+        data: { workspaceId, currentStep: Math.max(state.currentStep, 1) },
+      })
+    }
+  }
+
   const target =
-    state.targetId && state.workspaceId
-      ? await withWorkspaceRLS(state.workspaceId, (tx) =>
+    state.targetId && workspaceId
+      ? await withWorkspaceRLS(workspaceId, (tx) =>
           tx.target.findFirst({
-            where: { id: state.targetId!, workspaceId: state.workspaceId! },
+            where: { id: state.targetId!, workspaceId },
             select: { type: true, name: true },
           })
         )
       : null
 
   const initialState = {
-    currentStep: state.currentStep,
+    currentStep: state.workspaceId ? state.currentStep : Math.max(state.currentStep, 1),
     completed: state.completed,
     skipped: state.skipped,
-    workspaceId: state.workspaceId,
+    workspaceId,
     targetId: state.targetId,
     selectedGoal: state.selectedGoal,
     targetType: target?.type ?? null,
@@ -69,7 +90,13 @@ export default async function OnboardingPage({
         </p>
       </div>
 
-      <OnboardingWizard initialState={initialState} selectedPlan={selectedPlan} />
+      <OnboardingWizard
+        initialState={initialState}
+        selectedPlan={selectedPlan}
+        suggestedWorkspaceName={
+          session.userName?.trim() ? `${session.userName.trim()}'s workspace` : "My workspace"
+        }
+      />
       <InvitationAcceptBridge />
     </div>
   )

@@ -404,7 +404,7 @@ Active membership, credential scope, target authorization, plan limits, budgets,
 
 Platform administration is not a workspace role. The hidden **Platform Admin** destination is server-rendered only for `ecryptoguru@gmail.com` and `ankit@lyrashieldai.com` after each account is email-verified, assigned `PLATFORM_OPERATOR`, enrolled in TOTP, and signed in through a recently TOTP-verified browser session. API keys, bearer tokens, and ordinary Owner/Admin membership cannot grant access; other users receive not found.
 
-The current console shows bounded platform health plus paginated users, workspaces, scans, platform-audit entries, and affiliate review. It does not show customer source, scan payloads, secrets, or model cost. Affiliate changes remain disabled until every write uses the one-time elevation and atomic platform-audit transaction. Exact-two provisioning and fresh browser proof for both operators passed on 2026-08-26; operators should follow [`docs/ops/platform-admin-runbook.md`](docs/ops/platform-admin-runbook.md) and repeat that proof after any future apply.
+The current console shows bounded platform health plus paginated users, workspaces, scans, platform-audit entries, and affiliate review. It does not show customer source, scan payloads, secrets, or model cost. Affiliate changes remain disabled until every write uses the one-time elevation and atomic platform-audit transaction. Exact-two provisioning and fresh browser proof for both operators passed on 2026-08-26; operators should repeat that exact provisioning and browser proof after any future apply (the former runbook was removed on 2026-09-09; git history is the recovery path).
 
 ## 20. Integrations
 
@@ -518,7 +518,7 @@ LyraShield ships three ways to run checks from a coding agent, an editor, or a t
 The `lyrashield` command-line tool (published on npm; the scoped alias `@lyrashield/cli` is deprecated and will be removed in the next major release) installs, configures, and drives scans without hand-editing any config file:
 
 ```bash
-npx lyrashield login              # browser-based OAuth device login or workspace API key
+npx lyrashield login              # hosted PKCE OAuth login or workspace API key
 npx lyrashield connect codex      # configure and verify a supported coding agent
 npx lyrashield connections        # inspect saved credential and agent connection state
 npx lyrashield init                # detect installed coding agents and configure them

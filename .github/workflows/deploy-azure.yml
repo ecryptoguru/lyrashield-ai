@@ -286,8 +286,9 @@ jobs:
           # (run 30496418272): it reported "no tagged images found to delete" and "no
           # untagged images found" for both packages — with only ~10 accumulated versions
           # against keep-n-tagged: 10, nothing had aged out yet, so the first live run is a
-          # verified no-op, not a leap of faith. See docs/deployment/PRODUCTION_DEPLOYMENT.md
-          # "Known production blockers" #4 for the full sign-off record.
+          # verified no-op, not a leap of faith. The full sign-off record lives in
+          # git history (docs/deployment/PRODUCTION_DEPLOYMENT.md, removed 2026-09-09).
+
           dry-run: false
 
       - name: Delete untagged and superseded worker image versions
@@ -780,9 +781,9 @@ jobs:
           fi
 
       # Garbage-collect GitHub App secrets so rotation deletes what is no longer needed.
-      # A runbook lives in docs/deployment/PRODUCTION_DEPLOYMENT.md "Known production
-      # blockers" #6 and lays out app creation, credential inventory, webhook wiring, and
-      # secret naming. Every deploy reconciles this list with Container App secrets:
+      # The former runbook (docs/deployment/PRODUCTION_DEPLOYMENT.md, removed 2026-09-09)
+      # laid out app creation, credential inventory, webhook wiring, and secret naming.
+      # Every deploy reconciles this list with Container App secrets:
       # existing secrets keep their type (PEM private key survives intact), and a secret
       # that vanishes from the set below is removed so stale material does not linger.
       # This block is independent of whether the app still needs rotation.

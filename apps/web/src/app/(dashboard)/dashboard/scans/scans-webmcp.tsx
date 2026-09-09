@@ -21,6 +21,20 @@ const prepareScanInputSchema: WebMcpInputSchema = {
   },
 }
 
+const requestScanInputSchema: WebMcpInputSchema = {
+  required: ["targetName"],
+  properties: {
+    targetName: {
+      type: "string",
+      description: "The unique visible target name.",
+    },
+    reviewType: {
+      type: "string",
+      description: "Optional review type id. Defaults to the first available option.",
+    },
+  },
+}
+
 export function useScansWebMcp({
   workspaceId,
   targets,
@@ -153,4 +167,114 @@ export function useScansWebMcp({
     setModeResetNotice,
     receiptStore,
   ])
+
+  // W3-07: the durable execution tool. Server-bound workspace/principal
+  // identity (the browser session), W3-01 idempotency semantics, and the
+  // authoritative scan admission checks live on the server; agent input can
+  // never supply another workspace or principal.
+  useEffect(() => {
+    const cleanup = registerWebMcpTool<{
+      targetName: string
+      reviewType?: string
+    }>({
+      name: "request_security_scan",
+      title: "Request security scan",
+      description:
+        "Start a scan for a target and review type. Durable: the scan persists and consumes workspace usage subject to authorization and budget.",
+      inputSchema: requestScanInputSchema,
+      receiptStore,
+      classification: "mutation-durable",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      durableMutation: true,
+      humanConfirmationRequired: false,
+      forbiddenInputKeys: [
+        "workspaceId",
+        "workspace",
+        "userId",
+        "user",
+        "targetId",
+        "evidence",
+        "secret",
+      ],
+      handler: async (input, { signal }) => {
+        const currentTargets = targetsRef.current
+        const byName = currentTargets.filter(
+          (t) => t.name.localeCompare(input.targetName, undefined, { sensitivity: "base" }) === 0
+        )
+        if (byName.length === 0) {
+          throw new Error(
+            `No target named "${input.targetName}" is visible. Create or select a target first.`
+          )
+        }
+        if (byName.length > 1) {
+          throw new Error(
+            `Multiple targets named "${input.targetName}" are visible. Select the target manually in the dashboard.`
+          )
+        }
+        const [target] = byName
+        if (!target) {
+          throw new Error(`Target "${input.targetName}" was selected but is no longer visible.`)
+        }
+        const options = getManualScanOptions({
+          type: target.type,
+          hasApiSpec: Boolean(target.apiSpecUrl),
+        }).filter((o) => o.available)
+        const desired = input.reviewType?.trim()
+        if (desired && !options.some((o) => o.id === desired)) {
+          throw new Error(
+            `Review type "${desired}" is not available for ${target.name}. Choose a different type or target.`
+          )
+        }
+        const selectedOption = desired
+          ? options.find((o) => o.id === desired)
+          : (options.find((o) => o.id === selectedPresetRef.current) ?? options[0])
+        if (!selectedOption) {
+          throw new Error(
+            `No review option is available for ${target.name}. Add configuration first.`
+          )
+        }
+
+        // Cancellation after server acceptance reports the existing or
+        // uncertain operation rather than falsely claiming no side effect.
+        if (signal.aborted) {
+          throw new Error(
+            "The request was cancelled before the server confirmed it. Poll operation status before retrying."
+          )
+        }
+
+        const response = await fetch("/api/scans", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": `webmcp:${target.id}:${selectedOption.id}`,
+          },
+          body: JSON.stringify({
+            workspaceId,
+            targetId: target.id,
+            goal: selectedOption.goal,
+            mode: selectedOption.mode,
+          }),
+          signal,
+        })
+        const body = (await response.json().catch(() => null)) as {
+          data?: { id?: string }
+          error?: { code?: string; message?: string }
+        } | null
+        if (!response.ok) {
+          throw new Error(body?.error?.message ?? "The scan could not be started.")
+        }
+        return {
+          started: true,
+          scanId: body?.data?.id,
+          target: { name: target.name, type: target.type },
+          reviewType: { id: selectedOption.id, label: selectedOption.label },
+          note: "The scan is durable. Poll its status or open it in Scans.",
+        }
+      },
+    })
+
+    return cleanup
+  }, [workspaceId, receiptStore])
 }

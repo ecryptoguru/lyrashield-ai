@@ -5,6 +5,9 @@ import {
   createScan,
   listScans,
   updateScanStatus,
+  claimOrGetAgentOperation,
+  completeAgentOperation,
+  failAgentOperation,
   WorkspaceScanConcurrencyLimitError,
   type ScanListItem,
 } from "@lyrashield/db"
@@ -102,6 +105,41 @@ async function post(request: Request) {
 
   try {
     const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+
+    // W3-01: durable operation identity is opt-in. Callers that send an
+    // Idempotency-Key get identical-retry replay semantics; without the
+    // header the route behaves exactly as before.
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim()
+    let operationClaim: Awaited<ReturnType<typeof claimOrGetAgentOperation>> | null = null
+    if (idempotencyKey) {
+      if (idempotencyKey.length < 1 || idempotencyKey.length > 128) {
+        return apiError("VALIDATION_ERROR", "Idempotency-Key must be 1-128 characters", 400)
+      }
+      const claim = await claimOrGetAgentOperation({
+        workspaceId,
+        operationName: "scan.create",
+        idempotencyKey,
+        input: { targetId: data.targetId, goal: data.goal, mode: data.mode },
+        apiKeyId: session.apiKey?.keyId,
+        userId: session.apiKey ? undefined : session.userId,
+      })
+      if (claim.status === "CONFLICT") {
+        return apiError("IDEMPOTENCY_CONFLICT", claim.message, 409)
+      }
+      if (claim.status === "REPLAY" && claim.operation.resultReference) {
+        return apiSuccess({ scanId: claim.operation.resultReference, replayed: true }, 200)
+      }
+      if (claim.status === "IN_PROGRESS") {
+        return apiError(
+          "OPERATION_IN_PROGRESS",
+          "An identical scan start is already in progress. Poll the operation status instead of retrying.",
+          409,
+          undefined,
+          { operationId: claim.operation.id }
+        )
+      }
+      operationClaim = claim
+    }
 
     const target = await prisma.target.findFirst({
       where: { id: data.targetId, workspaceId, deletedAt: null },
@@ -294,12 +332,25 @@ async function post(request: Request) {
         errorCategory: "QUEUE",
         errorMessage: "Scan worker became unavailable while queueing the scan",
       })
+      // W3-01: the claimed operation records the failure so an identical retry
+      // surfaces the recorded outcome instead of replaying ambiguous paid work.
+      if (operationClaim && operationClaim.status === "NEW") {
+        await failAgentOperation(operationClaim.operation.id, workspaceId, {
+          error: "SCAN_SERVICE_UNAVAILABLE",
+        }).catch(() => undefined)
+      }
       revalidateDashboardAggregates(workspaceId)
       return apiError(
         "SCAN_SERVICE_UNAVAILABLE",
         "Scanning became unavailable while starting this scan. Please try again shortly.",
         503
       )
+    }
+
+    if (operationClaim && operationClaim.status === "NEW") {
+      await completeAgentOperation(operationClaim.operation.id, workspaceId, {
+        resultReference: scan.id,
+      })
     }
 
     await prisma.auditLog.create({
@@ -323,7 +374,7 @@ async function post(request: Request) {
     // Return the same shape the list endpoint returns. The client prepends this
     // straight into its scan list and validates it against the list-item schema,
     // so a narrower payload here fails response validation and surfaces to the
-    // user as "Start Trust Run" erroring — on a scan that was in fact created
+    // user as "Start scan" erroring — on a scan that was in fact created
     // and enqueued. `target` is the row already loaded and authorised above, and
     // findingCount is 0 by construction for a scan that has not run yet.
     return apiSuccess(

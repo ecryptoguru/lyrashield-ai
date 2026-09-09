@@ -79,4 +79,24 @@ describe("automatic operational access for every member role", () => {
         expect(hasPermission(role, permission), `${role}:${permission}`).toBe(false)
     }
   )
+
+  // Founder decision (2026-09-09, Option 3): "AI-assurance workflows" are part
+  // of the operational set, so every active role — including Viewer, Auditor,
+  // External Pentester and Billing Admin — receives aiAssurance view, manage
+  // and review. This is a deliberate founder decision, not an oversight; a
+  // reviewer suggestion to narrow it to view-only was declined. Evidence
+  // records remain workspace-scoped under RLS and audited.
+  it.each(ALL_ROLES)("grants %s the full AI-assurance workflow set under Option 3", (role) => {
+    expect(hasPermission(role, PERMISSIONS.aiAssurance.view), `${role}:view`).toBe(true)
+    expect(hasPermission(role, PERMISSIONS.aiAssurance.manage), `${role}:manage`).toBe(true)
+    expect(hasPermission(role, PERMISSIONS.aiAssurance.review), `${role}:review`).toBe(true)
+  })
+
+  it("keeps audit export restricted to governance roles", () => {
+    for (const role of ALL_ROLES) {
+      expect(hasPermission(role, PERMISSIONS.audit.export)).toBe(
+        ["OWNER", "ADMIN", "SECURITY_ADMIN", "AUDITOR"].includes(role)
+      )
+    }
+  })
 })

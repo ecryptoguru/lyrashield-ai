@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
 import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
-import { listApprovals, withWorkspaceRLS } from "@lyrashield/db"
+import { listApprovals, listRecentAgentOperations, withWorkspaceRLS } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
-import { REVIEW_QUEUE_LABEL, APPROVAL_PLURAL } from "@/lib/terminology"
+import { APPROVAL_PLURAL } from "@/lib/terminology"
 import { ClipboardCheck, ShieldX } from "lucide-react"
 import { EmptyState } from "@lyrashield/ui"
 import { ApprovalsClient } from "./approvals-client"
@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/page-header"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 
 export const metadata: Metadata = {
-  title: "Review Queue",
+  title: "Activity",
 }
 
 export default async function ApprovalsPage() {
@@ -27,8 +27,8 @@ export default async function ApprovalsPage() {
     return (
       <div>
         <PageHeader
-          title={REVIEW_QUEUE_LABEL}
-          description="Review and approve agent actions and fix proposals before they are applied."
+          title="Activity"
+          description="Operation activity and recovery, plus any legacy approvals that still need a decision."
         />
         <NoWorkspaceState
           icon={ClipboardCheck}
@@ -42,20 +42,20 @@ export default async function ApprovalsPage() {
     return (
       <div>
         <PageHeader
-          title={REVIEW_QUEUE_LABEL}
-          description="Review and approve agent actions and fix proposals before they are applied."
+          title="Activity"
+          description="Operation activity and recovery for authorized workflows."
         />
         <EmptyState
           icon={ShieldX}
           title="Access restricted"
-          description="You do not have permission to view the Review Queue."
+          description="You do not have permission to view operation activity for this workspace."
           action={null}
         />
       </div>
     )
   }
 
-  const [approvals, hasProposals] = await Promise.all([
+  const [approvals, hasProposals, operations] = await Promise.all([
     workspaceId
       ? listApprovals({ workspaceId, status: "PENDING", limit: 50 }).then((r) => r.items)
       : [],
@@ -70,19 +70,21 @@ export default async function ApprovalsPage() {
           })
         ).then((count) => count > 0)
       : false,
+    listRecentAgentOperations(workspaceId, 20),
   ])
 
   return (
     <div>
       <PageHeader
-        title={REVIEW_QUEUE_LABEL}
-        description="Review and approve agent actions and fix proposals before they are applied."
+        title="Activity"
+        description="What automated operations did, what needs recovery, and any legacy approvals that still require a decision."
       />
 
       <ApprovalsClient
         workspaceId={workspaceId}
         approvals={approvals}
         hasProposals={hasProposals}
+        operations={operations}
       />
     </div>
   )

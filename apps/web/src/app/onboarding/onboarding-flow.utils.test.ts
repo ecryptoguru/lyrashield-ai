@@ -7,6 +7,7 @@ import {
   onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
+  targetNameFromUrl,
 } from "./onboarding-flow.utils"
 
 describe("onboardingPathForTargetType", () => {
@@ -151,5 +152,19 @@ describe("pathLabel", () => {
     expect(pathLabel("api")).toBe("API")
     expect(pathLabel("skip")).toBe("later")
     expect(pathLabel(null)).toBe("target")
+  })
+})
+
+describe("targetNameFromUrl (W2-02)", () => {
+  it("prefills the target name from the parsed host", () => {
+    expect(targetNameFromUrl("https://staging.example.com/path")).toBe("staging.example.com")
+    expect(targetNameFromUrl("https://www.example.com/app")).toBe("example.com")
+    expect(targetNameFromUrl("http://api.example.com/v1")).toBe("api.example.com")
+  })
+
+  it("keeps the current name when no sensible prefill exists", () => {
+    expect(targetNameFromUrl("not a url")).toBeNull()
+    expect(targetNameFromUrl("ftp://example.com")).toBeNull()
+    expect(targetNameFromUrl("")).toBeNull()
   })
 })

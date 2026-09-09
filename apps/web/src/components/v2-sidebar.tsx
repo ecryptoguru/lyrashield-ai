@@ -78,6 +78,12 @@ export function V2Sidebar({
   const pathname = usePathname()
   const router = useRouter()
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(initialWorkspaceId)
+  // W1-06: a failed workspace switch must be visible and recoverable. The last
+  // server-confirmed workspace stays selected and no tenant data changes; the
+  // message offers an explicit retry of the intended workspace.
+  const [switchError, setSwitchError] = useState<string | null>(null)
+  const [pendingWorkspaceId, setPendingWorkspaceId] = useState<string | null>(null)
+  const [switching, setSwitching] = useState(false)
   // Scroll affordance: shown while the navigation region has more content
   // below the fold (e.g. Settings on short laptops), so truncation is never
   // silent. Cleared once the user scrolls to the bottom.
@@ -105,6 +111,10 @@ export function V2Sidebar({
   }, [measureNavOverflow, secondary.length])
 
   async function handleSelectWorkspace(id: string) {
+    if (switching) return
+    setSwitching(true)
+    setSwitchError(null)
+    setPendingWorkspaceId(id)
     try {
       await apiPost("/api/workspaces/active", { workspaceId: id })
       setActiveWorkspaceId(id)
@@ -112,7 +122,13 @@ export function V2Sidebar({
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/dashboard")
     } catch {
-      // Keep the last server-confirmed workspace selected if persistence fails.
+      // Keep the last server-confirmed workspace selected if persistence fails,
+      // and surface a visible, retryable message instead of failing silently.
+      setPendingWorkspaceId(id)
+      setSwitchError(
+        "Could not switch workspaces. Your current workspace is unchanged — retry below."
+      )
+      setSwitching(false)
     }
   }
 
@@ -160,6 +176,27 @@ export function V2Sidebar({
               activeId={activeWorkspaceId}
               onSelect={handleSelectWorkspace}
             />
+            {switchError && (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="bg-destructive/10 text-destructive mt-2 rounded-md border border-destructive/30 p-2 text-xs"
+              >
+                <p>{switchError}</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive mt-1 h-8 justify-start px-2"
+                  disabled={switching}
+                  onClick={() => {
+                    if (pendingWorkspaceId) void handleSelectWorkspace(pendingWorkspaceId)
+                  }}
+                >
+                  Retry switch
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

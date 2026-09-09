@@ -5,11 +5,42 @@ import { withWorkspaceRLS } from "./rls"
 
 export interface ClaimAgentOperationParams {
   workspaceId: string
-  connectionId: string
   operationName: string
   idempotencyKey: string
   input: Record<string, unknown>
   authorizationVersion?: number
+  /** OAuth connection principal. Mutually exclusive with apiKeyId/userId. */
+  connectionId?: string
+  /** API-key principal identity (the key id). */
+  apiKeyId?: string
+  /** Browser-session principal id (the user id). */
+  userId?: string
+}
+
+export type PrincipalIdentity = {
+  principalType: "OAUTH_CONNECTION" | "API_KEY" | "BROWSER_SESSION"
+  principalId: string
+  connectionId?: string
+}
+
+/**
+ * Resolve the principal-bound identity for an operation claim (W3-01). An
+ * OAuth connection keeps its connection-bound identity; an API key or browser
+ * session is never fabricated into a connection.
+ */
+export function resolveOperationPrincipal(
+  params: Pick<ClaimAgentOperationParams, "connectionId" | "apiKeyId" | "userId">
+): PrincipalIdentity {
+  if (params.connectionId) {
+    return {
+      principalType: "OAUTH_CONNECTION",
+      principalId: params.connectionId,
+      connectionId: params.connectionId,
+    }
+  }
+  if (params.apiKeyId) return { principalType: "API_KEY", principalId: params.apiKeyId }
+  if (params.userId) return { principalType: "BROWSER_SESSION", principalId: params.userId }
+  throw new Error("OPERATION_PRINCIPAL_REQUIRED")
 }
 
 export type ClaimOperationResult =
@@ -50,13 +81,17 @@ export async function claimOrGetAgentOperation(
   params: ClaimAgentOperationParams
 ): Promise<ClaimOperationResult> {
   const inputHash = hashOperationInput(params.operationName, params.input)
+  const principal = resolveOperationPrincipal(params)
 
-  // Check if operation exists
+  // Check if an operation with the same principal-bound identity exists.
+  // The principal unique index covers connectionless principals too.
   const existing = await withWorkspaceRLS(params.workspaceId, (tx) =>
     tx.agentOperation.findUnique({
       where: {
-        connectionId_operationName_idempotencyKey: {
-          connectionId: params.connectionId,
+        workspaceId_principalType_principalId_operationName_idempotencyKey: {
+          workspaceId: params.workspaceId,
+          principalType: principal.principalType,
+          principalId: principal.principalId,
           operationName: params.operationName,
           idempotencyKey: params.idempotencyKey,
         },
@@ -78,7 +113,8 @@ export async function claimOrGetAgentOperation(
       }
     } else {
       logger.warn("Idempotency key reused with conflicting input", {
-        connectionId: params.connectionId,
+        principalType: principal.principalType,
+        principalId: principal.principalId,
         operationName: params.operationName,
         idempotencyKey: params.idempotencyKey,
       })
@@ -96,10 +132,12 @@ export async function claimOrGetAgentOperation(
       tx.agentOperation.create({
         data: {
           workspaceId: params.workspaceId,
-          connectionId: params.connectionId,
+          connectionId: principal.connectionId ?? null,
           operationName: params.operationName,
           idempotencyKey: params.idempotencyKey,
           inputHash,
+          principalType: principal.principalType,
+          principalId: principal.principalId,
           authorizationVersion: params.authorizationVersion ?? 1,
           status: "EXECUTING",
         },
@@ -117,8 +155,10 @@ export async function claimOrGetAgentOperation(
       const raced = await withWorkspaceRLS(params.workspaceId, (tx) =>
         tx.agentOperation.findUnique({
           where: {
-            connectionId_operationName_idempotencyKey: {
-              connectionId: params.connectionId,
+            workspaceId_principalType_principalId_operationName_idempotencyKey: {
+              workspaceId: params.workspaceId,
+              principalType: principal.principalType,
+              principalId: principal.principalId,
               operationName: params.operationName,
               idempotencyKey: params.idempotencyKey,
             },
@@ -184,4 +224,110 @@ export async function getAgentOperation(
   return withWorkspaceRLS(workspaceId, (tx) =>
     tx.agentOperation.findFirst({ where: { id: operationId, workspaceId } })
   )
+}
+
+export interface AgentOperationListItem {
+  id: string
+  operationName: string
+  status: string
+  idempotencyKey: string
+  connectionId: string | null
+  resultReference: string | null
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Recent operations for a workspace, newest first. Bounded for presentation;
+ * every row stays workspace-scoped under RLS. Used by the operation-activity
+ * destination (W1-09) and the shared operation-status contract (W3-08).
+ */
+export async function listRecentAgentOperations(
+  workspaceId: string,
+  limit = 20
+): Promise<AgentOperationListItem[]> {
+  const boundedLimit = Math.max(1, Math.min(limit, 50))
+  const rows = await withWorkspaceRLS(workspaceId, (tx) =>
+    tx.agentOperation.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "desc" },
+      take: boundedLimit,
+      select: {
+        id: true,
+        operationName: true,
+        status: true,
+        idempotencyKey: true,
+        connectionId: true,
+        resultReference: true,
+        error: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+  )
+  return rows.map((row) => ({
+    id: row.id,
+    operationName: row.operationName,
+    status: row.status,
+    idempotencyKey: row.idempotencyKey,
+    connectionId: row.connectionId,
+    resultReference: row.resultReference,
+    error: row.error,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }))
+}
+
+export type OperationStatusState = "PENDING" | "EXECUTING" | "COMPLETED" | "FAILED" | "CONFLICT"
+
+export interface OperationStatusView {
+  /** Stable operation identity, safe to share with the principal. */
+  operationId: string
+  status: OperationStatusState
+  /** Safe reason code; never raw provider or internal error text. */
+  reasonCode: string | null
+  /** Where the durable result lives (e.g. a scan id), when completed. */
+  resultLocation: string | null
+  /** The one recovery action this state permits. */
+  recovery: "wait" | "poll" | "retry_new_key" | "none"
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * One operation-status/recovery contract (W3-08) shared by the dashboard,
+ * CLI, MCP, and WebMCP. The error text is never echoed: callers render the
+ * reason code, and an authentication failure cannot fall back to another
+ * principal's operation because every lookup is workspace- and
+ * principal-scoped.
+ */
+export async function getOperationStatus(
+  operationId: string,
+  workspaceId: string
+): Promise<OperationStatusView | null> {
+  const operation = await getAgentOperation(operationId, workspaceId)
+  if (!operation) return null
+  return toOperationStatusView(operation)
+}
+
+/** Pure state→recovery mapping, unit-testable without a database. */
+export function toOperationStatusView(operation: AgentOperation): OperationStatusView {
+  const recovery: OperationStatusView["recovery"] =
+    operation.status === "COMPLETED"
+      ? "none"
+      : operation.status === "EXECUTING" || operation.status === "PENDING"
+        ? "poll"
+        : operation.status === "FAILED"
+          ? "retry_new_key"
+          : "wait"
+  return {
+    operationId: operation.id,
+    status: operation.status,
+    reasonCode: operation.error ? "OPERATION_FAILED" : null,
+    resultLocation: operation.resultReference,
+    recovery,
+    createdAt: operation.createdAt.toISOString(),
+    updatedAt: operation.updatedAt.toISOString(),
+  }
 }

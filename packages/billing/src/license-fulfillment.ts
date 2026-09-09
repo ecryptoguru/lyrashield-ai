@@ -106,7 +106,7 @@ export async function resolveSigningPrivateKey(): Promise<string> {
     if (!value || !value.includes("-----BEGIN")) {
       throw new Error(
         `Key Vault secret "${secretName}" is missing or not a PEM key. ` +
-          "Provision it per docs/ops/license-signing-keys-runbook.md."
+          "Provision it per the former signing-key runbook (removed 2026-09-09; see git history)."
       )
     }
     cachedKeyVaultPrivateKey = value

@@ -6,6 +6,7 @@ const baseProps = {
   clientName: "Codex",
   clientId: "client-codex",
   oauthQuery: "client_id=client-codex",
+  consentState: "signed-consent-state",
   workspaces: [{ id: "ws-1", name: "Workspace" }],
   targets: [{ id: "target-1", name: "App", workspaceId: "ws-1", type: "REPO" }],
 }

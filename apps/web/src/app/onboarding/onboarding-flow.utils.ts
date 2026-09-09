@@ -112,3 +112,19 @@ export function pathLabel(path: OnboardingPath): string {
       return "target"
   }
 }
+
+/**
+ * Prefill a target name from its source (W2-02): the hostname for URL/API
+ * targets, so the user confirms rather than invents a name. Returns null when
+ * no sensible name can be derived; the caller keeps the current value then.
+ */
+export function targetNameFromUrl(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl)
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null
+    const host = parsed.hostname.replace(/^www\./, "")
+    return host || null
+  } catch {
+    return null
+  }
+}

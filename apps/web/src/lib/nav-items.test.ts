@@ -34,7 +34,7 @@ describe("nav-items mobile coverage", () => {
     }
   })
 
-  it("fills exactly the four fixed bottom-bar slots (the fifth is the More trigger)", () => {
+  it("keeps the desktop primary group at five destinations with four mobile slots (W2-10)", () => {
     expect(MOBILE_PRIMARY_NAV_ITEMS).toHaveLength(4)
   })
 
@@ -57,17 +57,18 @@ describe("nav-items mobile coverage", () => {
 })
 
 describe("nav-items lifecycle primary destinations", () => {
-  it("exposes exactly the four lifecycle destinations as primary", () => {
+  it("exposes the lifecycle destinations including Reports as desktop primary (W2-10)", () => {
     const hrefs = PRIMARY_NAV_ITEMS.map((i) => i.href)
     expect(hrefs).toEqual([
       "/dashboard",
       "/dashboard/targets",
       "/dashboard/scans",
       "/dashboard/findings",
+      "/dashboard/reports",
     ])
   })
 
-  it("exposes exactly the four lifecycle destinations as mobile primary", () => {
+  it("keeps the four fixed mobile slots stable with Reports in the More sheet", () => {
     const hrefs = MOBILE_PRIMARY_NAV_ITEMS.map((i) => i.href)
     expect(hrefs).toEqual([
       "/dashboard",
@@ -75,6 +76,7 @@ describe("nav-items lifecycle primary destinations", () => {
       "/dashboard/scans",
       "/dashboard/findings",
     ])
+    expect(MORE_NAV_ITEMS.map((i) => i.href)).toContain("/dashboard/reports")
   })
 })
 
@@ -87,12 +89,11 @@ describe("nav-items workspace destinations", () => {
       }
     }
   })
-  it("keeps coding agents before direct service integrations", () => {
+  it("keeps Connections in the workspace group with agents and integrations reachable (W2-08)", () => {
     expect(SECONDARY_NAV_ITEMS.map((item) => item.href)).toEqual([
       "/dashboard/fixes",
       "/dashboard/notifications",
-      "/dashboard/agents",
-      "/dashboard/integrations",
+      "/dashboard/connections",
       "/dashboard/team",
       "/dashboard/settings",
     ])
@@ -124,19 +125,20 @@ describe("nav-items workspace destinations", () => {
   })
 })
 
-describe("nav-items conditional Review Queue", () => {
-  it("hides Review Queue when there are no pending approvals", () => {
+describe("nav-items conditional Activity destination (W1-09)", () => {
+  it("hides Activity when there are no pending legacy approvals", () => {
     const nav = resolveNav({ pendingApprovals: 0 })
-    expect(nav.reviewQueue).toBeNull()
+    expect(nav.activity).toBeNull()
     expect(nav.secondary.map((i) => i.href)).not.toContain("/dashboard/approvals")
     expect(nav.more.map((i) => i.href)).not.toContain("/dashboard/approvals")
   })
 
-  it("shows Review Queue with a badge when pending approvals exist", () => {
+  it("shows Activity with a badge when pending legacy approvals exist", () => {
     const nav = resolveNav({ pendingApprovals: 3 })
-    expect(nav.reviewQueue).not.toBeNull()
-    expect(nav.reviewQueue?.href).toBe("/dashboard/approvals")
-    expect(nav.reviewQueue?.badgeCount).toBe(3)
+    expect(nav.activity).not.toBeNull()
+    expect(nav.activity?.href).toBe("/dashboard/approvals")
+    expect(nav.activity?.label).toBe("Activity")
+    expect(nav.activity?.badgeCount).toBe(3)
     expect(nav.secondary.map((i) => i.href)).toContain("/dashboard/approvals")
     expect(nav.more.map((i) => i.href)).toContain("/dashboard/approvals")
   })
@@ -147,9 +149,10 @@ describe("nav-items conditional Review Queue", () => {
     expect(empty.mobilePrimary).toEqual(withPending.mobilePrimary)
     expect(empty.primary).toEqual(withPending.primary)
     expect(empty.mobilePrimary).toHaveLength(4)
+    expect(empty.primary).toHaveLength(5)
   })
 
-  it("does not duplicate any destination when Review Queue is visible", () => {
+  it("does not duplicate any destination when Activity is visible", () => {
     const nav = resolveNav({ pendingApprovals: 1 })
     const hrefs = nav.items.map((i) => i.href)
     expect(new Set(hrefs).size).toBe(hrefs.length)
@@ -157,12 +160,12 @@ describe("nav-items conditional Review Queue", () => {
 
   it("defaults to zero pending approvals when state is omitted", () => {
     const nav = resolveNav()
-    expect(nav.reviewQueue).toBeNull()
+    expect(nav.activity).toBeNull()
   })
 })
 
 describe("nav-items title lookup", () => {
-  it("includes the Review Queue route for page-title resolution", () => {
+  it("includes the Activity route for page-title resolution", () => {
     const hrefs = NAV_TITLE_ITEMS.map((i) => i.href)
     expect(hrefs).toContain("/dashboard/approvals")
   })

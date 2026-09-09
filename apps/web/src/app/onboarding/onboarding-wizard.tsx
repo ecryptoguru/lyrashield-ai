@@ -10,10 +10,11 @@ import {
   installUrlSchema,
   onboardingDataSchema,
 } from "@/lib/api-schemas"
+import { z } from "zod"
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
-import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
+import { PRODUCT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
 import {
   buildUrlTargetPayload,
   ensureOnboardingTargetId,
@@ -22,6 +23,7 @@ import {
   onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
+  targetNameFromUrl,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
 
@@ -50,24 +52,33 @@ interface Repo {
 export function OnboardingWizard({
   initialState,
   selectedPlan,
+  suggestedWorkspaceName,
 }: {
   initialState: OnboardingData
   selectedPlan?: string | null
+  /** Used to name a default workspace when the user has none (W2-01). */
+  suggestedWorkspaceName?: string
 }) {
   const router = useRouter()
   useEffect(() => {
     rememberPlanIntent(selectedPlan)
   }, [selectedPlan])
-  const [step, setStep] = useState(initialState.currentStep ?? (initialState.workspaceId ? 1 : 0))
+  // W2-01: workspace naming left the critical path. The wizard starts at the
+  // target chooser; a workspace is created lazily (with a sensible default
+  // name) only when the user picks a path that needs one. A stale persisted
+  // step 0 cannot reappear.
+  const [step, setStep] = useState(Math.max(initialState.currentStep ?? 1, 1))
   const [data, setData] = useState(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [workspaceName, setWorkspaceName] = useState("")
   const [repos, setRepos] = useState<Repo[]>([])
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [productName, setProductName] = useState(initialState.targetName ?? "")
-  const [environment, setEnvironment] = useState("STAGING")
+  // W2-03: environment classification left the critical path. The safe default
+  // is metadata on the target and stays editable in target settings; it never
+  // changes scanner eligibility, authorization, or execution here.
+  const environment = "STAGING"
   const [selectedGoal, setSelectedGoal] = useState<string>(
     initialState.selectedGoal ?? "LAUNCH_REVIEW"
   )
@@ -108,6 +119,11 @@ export function OnboardingWizard({
       }
       if (cause.code === "VALIDATION_ERROR") {
         return "We couldn't save your target. Please check the name and URL and try again."
+      }
+      // W2-02: a same-source retry continues with the target that already
+      // exists instead of creating a second one.
+      if (cause.code === "TARGET_EXISTS") {
+        return "A target for this source already exists in your workspace. Open Targets to continue with it — no duplicate was created."
       }
     }
     return cause instanceof Error ? cause.message : "Could not start the review."
@@ -162,40 +178,51 @@ export function OnboardingWizard({
     return next
   }
 
-  async function createWorkspace() {
-    if (!workspaceName.trim()) {
-      setError("Name your workspace to continue.")
-      return
-    }
-    setLoading(true)
-    setError(null)
+  /**
+   * W2-01: workspace creation is lazy and unnamed. The workspace is created
+   * with a sensible default only when the user picks a path that needs one —
+   * never merely by visiting onboarding, and never with a required naming
+   * step. A concurrent tab that won the slug race is adopted instead of
+   * duplicated.
+   */
+  async function ensureWorkspace(): Promise<string> {
+    if (data.workspaceId) return data.workspaceId
     try {
       const workspace = await apiPost(
         "/api/workspaces",
-        {
-          name: workspaceName.trim(),
-          mode: "VIBE",
-        },
+        { name: suggestedWorkspaceName?.trim() || "My workspace", mode: "VIBE" },
         { schema: idSchema }
       )
-      await persist({ workspaceId: workspace.id, currentStep: 1, skipped: false })
-      setStep(1)
+      await persist({ workspaceId: workspace.id, currentStep: Math.max(step, 1), skipped: false })
+      return workspace.id
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not create your workspace.")
-    } finally {
-      setLoading(false)
+      if (cause instanceof ApiError && cause.code === "SLUG_TAKEN") {
+        // A concurrent tab created the default workspace first: adopt it.
+        const existing = await apiGet("/api/workspaces", {
+          schema: z.object({ data: z.array(z.object({ id: z.string().min(1) })).min(1) }),
+        })
+        const adopted = existing.data[0]
+        if (!adopted) throw cause
+        await persist({
+          workspaceId: adopted.id,
+          currentStep: Math.max(step, 1),
+          skipped: false,
+        })
+        return adopted.id
+      }
+      throw cause
     }
   }
 
   async function connectGitHub() {
-    if (!data.workspaceId) return
     setLoading(true)
     setError(null)
     try {
+      const workspaceId = await ensureWorkspace()
       const res = await apiPost(
         "/api/integrations/github/install",
         {
-          workspaceId: data.workspaceId,
+          workspaceId,
           returnTo: "onboarding",
         },
         { schema: installUrlSchema }
@@ -220,7 +247,7 @@ export function OnboardingWizard({
     }
   }
 
-  function choosePath(next: Exclude<OnboardingPath, null>) {
+  async function choosePath(next: Exclude<OnboardingPath, null>) {
     setError(null)
     track("onboarding_path_chosen", { path: next })
     if (next === "skip") {
@@ -230,6 +257,19 @@ export function OnboardingWizard({
     if (next === "github") {
       void connectGitHub()
       return
+    }
+    // URL / API: the workspace is created lazily here (W2-01) — no naming
+    // step; the default name is editable later in settings.
+    if (!data.workspaceId) {
+      setLoading(true)
+      try {
+        await ensureWorkspace()
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
+        return
+      } finally {
+        setLoading(false)
+      }
     }
     // URL / API: prefill a sensible product name, then collect the URL. The
     // onward step comes from the shared helper so the wizard and the flow logic
@@ -397,17 +437,18 @@ export function OnboardingWizard({
 
   // The progress bar adapts to the chosen path: GitHub users see a
   // "Select repository" step; URL/API users skip it, so we collapse it
-  // and show "Product details" as the third step instead.
+  // and show "Target details" as the third step instead. Workspace naming is
+  // no longer a step (W2-01): the server provisions the workspace.
   const isGithubFlow = path === "github" || (path === null && step <= 2)
   const steps = isGithubFlow
-    ? ["Workspace", "Add target", "Select repository", `${PRODUCT_SINGULAR} details`]
-    : ["Workspace", "Add target", `${PRODUCT_SINGULAR} details`]
-  const displayStep = isGithubFlow ? step : Math.min(step, steps.length - 1)
+    ? ["Add target", "Select repository", `${PRODUCT_SINGULAR} details`]
+    : ["Add target", `${PRODUCT_SINGULAR} details`]
+  const displayStep = Math.max(step - 1, 0)
 
   return (
     <div className="w-full max-w-2xl">
       <ol
-        className={`mb-2 grid border-y ${steps.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}
+        className={`mb-2 grid border-y ${steps.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}
         aria-label="Getting started progress"
       >
         {steps.map((label, index) => {
@@ -448,47 +489,11 @@ export function OnboardingWizard({
       )}
 
       <section className="rounded-xl border p-5 sm:p-7" aria-live="polite">
-        {step === 0 && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 1
-              </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">Give your work a home</h2>
-              <p className="text-muted-foreground mt-2 text-sm">
-                A workspace keeps your products and reviews together.
-              </p>
-            </div>
-            <FormField label="Workspace name" htmlFor="workspace-name">
-              <Input
-                id="workspace-name"
-                value={workspaceName}
-                onChange={(e) => setWorkspaceName(e.target.value)}
-                onKeyDown={(e) => {
-                  // Enter is how people expect to advance a single-field step.
-                  if (e.key === "Enter" && !loading) {
-                    e.preventDefault()
-                    void createWorkspace()
-                  }
-                }}
-                placeholder="My app security"
-                autoComplete="organization"
-              />
-            </FormField>
-            <div className="flex justify-end">
-              <Button type="button" onClick={createWorkspace} disabled={loading}>
-                {loading ? <Spinner className="mr-2" /> : <ChevronRight className="size-4" />}
-                Continue
-              </Button>
-            </div>
-          </div>
-        )}
-
         {step === 1 && path !== "url" && path !== "api" && (
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 2
+                Step 1
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Add your first target</h2>
               <p className="text-muted-foreground mt-2 text-sm">
@@ -539,12 +544,6 @@ export function OnboardingWizard({
                 </span>
               </button>
             </div>
-
-            <div className="flex justify-start">
-              <Button type="button" variant="ghost" onClick={() => setStep(0)} disabled={loading}>
-                <ChevronLeft className="size-4" /> Back
-              </Button>
-            </div>
           </div>
         )}
 
@@ -588,7 +587,20 @@ export function OnboardingWizard({
                 id="url-input"
                 type="url"
                 value={urlForm.url}
-                onChange={(e) => setUrlForm({ ...urlForm, url: e.target.value })}
+                onChange={(e) => {
+                  const url = e.target.value
+                  setUrlForm({ ...urlForm, url })
+                  // W2-02: selection and naming are one step — the name prefills
+                  // from the parsed host and stays editable.
+                  if (
+                    !productName ||
+                    productName === "Staging Site" ||
+                    productName === "Production API"
+                  ) {
+                    const fromHost = targetNameFromUrl(e.target.value)
+                    if (fromHost) setProductName(fromHost)
+                  }
+                }}
                 placeholder={
                   path === "api" ? "https://api.example.com" : "https://staging.example.com"
                 }
@@ -642,7 +654,7 @@ export function OnboardingWizard({
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 3
+                Step 2
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Select a repository</h2>
               <p className="text-muted-foreground mt-2 text-sm">
@@ -715,14 +727,14 @@ export function OnboardingWizard({
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step {pathNeedsRepo(path) ? 4 : 3}
+                Step {pathNeedsRepo(path) ? 3 : 2}
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">{PRODUCT_SINGULAR} details</h2>
               <p className="text-muted-foreground mt-2 text-sm">
                 {retryingExistingTarget
                   ? `Retry the review for ${productName || `this ${PRODUCT_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
                   : pathNeedsRepo(path)
-                    ? `Name your ${PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.`
+                    ? `Name your ${PRODUCT_SINGULAR.toLowerCase()}. You can classify its environment later in target settings.`
                     : `Reviewing your ${pathLabel(path)}. Name it and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
               </p>
             </div>
@@ -737,61 +749,65 @@ export function OnboardingWizard({
                 </p>
               </div>
             ) : (
-              <>
-                <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
-                  <Input
-                    id="product-name"
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
-                    placeholder="My web app"
-                  />
-                </FormField>
-
-                <fieldset>
-                  <legend className="mb-2 text-sm font-medium">{ENVIRONMENT_SINGULAR}</legend>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {["STAGING", "PRODUCTION", "DEVELOPMENT"].map((env) => (
-                      <button
-                        type="button"
-                        key={env}
-                        onClick={() => setEnvironment(env)}
-                        aria-pressed={environment === env}
-                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                          environment === env
-                            ? "border-primary bg-primary/8 text-primary"
-                            : "hover:bg-accent"
-                        }`}
-                      >
-                        {env.toLowerCase()}
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-              </>
+              <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
+                <Input
+                  id="product-name"
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="My web app"
+                />
+              </FormField>
             )}
 
+            {/* W2-04: one recommended eligible review, with alternatives behind
+                an explicit "Change review" toggle. Essential scope, limitation,
+                and usage information stays outside the collapsed details. */}
             <fieldset>
               <legend className="mb-2 text-sm font-medium">
-                What do you need from this {RUN_SINGULAR.toLowerCase()}?
+                Recommended review for this {pathLabel(path)}
               </legend>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {reviewOptions.map((option) => (
-                  <button
-                    type="button"
-                    key={option.id}
-                    onClick={() => setSelectedGoal(option.goal)}
-                    aria-pressed={selectedReview?.id === option.id}
-                    className={`rounded-lg border p-3 text-left text-sm transition-colors ${
-                      selectedReview?.id === option.id
-                        ? "border-primary bg-primary/8"
-                        : "hover:bg-accent"
-                    }`}
-                  >
-                    <span className="block font-medium">{option.label}</span>
-                    <span className="text-muted-foreground text-xs">{option.description}</span>
-                  </button>
-                ))}
-              </div>
+              {selectedReview && (
+                <div className="border-primary bg-primary/8 rounded-lg border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{selectedReview.label}</span>
+                    <Badge variant="info">
+                      ~{selectedReview.estimate.low}–{selectedReview.estimate.high} min
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-sm">{selectedReview.description}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Depth: {selectedReview.mode.toLowerCase()} · runs within your workspace plan,
+                    budgets, and target authorization. A clean result is not a security guarantee.
+                  </p>
+                </div>
+              )}
+              <details className="mt-2">
+                <summary className="text-muted-foreground cursor-pointer text-sm font-medium">
+                  Change review
+                </summary>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {reviewOptions.map((option) => (
+                    <button
+                      type="button"
+                      key={option.id}
+                      onClick={() => setSelectedGoal(option.goal)}
+                      aria-pressed={selectedReview?.id === option.id}
+                      className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                        selectedReview?.id === option.id
+                          ? "border-primary bg-primary/8"
+                          : "hover:bg-accent"
+                      }`}
+                    >
+                      <span className="block font-medium">{option.label}</span>
+                      <span className="text-muted-foreground text-xs">{option.description}</span>
+                      <span className="text-muted-foreground mt-1 block text-xs">
+                        ~{option.estimate.low}-{option.estimate.high} min ·{" "}
+                        {option.mode.toLowerCase()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </details>
               {path === "api" && (
                 <p className="text-muted-foreground mt-2 text-xs">
                   Add an OpenAPI document after setup to unlock Contract and Contract Behavior

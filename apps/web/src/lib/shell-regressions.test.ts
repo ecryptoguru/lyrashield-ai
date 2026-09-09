@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { ApiError } from "./api-client"
 import { NAV_TITLE_ITEMS, resolveNav } from "./nav-items"
@@ -25,5 +27,17 @@ describe("shell regressions", () => {
         (item) => item.href === "/dashboard/billing"
       )
     ).toBe(false)
+  })
+
+  // W1-06: a failed workspace switch is visible and recoverable in every shell
+  // surface. The desktop sidebar previously swallowed the persistence error.
+  it("surfaces a retryable workspace-switch failure in every shell path", () => {
+    const sidebar = readFileSync(join(__dirname, "..", "components", "v2-sidebar.tsx"), "utf8")
+    expect(sidebar).toContain('role="alert"')
+    expect(sidebar).toContain("aria-live")
+    expect(sidebar).toContain("Retry switch")
+    expect(sidebar).toContain("Your current workspace is unchanged")
+    const bottomNav = readFileSync(join(__dirname, "..", "components", "bottom-nav.tsx"), "utf8")
+    expect(bottomNav).toContain('role="alert"')
   })
 })

@@ -11,7 +11,7 @@ export interface SectionTab {
 
 /**
  * Shared, URL-driven section header for consolidated dashboard areas
- * (Trust Runs, Issues). The active tab is determined by the server-rendered
+ * (Scans, Findings). The active tab is determined by the server-rendered
  * URL, not client state, so each view is bookmarkable, deep-linkable, and
  * loads only its own content.
  *

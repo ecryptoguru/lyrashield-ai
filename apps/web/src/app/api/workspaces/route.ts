@@ -1,11 +1,10 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
-import { randomUUID } from "node:crypto"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import { CreateWorkspaceSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
-import { startTrial } from "@lyrashield/billing"
+import { createWorkspaceWithTrial } from "../../../lib/workspace-creation"
 
 function isPrismaUniqueError(error: unknown): error is { code: string } {
   return (
@@ -61,13 +60,39 @@ async function post(request: Request) {
       )
     }
 
-    const { name, mode } = parsed.data
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
+    const workspace = await createWorkspaceWithTrial({
+      userId: session.userId,
+      name: parsed.data.name,
+      mode: parsed.data.mode,
+    })
 
-    if (!slug) {
+    logger.info("Workspace created", {
+      workspaceId: workspace.id,
+      userId: session.userId,
+      trialStarted: workspace.trialStarted,
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+        mode: workspace.mode,
+        plan: workspace.plan,
+        trialStarted: workspace.trialStarted,
+        trialAlreadyUsed: workspace.trialAlreadyUsed,
+        trialEndsAt: workspace.trialEndsAt,
+      },
+    })
+  } catch (error) {
+    if (isPrismaUniqueError(error)) {
+      return NextResponse.json(
+        { success: false, error: { code: "SLUG_TAKEN", message: "Workspace slug already exists" } },
+        { status: 409 }
+      )
+    }
+    if (error instanceof Error && error.message === "INVALID_NAME") {
       return NextResponse.json(
         {
           success: false,
@@ -77,86 +102,6 @@ async function post(request: Request) {
           },
         },
         { status: 400 }
-      )
-    }
-
-    const existing = await prisma.workspace.findUnique({ where: { slug } })
-    if (existing) {
-      return NextResponse.json(
-        { success: false, error: { code: "SLUG_TAKEN", message: "Workspace slug already exists" } },
-        { status: 409 }
-      )
-    }
-
-    const workspaceId = randomUUID()
-    const { result, trial } = await withWorkspaceRLS(workspaceId, async (tx) => {
-      const workspace = await tx.workspace.create({
-        data: {
-          id: workspaceId,
-          name,
-          slug,
-          mode,
-          plan: "FREE",
-          members: {
-            create: {
-              userId: session.userId,
-              role: "OWNER",
-              status: "active",
-            },
-          },
-          policies: {
-            create: {
-              name: "Default Policy",
-              description: "Default scan policy with safe settings",
-              networkEgressPolicy: "target_only",
-              destructiveTestsAllowed: false,
-              approvalRequired: false,
-              maxDurationMinutes: 60,
-              piiRedactionEnabled: true,
-              evidenceRetentionDays: 30,
-            },
-          },
-        },
-      })
-
-      const trial = await startTrial(workspace.id, session.userId, tx)
-      return { result: workspace, trial }
-    })
-
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: result.id,
-        actorUserId: session.userId,
-        action: "workspace.created",
-        resourceType: "workspace",
-        resourceId: result.id,
-      },
-    })
-
-    logger.info("Workspace created", {
-      workspaceId: result.id,
-      userId: session.userId,
-      trialStarted: trial.started,
-    })
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: result.id,
-        name: result.name,
-        slug: result.slug,
-        mode: result.mode,
-        plan: result.plan,
-        trialStarted: trial.started,
-        trialAlreadyUsed: trial.alreadyUsed,
-        trialEndsAt: trial.trialEndsAt?.toISOString() ?? null,
-      },
-    })
-  } catch (error) {
-    if (isPrismaUniqueError(error)) {
-      return NextResponse.json(
-        { success: false, error: { code: "SLUG_TAKEN", message: "Workspace slug already exists" } },
-        { status: 409 }
       )
     }
     logger.error("Failed to create workspace", { error: String(error) })

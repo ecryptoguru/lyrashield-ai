@@ -10,6 +10,10 @@ import { requireBrowserConnectionManager } from "./connection-auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
+import {
+  connectionGrantMatchesConsent,
+  verifyOAuthConsentState,
+} from "../../../lib/oauth-consent-state"
 import { z } from "zod"
 import { ScanModeSchema } from "@lyrashield/types"
 
@@ -45,6 +49,7 @@ const CreateConnectionSchema = z.object({
   allTargets: z.boolean().default(false),
   allowedProfiles: z.array(ScanModeSchema).max(5).default([]),
   expiresAt: z.string().datetime().optional(),
+  consentState: z.string().min(1).max(2048),
 })
 
 async function post(request: Request) {
@@ -65,9 +70,42 @@ async function post(request: Request) {
       allTargets,
       allowedProfiles,
       expiresAt,
+      consentState,
     } = parsed.data
 
     const { session } = await requireBrowserConnectionManager(workspaceId)
+
+    // The grant must describe the same client and no more scope than the
+    // server-rendered authorization request the user is consenting to. The
+    // consent page mints the signed state; a forged or stale one fails here
+    // before any connection is persisted.
+    const consent = verifyOAuthConsentState(consentState)
+    if (!consent.valid) {
+      return apiError(
+        "VALIDATION_ERROR",
+        "The connection request could not be verified. Reload the consent page and try again.",
+        400
+      )
+    }
+    if (consent.payload.userId !== session.userId) {
+      return apiError(
+        "VALIDATION_ERROR",
+        "The connection request was issued for a different session.",
+        403
+      )
+    }
+    if (
+      !connectionGrantMatchesConsent(consent.payload, {
+        oauthClientId,
+        scopes,
+      })
+    ) {
+      return apiError(
+        "VALIDATION_ERROR",
+        "The requested connection does not match the authorization request being consented to.",
+        400
+      )
+    }
 
     const automating = scopes.includes("lyrashield.write")
     if (automating && allowedOperations.length === 0) {

@@ -2,7 +2,9 @@
 
 LyraShield AI connects Kiro to an OAuth-backed MCP server for evidence-backed release
 assurance. The default connection is read-only and is scoped to one selected workspace.
-Write actions require the `lyrashield.write` scope and LyraShield's exact-argument approval.
+Write actions require the `lyrashield.write` scope: one Connect consent authorizes the
+displayed workflows, and matching calls run within connection permissions using an
+idempotency key. Legacy nondelegated credentials keep the exact-argument approval gate.
 
 ## Privacy
 

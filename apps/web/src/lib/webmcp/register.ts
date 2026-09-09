@@ -47,6 +47,8 @@ export interface WebMcpToolOptions<
   untrustedContent: boolean
   uiChanged: boolean
   humanConfirmationRequired: boolean
+  /** True only for tools that persist a server-side action (W3-07). */
+  durableMutation?: boolean
   /** Keys that must never be accepted from the agent (e.g. workspaceId). */
   forbiddenInputKeys?: string[]
   /** Extra keys to remove from receipt inputs for privacy. */
@@ -77,6 +79,7 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
   untrustedContent,
   uiChanged,
   humanConfirmationRequired,
+  durableMutation = false,
   forbiddenInputKeys = [],
 }: WebMcpToolOptions<TInput>): () => void {
   const boundedName = enforceToolName(name)
@@ -123,7 +126,7 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
             dataClass,
             untrustedContent,
             uiChanged,
-            durableMutation: false,
+            durableMutation,
             humanConfirmationRequired,
             summary: `${boundedName} rejected forbidden input "${key}"`,
           })
@@ -182,7 +185,7 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
         dataClass,
         untrustedContent,
         uiChanged,
-        durableMutation: false,
+        durableMutation,
         humanConfirmationRequired,
         summary: `${boundedName} started`,
       })

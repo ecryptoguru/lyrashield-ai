@@ -14,16 +14,9 @@ Use this index to find the owning document and avoid duplicating current truth.
 
 ## How-to guides and runbooks
 
-- [`deployment/`](deployment/) — local setup and production deployment gates.
-- [`ops/`](ops/) — platform-admin operations, desktop release/install, signing keys, RLS verification, production smoke testing, monitoring, and launch assurance.
-- [`ops/platform-admin-runbook.md`](ops/platform-admin-runbook.md) — exact-two admin provisioning, personal TOTP, session effects, browser proof, and emergency revocation.
-- [`ops/billing-launch-runbook.md`](ops/billing-launch-runbook.md) — billing admission, isolated Sandbox/Test staging, provider evidence, and live-mode boundaries.
-- [`ops/monitoring-launch-runbook.md`](ops/monitoring-launch-runbook.md) — actionable Azure alert inventory, provisioning, readback, stop/resume admission, and release validation.
-- [`ops/launch-assurance-status-2026-08-26.md`](ops/launch-assurance-status-2026-08-26.md) — current exact-revision deployment, runtime, admin, provider, and scorecard evidence plus remaining gates.
-- [`ops/launch-assurance-status-2026-08-24.md`](ops/launch-assurance-status-2026-08-24.md) — retained historical release-gate snapshot; current deployment and scan truth live in `AGENTS.md`, `PRD.md`, and `codebase.md`.
-- [`ops/untrusted-launch-gates.md`](ops/untrusted-launch-gates.md) — release-evidence checks to run after worker, queue, evidence-storage, billing, or license-signing changes.
-- [`ops/launch-report-signing-keys-runbook.md`](ops/launch-report-signing-keys-runbook.md) — provisioning the ed25519 key that signs shareable Launch Readiness Reports.
 - [`license-key-compromise-runbook.md`](license-key-compromise-runbook.md) — signing-key incident response.
+
+The former `deployment/` and `ops/` runbooks were removed on 2026-09-09 as superseded; Git history is the recovery path, and current operational truth lives in `AGENTS.md`, `PRD.md`, and `codebase.md`.
 
 ## Reference and assurance records
 
@@ -34,6 +27,8 @@ Use this index to find the owning document and avoid duplicating current truth.
 - [`release-checklists/`](release-checklists/) and [`security/`](security/) — retained evidence checklists and customer templates.
 
 ## Retained source artifacts
+
+- [`plans/2026-09-09-product-simplification-coding-handoff.md`](plans/2026-09-09-product-simplification-coding-handoff.md) — implementation handoff for all three UX/automation simplification waves and the selected all-member operational-access policy; task completion requires separate source, CI, deployment and runtime evidence.
 
 - [`plans/`](plans/) — approved or historically load-bearing design records. A plan is not current implementation truth.
 - [`editorial/`](editorial/) — claim maps, briefs, research, and image manifests consumed by marketing validators. These are publishing inputs, not disposable notes.

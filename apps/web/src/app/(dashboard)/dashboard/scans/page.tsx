@@ -23,7 +23,7 @@ function normalizeTab(value: string | undefined): "runs" | "monitoring" {
 }
 
 export const metadata: Metadata = {
-  title: "Trust Runs",
+  title: "Scans",
 }
 
 export default async function ScansPage({

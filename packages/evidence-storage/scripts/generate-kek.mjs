@@ -8,7 +8,8 @@
  * every envelope-encrypted evidence artifact written under it unreadable.
  * There is no export path from the HKDF that derives the runtime key.
  *
- * Where the value must be provisioned (see docs/deployment/PRODUCTION_DEPLOYMENT.md):
+ * Where the value must be provisioned (the former deployment runbook was removed
+ * 2026-09-09; see git history):
  *   - GitHub secret LYRASHIELD_EVIDENCE_KEK (deploy workflow syncs the app
  *     Container App secret from it on every deploy)
  *   - Key Vault secret worker-evidence-kek (worker VM, via

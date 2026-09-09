@@ -203,7 +203,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
 
   await page.goto("/dashboard")
   await expect(page.getByRole("heading", { name: "Run your first review" })).toBeVisible()
-  await expect(page.getByRole("link", { name: "Start a Trust Run" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Start a scan" }).first()).toHaveAttribute(
     "href",
     "/dashboard/scans?new=1"
   )
@@ -234,7 +234,10 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
     })
   })
   await page.goto("/onboarding")
-  await expect(page.getByRole("button", { name: /^Endpoint Review/ })).toBeVisible()
+  // W2-04: the recommended review renders as a highlighted card, with the
+  // other supported reviews behind "Change review".
+  await expect(page.getByText("Recommended review for this API")).toBeVisible()
+  await expect(page.getByText("Endpoint Review", { exact: true }).first()).toBeVisible()
   await expect(page.getByText("target details are locked for this retry")).toBeVisible()
   await expect(page.locator("#product-name")).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0)

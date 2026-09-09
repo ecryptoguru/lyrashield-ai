@@ -9,7 +9,7 @@ import { RUN_SINGULAR } from "@/lib/terminology"
 import { ScanDetailClient } from "./scan-detail-client"
 
 export const metadata: Metadata = {
-  title: "Trust Run",
+  title: "Scan",
 }
 
 export default async function ScanDetailPage({ params }: { params: Promise<{ id: string }> }) {
