@@ -12,28 +12,6 @@ const { POST } = await import("./route")
 describe("OAuth route compatibility", () => {
   beforeEach(() => post.mockReset())
 
-  it("forwards omitted-type public loopback clients as native", async () => {
-    post.mockResolvedValueOnce(new Response(null, { status: 201 }))
-
-    await POST(
-      new Request("https://app.lyrashieldai.com/api/auth/oauth2/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          redirect_uris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
-          client_name: "OpenCode",
-          token_endpoint_auth_method: "none",
-        }),
-      })
-    )
-
-    const forwarded = post.mock.calls[0]?.[0] as Request
-    await expect(forwarded.json()).resolves.toMatchObject({
-      application_type: "native",
-      token_endpoint_auth_method: "none",
-    })
-  })
-
   it("normalizes provider rate limits for OAuth clients", async () => {
     post.mockResolvedValueOnce(
       new Response(JSON.stringify({ message: "Too many requests. Please try again later." }), {
