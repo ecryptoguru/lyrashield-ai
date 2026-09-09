@@ -283,10 +283,18 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           <table className="w-full text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">Goal</th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">Mode</th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">Status</th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Date</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Goal
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Mode
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Status
+                </th>
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                  Date
+                </th>
                 <th scope="col" className="px-4 py-3 text-left font-semibold">
                   <span className="sr-only">View</span>
                 </th>

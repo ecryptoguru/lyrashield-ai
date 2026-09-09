@@ -866,9 +866,7 @@ export function ScansClient({
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="block text-sm font-medium">Review type</p>
-                  <span className="text-muted-foreground text-xs">
-                    Simple options: pick one
-                  </span>
+                  <span className="text-muted-foreground text-xs">Simple options: pick one</span>
                 </div>
 
                 <div role="radiogroup" aria-label="Review type" className="grid grid-cols-1 gap-3">

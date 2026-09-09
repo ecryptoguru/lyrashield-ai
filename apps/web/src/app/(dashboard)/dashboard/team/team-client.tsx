@@ -271,11 +271,23 @@ export function TeamClient({
         <table className="w-full text-sm">
           <thead className="bg-muted/30 border-b">
             <tr>
-              <th scope="col" className="px-4 py-3 text-left font-semibold">Name</th>
-              <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Email</th>
-              <th scope="col" className="px-4 py-3 text-left font-semibold">Role</th>
-              <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Joined</th>
-              {(canRemove || canUpdateRole) && <th scope="col" className="px-4 py-3 text-left">Actions</th>}
+              <th scope="col" className="px-4 py-3 text-left font-semibold">
+                Name
+              </th>
+              <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                Email
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold">
+                Role
+              </th>
+              <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                Joined
+              </th>
+              {(canRemove || canUpdateRole) && (
+                <th scope="col" className="px-4 py-3 text-left">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -361,10 +373,20 @@ export function TeamClient({
           <table className="w-full text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">Email</th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">Role</th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Expires</th>
-                {canManage && <th scope="col" className="px-4 py-3 text-left">Actions</th>}
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Email
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Role
+                </th>
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                  Expires
+                </th>
+                {canManage && (
+                  <th scope="col" className="px-4 py-3 text-left">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>

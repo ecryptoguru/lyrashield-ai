@@ -572,16 +572,24 @@ export function TargetsClient({
           <table className="w-full min-w-[40rem] text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">Name</th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">Type</th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">Domain verification</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Name
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Type
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Domain verification
+                </th>
                 <th scope="col" className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
                   {RUN_PLURAL}
                 </th>
                 <th scope="col" className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
                   {ISSUE_PLURAL}
                 </th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Status</th>
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                  Status
+                </th>
                 <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
                   <span className="sr-only">View</span>
                 </th>

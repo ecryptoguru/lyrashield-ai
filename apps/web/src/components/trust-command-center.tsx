@@ -142,8 +142,8 @@ export function TrustCommandCenter({
               <span className="text-lg font-semibold">{trustPlanLabel(trustPlanData)}</span>
             </div>
             <p className="text-muted-foreground text-xs">
-              The checks this workspace runs before release. Default covers the standard
-              pre-release checks.
+              The checks this workspace runs before release. Default covers the standard pre-release
+              checks.
             </p>
             <Link
               href="/dashboard/settings"
