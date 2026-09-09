@@ -148,3 +148,113 @@ describe("GitHub installation webhook", () => {
     expect(systemPrisma.$transaction).not.toHaveBeenCalled()
   })
 })
+
+function pullRequestRequest(overrides: Record<string, unknown> = {}) {
+  return new Request("http://localhost/api/webhooks/github", {
+    method: "POST",
+    headers: {
+      "x-hub-signature-256": "sha256=valid",
+      "x-github-event": "pull_request",
+      "x-github-delivery": "merge-1",
+    },
+    body: JSON.stringify({
+      action: "closed",
+      installation: { id: 42 },
+      repository: { full_name: "test/repo", id: 1 },
+      pull_request: {
+        number: 7,
+        merged: true,
+        head: { ref: "lyrashield/fix-finding-1" },
+        base: { ref: "main" },
+        ...overrides,
+      },
+    }),
+  })
+}
+
+describe("GitHub fix-PR merge loop closure (W3-04)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    verifyWebhookSignature.mockReturnValue(true)
+    systemPrisma.webhookEvent.findUnique.mockResolvedValue(null)
+    systemPrisma.integration.findFirst.mockResolvedValue({
+      id: "integration-1",
+      workspaceId: "workspace-1",
+    })
+    systemPrisma.webhookEvent.create.mockResolvedValue({})
+    handleMerged.mockResolvedValue({
+      retestId: "retest-1",
+      findingId: "finding-1",
+      retestScanId: "scan-retest",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      policyId: null,
+    })
+    assertScanAllowed.mockResolvedValue({ allowed: true })
+    assertScanWorkerAvailable.mockResolvedValue(undefined)
+    enqueueScanJob.mockResolvedValue("job-1")
+  })
+
+  it("enqueues exactly one retest scan for a trusted merge", async () => {
+    const response = await POST(pullRequestRequest() as never)
+    expect(response.status).toBe(200)
+    expect(enqueueScanJob).toHaveBeenCalledOnce()
+    expect(enqueueScanJob).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: "scan-retest", workspaceId: "workspace-1" })
+    )
+  })
+
+  it("replays a duplicate delivery without enqueueing a second retest", async () => {
+    systemPrisma.webhookEvent.findUnique.mockResolvedValueOnce({ id: "seen" })
+    const response = await POST(pullRequestRequest() as never)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ data: { duplicate: true } })
+    expect(handleMerged).not.toHaveBeenCalled()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("treats a merge of an unrelated branch as a no-op", async () => {
+    handleMerged.mockResolvedValue(null)
+    const response = await POST(pullRequestRequest() as never)
+    expect(response.status).toBe(200)
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("does not enqueue a retest for a closed-unmerged pull request", async () => {
+    const response = await POST(
+      pullRequestRequest({ merged: false }) as never
+    )
+    expect(response.status).toBe(200)
+    expect(handleMerged).not.toHaveBeenCalled()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("clears the delivery marker and returns 500 when the retest is not entitled, so GitHub redelivers without duplicate paid work", async () => {
+    assertScanAllowed.mockResolvedValue({ allowed: false, code: "NO_MINUTES_REMAINING" })
+    systemPrisma.webhookEvent.deleteMany.mockResolvedValue({ count: 1 })
+    // The route passes an entitlement callback into the loop-closure handler;
+    // the mock must exercise it the way the real handler does.
+    handleMerged.mockImplementation(
+      async (_ws: unknown, _ref: unknown, _pr: unknown, ensure: (mode: string) => Promise<void>) => {
+        await ensure("STANDARD")
+        return null
+      }
+    )
+
+    const response = await POST(pullRequestRequest() as never)
+
+    expect(response.status).toBe(500)
+    expect(systemPrisma.webhookEvent.deleteMany).toHaveBeenCalledWith({
+      where: { provider: "github", externalId: "merge-1" },
+    })
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("never merges: the route contains no merge call", async () => {
+    const { readFileSync } = await import("node:fs")
+    const { join } = await import("node:path")
+    const source = readFileSync(join(__dirname, "route.ts"), "utf8")
+    expect(source).not.toMatch(/mergePullRequest|octokit\.pulls\.merge|\.merge\(/)
+  })
+})
