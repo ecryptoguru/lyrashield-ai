@@ -5,6 +5,7 @@ import type { MemberRole, WorkspaceMember } from "@lyrashield/db"
 import { hasPermission, hasMinimumRole, PERMISSIONS, type Permission } from "./permissions"
 import { verifyOAuthBearer, type OAuthBearerContext } from "./oauth"
 import { env } from "@lyrashield/config"
+import { setRequestId } from "@lyrashield/logger"
 
 export interface ApiKeyAuthContext {
   keyId: string
@@ -146,6 +147,10 @@ export async function requireAuth(): Promise<AuthSession> {
   if (!session) {
     throw new Error("UNAUTHORIZED")
   }
+  // Correlate every subsequent log line (incl. Prisma slow-query warnings) with
+  // this request's session. Cleared by the route's finally handler via
+  // setRequestId(undefined) — see withRequestId in apps/web/src/lib/api-auth.
+  setRequestId(session.sessionId)
   return session
 }
 

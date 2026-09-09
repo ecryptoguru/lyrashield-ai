@@ -109,6 +109,8 @@ interface ScanPollData {
   events?: Array<
     Omit<ScanEvent, "metadata" | "createdAt"> & { metadata?: unknown; createdAt: string | Date }
   >
+  /** Echoed when an incremental event window was applied to this response. */
+  eventsCursorApplied?: string
   resultManifest?: { checksum?: string | null } | null
   coverageReceipts?: Array<{
     scanner: string
@@ -167,6 +169,11 @@ const scanPollEventSchema = z
   })
   .passthrough()
 
+// Echoed by the API only when an incremental event window was actually applied
+// to the poll (see eventsAfter); lets the client prove the cursor took effect
+// before merging the tail into the full list.
+const eventsCursorAppliedSchema = z.string().optional()
+
 const scanPollCoverageReceiptSchema = z
   .object({
     scanner: z.string(),
@@ -197,6 +204,7 @@ const scanPollDataSchema = z
     llmOutputTokens: z.number().nullable().optional(),
     createdAt: z.string().datetime().or(z.string()).or(z.date()),
     events: z.array(scanPollEventSchema).optional(),
+    eventsCursorApplied: eventsCursorAppliedSchema,
     resultManifest: z
       .object({
         checksum: z.string().nullable().optional(),
@@ -255,6 +263,8 @@ const SCANNER_LABELS: Record<string, string> = {
 
 const ELAPSED_TIME_INTERVAL_MS = 1_000
 const COMPLETION_NOTICE_DISMISS_MS = 6_000
+/** Matches the service's event window cap (getScanWithEvents take: 200). */
+const MAX_EVENT_WINDOW = 200
 
 /** Ticking elapsed time from a start timestamp, returning a formatted string. */
 function useElapsedTime(startedAt: string | null): string {
@@ -283,6 +293,39 @@ function formatDuration(start: string | null, end: string | null): string {
 function asIsoString(value: string | Date | null): string | null {
   if (value === null) return null
   return value instanceof Date ? value.toISOString() : String(value)
+}
+
+// Event ordering for the incremental merge. The API returns events newest-first
+// and the client stores them ascending; a stale full window and a fresh
+// incremental tail can interleave, so comparisons never assume response order.
+function isEventAtOrAfterCursor(event: { createdAt: string; id: string }, cursor: ScanEvent) {
+  if (event.createdAt > cursor.createdAt) return true
+  if (event.createdAt < cursor.createdAt) return false
+  return event.id >= cursor.id
+}
+
+/**
+ * Merge a poll's events into the full client-side history. With a proven
+ * cursor (`eventsCursorApplied` echoed by the server) the payload is a tail:
+ * append strictly-new events and trim back to the 200-event window. Without
+ * one — initial load, no cursor sent, unknown-cursor fallback, or a response
+ * that raced a local trim — the payload is the authoritative full window and
+ * replaces local state wholesale.
+ */
+function mergeEvents(current: ScanEvent[], incoming: ScanEvent[], cursorApplied: boolean) {
+  if (!cursorApplied) return incoming
+  const cursor = current.at(-1)
+  if (!cursor) return incoming
+  const seen = new Set(current.map((event) => event.id))
+  // A retried poll can re-deliver the same tail; a late response from a poll
+  // started before the newest one can also arrive. Dropping ids the client
+  // already holds covers both; the at-or-after check is belt-and-braces for a
+  // malformed tail.
+  const newEvents = incoming.filter(
+    (event) => !seen.has(event.id) && isEventAtOrAfterCursor(event, cursor)
+  )
+  const merged = [...current, ...newEvents]
+  return merged.length > MAX_EVENT_WINDOW ? merged.slice(merged.length - MAX_EVENT_WINDOW) : merged
 }
 
 function asMetadata(value: unknown): Record<string, unknown> | null {
@@ -320,6 +363,12 @@ export function ScanDetailClient({
   useEffect(() => {
     scanRef.current = scan
   }, [scan])
+  // Incremental event polling cursor: the id of the newest event already held
+  // client-side. Each poll sends `eventsAfter` so the server returns only the
+  // tail. A ref (not state) so the in-flight poll callback always reads the
+  // latest cursor without re-render churn; it only advances after a successful
+  // merge, so a failed or aborted poll re-delivers the same tail next tick.
+  const eventCursorRef = useRef<string | null>(initialScan.events.at(-1)?.id ?? null)
 
   // Announce the active→terminal transition. Polling swaps the in-progress view
   // for the stat grid silently otherwise, so users who looked away (or use a
@@ -343,6 +392,13 @@ export function ScanDetailClient({
     })
   }, [scan.errorCategory, scan.errorMessage, scan.status])
 
+  // A successful commit re-derives the cursor from the merged list (single
+  // source of truth), so a failed, aborted, or validation-rejected poll never
+  // advances it and the next tick re-delivers the same tail.
+  useEffect(() => {
+    eventCursorRef.current = scan.events.at(-1)?.id ?? null
+  }, [scan])
+
   // Auto-dismiss the completion banner after 6s; the outcome stays visible in
   // the status badge and stat grid.
   useEffect(() => {
@@ -354,8 +410,13 @@ export function ScanDetailClient({
   const refresh = useCallback(
     async (signal: AbortSignal) => {
       try {
+        // Incremental polling: once a cursor exists, ask only for events after
+        // it. The first tick (or a full-window fallback) repopulates the whole
+        // list; manual refresh clears the cursor below to force that path.
+        const eventCursor = eventCursorRef.current
+        const cursorParam = eventCursor ? `&eventsAfter=${encodeURIComponent(eventCursor)}` : ""
         const { data, etag } = await apiGetConditional<ScanPollData>(
-          `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}`,
+          `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}${cursorParam}`,
           { signal, etag: etagRef.current, schema: scanPollDataSchema }
         )
         etagRef.current = etag
@@ -377,14 +438,21 @@ export function ScanDetailClient({
           errorCategory: updated.errorCategory,
           errorMessage: updated.errorMessage,
           createdAt: asIsoString(updated.createdAt)!,
-          events: (updated.events ?? []).map((event) => ({
-            id: event.id,
-            stage: event.stage,
-            level: event.level,
-            message: event.message,
-            metadata: asMetadata(event.metadata),
-            createdAt: asIsoString(event.createdAt)!,
-          })),
+          events: mergeEvents(
+            scanRef.current.events,
+            (updated.events ?? []).map((event) => ({
+              id: event.id,
+              stage: event.stage,
+              level: event.level,
+              message: event.message,
+              metadata: asMetadata(event.metadata),
+              createdAt: asIsoString(event.createdAt)!,
+            })),
+            // A tail page is only merged when the server echoes that the
+            // cursor sent on this very request was applied; anything else is a
+            // full replacement.
+            updated.eventsCursorApplied === eventCursor && eventCursor !== null
+          ),
           integrity: {
             ...scanRef.current.integrity,
             manifestChecksum: updated.resultManifest?.checksum ?? null,
@@ -479,6 +547,9 @@ export function ScanDetailClient({
   async function handleManualRefresh() {
     setRefreshing(true)
     etagRef.current = undefined
+    // Force a full-window refetch: manual refresh is the user's "prove it"
+    // action, so re-fetch every event instead of trusting the incremental tail.
+    eventCursorRef.current = null
     const controller = new AbortController()
     try {
       await refresh(controller.signal)

@@ -2,6 +2,7 @@ import { PrismaClient } from "./generated/prisma"
 import { env, isProd } from "@lyrashield/config"
 import { prisma } from "./client"
 import { createBoundedPgAdapter } from "./pool"
+import { registerSlowQueryLogging } from "./slow-query-log"
 
 const globalForSystemPrisma = globalThis as unknown as {
   systemPrisma: ReturnType<typeof createSystemPrismaClient> | undefined
@@ -11,10 +12,18 @@ function createSystemPrismaClient() {
   if (!env.DATABASE_SYSTEM_URL) {
     throw new Error("DATABASE_SYSTEM_URL is required for privileged system database operations")
   }
-  return new PrismaClient({
+  const client = new PrismaClient({
     adapter: createBoundedPgAdapter(env.DATABASE_SYSTEM_URL),
-    log: ["error"],
+    // Same stdout level as before (errors only), plus a query event emitter
+    // consumed by the slow-query logger below; query events are never printed
+    // wholesale.
+    log: [
+      { emit: "stdout", level: "error" },
+      { emit: "event", level: "query" },
+    ],
   })
+  registerSlowQueryLogging(client, { scope: "db:system" })
+  return client
 }
 
 /**

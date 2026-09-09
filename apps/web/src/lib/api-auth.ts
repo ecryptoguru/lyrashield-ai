@@ -1,5 +1,39 @@
 import { NextResponse } from "next/server"
 import { env } from "@lyrashield/config"
+import { AsyncLocalStorage } from "node:async_hooks"
+import { randomUUID } from "node:crypto"
+import { setRequestId } from "@lyrashield/logger"
+
+/**
+ * Request id for log correlation, scoped with AsyncLocalStorage so concurrent
+ * requests never observe each other's id (Node.js runtime only — API route
+ * handlers run in Node, not the edge middleware). `withApiRequest` runs the
+ * handler under a fresh id (honouring an upstream `x-request-id` when present)
+ * and stamps it into the logger so every line — including Prisma slow-query
+ * warnings — carries it.
+ */
+const apiRequestStorage = new AsyncLocalStorage<{ requestId: string }>()
+
+export function getApiRequestId(): string | undefined {
+  return apiRequestStorage.getStore()?.requestId
+}
+
+export function withApiRequest<Req extends Request, Args extends unknown[], Result>(
+  handler: (request: Req, ...args: Args) => Promise<Result>
+): (request: Req, ...args: Args) => Promise<Result> {
+  return async (request, ...args) => {
+    const upstreamId = request.headers.get("x-request-id")?.slice(0, 128)
+    const requestId = upstreamId && /^[\w-]+$/.test(upstreamId) ? upstreamId : randomUUID()
+    return apiRequestStorage.run({ requestId }, async () => {
+      setRequestId(requestId)
+      try {
+        return await handler(request, ...args)
+      } finally {
+        setRequestId(undefined)
+      }
+    })
+  }
+}
 
 /** Browser mutations must originate from the configured application origin. */
 export function assertSameOriginMutation(request: Request): void {
@@ -23,7 +57,7 @@ export function withCookieMutation<
 >(
   handler: (request: Req, ...args: Args) => Promise<Result>
 ): (request: Req, ...args: Args) => Promise<Result | NextResponse> {
-  return async (request, ...args) => {
+  return withApiRequest(async (request, ...args) => {
     if (request.headers.has("cookie")) {
       const { getSession } = await import("@lyrashield/auth/server")
       const session = await getSession()
@@ -39,7 +73,7 @@ export function withCookieMutation<
       }
     }
     return handler(request, ...args)
-  }
+  })
 }
 
 /**

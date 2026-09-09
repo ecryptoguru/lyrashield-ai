@@ -41,27 +41,32 @@ export default async function TargetsPage({
   }
 
   const limit = 50
-  const initialTargets = await prisma.target.findMany({
-    where: {
-      workspaceId,
-      deletedAt: null,
-      ...(params.projectId ? { projectId: params.projectId } : {}),
-    },
-    include: {
-      project: { select: { id: true, name: true } },
-      _count: { select: { scans: true, findings: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit + 1,
-  })
+  // Independent reads on different tables (targets vs integrations), both keyed
+  // only by workspaceId — run them together. The domain-status fetch below
+  // stays sequential: it consumes the sliced target list.
+  const [initialTargets, githubIntegration] = await Promise.all([
+    prisma.target.findMany({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        ...(params.projectId ? { projectId: params.projectId } : {}),
+      },
+      include: {
+        project: { select: { id: true, name: true } },
+        _count: { select: { scans: true, findings: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit + 1,
+    }),
+    prisma.integration.findFirst({
+      where: { workspaceId, type: "GITHUB", status: "active", deletedAt: null },
+    }),
+  ])
 
   const hasMore = initialTargets.length > limit
   const items = hasMore ? initialTargets.slice(0, limit) : initialTargets
   const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
-  const githubIntegration = await prisma.integration.findFirst({
-    where: { workspaceId, type: "GITHUB", status: "active", deletedAt: null },
-  })
   const githubConnected = !!githubIntegration
   const githubAccountLogin =
     (githubIntegration?.metadata as { accountLogin?: string } | null)?.accountLogin ?? null

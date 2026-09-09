@@ -56,7 +56,20 @@ describe("/api/scans/[id] workspace boundary", () => {
 
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
-    expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1")
+    // No `eventsAfter` param = no cursor: the full event window is returned.
+    expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: undefined })
+  })
+
+  it("passes a well-formed eventsAfter cursor through to the service", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1&eventsAfter=event-42"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: "event-42" })
   })
 
   it("binds cancellation to the authorized workspace", async () => {
