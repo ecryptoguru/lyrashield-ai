@@ -93,7 +93,9 @@ export default async function OnboardingPage({
       <OnboardingWizard
         initialState={initialState}
         selectedPlan={selectedPlan}
-        suggestedWorkspaceName={session.userName?.trim() ? `${session.userName.trim()}'s workspace` : "My workspace"}
+        suggestedWorkspaceName={
+          session.userName?.trim() ? `${session.userName.trim()}'s workspace` : "My workspace"
+        }
       />
       <InvitationAcceptBridge />
     </div>
