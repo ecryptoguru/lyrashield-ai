@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 import { CLI_VERSION } from "../version.js"
 
 describe("CLI version", () => {
-  it("uses one 0.2.7 version across runtime and package metadata", async () => {
+  it("uses one publishable 0.2.8 version across runtime and package metadata", async () => {
     const packagePath = fileURLToPath(new URL("../../package.json", import.meta.url))
     const packageJson = JSON.parse(await readFile(packagePath, "utf-8")) as {
       version: string
@@ -15,11 +15,12 @@ describe("CLI version", () => {
       devDependencies: Record<string, string>
     }
 
-    expect(CLI_VERSION).toBe("0.2.7")
+    expect(CLI_VERSION).toBe("0.2.8")
     expect(packageJson.version).toBe(CLI_VERSION)
     expect(packageJson.engines.node).toBe(">=22.0.0 <25.0.0")
     expect(packageJson.bin.lyrashield).toBe("bin/lyrashield.mjs")
-    expect(packageJson.dependencies["@lyrashield/agent-plugin"]).toBe("workspace:^")
+    expect(packageJson.dependencies["@lyrashield/agent-plugin"]).toBe("^0.1.26")
+    expect(Object.values(packageJson.dependencies)).not.toContainEqual(expect.stringMatching(/^workspace:/))
     expect(packageJson.devDependencies["@lyrashield/security"]).toBe("workspace:*")
 
     const targetsPath = fileURLToPath(new URL("../commands/targets.ts", import.meta.url))
