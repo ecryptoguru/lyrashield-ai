@@ -298,6 +298,23 @@ export function gateReasonSentence(reason: { code: string; message: string }): s
  * context. This adapter does not make a readiness decision from scores or
  * finding workflow states.
  */
+/**
+ * Human description of the release identity a target's verdict covers. Used
+ * to label ready verdicts on read-only surfaces: "commit abc1234" (short
+ * hash) or "artifact sha256:abcd1234…" (first 19 chars). Returns null when
+ * the target has no identity to describe.
+ */
+export function describeGateIdentity(
+  target: Pick<GateReadinessTarget, "identity" | "state">
+): string | null {
+  if (!target.identity) return null
+  if (target.identity.kind === "COMMIT") {
+    const short = target.identity.value.slice(0, 7)
+    return `Ready for commit ${short}`
+  }
+  return `Ready for artifact ${target.identity.value.slice(0, 19)}`
+}
+
 export function projectGateReadinessReport(
   groups: FindingReadinessAggregate[],
   targets: GateReadinessTarget[]
