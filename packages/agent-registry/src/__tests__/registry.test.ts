@@ -245,6 +245,15 @@ describe("renderEntry returns correct structural patch", () => {
 
   it("opencode — root is `mcp` and uses `{env:VAR}` interpolation", () => {
     const agent = getAgent("opencode")!
+    expect(agent.locations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: "global",
+          path: "~/.config/opencode/opencode.json",
+        }),
+        expect.objectContaining({ scope: "project", path: "opencode.json" }),
+      ])
+    )
     const opts = testOptions(agent, "stdio")
     const entry = renderEntry(agent, opts)
     expect(entry.rootKey).toBe("mcp")

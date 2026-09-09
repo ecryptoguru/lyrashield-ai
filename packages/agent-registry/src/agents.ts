@@ -196,6 +196,11 @@ const opencode: AgentEntry = {
   rootKey: "mcp",
   locations: [
     {
+      scope: "global",
+      path: "~/.config/opencode/opencode.json",
+      sharedByConvention: false,
+    },
+    {
       scope: "project",
       path: "opencode.json",
       sharedByConvention: true,
@@ -218,6 +223,7 @@ const opencode: AgentEntry = {
     url: "https://opencode.ai/docs/mcp-servers/",
   },
   gotchas: [
+    "OpenCode's global config is `~/.config/opencode/opencode.json`; project `opencode.json` overrides it.",
     "OpenCode uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
     'OpenCode local entries use `type: "local"`, a command array, and `environment`; remote entries use `type: "remote"`.',
     "OpenCode stores servers under the top-level `mcp` object and uses `enabled: false` to disable an entry.",
