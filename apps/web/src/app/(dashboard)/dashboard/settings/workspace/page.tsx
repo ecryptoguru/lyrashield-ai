@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import type { ComponentType, SVGProps } from "react"
 import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"

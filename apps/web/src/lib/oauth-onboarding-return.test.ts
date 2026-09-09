@@ -16,7 +16,7 @@ describe("OAuth onboarding return state (W2-05)", () => {
 
   it("rejects a swapped user binding", () => {
     const state = createOAuthOnboardingReturn(QUERY, "user_1")
-    const [, userB64, nonce, exp, sig] = state.split(".")
+    const [, , nonce, exp, sig] = state.split(".")
     const otherUser = Buffer.from("user_2").toString("base64url")
     const forged = `${Buffer.from(QUERY).toString("base64url")}.${otherUser}.${nonce}.${exp}.${sig}`
     expect(verifyOAuthOnboardingReturn(forged)).toEqual({

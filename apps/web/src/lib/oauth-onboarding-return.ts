@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "crypto"
+import { createHmac, timingSafeEqual } from "crypto"
 import { env } from "@lyrashield/config"
 
 /**

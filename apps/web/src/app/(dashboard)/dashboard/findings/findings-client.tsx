@@ -11,7 +11,6 @@ import {
 import {
   buildRemediationTimeline,
   type RemediationTimelineEvent,
-  type TimelineFixProposalInput,
   type TimelineRetestInput,
 } from "@/lib/finding-remediation-timeline"
 import { z } from "zod"
@@ -362,20 +361,26 @@ export function FindingsClient({
   // W2-12 context restoration: the URL carries filter/sort/target/query, but
   // pages loaded beyond the first server-rendered page and the scroll position
   // only survive navigation through this session-scoped snapshot. The first
-  // client render still matches the server HTML; restoration happens after
-  // mount so hydration stays clean.
+  // client render still matches the server HTML; restoration is queued (not
+  // synchronous) so hydration stays clean and the save effect below never
+  // overwrites the snapshot with the bare first page.
   const listContextRestoredRef = useRef(false)
   useEffect(() => {
-    listContextRestoredRef.current = true
-    if (typeof window === "undefined") return
-    const current = { filter, sort: sortMode, target: targetFilter, q: query }
-    // The context key encodes filter/sort/target/query, so any stored snapshot
-    // under this key already matches the URL-derived list state.
-    const stored = loadFindingsListContext(findingsContextKey(workspaceId, current))
-    if (!stored) return
-    setFindings(stored.rows)
-    setNextCursor(stored.nextCursor)
-    if (stored.scrollY > 0) requestAnimationFrame(() => window.scrollTo(0, stored.scrollY))
+    queueMicrotask(() => {
+      if (typeof window === "undefined") return
+      const current = { filter, sort: sortMode, target: targetFilter, q: query }
+      // The context key encodes filter/sort/target/query, so any stored
+      // snapshot under this key already matches the URL-derived list state.
+      const stored = loadFindingsListContext(findingsContextKey(workspaceId, current))
+      if (stored) {
+        setFindings(stored.rows)
+        setNextCursor(stored.nextCursor)
+        if (stored.scrollY > 0) requestAnimationFrame(() => window.scrollTo(0, stored.scrollY))
+      }
+      // The save effect below must not run until restoration has been
+      // attempted, otherwise the bare first page overwrites the snapshot.
+      listContextRestoredRef.current = true
+    })
     // Restore once per mount with the URL-derived context.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
