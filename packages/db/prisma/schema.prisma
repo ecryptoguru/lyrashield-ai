@@ -1720,13 +1720,23 @@ enum AgentOperationStatus {
   CONFLICT
 }
 
+enum AgentPrincipalType {
+  OAUTH_CONNECTION
+  API_KEY
+  BROWSER_SESSION
+}
+
 model AgentOperation {
   id                   String               @id @default(cuid())
   workspaceId          String
-  connectionId         String
+  /// Null for API-key and browser-session principals, which have no OAuth
+  /// connection. Principal identity is carried by principalType/principalId.
+  connectionId         String?
   operationName        String
   idempotencyKey       String
   inputHash            String
+  principalType        AgentPrincipalType   @default(OAUTH_CONNECTION)
+  principalId          String
   authorizationVersion Int                  @default(1)
   status               AgentOperationStatus @default(PENDING)
   resultReference      String?
@@ -1735,10 +1745,11 @@ model AgentOperation {
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
-  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  connection AgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection AgentConnection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@unique([connectionId, operationName, idempotencyKey])
+  @@unique([workspaceId, principalType, principalId, operationName, idempotencyKey])
   @@index([workspaceId])
   @@index([status])
   @@map("agent_operations")

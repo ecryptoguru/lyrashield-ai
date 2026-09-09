@@ -5,11 +5,38 @@ import { withWorkspaceRLS } from "./rls"
 
 export interface ClaimAgentOperationParams {
   workspaceId: string
-  connectionId: string
   operationName: string
   idempotencyKey: string
   input: Record<string, unknown>
   authorizationVersion?: number
+  /** OAuth connection principal. Mutually exclusive with apiKeyId/userId. */
+  connectionId?: string
+  /** API-key principal identity (the key id). */
+  apiKeyId?: string
+  /** Browser-session principal id (the user id). */
+  userId?: string
+}
+
+export type PrincipalIdentity = {
+  principalType: "OAUTH_CONNECTION" | "API_KEY" | "BROWSER_SESSION"
+  principalId: string
+  connectionId?: string
+}
+
+/**
+ * Resolve the principal-bound identity for an operation claim (W3-01). An
+ * OAuth connection keeps its connection-bound identity; an API key or browser
+ * session is never fabricated into a connection.
+ */
+export function resolveOperationPrincipal(
+  params: Pick<ClaimAgentOperationParams, "connectionId" | "apiKeyId" | "userId">
+): PrincipalIdentity {
+  if (params.connectionId) {
+    return { principalType: "OAUTH_CONNECTION", principalId: params.connectionId, connectionId: params.connectionId }
+  }
+  if (params.apiKeyId) return { principalType: "API_KEY", principalId: params.apiKeyId }
+  if (params.userId) return { principalType: "BROWSER_SESSION", principalId: params.userId }
+  throw new Error("OPERATION_PRINCIPAL_REQUIRED")
 }
 
 export type ClaimOperationResult =
@@ -50,13 +77,17 @@ export async function claimOrGetAgentOperation(
   params: ClaimAgentOperationParams
 ): Promise<ClaimOperationResult> {
   const inputHash = hashOperationInput(params.operationName, params.input)
+  const principal = resolveOperationPrincipal(params)
 
-  // Check if operation exists
+  // Check if an operation with the same principal-bound identity exists.
+  // The principal unique index covers connectionless principals too.
   const existing = await withWorkspaceRLS(params.workspaceId, (tx) =>
     tx.agentOperation.findUnique({
       where: {
-        connectionId_operationName_idempotencyKey: {
-          connectionId: params.connectionId,
+        workspaceId_principalType_principalId_operationName_idempotencyKey: {
+          workspaceId: params.workspaceId,
+          principalType: principal.principalType,
+          principalId: principal.principalId,
           operationName: params.operationName,
           idempotencyKey: params.idempotencyKey,
         },
@@ -78,7 +109,8 @@ export async function claimOrGetAgentOperation(
       }
     } else {
       logger.warn("Idempotency key reused with conflicting input", {
-        connectionId: params.connectionId,
+        principalType: principal.principalType,
+        principalId: principal.principalId,
         operationName: params.operationName,
         idempotencyKey: params.idempotencyKey,
       })
@@ -96,10 +128,12 @@ export async function claimOrGetAgentOperation(
       tx.agentOperation.create({
         data: {
           workspaceId: params.workspaceId,
-          connectionId: params.connectionId,
+          connectionId: principal.connectionId ?? null,
           operationName: params.operationName,
           idempotencyKey: params.idempotencyKey,
           inputHash,
+          principalType: principal.principalType,
+          principalId: principal.principalId,
           authorizationVersion: params.authorizationVersion ?? 1,
           status: "EXECUTING",
         },
@@ -117,8 +151,10 @@ export async function claimOrGetAgentOperation(
       const raced = await withWorkspaceRLS(params.workspaceId, (tx) =>
         tx.agentOperation.findUnique({
           where: {
-            connectionId_operationName_idempotencyKey: {
-              connectionId: params.connectionId,
+            workspaceId_principalType_principalId_operationName_idempotencyKey: {
+              workspaceId: params.workspaceId,
+              principalType: principal.principalType,
+              principalId: principal.principalId,
               operationName: params.operationName,
               idempotencyKey: params.idempotencyKey,
             },
@@ -191,7 +227,7 @@ export interface AgentOperationListItem {
   operationName: string
   status: string
   idempotencyKey: string
-  connectionId: string
+  connectionId: string | null
   resultReference: string | null
   error: string | null
   createdAt: string
