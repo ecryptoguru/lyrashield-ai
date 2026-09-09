@@ -278,3 +278,56 @@ export async function listRecentAgentOperations(
     updatedAt: row.updatedAt.toISOString(),
   }))
 }
+
+export type OperationStatusState = "PENDING" | "EXECUTING" | "COMPLETED" | "FAILED" | "CONFLICT"
+
+export interface OperationStatusView {
+  /** Stable operation identity, safe to share with the principal. */
+  operationId: string
+  status: OperationStatusState
+  /** Safe reason code; never raw provider or internal error text. */
+  reasonCode: string | null
+  /** Where the durable result lives (e.g. a scan id), when completed. */
+  resultLocation: string | null
+  /** The one recovery action this state permits. */
+  recovery: "wait" | "poll" | "retry_new_key" | "none"
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * One operation-status/recovery contract (W3-08) shared by the dashboard,
+ * CLI, MCP, and WebMCP. The error text is never echoed: callers render the
+ * reason code, and an authentication failure cannot fall back to another
+ * principal's operation because every lookup is workspace- and
+ * principal-scoped.
+ */
+export async function getOperationStatus(
+  operationId: string,
+  workspaceId: string
+): Promise<OperationStatusView | null> {
+  const operation = await getAgentOperation(operationId, workspaceId)
+  if (!operation) return null
+  return toOperationStatusView(operation)
+}
+
+/** Pure state→recovery mapping, unit-testable without a database. */
+export function toOperationStatusView(operation: AgentOperation): OperationStatusView {
+  const recovery: OperationStatusView["recovery"] =
+    operation.status === "COMPLETED"
+      ? "none"
+      : operation.status === "EXECUTING" || operation.status === "PENDING"
+        ? "poll"
+        : operation.status === "FAILED"
+          ? "retry_new_key"
+          : "wait"
+  return {
+    operationId: operation.id,
+    status: operation.status,
+    reasonCode: operation.error ? "OPERATION_FAILED" : null,
+    resultLocation: operation.resultReference,
+    recovery,
+    createdAt: operation.createdAt.toISOString(),
+    updatedAt: operation.updatedAt.toISOString(),
+  }
+}
