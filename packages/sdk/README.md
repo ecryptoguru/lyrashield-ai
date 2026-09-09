@@ -37,3 +37,9 @@ The client always prepends `/api/v1` to bare paths, so callers should pass paths
 - `packages/cli/README.md`
 - `packages/mcp/README.md`
 - `docs/api-stability.md`
+
+### Durable request retries
+
+Scan, report, retest, and fix-proposal creation accept an optional `idempotencyKey`. Keep this key with the request and reuse it with identical inputs after a lost response or process restart. Each SDK invocation without a supplied key generates a new request key. An uncertain operation must be inspected before starting another operation.
+
+`getOperationStatus(client, operationId, workspaceId)` validates the shared operation-status response, including the server-owned recovery decision. Operation lookup requires the original principal and current workspace access; it does not grant access through a different credential.

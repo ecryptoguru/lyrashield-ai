@@ -1,3 +1,4 @@
+import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import {
   createScan,
@@ -95,122 +96,140 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       return apiError(retestResolved.code, retestResolved.reason, 400)
     }
 
-    const existingPending = await prisma.retest.findFirst({
-      where: {
-        findingId: id,
+    const retestTargetId = sourceScan.targetId
+    assertOAuthDelegatedScope(session, retestTargetId, retestProfile.mode)
+    return await recordedOperation(
+      request,
+      {
         workspaceId,
-        status: { in: ["pending", "running"] },
+        operationName: "retest.create",
+        input: { ...parsed.data, findingId: id },
+        session,
       },
-    })
-    if (existingPending) {
-      return apiError("RETEST_IN_PROGRESS", "A retest is already in progress for this finding", 409)
-    }
+      async () => {
+        assertOAuthDelegatedScope(session, finding.targetId, retestProfile.mode)
+        const existingPending = await prisma.retest.findFirst({
+          where: {
+            findingId: id,
+            workspaceId,
+            status: { in: ["pending", "running"] },
+          },
+        })
+        if (existingPending) {
+          return apiError(
+            "RETEST_IN_PROGRESS",
+            "A retest is already in progress for this finding",
+            409
+          )
+        }
 
-    try {
-      await assertScanWorkerAvailable()
-    } catch (error) {
-      if (error instanceof ScanWorkerUnavailableError) {
-        return apiError(
-          "SCAN_SERVICE_UNAVAILABLE",
-          "Retesting is temporarily unavailable. Please try again shortly.",
-          503
-        )
+        try {
+          await assertScanWorkerAvailable()
+        } catch (error) {
+          if (error instanceof ScanWorkerUnavailableError) {
+            return apiError(
+              "SCAN_SERVICE_UNAVAILABLE",
+              "Retesting is temporarily unavailable. Please try again shortly.",
+              503
+            )
+          }
+          throw error
+        }
+
+        let scan: Awaited<ReturnType<typeof createScan>>
+        try {
+          scan = await createScan({
+            workspaceId,
+            targetId: retestTargetId,
+            goal: sourceScan.goal,
+            mode: retestProfile.mode as ScanMode,
+            policyId: sourceScan.policyId ?? undefined,
+            createdById: session.userId,
+            triggerType: "retest",
+            determinismMode: retestProfile.determinismMode,
+          })
+        } catch (error) {
+          if (error instanceof WorkspaceScanConcurrencyLimitError) {
+            return apiError(
+              "SCAN_CONCURRENCY_LIMIT",
+              "This workspace is at its concurrent review limit. Wait for one to finish before retesting.",
+              409
+            )
+          }
+          if (error instanceof Error && error.message === "Target already has an active scan") {
+            return apiError(
+              "RETEST_IN_PROGRESS",
+              "A retest is already in progress for this target",
+              409
+            )
+          }
+          throw error
+        }
+
+        let retest: { id: string }
+        try {
+          retest = await prisma.retest.create({
+            data: {
+              workspaceId,
+              findingId: id,
+              scanId: scan.id,
+              status: "pending",
+              resultBefore: retestProfile.reason,
+            },
+          })
+        } catch (error) {
+          await updateScanStatus(scan.id, "FAILED", {
+            errorCategory: "RETEST_SETUP",
+            errorMessage: "Retest could not be prepared before queueing",
+          })
+          throw error
+        }
+
+        try {
+          await enqueueScanJob({
+            scanId: scan.id,
+            workspaceId,
+            targetId: retestTargetId,
+            goal: sourceScan.goal,
+            mode: retestProfile.mode as ScanMode,
+            policyId: sourceScan.policyId ?? undefined,
+          })
+        } catch (enqueueError) {
+          await updateScanStatus(scan.id, "FAILED", {
+            errorCategory: "QUEUE",
+            errorMessage: "Scan worker became unavailable while queueing the retest",
+          })
+          await prisma.retest.update({
+            where: { id: retest.id },
+            data: { status: "error", resultAfter: "Retest could not be queued." },
+          })
+          logger.error("Failed to enqueue retest scan", {
+            findingId: id,
+            scanId: scan.id,
+            error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
+          })
+          revalidateDashboardAggregates(workspaceId)
+          return apiError(
+            "SCAN_SERVICE_UNAVAILABLE",
+            "Retesting became unavailable while starting. Please try again shortly.",
+            503
+          )
+        }
+
+        await prisma.auditLog.create({
+          data: {
+            workspaceId,
+            actorUserId: session.userId,
+            action: "retest.queued",
+            resourceType: "retest",
+            resourceId: retest.id,
+          },
+        })
+
+        revalidateDashboardAggregates(workspaceId)
+        return apiSuccess({ retest, scan: { id: scan.id, status: scan.status } }, 201)
       }
-      throw error
-    }
-
-    let scan: Awaited<ReturnType<typeof createScan>>
-    try {
-      scan = await createScan({
-        workspaceId,
-        targetId: sourceScan.targetId,
-        goal: sourceScan.goal,
-        mode: retestProfile.mode as ScanMode,
-        policyId: sourceScan.policyId ?? undefined,
-        createdById: session.userId,
-        triggerType: "retest",
-        determinismMode: retestProfile.determinismMode,
-      })
-    } catch (error) {
-      if (error instanceof WorkspaceScanConcurrencyLimitError) {
-        return apiError(
-          "SCAN_CONCURRENCY_LIMIT",
-          "This workspace is at its concurrent review limit. Wait for one to finish before retesting.",
-          409
-        )
-      }
-      if (error instanceof Error && error.message === "Target already has an active scan") {
-        return apiError(
-          "RETEST_IN_PROGRESS",
-          "A retest is already in progress for this target",
-          409
-        )
-      }
-      throw error
-    }
-
-    let retest: { id: string }
-    try {
-      retest = await prisma.retest.create({
-        data: {
-          workspaceId,
-          findingId: id,
-          scanId: scan.id,
-          status: "pending",
-          resultBefore: retestProfile.reason,
-        },
-      })
-    } catch (error) {
-      await updateScanStatus(scan.id, "FAILED", {
-        errorCategory: "RETEST_SETUP",
-        errorMessage: "Retest could not be prepared before queueing",
-      })
-      throw error
-    }
-
-    try {
-      await enqueueScanJob({
-        scanId: scan.id,
-        workspaceId,
-        targetId: sourceScan.targetId,
-        goal: sourceScan.goal,
-        mode: retestProfile.mode as ScanMode,
-        policyId: sourceScan.policyId ?? undefined,
-      })
-    } catch (enqueueError) {
-      await updateScanStatus(scan.id, "FAILED", {
-        errorCategory: "QUEUE",
-        errorMessage: "Scan worker became unavailable while queueing the retest",
-      })
-      await prisma.retest.update({
-        where: { id: retest.id },
-        data: { status: "error", resultAfter: "Retest could not be queued." },
-      })
-      logger.error("Failed to enqueue retest scan", {
-        findingId: id,
-        scanId: scan.id,
-        error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
-      })
-      revalidateDashboardAggregates(workspaceId)
-      return apiError(
-        "SCAN_SERVICE_UNAVAILABLE",
-        "Retesting became unavailable while starting. Please try again shortly.",
-        503
-      )
-    }
-
-    await prisma.auditLog.create({
-      data: {
-        workspaceId,
-        actorUserId: session.userId,
-        action: "retest.queued",
-        resourceType: "retest",
-        resourceId: retest.id,
-      },
-    })
-
-    revalidateDashboardAggregates(workspaceId)
-    return apiSuccess({ retest, scan: { id: scan.id, status: scan.status } }, 201)
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

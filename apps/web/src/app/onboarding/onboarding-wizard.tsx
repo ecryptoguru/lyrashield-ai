@@ -28,6 +28,7 @@ import {
 } from "./onboarding-flow.utils"
 
 interface OnboardingData {
+  updatedAt?: string
   currentStep: number
   completed: boolean
   skipped: boolean
@@ -54,6 +55,7 @@ export function OnboardingWizard({
   selectedPlan,
   suggestedWorkspaceName,
   oauthReturnQuery,
+  oauthReturnState,
 }: {
   initialState: OnboardingData
   selectedPlan?: string | null
@@ -66,6 +68,7 @@ export function OnboardingWizard({
    * fixed route — the query is the only thing carried — and the signature,
    * expiry, and user binding were verified by the server page.
    */
+  oauthReturnState?: string
   oauthReturnQuery?: string | null
 }) {
   const router = useRouter()
@@ -87,10 +90,12 @@ export function OnboardingWizard({
   // step 0 cannot reappear.
   const [step, setStep] = useState(Math.max(initialState.currentStep ?? 1, 1))
   const [data, setData] = useState(initialState)
+  const persistedState = useRef(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [repos, setRepos] = useState<Repo[]>([])
+  const [reposLoaded, setReposLoaded] = useState(false)
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [productName, setProductName] = useState(initialState.targetName ?? "")
   // W2-03: environment classification left the critical path. The safe default
@@ -109,6 +114,7 @@ export function OnboardingWizard({
   const [githubUnavailable, setGithubUnavailable] = useState(false)
   const [urlForm, setUrlForm] = useState({ url: "", ownershipAttested: false })
   const autoFetchAttempted = useRef(false)
+  const repoRequest = useRef("")
   const reviewOptions = getOnboardingReviewOptions(path)
   const selectedReview =
     reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
@@ -159,39 +165,66 @@ export function OnboardingWizard({
     setLoading(true)
     setError(null)
     const startedAt = performance.now()
+    const requestId = crypto.randomUUID()
+    repoRequest.current = requestId
     try {
       const res = await fetchRepos()
+      if (requestId !== repoRequest.current) return
       setRepos(res)
+      setReposLoaded(true)
+      setSelectedRepo((current) => res.find((repo) => repo.id === current?.id) ?? null)
       track("repos_loaded", {
         repo_count_bucket: bucketCount(res.length),
         load_ms_bucket: bucketDuration(performance.now() - startedAt),
       })
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load repositories.")
+      if (requestId === repoRequest.current) {
+        setError(cause instanceof Error ? cause.message : "Could not load repositories.")
+      }
     } finally {
-      setLoading(false)
+      if (requestId === repoRequest.current) setLoading(false)
     }
   }, [data.workspaceId, fetchRepos])
 
   useEffect(() => {
     if (step !== 2 || autoFetchAttempted.current || !data.workspaceId) return
     autoFetchAttempted.current = true
+    const requestId = crypto.randomUUID()
+    repoRequest.current = requestId
     const startedAt = performance.now()
     fetchRepos()
       .then((res) => {
+        if (requestId !== repoRequest.current) return
         setRepos(res)
+        setReposLoaded(true)
         track("repos_loaded", {
           repo_count_bucket: bucketCount(res.length),
           load_ms_bucket: bucketDuration(performance.now() - startedAt),
         })
       })
       .catch((cause) => {
+        if (requestId !== repoRequest.current) return
         setError(cause instanceof Error ? cause.message : "Could not load repositories.")
       })
+    return () => {
+      repoRequest.current = ""
+      autoFetchAttempted.current = false
+    }
   }, [step, data.workspaceId, fetchRepos])
 
   async function persist(updates: Partial<OnboardingData>) {
-    const next = await apiPatch("/api/onboarding", updates, { schema: onboardingDataSchema })
+    let next
+    try {
+      next = await apiPatch(
+        "/api/onboarding",
+        { ...updates, expectedUpdatedAt: persistedState.current.updatedAt },
+        { schema: onboardingDataSchema }
+      )
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === "ONBOARDING_CHANGED") router.refresh()
+      throw cause
+    }
+    persistedState.current = next
     setData(next)
     return next
   }
@@ -242,6 +275,7 @@ export function OnboardingWizard({
         {
           workspaceId,
           returnTo: "onboarding",
+          ...(oauthReturnState ? { oauthReturnState } : {}),
         },
         { schema: installUrlSchema }
       )
@@ -534,7 +568,7 @@ export function OnboardingWizard({
                 <span className="text-muted-foreground mt-1 block text-xs">
                   {githubUnavailable
                     ? "Unavailable right now — pick another option."
-                    : "Review a repository. Read-only; we never write code without an approval."}
+                    : "Review a repository. Connect an authorized repository. Scans inspect code; fixes and pull requests are separate actions."}
                 </span>
               </button>
 
@@ -687,7 +721,9 @@ export function OnboardingWizard({
                 <p className="text-sm">
                   {error
                     ? "We couldn't load repositories. You may need to reconnect GitHub or check the installation."
-                    : "After you finish the GitHub install, click below to load repositories."}
+                    : reposLoaded
+                      ? "No repositories are available. Check which repositories your GitHub installation can access, then load them again."
+                      : "After you finish the GitHub install, click below to load repositories."}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="secondary" onClick={loadRepos} disabled={loading}>

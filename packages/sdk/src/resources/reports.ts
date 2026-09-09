@@ -3,6 +3,7 @@ import { z } from "zod"
 import { ReportListSchema, ReportSchema } from "../schemas"
 
 export interface CreateReportInput {
+  idempotencyKey?: string
   workspaceId?: string
   scanId?: string
   targetId?: string
@@ -38,11 +39,12 @@ export function createReport(
   input: CreateReportInput
 ): Promise<z.infer<typeof ReportSchema>> {
   const body = {
-    ...input,
+    ...Object.fromEntries(Object.entries(input).filter(([key]) => key !== "idempotencyKey")),
     workspaceId: input.workspaceId ?? client.workspaceId,
   }
   return client.request("POST", "/reports", {
     body,
+    headers: { "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID() },
     parse: (data) => ReportSchema.parse(data),
   })
 }

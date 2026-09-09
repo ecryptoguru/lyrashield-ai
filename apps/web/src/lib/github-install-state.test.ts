@@ -75,3 +75,17 @@ describe("github install state (S2)", () => {
     if (!result.valid) expect(result.reason).toBe("malformed")
   })
 })
+
+it("retains each signed OAuth return independently across an install round trip", () => {
+  const first = createInstallState("ws", "onboarding", 1000, "first-signed-return")
+  const second = createInstallState("ws", "onboarding", 1000, "second-signed-return")
+  expect(verifyInstallState(first, 1001)).toMatchObject({
+    valid: true,
+    oauthReturnState: "first-signed-return",
+  })
+  expect(verifyInstallState(second, 1001)).toMatchObject({
+    valid: true,
+    oauthReturnState: "second-signed-return",
+  })
+  expect(verifyInstallState(first, 1000000).valid).toBe(false)
+})

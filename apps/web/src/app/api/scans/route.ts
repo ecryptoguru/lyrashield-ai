@@ -103,43 +103,12 @@ async function post(request: Request) {
   const data = parsed.data
   const workspaceId = data.workspaceId
 
+  let operationClaim: Awaited<ReturnType<typeof claimOrGetAgentOperation>> | null = null
+  let submissionAttempted = false
+  let submittedScanId: string | undefined
+  let operationCompleted = false
   try {
     const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
-
-    // W3-01: durable operation identity is opt-in. Callers that send an
-    // Idempotency-Key get identical-retry replay semantics; without the
-    // header the route behaves exactly as before.
-    const idempotencyKey = request.headers.get("idempotency-key")?.trim()
-    let operationClaim: Awaited<ReturnType<typeof claimOrGetAgentOperation>> | null = null
-    if (idempotencyKey) {
-      if (idempotencyKey.length < 1 || idempotencyKey.length > 128) {
-        return apiError("VALIDATION_ERROR", "Idempotency-Key must be 1-128 characters", 400)
-      }
-      const claim = await claimOrGetAgentOperation({
-        workspaceId,
-        operationName: "scan.create",
-        idempotencyKey,
-        input: { targetId: data.targetId, goal: data.goal, mode: data.mode },
-        apiKeyId: session.apiKey?.keyId,
-        userId: session.apiKey ? undefined : session.userId,
-      })
-      if (claim.status === "CONFLICT") {
-        return apiError("IDEMPOTENCY_CONFLICT", claim.message, 409)
-      }
-      if (claim.status === "REPLAY" && claim.operation.resultReference) {
-        return apiSuccess({ scanId: claim.operation.resultReference, replayed: true }, 200)
-      }
-      if (claim.status === "IN_PROGRESS") {
-        return apiError(
-          "OPERATION_IN_PROGRESS",
-          "An identical scan start is already in progress. Poll the operation status instead of retrying.",
-          409,
-          undefined,
-          { operationId: claim.operation.id }
-        )
-      }
-      operationClaim = claim
-    }
 
     const target = await prisma.target.findFirst({
       where: { id: data.targetId, workspaceId, deletedAt: null },
@@ -252,6 +221,66 @@ async function post(request: Request) {
     }
     const policyId = policy?.id
 
+    // W3-01: durable operation identity is opt-in. Callers that send an
+    // Idempotency-Key get identical-retry replay semantics; without the
+    // header the route behaves exactly as before.
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim()
+    if (idempotencyKey !== undefined) {
+      if (idempotencyKey.length < 1 || idempotencyKey.length > 128) {
+        return apiError("VALIDATION_ERROR", "Idempotency-Key must be 1-128 characters", 400)
+      }
+      const claim = await claimOrGetAgentOperation({
+        workspaceId,
+        operationName: "scan.create",
+        idempotencyKey,
+        input: { ...data, mode: canonicalMode, policyId: policyId ?? null },
+        connectionId: session.oauth?.connectionId,
+        authorizationVersion: session.oauth?.authorizationVersion,
+        apiKeyId: session.apiKey?.keyId,
+        userId: session.apiKey || session.oauth ? undefined : session.userId,
+      })
+      if (claim.status === "CONFLICT") {
+        return apiError("IDEMPOTENCY_CONFLICT", claim.message, 409)
+      }
+      if (claim.status === "REPLAY") {
+        if (!claim.operation.result || !claim.operation.resultReference) {
+          return apiError(
+            "OPERATION_RESULT_UNAVAILABLE",
+            "The recorded scan cannot be replayed. Inspect its operation status.",
+            409,
+            undefined,
+            { operationId: claim.operation.id }
+          )
+        }
+        return apiSuccess(
+          {
+            ...(claim.operation.result as Record<string, unknown>),
+            operationId: claim.operation.id,
+          },
+          200
+        )
+      }
+      if (claim.status === "FAILED") {
+        return apiError(
+          "OPERATION_FAILED",
+          "This operation previously failed. Inspect its status before starting another scan.",
+          409,
+          undefined,
+          { operationId: claim.operation.id }
+        )
+      }
+      if (claim.status === "IN_PROGRESS") {
+        return apiError(
+          "OPERATION_IN_PROGRESS",
+          "An identical scan start is already in progress. Poll the operation status instead of retrying.",
+          409,
+          undefined,
+          { operationId: claim.operation.id }
+        )
+      }
+      operationClaim = claim
+    }
+
     // Spend controls, cheapest check first. The existing per-target guard below stops the
     // same target running twice; neither of these bounded a workspace fanning out across
     // many targets, where each scan can commit up to PLATFORM_MAX_SCAN_BUDGET_USD.
@@ -305,6 +334,7 @@ async function post(request: Request) {
       throw error
     }
 
+    submissionAttempted = true
     const scan = await createScan({
       workspaceId,
       targetId: data.targetId,
@@ -314,6 +344,7 @@ async function post(request: Request) {
       createdById: session.userId,
     })
 
+    submittedScanId = scan.id
     try {
       await enqueueScanJob({
         scanId: scan.id,
@@ -332,25 +363,12 @@ async function post(request: Request) {
         errorCategory: "QUEUE",
         errorMessage: "Scan worker became unavailable while queueing the scan",
       })
-      // W3-01: the claimed operation records the failure so an identical retry
-      // surfaces the recorded outcome instead of replaying ambiguous paid work.
-      if (operationClaim && operationClaim.status === "NEW") {
-        await failAgentOperation(operationClaim.operation.id, workspaceId, {
-          error: "SCAN_SERVICE_UNAVAILABLE",
-        }).catch(() => undefined)
-      }
       revalidateDashboardAggregates(workspaceId)
       return apiError(
         "SCAN_SERVICE_UNAVAILABLE",
         "Scanning became unavailable while starting this scan. Please try again shortly.",
         503
       )
-    }
-
-    if (operationClaim && operationClaim.status === "NEW") {
-      await completeAgentOperation(operationClaim.operation.id, workspaceId, {
-        resultReference: scan.id,
-      })
     }
 
     await prisma.auditLog.create({
@@ -377,30 +395,41 @@ async function post(request: Request) {
     // user as "Start scan" erroring — on a scan that was in fact created
     // and enqueued. `target` is the row already loaded and authorised above, and
     // findingCount is 0 by construction for a scan that has not run yet.
+    const result = serializeScanListItem({
+      id: scan.id,
+      status: scan.status,
+      goal: scan.goal,
+      mode: scan.mode,
+      triggerType: scan.triggerType,
+      startedAt: scan.startedAt,
+      endedAt: scan.endedAt,
+      durationMs: scan.durationMs,
+      summary: scan.summary,
+      errorCategory: scan.errorCategory,
+      errorMessage: scan.errorMessage,
+      createdAt: scan.createdAt,
+      findingCount: 0,
+      target: {
+        id: target.id,
+        name: target.name,
+        type: target.type,
+        url: target.url,
+        apiSpecUrl: target.apiSpecUrl,
+        repoFullName: target.repoFullName,
+      },
+    })
+    if (operationClaim?.status === "NEW") {
+      await completeAgentOperation(operationClaim.operation.id, workspaceId, {
+        resultReference: scan.id,
+        result: result as unknown as Record<string, unknown>,
+      })
+      operationCompleted = true
+    }
     return apiSuccess(
-      serializeScanListItem({
-        id: scan.id,
-        status: scan.status,
-        goal: scan.goal,
-        mode: scan.mode,
-        triggerType: scan.triggerType,
-        startedAt: scan.startedAt,
-        endedAt: scan.endedAt,
-        durationMs: scan.durationMs,
-        summary: scan.summary,
-        errorCategory: scan.errorCategory,
-        errorMessage: scan.errorMessage,
-        createdAt: scan.createdAt,
-        findingCount: 0,
-        target: {
-          id: target.id,
-          name: target.name,
-          type: target.type,
-          url: target.url,
-          apiSpecUrl: target.apiSpecUrl,
-          repoFullName: target.repoFullName,
-        },
-      }),
+      {
+        ...result,
+        ...(operationClaim?.status === "NEW" ? { operationId: operationClaim.operation.id } : {}),
+      },
       201
     )
   } catch (error) {
@@ -425,6 +454,19 @@ async function post(request: Request) {
     if (authErr) return authErr
     logger.error("Failed to create scan", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to create scan", 500)
+  } finally {
+    if (operationClaim?.status === "NEW" && !operationCompleted) {
+      const operationId = operationClaim.operation.id
+      await failAgentOperation(operationId, workspaceId, {
+        error: submissionAttempted ? "OPERATION_OUTCOME_UNKNOWN" : "OPERATION_NOT_SUBMITTED",
+        resultReference: submittedScanId,
+      }).catch((error) =>
+        logger.error("Failed to record scan operation outcome", {
+          operationId,
+          error: String(error),
+        })
+      )
+    }
   }
 }
 

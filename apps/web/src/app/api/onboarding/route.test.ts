@@ -5,7 +5,7 @@ const getWorkspaceMembership = vi.fn()
 const getOrCreateOnboardingState = vi.fn()
 const prisma = {
   target: { findFirst: vi.fn() },
-  onboardingState: { update: vi.fn() },
+  onboardingState: { update: vi.fn(), updateMany: vi.fn() },
 }
 
 vi.mock("@lyrashield/auth/server", () => ({ getSession, getWorkspaceMembership }))
@@ -73,6 +73,15 @@ describe("PATCH /api/onboarding", () => {
       targetId: "target-1",
       selectedGoal: "LAUNCH_REVIEW",
     })
+  })
+
+  it("rejects a stale tab without overwriting newer onboarding progress", async () => {
+    prisma.onboardingState.updateMany.mockResolvedValue({ count: 0 })
+    const response = await PATCH(
+      patchRequest({ currentStep: 2, expectedUpdatedAt: "2026-09-09T00:00:00.000Z" })
+    )
+    expect(response.status).toBe(409)
+    expect(prisma.onboardingState.update).not.toHaveBeenCalled()
   })
 
   it("rejects an unauthenticated request", async () => {

@@ -1,3 +1,5 @@
+import { connectionHealth } from "@/lib/connection-health"
+import { ConnectionActions } from "./connection-actions"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { listAgentConnections } from "@lyrashield/db"
@@ -73,35 +75,46 @@ export default async function ConnectionsPage() {
           </Card>
         ) : (
           <ul className="grid gap-2">
-            {connections.map((connection) => (
-              <li key={connection.id}>
-                <Card>
-                  <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">
-                        {connection.clientName ?? connection.clientType}
-                      </p>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {connection.scopes.length > 0
-                          ? `Scopes: ${connection.scopes.join(", ")}`
-                          : "No scopes granted"}
-                        {" · "}
-                        {connection.scopes.includes("lyrashield.write")
-                          ? "usable for reads and writes"
-                          : "usable for reads"}
-                        {connection.allTargets ? " · all current and future targets" : ""}
-                        {connection.expiresAt
-                          ? ` · authorization expires ${new Date(connection.expiresAt).toLocaleDateString()}`
-                          : ""}
-                      </p>
-                    </div>
-                    <Badge variant={connectionStatusVariant(connection.status)}>
-                      {connection.status.replaceAll("_", " ").toLowerCase()}
-                    </Badge>
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
+            {connections.map((connection) => {
+              const health = connectionHealth(connection)
+              return (
+                <li key={connection.id}>
+                  <Card>
+                    <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">
+                          {connection.clientName ?? connection.clientType}
+                        </p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {connection.scopes.length > 0
+                            ? `Scopes: ${connection.scopes.join(", ")}`
+                            : "No scopes granted"}
+                          {" · "}
+                          {health.usability}
+                          {connection.lastSuccessfulOperationAt
+                            ? ` · Last successful operation ${new Date(connection.lastSuccessfulOperationAt).toLocaleString()}`
+                            : " · No successful operation recorded"}
+                          {connection.allTargets ? " · all current and future targets" : ""}
+                          {connection.expiresAt
+                            ? ` · authorization expires ${new Date(connection.expiresAt).toLocaleDateString()}`
+                            : ""}
+                        </p>
+                      </div>
+                      <Badge variant={connectionStatusVariant(health.status)}>
+                        {health.status.replaceAll("_", " ").toLowerCase()}
+                      </Badge>
+                      {connection.userId === session.userId && (
+                        <ConnectionActions
+                          id={connection.id}
+                          workspaceId={workspaceId}
+                          status={health.status}
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>

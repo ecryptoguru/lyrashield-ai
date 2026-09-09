@@ -213,9 +213,12 @@ describe("WebMCP registration", () => {
     })
 
     const tool = registerTool.mock.calls[0][0] as {
-      execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
+      execute: (input: unknown, options?: { signal: AbortSignal }) => Promise<unknown>
     }
-    const result = await tool.execute({}, { signal: new AbortController().signal })
+    const result = await tool.execute({})
+    expect(await tool.execute({}, { signal: new AbortController().signal })).toMatchObject({
+      ok: true,
+    })
     expect(result).toMatchObject({ ok: true })
     expect(store.getSnapshot().latest?.status).toBe("completed")
     expect(store.getSnapshot().latest?.classification).toBe("ui-only")

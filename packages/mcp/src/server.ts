@@ -78,41 +78,36 @@ export class McpServer {
       name: t.name,
       title: (t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name])?.title,
       description: t.description,
-      inputSchema:
-        (includeApprovalId || requireIdempotencyKey) && t.mutating
-          ? {
-              ...t.inputSchema,
-              properties: {
-                ...t.inputSchema.properties,
-                ...(requireIdempotencyKey
-                  ? {
-                      idempotencyKey: {
-                        type: "string",
-                        minLength: 1,
-                        maxLength: 128,
-                        description:
-                          "Stable caller-generated ID for this logical mutation. Reuse it only when retrying the same action.",
-                      },
-                    }
-                  : {}),
-                ...(includeApprovalId
-                  ? {
-                      approvalId: {
-                        type: "string",
-                        minLength: 1,
-                        maxLength: 128,
-                        description:
-                          "Approval ID returned by a pending call. After human approval, retry the same tool with identical arguments and this ID.",
-                      },
-                    }
-                  : {}),
+      inputSchema: t.mutating
+        ? {
+            ...t.inputSchema,
+            properties: {
+              ...t.inputSchema.properties,
+              idempotencyKey: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                description:
+                  "Stable caller-generated ID for an identical retry. A new logical action needs a new ID.",
               },
-              required: [
-                ...(t.inputSchema.required ?? []),
-                ...(requireIdempotencyKey ? ["idempotencyKey"] : []),
-              ],
-            }
-          : t.inputSchema,
+              ...(includeApprovalId
+                ? {
+                    approvalId: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 128,
+                      description:
+                        "Approval ID returned by a pending call. After human approval, retry the same tool with identical arguments and this ID.",
+                    },
+                  }
+                : {}),
+            },
+            required: [
+              ...(t.inputSchema.required ?? []),
+              ...(requireIdempotencyKey ? ["idempotencyKey"] : []),
+            ],
+          }
+        : t.inputSchema,
       annotations: t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name],
       outputSchema: t.outputSchema ?? { type: "object", additionalProperties: true },
       // SDK 1.30 supports MCP task declarations, but LyraShield scan IDs are

@@ -66,6 +66,12 @@ beforeEach(() => {
 })
 
 describe("handleScan", () => {
+  it("preserves an explicit numeric-looking idempotency key as text", async () => {
+    const output = makeOutput()
+    expect(await handleScan(["--target", "t-1", "--idempotency-key", "00123"], output)).toBe(0)
+    expect(getScanBody()).toMatchObject({ headers: { "Idempotency-Key": "00123" } })
+  })
+
   it("defaults to STANDARD mode for a general scan", async () => {
     ;(loadDefaultProject as ReturnType<typeof vi.fn>).mockResolvedValue({
       workspaceId: "ws-current",

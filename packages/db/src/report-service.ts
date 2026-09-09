@@ -225,18 +225,32 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
   }
 
   const contentJson = await gatherReportData(params.workspaceId, params.scanId, type)
-  const report = await prisma.report.create({
-    data: {
-      workspaceId: params.workspaceId,
-      ...(params.scanId ? { scanId: params.scanId } : {}),
-      type: params.type ?? "developer",
-      title: params.title,
-      status: "generated",
-      format: "html",
-      createdById: params.createdById,
-      contentJson,
-    },
-  })
+  const persist = (client: Pick<typeof prisma, "report">) =>
+    client.report.create({
+      data: {
+        workspaceId: params.workspaceId,
+        ...(params.scanId ? { scanId: params.scanId } : {}),
+        type,
+        title: params.title,
+        status: "generated",
+        format: "html",
+        createdById: params.createdById,
+        contentJson,
+      },
+    })
+  const report = params.scanId
+    ? await withWorkspaceRLS(params.workspaceId, async (tx) => {
+        // Serialize snapshot writers without deleting historical duplicates.
+        // Gather outside this transaction so the lock never spans report generation.
+        const identity = JSON.stringify([params.workspaceId, params.scanId, type])
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`
+        const existing = await tx.report.findFirst({
+          where: { workspaceId: params.workspaceId, scanId: params.scanId, type, deletedAt: null },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        })
+        return existing ?? persist(tx)
+      })
+    : await persist(prisma)
 
   logger.info("Report created", { reportId: report.id, workspaceId: params.workspaceId })
   return report

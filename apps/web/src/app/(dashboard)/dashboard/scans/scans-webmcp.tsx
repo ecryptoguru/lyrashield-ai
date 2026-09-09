@@ -22,8 +22,13 @@ const prepareScanInputSchema: WebMcpInputSchema = {
 }
 
 const requestScanInputSchema: WebMcpInputSchema = {
-  required: ["targetName"],
+  required: ["targetName", "requestId"],
   properties: {
+    requestId: {
+      type: "string",
+      description:
+        "Unique ID for this requested scan. Reuse only for an identical retry; use a new ID for a new scan.",
+    },
     targetName: {
       type: "string",
       description: "The unique visible target name.",
@@ -174,6 +179,7 @@ export function useScansWebMcp({
   // never supply another workspace or principal.
   useEffect(() => {
     const cleanup = registerWebMcpTool<{
+      requestId: string
       targetName: string
       reviewType?: string
     }>({
@@ -248,7 +254,7 @@ export function useScansWebMcp({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Idempotency-Key": `webmcp:${target.id}:${selectedOption.id}`,
+            "Idempotency-Key": input.requestId,
           },
           body: JSON.stringify({
             workspaceId,
@@ -259,7 +265,7 @@ export function useScansWebMcp({
           signal,
         })
         const body = (await response.json().catch(() => null)) as {
-          data?: { id?: string }
+          data?: { id?: string; operationId?: string }
           error?: { code?: string; message?: string }
         } | null
         if (!response.ok) {
@@ -268,6 +274,7 @@ export function useScansWebMcp({
         return {
           started: true,
           scanId: body?.data?.id,
+          operationId: body?.data?.operationId,
           target: { name: target.name, type: target.type },
           reviewType: { id: selectedOption.id, label: selectedOption.label },
           note: "The scan is durable. Poll its status or open it in Scans.",

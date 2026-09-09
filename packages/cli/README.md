@@ -122,3 +122,9 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 - `LYRASHIELD_API_KEY` — required; the workspace API key (`lsk_...`)
 - `LYRASHIELD_API_URL` — optional; defaults to `https://app.lyrashieldai.com`
 - `NO_COLOR=1` — optional; disables colored terminal output
+
+### Retrying a scan safely
+
+Supply `--idempotency-key <request-id>` when a request may be retried across CLI invocations. Reuse the same key and inputs after a lost response. Changed inputs with the same key conflict; an uncertain failed operation is not automatically resubmitted. Without this flag, each invocation is a new request.
+
+Use `lyrashield status --operation <operationId>` (with `--json` for scripts) to read the server's current status, result reference, and permitted recovery. This reports submission state; follow the returned scan ID to inspect scan completion. Access remains bound to the originating credential and workspace.

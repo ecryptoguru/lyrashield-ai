@@ -1,11 +1,16 @@
+import { getOperationStatus } from "@lyrashield/sdk"
 import minimist from "minimist"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import type { Output } from "../output.js"
 
 export async function handleStatus(args: string[], output: Output): Promise<number> {
-  const parsed = minimist(args, { boolean: ["watch"] })
+  const parsed = minimist(args, { boolean: ["watch"], string: ["operation"] })
   const [scanId] = parsed._
+  if (parsed.operation && scanId) {
+    output.error("Supply a scan ID or --operation, not both.")
+    return 2
+  }
 
   // Fail before doing work rather than printing a result and exiting 0, which
   // would let a script believe it had followed the scan to completion.
@@ -19,10 +24,15 @@ export async function handleStatus(args: string[], output: Output): Promise<numb
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
   const client = await createClient()
 
+  if (parsed.operation) {
+    const res = await getOperationStatus(client, parsed.operation, workspaceId)
+    output.result(res)
+    return 0
+  }
   if (scanId) {
     const res = await client.request(
       "GET",
-      `/scans/${scanId}?workspaceId=${encodeURIComponent(workspaceId)}`
+      `/scans/${encodeURIComponent(scanId)}?workspaceId=${encodeURIComponent(workspaceId)}`
     )
     output.result(res)
     return 0

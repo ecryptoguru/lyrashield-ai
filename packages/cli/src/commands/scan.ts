@@ -74,7 +74,7 @@ async function resolveTarget(
 
 export async function handleScan(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["target", "goal", "mode", "repo", "name"],
+    string: ["target", "goal", "mode", "repo", "name", "idempotency-key"],
     boolean: ["watch", "auto"],
     default: { goal: "TEST_APP", mode: "STANDARD" },
     alias: { t: "target", g: "goal", m: "mode" },
@@ -127,6 +127,7 @@ export async function handleScan(args: string[], output: Output): Promise<number
 
   const res = (await client.request("POST", "/scans", {
     body: { workspaceId, targetId: resolved.targetId, goal, mode },
+    headers: { "Idempotency-Key": parsed["idempotency-key"] ?? crypto.randomUUID() },
   })) as { id: string }
 
   if (resolved.isNew && resolved.repository) {

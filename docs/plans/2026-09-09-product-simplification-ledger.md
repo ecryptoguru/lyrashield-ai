@@ -4,6 +4,10 @@ Companion to [`2026-09-09-product-simplification-coding-handoff.md`](./2026-09-0
 States: `not started` → `implemented` → `locally verified` → `CI verified` → `deployed` → `operationally accepted`, or `blocked: <exact dependency>`.
 A local green test does not fill deployment or client columns. Source: PR #638 (merged, main `4671ad11`) for Waves 1–3 core; this session's follow-up wave (W2-05/07/11/12, W3-03/05/06) is the follow-up PR based on main `4671ad11` (with #639's ledger note merged).
 
+## Current final-pass status
+
+The tables below are historical implementation receipts, not current completion claims. PRs #637, #638 and #640 are merged. See [the remediation and all-30-task final pass](./2026-09-09-simplification-remediation-verification.md) for the follow-up fixes, current local checks and remaining release gates. The historical WebMCP blocker is superseded by bounded native-browser proof with experimental features enabled.
+
 ## Baseline receipts (this session)
 
 | Check                         | Result                                                                                                                                                 |

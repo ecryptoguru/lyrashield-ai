@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("./client", () => ({
-  prisma: { report: { create: vi.fn(), findFirst: vi.fn() } },
+  prisma: { $executeRaw: vi.fn(), report: { create: vi.fn(), findFirst: vi.fn() } },
+}))
+vi.mock("./rls", () => ({
+  withWorkspaceRLS: vi.fn(async (_workspaceId, fn) => fn((await import("./client")).prisma)),
 }))
 vi.mock("./report-generator", () => ({ gatherReportData: vi.fn() }))
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn() } }))

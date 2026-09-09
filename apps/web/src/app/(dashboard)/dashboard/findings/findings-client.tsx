@@ -54,7 +54,7 @@ import {
   TARGET_PLURAL,
   TARGET_SINGULAR,
 } from "@/lib/terminology"
-import { getFindingNextStep } from "@/lib/finding-next-step"
+import { getFindingNextAction } from "@/lib/finding-next-step"
 import {
   Sheet,
   SheetContent,
@@ -1268,10 +1268,12 @@ function FindingDetailDrawer({
 
   const latestRetest = detail?.retests?.[0] ?? null
   const hasFixProposal = (detail?.fixProposals?.length ?? 0) > 0
-  const nextStep = getFindingNextStep({
+  const nextAction = getFindingNextAction({
+    status: finding.status,
     latestRetestStatus: latestRetest?.status,
     hasFixProposal,
   })
+  const nextStep = nextAction.action
 
   async function queueRetest() {
     if (!detail?.scanId) return
@@ -1504,7 +1506,9 @@ function FindingDetailDrawer({
                   <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
                     Next step
                   </p>
-                  {nextStep === "REPORT" && latestRetest ? (
+                  {nextStep === "NONE" ? (
+                    <p className="text-muted-foreground mt-2 text-sm">{nextAction.reason}</p>
+                  ) : nextStep === "REPORT" && latestRetest ? (
                     <div className="mt-2">
                       <h3 className="font-semibold">
                         Turn the retest result into an assurance report
@@ -1736,8 +1740,10 @@ function FindingDetailDrawer({
 
                 {/* Status transition actions — Accept risk / Mark false positive */}
                 {!isResolved && (
-                  <div className="space-y-2 border-t pt-2">
-                    <p className="text-muted-foreground text-xs font-medium">Risk decisions</p>
+                  <details className="space-y-2 border-t pt-2">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      Other actions: risk decisions
+                    </summary>
                     <div className="flex flex-wrap gap-2">
                       {!showAcceptRisk && !showFalsePositive && (
                         <>
@@ -1794,7 +1800,7 @@ function FindingDetailDrawer({
                         error={patchError}
                       />
                     )}
-                  </div>
+                  </details>
                 )}
                 {isResolved && (
                   <div className="bg-muted/30 text-muted-foreground rounded-md border px-3 py-2 text-xs">
