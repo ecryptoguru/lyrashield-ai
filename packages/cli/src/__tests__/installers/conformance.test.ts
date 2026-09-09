@@ -30,6 +30,7 @@ function parseJsoncContent(content: string): Record<string, unknown> {
 const claude = getAgent("claude-code")!
 const kilo = getAgent("kilo-code")!
 const aider = getAgent("aider")!
+const opencode = getAgent("opencode")!
 
 describe("conformance: install/uninstall round-trips", () => {
   let cwd: string
@@ -227,6 +228,29 @@ describe("conformance: install/uninstall round-trips", () => {
     expect(content).not.toContain("LYRASHIELD_API_URL")
     expect(content).not.toContain("LYRASHIELD_API_KEY")
     expect(content).not.toContain("oauth")
+  })
+
+  it("native remote OAuth writes server metadata without a bearer token", async () => {
+    const result = await installAgent({
+      agent: opencode,
+      transport: "remote-http",
+      apiUrl: API_URL,
+      scope: "project",
+      cwd,
+      all: true,
+      useCredentialStore: true,
+    })
+
+    expect(result.outcome).toBe("CONFIGURED")
+    const content = await readFile(path.join(cwd, "opencode.json"), "utf-8")
+    const parsed = JSON.parse(content) as Record<string, unknown>
+    const mcp = parsed.mcp as Record<string, Record<string, unknown>>
+    expect(mcp.lyrashield).toMatchObject({
+      type: "remote",
+      url: "https://app.lyrashieldai.com/api/mcp",
+    })
+    expect(content).not.toContain("Authorization")
+    expect(content).not.toContain("LYRASHIELD_API_KEY")
   })
 
   it("interpolated agent writes no literal API key", async () => {

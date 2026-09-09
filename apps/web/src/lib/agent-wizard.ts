@@ -71,7 +71,7 @@ function buildRemoteSnippet(agent: AgentEntry, apiUrl: string): string | undefin
     return renderConfig(agent, {
       transport: "remote-http",
       apiUrl,
-      secretMode: "header",
+      secretMode: agent.remoteAuth === "oauth" ? "shell" : "header",
     }).content
   } catch {
     return undefined
@@ -90,6 +90,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   const steps: WizardStep[] = []
   const configPath = primaryConfigPath(agent)
   const supportsRemote = agent.transports.includes("remote-http")
+  const usesRemoteOAuth = supportsRemote && agent.remoteAuth === "oauth"
 
   // 1) Install / detect
   if (agent.installStrategy === "vendor-cli" && agent.vendorCli) {
@@ -153,9 +154,9 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       id: "config",
       kind: "config",
       title: "Add LyraShield in the agent",
-      summary: `${agent.displayName} is configured through its own UI. Add a new MCP server and use the endpoint below with a Bearer key.`,
+      summary: `${agent.displayName} is configured through its own UI. Add a new MCP server and use the connection values below.`,
       snippet: supportsRemote
-        ? `URL: ${apiUrl}/api/mcp\nAuthorization: Bearer ${API_KEY_PLACEHOLDER}`
+        ? `URL: ${apiUrl}/api/mcp\nAuthentication: ${usesRemoteOAuth ? "OAuth" : `Bearer ${API_KEY_PLACEHOLDER}`}`
         : `Run: npx -y @lyrashield/mcp\nEnv: LYRASHIELD_API_KEY=${API_KEY_PLACEHOLDER}`,
       copyLabel: `Copy ${agent.displayName} connection values`,
       note: agent.gotchas[0],
@@ -167,11 +168,14 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     id: "api-key",
     kind: "api-key",
     title: "Authenticate",
-    summary:
-      "Recommended: sign in with the read-only OAuth device flow so the CLI and local MCP server can use your selected workspace.",
-    command: "lyrashield login --oauth",
-    copyLabel: "Copy login command",
-    note: "Credentials are stored at ~/.lyrashield/credentials.json. For API-key-only clients, create an lsk_ key in Settings → API keys and run `lyrashield login` instead.",
+    summary: usesRemoteOAuth
+      ? `Complete OAuth in ${agent.displayName}, select one workspace, and approve the requested access once.`
+      : "Sign in with the OAuth device flow so the CLI and local MCP server can use your selected workspace.",
+    command: usesRemoteOAuth ? undefined : "lyrashield login --oauth",
+    copyLabel: usesRemoteOAuth ? undefined : "Copy login command",
+    note: usesRemoteOAuth
+      ? "Matching actions then run within your workspace role, connection scope, target access, and budget. Reconnect only after revocation, expiry, or a scope change."
+      : "Credentials are stored at ~/.lyrashield/credentials.json. For API-key-only clients, create an lsk_ key in Settings → API keys and run `lyrashield login` instead.",
   })
 
   // 4) Rules / skills

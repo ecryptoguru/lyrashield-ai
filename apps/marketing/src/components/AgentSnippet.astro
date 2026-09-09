@@ -41,11 +41,14 @@ const effectiveTransport: Transport =
   transport && safeAgent.transports.includes(transport) ? transport : (safeAgent.transports[0] ?? "stdio")
 
 const defaultSecretMode: InstallOptions["secretMode"] =
-  effectiveTransport === "stdio" ? "shell" : "interpolated"
+  effectiveTransport === "stdio" || safeAgent.remoteAuth === "oauth" ? "shell" : "interpolated"
 
 const effectiveSecretMode: InstallOptions["secretMode"] = secretMode ?? defaultSecretMode
 
 function buildKeyNote(snippet: string): string {
+  if (effectiveTransport === "remote-http" && safeAgent.remoteAuth === "oauth") {
+    return "Complete OAuth in the client after adding the server. No API key belongs in this config."
+  }
   if (snippet.includes("<LYRASHIELD_API_KEY>")) {
     return "Replace <LYRASHIELD_API_KEY> with your workspace API key."
   }
@@ -69,8 +72,8 @@ function buildRemoteManualCommand(agent: AgentEntry): string {
   for (const [key, value] of Object.entries(remoteFields)) {
     entry[key] = value === "<apiUrl>" ? MCP_REMOTE_URL : value
   }
-  entry.headers = {
-    Authorization: `Bearer ${apiKey}`,
+  if (agent.remoteAuth !== "oauth") {
+    entry.headers = { Authorization: `Bearer ${apiKey}` }
   }
 
   return JSON.stringify({ mcpServers: { [SERVER_NAME]: entry } }, null, 2)

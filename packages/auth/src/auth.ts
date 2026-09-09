@@ -90,8 +90,8 @@ const oauthProviderPlugin = oauthProvider({
   allowPublicClientPrelogin: true,
   // apps/web serves the required path-based issuer metadata route.
   silenceWarnings: { oauthAuthServerConfig: true },
-  // Dynamic MCP clients must be allowed to request the approval-gated write
-  // scope. This only permits a request; consent and the per-action gate remain required.
+  // Dynamic MCP clients may request delegated write scope. Consent records the
+  // grant; execution still revalidates role, scope, target, budget, and expiry.
   clientRegistrationDefaultScopes: oauthScopes,
   clientRegistrationAllowedScopes: oauthScopes,
   postLogin: {

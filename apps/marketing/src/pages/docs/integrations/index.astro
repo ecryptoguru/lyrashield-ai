@@ -10,7 +10,7 @@ const title = "Connect LyraShield to AI Coding Tools | Integrations"
 const description =
   "Connect LyraShield AI to Claude Code, Cursor, Windsurf, VS Code, GitHub Actions, and more. Step-by-step MCP server setup, REST API keys, and agent rules for every AI coding environment."
 
-const updatedDate = "2026-08-12"
+const updatedDate = "2026-09-09"
 
 const agents = listPreferredAgents()
 
@@ -38,7 +38,7 @@ const faqItems = [
   },
   {
     q: "Which editors use the remote MCP endpoint instead of the local stdio server?",
-    a: "Cloud-hosted editors that cannot run local processes — such as Lovable, Bolt.new, Replit, and v0 — use protected-resource discovery at https://app.lyrashieldai.com/api/mcp. OAuth is read-only by default; explicit write scope and LyraShield approval are required for mutating tools.",
+    a: "Cloud-hosted editors that cannot run local processes — such as Lovable, Bolt.new, Replit, and v0 — use protected-resource discovery at https://app.lyrashieldai.com/api/mcp. During OAuth, users choose one workspace and the requested access. Matching delegated actions run without repeated LyraShield approval.",
   },
   {
     q: "Is the @lyrashield/mcp package available on npm now?",
@@ -233,8 +233,8 @@ npx lyrashield init</code></pre>
   <p>
     OAuth clients use authorization code + PKCE (S256), refresh and revocation, and a consent screen
     that names the client, workspace, and requested scopes. A connection is bound to one active
-    workspace; changing workspaces requires disconnecting and reconnecting. Write scope is optional,
-    and every write still enters the exact-argument approval flow. Use the API-key guide below only
+    workspace; changing workspaces requires disconnecting and reconnecting. Matching delegated
+    actions run without repeated approval after consent. Use the API-key guide below only
     for CI or clients that cannot complete OAuth.
   </p>
 

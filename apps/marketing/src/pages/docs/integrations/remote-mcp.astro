@@ -6,20 +6,20 @@ const canonical = new URL("/docs/integrations/remote-mcp", origin).toString()
 const title = "LyraShield Remote MCP Endpoint — Cloud Editor Setup"
 const description =
   "Connect Lovable, Bolt.new, Replit, and v0 to LyraShield via the remote Streamable-HTTP MCP endpoint at https://app.lyrashieldai.com/api/mcp. No local process required."
-const updatedDate = "2026-08-12"
+const updatedDate = "2026-09-09"
 
 const faqItems = [
   {
     q: "Can cloud editors run mutating LyraShield tools?",
-    a: "Remote mutating tools (scan triggers, finding submissions, report creation) require an explicit OAuth write scope plus human out-of-band approval. When a cloud agent calls one, the server returns a structured PENDING result with an approvalId and URL. After a human approves it in the LyraShield dashboard, the agent can re-call the same tool with the approvalId to execute it once. Read-only inspection tools work without approval.",
+    a: "A browser-confirmed OAuth connection can run the workflows and targets granted at consent without another LyraShield review. LyraShield still checks the user's current workspace role, connection state, scope, target access, budget, expiry, and idempotency for every call. Legacy credentials and requests outside the grant fail closed or use exact-input approval.",
   },
   {
     q: "What is the difference between remote MCP and the GitHub Action?",
     a: "Remote MCP connects your cloud editor's AI assistant to LyraShield tools for interactive use. The GitHub Action runs automated checks in CI on every pull request without any AI editor involved. For cloud-hosted workflows, using both together is recommended.",
   },
   {
-    q: "How long does an approval stay pending?",
-    a: "Approvals expire after 15 minutes. An expired approval must be re-requested.",
+    q: "When will LyraShield still ask for approval?",
+    a: "Exact-input approval remains a compatibility fallback for legacy credentials and requests outside a delegated OAuth grant. Pending approvals expire after 15 minutes.",
   },
 ]
 
@@ -76,12 +76,11 @@ const jsonLd: unknown[] = [
     tools.
   </p>
 
-  <div class="callout callout--warn">
-    <strong>Human approval required:</strong> Remote mutating tools (scan triggers, finding
-    submissions, report creation) return a PENDING result and an approval URL. They run only after a
-    human approves the action in the LyraShield dashboard. Read-only inspection tools work
-    everywhere. OAuth connections are read-only by default; write scope is explicit and every
-    mutating call still enters the approval flow. There is no normal-user or marketplace bypass.
+  <div class="callout">
+    <strong>Connect once:</strong> During OAuth, select one workspace and grant the workflows you
+    want the client to use. Matching actions then run without another LyraShield review. Each call
+    still enforces the current workspace role, connection state, scope, target access, budget,
+    expiry, and idempotency.
   </div>
 
   <h2>Endpoint details</h2>
@@ -111,41 +110,31 @@ const jsonLd: unknown[] = [
     </tbody>
   </table>
 
-  <h2>Mutating-tool approval flow</h2>
+  <h2>Authorization behavior</h2>
   <p>
-    When a cloud editor calls a mutating tool over remote MCP, LyraShield does <strong>not</strong>
-    execute it immediately. Instead it creates a PENDING agent approval and returns a structured
-    result the agent can understand:
+    A browser-confirmed OAuth delegation records one workspace, allowed workflows, target scope,
+    scan profiles, and expiry. LyraShield revalidates that grant on every mutating call. A stable
+    idempotency key makes retries return the stored operation instead of repeating it.
   </p>
-  <pre><code>{`{
-  "status": "PENDING",
-  "approvalId": "cm...",
-  "approvalUrl": "https://app.lyrashieldai.com/agent-approvals/cm...",
-  "message": "This action requires human approval. Poll with the same arguments and approvalId once approved."
-}`}</code></pre>
-  <ol>
-    <li>A human opens the approval URL and reviews the exact action and inputs.</li>
-    <li>After approving, the agent re-calls the same tool with the same arguments plus <code>approvalId</code>.</li>
-    <li>LyraShield verifies the input hash, executes the tool exactly once, and returns the result.</li>
-    <li>Replays with the same approvalId return the stored result without re-executing.</li>
-  </ol>
   <p>
-    Approvals expire after 15 minutes. An expired approval must be re-requested. Write scope is
-    required; read-only OAuth connections and API keys are refused even for approved actions.
+    Requests outside the recorded grant, expired or revoked connections, lost workspace access,
+    and unsupported legacy credentials never inherit delegated permission. They fail closed or use
+    the exact-input approval fallback. LyraShield-generated fixes and pull requests remain proposals;
+    LyraShield never merges a pull request automatically.
   </p>
 
   <h2>Lovable</h2>
   <p>
     In Lovable, open <strong>Settings → Integrations → Custom MCP</strong>. Add a new remote MCP
     server with the URL <code>https://app.lyrashieldai.com/api/mcp</code>. Complete the host's OAuth
-    flow when offered; otherwise use a read-only API key in the Authorization header.
+    flow when offered; otherwise use a scoped API key in the Authorization header.
   </p>
 
   <h2>Bolt.new (hosted)</h2>
   <p>
     In the Bolt.new hosted environment, navigate to <strong>Settings → MCP Servers</strong> and add
     a custom remote server. Use the endpoint URL and complete OAuth when the host offers it; use a
-    Bearer API key only as a fallback. Note: Bolt.new Desktop supports local stdio — see the other
+    scoped Bearer API key only as a fallback. Note: Bolt.new Desktop supports local stdio — see the other
     editor guides for that setup.
   </p>
 
@@ -157,7 +146,7 @@ const jsonLd: unknown[] = [
       UI in your Replit version).
     </li>
     <li>Add a new server with the remote endpoint URL.</li>
-    <li>Complete OAuth if Replit presents it; otherwise set the Authorization header with a read-only API key.</li>
+    <li>Complete OAuth if Replit presents it; otherwise set the Authorization header with a scoped API key.</li>
   </ol>
   <p>
     For automated checks on every push, the <a href="/docs/integrations/github-action"
@@ -170,7 +159,7 @@ const jsonLd: unknown[] = [
   <p>
     In v0, open <strong>Settings → Integrations → MCP</strong> and add a custom remote MCP server.
     Supply the endpoint URL and complete OAuth if v0 presents it. If it does not, use a read-only
-    API key in the Bearer authorization header.
+    scoped API key in the Bearer authorization header.
   </p>
 
   <h2>GitHub Action as a complement</h2>

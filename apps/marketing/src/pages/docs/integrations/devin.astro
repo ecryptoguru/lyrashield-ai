@@ -6,7 +6,7 @@ const canonical = new URL("/docs/integrations/devin", origin).toString()
 const title = "LyraShield MCP for Devin — Setup Guide"
 const description =
   "Connect LyraShield to Devin through its MCP Marketplace using a remote Streamable HTTP server."
-const updatedDate = "2026-08-13"
+const updatedDate = "2026-09-09"
 
 const jsonLd: unknown[] = [
   {
@@ -43,10 +43,7 @@ const jsonLd: unknown[] = [
     <li>Open <strong>Settings → MCP Marketplace</strong> in Devin.</li>
     <li>Select <strong>Add Your Own</strong> and choose <strong>HTTP</strong>.</li>
     <li>Enter <code>https://app.lyrashieldai.com/api/mcp</code> as the server URL.</li>
-    <li>
-      Add an <code>Authorization</code> header with <code>Bearer &lt;your lsk_ API key&gt;</code>.
-      Keep that key out of source control.
-    </li>
+    <li>Select <strong>OAuth</strong> authentication and choose the required access level.</li>
     <li>Save, then select <strong>Test listing tools</strong>.</li>
   </ol>
 
@@ -56,18 +53,18 @@ const jsonLd: unknown[] = [
     server is enabled for work.
   </div>
 
-  <h2>Credential choice</h2>
+  <h2>Connect once</h2>
   <p>
-    Use a scoped LyraShield API key for the Marketplace header. The local OAuth device flow is for
-    LyraShield CLI and local stdio clients; Devin&apos;s hosted Marketplace configuration needs the
-    header supplied in its UI.
+    Complete LyraShield OAuth when Devin opens the browser. Select one workspace and grant the
+    workflows Devin should use. Matching calls then run within your current role, target access,
+    budget, and connection scope without another LyraShield approval.
   </p>
 
   <h2>Verify the connection</h2>
   <p>
     After the Marketplace test passes, start a Devin session and ask which LyraShield tools are
-    available. Remote write actions remain approval-gated; read-only inspection does not grant
-    permission to trigger a scan or create a pull request.
+    available. Use <strong>Test listing tools</strong> to confirm authentication and tool discovery
+    before starting work.
   </p>
 
   <p>

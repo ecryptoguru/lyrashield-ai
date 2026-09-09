@@ -39,6 +39,7 @@ export const agentEntrySchema = z
     rootKey: z.string().nullable(),
     locations: z.array(configLocationSchema),
     transports: z.array(transportSchema).min(1),
+    remoteAuth: z.enum(["oauth", "api-key"]).optional(),
     credential: credentialStyleSchema,
     requiredEntryFields: z.record(z.string(), z.string()).optional(),
     transportFields: z.partialRecord(transportSchema, z.record(z.string(), z.string())).optional(),

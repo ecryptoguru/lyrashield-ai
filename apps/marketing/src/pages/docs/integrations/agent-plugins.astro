@@ -6,7 +6,7 @@ const canonical = new URL("/docs/integrations/agent-plugins", origin).toString()
 const title = "LyraShield Agent Plugin — Coding Agent Setup"
 const description =
   "Install the LyraShield Agent Plugin through each coding client's documented local, marketplace, or MCP activation path."
-const updatedDate = "2026-09-08"
+const updatedDate = "2026-09-09"
 
 // Kept in the same order as the launch-client table below.
 const launchClients = [
@@ -57,7 +57,7 @@ const faqItems = [
   },
   {
     q: "Does the plugin let the agent change my code on its own?",
-    a: "No. LyraShield findings and fixes are proposals requiring review. Mutating tools need a write-scoped credential, and over the remote endpoint they additionally need a human out-of-band approval before they run.",
+    a: "No. LyraShield findings and fixes are proposals requiring review before they land. A browser-confirmed OAuth delegation can run its recorded LyraShield workflows without repeated approval, but it remains limited by the user's current role, workspace, targets, profiles, budget, scope, and connection expiry. LyraShield never auto-merges a pull request.",
   },
   {
     q: "Why does VS Code use an MCP config file instead of the plugin?",
@@ -180,13 +180,12 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
 
   <h2>Findings are proposals, not automatic changes</h2>
   <p>
-    Installing the plugin does not let an agent rewrite your code unattended. Read-only tools work
-    with any valid credential. Mutating tools need a write-scoped credential, and over the{" "}
-    <a href="/docs/integrations/remote-mcp">remote endpoint</a> they also need a human out-of-band
-    approval: the server returns a pending result with an approval link rather than executing, and
-    the agent can only proceed after a person approves it. See{" "}
-    <a href="/docs/approvals">Approvals</a> for the full flow. Fixes LyraShield generates are
-    proposals requiring review before they land.
+    Installing the plugin does not let an agent rewrite your code unattended. During remote OAuth,
+    the user chooses one workspace and the requested workflows. Matching calls can then run without
+    repeated LyraShield approval, while current role, target access, profile, budget, connection,
+    scope, expiry, and idempotency checks still apply. Legacy and out-of-grant requests fail closed
+    or use the <a href="/docs/approvals">exact-input approval fallback</a>. Fixes and pull requests
+    remain proposals requiring review before they land; LyraShield never merges them automatically.
   </p>
 
   <h2>Uninstall</h2>

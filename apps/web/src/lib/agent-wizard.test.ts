@@ -12,6 +12,7 @@ describe("agent wizard connection snippets", () => {
     expect(local).not.toContain("/api/mcp")
     expect(local).not.toContain("LYRASHIELD_API_KEY")
     expect(remote).toContain("https://app.lyrashieldai.com/api/mcp")
+    expect(remote).not.toContain("Authorization")
   })
 
   it("does not ask Agent Plugin users to configure an MCP server a second time", () => {
@@ -31,5 +32,22 @@ describe("agent wizard connection snippets", () => {
     expect(config?.title).toBe("Add LyraShield in the agent")
     expect(config?.note).toContain("MCP Marketplace")
     expect(config?.snippet).toContain("https://app.lyrashieldai.com/api/mcp")
+    expect(config?.snippet).toContain("Authentication: OAuth")
+    expect(config?.snippet).not.toContain("Bearer")
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBeUndefined()
+  })
+
+  it("renders native OAuth config for OpenCode and Hermes without bearer placeholders", () => {
+    for (const agentId of ["opencode", "hermes"]) {
+      const wizard = buildAgentWizard(agentId, "https://app.lyrashieldai.com")
+      const remote = wizard?.steps.find((step) => step.id === "config-remote")?.snippet
+      expect(remote).toContain("https://app.lyrashieldai.com/api/mcp")
+      expect(remote).not.toContain("Authorization")
+    }
+    expect(
+      buildAgentWizard("hermes", "https://app.lyrashieldai.com")?.steps.find(
+        (step) => step.id === "config-remote"
+      )?.snippet
+    ).toContain('auth: "oauth"')
   })
 })
