@@ -40,7 +40,8 @@ export function assertOAuthDelegatedScope(
 ): void {
   const connection = session.oauth
   if (!connection?.connectionId) return
-  if (!targetId || (!connection.allTargets && !connection.allowedTargetIds?.includes(targetId))) {
+  if (!targetId && !connection.allTargets) throw new Error("FORBIDDEN")
+  if (targetId && !connection.allTargets && !connection.allowedTargetIds?.includes(targetId)) {
     throw new Error("FORBIDDEN")
   }
   if (profile && !connection.allowedProfiles?.includes(profile)) throw new Error("FORBIDDEN")

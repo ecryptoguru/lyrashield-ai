@@ -197,5 +197,10 @@ describe("OAuth delegated scope", () => {
       oauth: { ...baseSession.oauth, allowedTargetIds: [], allTargets: true },
     }
     expect(() => assertOAuthDelegatedScope(session, "target-2", "STANDARD")).not.toThrow()
+    expect(() => assertOAuthDelegatedScope(session, undefined)).not.toThrow()
+  })
+
+  it("rejects target-less mutations for a selected-target grant", () => {
+    expect(() => assertOAuthDelegatedScope(baseSession, undefined)).toThrow("FORBIDDEN")
   })
 })
