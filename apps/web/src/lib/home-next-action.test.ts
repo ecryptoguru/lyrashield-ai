@@ -40,7 +40,10 @@ describe("deriveHomeDecision — one canonical action", () => {
     const decision = deriveHomeDecision(base)
     expect(decision.action?.title).toBe("Run your first review")
     expect(decision.action?.cta).toBe("Start a scan")
-    expect(decision.primaryAction).toEqual({ href: "/dashboard/scans?new=1", label: "Start a scan" })
+    expect(decision.primaryAction).toEqual({
+      href: "/dashboard/scans?new=1",
+      label: "Start a scan",
+    })
   })
 
   it("points at the highest-priority finding once evidence exists with blockers", () => {
@@ -84,7 +87,10 @@ describe("deriveHomeDecision — one canonical action", () => {
     const decision = deriveHomeDecision({
       ...base,
       targets: { ...base.targets, expiredAssessments: 1 },
-      lastEvaluatedAssessment: { ...evaluatedAssessment(), scoreExpiresAt: "2026-01-01T00:00:00.000Z" },
+      lastEvaluatedAssessment: {
+        ...evaluatedAssessment(),
+        scoreExpiresAt: "2026-01-01T00:00:00.000Z",
+      },
       gateTargets: [gate("INSUFFICIENT_EVIDENCE")],
     })
     expect(decision.action?.cta).toBe("Start a scan")

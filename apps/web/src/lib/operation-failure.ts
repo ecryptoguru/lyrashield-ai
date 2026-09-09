@@ -128,7 +128,8 @@ export function presentOperationFailure(
     case "NO_REPOSITORIES":
       return {
         cause: "The GitHub installation has no accessible repositories.",
-        effect: "Repository targets cannot be created until the installation can access at least one repository.",
+        effect:
+          "Repository targets cannot be created until the installation can access at least one repository.",
         recovery: "Check the installation's repository access on GitHub, then retry.",
         recoveryHref: "/dashboard/connections",
       }
@@ -137,14 +138,16 @@ export function presentOperationFailure(
       return {
         cause: `Source ownership could not be confirmed${target}.`,
         effect: "The target stays unauthorized; scans are not started and nothing is charged.",
-        recovery: "Approve the provider's authorization prompt from the Connect button — that approval is what proves ownership.",
+        recovery:
+          "Approve the provider's authorization prompt from the Connect button — that approval is what proves ownership.",
         recoveryHref: "/dashboard/connections",
       }
     case "INSTALLATION_ALREADY_CLAIMED":
       return {
         cause: "This installation is already connected to a different workspace.",
         effect: "An installation can only be linked to one workspace at a time.",
-        recovery: "Disconnect it there first, or install the app on a different account or organisation.",
+        recovery:
+          "Disconnect it there first, or install the app on a different account or organisation.",
         recoveryHref: "/dashboard/connections",
       }
     case "SSRF_BLOCKED":
@@ -166,13 +169,15 @@ export function presentOperationFailure(
     case "INTERNAL_ERROR":
       return {
         cause: "The service is temporarily unavailable.",
-        effect: "The action did not complete; no approval was granted and no billable work started.",
+        effect:
+          "The action did not complete; no approval was granted and no billable work started.",
         recovery: "Try again shortly. If it persists, check the status page before retrying.",
       }
     case "COVERAGE_INCOMPLETE":
       return {
         cause: "The last scan completed without evaluating the target.",
-        effect: "There is no evidence to judge — this is not a clean result and no launch decision is possible.",
+        effect:
+          "There is no evidence to judge — this is not a clean result and no launch decision is possible.",
         recovery: "Review the scan's coverage details, then re-run the review.",
         recoveryHref: "/dashboard/scans",
       }

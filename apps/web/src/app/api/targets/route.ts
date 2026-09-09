@@ -181,7 +181,44 @@ async function post(request: Request) {
             environment: data.environment,
           }
 
-    const target = await prisma.target.create({ data: targetData })
+    let target
+    try {
+      target = await prisma.target.create({ data: targetData })
+    } catch (error) {
+      // W2-02: same-source retries adopt the existing target instead of
+      // creating a second one. The unique constraints on (workspaceId,
+      // repoFullName) and (workspaceId, url) are the identity rules.
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code: unknown }).code === "P2002"
+      ) {
+        const existing = await prisma.target.findFirst({
+          where: {
+            workspaceId,
+            deletedAt: null,
+            ...(data.type === "REPO"
+              ? { repoFullName: `${data.repoOwner}/${data.repoName}` }
+              : { url: data.url }),
+          },
+          select: { id: true },
+        })
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "TARGET_EXISTS",
+              message:
+                "A target for this source already exists in the workspace. Continue with the existing target.",
+              existingTargetId: existing?.id ?? null,
+            },
+          },
+          { status: 409 }
+        )
+      }
+      throw error
+    }
 
     await prisma.auditLog.create({
       data: {

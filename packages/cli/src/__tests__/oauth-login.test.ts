@@ -5,9 +5,9 @@ describe("OAuth failure messages", () => {
   it("maps known failures to short controlled messages", () => {
     expect(describeOAuthFailure(new Error("Authorization was declined"))).toMatch(/declined/i)
     expect(describeOAuthFailure(new Error("Authorization timed out"))).toMatch(/timed out/i)
-    expect(describeOAuthFailure(new Error("The authorized workspace could not be established"))).toMatch(
-      /workspace/i
-    )
+    expect(
+      describeOAuthFailure(new Error("The authorized workspace could not be established"))
+    ).toMatch(/workspace/i)
   })
   it("never exposes unknown cause text", () => {
     const message = describeOAuthFailure(

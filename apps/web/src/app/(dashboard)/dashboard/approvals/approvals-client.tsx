@@ -13,7 +13,10 @@ interface ApprovalItem extends Omit<ApprovalListItem, "input"> {
   input: Record<string, unknown>
 }
 
-const OPERATION_STATUS_VARIANT: Record<string, "success" | "danger" | "warning" | "info" | "muted"> = {
+const OPERATION_STATUS_VARIANT: Record<
+  string,
+  "success" | "danger" | "warning" | "info" | "muted"
+> = {
   COMPLETED: "success",
   FAILED: "danger",
   CONFLICT: "warning",
@@ -149,14 +152,10 @@ export function ApprovalsClient({
                       <p className="text-muted-foreground mt-1 text-xs">
                         {formatDateTime(operation.createdAt)}
                         {operation.error ? ` · ${operation.error}` : ""}
-                        {operation.resultReference
-                          ? ` · result: ${operation.resultReference}`
-                          : ""}
+                        {operation.resultReference ? ` · result: ${operation.resultReference}` : ""}
                       </p>
                     </div>
-                    <Badge
-                      variant={OPERATION_STATUS_VARIANT[operation.status] ?? "muted"}
-                    >
+                    <Badge variant={OPERATION_STATUS_VARIANT[operation.status] ?? "muted"}>
                       {operation.status.replaceAll("_", " ").toLowerCase()}
                     </Badge>
                   </CardContent>
