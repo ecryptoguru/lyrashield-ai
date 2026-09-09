@@ -366,7 +366,10 @@ describe("remote approval gate — claim-before-execution", () => {
 
   it("resolves a historical approval even without a connection on the principal", async () => {
     dbGetApproval.mockResolvedValue(approvalFixture({ status: "EXECUTED", result: TOOL_RESULT }))
-    const decision = await makeGate()("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
+    const decision = await makeGate()("lyrashield_scan_target", {
+      targetId: "t-1",
+      approvalId: "ap-1",
+    })
     expect(decision.approved).toBe(true)
     expect(mcpCallTool).not.toHaveBeenCalled()
   })

@@ -213,10 +213,7 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     expect(enqueueScanJob).toHaveBeenCalledWith(
       expect.objectContaining({ scanId: "scan-retest", workspaceId: "workspace-1" })
     )
-    expect(completeLoopClosure).toHaveBeenCalledWith(
-      "workspace-1",
-      "lyrashield/fix-finding-1"
-    )
+    expect(completeLoopClosure).toHaveBeenCalledWith("workspace-1", "lyrashield/fix-finding-1")
   })
 
   it("replays a duplicate delivery without enqueueing a second retest", async () => {

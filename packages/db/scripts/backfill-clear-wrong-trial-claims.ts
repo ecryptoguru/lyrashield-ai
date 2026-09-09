@@ -27,9 +27,9 @@ import { createBoundedPgAdapter } from "../src/pool"
 
 type BackfillPrisma = {
   user: {
-    findMany: (args: unknown) => Promise<
-      Array<{ id: string; email: string; trialStartedAt: Date | null }>
-    >
+    findMany: (
+      args: unknown
+    ) => Promise<Array<{ id: string; email: string; trialStartedAt: Date | null }>>
     updateMany: (args: unknown) => Promise<{ count: number }>
   }
   workspaceMember: {

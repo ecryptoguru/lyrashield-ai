@@ -250,9 +250,7 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
         )
       }
       if (!scopes.includes("write") && !scopes.includes("lyrashield.write")) {
-        return denied(
-          "This connection does not have write scope; mutating tools are refused."
-        )
+        return denied("This connection does not have write scope; mutating tools are refused.")
       }
       const { targetId, profile } = await resolveDelegatedScope(workspaceId, toolArgs)
 

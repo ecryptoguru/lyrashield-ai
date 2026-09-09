@@ -28,10 +28,7 @@ type TrialTransaction = Parameters<Parameters<typeof withWorkspaceRLS>[1]>[0]
  * eligibility from anyone invited into a trialing workspace even though they
  * never started a trial of their own.
  */
-async function hasUsedTrial(
-  userId: string,
-  db: Pick<TrialTransaction, "user">
-): Promise<boolean> {
+async function hasUsedTrial(userId: string, db: Pick<TrialTransaction, "user">): Promise<boolean> {
   const user = await db.user.findUnique({ where: { id: userId }, select: { trialStartedAt: true } })
   if (!user) return true
   return Boolean(user.trialStartedAt)

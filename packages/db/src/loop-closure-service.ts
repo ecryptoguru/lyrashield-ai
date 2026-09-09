@@ -72,7 +72,8 @@ export function classifyLoopClosureError(error: unknown): LoopClosureReason {
 }
 
 export function nextLoopClosureRetryAt(attempts: number, now = new Date()): Date {
-  const minutes = LOOP_CLOSURE_BACKOFF_MINUTES[Math.min(attempts, LOOP_CLOSURE_BACKOFF_MINUTES.length - 1)]
+  const minutes =
+    LOOP_CLOSURE_BACKOFF_MINUTES[Math.min(attempts, LOOP_CLOSURE_BACKOFF_MINUTES.length - 1)]
   return new Date(now.getTime() + minutes * 60 * 1000)
 }
 
@@ -214,7 +215,14 @@ export async function claimDueLoopClosures(
     where: { status: "pending", nextRetryAt: { lte: now } },
     orderBy: [{ attempts: "asc" }, { nextRetryAt: "asc" }],
     take: limit,
-    select: { id: true, workspaceId: true, branchName: true, prNumber: true, attempts: true, lastReason: true },
+    select: {
+      id: true,
+      workspaceId: true,
+      branchName: true,
+      prNumber: true,
+      attempts: true,
+      lastReason: true,
+    },
   })
   return due
 }

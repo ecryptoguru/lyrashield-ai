@@ -682,9 +682,8 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     // workspace-scoped table under the NOBYPASSRLS runtime role — same-
     // workspace writes succeed, absent and foreign contexts read and write
     // nothing.
-    const { recordDeferredLoopClosure, completeLoopClosure } = await import(
-      "./loop-closure-service"
-    )
+    const { recordDeferredLoopClosure, completeLoopClosure } =
+      await import("./loop-closure-service")
     const branchName = `lyrashield/fix-rls-${suffix}`
     await recordDeferredLoopClosure({
       workspaceId,

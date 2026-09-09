@@ -269,10 +269,9 @@ export async function POST(request: NextRequest) {
                 })
                 loopClosureDelivered = true
                 const { completeLoopClosure } = await import("@lyrashield/db")
-                await completeLoopClosure(
-                  integration.workspaceId,
-                  pullRequest.head.ref
-                ).catch(() => undefined)
+                await completeLoopClosure(integration.workspaceId, pullRequest.head.ref).catch(
+                  () => undefined
+                )
                 logger.info("Fix PR merge closed the loop", {
                   retestId: outcome.retestId,
                   findingId: outcome.findingId,
@@ -288,10 +287,8 @@ export async function POST(request: NextRequest) {
               // record the worker sweep retries with backoff; the delivery is
               // acknowledged so the merge webhook is not lost to a rethrow.
               // Only genuinely unexpected errors still rethrow.
-              const {
-                recordDeferredLoopClosure,
-                classifyLoopClosureError,
-              } = await import("@lyrashield/db")
+              const { recordDeferredLoopClosure, classifyLoopClosureError } =
+                await import("@lyrashield/db")
               const reason = classifyLoopClosureError(loopErr)
               if (reason !== "UNEXPECTED_ERROR") {
                 loopClosureDelivered = true

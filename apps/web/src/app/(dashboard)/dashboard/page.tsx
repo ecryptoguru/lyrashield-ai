@@ -228,9 +228,7 @@ export default async function DashboardPage() {
           state: readiness.state ?? "INSUFFICIENT_EVIDENCE",
           coverageLabel,
         }}
-        latestScore={
-          readiness.state === "READY" ? latestScore : null
-        }
+        latestScore={readiness.state === "READY" ? latestScore : null}
       />
 
       {/* 3 — latest run warning/progress when it needs attention */}

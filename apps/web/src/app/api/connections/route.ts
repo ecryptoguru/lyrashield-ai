@@ -113,7 +113,8 @@ async function post(request: Request) {
     const automating = scopes.includes("lyrashield.write")
     if (automating && allowedOperations.length === 0) {
       return apiError("VALIDATION_ERROR", "Select at least one workflow to automate", 400)
-    }    if (automating && !allTargets && allowedTargetIds.length === 0) {
+    }
+    if (automating && !allTargets && allowedTargetIds.length === 0) {
       return apiError("VALIDATION_ERROR", "Select at least one target or all targets", 400)
     }
     if (allTargets && allowedTargetIds.length > 0) {
