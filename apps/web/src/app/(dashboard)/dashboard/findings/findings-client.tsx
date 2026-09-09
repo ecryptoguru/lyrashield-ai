@@ -3,6 +3,11 @@ import { CreateFixPrAction } from "@/components/create-fix-pr-action"
 
 import { useState, useEffect, useCallback, useRef, useId } from "react"
 import { useFindingsWebMcp } from "./findings-webmcp"
+import {
+  findingsContextKey,
+  loadFindingsListContext,
+  saveFindingsListContext,
+} from "./findings-list-context"
 import { z } from "zod"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import Link from "next/link"
@@ -347,6 +352,46 @@ export function FindingsClient({
     // Run once on mount: the deep link is consumed exactly once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // W2-12 context restoration: the URL carries filter/sort/target/query, but
+  // pages loaded beyond the first server-rendered page and the scroll position
+  // only survive navigation through this session-scoped snapshot. The first
+  // client render still matches the server HTML; restoration happens after
+  // mount so hydration stays clean.
+  const listContextRestoredRef = useRef(false)
+  useEffect(() => {
+    listContextRestoredRef.current = true
+    if (typeof window === "undefined") return
+    const current = { filter, sort: sortMode, target: targetFilter, q: query }
+    // The context key encodes filter/sort/target/query, so any stored snapshot
+    // under this key already matches the URL-derived list state.
+    const stored = loadFindingsListContext(findingsContextKey(workspaceId, current))
+    if (!stored) return
+    setFindings(stored.rows)
+    setNextCursor(stored.nextCursor)
+    if (stored.scrollY > 0) requestAnimationFrame(() => window.scrollTo(0, stored.scrollY))
+    // Restore once per mount with the URL-derived context.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Persist the loaded list (rows, cursor, scroll) for the current context so
+  // returning to Findings restores it. Skipped until the restore pass has run
+  // so the snapshot is never overwritten with the bare first page.
+  useEffect(() => {
+    if (!listContextRestoredRef.current || typeof window === "undefined") return
+    const save = () =>
+      saveFindingsListContext(
+        findingsContextKey(workspaceId, { filter, sort: sortMode, target: targetFilter, q: query }),
+        {
+          rows: findings,
+          nextCursor,
+          scrollY: window.scrollY,
+        }
+      )
+    save()
+    window.addEventListener("pagehide", save)
+    return () => window.removeEventListener("pagehide", save)
+  }, [workspaceId, filter, sortMode, targetFilter, query, findings, nextCursor])
 
   const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
     workspaceId,
