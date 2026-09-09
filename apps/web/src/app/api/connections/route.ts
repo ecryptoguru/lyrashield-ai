@@ -172,7 +172,7 @@ async function post(request: Request) {
       workspaceId,
       userId: session.userId,
       clientType: resolvedClientType,
-      clientName: resolvedClientName,
+      clientName: resolvedClientName ?? undefined,
       oauthClientId,
       scopes,
       allowedOperations,
@@ -191,7 +191,7 @@ async function post(request: Request) {
         resourceId: connection.id,
         metadata: {
           clientType: resolvedClientType,
-          clientName: resolvedClientName,
+          clientName: resolvedClientName ?? undefined,
           allowedOperations,
           allowedTargetIds,
           allowedProfiles,
