@@ -253,6 +253,14 @@ export default async function BillingPage({
                 You are only billed for usable scans: a failed scan bills nothing, and a cancelled
                 scan bills only the time it actually ran.
               </p>
+              <p className="text-xs text-muted-foreground">
+                A partial scan keeps its completed findings and bills only the portion that ran —
+                partial minutes are metered the same as completed minutes.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                A budget-stopped scan ended because its spend ceiling was reached. Minutes already
+                used are billed; nothing further runs until usage is available again.
+              </p>
             </div>
 
             {/* Grace state */}
@@ -321,8 +329,11 @@ export default async function BillingPage({
           </Card>
         )}
 
-        {/* Portal Link */}
-        {canManageBilling && plan !== "FREE" && billingAccount?.provider === "polar" && (
+        {/* Portal Link — rendered for ANY provider: the portal route decides
+            the destination (Polar portal, or the Razorpay billing-support
+            path). Gating the card on provider === "polar" left Razorpay
+            subscribers with no manage path at all. */}
+        {canManageBilling && plan !== "FREE" && billingAccount && (
           <Card>
             <CardHeader>
               <CardTitle>Manage Subscription</CardTitle>

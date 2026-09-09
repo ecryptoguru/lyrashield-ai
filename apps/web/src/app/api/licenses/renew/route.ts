@@ -78,7 +78,11 @@ export async function POST(request: Request) {
     // WebhookEvent table since renewals are triggered by Polar webhooks.
     // The webhook handler inserts a WebhookEvent with (provider, externalId)
     // uniqueness; if the webhook was already processed, the renewal was too.
-    const existingRenewal = await prisma.webhookEvent.findUnique({
+    // WebhookEvent is FORCE RLS strict with NULL-workspaceId rows for direct
+    // purchases, so this cross-workspace replay guard must use the system
+    // client like the lookup above — the plain client returns nothing under
+    // the NOBYPASSRLS runtime role, which made this guard dead code.
+    const existingRenewal = await systemPrisma.webhookEvent.findUnique({
       where: { provider_externalId: { provider: "polar", externalId: orderId } },
       select: { processed: true },
     })

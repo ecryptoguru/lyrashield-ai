@@ -16,20 +16,25 @@ vi.mock("@lyrashield/integrations", () => ({
   enqueueWebhookTrackRetry: (...args: unknown[]) => enqueueWebhookTrackRetryMock(...args),
 }))
 
-// Mock prisma
-vi.mock("@lyrashield/db", () => ({
-  prisma: {
-    webhookEvent: {
-      findUnique: vi.fn(),
-      findFirst: vi.fn(),
-      findMany: vi.fn(() => Promise.resolve([])),
-    },
-    webhookEventTrack: {
-      findMany: vi.fn(() => Promise.resolve([])),
-      count: vi.fn(() => Promise.resolve(0)),
-    },
-  },
-}))
+// Mock prisma. getSystemPrisma returns the same mock shape: the
+// reconciliation sweep reads WebhookEvent (FORCE RLS strict) cross-workspace
+// through the system client, and WebhookEventTrack (no RLS) through the
+// plain client.
+vi.mock("@lyrashield/db", () => {
+  const webhookEvent = {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(() => Promise.resolve([])),
+  }
+  const webhookEventTrack = {
+    findMany: vi.fn(() => Promise.resolve([])),
+    count: vi.fn(() => Promise.resolve(0)),
+  }
+  return {
+    prisma: { webhookEvent, webhookEventTrack },
+    getSystemPrisma: () => ({ webhookEvent }),
+  }
+})
 
 // Mock logger
 vi.mock("@lyrashield/logger", () => ({

@@ -6,7 +6,7 @@
  *   pool (monthly grant) + Σ unexpired pack minutes − consumed minutes
  *
  * Draw order when consuming minutes: monthly pool first, then oldest pack,
- * then overage (Team opt-in only). Overage is consumed AFTER pool + packs,
+ * then overage (Launch Assurance opt-in only). Overage is consumed AFTER pool + packs,
  * so it does NOT reduce the pool or pack remaining.
  *
  * Pack consumption is computed from UsageRecords rather than trusting the
@@ -37,7 +37,7 @@ export interface UsageBalance {
   packs: PackBalance[]
   /** Total remaining across pool + packs. */
   totalRemaining: number
-  /** Overage minutes consumed beyond pool + packs (Team opt-in only). */
+  /** Overage minutes consumed beyond pool + packs (Launch Assurance opt-in only). */
   overageConsumed: number
   /** Cycle start timestamp for the current billing period. */
   cycleStart: Date | null

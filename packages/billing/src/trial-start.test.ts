@@ -25,20 +25,16 @@ beforeEach(() => {
 })
 
 describe("startTrial", () => {
-  it("retains old-revision trial history before the durable user marker was written", async () => {
-    tx.workspace.findFirst.mockResolvedValue({ id: "legacy" })
-    expect(await isTrialAvailable("ws", "user")).toBe(false)
-    expect(await startTrial("ws", "user")).toEqual({
-      started: false,
-      alreadyUsed: true,
-      trialEndsAt: null,
+  it("grants a trial to a user who was only ever a member of someone else's trialing workspace (ruling 5)", async () => {
+    // The membership fallback is gone: invited members keep their own trial
+    // eligibility. No workspace.findFirst membership probe happens at all.
+    expect(await isTrialAvailable("ws-own", "user-invited")).toBe(true)
+    expect(await startTrial("ws-own", "user-invited")).toMatchObject({
+      started: true,
+      alreadyUsed: false,
     })
-    expect(tx.user.updateMany).toHaveBeenCalledWith({
-      where: { id: "user", trialStartedAt: null },
-      data: { trialStartedAt: expect.any(Date) },
-    })
-    expect(tx.workspace.updateMany).not.toHaveBeenCalled()
-    expect(tx.usageRecord.create).not.toHaveBeenCalled()
+    expect(tx.workspace.findFirst).not.toHaveBeenCalled()
+    expect(tx.usageRecord.create).toHaveBeenCalled()
   })
   it("serializes and claims the user with the entitlement in one scoped transaction", async () => {
     expect(await startTrial("ws", "user")).toMatchObject({ started: true, alreadyUsed: false })

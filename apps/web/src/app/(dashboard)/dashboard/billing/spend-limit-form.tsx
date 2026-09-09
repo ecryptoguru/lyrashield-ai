@@ -10,7 +10,7 @@ interface SpendLimitFormProps {
 }
 
 /**
- * Team-only overage spend-limit editor. Posts integer cents to
+ * Launch Assurance overage spend-limit editor. Posts integer cents to
  * POST /api/billing/spend-limit?workspaceId=… — the API already exists
  * this form was the missing client.
  */
