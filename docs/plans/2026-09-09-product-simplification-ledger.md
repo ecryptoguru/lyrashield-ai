@@ -2,7 +2,7 @@
 
 Companion to [`2026-09-09-product-simplification-coding-handoff.md`](./2026-09-09-product-simplification-coding-handoff.md).
 States: `not started` → `implemented` → `locally verified` → `CI verified` → `deployed` → `operationally accepted`, or `blocked: <exact dependency>`.
-A local green test does not fill deployment or client columns. Source: PR #638 (merged, main `4671ad11`) for Waves 1–3 core; this session's follow-up wave (W2-05/07/11/12, W3-03/05/06) is the follow-up PR based on main `4671ad11`.
+A local green test does not fill deployment or client columns. Source: PR #638 (merged, main `4671ad11`) for Waves 1–3 core; this session's follow-up wave (W2-05/07/11/12, W3-03/05/06) is the follow-up PR based on main `4671ad11` (with #639's ledger note merged).
 
 ## Baseline receipts (this session)
 
