@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
-import { Bell, CalendarClock, Plug, Users } from "lucide-react"
+import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
 import { Card, CardContent, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
@@ -25,7 +25,10 @@ export default async function WorkspaceSettingsPage() {
           title="Workspace settings"
           description="Workspace access, automation, and connected services."
         />
-        <NoWorkspaceState description="Create a workspace during onboarding to manage workspace settings." />
+        <NoWorkspaceState
+          icon={Settings}
+          description="Create a workspace during onboarding to manage workspace settings."
+        />
       </div>
     )
   }

@@ -8,7 +8,6 @@ import { ConnectedAccounts } from "./connected-accounts"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { TwoFactorSecurity } from "./two-factor-security"
-import { WorkspaceSettingsLink } from "./workspace-settings-link"
 
 export const metadata: Metadata = {
   title: "Settings",
