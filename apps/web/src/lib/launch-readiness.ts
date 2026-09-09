@@ -71,6 +71,13 @@ export interface GateReadinessTarget {
   applicable: boolean
   blockingFindings: number
   reasons: { code: string; message: string }[]
+  /**
+   * The release identity the verdict covers (the assessment's own identity
+   * when the caller enforces none). Absent when there is no assessment to
+   * describe. Rendered so a verdict reads "READY for commit abc1234" rather
+   * than an unexplained all-clear.
+   */
+  identity?: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
 }
 
 export interface FindingReadinessAggregate {
@@ -322,6 +329,13 @@ export function projectGateReadinessReport(
     }
   }
 
+  // Label what the READY verdicts actually cover: the assessment's own
+  // identity when none was enforced, so "READY" never reads as an unscoped
+  // all-clear.
+  const identityLabels = targets
+    .map((target) => describeGateIdentity(target))
+    .filter((label): label is string => label !== null)
+
   return {
     ...triage,
     state: "READY",
@@ -329,7 +343,27 @@ export function projectGateReadinessReport(
     score: null,
     triageScore: triage.score,
     blockingFindings,
-    summary: `All ${targets.length} active target assessment(s) are READY and currently applicable under LyraShield Gate v2.`,
+    summary:
+      identityLabels.length > 0
+        ? `All ${targets.length} active target assessment(s) are READY and currently applicable under LyraShield Gate v2. ${identityLabels.join(" · ")}`
+        : `All ${targets.length} active target assessment(s) are READY and currently applicable under LyraShield Gate v2.`,
     conditions: [],
   }
+}
+
+/**
+ * Human description of the release identity a target's verdict covers. Used
+ * to label READY verdicts on read-only surfaces: "commit abc1234" (short
+ * hash) or "artifact sha256:abcd1234…" (first 19 chars). Returns null when
+ * the target has no identity to describe.
+ */
+export function describeGateIdentity(
+  target: Pick<GateReadinessTarget, "identity" | "state">
+): string | null {
+  if (!target.identity) return null
+  if (target.identity.kind === "COMMIT") {
+    const short = target.identity.value.slice(0, 7)
+    return `READY for commit ${short}`
+  }
+  return `READY for artifact ${target.identity.value.slice(0, 19)}`
 }

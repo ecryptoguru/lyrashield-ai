@@ -36,7 +36,7 @@ export interface HomeDecisionInput {
   /** Canonical per-target gate states from an uncached applicability read. */
   gateTargets: Pick<
     GateReadinessTarget,
-    "targetId" | "targetName" | "state" | "applicable" | "blockingFindings"
+    "targetId" | "targetName" | "state" | "applicable" | "blockingFindings" | "reasons"
   >[]
   /** A queued/running scan; the decision leads with its progress. */
   activeScan?: { id: string; targetName: string | null } | null
@@ -155,6 +155,25 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
         cta: "Review blockers",
       }
       return { action, primaryAction: { href: blockerHref, label: "Review blockers" } }
+    }
+    // A verdict blocked ONLY by a missing enforced release identity does not
+    // need another scan: the assessment itself is usable and is shown with the
+    // identity it covers on Launch Readiness. Sending the user to scan again
+    // would recommend an action that can never clear the reason.
+    const identityOnly = notReady.every(
+      (target) =>
+        target.reasons.length === 1 && target.reasons[0]?.code === "EXPECTED_IDENTITY_REQUIRED"
+    )
+    if (identityOnly && notReady.length > 0) {
+      const action: HomeNextAction = {
+        eyebrow: "Next step",
+        title: "Review your launch verdict",
+        description:
+          "Every target has a current assessment. Open Launch Readiness to see each verdict and the release identity it covers.",
+        href: "/dashboard/launch-readiness",
+        cta: "Open Launch Readiness",
+      }
+      return { action, primaryAction: { href: action.href, label: "Open Launch Readiness" } }
     }
     // W2-07: preselect the specific target that lacks usable evidence.
     const needingEvidence = notReady.find(
