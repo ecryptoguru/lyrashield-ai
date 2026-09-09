@@ -238,6 +238,14 @@ export {
   createAndSendNotification,
 } from "./notification-service"
 export {
+  buildRoutineDigest,
+  appendDigestLine,
+  classifyNotificationPriority,
+  isCriticalNotification,
+  routineGroupDedupeKey,
+  type NotificationPriority,
+} from "./notification-grouping"
+export {
   createSchedule,
   getSchedule,
   listSchedules,
