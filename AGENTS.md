@@ -165,7 +165,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - [product.md](./product.md): positioning and commercial decisions.
 - [userguide.md](./userguide.md): user workflows and limitations.
 - [monetization.md](./monetization.md): pricing and affiliate economics.
-- `docs/deployment/*` and `docs/ops/*`: deployment and operational procedures.
+- Deployment and operational runbooks were removed on 2026-09-09; Git history is the recovery path.
 - [docs/README.md](./docs/README.md): document ownership and retention map.
 
 After merge, remove branch-only wording and update all affected truth documents. Keep historical detail in Git/PRs, not copied into current summaries.

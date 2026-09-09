@@ -404,7 +404,7 @@ Active membership, credential scope, target authorization, plan limits, budgets,
 
 Platform administration is not a workspace role. The hidden **Platform Admin** destination is server-rendered only for `ecryptoguru@gmail.com` and `ankit@lyrashieldai.com` after each account is email-verified, assigned `PLATFORM_OPERATOR`, enrolled in TOTP, and signed in through a recently TOTP-verified browser session. API keys, bearer tokens, and ordinary Owner/Admin membership cannot grant access; other users receive not found.
 
-The current console shows bounded platform health plus paginated users, workspaces, scans, platform-audit entries, and affiliate review. It does not show customer source, scan payloads, secrets, or model cost. Affiliate changes remain disabled until every write uses the one-time elevation and atomic platform-audit transaction. Exact-two provisioning and fresh browser proof for both operators passed on 2026-08-26; operators should follow [`docs/ops/platform-admin-runbook.md`](docs/ops/platform-admin-runbook.md) and repeat that proof after any future apply.
+The current console shows bounded platform health plus paginated users, workspaces, scans, platform-audit entries, and affiliate review. It does not show customer source, scan payloads, secrets, or model cost. Affiliate changes remain disabled until every write uses the one-time elevation and atomic platform-audit transaction. Exact-two provisioning and fresh browser proof for both operators passed on 2026-08-26; operators should repeat that exact provisioning and browser proof after any future apply (the former runbook was removed on 2026-09-09; git history is the recovery path).
 
 ## 20. Integrations
 

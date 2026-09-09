@@ -163,7 +163,7 @@ The application pins an exact engine commit in `.github/workflows/deploy-azure.y
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
 - Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before any deploy. Operator promotion of that digest on the worker VM remains a separate manual action.
 
-See [PRD release status](PRD.md#9-release-status) and the [production smoke-test plan](docs/ops/production-smoke-test-plan.md) for the current deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
+See [PRD release status](PRD.md#9-release-status) for the current deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
 
 ## Further reading
 
@@ -174,8 +174,7 @@ See [PRD release status](PRD.md#9-release-status) and the [production smoke-test
 - [docs/README.md](docs/README.md) — documentation ownership, categories, and retention policy.
 - [product.md](product.md) — current positioning and founder decisions.
 - [monetization.md](monetization.md) — business and pricing plan (plans, minute packs, affiliate payouts).
-- [docs/ops/desktop-release-runbook.md](docs/ops/desktop-release-runbook.md) — release procedure for the Local/Desktop app.
-- [docs/ops/license-signing-keys-runbook.md](docs/ops/license-signing-keys-runbook.md) — ed25519 license key generation and rotation.
+- The former desktop-release and license-signing runbooks were removed on 2026-09-09; git history is the recovery path.
 
 ## License
 

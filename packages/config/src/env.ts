@@ -295,7 +295,7 @@ const envSchema = z
     // Leave unset in dev to use LICENSE_SIGNING_PRIVATE_KEY directly.
     LYRASHIELD_KEY_VAULT_NAME: z.string().optional().or(z.literal("")),
     // Names of the Key Vault secrets holding the signing private/public key.
-    // Defaults match the runbook (docs/ops/license-signing-keys-runbook.md).
+    // Defaults match the former signing-key runbook (removed 2026-09-09; git history).
     LICENSE_SIGNING_PRIVATE_KEY_SECRET_NAME: z
       .string()
       .optional()
