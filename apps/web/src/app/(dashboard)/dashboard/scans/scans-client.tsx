@@ -234,6 +234,10 @@ export function ScansClient({
       initialMode
     )
   })
+  const choosePreset = useCallback((id: string) => {
+    reviewChoiceVersion.current++
+    setSelectedPreset(id)
+  }, [])
   const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -256,7 +260,7 @@ export function ScansClient({
     targets,
     selectedPreset,
     setSelectedTarget,
-    setSelectedPreset,
+    setSelectedPreset: choosePreset,
     setShowCreate,
     setModeResetNotice,
   })
@@ -559,11 +563,6 @@ export function ScansClient({
     eligibility.status === "checking" ||
     eligibility.status === "error" ||
     eligibilityBlocked
-
-  function choosePreset(id: string) {
-    reviewChoiceVersion.current++
-    setSelectedPreset(id)
-  }
 
   function handleSelectTarget(targetId: string) {
     const choiceVersion = ++reviewChoiceVersion.current

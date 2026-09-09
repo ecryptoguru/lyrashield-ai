@@ -16,10 +16,16 @@ export async function recordedOperation(
     input: Record<string, unknown>
     session: Awaited<ReturnType<typeof requirePermission>>["session"]
   },
-  execute: () => Promise<Response>
+  execute: (outcome: { confirmNotSubmitted: () => void }) => Promise<Response>
 ): Promise<Response> {
+  let confirmedNotSubmitted = false
+  const outcome = {
+    confirmNotSubmitted: () => {
+      confirmedNotSubmitted = true
+    },
+  }
   const key = request.headers.get("idempotency-key")
-  if (key === null) return execute()
+  if (key === null) return execute(outcome)
   if (!key.trim() || key.length > 128)
     return apiError("VALIDATION_ERROR", "Idempotency-Key must be 1-128 characters", 400)
   const { session, ...identity } = params
@@ -46,8 +52,15 @@ export async function recordedOperation(
     )
   let completed = false
   try {
-    const response = await execute()
-    if (!response.ok) return response
+    const response = await execute(outcome)
+    if (!response.ok) {
+      const envelope = await response.clone().json()
+      if (envelope.error) {
+        envelope.error.details = { ...envelope.error.details, operationId }
+        return Response.json(envelope, { status: response.status, headers: response.headers })
+      }
+      return response
+    }
     const envelope = (await response.clone().json()) as { data: Record<string, unknown> }
     await completeAgentOperation(operationId, params.workspaceId, {
       result: envelope.data,
@@ -57,10 +70,10 @@ export async function recordedOperation(
     return apiSuccess({ ...envelope.data, operationId }, response.status)
   } finally {
     // A handler may already have persisted work before returning an error.
-    // Never recommend a fresh key for an uncertain outcome.
+    // Only a callback that positively confirms no submission may permit a fresh key.
     if (!completed)
       await failAgentOperation(operationId, params.workspaceId, {
-        error: "OPERATION_OUTCOME_UNKNOWN",
+        error: confirmedNotSubmitted ? "OPERATION_NOT_SUBMITTED" : "OPERATION_OUTCOME_UNKNOWN",
       }).catch((error) =>
         logger.error("Failed to record operation outcome", { operationId, error: String(error) })
       )

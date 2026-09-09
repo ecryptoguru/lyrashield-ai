@@ -343,20 +343,7 @@ export function FindingsClient({
     return () => window.removeEventListener("popstate", onPopState)
   }, [findings])
 
-  // Deep-link hygiene: once a ?finding= deep link has been consumed by the
-  // server render, replace the history entry WITHOUT the param. Without this,
-  // opening another finding (pushState) and closing it pops back to the
-  // original deep-link entry — whose popstate handler would re-open the
-  // deep-linked finding instead of returning to the clean list.
-  useEffect(() => {
-    if (!initialSelectedFindingId || typeof window === "undefined") return
-    const url = new URL(window.location.href)
-    if (!url.searchParams.has("finding")) return
-    url.searchParams.delete("finding")
-    window.history.replaceState(null, "", `${url.pathname}${url.search}`)
-    // Run once on mount: the deep link is consumed exactly once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Keep the drawer deep link on refresh. closeFinding removes it explicitly.
 
   // W2-12 context restoration: the URL carries filter/sort/target/query, but
   // pages loaded beyond the first server-rendered page and the scroll position
@@ -1179,6 +1166,7 @@ function FindingDetailDrawer({
 
   // Audience mode for "What to do" tab
   const [audienceMode, setAudienceMode] = useState<AudienceMode>("developer")
+  const [detailTab, setDetailTab] = useState("what-to-do")
 
   const knownExploited = detail?.technicalDetail?.includes("CISA KEV:") ?? false
   const epssSummary = extractEpssPercentage(detail?.technicalDetail)
@@ -1271,6 +1259,7 @@ function FindingDetailDrawer({
   const nextAction = getFindingNextAction({
     status: finding.status,
     latestRetestStatus: latestRetest?.status,
+    hasEvidence: (detail?.evidence?.length ?? 0) > 0,
     hasFixProposal,
   })
   const nextStep = nextAction.action
@@ -1459,7 +1448,7 @@ function FindingDetailDrawer({
                 Tab 2: Technical   (technical details, CWE, CVSS, EPSS, evidence)
                 Tab 3: History     (retests, fix proposals, verification receipts)
             ----------------------------------------------------------------- */}
-            <Tabs defaultValue="what-to-do" className="w-full">
+            <Tabs value={detailTab} onValueChange={setDetailTab} className="w-full">
               <TabsList className="w-full">
                 <TabsTrigger value="what-to-do" className="flex-1">
                   What to do
@@ -1606,6 +1595,24 @@ function FindingDetailDrawer({
                           }}
                         >
                           Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : nextStep === "INSPECT_EVIDENCE" ? (
+                    <div className="mt-2">
+                      <h3 className="font-semibold">Review the retained evidence</h3>
+                      <p className="text-muted-foreground mt-1 text-sm">{nextAction.reason}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button type="button" size="sm" onClick={() => setDetailTab("technical")}>
+                          View evidence
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setShowFixForm(true)}
+                        >
+                          Create fix proposal
                         </Button>
                       </div>
                     </div>

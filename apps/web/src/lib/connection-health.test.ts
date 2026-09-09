@@ -13,6 +13,14 @@ describe("effective connection health", () => {
       ).toBe("Access unavailable")
     })
   }
+  it("requires reconnect for a paused connection after expiry", () => {
+    expect(
+      connectionHealth(
+        { status: "PAUSED", scopes: ["lyrashield.read"], expiresAt: new Date(1000) },
+        1000
+      )
+    ).toMatchObject({ status: "EXPIRED", reconnect: true })
+  })
   it("expires at the boundary and supports read-only and empty scopes", () => {
     const base = { status: "ACTIVE", scopes: ["lyrashield.read"], expiresAt: new Date(1000) }
     expect(connectionHealth(base, 999).usability).toBe("Read-only access")

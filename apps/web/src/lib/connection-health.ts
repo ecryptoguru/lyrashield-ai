@@ -3,7 +3,8 @@ export function connectionHealth(
   now = Date.now()
 ) {
   const expired = connection.expiresAt !== null && new Date(connection.expiresAt).getTime() <= now
-  const status = connection.status === "ACTIVE" && expired ? "EXPIRED" : connection.status
+  const status =
+    ["ACTIVE", "PAUSED"].includes(connection.status) && expired ? "EXPIRED" : connection.status
   const active = status === "ACTIVE"
   const reads = active && connection.scopes.includes("lyrashield.read")
   const writes = active && connection.scopes.includes("lyrashield.write")

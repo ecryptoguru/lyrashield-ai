@@ -241,7 +241,8 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
   const report = params.scanId
     ? await withWorkspaceRLS(params.workspaceId, async (tx) => {
         // Serialize snapshot writers without deleting historical duplicates.
-        // Gather outside this transaction so the lock never spans report generation.
+        // ponytail: concurrent callers can duplicate bounded gathering. Keep its pooled
+        // reads outside the lock; coalesce only after profiling shows contention.
         const identity = JSON.stringify([params.workspaceId, params.scanId, type])
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`
         const existing = await tx.report.findFirst({

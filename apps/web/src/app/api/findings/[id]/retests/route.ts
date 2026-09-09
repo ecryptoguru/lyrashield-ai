@@ -106,7 +106,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         input: { ...parsed.data, findingId: id },
         session,
       },
-      async () => {
+      async ({ confirmNotSubmitted }) => {
         assertOAuthDelegatedScope(session, finding.targetId, retestProfile.mode)
         const existingPending = await prisma.retest.findFirst({
           where: {
@@ -127,6 +127,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
           await assertScanWorkerAvailable()
         } catch (error) {
           if (error instanceof ScanWorkerUnavailableError) {
+            confirmNotSubmitted()
             return apiError(
               "SCAN_SERVICE_UNAVAILABLE",
               "Retesting is temporarily unavailable. Please try again shortly.",

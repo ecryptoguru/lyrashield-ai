@@ -247,6 +247,34 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
       }
     }
 
+    // Display-only evidence fixture: no evidence object or source material is persisted.
+    await page.route(`**/api/findings/${fixture.findingId}?*`, async (route) => {
+      const response = await route.fetch()
+      const payload = await response.json()
+      payload.data.evidence = [{ id: "display-evidence", type: "LOG", redactionStatus: "REDACTED" }]
+      await route.fulfill({ response, json: payload })
+    })
+    await expect(page).toHaveURL(new RegExp(`finding=${fixture.findingId}`))
+    await page.reload()
+    await expect(page.getByRole("button", { name: "View evidence", exact: true })).toBeVisible()
+    await page.getByRole("button", { name: "View evidence", exact: true }).click()
+    await expect(page.getByRole("tab", { name: "Technical", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    )
+    await page.getByRole("tab", { name: "What to do", exact: true }).click()
+    await page.getByRole("button", { name: "Create fix proposal", exact: true }).click()
+    await expect(page.getByLabel("Fix summary", { exact: true })).toBeVisible()
+    await page.getByRole("button", { name: "Close", exact: true }).click()
+    await expect(page).not.toHaveURL(/finding=/)
+    await page.getByRole("button", { name: /Request body accepts unexpected fields/ }).click()
+    await expect(page).toHaveURL(new RegExp(`finding=${fixture.findingId}`))
+    await page.goBack()
+    await expect(page).not.toHaveURL(/finding=/)
+    await expect(page.getByRole("button", { name: "View evidence", exact: true })).toHaveCount(0)
+    await page.goForward()
+    await expect(page.getByRole("button", { name: "View evidence", exact: true })).toBeVisible()
+
     if (testInfo.project.name === "visual-mobile") {
       const bottomNav = page.getByRole("navigation", { name: "Main navigation" })
       await expect(bottomNav).toBeVisible()

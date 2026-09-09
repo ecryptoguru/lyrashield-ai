@@ -23,6 +23,15 @@ Snapshot serialization is database-coordinated through the shared service, not a
 - W3: a pending/running retest takes priority over the fixed-pending-retest prompt. A reopened/unresolved finding cannot inherit a historical passing retest as its report recommendation. Four new counterexamples failed before the fix and pass afterward.
 - PR #641 CI fixture correction: target updates in the recovery test now use explicit workspace RLS context. The complete browser suite was rerun with the restricted runtime role used by CI, while privileged system operations retain a separate connection. No application database bypass or assertion relaxation was added.
 
+## PR review follow-up
+
+- Expired paused connections now require reconnect instead of offering a resume that cannot restore authorization.
+- WebMCP review selection uses the same versioned choice setter as manual selection, so a pending history response cannot overwrite it. Its callback is stable across renders: the native browser regression caught tool re-registration cancelling execution before this correction.
+- Loaded evidence now selects the evidence-inspection action. The browser journey verifies opening Technical and then creating a proposal without persisting a test mutation.
+- Finding deep links remain in the URL until the drawer is explicitly closed, preserving selection on refresh.
+- Recorded callbacks can positively confirm non-submission. Retest worker-unavailable responses use that path; existing pending retests and ambiguous persistence failures remain non-retryable. Error responses include the operation ID and preserve retry headers. Unknown callback failures are still conservative; the scan route has broader submission-attempt tracking.
+- The suggested move of report gathering under the advisory lock was not adopted: gathering uses pooled service reads, so doing it inside the held transaction can require additional connections and extend lock duration. Concurrent gathering remains bounded and may repeat work; snapshot persistence remains serialized and real-DB tested. Profile before adding a coalescing mechanism or refactoring gathering to accept one transaction client.
+
 ## Final pass across all 30 tasks
 
 The following maps each task to the inspected implementation and regression group. The full test run covers the underlying authorization, evidence, queue, billing and compatibility suites. A passing model/contract test is not substituted for a human screen-reader session or a live provider/client receipt.
@@ -62,7 +71,7 @@ The following maps each task to the inspected implementation and regression grou
 
 ## Local verification
 
-- Core regression suite: 3,588 passed, 48 environment-dependent skips, zero failures (four workers). An earlier run alongside builds exceeded one existing test's five-second import timeout; no assertion was weakened.
+- Core regression suite: 3,591 passed, 48 environment-dependent skips, zero failures (four workers). An earlier run alongside builds exceeded one existing test's five-second import timeout; no assertion was weakened.
 - Marketing: 152 passed. Motion: 18 passed. Operational workflow scripts: 6 passed.
 - Lint/typecheck: 65 Turbo tasks passed, including dependent package builds.
 - Isolated PostgreSQL: 36 tests passed using a NOSUPERUSER/NOBYPASSRLS runtime role; includes old/new writer compatibility and concurrent report creation. CI now invokes both database runtime files, not only the original RLS file.
