@@ -264,7 +264,8 @@ exports[`renderConfig snapshot — every agent × every transport > hermes × re
   lyrashield:
     url: "https://app.lyrashieldai.com/api/mcp"
     headers:
-      Authorization: "Bearer \${env:LYRASHIELD_API_KEY}""
+      Authorization: "Bearer \${env:LYRASHIELD_API_KEY}"
+    auth: "oauth""
 `;
 
 exports[`renderConfig snapshot — every agent × every transport > hermes × stdio 1`] = `
@@ -321,6 +322,14 @@ exports[`renderConfig snapshot — every agent × every transport > oh-my-pi × 
     }
   }
 }"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > openai-codex × remote-http 1`] = `
+"[mcp_servers.lyrashield]
+url = "https://app.lyrashieldai.com/api/mcp"
+
+[mcp_servers.lyrashield.headers]
+Authorization = "Bearer lsk_test_lyrashield_api_key""
 `;
 
 exports[`renderConfig snapshot — every agent × every transport > openai-codex × stdio 1`] = `

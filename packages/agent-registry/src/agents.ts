@@ -1,7 +1,7 @@
 import type { AgentEntry, RegistryAgentEntry } from "./types"
 import { API_URL_PLACEHOLDER } from "./render"
 
-const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-09-08"
+const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-09-09"
 
 const claudeCode: AgentEntry = {
   id: "claude-code",
@@ -18,6 +18,7 @@ const claudeCode: AgentEntry = {
     },
   ],
   transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "inline-env" },
   transportFields: {
     "remote-http": { type: "http", url: API_URL_PLACEHOLDER },
@@ -78,6 +79,7 @@ const devin: AgentEntry = {
   rootKey: null,
   locations: [],
   transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "inline-env" },
   transportFields: {
     "remote-http": { type: "http", url: API_URL_PLACEHOLDER },
@@ -89,7 +91,7 @@ const devin: AgentEntry = {
   },
   gotchas: [
     "In Devin, open Settings → MCP Marketplace → Add Your Own. Configure the server in that UI; Devin does not document a local JSON configuration file for custom MCP servers.",
-    "For LyraShield's remote server, select HTTP (Streamable HTTP), enter the endpoint and Bearer header, save it, then use Test listing tools before enabling it for work.",
+    "For LyraShield's remote server, select HTTP (Streamable HTTP) and OAuth, enter the endpoint, then use Test listing tools before enabling it for work.",
   ],
 }
 
@@ -139,8 +141,12 @@ const openaiCodex: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
+  transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "inline-env" },
+  transportFields: {
+    "remote-http": { url: API_URL_PLACEHOLDER },
+  },
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -196,6 +202,7 @@ const opencode: AgentEntry = {
     },
   ],
   transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: {
     kind: "interpolated-env",
     syntax: "{env:LYRASHIELD_API_KEY}",
@@ -413,7 +420,11 @@ const hermes: AgentEntry = {
   rootKey: "mcp_servers",
   locations: [{ scope: "global", path: "~/.hermes/config.yaml", sharedByConvention: false }],
   transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "interpolated-env", syntax: "${env:LYRASHIELD_API_KEY}" },
+  transportFields: {
+    "remote-http": { url: API_URL_PLACEHOLDER, auth: "oauth" },
+  },
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -445,6 +456,7 @@ const antigravity: AgentEntry = {
     },
   ],
   transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "inline-env" },
   transportFields: {
     // Antigravity uses `serverUrl` (not `url`) for HTTP-based MCP servers.

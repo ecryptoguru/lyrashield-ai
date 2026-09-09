@@ -6,8 +6,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/opencode", origin).toString()
 const title = "LyraShield MCP for OpenCode — Setup Guide"
 const description =
-  'Connect LyraShield to OpenCode. Configure opencode.json with the mcp key and type:"local". Note: OpenCode uses single-brace env interpolation {env:VAR} — not ${VAR}.'
-const updatedDate = "2026-09-08"
+  'Connect LyraShield to OpenCode with native remote OAuth or local stdio MCP under the top-level "mcp" key.'
+const updatedDate = "2026-09-09"
 
 const jsonLd: unknown[] = [
   {
@@ -76,16 +76,21 @@ const jsonLd: unknown[] = [
     and revalidate this schema after upgrades.
   </div>
 
-  <h2>Local stdio setup</h2>
+  <h2>Remote OAuth setup (recommended)</h2>
+  <AgentSnippet agentId="opencode" transport="remote-http" />
+
+  <p>
+    Run <code>opencode mcp auth lyrashield</code> to complete OAuth. OpenCode stores tokens outside
+    the project configuration and refreshes them for later sessions.
+  </p>
+
+  <h2>Local stdio alternative</h2>
   <AgentSnippet agentId="opencode" transport="stdio" />
 
   <p>
     Export <code>LYRASHIELD_API_KEY</code> in your shell or add it to a <code>.env</code> file that
     OpenCode loads.
   </p>
-
-  <h2>Remote endpoint</h2>
-  <AgentSnippet agentId="opencode" transport="remote-http" secondary />
 
   <h2>Verify the connection</h2>
   <p>
@@ -94,7 +99,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The
+    <strong>Local stdio requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The
     <code>@lyrashield/mcp</code> package is published on npm, so
     <code>npx -y @lyrashield/mcp@0.2.7</code> resolves directly.
   </div>

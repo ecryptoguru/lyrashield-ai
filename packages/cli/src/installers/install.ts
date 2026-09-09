@@ -47,6 +47,15 @@ function renderManualInstructions(agent: AgentEntry, opts: InstallAgentOptions):
   if (agent.manualInstructions) return agent.manualInstructions
 
   const serverName = opts.serverName ?? "lyrashield"
+  if (opts.transport === "remote-http") {
+    const endpoint = `${opts.apiUrl.replace(/\/$/, "")}/api/mcp`
+    const authentication = agent.remoteAuth === "oauth" ? "OAuth" : "Bearer API key"
+    return `[${agent.displayName} — manual configuration]
+Server name:    ${serverName}
+Transport:      Streamable HTTP
+URL:            ${endpoint}
+Authentication: ${authentication}`
+  }
   const command = "npx"
   const args = ["-y", "@lyrashield/mcp@0.2.7"]
   const env = opts.useCredentialStore

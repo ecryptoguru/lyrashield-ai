@@ -6,8 +6,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/hermes", origin).toString()
 const title = "LyraShield MCP for Hermes (Nous Research) — Setup Guide"
 const description =
-  "Connect LyraShield to Hermes by Nous Research. Configure the mcp_servers: block in your profile YAML for stdio transport. Hermes also supports ACP for editor integrations."
-const updatedDate = "2026-09-08"
+  "Connect LyraShield to Hermes by Nous Research with native remote OAuth or local stdio MCP."
+const updatedDate = "2026-09-09"
 
 const jsonLd: unknown[] = [
   {
@@ -59,8 +59,17 @@ const jsonLd: unknown[] = [
   </p>
   <pre><code>npx lyrashield install hermes</code></pre>
 
-  <h2>Profile YAML configuration</h2>
-  <p>Add the following to <code>~/.hermes/config.yaml</code> if you prefer to configure it manually:</p>
+  <h2>Remote OAuth setup (recommended)</h2>
+  <p>
+    Add the remote configuration below to <code>~/.hermes/config.yaml</code>, then run{" "}
+    <code>hermes mcp login lyrashield</code>. Hermes completes PKCE OAuth in your browser and stores
+    the token outside the configuration file.
+  </p>
+
+  <AgentSnippet agentId="hermes" transport="remote-http" />
+
+  <h2>Local stdio alternative</h2>
+  <p>Use the local server when the remote OAuth flow is unavailable:</p>
 
   <AgentSnippet agentId="hermes" />
 
@@ -78,8 +87,8 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield login or workspace API key. Keep
-    keys in <code>~/.hermes/.env</code>; Hermes resolves the generated
+    <strong>Local stdio requirements:</strong> Node.js 24+ and a LyraShield login or workspace API
+    key. Keep keys in <code>~/.hermes/.env</code>; Hermes resolves the generated
     <code>{"${env:LYRASHIELD_API_KEY}"}</code> reference from its secret scope.
   </div>
 </DocsLayout>

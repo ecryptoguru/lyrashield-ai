@@ -312,6 +312,20 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.value).not.toHaveProperty("url")
   })
 
+  it.each(["claude-code", "openai-codex", "opencode", "hermes", "antigravity"])(
+    "%s — native OAuth remote config contains no bearer placeholder",
+    (agentId) => {
+      const agent = getAgent(agentId)!
+      const entry = renderEntry(agent, {
+        transport: "remote-http",
+        apiUrl: TEST_BASE_URL,
+        secretMode: "shell",
+      })
+      expect(JSON.stringify(entry.value)).not.toContain("Authorization")
+      expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_KEY")
+    }
+  )
+
   it("copilot-cli — stdio declares `type: local` and remote `type: http`", () => {
     const agent = getAgent("copilot-cli")!
     const stdioEntry = renderEntry(agent, testOptions(agent, "stdio"))

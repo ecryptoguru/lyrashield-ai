@@ -140,10 +140,8 @@ function buildRemoteEntry(agent: AgentEntry, opts: InstallOptions): Record<strin
     }
   }
 
-  const entry: Record<string, unknown> = {
-    [urlKey]: mcpUrl,
-    headers,
-  }
+  const entry: Record<string, unknown> = { [urlKey]: mcpUrl }
+  if (Object.keys(headers).length > 0) entry.headers = headers
 
   Object.assign(entry, remoteFields)
 

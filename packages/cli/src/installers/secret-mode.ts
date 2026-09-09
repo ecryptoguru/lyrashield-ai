@@ -36,6 +36,7 @@ export async function resolveSecretMode(opts: SecretModeOptions): Promise<Resolv
 
   if (opts.useCredentialStore) {
     if (opts.transport !== "stdio") {
+      if (agent.remoteAuth === "oauth") return { mode: "shell", envVar }
       return {
         mode: "manual",
         reason:

@@ -40,6 +40,8 @@ export interface AgentEntry {
   rootKey: string | null
   locations: ConfigLocation[]
   transports: Transport[]
+  /** Preferred authentication for native remote HTTP connections. */
+  remoteAuth?: "oauth" | "api-key"
   credential: CredentialStyle
   requiredEntryFields?: Record<string, string>
   /** Per-transport fields. Use "<apiUrl>" as a placeholder; stdio env blocks receive the base apiUrl, remote HTTP entries receive the MCP endpoint. */
