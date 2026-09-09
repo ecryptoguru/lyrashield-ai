@@ -449,7 +449,15 @@ export function createCreateReportTool(context: ToolHandlerContext): McpTool {
           title: args.title,
           type: args.type ?? "developer",
         })
-        return makeToolResult({ action: "report_created", report: data })
+        const snapshotReused =
+          data !== null &&
+          typeof data === "object" &&
+          "snapshotReused" in data &&
+          data.snapshotReused === true
+        return makeToolResult({
+          action: snapshotReused ? "report_reused" : "report_created",
+          report: data,
+        })
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
       }

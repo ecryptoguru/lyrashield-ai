@@ -8,7 +8,7 @@ draft: false
 heroImage: agent-security-18
 faq:
   - q: "How do I add LyraShield MCP server to Amp?"
-    a: "Run amp mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.7. Amp stores always-available local definitions in amp.mcpServers."
+    a: "Run amp mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.8. Amp stores always-available local definitions in amp.mcpServers."
   - q: "Does Amp support remote MCP with bearer auth?"
     a: "Yes. Use an Amp remote MCP definition with auth oauth, or use ${VAR_NAME} interpolation in a private amp.mcpServers entry."
   - q: "Can I block auto merge if high findings remain?"
@@ -17,7 +17,7 @@ faq:
     a: "Amp reads local definitions from amp.mcpServers in user or workspace settings and can store remote definitions through ampcode.com."
 ---
 
-You can wire Amp directly to LyraShield AI via MCP to get target aware verification inside your agent loop. In this guide you will add the local stdio server using pinned npx -y @lyrashield/mcp@0.2.7 and the remote server at https://app.lyrashieldai.com/api/mcp with bearer auth, confirm tool listing, run a scoped scan for findings with recorded evidence states, and enforce a diff aware GitHub Action gate that uploads SARIF for code scanning.
+You can wire Amp directly to LyraShield AI via MCP to get target aware verification inside your agent loop. In this guide you will add the local stdio server using pinned npx -y @lyrashield/mcp@0.2.8 and the remote server at https://app.lyrashieldai.com/api/mcp with bearer auth, confirm tool listing, run a scoped scan for findings with recorded evidence states, and enforce a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
 Vibe coding with Amp is fast because the agent fills in routes, components, and API handlers from short prompts. Speed amplifies both delivery and risk, which is why early verification matters. A solid policy reference is the [vibe coding security guide](/blog/vibe-coding-security-guide) that outlines hygiene, review checkpoints, and supply chain controls. For category background, consult [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) to map common issues in generated front ends and APIs to concrete weakness types.
 
@@ -47,7 +47,7 @@ Amp supports two ways to add MCP servers. The CLI path is simplest for quick set
 CLI option for local stdio:
 
 ```bash
-amp mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.7
+amp mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.8
 amp mcp remote --personal add LyraShield https://app.lyrashieldai.com/api/mcp --auth oauth
 ```
 
@@ -58,13 +58,13 @@ Settings.json option for project local or user global config:
   "amp.mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.7"]
+      "args": ["-y", "@lyrashield/mcp@0.2.8"]
     }
   }
 }
 ```
 
-This pins stdio to `@lyrashield/mcp@0.2.7`. The canonical reference lives in [Amp integration guide](/docs/integrations/amp). Workspace definitions require Amp approval before they run; user settings and remote definitions have separate trust and authentication paths.
+This pins stdio to `@lyrashield/mcp@0.2.8`. The canonical reference lives in [Amp integration guide](/docs/integrations/amp). Workspace definitions require Amp approval before they run; user settings and remote definitions have separate trust and authentication paths.
 
 ## 3. Verify connection and list security tools
 
@@ -80,7 +80,7 @@ Show command type and tool names.
 Expected response:
 
 ```text
-lyrashield (stdio via npx -y @lyrashield/mcp@0.2.7):
+lyrashield (stdio via npx -y @lyrashield/mcp@0.2.8):
 - lyrashield_scan_target(target, scope)
 - lyrashield_get_findings(id)
 - lyrashield_list_targets()

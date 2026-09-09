@@ -87,4 +87,36 @@ describe("POST /api/reports", () => {
     )
     expect(response.status).toBe(201)
   })
+
+  it("reports immutable snapshot reuse without claiming a new report was created", async () => {
+    vi.mocked(prisma.scan.findFirst).mockResolvedValue({ id: "scan-latest" } as never)
+    vi.mocked(createReport).mockResolvedValue({
+      id: "report-existing",
+      title: "Original snapshot",
+      status: "generated",
+      snapshotReused: true,
+    } as never)
+
+    const response = await POST(
+      new Request("http://localhost/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          targetId: "target-1",
+          title: "Requested title",
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      data: {
+        id: "report-existing",
+        title: "Original snapshot",
+        requestedTitle: "Requested title",
+        snapshotReused: true,
+      },
+    })
+  })
 })

@@ -58,7 +58,7 @@ URL:            ${endpoint}
 Authentication: ${authentication}`
   }
   const command = "npx"
-  const args = ["-y", "@lyrashield/mcp@0.2.7"]
+  const args = ["-y", "@lyrashield/mcp@0.2.8"]
   const env = opts.useCredentialStore
     ? {}
     : { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY", LYRASHIELD_API_URL: opts.apiUrl }

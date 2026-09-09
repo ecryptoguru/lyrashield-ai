@@ -19,7 +19,7 @@ faq:
 
 Fastest path: run `npx lyrashield init`, which detects Claude Code and writes the config. For a one-step install, use the Agent Plugin (agent-plugins.org v1.0.0), the preferred route for launch clients. The manual config below is what the CLI writes, kept for reference.
 
-Claude Code users can secure AI built apps by adding LyraShield MCP via stdio using npx -y @lyrashield/mcp@0.2.7 or remote endpoint with a Bearer lsk\_ key, registering it in .mcp.json with project scope, verifying the connection in Claude Code, then running inline security checks and a GitHub diff gate for team review.
+Claude Code users can secure AI built apps by adding LyraShield MCP via stdio using npx -y @lyrashield/mcp@0.2.8 or remote endpoint with a Bearer lsk\_ key, registering it in .mcp.json with project scope, verifying the connection in Claude Code, then running inline security checks and a GitHub diff gate for team review.
 
 Claude Code generates hundreds of lines per prompt, magnifying [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks like injection and broken access control. Adding LyraShield brings verification, aligned with [vibe coding security guide](/blog/vibe-coding-security-guide). LyraShield is agent native AppSec at [LyraShield site](https://lyrashieldai.com), built as Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. Setup in [Claude Code integration guide](/docs/integrations/claude-code) and checklist [Claude Code security workflow](/blog/claude-code-security-workflow). Transport uses [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions) plus [NIST SSDF](https://csrc.nist.gov/projects/ssdf). Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
 
@@ -27,20 +27,20 @@ Claude Code generates hundreds of lines per prompt, magnifying [OWASP Top 10](ht
 
 Create LyraShield API key starting with lsk\_ and store as LYRASHIELD_API_KEY. Never commit key to source control or chat logs. For local work, export it in shell profile. For teams, keep it in secret manager and add to GitHub repository secrets for CI parity. Naming consistency between shell, IDE config and CI reduces misconfig.
 
-You need Node 24 or newer for the LyraShield package, a current Claude Code release, and a testable target such as http://localhost:3000 or a repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.7 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
+You need Node 24 or newer for the LyraShield package, a current Claude Code release, and a testable target such as http://localhost:3000 or a repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.8 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
 
 Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals record intended remediation for human review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. See [Claude Code integration guide](/docs/integrations/claude-code).
 
 ## 2. Configure MCP server in claude-code config file
 
-claude-code reads MCP from .mcp.json. Top level key is mcpServers. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp@0.2.7 for stdio.
+claude-code reads MCP from .mcp.json. Top level key is mcpServers. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp@0.2.8 for stdio.
 
 ```json
 {
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.7"],
+      "args": ["-y", "@lyrashield/mcp@0.2.8"],
       "env": {
         "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
       }
@@ -56,7 +56,7 @@ claude-code reads MCP from .mcp.json. Top level key is mcpServers. Include stdio
 ```
 
 ```bash
-claude mcp add --scope project lyrashield -- npx -y @lyrashield/mcp@0.2.7
+claude mcp add --scope project lyrashield -- npx -y @lyrashield/mcp@0.2.8
 claude mcp add --scope project --transport http lyrashield-remote https://app.lyrashieldai.com/api/mcp
 ```
 
@@ -66,7 +66,7 @@ Placeholder `${LYRASHIELD_API_KEY}` is resolved securely without writing secret 
 
 Restart claude-code after saving config and open MCP servers view to confirm lyrashield shows connected with tools. In chat ask to list MCP tools to see scan tool. This confirms handshake completed.
 
-If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp@0.2.7 manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
+If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp@0.2.8 manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
 
 Verification prevents silent failure where agent assumes scan succeeded but server was unreachable. That leaves [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks undetected and breaks verification loop. Allow egress to [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) if org blocks external.
 

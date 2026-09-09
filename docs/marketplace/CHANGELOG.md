@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.27
+
+- Pin MCP 0.2.8 so clients label immutable report snapshot reuse accurately.
+- Keep native OAuth delegation and client-specific installation paths unchanged.
+
 ## 0.1.26
 
 - Pin MCP 0.2.7 so target-scoped report creation can select the latest completed scan consistently across hosted and local integrations.

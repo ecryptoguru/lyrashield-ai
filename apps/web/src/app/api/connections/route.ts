@@ -4,6 +4,7 @@ import {
   createAgentConnection,
   listAgentConnections,
   prisma,
+  resolveOAuthClientDisplayName,
 } from "@lyrashield/db"
 import { auth, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { requireBrowserConnectionManager } from "./connection-auth"
@@ -61,8 +62,6 @@ async function post(request: Request) {
     }
     const {
       workspaceId,
-      clientType,
-      clientName,
       oauthClientId,
       scopes,
       allowedOperations,
@@ -106,6 +105,15 @@ async function post(request: Request) {
         400
       )
     }
+
+    const oauthClient = await prisma.oauthClient.findUnique({
+      where: { clientId: oauthClientId },
+      select: { name: true, uri: true, softwareId: true, redirectUris: true },
+    })
+    if (!oauthClient) {
+      return apiError("VALIDATION_ERROR", "The OAuth client is no longer registered.", 400)
+    }
+    const trustedClientName = resolveOAuthClientDisplayName(oauthClient)
 
     const automating = scopes.includes("lyrashield.write")
     if (automating && allowedOperations.length === 0) {
@@ -153,8 +161,8 @@ async function post(request: Request) {
     const connection = await createAgentConnection({
       workspaceId,
       userId: session.userId,
-      clientType,
-      clientName,
+      clientType: trustedClientName,
+      clientName: trustedClientName,
       oauthClientId,
       scopes,
       allowedOperations,
@@ -172,8 +180,8 @@ async function post(request: Request) {
         resourceType: "agent_connection",
         resourceId: connection.id,
         metadata: {
-          clientType,
-          clientName,
+          clientType: trustedClientName,
+          clientName: trustedClientName,
           allowedOperations,
           allowedTargetIds,
           allowedProfiles,

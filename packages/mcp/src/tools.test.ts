@@ -203,6 +203,16 @@ describe("createCreateReportTool", () => {
     expect(data.report.id).toBe("r-1")
   })
 
+  it("labels an immutable snapshot reuse truthfully", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeApiResponse({ id: "r-1", title: "Original", snapshotReused: true })
+    )
+    const tool = createCreateReportTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", title: "Requested" })
+
+    expect(JSON.parse(result.content[0]!.text).action).toBe("report_reused")
+  })
+
   it("passes target scope for delegated report authorization", async () => {
     mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "r-2", title: "Target Report" }))
     const tool = createCreateReportTool(context)

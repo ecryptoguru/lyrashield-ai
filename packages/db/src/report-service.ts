@@ -202,7 +202,9 @@ function getSnapshotScanSummary(contentJson: unknown): ShareableReport["scanSumm
   }
 }
 
-export async function createReport(params: CreateReportParams): Promise<Report> {
+export async function createReport(
+  params: CreateReportParams
+): Promise<Report & { snapshotReused?: boolean }> {
   const type =
     params.type === "executive" || params.type === "compliance" ? params.type : "developer"
 
@@ -220,7 +222,7 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
         reportId: existing.id,
         workspaceId: params.workspaceId,
       })
-      return existing
+      return { ...existing, snapshotReused: true }
     }
   }
 
@@ -249,7 +251,7 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
           where: { workspaceId: params.workspaceId, scanId: params.scanId, type, deletedAt: null },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         })
-        return existing ?? persist(tx)
+        return existing ? { ...existing, snapshotReused: true } : persist(tx)
       })
     : await persist(prisma)
 
