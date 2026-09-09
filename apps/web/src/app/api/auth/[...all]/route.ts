@@ -1,25 +1,33 @@
 import { auth } from "@lyrashield/auth/server"
 import { toNextJsHandler } from "better-auth/next-js"
-import { normalizeLoopbackOAuthClient } from "@/lib/oauth-registration"
+import {
+  isOAuthProtocolPath,
+  normalizeLoopbackOAuthClient,
+  normalizeOAuthRateLimitResponse,
+} from "@/lib/oauth-registration"
 
 const handlers = toNextJsHandler(auth)
 
 export const GET = handlers.GET
 
 export async function POST(request: Request): Promise<Response> {
-  if (new URL(request.url).pathname !== "/api/auth/oauth2/register") {
+  const pathname = new URL(request.url).pathname
+  if (!isOAuthProtocolPath(pathname)) {
     return handlers.POST(request)
   }
 
+  let forwardedRequest = request
   try {
-    const body = await request.clone().json()
-    const normalized = normalizeLoopbackOAuthClient(body)
-    if (normalized === body) return handlers.POST(request)
+    if (pathname === "/api/auth/oauth2/register") {
+      const body = await request.clone().json()
+      const normalized = normalizeLoopbackOAuthClient(body)
+      if (normalized !== body) {
+        const headers = new Headers(request.headers)
+        headers.delete("content-length")
+        forwardedRequest = new Request(request, { body: JSON.stringify(normalized), headers })
+      }
+    }
+  } catch {}
 
-    const headers = new Headers(request.headers)
-    headers.delete("content-length")
-    return handlers.POST(new Request(request, { body: JSON.stringify(normalized), headers }))
-  } catch {
-    return handlers.POST(request)
-  }
+  return normalizeOAuthRateLimitResponse(await handlers.POST(forwardedRequest))
 }

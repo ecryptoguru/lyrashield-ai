@@ -10,6 +10,7 @@ import {
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
 import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
 import { assessAppOrigin, isAppHost, isDirectAppOrigin, trustedAppCountry } from "@/lib/app-origin"
+import { isOAuthProtocolPath, OAUTH_RATE_LIMIT_ERROR } from "@/lib/oauth-registration"
 
 // This is the Next.js 16 middleware entry. Next.js detects `proxy.ts` as the
 // proxy/middleware file; do not create a separate `middleware.ts` or the build
@@ -350,10 +351,15 @@ export async function proxy(request: NextRequest) {
     const result = await checkAuthRateLimit(ip)
     if (result.limited) {
       const response = NextResponse.json(
-        {
-          success: false,
-          error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." },
-        },
+        isOAuthProtocolPath(pathname)
+          ? OAUTH_RATE_LIMIT_ERROR
+          : {
+              success: false,
+              error: {
+                code: "RATE_LIMITED",
+                message: "Too many requests. Please try again later.",
+              },
+            },
         {
           status: 429,
           headers: {

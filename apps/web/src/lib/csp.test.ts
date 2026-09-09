@@ -218,6 +218,23 @@ describe("CSP nonce proxy", () => {
     expect(csp).toContain("nonce-")
   })
 
+  it("returns an OAuth-standard rate-limit error for protocol endpoints", async () => {
+    const { checkAuthRateLimit } = await import("@/lib/rate-limit")
+    vi.mocked(checkAuthRateLimit).mockResolvedValueOnce({
+      limited: true,
+      remaining: 0,
+      retryAfter: 30,
+    })
+
+    const res = await proxy(makeRequest("/api/auth/oauth2/register"))
+
+    expect(res.status).toBe(429)
+    await expect(res.json()).resolves.toEqual({
+      error: "temporarily_unavailable",
+      error_description: "Too many requests. Please try again later.",
+    })
+  })
+
   it("does not charge session lookups against the auth mutation limit", async () => {
     const { checkApiRateLimit, checkAuthRateLimit } = await import("@/lib/rate-limit")
 
