@@ -203,9 +203,11 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
 
   await page.goto("/dashboard")
   await expect(page.getByRole("heading", { name: "Run your first review" })).toBeVisible()
+  // W2-07: the scan recommendation preselects the recommended target in the
+  // composer href.
   await expect(page.getByRole("link", { name: "Start a scan" }).first()).toHaveAttribute(
     "href",
-    "/dashboard/scans?new=1"
+    /\/dashboard\/scans\?new=1(&target=[A-Za-z0-9]+)?$/
   )
 
   const restoreOnboardingResponse = await page.request.patch("/api/onboarding", {
