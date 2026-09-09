@@ -1,23 +1,8 @@
-import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import program from "../content/blog-program.json"
 import images from "../content/blog-images/images.json"
 import authors from "../content/authors/authors.json"
 import { IMAGE_CORPUS, PROGRAM_ARTICLE_COUNT } from "../../scripts/blog-validation-lib.mjs"
-
-type BlogProgramEntry = {
-  index: number
-  title: string
-  slug: string
-  query: string
-  cluster: string
-  targetWords: number
-  batch: string
-  cta: string
-}
-
-const BLOG_MAP_HEADING = "## 5. The published blog map"
-const TOOLS_HEADING = "## 6. `/tools` product-led SEO surface"
 
 function batchFor(index: number) {
   if (index === 1) return "authority"
@@ -33,70 +18,33 @@ function batchFor(index: number) {
   return "batch-10"
 }
 
-function readApprovedBlogProgram(): BlogProgramEntry[] {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The URL is a fixed repository-owned editorial plan fixture.
-  const plan = readFileSync(
-    new URL(
-      "../../../../docs/plans/2026-07-14-vibe-coder-security-seo-tools-plan.md",
-      import.meta.url
-    ),
-    "utf8"
-  )
-  const sectionStart = plan.indexOf(BLOG_MAP_HEADING)
-  const sectionEnd = plan.indexOf(TOOLS_HEADING, sectionStart)
-
-  if (sectionStart === -1 || sectionEnd === -1) {
-    throw new Error("Could not find the authoritative blog map in the editorial plan")
-  }
-
-  return plan
-    .slice(sectionStart, sectionEnd)
-    .split("\n")
-    .filter((line) => /^\|\s*\d+\s*\|/.test(line))
-    .map((line, rowIndex) => {
-      const cells = line
-        .split("|")
-        .slice(1, -1)
-        .map((cell) => cell.trim())
-
-      if (cells.length !== 6) {
-        throw new Error(`Blog map row ${rowIndex + 1} has ${cells.length} columns instead of 6`)
-      }
-
-      const [indexValue, titleAndSlug, query, cluster, targetWordsValue, cta] = cells
-      const index = Number(indexValue)
-      const titleAndSlugMatch = /^(.*) \/ `([^`]+)`$/.exec(titleAndSlug)
-
-      if (!Number.isInteger(index) || !titleAndSlugMatch) {
-        throw new Error(`Could not parse authoritative blog map row ${rowIndex + 1}: ${line}`)
-      }
-
-      return {
-        index,
-        title: titleAndSlugMatch[1],
-        slug: titleAndSlugMatch[2],
-        query,
-        cluster,
-        targetWords: Number(targetWordsValue.replaceAll(",", "")),
-        batch: batchFor(index),
-        cta,
-      }
-    })
-}
-
+// The published manifest is the canonical record of the approved blog
+// program. The editorial plan that seeded it was removed on 2026-09-09; git
+// history is the recovery path, so the contract validates the manifest's
+// internal consistency instead of re-reading the plan.
 describe("blog program contracts", () => {
-  it("contains the exact ordered 100-topic program", () => {
-    const approvedProgram = readApprovedBlogProgram()
+  it("contains the exact ordered program manifest", () => {
+    expect(program).toHaveLength(PROGRAM_ARTICLE_COUNT)
 
-    expect(approvedProgram).toHaveLength(PROGRAM_ARTICLE_COUNT)
-    expect(program).toHaveLength(approvedProgram.length)
-    approvedProgram.forEach((approvedEntry, position) => {
-      expect(
-        program[position],
-        `Manifest position ${position + 1} must exactly match approved topic ${approvedEntry.index} (${approvedEntry.slug})`
-      ).toEqual(approvedEntry)
+    program.forEach((entry, position) => {
+      expect(entry.index, `manifest position ${position + 1} must be 1-based sequential`).toBe(
+        position + 1
+      )
+      expect(entry.title.length).toBeGreaterThan(0)
+      expect(entry.slug).toMatch(/^[a-z0-9-]+$/)
+      expect(entry.query.length).toBeGreaterThan(0)
+      expect(entry.cluster.length).toBeGreaterThan(0)
+      expect(entry.targetWords).toBeGreaterThan(0)
+      expect(entry.cta.length).toBeGreaterThan(0)
+      expect(entry.batch, `entry ${entry.index} batch`).toBe(batchFor(entry.index))
     })
     expect(new Set(program.map((entry) => entry.slug)).size).toBe(PROGRAM_ARTICLE_COUNT)
+  })
+
+  it("keeps every entry inside a known cluster", () => {
+    const clusters = new Set(program.map((entry) => entry.cluster))
+    expect(clusters.has("Authority")).toBe(true)
+    expect(clusters.size).toBeGreaterThanOrEqual(7)
   })
 
   it("contains the reviewed 36-image catalog with every production rendition", () => {

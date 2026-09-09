@@ -200,7 +200,7 @@ curl -X POST -d "email=you@example.com" -d "source=landing" http://localhost:878
 
 ## Notes
 
-- `/tools` is a browser-local free-utility hub. The launch checklist, headers/CORS checker, secret scanner, Supabase RLS checker, and JWT/session inspector intentionally do not fetch a supplied target or upload pasted text/files. They are bounded heuristics, not security scans; see `docs/plans/2026-07-14-vibe-coder-security-seo-tools-plan.md` for the product and publishing boundaries.
+- `/tools` is a browser-local free-utility hub. The launch checklist, headers/CORS checker, secret scanner, Supabase RLS checker, and JWT/session inspector intentionally do not fetch a supplied target or upload pasted text/files. They are bounded heuristics, not security scans; publishing boundaries are recorded in git history (the former plan doc was removed 2026-09-09).
 - The header hides Sign in/Sign up when `PUBLIC_APP_URL` is unset. Production sets `PUBLIC_APP_URL=https://app.lyrashieldai.com` so desktop and mobile navigation expose the same sign-in destination.
 - Completed Lite Check results describe the full release-assurance loop and link to **Create free account** when the app origin is configured. The no-account scan and product-updates signup remain available alongside it.
 - No pricing, no fake metrics, no public mention of the forked engine.
