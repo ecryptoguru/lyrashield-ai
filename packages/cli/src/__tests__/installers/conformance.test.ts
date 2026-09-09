@@ -31,6 +31,7 @@ const claude = getAgent("claude-code")!
 const kilo = getAgent("kilo-code")!
 const aider = getAgent("aider")!
 const opencode = getAgent("opencode")!
+const devin = getAgent("devin")!
 
 describe("conformance: install/uninstall round-trips", () => {
   let cwd: string
@@ -55,6 +56,23 @@ describe("conformance: install/uninstall round-trips", () => {
     expect(result.message).toContain("does not document native MCP client support")
     expect(result.message).not.toContain("Command:     npx")
   })
+
+  it.each([API_URL, `${API_URL}/api`, `${API_URL}/api/v1`, `${API_URL}/api/mcp`])(
+    "normalizes the guided remote endpoint from %s",
+    async (apiUrl) => {
+      const result = await installAgent({
+        agent: devin,
+        transport: "remote-http",
+        apiUrl,
+        cwd,
+      })
+
+      expect(result.outcome).toBe("MANUAL_REQUIRED")
+      expect(result.message).toContain(`URL:            ${API_URL}/api/mcp`)
+      expect(result.message).toContain("Authentication: OAuth")
+      expect(result.message).not.toContain("Bearer API key")
+    }
+  )
 
   it("claude-code merge-safety keeps foreign servers and unrelated keys", async () => {
     await ignoreSharedConfig(cwd)
@@ -238,7 +256,6 @@ describe("conformance: install/uninstall round-trips", () => {
       scope: "project",
       cwd,
       all: true,
-      useCredentialStore: true,
     })
 
     expect(result.outcome).toBe("CONFIGURED")

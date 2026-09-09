@@ -10,6 +10,7 @@ import type {
   RenderedEntry,
   Transport,
 } from "@lyrashield/agent-registry"
+import { deriveMcpUrl } from "@lyrashield/agent-registry"
 import { detectAgent, resolveLocation, findDetectedLocations } from "./detect.js"
 import { resolveSecretMode, secretWarning } from "./secret-mode.js"
 import { mergeFile } from "./merge.js"
@@ -48,7 +49,7 @@ function renderManualInstructions(agent: AgentEntry, opts: InstallAgentOptions):
 
   const serverName = opts.serverName ?? "lyrashield"
   if (opts.transport === "remote-http") {
-    const endpoint = `${opts.apiUrl.replace(/\/$/, "")}/api/mcp`
+    const endpoint = deriveMcpUrl(opts.apiUrl)
     const authentication = agent.remoteAuth === "oauth" ? "OAuth" : "Bearer API key"
     return `[${agent.displayName} — manual configuration]
 Server name:    ${serverName}

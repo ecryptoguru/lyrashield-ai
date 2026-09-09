@@ -25,6 +25,35 @@ describe("output", () => {
 })
 
 describe("secret mode", () => {
+  it("uses client-managed OAuth for remote clients without credential-store flags", async () => {
+    const loc: ConfigLocation = {
+      scope: "project",
+      path: "opencode.json",
+      sharedByConvention: true,
+    }
+    const agent: AgentEntry = {
+      id: "opencode",
+      displayName: "OpenCode",
+      docsSlug: "opencode",
+      installStrategy: "config-file",
+      format: "json",
+      rootKey: "mcp",
+      locations: [loc],
+      transports: ["remote-http"],
+      remoteAuth: "oauth",
+      credential: { kind: "http-header", header: "Authorization" },
+      rulesFiles: [],
+      gotchas: [],
+    }
+    const res = await resolveSecretMode({
+      agent,
+      location: loc,
+      transport: "remote-http",
+      apiUrl: "https://app.lyrashieldai.com",
+    })
+    expect(res.mode).toBe("shell")
+  })
+
   it("interpolates for opencode", async () => {
     const loc: ConfigLocation = {
       scope: "project",

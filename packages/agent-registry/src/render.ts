@@ -115,7 +115,8 @@ function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string
   return entry
 }
 
-function deriveMcpUrl(apiUrl: string): string {
+/** Normalize a product/API URL to the canonical Streamable HTTP MCP endpoint. */
+export function deriveMcpUrl(apiUrl: string): string {
   const base = apiUrl.replace(/\/$/, "")
   if (base.endsWith("/api/mcp")) return base
   if (base.endsWith("/api/v1")) return base.replace(/\/api\/v1$/, "") + "/api/mcp"
