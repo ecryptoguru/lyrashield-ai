@@ -27,7 +27,7 @@ When you generate code with an agent, you generate more attack surface than a hu
 
 ## 1. Prerequisites and workspace baseline
 
-Start with Node.js 20 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Git with pull request workflow, and a LyraShield API key in the form lsk\_... Set the key as an environment variable named LYRASHIELD_API_KEY and avoid pasting raw values into checked in files. Kilo Code resolves `{env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of kilo.jsonc.
+Start with Node.js 24 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Git with pull request workflow and a LyraShield API key in the form lsk\_... Set the key as an environment variable named LYRASHIELD_API_KEY and avoid pasting raw values into checked in files. Kilo Code resolves `{env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of kilo.jsonc.
 
 Take stock of the app scope you want to protect. LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action, and SARIF output. Findings retain their recorded evidence states; scan detection alone is not independent verification. Fix proposals and retests remain approval-gated, and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for why stdio works locally and streamable HTTP fits remote hosting.
 
