@@ -13,8 +13,7 @@
  * in-app notification — never a silent loss.
  */
 
-import { Prisma } from "@prisma/client"
-import { prisma } from "./client"
+import { Prisma } from "./generated/prisma"
 import { getSystemPrisma } from "./system-client"
 import { withWorkspaceRLS } from "./rls"
 import { createNotification } from "./notification-service"

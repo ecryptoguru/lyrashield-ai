@@ -682,7 +682,6 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     // workspace-scoped table under the NOBYPASSRLS runtime role — same-
     // workspace writes succeed, absent and foreign contexts read and write
     // nothing.
-    const { withWorkspaceRLS } = await import("./rls")
     const { recordDeferredLoopClosure, completeLoopClosure } = await import(
       "./loop-closure-service"
     )
