@@ -64,6 +64,7 @@ The following maps each task to the inspected implementation and regression grou
 - Visual suite: mobile, tablet and desktop all passed (3/3), including keyboard access to the secondary risk decisions. Only the two finding-detail baselines changed for the inspected disclosure; all other baselines stayed unchanged.
 - Production-mode Next build completed for the browser suite.
 - Migration drift check: no difference against an isolated temporary shadow database.
+- CI first-head browser run exposed a shared-IP fixture collision: the second tenant received rate limiting before authorization. The test now uses a separate simulated client IP and still requires 403. All three critical-flow tests pass locally; production rate limits are unchanged.
 - Dependency audit: zero reported vulnerabilities.
 - Connections inspected at 390px and 1440px, without horizontal overflow. Generated screenshots remain outside Git.
 
