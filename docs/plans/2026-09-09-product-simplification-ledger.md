@@ -2,7 +2,7 @@
 
 Companion to [`2026-09-09-product-simplification-coding-handoff.md`](./2026-09-09-product-simplification-coding-handoff.md).
 States: `not started` → `implemented` → `locally verified` → `CI verified` → `deployed` → `operationally accepted`, or `blocked: <exact dependency>`.
-A local green test does not fill deployment or client columns. Source: PR #638 (`codex/product-simplification-waves`, head `a6f900d3`), based on the merged Option 3 baseline (#637, squash-merged to main `2b10191d`). The original working branch `codex/automatic-connection-authorization` was merged as #637 while this work was in flight; the wave commits were cherry-picked onto main.
+A local green test does not fill deployment or client columns. Source: PR #638 (`codex/product-simplification-waves`), based on the merged Option 3 baseline (#637, squash-merged to main `2b10191d`). The original working branch was merged as #637 while this work was in flight; the wave commits were cherry-picked onto main.
 
 ## Baseline receipts (this session)
 
