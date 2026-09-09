@@ -77,11 +77,18 @@ export default async function OnboardingPage({
     state.targetId && workspaceId
       ? await withWorkspaceRLS(workspaceId, (tx) =>
           tx.target.findFirst({
-            where: { id: state.targetId!, workspaceId },
+            where: { id: state.targetId!, workspaceId, deletedAt: null },
             select: { type: true, name: true },
           })
         )
       : null
+
+  if (state.targetId && !target) {
+    state = await prisma.onboardingState.update({
+      where: { userId: session.userId },
+      data: { targetId: null, currentStep: workspaceId ? 1 : 0 },
+    })
+  }
 
   const initialState = {
     currentStep: state.workspaceId ? state.currentStep : Math.max(state.currentStep, 1),

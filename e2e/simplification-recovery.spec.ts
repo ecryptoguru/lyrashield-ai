@@ -152,6 +152,19 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
       where: { userId: user.id },
       data: { workspaceId, targetId: target.id, currentStep: 3, skipped: false },
     })
+    await prisma.target.update({ where: { id: target.id }, data: { deletedAt: new Date() } })
+    await second.goto("/onboarding")
+    await expect(second.getByRole("heading", { name: "Add your first target" })).toBeVisible()
+    const deletedTargetState = await prisma.onboardingState.findUniqueOrThrow({
+      where: { userId: user.id },
+    })
+    expect(deletedTargetState.workspaceId).toBe(workspaceId)
+    expect(deletedTargetState.targetId).toBeNull()
+    await prisma.target.update({ where: { id: target.id }, data: { deletedAt: null } })
+    await prisma.onboardingState.update({
+      where: { userId: user.id },
+      data: { targetId: target.id, currentStep: 3 },
+    })
     // Native execution with permission loss reaches the server and creates no scan.
     await prisma.workspaceMember.updateMany({
       where: { workspaceId, userId: user.id },

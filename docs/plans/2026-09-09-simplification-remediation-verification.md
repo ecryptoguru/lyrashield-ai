@@ -21,38 +21,38 @@ Snapshot serialization is database-coordinated through the shared service, not a
 
 The following maps each task to the inspected implementation and regression group. The full test run covers the underlying authorization, evidence, queue, billing and compatibility suites. A passing model/contract test is not substituted for a human screen-reader session or a live provider/client receipt.
 
-| Task  | Final-pass implementation / evidence                                                                                               |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| W1-01 | Shared terminology and compatibility URL tests                                                                                     |
-| W1-02 | One home-next-action decision for header/panel, active-scan fixtures                                                               |
-| W1-03 | Gate/applicability-first home decisions, insufficient and stale fixtures                                                           |
-| W1-04 | Target-scoped gate presentation; score remains secondary context                                                                   |
-| W1-05 | Simplified home metrics; mobile shell/browser regression suite                                                                     |
-| W1-06 | Visible workspace persistence errors; shell regressions and tenant browser tests                                                   |
-| W1-07 | Structured safe failure presentation, no automatic uncertain replay                                                                |
-| W1-08 | Option 3 role projection tests, restricted administration and RLS tests                                                            |
-| W1-09 | Activity navigation and historical approval URL compatibility                                                                      |
-| W1-10 | Existing status/receipt components, OAuth and mobile browser journeys                                                              |
-| W2-01 | Existing-workspace reuse and lazy default creation; stale workspace recovery now renders the updated state                         |
-| W2-02 | Source-derived names, existing-target reuse and URL/API interaction regressions                                                    |
-| W2-03 | Optional grouping remains outside the initial path; eligibility unchanged                                                          |
-| W2-04 | Existing review presets and eligibility validation remain authoritative                                                            |
-| W2-05 | Signed OAuth return survives GitHub install; completed onboarding returns to consent                                               |
-| W2-06 | Optimistic state version rejects stale tabs; late repository responses discarded; revoked workspace reset; browser recovery matrix |
-| W2-07 | Last completed per-target review read, manual selection version prevents stale override                                            |
-| W2-08 | Connections destination with existing install catalogs and callbacks retained                                                      |
-| W2-09 | Accurate capability/expiry state, last successful operation and owner recovery controls                                            |
-| W2-10 | Direct Reports destination and compatibility navigation regression suite                                                           |
-| W2-11 | Personal/workspace settings contract tests and unchanged administration gates                                                      |
-| W2-12 | Finding filter/context restoration contract tests                                                                                  |
-| W3-01 | Principal-bound scan/report/retest/fix REST keys, SDK/CLI/MCP propagation, failed/replay/concurrency tests                         |
-| W3-02 | Canonical next-action helper wired into finding UI; risk decisions in secondary disclosure                                         |
-| W3-03 | Receipt-derived remediation timeline tests; disposition separate from remediation                                                  |
-| W3-04 | Existing trusted-merge retest webhook regressions; no additional queue producer                                                    |
-| W3-05 | Serialized immutable private snapshot reuse and failed-assessment report regressions                                               |
-| W3-06 | Existing notification grouping/dedupe tests; no acceptance emails sent                                                             |
-| W3-07 | Native WebMCP registration/discovery/preparation and permission-loss rejection; optional callback options fixed                    |
-| W3-08 | SDK status schema, CLI operation lookup, MCP operation lookup, server-owned recovery and principal checks                          |
+| Task  | Final-pass implementation / evidence                                                                                                                           |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W1-01 | Shared terminology and compatibility URL tests                                                                                                                 |
+| W1-02 | One home-next-action decision for header/panel, active-scan fixtures                                                                                           |
+| W1-03 | Gate/applicability-first home decisions, insufficient and stale fixtures                                                                                       |
+| W1-04 | Target-scoped gate presentation; score remains secondary context                                                                                               |
+| W1-05 | Simplified home metrics; mobile shell/browser regression suite                                                                                                 |
+| W1-06 | Visible workspace persistence errors; shell regressions and tenant browser tests                                                                               |
+| W1-07 | Structured safe failure presentation, no automatic uncertain replay                                                                                            |
+| W1-08 | Option 3 role projection tests, restricted administration and RLS tests                                                                                        |
+| W1-09 | Activity navigation and historical approval URL compatibility                                                                                                  |
+| W1-10 | Existing status/receipt components, OAuth and mobile browser journeys                                                                                          |
+| W2-01 | Existing-workspace reuse and lazy default creation; stale workspace recovery now renders the updated state                                                     |
+| W2-02 | Source-derived names, existing-target reuse and URL/API interaction regressions                                                                                |
+| W2-03 | Optional grouping remains outside the initial path; eligibility unchanged                                                                                      |
+| W2-04 | Existing review presets and eligibility validation remain authoritative                                                                                        |
+| W2-05 | Signed OAuth return survives GitHub install; completed onboarding returns to consent                                                                           |
+| W2-06 | Optimistic state version rejects stale tabs; late repository responses discarded; revoked workspace reset; browser recovery matrix                             |
+| W2-07 | Last completed per-target review read, manual selection version prevents stale override; unavailable onboarding targets reset without discarding the workspace |
+| W2-08 | Connections destination with existing install catalogs and callbacks retained                                                                                  |
+| W2-09 | Accurate capability/expiry state, last successful operation and owner recovery controls                                                                        |
+| W2-10 | Direct Reports destination and compatibility navigation regression suite                                                                                       |
+| W2-11 | Personal/workspace settings contract tests and unchanged administration gates                                                                                  |
+| W2-12 | Finding filter/context restoration contract tests                                                                                                              |
+| W3-01 | Principal-bound scan/report/retest/fix REST keys, SDK/CLI/MCP propagation, failed/replay/concurrency tests                                                     |
+| W3-02 | Canonical next-action helper wired into finding UI; risk decisions in secondary disclosure                                                                     |
+| W3-03 | Receipt-derived remediation timeline tests; disposition separate from remediation                                                                              |
+| W3-04 | Existing trusted-merge retest webhook regressions; no additional queue producer                                                                                |
+| W3-05 | Serialized immutable private snapshot reuse and failed-assessment report regressions                                                                           |
+| W3-06 | Existing notification grouping/dedupe tests; no acceptance emails sent                                                                                         |
+| W3-07 | Native WebMCP registration/discovery/preparation and permission-loss rejection; optional callback options fixed                                                |
+| W3-08 | SDK status schema, CLI operation lookup, MCP operation lookup, server-owned recovery and principal checks                                                      |
 
 ## Local verification
 
@@ -60,7 +60,7 @@ The following maps each task to the inspected implementation and regression grou
 - Marketing: 152 passed. Motion: 18 passed. Operational workflow scripts: 6 passed.
 - Lint/typecheck: 65 Turbo tasks passed, including dependent package builds.
 - Isolated PostgreSQL: 36 tests passed using a NOSUPERUSER/NOBYPASSRLS runtime role; includes old/new writer compatibility and concurrent report creation. CI now invokes both database runtime files, not only the original RLS file.
-- Full nonvisual browser suite: 38 passed, five existing provider/affiliate placeholders skipped. Both targeted recovery/OAuth tests passed after the final onboarding changes, including the controlled GitHub recovery matrix and native Chrome 152.0.7977.76.
+- Full nonvisual browser suite: 38 passed, five existing provider/affiliate placeholders skipped. Both targeted recovery/OAuth tests passed after the final onboarding changes, including the controlled GitHub recovery matrix and native Chrome 152.0.7977.76. The final deleted-target recovery rerun also passed on Chrome 152.0.7977.83.
 - Visual suite: mobile, tablet and desktop all passed (3/3), including keyboard access to the secondary risk decisions. Only the two finding-detail baselines changed for the inspected disclosure; all other baselines stayed unchanged.
 - Production-mode Next build completed for the browser suite.
 - Migration drift check: no difference against an isolated temporary shadow database.
