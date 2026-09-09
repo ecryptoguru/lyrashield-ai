@@ -539,7 +539,11 @@ export function OnboardingWizard({
                   setUrlForm({ ...urlForm, url })
                   // W2-02: selection and naming are one step — the name prefills
                   // from the parsed host and stays editable.
-                  if (!productName || productName === "Staging Site" || productName === "Production API") {
+                  if (
+                    !productName ||
+                    productName === "Staging Site" ||
+                    productName === "Production API"
+                  ) {
                     const fromHost = targetNameFromUrl(e.target.value)
                     if (fromHost) setProductName(fromHost)
                   }
@@ -744,7 +748,8 @@ export function OnboardingWizard({
                       <span className="block font-medium">{option.label}</span>
                       <span className="text-muted-foreground text-xs">{option.description}</span>
                       <span className="text-muted-foreground mt-1 block text-xs">
-                        ~{option.estimate.low}-{option.estimate.high} min · {option.mode.toLowerCase()}
+                        ~{option.estimate.low}-{option.estimate.high} min ·{" "}
+                        {option.mode.toLowerCase()}
                       </span>
                     </button>
                   ))}

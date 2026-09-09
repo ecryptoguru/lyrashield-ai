@@ -138,9 +138,7 @@ export default async function ConnectionsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground text-sm">
-                Connect GitHub, MCP, and the CLI.
-              </p>
+              <p className="text-muted-foreground text-sm">Connect GitHub, MCP, and the CLI.</p>
               <Link
                 href="/dashboard/integrations"
                 className={buttonVariants({ variant: "secondary", size: "sm", className: "mt-3" })}

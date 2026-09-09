@@ -32,7 +32,11 @@ export function resolveOperationPrincipal(
   params: Pick<ClaimAgentOperationParams, "connectionId" | "apiKeyId" | "userId">
 ): PrincipalIdentity {
   if (params.connectionId) {
-    return { principalType: "OAUTH_CONNECTION", principalId: params.connectionId, connectionId: params.connectionId }
+    return {
+      principalType: "OAUTH_CONNECTION",
+      principalId: params.connectionId,
+      connectionId: params.connectionId,
+    }
   }
   if (params.apiKeyId) return { principalType: "API_KEY", principalId: params.apiKeyId }
   if (params.userId) return { principalType: "BROWSER_SESSION", principalId: params.userId }

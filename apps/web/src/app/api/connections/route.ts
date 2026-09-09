@@ -81,10 +81,18 @@ async function post(request: Request) {
     // before any connection is persisted.
     const consent = verifyOAuthConsentState(consentState)
     if (!consent.valid) {
-      return apiError("VALIDATION_ERROR", "The connection request could not be verified. Reload the consent page and try again.", 400)
+      return apiError(
+        "VALIDATION_ERROR",
+        "The connection request could not be verified. Reload the consent page and try again.",
+        400
+      )
     }
     if (consent.payload.userId !== session.userId) {
-      return apiError("VALIDATION_ERROR", "The connection request was issued for a different session.", 403)
+      return apiError(
+        "VALIDATION_ERROR",
+        "The connection request was issued for a different session.",
+        403
+      )
     }
     if (
       !connectionGrantMatchesConsent(consent.payload, {

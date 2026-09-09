@@ -43,7 +43,10 @@ async function post(request: Request) {
       body = await request.json()
     } catch {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+        {
+          success: false,
+          error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
+        },
         { status: 400 }
       )
     }
@@ -89,10 +92,7 @@ async function post(request: Request) {
         { status: 409 }
       )
     }
-    if (
-      error instanceof Error &&
-      error.message === "INVALID_NAME"
-    ) {
+    if (error instanceof Error && error.message === "INVALID_NAME") {
       return NextResponse.json(
         {
           success: false,

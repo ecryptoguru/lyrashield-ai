@@ -59,8 +59,14 @@ export function postureVerdict(
   if (!gate) {
     return latestScore
       ? {
-          variant: latestScore.score >= 80 ? "success" : latestScore.score >= 50 ? "warning" : "danger",
-          text: latestScore.score >= 80 ? "Ready within completed scope" : latestScore.score >= 50 ? "Needs attention" : "Needs action",
+          variant:
+            latestScore.score >= 80 ? "success" : latestScore.score >= 50 ? "warning" : "danger",
+          text:
+            latestScore.score >= 80
+              ? "Ready within completed scope"
+              : latestScore.score >= 50
+                ? "Needs attention"
+                : "Needs action",
           scope: scoreScope,
         }
       : {

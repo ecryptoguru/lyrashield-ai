@@ -113,7 +113,10 @@ export default async function DashboardPage() {
     lastEvaluatedAssessment,
     reportCount,
     openIssues,
-    gateTargets: gateTargets.map((target) => ({ state: target.state, applicable: target.applicable })),
+    gateTargets: gateTargets.map((target) => ({
+      state: target.state,
+      applicable: target.applicable,
+    })),
     activeScan: overview.activeScan,
   })
 
@@ -362,9 +365,7 @@ export default async function DashboardPage() {
                 All retained findings grouped by severity, workspace-wide.
               </p>
             </div>
-            <Badge variant="muted">
-              {openIssues.independentlyVerified} independently verified
-            </Badge>
+            <Badge variant="muted">{openIssues.independentlyVerified} independently verified</Badge>
           </div>
           <SeverityDonut values={openIssuesBySeverity} />
         </Card>
@@ -464,7 +465,11 @@ function LatestRunAlert({
   const failure =
     !active && (run.userSafeFailure || run.coverageState === "NONE")
       ? presentOperationFailure(
-          run.userSafeFailure ? (run.status === "STOPPED_BUDGET" ? "NO_MINUTES_REMAINING" : run.status) : "COVERAGE_INCOMPLETE",
+          run.userSafeFailure
+            ? run.status === "STOPPED_BUDGET"
+              ? "NO_MINUTES_REMAINING"
+              : run.status
+            : "COVERAGE_INCOMPLETE",
           { targetName: run.targetName }
         )
       : null

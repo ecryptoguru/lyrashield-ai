@@ -1,5 +1,4 @@
 import type { Metadata } from "next"
-import { prisma } from "@lyrashield/db"
 import { FileText } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"

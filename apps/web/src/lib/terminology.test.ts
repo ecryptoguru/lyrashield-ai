@@ -26,16 +26,11 @@ describe("user-facing terminology", () => {
   // Internal identifiers, routes, and API contracts keep their names; this
   // sweep guards the presentation layer against regressions.
   it("keeps the legacy 'Trust Run' label out of web source", () => {
-    const roots = [
-      join(__dirname, "..", "app"),
-      join(__dirname, "..", "components"),
-      __dirname,
-    ]
+    const roots = [join(__dirname, "..", "app"), join(__dirname, "..", "components"), __dirname]
     const offenders: string[] = []
     const walk = (dir: string) => {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       for (const entry of readdirSync(dir)) {
-         
         const full = join(dir, entry)
         // eslint-disable-next-line security/detect-non-literal-fs-filename
         const stat = statSync(full)
