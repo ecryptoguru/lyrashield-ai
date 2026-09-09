@@ -1164,6 +1164,7 @@ model LoopClosure {
 
   @@unique([workspaceId, branchName])
   @@index([status, nextRetryAt])
+  @@map("loop_closures")
 }
 
 model Ticket {
