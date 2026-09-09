@@ -7,8 +7,19 @@ import type { Output } from "../output.js"
 
 export async function handleDoctor(_args: string[], output: Output): Promise<number> {
   const creds = await getEffectiveCredentials()
+  const credential =
+    creds.credentialKind === "oauth"
+      ? "OAuth access token"
+      : creds.apiKey
+        ? redactKey(creds.apiKey)
+        : "not set"
   const report: Record<string, unknown> = {
-    apiKey: creds.apiKey ? redactKey(creds.apiKey) : "not set",
+    credential,
+    credentialKind: creds.credentialKind,
+    credentialSource: creds.source,
+    // Preserve the existing JSON field for API-key consumers without
+    // misclassifying OAuth access tokens as third-party API keys.
+    apiKey: creds.credentialKind === "api-key" ? redactKey(creds.apiKey) : "not set",
     apiUrl: creds.apiUrl,
     workspaceId: creds.workspaceId ?? "not set",
     apiKeySource: creds.source,
@@ -92,7 +103,7 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
   if (output.json) {
     output.result(report)
   } else {
-    output.log(`API key:    ${report.apiKey} (${creds.source})`)
+    output.log(`Credential: ${credential} (${creds.source})`)
     output.log(`API URL:    ${creds.apiUrl}`)
     output.log(`Workspace:  ${creds.workspaceId ?? "not set"}`)
     output.log(`API status: ${apiReachable ? "reachable" : "unreachable"}`)
