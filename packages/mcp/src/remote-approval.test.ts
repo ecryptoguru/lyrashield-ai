@@ -149,10 +149,7 @@ function callWithApprovalId(
 }
 
 describe("handleRemoteMcpRequest (remote-oob approval)", () => {
-  it("no longer advertises approvalId on remote mutating tools (ruling 2)", async () => {
-    // No principal enters the legacy create-poll-approve cycle, so the
-    // approvalId parameter is not advertised to any caller. The call path
-    // still accepts it so historical records resolve.
+  it("advertises optional approvalId only on remote mutating tools", async () => {
     const { gate } = makeFakeGate()
     const res = await handleRemoteMcpRequest(
       mcpRequest({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
@@ -175,7 +172,12 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
     }
     expect(tools.length).toBeGreaterThan(0)
     for (const tool of tools) {
-      expect(tool.inputSchema.properties).not.toHaveProperty("approvalId")
+      if (tool.annotations.readOnlyHint) {
+        expect(tool.inputSchema.properties).not.toHaveProperty("approvalId")
+      } else {
+        expect(tool.inputSchema.properties.approvalId).toMatchObject({ type: "string" })
+        expect(tool.inputSchema.required ?? []).not.toContain("approvalId")
+      }
     }
   })
 

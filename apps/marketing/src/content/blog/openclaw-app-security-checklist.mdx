@@ -13,7 +13,7 @@ faq:
   - q: "How do I filter MCP tools in OpenClaw?"
     a: "Use mcp.servers.<name>.toolFilter with include/exclude globs. Applies to discovered tools and utility wrappers like resources_list."
   - q: "How do I add LyraShield to OpenClaw?"
-    a: "Use openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.7, or add the remote URL with transport streamable-http and auth oauth."
+    a: "Use openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.8, or add the remote URL with transport streamable-http and auth oauth."
   - q: "Does OpenClaw require OAuth for remote MCP?"
     a: "Supports OAuth with auth:oauth and openclaw mcp login. Tokens stored under OpenClaw state, not in config literals."
 ---
@@ -73,7 +73,7 @@ LyraShield integration using the same primitives, docs at [openclaw integration 
 Local stdio:
 
 ```bash
-openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.7
+openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.8
 ```
 
 Remote Streamable HTTP:
@@ -91,7 +91,7 @@ Or JSON5:
     servers: {
       lyrashield: {
         command: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.7"],
+        args: ["-y", "@lyrashield/mcp@0.2.8"],
         toolFilter: {
           include: ["scan_target", "get_findings"],
           exclude: [],
@@ -141,7 +141,7 @@ Hardening:
 
 - For private MCP endpoints, set `sslVerify` to a CA bundle path, not `false`. `sslVerify: false` is only for explicitly trusted private HTTPS.
 - For mTLS, set `clientCert` and `clientKey` paths. Paths are validated by `doctor`.
-- Prefer `streamable-http` for bidirectional streaming with remote verifiers. `sse` is legacy compat. Use `stdio` for local-first verifiers like `npx -y @lyrashield/mcp@0.2.7` to keep secrets on host.
+- Prefer `streamable-http` for bidirectional streaming with remote verifiers. `sse` is legacy compat. Use `stdio` for local-first verifiers like `npx -y @lyrashield/mcp@0.2.8` to keep secrets on host.
 
 ## 5. Build release evidence that survives gateway sessions
 
@@ -172,7 +172,7 @@ Keep that record scoped to the gateway revision reviewed.
 
 OpenClaw gives you local-first gateway power: one control plane for 29 channels, client-and-server MCP, and a verified registry with `doctor`/`probe`. LyraShield is the narrow verifier on that gateway: release assurance for AI-built apps with `target, review, evidence, fix, retest, report` and SCA and secrets feeding SARIF, not another general-purpose agent. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-The integration surface matches OpenClaw primitives: local `npx -y @lyrashield/mcp@0.2.7` for developer machines and remote `https://app.lyrashieldai.com/api/mcp` with revocable authentication, both behind `toolFilter` and `requestTimeoutMs`. The combination is about channel-to-release integrity: least-privilege MCP inspection, an advisory diff-aware CI gate, and a separate recorded retest. The platform is live in open beta; scans, findings and evidence, approval-gated fix proposals, retests, reports, and billing are implemented. Production availability remains bounded by release gates, and automatic server-generated Fix PR execution is not enabled.
+The integration surface matches OpenClaw primitives: local `npx -y @lyrashield/mcp@0.2.8` for developer machines and remote `https://app.lyrashieldai.com/api/mcp` with revocable authentication, both behind `toolFilter` and `requestTimeoutMs`. The combination is about channel-to-release integrity: least-privilege MCP inspection, an advisory diff-aware CI gate, and a separate recorded retest. The platform is live in open beta; scans, findings and evidence, approval-gated fix proposals, retests, reports, and billing are implemented. Production availability remains bounded by release gates, and automatic server-generated Fix PR execution is not enabled.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 

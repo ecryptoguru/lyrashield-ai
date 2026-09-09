@@ -252,7 +252,8 @@ export async function POST(request: NextRequest) {
                   if (!entitlement.allowed)
                     throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
                   await assertScanWorkerAvailable()
-                }
+                },
+                repository.full_name
               )
               if (outcome) {
                 // The retest scan exists but is not queued yet — packages/db
@@ -269,8 +270,10 @@ export async function POST(request: NextRequest) {
                 })
                 loopClosureDelivered = true
                 const { completeLoopClosure } = await import("@lyrashield/db")
-                await completeLoopClosure(integration.workspaceId, pullRequest.head.ref).catch(
-                  () => undefined
+                await completeLoopClosure(
+                  integration.workspaceId,
+                  repository.full_name,
+                  pullRequest.number
                 )
                 logger.info("Fix PR merge closed the loop", {
                   retestId: outcome.retestId,
@@ -291,19 +294,14 @@ export async function POST(request: NextRequest) {
                 await import("@lyrashield/db")
               const reason = classifyLoopClosureError(loopErr)
               if (reason !== "UNEXPECTED_ERROR") {
-                loopClosureDelivered = true
                 await recordDeferredLoopClosure({
                   workspaceId: integration.workspaceId,
+                  repoFullName: repository.full_name,
                   branchName: pullRequest.head.ref,
                   prNumber: pullRequest.number,
                   reason,
-                }).catch((recordError) => {
-                  logger.error("Failed to record deferred loop closure", {
-                    workspaceId: integration.workspaceId,
-                    branchName: pullRequest.head.ref,
-                    error: String(recordError),
-                  })
                 })
+                loopClosureDelivered = true
                 logger.warn("Fix PR loop-closure deferred to the worker sweep", {
                   workspaceId: integration.workspaceId,
                   branchName: pullRequest.head.ref,

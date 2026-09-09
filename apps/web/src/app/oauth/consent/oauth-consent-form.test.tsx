@@ -30,13 +30,4 @@ describe("OAuthConsentForm", () => {
     expect(html).not.toContain("Automatic workspace access")
     expect(html).not.toContain('type="radio"')
   })
-
-  it("labels the consent heading with the client name it was given, exactly once", () => {
-    // The page resolves clientName server-side from the registered OauthClient
-    // record (v16 item 1.5). The form must render that value verbatim — the
-    // forged-query-parameter class of spoofing is prevented upstream, and this
-    // test pins the rendering contract.
-    const html = renderToStaticMarkup(<OAuthConsentForm {...baseProps} scope="lyrashield.read" />)
-    expect(html).toContain("Connect Codex")
-  })
 })

@@ -37,6 +37,18 @@ test("OAuth consent discloses automatic access and recovers from errors on mobil
   const {
     data: { id: workspaceId },
   } = await workspace.json()
+  const registration = await page.request.post("/api/auth/oauth2/register", {
+    headers,
+    data: {
+      client_name: "Test Agent",
+      redirect_uris: [`http://127.0.0.1:19876/callback/${suffix}`],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    },
+  })
+  await expect(registration).toBeOK()
+  const { client_id: clientId } = (await registration.json()) as { client_id: string }
 
   // Exercise the actual rendered component and request contract without issuing
   // a real client grant or exchanging tokens from a fabricated OAuth request.
@@ -58,7 +70,7 @@ test("OAuth consent discloses automatic access and recovers from errors on mobil
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto(
-      "/oauth/consent?client_id=local-render-fixture&client_name=Test%20Agent&scope=lyrashield.read%20lyrashield.write"
+      `/oauth/consent?client_id=${encodeURIComponent(clientId)}&client_name=Spoofed%20Name&scope=lyrashield.read%20lyrashield.write`
     )
     await expect(page.getByRole("heading", { name: "Connect Test Agent" })).toBeVisible()
     await page.getByLabel("Target Workspace").selectOption(workspaceId)
@@ -76,7 +88,7 @@ test("OAuth consent discloses automatic access and recovers from errors on mobil
     )
     await expect(connect).toBeEnabled()
   }
-  await page.goto("/oauth/consent?client_id=local-render-fixture&scope=lyrashield.read")
+  await page.goto(`/oauth/consent?client_id=${encodeURIComponent(clientId)}&scope=lyrashield.read`)
   await expect(page.getByText(/cannot make changes/)).toBeVisible()
   await expect(page.getByText("Automatic workspace access")).toHaveCount(0)
   const user = await prisma.user.findUniqueOrThrow({ where: { email } })

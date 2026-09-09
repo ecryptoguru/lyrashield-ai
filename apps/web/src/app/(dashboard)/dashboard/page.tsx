@@ -119,7 +119,6 @@ export default async function DashboardPage() {
       state: target.state,
       applicable: target.applicable,
       blockingFindings: target.blockingFindings,
-      reasons: target.reasons,
     })),
     activeScan: overview.activeScan,
   })
@@ -137,10 +136,7 @@ export default async function DashboardPage() {
       : null
 
   // The trend plots only snapshots bound to scans with usable coverage — the
-  // read model already excludes scores from runs that evaluated nothing. The
-  // posture header demotes the score entirely while the canonical verdict is
-  // inconclusive: a green 100 beside "Inconclusive" reads as an all-clear the
-  // evidence does not support.
+  // read model already excludes scores from runs that evaluated nothing.
   const trend = [...scoreHistory]
     .reverse()
     .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
@@ -229,7 +225,7 @@ export default async function DashboardPage() {
           state: readiness.state ?? "INSUFFICIENT_EVIDENCE",
           coverageLabel,
         }}
-        latestScore={readiness.state === "READY" ? latestScore : null}
+        latestScore={latestScore}
       />
 
       {/* 3 — latest run warning/progress when it needs attention */}
@@ -347,28 +343,19 @@ export default async function DashboardPage() {
             <div>
               <h2 className="font-semibold">Risk posture</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                {latestScore && readiness.state === "READY"
+                {latestScore
                   ? `Score from the ${latestScore.completedAtLabel} review of ${latestScore.targetName}, with recent evaluated snapshots.`
-                  : "No launch-ready verdict yet. Scores appear when every active target's gate is READY."}
+                  : "No evaluated review yet."}
               </p>
             </div>
             <Badge
-              variant={
-                latestScore && readiness.state === "READY"
-                  ? latestScore.score >= 80
-                    ? "success"
-                    : "warning"
-                  : "muted"
-              }
+              variant={latestScore ? (latestScore.score >= 80 ? "success" : "warning") : "muted"}
             >
-              {latestScore && readiness.state === "READY" ? "Evaluated" : "Not launch-ready"}
+              {latestScore ? "Evaluated" : "Not evaluated"}
             </Badge>
           </div>
           <div className="grid items-center gap-6 md:grid-cols-[auto_1fr]">
-            <ScoreGauge
-              score={readiness.state === "READY" ? (latestScore?.score ?? null) : null}
-              grade={readiness.state === "READY" ? (latestScore?.grade ?? null) : null}
-            />
+            <ScoreGauge score={latestScore?.score ?? null} grade={latestScore?.grade ?? null} />
             <ScoreTrend points={trend} />
           </div>
         </Card>

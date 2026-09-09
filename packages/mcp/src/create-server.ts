@@ -8,7 +8,7 @@ import { logger } from "@lyrashield/logger"
 
 export const SERVER_NAME = "lyrashield-mcp"
 export const SERVER_TITLE = "LyraShield AI"
-export const SERVER_VERSION = "0.2.7"
+export const SERVER_VERSION = "0.2.8"
 export const SERVER_DESCRIPTION =
   "Bounded security scans, recorded evidence states, fix proposals, retests, and launch-readiness review."
 export const SERVER_WEBSITE_URL = "https://lyrashieldai.com"
@@ -175,11 +175,12 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: engine.listTools({
-      // Ruling 2: no principal enters the legacy create-poll-approve cycle
-      // anymore, so the approvalId parameter is no longer advertised. The
-      // call path still ACCEPTS approvalId so historical PENDING/EXECUTED
-      // records remain resolvable for clients that already hold one.
-      includeApprovalId: false,
+      includeApprovalId:
+        !options.allowMutations &&
+        options.approvalMode === "remote-oob" &&
+        !options.delegatedAuthorization &&
+        !!options.remoteApprovalGate &&
+        !!options.remoteApprovalContext,
       requireIdempotencyKey:
         !options.allowMutations &&
         options.approvalMode === "remote-oob" &&

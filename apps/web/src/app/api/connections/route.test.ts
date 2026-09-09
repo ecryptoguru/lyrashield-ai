@@ -12,10 +12,13 @@ vi.mock("@lyrashield/db", () => ({
   },
   createAgentConnection: vi.fn(),
   listAgentConnections: vi.fn(),
+  resolveOAuthClientDisplayName: vi.fn(
+    (client: { name?: string }) => client.name ?? "Connected coding agent"
+  ),
   prisma: {
     auditLog: { create: vi.fn() },
     target: { count: vi.fn() },
-    oauthClient: { findFirst: vi.fn() },
+    oauthClient: { findUnique: vi.fn() },
   },
 }))
 
@@ -111,10 +114,7 @@ describe("POST /api/connections", () => {
     requireWorkspaceAccess.mockResolvedValue(sessionResult())
     requireBrowserConnectionManager.mockResolvedValue(sessionResult())
     vi.mocked(prisma.target.count).mockResolvedValue(1)
-    vi.mocked(prisma.oauthClient.findFirst).mockResolvedValue({
-      name: "Cursor",
-      uri: "https://cursor.com",
-    } as never)
+    vi.mocked(prisma.oauthClient.findUnique).mockResolvedValue({ name: "Cursor IDE" } as never)
     validConsent()
   })
 
@@ -161,19 +161,12 @@ describe("POST /api/connections", () => {
     const body = await res.json()
     expect(body.data.id).toBe("conn-new")
     expect(verifyOAuthConsentState).toHaveBeenCalledWith("signed-state")
+    expect(createAgentConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ clientType: "Cursor IDE", clientName: "Cursor IDE" })
+    )
     expect(updateSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: { activeWorkspaceId: "ws-1", pendingAgentConnectionId: "conn-new" },
-      })
-    )
-    // W3-08 (v16 item 1.5): client identity is resolved server-side from the
-    // registered OauthClient record — the body's clientType/clientName are
-    // ignored, so a forged label cannot relabel the connection.
-    expect(createAgentConnection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clientType: "oauth:client-cursor",
-        clientName: "Cursor",
-        oauthClientId: "client-cursor",
       })
     )
     expect(vi.mocked(prisma.auditLog.create)).toHaveBeenCalledWith(
@@ -186,42 +179,47 @@ describe("POST /api/connections", () => {
     )
   })
 
-  it("rejects an unknown or disabled OAuth client before persisting anything", async () => {
-    vi.mocked(prisma.oauthClient.findFirst).mockResolvedValue(null as never)
-    const res = await POST(
-      new Request("http://localhost/api/connections", {
-        method: "POST",
-        body: JSON.stringify({
-          workspaceId: "ws-1",
-          clientType: "cursor",
-          oauthClientId: "client-unknown",
-          scopes: ["lyrashield.read"],
-          consentState: "signed-state",
-        }),
-      })
-    )
-    expect(res.status).toBe(400)
-    expect(createAgentConnection).not.toHaveBeenCalled()
-  })
+  it("uses registered OAuth metadata instead of a client-supplied display name", async () => {
+    vi.mocked(createAgentConnection).mockResolvedValue({ id: "conn-new" } as never)
 
-  it("falls back to the client id when the registered client has no name", async () => {
-    vi.mocked(prisma.oauthClient.findFirst).mockResolvedValue({ name: null, uri: null } as never)
     const res = await POST(
       new Request("http://localhost/api/connections", {
         method: "POST",
         body: JSON.stringify({
           workspaceId: "ws-1",
-          clientType: "cursor",
+          clientType: "Spoofed client",
+          clientName: "Spoofed client",
           oauthClientId: "client-cursor",
           scopes: ["lyrashield.read"],
           consentState: "signed-state",
         }),
       })
     )
+
     expect(res.status).toBe(201)
     expect(createAgentConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ clientName: null, clientType: "oauth:client-cursor" })
+      expect.objectContaining({ clientType: "Cursor IDE", clientName: "Cursor IDE" })
     )
+  })
+
+  it("rejects a connection when its OAuth client no longer exists", async () => {
+    vi.mocked(prisma.oauthClient.findUnique).mockResolvedValue(null)
+
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "client",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          consentState: "signed-state",
+        }),
+      })
+    )
+
+    expect(res.status).toBe(400)
+    expect(createAgentConnection).not.toHaveBeenCalled()
   })
 
   it("rejects a missing consent state before persisting anything", async () => {

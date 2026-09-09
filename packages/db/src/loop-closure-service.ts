@@ -1,5 +1,5 @@
 /**
- * Durable loop-closure for merged fix PRs (Deep Review v16 item 1.2).
+ * Durable loop closure for merged fix PRs.
  *
  * GitHub never redelivers a failed delivery automatically. The previous
  * strategy — delete the delivery marker and rethrow so GitHub "redelivers" —
@@ -72,21 +72,22 @@ export function classifyLoopClosureError(error: unknown): LoopClosureReason {
 }
 
 export function nextLoopClosureRetryAt(attempts: number, now = new Date()): Date {
-  const index = Math.min(Math.max(attempts, 0), LOOP_CLOSURE_BACKOFF_MINUTES.length - 1)
+  const index = Math.min(Math.max(attempts - 1, 0), LOOP_CLOSURE_BACKOFF_MINUTES.length - 1)
   const minutes: number = LOOP_CLOSURE_BACKOFF_MINUTES[index] ?? 240
   return new Date(now.getTime() + minutes * 60 * 1000)
 }
 
 /**
  * Persist (or refresh) a deferred closure for a merged fix PR. Idempotent on
- * (workspaceId, branchName): a duplicate delivery refreshes the retry state
+ * (workspaceId, repository, PR number): a duplicate delivery refreshes the retry state
  * rather than creating a second row, and a completed or terminal-failed
  * closure is never reopened.
  */
 export async function recordDeferredLoopClosure(input: {
   workspaceId: string
+  repoFullName: string
   branchName: string
-  prNumber?: number | null
+  prNumber: number
   reason: LoopClosureReason
   /** Absolute attempt count for this deferral; defaults to 1 on create. */
   attempts?: number
@@ -96,24 +97,12 @@ export async function recordDeferredLoopClosure(input: {
   const nextRetryAt = nextLoopClosureRetryAt(attempts, input.now)
   try {
     await withWorkspaceRLS(input.workspaceId, (tx) =>
-      tx.loopClosure.upsert({
-        where: {
-          workspaceId_branchName: {
-            workspaceId: input.workspaceId,
-            branchName: input.branchName,
-          },
-        },
-        create: {
+      tx.loopClosure.create({
+        data: {
           workspaceId: input.workspaceId,
+          repoFullName: input.repoFullName,
           branchName: input.branchName,
-          prNumber: input.prNumber ?? null,
-          status: "pending",
-          attempts,
-          lastReason: input.reason,
-          nextRetryAt,
-        },
-        update: {
-          ...(input.prNumber != null ? { prNumber: input.prNumber } : {}),
+          prNumber: input.prNumber,
           status: "pending",
           attempts,
           lastReason: input.reason,
@@ -123,8 +112,25 @@ export async function recordDeferredLoopClosure(input: {
     )
   } catch (error) {
     if (isUniqueConstraintError(error)) {
-      // A concurrent delivery raced the upsert; the winner's row stands.
-      logger.info("Concurrent loop-closure record raced; existing row stands", {
+      // Preserve terminal state and the highest attempt count. A duplicate
+      // webhook may refresh a pending retry, but must never reopen a completed
+      // or exhausted closure or reset its progress.
+      await withWorkspaceRLS(input.workspaceId, (tx) =>
+        tx.loopClosure.updateMany({
+          where: {
+            workspaceId: input.workspaceId,
+            repoFullName: input.repoFullName,
+            prNumber: input.prNumber,
+            status: "pending",
+          },
+          data: {
+            branchName: input.branchName,
+            lastReason: input.reason,
+            nextRetryAt,
+          },
+        })
+      )
+      logger.info("Existing pending loop closure refreshed", {
         workspaceId: input.workspaceId,
         branchName: input.branchName,
       })
@@ -142,13 +148,18 @@ export async function recordDeferredLoopClosure(input: {
 }
 
 /** Mark a closure complete. Idempotent: completing twice is a no-op. */
-export async function completeLoopClosure(workspaceId: string, branchName: string): Promise<void> {
+export async function completeLoopClosure(
+  workspaceId: string,
+  repoFullName: string,
+  prNumber: number
+): Promise<void> {
   await withWorkspaceRLS(workspaceId, (tx) =>
     tx.loopClosure.updateMany({
       where: {
         workspaceId,
-        branchName,
-        status: { not: "completed" },
+        repoFullName,
+        prNumber,
+        status: "pending",
       },
       data: { status: "completed", completedAt: new Date() },
     })
@@ -163,16 +174,18 @@ export async function completeLoopClosure(workspaceId: string, branchName: strin
  */
 export async function failLoopClosureTerminally(
   workspaceId: string,
+  repoFullName: string,
   branchName: string,
-  prNumber: number | null,
+  prNumber: number,
   reason: LoopClosureReason
 ): Promise<void> {
-  await withWorkspaceRLS(workspaceId, (tx) =>
+  const updated = await withWorkspaceRLS(workspaceId, (tx) =>
     tx.loopClosure.updateMany({
-      where: { workspaceId, branchName, status: "pending" },
+      where: { workspaceId, repoFullName, prNumber, status: "pending" },
       data: { status: "failed", lastReason: reason },
     })
   )
+  if (updated.count === 0) return
   await createNotification({
     workspaceId,
     channel: "in_app",
@@ -182,10 +195,11 @@ export async function failLoopClosureTerminally(
       `A fix PR was merged (branch ${branchName}${prNumber != null ? `, PR #${prNumber}` : ""}) ` +
       `but its automatic retest could not be scheduled after ${LOOP_CLOSURE_MAX_ATTEMPTS} attempts ` +
       `(${reason}). The merge is recorded. Start the retest manually from the finding when you are ready.`,
-    dedupeKey: `loop_closure_failed:${workspaceId}:${branchName}`,
+    dedupeKey: `loop_closure_failed:${workspaceId}:${repoFullName}:${prNumber}`,
   })
   logger.warn("Loop closure terminated as failed after max attempts", {
     workspaceId,
+    repoFullName,
     branchName,
     reason,
   })
@@ -203,26 +217,47 @@ export async function claimDueLoopClosures(
   Array<{
     id: string
     workspaceId: string
+    repoFullName: string
     branchName: string
-    prNumber: number | null
+    prNumber: number
     attempts: number
     lastReason: string | null
   }>
 > {
   // Cross-workspace system read: the sweep runs without a workspace context,
   // like the scan-queue reconciliation preflight.
-  const due = await getSystemPrisma().loopClosure.findMany({
+  const systemPrisma = getSystemPrisma()
+  const boundedLimit = Math.min(Math.max(limit, 1), 100)
+  const due = await systemPrisma.loopClosure.findMany({
     where: { status: "pending", nextRetryAt: { lte: now } },
-    orderBy: [{ attempts: "asc" }, { nextRetryAt: "asc" }],
-    take: limit,
+    orderBy: [{ attempts: "asc" }, { nextRetryAt: "asc" }, { id: "asc" }],
+    take: boundedLimit,
     select: {
       id: true,
       workspaceId: true,
+      repoFullName: true,
       branchName: true,
       prNumber: true,
       attempts: true,
       lastReason: true,
     },
   })
-  return due
+  const leaseUntil = new Date(now.getTime() + 5 * 60 * 1000)
+  const claimed: typeof due = []
+  for (const closure of due) {
+    const result = await systemPrisma.loopClosure.updateMany({
+      where: {
+        id: closure.id,
+        status: "pending",
+        attempts: closure.attempts,
+        nextRetryAt: { lte: now },
+      },
+      data: {
+        attempts: { increment: 1 },
+        nextRetryAt: leaseUntil,
+      },
+    })
+    if (result.count === 1) claimed.push({ ...closure, attempts: closure.attempts + 1 })
+  }
+  return claimed
 }

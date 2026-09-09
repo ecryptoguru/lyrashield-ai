@@ -62,16 +62,13 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
     )
   })
 
-  it("routes write-scoped API-key mutations through the gate, not a write bypass (ruling 2)", async () => {
-    // One authorization model: the gate returns the structured
-    // connect-over-OAuth response for connection-less principals instead of
-    // executing mutations directly off the API key's REST scope.
+  it("executes write-scoped API-key calls without a second approval", async () => {
     verifyApiKey.mockResolvedValue({ keyId: "k", workspaceId: "ws-1", scopes: ["read", "write"] })
     handleRemoteMcpRequest.mockResolvedValue(new Response("{}", { status: 200 }))
     expect((await POST(req("Bearer lsk_write"))).status).toBe(200)
     expect(handleRemoteMcpRequest).toHaveBeenCalledWith(
       expect.any(Request),
-      expect.objectContaining({ allowMutations: false })
+      expect.objectContaining({ allowMutations: true })
     )
   })
 

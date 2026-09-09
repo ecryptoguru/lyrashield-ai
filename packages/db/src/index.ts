@@ -388,6 +388,7 @@ export {
   createAgentConnection,
   getAgentConnection,
   listAgentConnections,
+  resolveOAuthClientDisplayName,
   pauseAgentConnection,
   resumeAgentConnection,
   revokeAgentConnection,

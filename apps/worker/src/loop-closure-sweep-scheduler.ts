@@ -1,5 +1,5 @@
 /**
- * Loop-closure sweep scheduler (Deep Review v16 item 1.2).
+ * Loop-closure sweep scheduler.
  *
  * Periodically retries deferred fix-PR loop closures — merged PRs whose
  * automatic retest was deferred at webhook time by the concurrency cap,

@@ -108,7 +108,16 @@ async function post(request: Request) {
 
         revalidateDashboardAggregates(workspaceId)
 
-        return apiSuccess({ id: report.id, title: report.title, status: report.status }, 201)
+        return apiSuccess(
+          {
+            id: report.id,
+            title: report.title,
+            status: report.status,
+            snapshotReused: report.snapshotReused === true,
+            ...(report.snapshotReused ? { requestedTitle: title } : {}),
+          },
+          report.snapshotReused ? 200 : 201
+        )
       }
     )
   } catch (error) {

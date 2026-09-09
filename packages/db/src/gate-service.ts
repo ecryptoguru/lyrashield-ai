@@ -457,10 +457,6 @@ export async function getCurrentGateVerdict(
       applicability: {
         applicable: applicability.applicable,
         reasons: applicability.reasons,
-        // The identity this read was evaluated against: the enforced release
-        // identity when the caller supplied one, otherwise the assessment's
-        // own identity (read-only surfaces label the verdict with it).
-        evaluatedIdentity: applicability.evaluatedIdentity,
       },
       historical,
     }
@@ -487,9 +483,14 @@ export async function handleFixPrMergedAndReevaluate(
   workspaceId: string,
   branchName: string,
   prNumber: number | undefined,
-  assertRetestAllowed: (mode: ScanMode) => Promise<void>
+  assertRetestAllowed: (mode: ScanMode) => Promise<void>,
+  repoFullName?: string
 ): Promise<FixPrMergeOutcome | null> {
   if (typeof assertRetestAllowed !== "function") throw new Error("Retest admission guard required")
+  const [repoOwner, repoName, ...extra] = repoFullName?.split("/") ?? []
+  if (repoFullName && (!repoOwner || !repoName || extra.length > 0)) {
+    throw new Error("Invalid GitHub repository identity")
+  }
   const outcome = await withWorkspaceRLS(
     workspaceId,
     async (lockTx) => {
@@ -503,6 +504,8 @@ export async function handleFixPrMergedAndReevaluate(
         const pr = await tx.pullRequest.findFirst({
           where: {
             branchName,
+            ...(repoOwner && repoName ? { repoOwner, repoName } : {}),
+            ...(prNumber ? { OR: [{ prNumber }, { prNumber: null }] } : {}),
             status: { in: ["open", "merged"] },
             deletedAt: null,
             fixProposal: { finding: { workspaceId, deletedAt: null } },
@@ -565,6 +568,7 @@ export async function handleFixPrMergedAndReevaluate(
         workspaceId,
         branchName,
         prNumber,
+        repoFullName,
       })
       if (!result) return null
 

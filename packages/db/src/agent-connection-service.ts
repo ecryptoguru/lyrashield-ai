@@ -39,6 +39,28 @@ export interface AgentConnectionDTO {
   lastSuccessfulOperationAt?: Date | null
 }
 
+type OAuthClientIdentity = {
+  name?: string | null
+  uri?: string | null
+  softwareId?: string | null
+  redirectUris?: string[]
+}
+
+export function resolveOAuthClientDisplayName(client: OAuthClientIdentity): string {
+  const identity = [client.uri, client.softwareId, ...(client.redirectUris ?? [])]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase()
+
+  if (identity.includes("devin.ai")) return "Devin"
+  if (identity.includes("antigravity.google")) return "Antigravity"
+  if (identity.includes("claude.ai") || identity.includes("anthropic.com")) return "Claude"
+
+  const name = client.name?.trim()
+  if (name && !/^(lyrashield(?: ai)?|mcp(?: client)?)$/i.test(name)) return name
+  return "Connected coding agent"
+}
+
 export function toAgentConnectionDTO(connection: AgentConnection): AgentConnectionDTO {
   return {
     id: connection.id,
@@ -108,8 +130,8 @@ export async function listAgentConnections(
   workspaceId: string,
   options: { status?: AgentConnectionStatus } = {}
 ): Promise<AgentConnectionDTO[]> {
-  const connections = await withWorkspaceRLS(workspaceId, (tx) =>
-    tx.agentConnection.findMany({
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const connections = await tx.agentConnection.findMany({
       where: {
         workspaceId,
         ...(options.status ? { status: options.status } : {}),
@@ -124,11 +146,36 @@ export async function listAgentConnections(
         },
       },
     })
-  )
-  return connections.map((connection) => ({
-    ...toAgentConnectionDTO(connection),
-    lastSuccessfulOperationAt: connection.operations?.[0]?.updatedAt ?? null,
-  }))
+    const oauthClientIds = connections.flatMap((connection) =>
+      connection.oauthClientId ? [connection.oauthClientId] : []
+    )
+    const oauthClients = oauthClientIds.length
+      ? await tx.oauthClient.findMany({
+          where: { clientId: { in: oauthClientIds } },
+          select: {
+            clientId: true,
+            name: true,
+            uri: true,
+            softwareId: true,
+            redirectUris: true,
+          },
+        })
+      : []
+    const clientNames = new Map(
+      oauthClients.map((client) => [client.clientId, resolveOAuthClientDisplayName(client)])
+    )
+
+    return connections.map((connection) => {
+      const registeredName = connection.oauthClientId
+        ? clientNames.get(connection.oauthClientId)?.trim()
+        : undefined
+      return {
+        ...toAgentConnectionDTO(connection),
+        clientName: registeredName || connection.clientName,
+        lastSuccessfulOperationAt: connection.operations?.[0]?.updatedAt ?? null,
+      }
+    })
+  })
 }
 
 export async function pauseAgentConnection(

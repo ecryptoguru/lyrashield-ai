@@ -44,21 +44,6 @@ export interface GateApplicabilityResult {
   applicable: boolean
   reasons: GateApplicabilityReason[]
   effectiveState: GateVerdictState
-  /**
-   * The identity the verdict was evaluated against. When the caller enforces a
-   * release identity this is that identity; when no identity is enforced it is
-   * the assessment's own identity, so a read-only surface can label what the
-   * verdict covers ("READY for commit abc1234") without implying it enforced
-   * anything.
-   */
-  evaluatedIdentity: GateAssessmentIdentity | null
-}
-
-/** True when the caller supplies a release identity to enforce. */
-export function isEnforcingIdentityInput(
-  input: Pick<GateApplicabilityInput, "expectedCommit" | "expectedArtifactDigest">
-): boolean {
-  return Boolean(input.expectedCommit ?? input.expectedArtifactDigest)
 }
 
 /**
@@ -77,30 +62,28 @@ export function evaluateGateApplicability(
     : input.expectedArtifactDigest
       ? ({ kind: "ARTIFACT_DIGEST", value: input.expectedArtifactDigest } as const)
       : null
-  // Read-only surfaces (Home, Launch Readiness) supply no release identity:
-  // evaluate the assessment against its OWN identity so a usable verdict is
-  // reachable, and return that identity so the UI can label what it covers.
-  // Callers that enforce a commit or digest (the CI gate, the API route)
-  // keep the strict mismatch behaviour below.
-  const enforcedIdentity = expectedIdentity ?? (snapshot ? snapshot.identity : null)
 
   if (!snapshot || snapshot.version !== GATE_ASSESSMENT_VERSION) {
     reasons.push({
       code: "ASSESSMENT_UNAVAILABLE",
       message: "This historical verdict has no supported assessment binding.",
     })
-  } else if (isEnforcingIdentityInput(input)) {
-    if (snapshot.identity.kind !== enforcedIdentity?.kind) {
-      reasons.push({
-        code: "UNSUPPORTED_IDENTITY",
-        message: "The assessment cannot establish this kind of release identity.",
-      })
-    } else if (snapshot.identity.value !== expectedIdentity?.value) {
-      reasons.push({
-        code: "IDENTITY_MISMATCH",
-        message: "The assessment identity does not match the release being enforced.",
-      })
-    }
+  }
+  if (!expectedIdentity) {
+    reasons.push({
+      code: "EXPECTED_IDENTITY_REQUIRED",
+      message: "Provide the commit or artifact digest being enforced.",
+    })
+  } else if (snapshot && snapshot.identity.kind !== expectedIdentity.kind) {
+    reasons.push({
+      code: "UNSUPPORTED_IDENTITY",
+      message: "The assessment cannot establish this kind of release identity.",
+    })
+  } else if (snapshot && snapshot.identity.value !== expectedIdentity?.value) {
+    reasons.push({
+      code: "IDENTITY_MISMATCH",
+      message: "The assessment identity does not match the release being enforced.",
+    })
   }
   if (snapshot && input.nowMs >= snapshot.completedAtMs + GATE_FRESHNESS_MS) {
     reasons.push({
@@ -131,6 +114,5 @@ export function evaluateGateApplicability(
     applicable: reasons.length === 0,
     reasons,
     effectiveState: reasons.length === 0 ? historicalState : "INSUFFICIENT_EVIDENCE",
-    evaluatedIdentity: enforcedIdentity,
   }
 }

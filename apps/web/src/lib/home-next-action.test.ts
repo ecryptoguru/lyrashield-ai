@@ -9,30 +9,22 @@ const base = {
   openIssues: { total: 0, critical: 0, high: 0 },
   gateTargets: [] as Pick<
     GateReadinessTarget,
-    "targetId" | "targetName" | "state" | "applicable" | "blockingFindings" | "reasons"
+    "targetId" | "targetName" | "state" | "applicable" | "blockingFindings"
   >[],
   activeScan: null,
 }
 
 function gate(state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE", applicable = true) {
-  return { state, applicable, reasons: [] }
+  return { state, applicable }
 }
 
 function gateFor(
   id: string,
   state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE",
   applicable = true,
-  blockingFindings = 0,
-  reasons: { code: string; message: string }[] = []
+  blockingFindings = 0
 ) {
-  return {
-    targetId: id,
-    targetName: `Target ${id}`,
-    state,
-    applicable,
-    blockingFindings,
-    reasons,
-  }
+  return { targetId: id, targetName: `Target ${id}`, state, applicable, blockingFindings }
 }
 
 describe("deriveHomeDecision — one canonical action", () => {
@@ -192,44 +184,6 @@ describe("deriveHomeDecision — one canonical action", () => {
 
   it("keeps the legacy wrapper returning just the action", () => {
     expect(deriveHomeNextAction(base)?.cta).toBe("Start a scan")
-  })
-
-  it("never recommends a scan when the only applicability reason is a missing enforced identity", () => {
-    // A verdict blocked solely by EXPECTED_IDENTITY_REQUIRED needs no new
-    // scan — the assessment itself is usable. The decision routes to Launch
-    // Readiness instead of an action that can never clear the reason.
-    const decision = deriveHomeDecision({
-      ...base,
-      lastEvaluatedAssessment: evaluatedAssessment(),
-      targets: { ...base.targets, total: 2 },
-      gateTargets: [
-        gateFor("t-1", "READY"),
-        gateFor("t-2", "INSUFFICIENT_EVIDENCE", false, 0, [
-          { code: "EXPECTED_IDENTITY_REQUIRED", message: "Provide the commit being enforced." },
-        ]),
-      ],
-    })
-    expect(decision.action?.cta).toBe("Open Launch Readiness")
-    expect(decision.action?.href).toBe("/dashboard/launch-readiness")
-    expect(decision.action?.cta).not.toBe("Start a scan")
-    expect(decision.primaryAction.label).toBe("Open Launch Readiness")
-  })
-
-  it("still recommends evidence work when identity-only reasons mix with real gaps", () => {
-    const decision = deriveHomeDecision({
-      ...base,
-      lastEvaluatedAssessment: evaluatedAssessment(),
-      targets: { ...base.targets, total: 3 },
-      gateTargets: [
-        gateFor("t-1", "INSUFFICIENT_EVIDENCE", false, 0, [
-          { code: "EXPECTED_IDENTITY_REQUIRED", message: "Provide the commit being enforced." },
-        ]),
-        gateFor("t-2", "INSUFFICIENT_EVIDENCE", false, 0, [
-          { code: "ASSESSMENT_UNAVAILABLE", message: "No supported assessment binding." },
-        ]),
-      ],
-    })
-    expect(decision.action?.cta).toBe("Start a scan")
   })
 })
 

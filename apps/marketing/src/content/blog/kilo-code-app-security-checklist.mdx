@@ -13,7 +13,7 @@ faq:
   - q: "How do Kilo Code permissions work?"
     a: "Via the permission key in kilo.jsonc using exact tool names or glob patterns. Use it to restrict file writes and MCP tool calls."
   - q: "How do I add LyraShield MCP to Kilo Code?"
-    a: "Add an mcp entry under the mcp key with type local for stdio npx -y @lyrashield/mcp@0.2.7 or type remote for https://app.lyrashieldai.com/api/mcp with Bearer token."
+    a: "Add an mcp entry under the mcp key with type local for stdio npx -y @lyrashield/mcp@0.2.8 or type remote for https://app.lyrashieldai.com/api/mcp with Bearer token."
   - q: "Do parallel agents increase risk?"
     a: "Parallel agents increase TOCTOU and secret-sprawl risk if they share working directories and credentials. Scope each agent and audit cross-agent writes."
 ---
@@ -60,7 +60,7 @@ Kilo Code is MCP-aware with a marketplace and first-class support for local stdi
   "mcp": {
     "lyrashield": {
       "type": "local",
-      "command": ["npx", "-y", "@lyrashield/mcp@0.2.7"],
+      "command": ["npx", "-y", "@lyrashield/mcp@0.2.8"],
       "environment": {
         "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
       },
@@ -133,7 +133,7 @@ Kilo Code configuration belongs in the release review whenever it can read sourc
 
 Kilo Code gives you velocity: open-source agent, parallel execution, 500+ models, MCP marketplace. LyraShield adds release assurance for AI-built apps on top of that velocity. The loop, `target, review, evidence, fix, retest, report`, is built for AI-built code where issues cluster around CWE-20 (improper input validation), CWE-287 (improper authentication), CWE-798 (hardcoded credentials), and OWASP A03 Injection / A07 Identification & Authentication Failures. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, meaning PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-Integration is via MCP (`stdio npx -y @lyrashield/mcp@0.2.7` and remote Streamable HTTP at `https://app.lyrashieldai.com/api/mcp` per the [integrations hub](/docs/integrations)) and a runner-local GitHub Action that emits advisory SARIF. Run `npx lyrashield init` to configure Kilo Code, verify with `npx lyrashield doctor`, then use `npx lyrashield login --oauth` so credentials remain outside the repository. The platform is live in open beta; scans, findings and evidence, approval-gated fix proposals, retests, reports, and billing are implemented. Production availability remains bounded by release gates, and automatic server-generated Fix PR execution is not enabled.
+Integration is via MCP (`stdio npx -y @lyrashield/mcp@0.2.8` and remote Streamable HTTP at `https://app.lyrashieldai.com/api/mcp` per the [integrations hub](/docs/integrations)) and a runner-local GitHub Action that emits advisory SARIF. Run `npx lyrashield init` to configure Kilo Code, verify with `npx lyrashield doctor`, then use `npx lyrashield login --oauth` so credentials remain outside the repository. The platform is live in open beta; scans, findings and evidence, approval-gated fix proposals, retests, reports, and billing are implemented. Production availability remains bounded by release gates, and automatic server-generated Fix PR execution is not enabled.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 

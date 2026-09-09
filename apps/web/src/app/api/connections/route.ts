@@ -4,6 +4,7 @@ import {
   createAgentConnection,
   listAgentConnections,
   prisma,
+  resolveOAuthClientDisplayName,
 } from "@lyrashield/db"
 import { auth, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { requireBrowserConnectionManager } from "./connection-auth"
@@ -40,11 +41,6 @@ export async function GET(request: Request) {
 
 const CreateConnectionSchema = z.object({
   workspaceId: z.string().min(1),
-  /**
-   * Client identity is RESOLVED SERVER-SIDE from the registered OauthClient
-   * record (W3-08 / v16 item 1.5); these two fields are accepted for
-   * backward compatibility with existing clients and deliberately ignored.
-   */
   clientType: z.string().trim().min(1).max(100),
   clientName: z.string().trim().max(100).optional(),
   oauthClientId: z.string().trim().min(1).max(255),
@@ -110,6 +106,15 @@ async function post(request: Request) {
       )
     }
 
+    const oauthClient = await prisma.oauthClient.findUnique({
+      where: { clientId: oauthClientId },
+      select: { name: true, uri: true, softwareId: true, redirectUris: true },
+    })
+    if (!oauthClient) {
+      return apiError("VALIDATION_ERROR", "The OAuth client is no longer registered.", 400)
+    }
+    const trustedClientName = resolveOAuthClientDisplayName(oauthClient)
+
     const automating = scopes.includes("lyrashield.write")
     if (automating && allowedOperations.length === 0) {
       return apiError("VALIDATION_ERROR", "Select at least one workflow to automate", 400)
@@ -153,26 +158,11 @@ async function post(request: Request) {
       }
     }
 
-    // W3-08 (Deep Review v16 item 1.5): client identity is resolved
-    // server-side from the registered OauthClient record the consent state
-    // verified — never from the request body. A client can register under
-    // one name and POST any other; the stored label must describe the
-    // registered client.
-    const oauthClient = await prisma.oauthClient.findFirst({
-      where: { clientId: oauthClientId, disabled: { not: true } },
-      select: { name: true, uri: true },
-    })
-    if (!oauthClient) {
-      return apiError("VALIDATION_ERROR", "Unknown or disabled OAuth client", 400)
-    }
-    const resolvedClientName = oauthClient.name?.trim() || null
-    const resolvedClientType = `oauth:${oauthClientId}`
-
     const connection = await createAgentConnection({
       workspaceId,
       userId: session.userId,
-      clientType: resolvedClientType,
-      clientName: resolvedClientName ?? undefined,
+      clientType: trustedClientName,
+      clientName: trustedClientName,
       oauthClientId,
       scopes,
       allowedOperations,
@@ -190,8 +180,8 @@ async function post(request: Request) {
         resourceType: "agent_connection",
         resourceId: connection.id,
         metadata: {
-          clientType: resolvedClientType,
-          clientName: resolvedClientName ?? undefined,
+          clientType: trustedClientName,
+          clientName: trustedClientName,
           allowedOperations,
           allowedTargetIds,
           allowedProfiles,

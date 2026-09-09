@@ -23,8 +23,8 @@ vi.mock("@lyrashield/db", () => ({
   getSystemPrisma: () => systemPrisma,
   prisma,
   handleFixPrMergedAndReevaluate: handleMerged,
-  recordDeferredLoopClosure: vi.fn(() => Promise.resolve()),
-  completeLoopClosure: vi.fn(() => Promise.resolve()),
+  recordDeferredLoopClosure,
+  completeLoopClosure,
   classifyLoopClosureError: (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     if (message === "NO_MINUTES_REMAINING") return "RETEST_NOT_ENTITLED"
@@ -41,7 +41,9 @@ vi.mock("@lyrashield/integrations", () => ({
   // define the ORIGINAL export name.
   enqueueScan: vi.fn(async () => "queued-job-id"),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+}))
 
 const { POST } = await import("./route")
 
@@ -213,7 +215,7 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     expect(enqueueScanJob).toHaveBeenCalledWith(
       expect.objectContaining({ scanId: "scan-retest", workspaceId: "workspace-1" })
     )
-    expect(completeLoopClosure).toHaveBeenCalledWith("workspace-1", "lyrashield/fix-finding-1")
+    expect(completeLoopClosure).toHaveBeenCalledWith("workspace-1", "test/repo", 7)
   })
 
   it("replays a duplicate delivery without enqueueing a second retest", async () => {
@@ -264,6 +266,7 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     expect(recordDeferredLoopClosure).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: "workspace-1",
+        repoFullName: "test/repo",
         branchName: "lyrashield/fix-finding-1",
         prNumber: 7,
         reason: "RETEST_NOT_ENTITLED",

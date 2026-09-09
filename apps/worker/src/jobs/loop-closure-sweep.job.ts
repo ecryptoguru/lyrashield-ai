@@ -1,5 +1,5 @@
 /**
- * Loop-closure sweep (Deep Review v16 item 1.2).
+ * Loop-closure sweep.
  *
  * Retries deferred fix-PR loop closures (merged PRs whose automatic retest
  * could not be created at webhook time) with backoff and a maximum attempt
@@ -52,12 +52,13 @@ export async function processLoopClosureSweep(
       const outcome = await handleFixPrMergedAndReevaluate(
         closure.workspaceId,
         closure.branchName,
-        closure.prNumber ?? undefined,
+        closure.prNumber,
         async (mode) => {
           const entitlement = await assertScanAllowed(closure.workspaceId, mode)
           if (!entitlement.allowed) throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
           await assertScanWorkerAvailable()
-        }
+        },
+        closure.repoFullName
       )
       if (outcome) {
         await enqueueScan({
@@ -68,7 +69,7 @@ export async function processLoopClosureSweep(
           mode: outcome.mode,
           ...(outcome.policyId ? { policyId: outcome.policyId } : {}),
         })
-        await completeLoopClosure(closure.workspaceId, closure.branchName)
+        await completeLoopClosure(closure.workspaceId, closure.repoFullName, closure.prNumber)
         result.completed++
         logger.info("Loop-closure sweep completed a deferred retest", {
           workspaceId: closure.workspaceId,
@@ -80,15 +81,16 @@ export async function processLoopClosureSweep(
         // No actionable outcome: the PR is no longer associated with a live
         // finding (deleted target, resolved finding) or the retest already
         // exists. The closure is complete by definition.
-        await completeLoopClosure(closure.workspaceId, closure.branchName)
+        await completeLoopClosure(closure.workspaceId, closure.repoFullName, closure.prNumber)
         result.completed++
       }
     } catch (error) {
       const reason = classifyLoopClosureError(error)
-      const attempts = closure.attempts + 1
+      const attempts = closure.attempts
       if (attempts >= LOOP_CLOSURE_MAX_ATTEMPTS) {
         await failLoopClosureTerminally(
           closure.workspaceId,
+          closure.repoFullName,
           closure.branchName,
           closure.prNumber,
           reason
@@ -97,6 +99,7 @@ export async function processLoopClosureSweep(
       } else {
         await recordDeferredLoopClosure({
           workspaceId: closure.workspaceId,
+          repoFullName: closure.repoFullName,
           branchName: closure.branchName,
           prNumber: closure.prNumber,
           reason: reason as LoopClosureReason,

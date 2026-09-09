@@ -115,11 +115,8 @@ async function handle(request: Request): Promise<Response> {
 
     return await handleRemoteMcpRequest(request, {
       toolContext,
-      // Ruling 2 (item 1.3): one authorization model. API keys no longer
-      // execute mutations directly and no longer enter the legacy approval
-      // queue — the gate returns the structured connect-over-OAuth response
-      // for them. OAuth connections execute within their grant.
-      allowMutations: false,
+      // API-key creation already grants its REST permissions; MCP uses those same permissions.
+      allowMutations: authInfo.kind === "api-key" && authInfo.scopes.includes("write"),
       delegatedAuthorization: authInfo.kind === "oauth" && !!authInfo.connection,
       remoteApprovalContext: {
         workspaceId: authInfo.workspaceId,

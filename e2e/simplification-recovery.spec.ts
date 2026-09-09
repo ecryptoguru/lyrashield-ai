@@ -113,7 +113,7 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
       await page.setViewportSize({ width, height: 1000 })
       await page.goto("/dashboard/connections")
       await expect(page.getByText("Access unavailable", { exact: false })).toBeVisible()
-      await expect(page.getByText(/Last successful operation/)).toBeVisible()
+      await expect(page.getByText(/Last used/)).toBeVisible()
       await page.screenshot({ path: `/tmp/lyrashield-connections-${width}.png`, fullPage: true })
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         width

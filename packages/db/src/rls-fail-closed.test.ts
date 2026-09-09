@@ -678,7 +678,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
   })
 
   it("fails closed and writes LoopClosure only with its workspace context", async () => {
-    // Item 1.2: the durable loop-closure table must behave like every other
+    // The durable loop-closure table must behave like every other
     // workspace-scoped table under the NOBYPASSRLS runtime role — same-
     // workspace writes succeed, absent and foreign contexts read and write
     // nothing.
@@ -687,6 +687,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     const branchName = `lyrashield/fix-rls-${suffix}`
     await recordDeferredLoopClosure({
       workspaceId,
+      repoFullName: "acme/rls-fixture",
       branchName,
       prNumber: 1,
       reason: "SCAN_CONCURRENCY_LIMIT",
@@ -706,7 +707,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       expect(await count(otherWorkspaceId)).toBe(0)
 
       // A same-workspace WRITE through the service completes the closure.
-      await completeLoopClosure(workspaceId, branchName)
+      await completeLoopClosure(workspaceId, "acme/rls-fixture", 1)
       const status = await asWorkspace(workspaceId, async (tx) => {
         const rows = await tx.$queryRaw<Array<{ status: string }>>`
           SELECT status FROM "loop_closures"

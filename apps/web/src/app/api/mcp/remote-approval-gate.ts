@@ -60,32 +60,6 @@ function denied(reason: string): { approved: false; reason: string } {
   return { approved: false, reason }
 }
 
-/**
- * Ruling 2 (Deep Review v16 item 1.3): a principal without a connected client
- * no longer enters the legacy create-poll-approve cycle. Mutating tools
- * require a connected OAuth client; the response names the tool, states the
- * model, and gives the connect path. Read-only tools are unaffected, and
- * historical approval records remain resolvable through approvalId so
- * existing PENDING/EXECUTED rows stay readable and approvable in the
- * Activity destination.
- */
-function connectOAuthResponse(toolName: string) {
-  const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
-  const structured = {
-    status: "connect_required" as const,
-    tool: toolName,
-    message:
-      "Mutating tools now require a connected client. Connect your coding agent through OAuth once; its authorized operations then run automatically within the connection grant without repeated review prompts.",
-    connect: { href: `${base}/dashboard/connections`, label: "Connect a client" },
-  }
-  return {
-    approved: false as const,
-    reason: structured.message,
-    structuredContent: structured,
-    content: [{ type: "text" as const, text: JSON.stringify(structured) }],
-  }
-}
-
 type StoredApproval = Awaited<ReturnType<typeof getApproval>>
 
 /** Replay a stored EXECUTED result without re-running the tool. */
@@ -210,6 +184,10 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
   const { workspaceId, scopes, createdById } = apiKeyInfo
 
   return async (toolName, args) => {
+    if (!scopes.includes("write") && !scopes.includes("lyrashield.write")) {
+      return denied("This connection does not have write scope; mutating tools are refused.")
+    }
+
     // Replay bypasses REST handlers, so recheck live membership and role before
     // returning stored data or claiming an operation, not just before execution.
     const permission = operationPermissions[TOOL_OPERATION_MAP[toolName]?.canonicalOperation ?? ""]
@@ -225,32 +203,11 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
     const approvalIdArg = parsedApprovalId.data
     const toolArgs = stripControlArgs(args)
 
-    // Ruling 2 (item 1.3): a principal that is not a connected client no
-    // longer enters the legacy create-poll-approve cycle for mutating tools.
-    // One structured response names the tool and the OAuth connect path.
-    // Historical approvals stay resolvable through approvalId above, and
-    // read-only tools never reach this gate.
-    if (!options.connection && !approvalIdArg) {
-      const response = connectOAuthResponse(toolName)
-      return {
-        approved: false,
-        reason: response.reason,
-        structuredDenial: {
-          content: response.content,
-          isError: true,
-          structuredContent: response.structuredContent,
-        },
-      }
-    }
-
     if (options.connection) {
       if (approvalIdArg) {
         return denied(
           "Connection-bound credentials cannot bypass their grant with a per-action approval. Update the connection scope instead."
         )
-      }
-      if (!scopes.includes("write") && !scopes.includes("lyrashield.write")) {
-        return denied("This connection does not have write scope; mutating tools are refused.")
       }
       const { targetId, profile } = await resolveDelegatedScope(workspaceId, toolArgs)
 

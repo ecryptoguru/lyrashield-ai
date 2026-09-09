@@ -47,9 +47,10 @@ const outcome = {
 const closure = {
   id: "closure-1",
   workspaceId: "ws-1",
+  repoFullName: "acme/repo",
   branchName: "lyrashield/fix-abc",
   prNumber: 42,
-  attempts: 1,
+  attempts: 2,
   lastReason: "SCAN_CONCURRENCY_LIMIT",
 }
 
@@ -72,12 +73,13 @@ describe("processLoopClosureSweep — durable retry with terminal visibility", (
       "ws-1",
       "lyrashield/fix-abc",
       42,
-      expect.any(Function)
+      expect.any(Function),
+      "acme/repo"
     )
     expect(enqueueScanMock).toHaveBeenCalledWith(
       expect.objectContaining({ scanId: "scan-retest-1", workspaceId: "ws-1" })
     )
-    expect(completeMock).toHaveBeenCalledWith("ws-1", "lyrashield/fix-abc")
+    expect(completeMock).toHaveBeenCalledWith("ws-1", "acme/repo", 42)
   })
 
   it.each([
@@ -94,6 +96,7 @@ describe("processLoopClosureSweep — durable retry with terminal visibility", (
     expect(recordDeferredMock).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: "ws-1",
+        repoFullName: "acme/repo",
         branchName: "lyrashield/fix-abc",
         attempts: 2,
       })
@@ -102,7 +105,7 @@ describe("processLoopClosureSweep — durable retry with terminal visibility", (
   })
 
   it("terminates into a visible failure at the maximum attempt count", async () => {
-    claimDueMock.mockResolvedValue([{ ...closure, attempts: 4 }])
+    claimDueMock.mockResolvedValue([{ ...closure, attempts: 5 }])
     handleMergedMock.mockRejectedValue(new Error("concurrency"))
 
     const result = await processLoopClosureSweep({ now: new Date() })
@@ -110,6 +113,7 @@ describe("processLoopClosureSweep — durable retry with terminal visibility", (
     expect(result).toEqual({ claimed: 1, completed: 0, deferred: 0, failedTerminal: 1 })
     expect(failTerminallyMock).toHaveBeenCalledWith(
       "ws-1",
+      "acme/repo",
       "lyrashield/fix-abc",
       42,
       "SCAN_CONCURRENCY_LIMIT"
@@ -125,7 +129,7 @@ describe("processLoopClosureSweep — durable retry with terminal visibility", (
 
     expect(result).toEqual({ claimed: 1, completed: 1, deferred: 0, failedTerminal: 0 })
     expect(enqueueScanMock).not.toHaveBeenCalled()
-    expect(completeMock).toHaveBeenCalledWith("ws-1", "lyrashield/fix-abc")
+    expect(completeMock).toHaveBeenCalledWith("ws-1", "acme/repo", 42)
   })
 
   it("claims nothing when no closure is due", async () => {

@@ -21,17 +21,19 @@ export const TRIAL_TARGET_CAP = 3
 
 type TrialTransaction = Parameters<Parameters<typeof withWorkspaceRLS>[1]>[0]
 
-/**
- * Ruling 5 (Deep Review v16 item 1.4): trial use is determined by the user's
- * OWN trialStartedAt claim only. The previous fallback — "any active
- * membership in a workspace with trialStartedAt" — permanently stripped
- * eligibility from anyone invited into a trialing workspace even though they
- * never started a trial of their own.
- */
-async function hasUsedTrial(userId: string, db: Pick<TrialTransaction, "user">): Promise<boolean> {
+async function hasUsedTrial(
+  userId: string,
+  db: Pick<TrialTransaction, "user" | "workspace">
+): Promise<boolean> {
   const user = await db.user.findUnique({ where: { id: userId }, select: { trialStartedAt: true } })
-  if (!user) return true
-  return Boolean(user.trialStartedAt)
+  if (!user || user.trialStartedAt) return true
+  // Older application revisions may still grant trials during migration rollout.
+  return Boolean(
+    await db.workspace.findFirst({
+      where: { trialStartedAt: { not: null }, members: { some: { userId } } },
+      select: { id: true },
+    })
+  )
 }
 
 /** Read-only advisory eligibility. The start transaction repeats all guards. */
