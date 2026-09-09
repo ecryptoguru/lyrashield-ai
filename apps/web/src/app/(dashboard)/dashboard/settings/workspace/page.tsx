@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
 import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
-import { Card, CardContent, buttonVariants } from "@lyrashield/ui"
+import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { ApiKeysSection } from "../api-keys"
@@ -91,6 +91,18 @@ export default async function WorkspaceSettingsPage() {
       </Card>
 
       <ApiKeysSection workspaceId={workspaceId} canManage={canManageApiKeys} />
+
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader>
+          <CardTitle as="h2">Open beta</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-sm leading-6">
+            Registration is open while we validate the production service. Scan results are scoped
+            evidence, not a security guarantee.
+          </p>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SettingsLink
