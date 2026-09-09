@@ -20,7 +20,9 @@ describe("CLI version", () => {
     expect(packageJson.engines.node).toBe(">=22.0.0 <25.0.0")
     expect(packageJson.bin.lyrashield).toBe("bin/lyrashield.mjs")
     expect(packageJson.dependencies["@lyrashield/agent-plugin"]).toBe("^0.1.26")
-    expect(Object.values(packageJson.dependencies)).not.toContainEqual(expect.stringMatching(/^workspace:/))
+    expect(Object.values(packageJson.dependencies)).not.toContainEqual(
+      expect.stringMatching(/^workspace:/)
+    )
     expect(packageJson.devDependencies["@lyrashield/security"]).toBe("workspace:*")
 
     const targetsPath = fileURLToPath(new URL("../commands/targets.ts", import.meta.url))
