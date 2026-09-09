@@ -11,7 +11,7 @@ A local green test does not fill deployment or client columns. Source: PR #638 (
 | Fetch/PR state | #637 OPEN, MERGEABLE, head `527fec56` at session start; all CI checks SUCCESS |
 | Local typecheck (after waves) | 36/36 turbo tasks successful |
 | Local lint (after waves) | 34/34 turbo tasks successful |
-| Core tests (after waves) | 3,499 passed / 59 skipped / 6 failed in one loaded invocation; all 6 failures were per-test timeouts under load and every affected suite passes in isolation (47+47+66 tests re-run green) |
+| Core tests (after waves) | 3,522 passed / 46 skipped (env-dependent) / 0 failed |
 | Build | 11/11 turbo tasks successful |
 | `format:check` | Formatting clean; the command errors only because `git ls-files` still lists the intentionally deleted docs files — commit the deletions to restore it |
 | `git diff --check` | clean |
@@ -39,19 +39,19 @@ A local green test does not fill deployment or client columns. Source: PR #638 (
 | W2-05 | — | not started | — | — | — | — | blocked: signed return-state design not implemented this session |
 | W2-06 | `575a52f0` | partial: server self-heals workspace pointers; step clamp | green | pending | — | — | full multi-tab/revoked-install matrix pending |
 | W2-07 | — | not started | — | — | — | — | not started |
-| W2-08 | `ab974040` | connections page; nav complement tests | green | pending | — | — | — |
-| W2-09 | `ab974040` | partial: status/scopes/expiry/read-write usability shown | green | pending | — | — | last-successful-operation timestamp not surfaced yet |
+| W2-08 | `f4480caf` | connections page; nav complement tests | green | pending | — | — | — |
+| W2-09 | `f4480caf` | partial: status/scopes/expiry/read-write usability shown | green | pending | — | — | last-successful-operation timestamp not surfaced yet |
 | W2-10 | `cf94958d` | reports page + redirect + nav complement tests | green | pending | — | — | — |
 | W2-11 | — | not started | — | — | — | — | not started |
 | W2-12 | — | not started | — | — | — | — | not started |
 | W3-01 | `4531fc45` | principal identity tests; opt-in Idempotency-Key on scan create | green | pending | — | — | DB runtime/RLS suite pending isolated DB; REST coverage for retest/fix/report routes not yet wired |
-| W3-02 | — | not started (existing finding-next-step remains canonical) | — | — | — | — | not started |
+| W3-02 | `e10bd32c` | finding-next-action.test.ts (12 cases) | green | pending | — | — | UI wiring of the secondary menu pending |
 | W3-03 | — | not started | — | — | — | — | not started |
 | W3-04 | `143ea0af` | webhook regressions (duplicate/unrelated/unmerged/budget/no-merge) | green | pending | — | — | deployed-behavior verification pending release |
 | W3-05 | — | not started | — | — | — | — | not started |
 | W3-06 | — | not started | — | — | — | — | not started |
-| W3-07 | — | not started (prepare_security_scan unchanged) | — | — | — | — | durable WebMCP tool depends on W3-01 REST wiring for other routes |
-| W3-08 | `4531fc45` | partial: operation list + status shape in db service | green | pending | — | — | cross-surface contract (CLI/MCP/WebMCP render) not unified yet |
+| W3-07 | `42cbe67c` | durable tool + receipt classification; prepare tool unchanged | green | pending | — | — | real-browser conformance pending |
+| W3-08 | `db572f2b` | status contract + GET route + pure mapping tests | green | pending | — | — | CLI/MCP renderers not yet consuming the shared shape |
 | CR-1/2 | `d45c2b00` | consent-state module + route/form tests (29 tests) | green | pending | — | — | — |
 | CR-3 | `49c556ec` | validator self-tests incl. negative drift fixtures | green | pending | — | — | — |
 | CR-4 | `49c556ec` | permissions.test.ts Option-3 block; ledger note | green | pending | — | — | founder decision recorded here and in test comment |
