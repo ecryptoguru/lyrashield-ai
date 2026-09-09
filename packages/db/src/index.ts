@@ -208,6 +208,17 @@ export {
   type FixPrMergeOutcome,
 } from "./gate-service"
 export {
+  LOOP_CLOSURE_MAX_ATTEMPTS,
+  LOOP_CLOSURE_BACKOFF_MINUTES,
+  classifyLoopClosureError,
+  nextLoopClosureRetryAt,
+  recordDeferredLoopClosure,
+  completeLoopClosure,
+  failLoopClosureTerminally,
+  claimDueLoopClosures,
+  type LoopClosureReason,
+} from "./loop-closure-service"
+export {
   buildLaunchReportPayload,
   computeLaunchReportChecksum,
   NEUTRAL_APP_LABEL,

@@ -83,6 +83,7 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "GateVerdict",
   "AgentConnection",
   "AgentOperation",
+  "LoopClosure",
 ])
 
 export const READ_OPS = new Set<string>([

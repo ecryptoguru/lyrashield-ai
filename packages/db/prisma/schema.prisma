@@ -1142,6 +1142,30 @@ model PullRequest {
   @@index([fixProposalId])
 }
 
+/// Durable loop-closure state for merged fix PRs. GitHub never redelivers a
+/// failed delivery, so a retest deferred by the concurrency cap, worker
+/// unavailability or entitlement failure needs its own persisted retry record
+/// that a worker sweep can complete. Terminal FAILED is a visible state with
+/// a manual recovery action, never a silent loss.
+model LoopClosure {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  branchName   String
+  prNumber     Int?
+  /// "pending" | "completed" | "failed"
+  status       String   @default("pending")
+  attempts     Int      @default(0)
+  /// Bounded reason code (identifiers/reason codes only, no raw payloads).
+  lastReason   String?
+  nextRetryAt  DateTime @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([workspaceId, branchName])
+  @@index([status, nextRetryAt])
+}
+
 model Ticket {
   id         String    @id @default(cuid())
   findingId  String
