@@ -27,10 +27,11 @@ CREATE TABLE "loop_closures" (
 CREATE UNIQUE INDEX "loop_closures_workspaceId_branchName_key" ON "loop_closures"("workspaceId", "branchName");
 CREATE INDEX "loop_closures_status_nextRetryAt_idx" ON "loop_closures"("status", "nextRetryAt");
 
--- AddForeignKey
-ALTER TABLE "loop_closures" ADD CONSTRAINT "loop_closures_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- RLS: fail closed like every other workspace-scoped table.
+-- AddForeignKey: intentionally omitted. LoopClosure follows the
+-- WebhookEventTrack precedent (workspaceId column, RLS-scoped, no FK to
+-- Workspace) — the model declares no Prisma relation, so the migration must
+-- not create one or the schema/migration drift check fails. Workspace
+-- isolation is enforced by the RLS policy below.
 ALTER TABLE "loop_closures" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "loop_closures" FORCE ROW LEVEL SECURITY;
 
