@@ -476,6 +476,54 @@ describe("report-generator", () => {
         issueCodes: ["LIMIT_REACHED"],
       })
     })
+
+    // W3-05: failed/incomplete scans never acquire readiness claims, no
+    // matter how few findings they retained.
+    it.each(["FAILED", "CANCELLED", "TIMED_OUT", "STOPPED_BUDGET", "RUNNING", "QUEUED"])(
+      "refuses a GO verdict when the attached scan is %s",
+      async (status) => {
+        mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
+        mockPrisma.scan.findFirst.mockResolvedValue({
+          id: "scan-1",
+          status,
+          summary: null,
+          target: { name: "example.com", type: "url", url: "https://example.com" },
+          startedAt: new Date("2026-01-01"),
+          endedAt: null,
+          targetId: "target-1",
+          resultManifest: { checksum: "manifest-checksum", manifest: { version: 5 } },
+          coverageReceipts: [],
+        })
+        mockPrisma.finding.findMany.mockResolvedValue([])
+        mockPrisma.scoreSnapshot.findMany.mockResolvedValue([])
+
+        const data = await gatherReportData("ws-1", "scan-1")
+
+        expect(data.assurance?.verdict).toBe("NOT_EVALUATED")
+        expect(data.assurance?.narrative).toContain("did not complete successfully")
+      }
+    )
+
+    it("still grounds a verdict on a completed scan with zero findings", async () => {
+      mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
+      mockPrisma.scan.findFirst.mockResolvedValue({
+        id: "scan-1",
+        status: "COMPLETED",
+        summary: "Clean scan",
+        target: { name: "example.com", type: "url", url: "https://example.com" },
+        startedAt: new Date("2026-01-01"),
+        endedAt: new Date("2026-01-02"),
+        targetId: "target-1",
+        resultManifest: { checksum: "manifest-checksum", manifest: { version: 5 } },
+        coverageReceipts: [],
+      })
+      mockPrisma.finding.findMany.mockResolvedValue([])
+      mockPrisma.scoreSnapshot.findMany.mockResolvedValue([])
+
+      const data = await gatherReportData("ws-1", "scan-1")
+
+      expect(data.assurance?.verdict).toBe("GO")
+    })
   })
 
   describe("generateReportHTML", () => {

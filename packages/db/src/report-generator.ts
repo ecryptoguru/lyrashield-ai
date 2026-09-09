@@ -638,7 +638,14 @@ export async function gatherReportData(
   const currentScore = scoreTrend[0] ?? null
   const criticalCount = bySeverity.CRITICAL ?? 0
   const highCount = bySeverity.HIGH ?? 0
-  const verdict = !scanInfo
+  // W3-05: only a successfully completed scan can ground a readiness verdict.
+  // A failed, cancelled, timed-out, budget-stopped, or still-running scan
+  // never acquires a readiness claim, no matter how few findings it retained.
+  // (Historical rows may carry lowercase enum spellings.)
+  const scanStatus = scanInfo?.status.toUpperCase()
+  const scanUsableForVerdict =
+    scanInfo !== null && (scanStatus === "COMPLETED" || scanStatus === "PARTIAL")
+  const verdict = !scanUsableForVerdict
     ? "NOT_EVALUATED"
     : criticalCount > 0
       ? "NO_GO"
@@ -647,7 +654,9 @@ export async function gatherReportData(
         : "GO"
   const narrative =
     verdict === "NOT_EVALUATED"
-      ? "No completed scan is attached, so release posture has not been evaluated."
+      ? scanInfo
+        ? `The attached scan did not complete successfully (${scanInfo.status.toLowerCase()}), so its evidence cannot establish release posture.`
+        : "No completed scan is attached, so release posture has not been evaluated."
       : verdict === "NO_GO"
         ? `${criticalCount} critical finding${criticalCount === 1 ? " requires" : "s require"} remediation and verification before release.`
         : verdict === "GO_WITH_CONDITIONS"

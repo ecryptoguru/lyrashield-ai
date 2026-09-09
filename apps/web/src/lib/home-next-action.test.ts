@@ -7,12 +7,24 @@ const base = {
   lastEvaluatedAssessment: null,
   reportCount: 0,
   openIssues: { total: 0, critical: 0, high: 0 },
-  gateTargets: [] as Pick<GateReadinessTarget, "state" | "applicable">[],
+  gateTargets: [] as Pick<
+    GateReadinessTarget,
+    "targetId" | "targetName" | "state" | "applicable" | "blockingFindings"
+  >[],
   activeScan: null,
 }
 
 function gate(state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE", applicable = true) {
   return { state, applicable }
+}
+
+function gateFor(
+  id: string,
+  state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE",
+  applicable = true,
+  blockingFindings = 0
+) {
+  return { targetId: id, targetName: `Target ${id}`, state, applicable, blockingFindings }
 }
 
 describe("deriveHomeDecision — one canonical action", () => {
@@ -44,6 +56,36 @@ describe("deriveHomeDecision — one canonical action", () => {
       href: "/dashboard/scans?new=1",
       label: "Start a scan",
     })
+  })
+
+  // W2-07: scan and findings recommendations carry the target context.
+  it("preselects the recommended target in the scan composer href", () => {
+    const decision = deriveHomeDecision({
+      ...base,
+      gateTargets: [gateFor("t-recommended", "INSUFFICIENT_EVIDENCE")],
+    })
+    expect(decision.action?.href).toBe("/dashboard/scans?new=1&target=t-recommended")
+    expect(decision.primaryAction.href).toBe(decision.action?.href)
+  })
+
+  it("scopes the blocker recommendation to the gate's blocking target", () => {
+    const decision = deriveHomeDecision({
+      ...base,
+      lastEvaluatedAssessment: evaluatedAssessment(),
+      openIssues: { total: 5, critical: 1, high: 2 },
+      gateTargets: [gateFor("t-blocking", "NOT_READY", true, 2)],
+    })
+    expect(decision.primaryAction.href).toBe("/dashboard/findings?target=t-blocking")
+  })
+
+  it("keeps the unscoped hrefs when no target context is available", () => {
+    const decision = deriveHomeDecision({
+      ...base,
+      lastEvaluatedAssessment: evaluatedAssessment(),
+      openIssues: { total: 5, critical: 1, high: 2 },
+      gateTargets: [],
+    })
+    expect(decision.primaryAction.href).toBe("/dashboard/findings")
   })
 
   it("points at the highest-priority finding once evidence exists with blockers", () => {

@@ -10,11 +10,12 @@ import { InvitationAcceptBridge } from "@/components/invitation-accept-bridge"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
 import { cookies } from "next/headers"
 import { parsePlanIntent, planIntentPath, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
+import { verifyOAuthOnboardingReturn } from "@/lib/oauth-onboarding-return"
 
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string }>
+  searchParams: Promise<{ plan?: string; oauth_return?: string }>
 }) {
   const params = await searchParams
   const selectedPlan =
@@ -25,6 +26,17 @@ export default async function OnboardingPage({
   if (!session) {
     redirect("/sign-in")
   }
+
+  // W2-05: an OAuth client (for example a coding agent) may send a
+  // workspace-less user here to finish setup, with a signed return state bound
+  // to the exact authorization request. The signature, expiry, and user
+  // binding are verified server-side; an invalid state is dropped and the
+  // wizard behaves exactly as a direct visit (no redirect, no error).
+  const oauthReturn = params.oauth_return ? verifyOAuthOnboardingReturn(params.oauth_return) : null
+  const oauthReturnQuery =
+    oauthReturn && oauthReturn.valid && oauthReturn.userId === session.userId
+      ? oauthReturn.oauthQuery
+      : null
 
   const state = await getOrCreateOnboardingState(session.userId)
 
@@ -96,6 +108,7 @@ export default async function OnboardingPage({
         suggestedWorkspaceName={
           session.userName?.trim() ? `${session.userName.trim()}'s workspace` : "My workspace"
         }
+        oauthReturnQuery={oauthReturnQuery}
       />
       <InvitationAcceptBridge />
     </div>

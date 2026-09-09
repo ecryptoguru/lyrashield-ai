@@ -53,16 +53,34 @@ export function OnboardingWizard({
   initialState,
   selectedPlan,
   suggestedWorkspaceName,
+  oauthReturnQuery,
 }: {
   initialState: OnboardingData
   selectedPlan?: string | null
   /** Used to name a default workspace when the user has none (W2-01). */
   suggestedWorkspaceName?: string
+  /**
+   * W2-05: server-verified OAuth return state. When present, onboarding
+   * completion returns the user to /oauth/consent with the preserved
+   * authorization request instead of the dashboard. The destination is a
+   * fixed route — the query is the only thing carried — and the signature,
+   * expiry, and user binding were verified by the server page.
+   */
+  oauthReturnQuery?: string | null
 }) {
   const router = useRouter()
   useEffect(() => {
     rememberPlanIntent(selectedPlan)
   }, [selectedPlan])
+  // W2-05: where completion lands. An OAuth-arriving user returns to the
+  // consent screen (their memberships are re-checked there); everyone else
+  // keeps the existing destinations. The plan intent is dropped on the OAuth
+  // return path — the consent flow, not billing, is the pending task.
+  const completionPath = oauthReturnQuery
+    ? `/oauth/consent?${oauthReturnQuery}`
+    : selectedPlan
+      ? planIntentPath("/dashboard/billing", selectedPlan)
+      : "/dashboard"
   // W2-01: workspace naming left the critical path. The wizard starts at the
   // target chooser; a workspace is created lazily (with a sensible default
   // name) only when the user picks a path that needs one. A stale persisted
@@ -285,7 +303,7 @@ export function OnboardingWizard({
     setError(null)
     try {
       await persist({ skipped: true, currentStep: 0 })
-      router.push(selectedPlan ? planIntentPath("/dashboard/billing", selectedPlan) : "/dashboard")
+      router.push(completionPath)
       router.refresh()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not skip setup.")
@@ -426,7 +444,9 @@ export function OnboardingWizard({
         estimate_low_min: selectedReview.estimate.low,
         estimate_high_min: selectedReview.estimate.high,
       })
-      router.push(`/dashboard/scans/${scan.id}`)
+      // W2-05: agent-first completion returns to the originating client's
+      // consent flow; the started scan keeps running server-side.
+      router.push(oauthReturnQuery ? completionPath : `/dashboard/scans/${scan.id}`)
       router.refresh()
     } catch (cause) {
       setError(friendlyTargetError(cause))

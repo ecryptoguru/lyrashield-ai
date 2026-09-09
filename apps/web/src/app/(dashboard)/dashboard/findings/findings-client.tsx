@@ -3,6 +3,16 @@ import { CreateFixPrAction } from "@/components/create-fix-pr-action"
 
 import { useState, useEffect, useCallback, useRef, useId } from "react"
 import { useFindingsWebMcp } from "./findings-webmcp"
+import {
+  findingsContextKey,
+  loadFindingsListContext,
+  saveFindingsListContext,
+} from "./findings-list-context"
+import {
+  buildRemediationTimeline,
+  type RemediationTimelineEvent,
+  type TimelineRetestInput,
+} from "@/lib/finding-remediation-timeline"
 import { z } from "zod"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import Link from "next/link"
@@ -347,6 +357,52 @@ export function FindingsClient({
     // Run once on mount: the deep link is consumed exactly once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // W2-12 context restoration: the URL carries filter/sort/target/query, but
+  // pages loaded beyond the first server-rendered page and the scroll position
+  // only survive navigation through this session-scoped snapshot. The first
+  // client render still matches the server HTML; restoration is queued (not
+  // synchronous) so hydration stays clean and the save effect below never
+  // overwrites the snapshot with the bare first page.
+  const listContextRestoredRef = useRef(false)
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (typeof window === "undefined") return
+      const current = { filter, sort: sortMode, target: targetFilter, q: query }
+      // The context key encodes filter/sort/target/query, so any stored
+      // snapshot under this key already matches the URL-derived list state.
+      const stored = loadFindingsListContext(findingsContextKey(workspaceId, current))
+      if (stored) {
+        setFindings(stored.rows)
+        setNextCursor(stored.nextCursor)
+        if (stored.scrollY > 0) requestAnimationFrame(() => window.scrollTo(0, stored.scrollY))
+      }
+      // The save effect below must not run until restoration has been
+      // attempted, otherwise the bare first page overwrites the snapshot.
+      listContextRestoredRef.current = true
+    })
+    // Restore once per mount with the URL-derived context.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Persist the loaded list (rows, cursor, scroll) for the current context so
+  // returning to Findings restores it. Skipped until the restore pass has run
+  // so the snapshot is never overwritten with the bare first page.
+  useEffect(() => {
+    if (!listContextRestoredRef.current || typeof window === "undefined") return
+    const save = () =>
+      saveFindingsListContext(
+        findingsContextKey(workspaceId, { filter, sort: sortMode, target: targetFilter, q: query }),
+        {
+          rows: findings,
+          nextCursor,
+          scrollY: window.scrollY,
+        }
+      )
+    save()
+    window.addEventListener("pagehide", save)
+    return () => window.removeEventListener("pagehide", save)
+  }, [workspaceId, filter, sortMode, targetFilter, query, findings, nextCursor])
 
   const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
     workspaceId,
@@ -836,7 +892,22 @@ interface FindingDetail {
     createdAt: string
   }>
   evidence?: Array<{ id: string; type: string; redactionStatus: string }>
-  fixProposals?: Array<{ id: string; status: string; summary: string }>
+  fixProposals?: Array<{
+    id: string
+    status: string
+    summary: string
+    createdAt?: string
+    pullRequests?: Array<{
+      id: string
+      status: string
+      prNumber: number | null
+      prUrl: string | null
+      branchName: string
+      createdAt: string
+      mergedAt: string | null
+      closedAt: string | null
+    }>
+  }>
   retests?: Array<{ id: string; scanId: string; status: string; createdAt: string }>
   historyPagination?: Record<
     "evidence" | "verificationReceipts" | "fixProposals" | "retests",
@@ -910,7 +981,28 @@ const evidenceSchema = z
   .passthrough()
 
 const fixProposalSchema = z
-  .object({ id: z.string(), status: z.string(), summary: z.string() })
+  .object({
+    id: z.string(),
+    status: z.string(),
+    summary: z.string(),
+    createdAt: z.string().optional(),
+    pullRequests: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            status: z.string(),
+            prNumber: z.number().nullable(),
+            prUrl: z.string().nullable(),
+            branchName: z.string(),
+            createdAt: z.string(),
+            mergedAt: z.string().nullable(),
+            closedAt: z.string().nullable(),
+          })
+          .passthrough()
+      )
+      .optional(),
+  })
   .passthrough()
 
 const retestSchema = z
@@ -1837,6 +1929,12 @@ function FindingDetailDrawer({
                   TAB 3: History
               ============================================================ */}
               <TabsContent value="history" className="mt-4 space-y-4">
+                <RemediationTimelineSection
+                  finding={finding}
+                  fixProposals={detail.fixProposals ?? []}
+                  retests={detail.retests ?? []}
+                />
+
                 {detail.retests && detail.retests.length > 0 ? (
                   <div>
                     <h3 className="mb-2 text-sm font-medium">
@@ -2061,5 +2159,98 @@ function FindingDetailDrawer({
         )}
       </SheetContent>
     </Sheet>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// W3-03: one remediation timeline assembled from stored receipts
+// ---------------------------------------------------------------------------
+
+const TIMELINE_TONE_CLASS: Record<RemediationTimelineEvent["tone"], string> = {
+  neutral: "bg-muted text-foreground",
+  primary: "bg-primary/10 text-primary",
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  destructive: "bg-destructive/10 text-destructive",
+}
+
+function RemediationTimelineSection({
+  finding,
+  fixProposals,
+  retests,
+}: {
+  finding: FindingListItem
+  fixProposals: Array<{
+    id: string
+    status: string
+    summary: string
+    createdAt?: string
+    pullRequests?: Array<{
+      id: string
+      status: string
+      prNumber: number | null
+      prUrl: string | null
+      branchName: string
+      createdAt: string
+      mergedAt: string | null
+      closedAt: string | null
+    }>
+  }>
+  retests: TimelineRetestInput[]
+}) {
+  const events = buildRemediationTimeline(
+    {
+      status: finding.status,
+      verified: finding.verified,
+      verificationStatus: finding.verificationStatus,
+      verificationMethod: finding.verificationMethod ?? null,
+      dispositionReason: finding.verificationReason ?? null,
+      lastSeenAt: finding.lastSeenAt,
+    },
+    fixProposals.map((proposal) => ({
+      id: proposal.id,
+      status: proposal.status,
+      summary: proposal.summary,
+      createdAt: proposal.createdAt ?? finding.firstSeenAt,
+      pullRequests: proposal.pullRequests ?? [],
+    })),
+    retests
+  )
+
+  if (events.length === 0) {
+    return (
+      <div className="bg-muted/30 rounded-lg border p-3">
+        <h3 className="text-sm font-medium">Remediation timeline</h3>
+        <p className="text-muted-foreground mt-1 text-sm">
+          No remediation receipts recorded yet. Timeline entries appear as fixes are proposed,
+          opened as PRs, merged, retested, and verified.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-muted/30 rounded-lg border p-3">
+      <h3 className="text-sm font-medium">Remediation timeline</h3>
+      <ol className="mt-2 space-y-2">
+        {events.map((event, index) => (
+          <li key={`${event.kind}-${event.at}-${index}`} className="flex items-start gap-2 text-sm">
+            <span
+              className={`mt-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium ${TIMELINE_TONE_CLASS[event.tone]}`}
+            >
+              {event.label}
+            </span>
+            <span className="text-muted-foreground min-w-0 flex-1">
+              {event.detail ? `${event.detail} · ` : ""}
+              {formatDate(event.at)}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="text-muted-foreground mt-2 text-xs">
+        Built only from stored receipts. A proposed fix is not an applied fix, and a merged PR is
+        not verification.
+      </p>
+    </div>
   )
 }

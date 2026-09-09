@@ -17,12 +17,23 @@ export async function notifyScanCompleted(
     const title = `Scan Completed — ${findingCount} finding${findingCount !== 1 ? "s" : ""}`
     const body = `Scan ${scanId} completed successfully.\n\nSummary: ${summary}\nFindings: ${findingCount}`
 
+    // W3-06: routine completions coalesce into one digest per hour so a batch
+    // of finishing scans (queue drain, schedule fan-out, webhook retries)
+    // cannot storm the channels. Failures and critical findings are never
+    // grouped and keep delivering individually.
+    const windowKey = new Date().toISOString().slice(0, 13) // hourly bucket
     await createAndSendNotification({
       workspaceId,
       type: "scan.completed",
       title,
       body,
       workspaceName: workspace?.name,
+      routineGroup: {
+        groupType: "scan completions",
+        windowKey,
+        windowLabel: "Recent scan completions",
+        detail: `${summary} · ${findingCount} finding${findingCount === 1 ? "" : "s"}`,
+      },
       sendFn: (channel, payload) => sendNotification(channel as NotificationChannel, payload),
     })
   } catch (error) {

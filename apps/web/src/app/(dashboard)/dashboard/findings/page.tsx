@@ -134,10 +134,29 @@ export default async function FindingsPage({
         })
       : Promise.resolve(null),
   ])
+
+  // W2-07 invalidation: a target filter that no longer matches an active
+  // target in this workspace (deleted target, stale cross-workspace link) is
+  // dropped rather than silently rendering an empty list.
+  const targetFilterValid = listParams.target
+    ? targets.some((target) => target.id === listParams.target)
+    : true
+  let effectiveFindings = findings
+  let effectiveNextCursor = nextCursor
+  if (listParams.target && !targetFilterValid) {
+    const unscoped = await listFindings({
+      workspaceId,
+      ...findingFilterToApiQuery(listParams.filter),
+      ...(listParams.q ? { q: listParams.q } : {}),
+      limit: 25,
+    })
+    effectiveFindings = unscoped.items
+    effectiveNextCursor = unscoped.nextCursor
+  }
   const visibleFindings =
-    requestedFinding && !findings.some((finding) => finding.id === requestedFinding.id)
-      ? [requestedFinding, ...findings]
-      : findings
+    requestedFinding && !effectiveFindings.some((finding) => finding.id === requestedFinding.id)
+      ? [requestedFinding, ...effectiveFindings]
+      : effectiveFindings
 
   // Page-local priority matches the API list contract: SSR initial data is
   // ranked with the same pure helper so the client's default Priority sort is
@@ -199,11 +218,11 @@ export default async function FindingsPage({
         }
         workspaceId={workspaceId}
         initialData={initialData}
-        initialNextCursor={nextCursor}
+        initialNextCursor={effectiveNextCursor}
         initialSelectedFindingId={requestedFindingId}
         initialFilter={listParams.filter}
         initialSort={listParams.sort}
-        initialTargetFilter={listParams.target}
+        initialTargetFilter={targetFilterValid ? listParams.target : ""}
         initialQuery={listParams.q}
         targets={targets}
       />

@@ -205,6 +205,25 @@ function getSnapshotScanSummary(contentJson: unknown): ShareableReport["scanSumm
 export async function createReport(params: CreateReportParams): Promise<Report> {
   const type =
     params.type === "executive" || params.type === "compliance" ? params.type : "developer"
+
+  // W3-05: one private snapshot per scan+type. Duplicate completion events or
+  // a retried creation return the existing snapshot instead of gathering a
+  // second one — and never touch the scan, so a retry can never replay or
+  // re-enqueue billable work.
+  if (params.scanId) {
+    const existing = await prisma.report.findFirst({
+      where: { workspaceId: params.workspaceId, scanId: params.scanId, type, deletedAt: null },
+      orderBy: { createdAt: "asc" },
+    })
+    if (existing) {
+      logger.info("Report snapshot reused for scan+type", {
+        reportId: existing.id,
+        workspaceId: params.workspaceId,
+      })
+      return existing
+    }
+  }
+
   const contentJson = await gatherReportData(params.workspaceId, params.scanId, type)
   const report = await prisma.report.create({
     data: {

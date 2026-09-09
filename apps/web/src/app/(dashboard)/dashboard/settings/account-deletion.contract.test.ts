@@ -13,8 +13,11 @@ describe("settings account-deletion access", () => {
   })
 
   it("describes the actual open-registration beta", () => {
-    expect(source).toContain('CardTitle as="h2">Open beta</CardTitle>')
-    expect(source).toContain("Registration is open")
+    // W2-11: the open-beta notice describes the workspace service, so it
+    // lives on the workspace settings page; account deletion stays personal.
     expect(source).not.toContain("reply to your invitation email")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const workspaceSource = readFileSync(new URL("./workspace/page.tsx", import.meta.url), "utf8")
+    expect(workspaceSource + source).toContain("Registration is open")
   })
 })

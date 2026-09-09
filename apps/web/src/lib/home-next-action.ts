@@ -13,6 +13,18 @@ export interface HomeNextAction {
 export const HOME_BLOCKER_HREF = "/dashboard/findings"
 export const HOME_REPORT_HREF = "/dashboard/reports"
 
+/**
+ * W2-07: scan recommendations carry the recommended target so the composer
+ * opens preselected instead of defaulting to "choose a target". The scans
+ * page re-validates the id against the workspace's active targets, so a
+ * deleted or switched target degrades to the unscoped composer.
+ */
+export function scanComposerHref(targetId?: string | null): string {
+  return targetId
+    ? `/dashboard/scans?new=1&target=${encodeURIComponent(targetId)}`
+    : "/dashboard/scans?new=1"
+}
+
 export interface HomeDecisionInput {
   targets: Pick<
     DashboardOverview["targets"],
@@ -22,7 +34,10 @@ export interface HomeDecisionInput {
   reportCount: number
   openIssues: Pick<DashboardOverview["openIssues"], "total" | "critical" | "high">
   /** Canonical per-target gate states from an uncached applicability read. */
-  gateTargets: Pick<GateReadinessTarget, "state" | "applicable">[]
+  gateTargets: Pick<
+    GateReadinessTarget,
+    "targetId" | "targetName" | "state" | "applicable" | "blockingFindings"
+  >[]
   /** A queued/running scan; the decision leads with its progress. */
   activeScan?: { id: string; targetName: string | null } | null
 }
@@ -81,27 +96,39 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
   }
 
   if (!input.lastEvaluatedAssessment) {
+    // W2-07: preselect the earliest-created target — the same target the
+    // onboarding recommended-review flow would pick.
+    const recommended = input.gateTargets[0]?.targetId ?? null
+    const href = scanComposerHref(recommended)
     const action: HomeNextAction = {
       eyebrow: "Get started",
       title: "Run your first review",
       description:
         "Start a scan to capture your first evidence record. Deterministic checks and, where applicable, an AI-assisted review inspect the target for you.",
-      href: "/dashboard/scans?new=1",
+      href,
       cta: "Start a scan",
     }
-    return { action, primaryAction: { href: "/dashboard/scans?new=1", label: "Start a scan" } }
+    return { action, primaryAction: { href, label: "Start a scan" } }
   }
 
   const blockers = input.openIssues.critical + input.openIssues.high
   if (blockers > 0) {
+    // W2-07: scope the findings list to the blocking target when the gate
+    // identifies one, so the user lands on the relevant evidence.
+    const blockingTarget = input.gateTargets.find(
+      (target) => target.state === "NOT_READY" || target.blockingFindings > 0
+    )
+    const href = blockingTarget
+      ? `${HOME_BLOCKER_HREF}?target=${encodeURIComponent(blockingTarget.targetId)}`
+      : HOME_BLOCKER_HREF
     const action: HomeNextAction = {
       eyebrow: "Next step",
       title: "Review the highest-priority finding",
       description: `This workspace has ${blockers} unresolved critical or high finding${blockers === 1 ? "" : "s"} across all targets. Detection is not verification. Review the evidence, then fix and retest.`,
-      href: HOME_BLOCKER_HREF,
+      href,
       cta: "Open findings",
     }
-    return { action, primaryAction: { href: HOME_BLOCKER_HREF, label: "Open findings" } }
+    return { action, primaryAction: { href, label: "Open findings" } }
   }
 
   // Canonical gate state governs readiness claims. A clean score or an empty
@@ -111,25 +138,35 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
   if (notReady.length > 0) {
     const blocking = notReady.find((target) => target.state === "NOT_READY")
     if (blocking) {
+      // W2-07: scope the findings list to the blocking target when its id is
+      // known; callers without target ids keep the unscoped findings href.
+      const blockerHref = blocking.targetId
+        ? `${HOME_BLOCKER_HREF}?target=${encodeURIComponent(blocking.targetId)}`
+        : HOME_BLOCKER_HREF
       const action: HomeNextAction = {
         eyebrow: "Next step",
         title: "Resolve launch blockers",
         description:
           "The current gate state is NOT_READY. Review the blocking findings, then fix and retest before a launch decision.",
-        href: HOME_BLOCKER_HREF,
+        href: blockerHref,
         cta: "Review blockers",
       }
-      return { action, primaryAction: { href: HOME_BLOCKER_HREF, label: "Review blockers" } }
+      return { action, primaryAction: { href: blockerHref, label: "Review blockers" } }
     }
+    // W2-07: preselect the specific target that lacks usable evidence.
+    const needingEvidence = notReady.find(
+      (target) => target.state === "INSUFFICIENT_EVIDENCE" && target.applicable
+    )
+    const href = scanComposerHref(needingEvidence?.targetId ?? null)
     const action: HomeNextAction = {
       eyebrow: "Next step",
       title: "Run a review to strengthen evidence",
       description:
         "At least one target lacks usable, current review evidence, so no launch decision is possible yet. Historical reports remain available.",
-      href: "/dashboard/scans?new=1",
+      href,
       cta: "Start a scan",
     }
-    return { action, primaryAction: { href: "/dashboard/scans?new=1", label: "Start a scan" } }
+    return { action, primaryAction: { href, label: "Start a scan" } }
   }
 
   if (input.reportCount === 0) {

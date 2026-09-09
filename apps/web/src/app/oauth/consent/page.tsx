@@ -3,6 +3,7 @@ import { getSession } from "@lyrashield/auth/server"
 import { prisma } from "@lyrashield/db"
 import { serializeOAuthQuery } from "../oauth-query"
 import { createOAuthConsentState } from "@/lib/oauth-consent-state"
+import { createOAuthOnboardingReturn } from "@/lib/oauth-onboarding-return"
 import { OAuthConsentForm } from "./oauth-consent-form"
 
 export const dynamic = "force-dynamic"
@@ -39,6 +40,15 @@ export default async function OAuthConsentPage({
     select: { workspaceId: true, workspace: { select: { name: true } } },
     orderBy: { createdAt: "asc" },
   })
+
+  // W2-05: a user arriving from an OAuth client with no workspace cannot
+  // consent yet. Send them through onboarding with a signed, expiring return
+  // state bound to this exact authorization request; onboarding returns them
+  // here (fixed /oauth/consent destination — no open redirect).
+  if (memberships.length === 0) {
+    const returnState = createOAuthOnboardingReturn(oauthQuery, session.userId)
+    redirect(`/onboarding?oauth_return=${encodeURIComponent(returnState)}`)
+  }
 
   return (
     <OAuthConsentForm
