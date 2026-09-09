@@ -12,7 +12,14 @@ vi.mock("@lyrashield/db", () => ({
   },
   createAgentConnection: vi.fn(),
   listAgentConnections: vi.fn(),
-  prisma: { auditLog: { create: vi.fn() }, target: { count: vi.fn() } },
+  resolveOAuthClientDisplayName: vi.fn(
+    (client: { name?: string }) => client.name ?? "Connected coding agent"
+  ),
+  prisma: {
+    auditLog: { create: vi.fn() },
+    target: { count: vi.fn() },
+    oauthClient: { findUnique: vi.fn() },
+  },
 }))
 
 const requireWorkspaceAccess = vi.fn()
@@ -107,6 +114,7 @@ describe("POST /api/connections", () => {
     requireWorkspaceAccess.mockResolvedValue(sessionResult())
     requireBrowserConnectionManager.mockResolvedValue(sessionResult())
     vi.mocked(prisma.target.count).mockResolvedValue(1)
+    vi.mocked(prisma.oauthClient.findUnique).mockResolvedValue({ name: "Cursor IDE" } as never)
     validConsent()
   })
 
@@ -153,6 +161,9 @@ describe("POST /api/connections", () => {
     const body = await res.json()
     expect(body.data.id).toBe("conn-new")
     expect(verifyOAuthConsentState).toHaveBeenCalledWith("signed-state")
+    expect(createAgentConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ clientType: "Cursor IDE", clientName: "Cursor IDE" })
+    )
     expect(updateSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: { activeWorkspaceId: "ws-1", pendingAgentConnectionId: "conn-new" },
@@ -166,6 +177,49 @@ describe("POST /api/connections", () => {
         }),
       })
     )
+  })
+
+  it("uses registered OAuth metadata instead of a client-supplied display name", async () => {
+    vi.mocked(createAgentConnection).mockResolvedValue({ id: "conn-new" } as never)
+
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "Spoofed client",
+          clientName: "Spoofed client",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          consentState: "signed-state",
+        }),
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(createAgentConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ clientType: "Cursor IDE", clientName: "Cursor IDE" })
+    )
+  })
+
+  it("rejects a connection when its OAuth client no longer exists", async () => {
+    vi.mocked(prisma.oauthClient.findUnique).mockResolvedValue(null)
+
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "client",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          consentState: "signed-state",
+        }),
+      })
+    )
+
+    expect(res.status).toBe(400)
+    expect(createAgentConnection).not.toHaveBeenCalled()
   })
 
   it("rejects a missing consent state before persisting anything", async () => {

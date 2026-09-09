@@ -187,7 +187,7 @@ Coding-agent hosts may impose their own tool permission dialogs. LyraShield cann
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.7; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/mcp` 0.2.8; runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
-import { prisma } from "@lyrashield/db"
+import { prisma, resolveOAuthClientDisplayName } from "@lyrashield/db"
 import { serializeOAuthQuery } from "../oauth-query"
 import { createOAuthConsentState } from "@/lib/oauth-consent-state"
 import { createOAuthOnboardingReturn } from "@/lib/oauth-onboarding-return"
@@ -35,11 +35,19 @@ export default async function OAuthConsentPage({
     userId: session.userId,
   })
 
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: session.userId, status: "active" },
-    select: { workspaceId: true, workspace: { select: { name: true } } },
-    orderBy: { createdAt: "asc" },
-  })
+  const [memberships, oauthClient] = await Promise.all([
+    prisma.workspaceMember.findMany({
+      where: { userId: session.userId, status: "active" },
+      select: { workspaceId: true, workspace: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.oauthClient.findUnique({
+      where: { clientId },
+      select: { name: true, uri: true, softwareId: true, redirectUris: true },
+    }),
+  ])
+
+  if (!oauthClient) redirect("/sign-in?error=invalid_oauth_request")
 
   // W2-05: a user arriving from an OAuth client with no workspace cannot
   // consent yet. Send them through onboarding with a signed, expiring return
@@ -52,7 +60,7 @@ export default async function OAuthConsentPage({
 
   return (
     <OAuthConsentForm
-      clientName={typeof params.client_name === "string" ? params.client_name : "LyraShield AI"}
+      clientName={resolveOAuthClientDisplayName(oauthClient)}
       clientId={clientId}
       scope={typeof params.scope === "string" ? params.scope : "lyrashield.read"}
       oauthQuery={oauthQuery}

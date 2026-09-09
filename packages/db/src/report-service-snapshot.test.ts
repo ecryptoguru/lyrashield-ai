@@ -50,6 +50,7 @@ describe("report snapshots", () => {
     })
 
     expect(report.id).toBe("report-existing")
+    expect(report.snapshotReused).toBe(true)
     expect(prisma.report.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

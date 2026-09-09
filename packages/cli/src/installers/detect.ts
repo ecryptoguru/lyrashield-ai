@@ -102,6 +102,10 @@ export async function detectLocation(
   const resolvedPath = resolveLocation(loc, opts)
   const exists = await pathExists(resolvedPath)
   const out: DetectedLocation = { location: loc, resolvedPath, exists, hasEntry: false }
+  if (agent.installStrategy === "agent-plugin") {
+    out.hasEntry = exists
+    return out
+  }
   if (!exists || !agent.rootKey) return out
 
   try {
@@ -138,5 +142,7 @@ export async function findDetectedLocations(
   agent: AgentEntry,
   opts?: { scope?: "project" | "global"; cwd?: string }
 ): Promise<DetectedLocation[]> {
-  return Promise.all(agent.locations.map((loc) => detectLocation(agent, loc, opts)))
+  const locations =
+    agent.installStrategy === "agent-plugin" ? (agent.pluginLocations ?? []) : agent.locations
+  return Promise.all(locations.map((loc) => detectLocation(agent, loc, opts)))
 }

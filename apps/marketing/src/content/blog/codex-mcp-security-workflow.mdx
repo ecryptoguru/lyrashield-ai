@@ -21,7 +21,7 @@ Fastest path: run `npx lyrashield init`, which detects Codex and writes the conf
 
 You can review AI generated pull requests in Codex with evidence-state AppSec findings by connecting LyraShield AI through MCP, running a targeted scan from your Codex session, and enforcing the same policy in CI with a diff aware gate. The config lives in `~/.codex/config.toml` and supports both local stdio and remote HTTP with a bearer token.
 
-OpenAI Codex excels at large refactors, but refactors can introduce auth bypasses, injection, and vulnerable dependencies that are hard to spot in a diff. The [vibe coding security guide](/blog/vibe-coding-security-guide) describes why AI built code needs findings with recorded evidence states instead of noisy lint. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives you the exact `~/.codex/config.toml` entries for local and remote MCP using `npx -y @lyrashield/mcp@0.2.7` and `https://app.lyrashieldai.com/api/mcp`, plus verification, inline checks, and a GitHub Action. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
+OpenAI Codex excels at large refactors, but refactors can introduce auth bypasses, injection, and vulnerable dependencies that are hard to spot in a diff. The [vibe coding security guide](/blog/vibe-coding-security-guide) describes why AI built code needs findings with recorded evidence states instead of noisy lint. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives you the exact `~/.codex/config.toml` entries for local and remote MCP using `npx -y @lyrashield/mcp@0.2.8` and `https://app.lyrashieldai.com/api/mcp`, plus verification, inline checks, and a GitHub Action. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
 
 ## 1. Prerequisites and setup
 
@@ -36,7 +36,7 @@ Local stdio example:
 ```toml
 [mcp_servers.lyrashield]
 command = "npx"
-args = ["-y", "@lyrashield/mcp@0.2.7"]
+args = ["-y", "@lyrashield/mcp@0.2.8"]
 startup_timeout_sec = 20
 tool_timeout_sec = 120
 ```

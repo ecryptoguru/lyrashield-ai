@@ -19,7 +19,7 @@ faq:
 
 Run `npx lyrashield init --agent openclaw` to print the current guided setup, then use OpenClaw's own `mcp add` commands below. LyraShield does not edit OpenClaw's client-owned registry automatically. This preserves OpenClaw's validation, OAuth storage, and server lifecycle behavior and gives you a clear command to review before it changes the registry.
 
-You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, findings with explicit evidence states, and reviewable fix proposals inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp@0.2.7 plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
+You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, findings with explicit evidence states, and reviewable fix proposals inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp@0.2.8 plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
 OpenClaw is built to run many tools in parallel and to coordinate long lived sessions. That parallelism accelerates vibe coding and also expands attack surface quickly, which is why verification close to generation helps. Keep the [vibe coding security guide](/blog/vibe-coding-security-guide) open as your policy reference, then map findings to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) so triage has a shared vocabulary. Teams that generate large microservice surfaces in one session benefit most from this pairing, because otherwise review struggles to keep up with generation speed.
 
@@ -51,7 +51,7 @@ OpenClaw stores MCP servers under mcp.servers inside ~/.openclaw/openclaw.json. 
 CLI options:
 
 ```bash
-openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.7
+openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.8
 openclaw mcp add lyrashield-remote --url https://app.lyrashieldai.com/api/mcp --transport streamable-http --auth oauth
 openclaw mcp login lyrashield-remote
 ```
@@ -64,7 +64,7 @@ JSON option with tool filtering:
     "servers": {
       "lyrashield": {
         "command": "npx",
-        "args": ["-y", "@lyrashield/mcp@0.2.7"],
+        "args": ["-y", "@lyrashield/mcp@0.2.8"],
         "toolFilter": {
           "include": [
             "lyrashield_scan_target",
@@ -106,7 +106,7 @@ Show transport type, command or url, and filtered tool list.
 Expected:
 
 ```text
-lyrashield (stdio via npx -y @lyrashield/mcp@0.2.7):
+lyrashield (stdio via npx -y @lyrashield/mcp@0.2.8):
 - lyrashield_scan_target(targetId, mode)
 - lyrashield_get_findings(workspaceId)
 - lyrashield_list_targets(workspaceId)

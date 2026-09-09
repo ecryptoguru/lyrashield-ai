@@ -10,7 +10,7 @@ faq:
   - q: "Where does Cline store MCP config?"
     a: "Cline CLI stores MCP servers in ~/.cline/mcp.json. IDE extensions open their client-owned settings JSON from the MCP Servers panel. Both use mcpServers."
   - q: "How do I use LyraShield remote with Cline?"
-    a: "Use type streamableHttp with URL https://app.lyrashieldai.com/api/mcp and Authorization Bearer LYRASHIELD_API_KEY. Local uses npx -y @lyrashield/mcp@0.2.7 via stdio."
+    a: "Use type streamableHttp with URL https://app.lyrashieldai.com/api/mcp and Authorization Bearer LYRASHIELD_API_KEY. Local uses npx -y @lyrashield/mcp@0.2.8 via stdio."
   - q: "What is LyraShield build status?"
     a: "Bounded scans, evidence states, fix-proposal recording, retest queueing, and SARIF are available now. No current MCP tool edits code or creates a branch or pull request."
   - q: "Should I use autoApprove for LyraShield tools?"
@@ -21,7 +21,7 @@ Fastest path: run `npx lyrashield init` to detect Cline and write the MCP config
 
 You can run secure AI app development in Cline by adding LyraShield AI as an MCP server, getting findings with their recorded evidence states and supporting evidence inside Cline, and enforcing the same checks in CI with a diff aware GitHub Action that uploads SARIF.
 
-Cline automates file edits and terminal actions, which speeds up feature work but can introduce secrets, injection, and vulnerable dependencies when scaffolding is agent driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification must be part of the agent loop. LyraShield AI is agent native AppSec for AI built software with a loop from Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives exact Cline config using `npx -y @lyrashield/mcp@0.2.7` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification, inline checks, and the GitHub gate. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
+Cline automates file edits and terminal actions, which speeds up feature work but can introduce secrets, injection, and vulnerable dependencies when scaffolding is agent driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification must be part of the agent loop. LyraShield AI is agent native AppSec for AI built software with a loop from Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives exact Cline config using `npx -y @lyrashield/mcp@0.2.8` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification, inline checks, and the GitHub gate. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
 
 ## 1. Prerequisites and setup
 
@@ -38,7 +38,7 @@ Local stdio:
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.7"],
+      "args": ["-y", "@lyrashield/mcp@0.2.8"],
       "disabled": false,
       "autoApprove": []
     }
@@ -120,7 +120,7 @@ Agent rules work because Cline reads `.clinerules` files at the start of every s
 
 | Mode    | Config file                      | Launch style                 | Auth                                        |
 | ------- | -------------------------------- | ---------------------------- | ------------------------------------------- |
-| Local   | `~/.cline/mcp.json` or IDE-managed settings | `npx -y @lyrashield/mcp@0.2.7` | LyraShield OAuth credential store            |
+| Local   | `~/.cline/mcp.json` or IDE-managed settings | `npx -y @lyrashield/mcp@0.2.8` | LyraShield OAuth credential store            |
 | Remote  | IDE-managed settings                      | `streamableHttp`                  | Private Bearer header                         |
 | CI gate | .github/workflows/lyrashield.yml | ecryptoguru/lyrashield-ai@v2 | no LyraShield secret required               |
 
