@@ -72,8 +72,8 @@ export function classifyLoopClosureError(error: unknown): LoopClosureReason {
 }
 
 export function nextLoopClosureRetryAt(attempts: number, now = new Date()): Date {
-  const minutes =
-    LOOP_CLOSURE_BACKOFF_MINUTES[Math.min(attempts, LOOP_CLOSURE_BACKOFF_MINUTES.length - 1)]
+  const index = Math.min(Math.max(attempts, 0), LOOP_CLOSURE_BACKOFF_MINUTES.length - 1)
+  const minutes: number = LOOP_CLOSURE_BACKOFF_MINUTES[index] ?? 240
   return new Date(now.getTime() + minutes * 60 * 1000)
 }
 
