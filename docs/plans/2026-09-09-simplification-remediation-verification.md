@@ -61,7 +61,9 @@ The following maps each task to the inspected implementation and regression grou
 - Lint/typecheck: 65 Turbo tasks passed, including dependent package builds.
 - Isolated PostgreSQL: 36 tests passed using a NOSUPERUSER/NOBYPASSRLS runtime role; includes old/new writer compatibility and concurrent report creation. CI now invokes both database runtime files, not only the original RLS file.
 - Full nonvisual browser suite: 38 passed, five existing provider/affiliate placeholders skipped. Both targeted recovery/OAuth tests passed after the final onboarding changes, including the controlled GitHub recovery matrix and native Chrome 152.0.7977.76.
+- Visual suite: mobile, tablet and desktop all passed (3/3), including keyboard access to the secondary risk decisions. Only the two finding-detail baselines changed for the inspected disclosure; all other baselines stayed unchanged.
 - Production-mode Next build completed for the browser suite.
+- Migration drift check: no difference against an isolated temporary shadow database.
 - Dependency audit: zero reported vulnerabilities.
 - Connections inspected at 390px and 1440px, without horizontal overflow. Generated screenshots remain outside Git.
 

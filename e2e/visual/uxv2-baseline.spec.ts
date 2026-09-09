@@ -234,6 +234,17 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
     ] as const) {
       await page.goto(path)
       await capture(page, screenshot)
+      if (screenshot === "issue-detail.png") {
+        const alternatives = page
+          .locator("summary")
+          .filter({ hasText: "Other actions: risk decisions" })
+        await alternatives.focus()
+        await alternatives.press("Enter")
+        await expect(page.getByRole("button", { name: "Accept risk", exact: true })).toBeVisible()
+        await expect(
+          page.getByRole("button", { name: "Mark false positive", exact: true })
+        ).toBeVisible()
+      }
     }
 
     if (testInfo.project.name === "visual-mobile") {
