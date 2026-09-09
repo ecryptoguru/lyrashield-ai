@@ -251,6 +251,11 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
     await page.route(`**/api/findings/${fixture.findingId}?*`, async (route) => {
       const response = await route.fetch()
       const payload = await response.json()
+      if (!response.ok() || !payload?.data) {
+        throw new Error(
+          `Finding fixture request failed: ${response.status()} ${String(payload?.error?.code ?? payload?.error ?? "missing data")}`
+        )
+      }
       payload.data.evidence = [{ id: "display-evidence", type: "LOG", redactionStatus: "REDACTED" }]
       await route.fulfill({ response, json: payload })
     })
