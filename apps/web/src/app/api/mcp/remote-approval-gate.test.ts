@@ -338,4 +338,36 @@ describe("remote approval gate — claim-before-execution", () => {
     expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
     expect(mcpCallTool).not.toHaveBeenCalled()
   })
+
+  it("returns the structured connect-over-OAuth response for a mutating call without a connection", async () => {
+    // Ruling 2 (item 1.3): no AgentApproval is created; one structured
+    // response names the tool and the connect path.
+    const decision = await makeGate()("lyrashield_scan_target", { targetId: "t-1" })
+
+    expect(decision.approved).toBe(false)
+    expect((decision as { pending?: boolean }).pending).toBeUndefined()
+    const structured = (
+      decision as {
+        structuredDenial?: { structuredContent?: { status?: string; connect?: { href?: string } } }
+      }
+    ).structuredDenial?.structuredContent
+    expect(structured?.status).toBe("connect_required")
+    expect(structured?.connect?.href).toBe("https://app.example.com/dashboard/connections")
+    expect(mcpCallTool).not.toHaveBeenCalled()
+    expect(dbClaimApprovalExecution).not.toHaveBeenCalled()
+  })
+
+  it("creates no approval rows from the create-poll path anymore", async () => {
+    const { createApproval, findPendingApprovalByHash } = await import("@lyrashield/db")
+    await makeGate()("lyrashield_scan_target", { targetId: "t-1" })
+    expect(createApproval).not.toHaveBeenCalled()
+    expect(findPendingApprovalByHash).not.toHaveBeenCalled()
+  })
+
+  it("resolves a historical approval even without a connection on the principal", async () => {
+    dbGetApproval.mockResolvedValue(approvalFixture({ status: "EXECUTED", result: TOOL_RESULT }))
+    const decision = await makeGate()("lyrashield_scan_target", { targetId: "t-1", approvalId: "ap-1" })
+    expect(decision.approved).toBe(true)
+    expect(mcpCallTool).not.toHaveBeenCalled()
+  })
 })

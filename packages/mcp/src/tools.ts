@@ -114,8 +114,11 @@ export interface McpTool {
   description: string
   /**
    * Whether this tool mutates state (triggers a scan, creates a report, opens a
-   * PR, …). Mutating tools are gated behind a human-approval check in the server
-   * before their handler runs — read-only tools are not. (S8)
+   * PR, …). Mutating tools pass an authorization check in the server before
+   * their handler runs: locally through the interactive approval flow, and on
+   * the remote endpoint through the connection grant (connection-less
+   * principals receive the structured connect-over-OAuth response).
+   * Read-only tools are not gated. (S8, ruling 2)
    */
   mutating: boolean
   annotations?: ToolAnnotations

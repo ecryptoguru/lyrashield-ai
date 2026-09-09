@@ -175,12 +175,11 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: engine.listTools({
-      includeApprovalId:
-        !options.allowMutations &&
-        options.approvalMode === "remote-oob" &&
-        !options.delegatedAuthorization &&
-        !!options.remoteApprovalGate &&
-        !!options.remoteApprovalContext,
+      // Ruling 2: no principal enters the legacy create-poll-approve cycle
+      // anymore, so the approvalId parameter is no longer advertised. The
+      // call path still ACCEPTS approvalId so historical PENDING/EXECUTED
+      // records remain resolvable for clients that already hold one.
+      includeApprovalId: false,
       requireIdempotencyKey:
         !options.allowMutations &&
         options.approvalMode === "remote-oob" &&

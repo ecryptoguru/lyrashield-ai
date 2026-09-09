@@ -26,6 +26,13 @@ export interface ApprovalDecision {
   reason?: string
   /** Pre-computed tool result; if set and approved is true, the handler is skipped. */
   result?: McpToolResult
+  /**
+   * Structured denial (ruling 2): when set on an unapproved decision, the
+   * server returns this verbatim as an isError result instead of the generic
+   * denial wrap — used for the connect-over-OAuth response that names the
+   * tool and the connect path.
+   */
+  structuredDenial?: McpToolResult
 }
 
 export type ApprovalGate = (
@@ -203,6 +210,9 @@ export class McpServer {
           tool: name,
           reason: decision.reason,
         })
+        if (decision.structuredDenial) {
+          return decision.structuredDenial
+        }
         const error = {
           error: "Mutation was not authorized or could not be executed",
           tool: name,
