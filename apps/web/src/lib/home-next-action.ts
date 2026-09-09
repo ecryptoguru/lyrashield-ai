@@ -134,8 +134,11 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
   // Canonical gate state governs readiness claims. A clean score or an empty
   // blocker list never overrides missing coverage, expired evidence, a revision
   // mismatch, or an unsupported target.
-  const notReady = input.gateTargets.filter((target) => target.state !== "READY")
-  if (notReady.length > 0) {
+  const notReady = input.gateTargets.filter(
+    (target) => target.state !== "READY" || !target.applicable
+  )
+  const coveredTargets = new Set(input.gateTargets.map((target) => target.targetId).filter(Boolean))
+  if (notReady.length > 0 || coveredTargets.size !== input.targets.total) {
     const blocking = notReady.find((target) => target.state === "NOT_READY")
     if (blocking) {
       // W2-07: scope the findings list to the blocking target when its id is

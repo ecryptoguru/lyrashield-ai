@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 
 test.use({
   launchOptions: {
@@ -152,7 +152,9 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
       where: { userId: user.id },
       data: { workspaceId, targetId: target.id, currentStep: 3, skipped: false },
     })
-    await prisma.target.update({ where: { id: target.id }, data: { deletedAt: new Date() } })
+    await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.target.update({ where: { id: target.id, workspaceId }, data: { deletedAt: new Date() } })
+    )
     await second.goto("/onboarding")
     await expect(second.getByRole("heading", { name: "Add your first target" })).toBeVisible()
     const deletedTargetState = await prisma.onboardingState.findUniqueOrThrow({
@@ -160,7 +162,9 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
     })
     expect(deletedTargetState.workspaceId).toBe(workspaceId)
     expect(deletedTargetState.targetId).toBeNull()
-    await prisma.target.update({ where: { id: target.id }, data: { deletedAt: null } })
+    await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.target.update({ where: { id: target.id, workspaceId }, data: { deletedAt: null } })
+    )
     await prisma.onboardingState.update({
       where: { userId: user.id },
       data: { targetId: target.id, currentStep: 3 },

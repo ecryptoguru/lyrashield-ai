@@ -17,6 +17,12 @@ Baseline: main `5fa62d5a6b377ca1491e2ef336a3391d8a760767`, including merged PRs 
 
 Snapshot serialization is database-coordinated through the shared service, not a unique index. Existing historical duplicates are preserved. Direct writers bypassing that service are outside this guarantee.
 
+## Additional phase-review regressions
+
+- W1: missing, duplicate or inapplicable target-gate inputs cannot produce a ready-report recommendation. Three new counterexamples failed before the fix and pass afterward.
+- W3: a pending/running retest takes priority over the fixed-pending-retest prompt. A reopened/unresolved finding cannot inherit a historical passing retest as its report recommendation. Four new counterexamples failed before the fix and pass afterward.
+- PR #641 CI fixture correction: target updates in the recovery test now use explicit workspace RLS context. The complete browser suite was rerun with the restricted runtime role used by CI, while privileged system operations retain a separate connection. No application database bypass or assertion relaxation was added.
+
 ## Final pass across all 30 tasks
 
 The following maps each task to the inspected implementation and regression group. The full test run covers the underlying authorization, evidence, queue, billing and compatibility suites. A passing model/contract test is not substituted for a human screen-reader session or a live provider/client receipt.
@@ -56,11 +62,11 @@ The following maps each task to the inspected implementation and regression grou
 
 ## Local verification
 
-- Core regression suite: 3,581 passed, 48 environment-dependent skips, zero failures (four workers). An earlier run alongside builds exceeded one existing test's five-second import timeout; no assertion was weakened.
+- Core regression suite: 3,588 passed, 48 environment-dependent skips, zero failures (four workers). An earlier run alongside builds exceeded one existing test's five-second import timeout; no assertion was weakened.
 - Marketing: 152 passed. Motion: 18 passed. Operational workflow scripts: 6 passed.
 - Lint/typecheck: 65 Turbo tasks passed, including dependent package builds.
 - Isolated PostgreSQL: 36 tests passed using a NOSUPERUSER/NOBYPASSRLS runtime role; includes old/new writer compatibility and concurrent report creation. CI now invokes both database runtime files, not only the original RLS file.
-- Full nonvisual browser suite: 38 passed, five existing provider/affiliate placeholders skipped. Both targeted recovery/OAuth tests passed after the final onboarding changes, including the controlled GitHub recovery matrix and native Chrome 152.0.7977.76. The final deleted-target recovery rerun also passed on Chrome 152.0.7977.83.
+- Full nonvisual browser suite: 38 passed, five existing provider/affiliate placeholders skipped. The final phase-review run used a NOSUPERUSER/NOBYPASSRLS application and test runtime connection, matching CI. Both targeted recovery/OAuth tests passed after the final onboarding changes, including the controlled GitHub recovery matrix and native Chrome 152.0.7977.76. The final deleted-target recovery rerun also passed on Chrome 152.0.7977.83.
 - Visual suite: mobile, tablet and desktop all passed (3/3), including keyboard access to the secondary risk decisions. Only the two finding-detail baselines changed for the inspected disclosure; all other baselines stayed unchanged.
 - Production-mode Next build completed for the browser suite.
 - Migration drift check: no difference against an isolated temporary shadow database.

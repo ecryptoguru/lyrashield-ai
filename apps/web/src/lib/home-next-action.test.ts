@@ -138,11 +138,29 @@ describe("deriveHomeDecision — one canonical action", () => {
     expect(decision.action?.cta).toBe("Start a scan")
   })
 
+  it.each([
+    ["missing", []],
+    ["inapplicable", [gateFor("t-1", "READY", false)]],
+    ["duplicate", [gateFor("t-1", "READY"), gateFor("t-1", "READY")]],
+  ] as const)("never claims readiness from %s gate coverage", (_, gateTargets) => {
+    const decision = deriveHomeDecision({
+      ...base,
+      targets: { ...base.targets, total: gateTargets.length || 1 },
+      lastEvaluatedAssessment: evaluatedAssessment(),
+      gateTargets: [...gateTargets],
+    })
+    expect(decision.action?.cta).toBe("Start a scan")
+    expect(decision.action?.description).not.toContain(
+      "Every active target's current gate state is READY"
+    )
+  })
+
   it("offers the report only when every active target's gate is READY", () => {
     const decision = deriveHomeDecision({
       ...base,
       lastEvaluatedAssessment: evaluatedAssessment(),
-      gateTargets: [gate("READY"), gate("READY")],
+      targets: { ...base.targets, total: 2 },
+      gateTargets: [gateFor("t-1", "READY"), gateFor("t-2", "READY")],
     })
     expect(decision.action?.title).toBe("Generate an assurance report")
     expect(decision.action?.href).toBe("/dashboard/reports")
@@ -153,7 +171,7 @@ describe("deriveHomeDecision — one canonical action", () => {
       ...base,
       lastEvaluatedAssessment: evaluatedAssessment(),
       reportCount: 2,
-      gateTargets: [gate("READY")],
+      gateTargets: [gateFor("t-1", "READY")],
     })
     expect(decision.action).toBeNull()
   })
