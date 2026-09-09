@@ -1,6 +1,6 @@
 export type WebMcpReceiptStatus = "running" | "completed" | "cancelled" | "failed"
 
-export type WebMcpClassification = "read" | "ui-only" | "mutation-prepared"
+export type WebMcpClassification = "read" | "ui-only" | "mutation-prepared" | "mutation-durable"
 
 export type WebMcpDataClass = "public" | "workspace-summary" | "untrusted-finding" | "source-local"
 
@@ -12,7 +12,8 @@ export interface WebMcpActivityReceipt {
   dataClass: WebMcpDataClass
   untrustedContent: boolean
   uiChanged: boolean
-  durableMutation: false
+  /** True only for tools that persist a server-side action (W3-07). */
+  durableMutation: boolean
   humanConfirmationRequired: boolean
   startedAt: string
   endedAt?: string

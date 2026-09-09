@@ -25,6 +25,7 @@ const CLASSIFICATION_LABEL: Record<WebMcpActivityReceipt["classification"], stri
   read: "Read",
   "ui-only": "UI only",
   "mutation-prepared": "Prepared mutation",
+  "mutation-durable": "Durable mutation",
 }
 
 const DATA_CLASS_LABEL: Record<WebMcpActivityReceipt["dataClass"], string> = {
