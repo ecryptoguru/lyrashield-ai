@@ -144,7 +144,7 @@ export async function getFinding(
         evidence: unknown
         createdAt: Date
       }[]
-      fixProposals: { id: string; status: string; summary: string }[]
+      fixProposals: { id: string; status: string; summary: string; createdAt: Date }[]
       retests: { id: string; scanId: string; status: string; createdAt: Date }[]
       historyPagination: Record<
         FindingHistoryCollection,
@@ -189,6 +189,22 @@ export async function getFinding(
           status: true,
           summary: true,
           createdAt: true,
+          // W3-03: PR rows are the receipts behind "PR opened" and "merged"
+          // timeline events; creation alone never implies applied.
+          pullRequests: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              status: true,
+              prNumber: true,
+              prUrl: true,
+              branchName: true,
+              createdAt: true,
+              mergedAt: true,
+              closedAt: true,
+            },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          },
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: HISTORY_PREVIEW_LIMIT + 1,
