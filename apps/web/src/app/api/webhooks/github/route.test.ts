@@ -16,8 +16,8 @@ const handleMerged = vi.fn()
 const assertScanAllowed = vi.fn()
 const assertScanWorkerAvailable = vi.fn()
 const enqueueScanJob = vi.fn()
-const recordDeferredLoopClosure = vi.fn()
-const completeLoopClosure = vi.fn()
+const recordDeferredLoopClosure = vi.fn(() => Promise.resolve())
+const completeLoopClosure = vi.fn(() => Promise.resolve())
 
 vi.mock("@lyrashield/db", () => ({
   getSystemPrisma: () => systemPrisma,
