@@ -8,7 +8,6 @@ import { SignOutButton } from "./sign-out-button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { InvitationAcceptBridge } from "@/components/invitation-accept-bridge"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
-import { ensureOnboardingWorkspace } from "@/lib/workspace-creation"
 import { cookies } from "next/headers"
 import { parsePlanIntent, planIntentPath, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
 
@@ -34,15 +33,24 @@ export default async function OnboardingPage({
   }
 
   // W2-01: workspace naming is not part of the critical setup path. Reuse an
-  // authorized active workspace when one exists; create a default only when
-  // none is suitable, exactly once even across concurrent tabs.
+  // authorized active workspace when one exists. When none exists, the wizard
+  // creates a default lazily — at the moment the user picks a target path —
+  // so merely visiting onboarding (or skipping it) never creates a workspace
+  // or trial the user did not ask for.
   let workspaceId = state.workspaceId
   if (!workspaceId) {
-    workspaceId = await ensureOnboardingWorkspace(session.userId, session.userName)
-    await prisma.onboardingState.update({
-      where: { userId: session.userId },
-      data: { workspaceId, currentStep: Math.max(state.currentStep, 1) },
+    const memberships = await prisma.workspaceMember.findMany({
+      where: { userId: session.userId, status: "active", workspace: { deletedAt: null } },
+      orderBy: { createdAt: "asc" },
+      select: { workspaceId: true },
     })
+    if (memberships.length > 0) {
+      workspaceId = memberships[0]!.workspaceId
+      await prisma.onboardingState.update({
+        where: { userId: session.userId },
+        data: { workspaceId, currentStep: Math.max(state.currentStep, 1) },
+      })
+    }
   }
 
   const target =
@@ -82,7 +90,11 @@ export default async function OnboardingPage({
         </p>
       </div>
 
-      <OnboardingWizard initialState={initialState} selectedPlan={selectedPlan} />
+      <OnboardingWizard
+        initialState={initialState}
+        selectedPlan={selectedPlan}
+        suggestedWorkspaceName={session.userName?.trim() ? `${session.userName.trim()}'s workspace` : "My workspace"}
+      />
       <InvitationAcceptBridge />
     </div>
   )

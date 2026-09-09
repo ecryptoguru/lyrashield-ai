@@ -10,6 +10,7 @@ import {
   installUrlSchema,
   onboardingDataSchema,
 } from "@/lib/api-schemas"
+import { z } from "zod"
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
@@ -51,17 +52,20 @@ interface Repo {
 export function OnboardingWizard({
   initialState,
   selectedPlan,
+  suggestedWorkspaceName,
 }: {
   initialState: OnboardingData
   selectedPlan?: string | null
+  /** Used to name a default workspace when the user has none (W2-01). */
+  suggestedWorkspaceName?: string
 }) {
   const router = useRouter()
   useEffect(() => {
     rememberPlanIntent(selectedPlan)
   }, [selectedPlan])
-  // W2-01: workspace naming left the critical path. The server reuses an
-  // authorized workspace or creates a default before this renders, so the
-  // wizard always starts at the target chooser (step 1). A stale persisted
+  // W2-01: workspace naming left the critical path. The wizard starts at the
+  // target chooser; a workspace is created lazily (with a sensible default
+  // name) only when the user picks a path that needs one. A stale persisted
   // step 0 cannot reappear.
   const [step, setStep] = useState(Math.max(initialState.currentStep ?? 1, 1))
   const [data, setData] = useState(initialState)
@@ -174,15 +178,51 @@ export function OnboardingWizard({
     return next
   }
 
+  /**
+   * W2-01: workspace creation is lazy and unnamed. The workspace is created
+   * with a sensible default only when the user picks a path that needs one —
+   * never merely by visiting onboarding, and never with a required naming
+   * step. A concurrent tab that won the slug race is adopted instead of
+   * duplicated.
+   */
+  async function ensureWorkspace(): Promise<string> {
+    if (data.workspaceId) return data.workspaceId
+    try {
+      const workspace = await apiPost(
+        "/api/workspaces",
+        { name: suggestedWorkspaceName?.trim() || "My workspace", mode: "VIBE" },
+        { schema: idSchema }
+      )
+      await persist({ workspaceId: workspace.id, currentStep: Math.max(step, 1), skipped: false })
+      return workspace.id
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === "SLUG_TAKEN") {
+        // A concurrent tab created the default workspace first: adopt it.
+        const existing = await apiGet("/api/workspaces", {
+          schema: z.object({ data: z.array(z.object({ id: z.string().min(1) })).min(1) }),
+        })
+        const adopted = existing.data[0]
+        if (!adopted) throw cause
+        await persist({
+          workspaceId: adopted.id,
+          currentStep: Math.max(step, 1),
+          skipped: false,
+        })
+        return adopted.id
+      }
+      throw cause
+    }
+  }
+
   async function connectGitHub() {
-    if (!data.workspaceId) return
     setLoading(true)
     setError(null)
     try {
+      const workspaceId = await ensureWorkspace()
       const res = await apiPost(
         "/api/integrations/github/install",
         {
-          workspaceId: data.workspaceId,
+          workspaceId,
           returnTo: "onboarding",
         },
         { schema: installUrlSchema }
@@ -207,7 +247,7 @@ export function OnboardingWizard({
     }
   }
 
-  function choosePath(next: Exclude<OnboardingPath, null>) {
+  async function choosePath(next: Exclude<OnboardingPath, null>) {
     setError(null)
     track("onboarding_path_chosen", { path: next })
     if (next === "skip") {
@@ -217,6 +257,19 @@ export function OnboardingWizard({
     if (next === "github") {
       void connectGitHub()
       return
+    }
+    // URL / API: the workspace is created lazily here (W2-01) — no naming
+    // step; the default name is editable later in settings.
+    if (!data.workspaceId) {
+      setLoading(true)
+      try {
+        await ensureWorkspace()
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
+        return
+      } finally {
+        setLoading(false)
+      }
     }
     // URL / API: prefill a sensible product name, then collect the URL. The
     // onward step comes from the shared helper so the wizard and the flow logic
