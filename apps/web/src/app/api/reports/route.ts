@@ -1,3 +1,4 @@
+import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../lib/api-auth"
 import { listReports, createReport, prisma } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
@@ -93,17 +94,23 @@ async function post(request: Request) {
     }
     assertOAuthDelegatedScope(session, targetId)
 
-    const report = await createReport({
-      workspaceId,
-      ...(resolvedScanId ? { scanId: resolvedScanId } : {}),
-      ...(type ? { type } : {}),
-      title,
-      createdById: session.userId,
-    })
+    return await recordedOperation(
+      request,
+      { workspaceId, operationName: "report.create", input: { ...parsed.data }, session },
+      async () => {
+        const report = await createReport({
+          workspaceId,
+          ...(resolvedScanId ? { scanId: resolvedScanId } : {}),
+          ...(type ? { type } : {}),
+          title,
+          createdById: session.userId,
+        })
 
-    revalidateDashboardAggregates(workspaceId)
+        revalidateDashboardAggregates(workspaceId)
 
-    return apiSuccess({ id: report.id, title: report.title, status: report.status }, 201)
+        return apiSuccess({ id: report.id, title: report.title, status: report.status }, 201)
+      }
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

@@ -1,3 +1,4 @@
+import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import { createFixProposal, getFindingReference } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
@@ -38,41 +39,52 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     }
     assertOAuthDelegatedScope(session, finding.targetId)
 
-    const proposal = await createFixProposal({
-      findingId: id,
-      workspaceId,
-      summary,
-      ...(diffRef ? { diffRef } : {}),
-      ...(generatedByModel ? { generatedByModel } : {}),
-      ...(safetyScore != null ? { safetyScore } : {}),
-    })
-
-    // WP3 producer: a proposal without a caller-supplied patch is enqueued for
-    // deterministic generation from the finding's engine-emitted structured
-    // fix. Best-effort — the proposal exists and can be regenerated; a queue
-    // outage must not fail the API response.
-    if (!diffRef) {
-      try {
-        await enqueueFixGenerate({ workspaceId, fixProposalId: proposal.id })
-      } catch (enqueueError) {
-        logger.error("Failed to enqueue fix generation (proposal remains draft)", {
-          fixProposalId: proposal.id,
-          error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
-        })
-      }
-    }
-
-    await prisma.auditLog.create({
-      data: {
+    return await recordedOperation(
+      request,
+      {
         workspaceId,
-        actorUserId: session.userId,
-        action: "fix_proposal.created",
-        resourceType: "fix_proposal",
-        resourceId: proposal.id,
+        operationName: "fix_proposal.create",
+        input: { ...parsed.data, findingId: id },
+        session,
       },
-    })
+      async () => {
+        const proposal = await createFixProposal({
+          findingId: id,
+          workspaceId,
+          summary,
+          ...(diffRef ? { diffRef } : {}),
+          ...(generatedByModel ? { generatedByModel } : {}),
+          ...(safetyScore != null ? { safetyScore } : {}),
+        })
 
-    return apiSuccess(proposal)
+        // WP3 producer: a proposal without a caller-supplied patch is enqueued for
+        // deterministic generation from the finding's engine-emitted structured
+        // fix. Best-effort — the proposal exists and can be regenerated; a queue
+        // outage must not fail the API response.
+        if (!diffRef) {
+          try {
+            await enqueueFixGenerate({ workspaceId, fixProposalId: proposal.id })
+          } catch (enqueueError) {
+            logger.error("Failed to enqueue fix generation (proposal remains draft)", {
+              fixProposalId: proposal.id,
+              error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
+            })
+          }
+        }
+
+        await prisma.auditLog.create({
+          data: {
+            workspaceId,
+            actorUserId: session.userId,
+            action: "fix_proposal.created",
+            resourceType: "fix_proposal",
+            resourceId: proposal.id,
+          },
+        })
+
+        return apiSuccess(proposal)
+      }
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

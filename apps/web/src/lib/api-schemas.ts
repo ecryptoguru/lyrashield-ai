@@ -20,6 +20,7 @@ export const installUrlSchema = z.object({ installUrl: z.string() }).passthrough
 
 export const onboardingDataSchema = z
   .object({
+    updatedAt: z.string().optional(),
     currentStep: z.number(),
     completed: z.boolean(),
     skipped: z.boolean(),

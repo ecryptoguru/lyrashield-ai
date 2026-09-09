@@ -1,6 +1,12 @@
+import { createHash, randomUUID } from "node:crypto"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { LyraShieldClient, parseRepoIdentifier, type ParsedRepo } from "@lyrashield/sdk"
+import {
+  LyraShieldClient,
+  OperationStatusSchema,
+  parseRepoIdentifier,
+  type ParsedRepo,
+} from "@lyrashield/sdk"
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js"
 
 const execFileAsync = promisify(execFile)
@@ -158,7 +164,24 @@ async function apiCall(
 ): Promise<unknown> {
   const client = getClient(context)
   const sdkPath = path.replace(/^\/api\/v1/, "").replace(/^\/api/, "") || "/"
-  return client.request(method, sdkPath, body ? { body } : undefined)
+  const recorded =
+    method === "POST" &&
+    (sdkPath === "/scans" ||
+      sdkPath === "/reports" ||
+      /\/findings\/[^/]+\/(retests|fix-proposals)$/.test(sdkPath))
+  if (!recorded || !body) return client.request(method, sdkPath, body ? { body } : undefined)
+  const { idempotencyKey, ...input } = body
+  if (
+    idempotencyKey !== undefined &&
+    (typeof idempotencyKey !== "string" || !idempotencyKey.trim() || idempotencyKey.length > 128)
+  )
+    throw new Error("Invalid idempotency key")
+  // Separate the HTTP sub-operation from the hosted MCP execution claim.
+  const key =
+    typeof idempotencyKey === "string"
+      ? `mcp:${createHash("sha256").update(idempotencyKey).digest("hex")}`
+      : randomUUID()
+  return client.request(method, sdkPath, { body: input, headers: { "Idempotency-Key": key } })
 }
 
 async function detectGitRepo(cwd = process.cwd()): Promise<ParsedRepo | undefined> {
@@ -310,6 +333,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
         const resolved = await resolveTargetId(context, args)
         const data = await apiCall(context, "POST", "/api/scans", {
           workspaceId: args.workspaceId,
+          idempotencyKey: args.idempotencyKey,
           targetId: resolved.targetId,
           goal: (args.goal as string) ?? "TEST_APP",
           mode: (args.mode as string) ?? "STANDARD",
@@ -419,6 +443,7 @@ export function createCreateReportTool(context: ToolHandlerContext): McpTool {
       try {
         const data = await apiCall(context, "POST", "/api/reports", {
           workspaceId: args.workspaceId,
+          idempotencyKey: args.idempotencyKey,
           ...(args.scanId ? { scanId: args.scanId } : {}),
           ...(args.targetId ? { targetId: args.targetId } : {}),
           title: args.title,
@@ -485,24 +510,30 @@ export function createGetScanStatusTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_get_scan_status",
     mutating: false,
     description:
-      "Get the current status, timing, and event trail of a scan by its scanId. Poll this after starting a scan.",
+      "Get the current status, timing, and event trail of a scan by its scanId. Poll this after starting a scan. Supply operationId instead of scanId to inspect durable retry status and recovery.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
+        operationId: {
+          type: "string",
+          description: "Durable operation ID; mutually exclusive with scanId",
+        },
         scanId: { type: "string", description: "Scan ID" },
       },
-      required: ["workspaceId", "scanId"],
+      required: ["workspaceId"],
     },
     handler: async (args) => {
       try {
+        if (Boolean(args.operationId) === Boolean(args.scanId))
+          return makeErrorResult("Supply exactly one of scanId or operationId.")
         const params = new URLSearchParams({ workspaceId: args.workspaceId as string })
         const data = await apiCall(
           context,
           "GET",
-          `/api/scans/${encodeURIComponent(args.scanId as string)}?${params.toString()}`
+          `/api/${args.operationId ? "agent-operations" : "scans"}/${encodeURIComponent((args.operationId ?? args.scanId) as string)}?${params.toString()}`
         )
-        return makeToolResult(data)
+        return makeToolResult(args.operationId ? OperationStatusSchema.parse(data) : data)
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
       }
@@ -633,6 +664,7 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
         const resolved = await resolveTargetId(context, args)
         const data = await apiCall(context, "POST", "/api/scans", {
           workspaceId: args.workspaceId,
+          idempotencyKey: args.idempotencyKey,
           targetId: resolved.targetId,
           goal: "CHECK_PR",
           mode: (args.mode as string) ?? "QUICK",
@@ -747,7 +779,12 @@ export function createRecordFixProposalTool(context: ToolHandlerContext): McpToo
           context,
           "POST",
           `/api/findings/${encodeURIComponent(args.findingId as string)}/fix-proposals`,
-          { workspaceId: args.workspaceId, summary, generatedByModel: "mcp-client" }
+          {
+            workspaceId: args.workspaceId,
+            idempotencyKey: args.idempotencyKey,
+            summary,
+            generatedByModel: "mcp-client",
+          }
         )
         return makeToolResult({ action: "fix_proposal_recorded", proposal })
       } catch (err) {
@@ -777,7 +814,7 @@ export function createVerifyFixTool(context: ToolHandlerContext): McpTool {
           context,
           "POST",
           `/api/findings/${encodeURIComponent(args.findingId as string)}/retests`,
-          { workspaceId: args.workspaceId }
+          { workspaceId: args.workspaceId, idempotencyKey: args.idempotencyKey }
         )
         return makeToolResult({ action: "retest_queued", retest: data })
       } catch (err) {

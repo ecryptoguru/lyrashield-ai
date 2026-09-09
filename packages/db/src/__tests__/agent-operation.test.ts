@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
-import { claimOrGetAgentOperation, hashOperationInput } from "../agent-operation-service"
+import {
+  claimOrGetAgentOperation,
+  getOperationStatus,
+  hashOperationInput,
+} from "../agent-operation-service"
 import { prisma } from "../client"
 
 vi.mock("../client", () => ({
@@ -174,4 +178,38 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
 
     expect(result.status).toBe("CONFLICT")
   })
+})
+
+it("restricts operation status to its principal and current authorization version", async () => {
+  vi.mocked(prisma.agentOperation.findFirst).mockResolvedValue({
+    id: "op",
+    principalType: "OAUTH_CONNECTION",
+    principalId: "conn-a",
+    authorizationVersion: 2,
+    status: "COMPLETED",
+    resultReference: "report",
+    error: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as never)
+  expect(
+    await getOperationStatus("op", "ws", {
+      principalType: "OAUTH_CONNECTION",
+      principalId: "conn-b",
+    })
+  ).toBeNull()
+  expect(
+    await getOperationStatus("op", "ws", {
+      principalType: "OAUTH_CONNECTION",
+      principalId: "conn-a",
+      authorizationVersion: 3,
+    })
+  ).toBeNull()
+  expect(
+    await getOperationStatus("op", "ws", {
+      principalType: "OAUTH_CONNECTION",
+      principalId: "conn-a",
+      authorizationVersion: 2,
+    })
+  ).toMatchObject({ operationId: "op", resultLocation: "report" })
 })

@@ -54,7 +54,7 @@ import {
   TARGET_PLURAL,
   TARGET_SINGULAR,
 } from "@/lib/terminology"
-import { getFindingNextStep } from "@/lib/finding-next-step"
+import { getFindingNextAction } from "@/lib/finding-next-step"
 import {
   Sheet,
   SheetContent,
@@ -343,20 +343,7 @@ export function FindingsClient({
     return () => window.removeEventListener("popstate", onPopState)
   }, [findings])
 
-  // Deep-link hygiene: once a ?finding= deep link has been consumed by the
-  // server render, replace the history entry WITHOUT the param. Without this,
-  // opening another finding (pushState) and closing it pops back to the
-  // original deep-link entry — whose popstate handler would re-open the
-  // deep-linked finding instead of returning to the clean list.
-  useEffect(() => {
-    if (!initialSelectedFindingId || typeof window === "undefined") return
-    const url = new URL(window.location.href)
-    if (!url.searchParams.has("finding")) return
-    url.searchParams.delete("finding")
-    window.history.replaceState(null, "", `${url.pathname}${url.search}`)
-    // Run once on mount: the deep link is consumed exactly once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Keep the drawer deep link on refresh. closeFinding removes it explicitly.
 
   // W2-12 context restoration: the URL carries filter/sort/target/query, but
   // pages loaded beyond the first server-rendered page and the scroll position
@@ -1179,6 +1166,7 @@ function FindingDetailDrawer({
 
   // Audience mode for "What to do" tab
   const [audienceMode, setAudienceMode] = useState<AudienceMode>("developer")
+  const [detailTab, setDetailTab] = useState("what-to-do")
 
   const knownExploited = detail?.technicalDetail?.includes("CISA KEV:") ?? false
   const epssSummary = extractEpssPercentage(detail?.technicalDetail)
@@ -1268,10 +1256,13 @@ function FindingDetailDrawer({
 
   const latestRetest = detail?.retests?.[0] ?? null
   const hasFixProposal = (detail?.fixProposals?.length ?? 0) > 0
-  const nextStep = getFindingNextStep({
+  const nextAction = getFindingNextAction({
+    status: finding.status,
     latestRetestStatus: latestRetest?.status,
+    hasEvidence: (detail?.evidence?.length ?? 0) > 0,
     hasFixProposal,
   })
+  const nextStep = nextAction.action
 
   async function queueRetest() {
     if (!detail?.scanId) return
@@ -1457,7 +1448,7 @@ function FindingDetailDrawer({
                 Tab 2: Technical   (technical details, CWE, CVSS, EPSS, evidence)
                 Tab 3: History     (retests, fix proposals, verification receipts)
             ----------------------------------------------------------------- */}
-            <Tabs defaultValue="what-to-do" className="w-full">
+            <Tabs value={detailTab} onValueChange={setDetailTab} className="w-full">
               <TabsList className="w-full">
                 <TabsTrigger value="what-to-do" className="flex-1">
                   What to do
@@ -1504,7 +1495,9 @@ function FindingDetailDrawer({
                   <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
                     Next step
                   </p>
-                  {nextStep === "REPORT" && latestRetest ? (
+                  {nextStep === "NONE" ? (
+                    <p className="text-muted-foreground mt-2 text-sm">{nextAction.reason}</p>
+                  ) : nextStep === "REPORT" && latestRetest ? (
                     <div className="mt-2">
                       <h3 className="font-semibold">
                         Turn the retest result into an assurance report
@@ -1602,6 +1595,24 @@ function FindingDetailDrawer({
                           }}
                         >
                           Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : nextStep === "INSPECT_EVIDENCE" ? (
+                    <div className="mt-2">
+                      <h3 className="font-semibold">Review the retained evidence</h3>
+                      <p className="text-muted-foreground mt-1 text-sm">{nextAction.reason}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button type="button" size="sm" onClick={() => setDetailTab("technical")}>
+                          View evidence
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setShowFixForm(true)}
+                        >
+                          Create fix proposal
                         </Button>
                       </div>
                     </div>
@@ -1736,8 +1747,10 @@ function FindingDetailDrawer({
 
                 {/* Status transition actions — Accept risk / Mark false positive */}
                 {!isResolved && (
-                  <div className="space-y-2 border-t pt-2">
-                    <p className="text-muted-foreground text-xs font-medium">Risk decisions</p>
+                  <details className="space-y-2 border-t pt-2">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      Other actions: risk decisions
+                    </summary>
                     <div className="flex flex-wrap gap-2">
                       {!showAcceptRisk && !showFalsePositive && (
                         <>
@@ -1794,7 +1807,7 @@ function FindingDetailDrawer({
                         error={patchError}
                       />
                     )}
-                  </div>
+                  </details>
                 )}
                 {isResolved && (
                   <div className="bg-muted/30 text-muted-foreground rounded-md border px-3 py-2 text-xs">

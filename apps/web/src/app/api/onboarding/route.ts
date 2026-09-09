@@ -22,6 +22,7 @@ export async function GET() {
       success: true,
       data: {
         id: state.id,
+        updatedAt: state.updatedAt?.toISOString(),
         currentStep: state.currentStep,
         completed: state.completed,
         skipped: state.skipped,
@@ -149,15 +150,32 @@ async function patch(request: Request) {
     if (parsed.data.selectedGoal !== undefined) updateData.selectedGoal = parsed.data.selectedGoal
 
     await getOrCreateOnboardingState(session.userId)
-    const state = await prisma.onboardingState.update({
-      where: { userId: session.userId },
-      data: updateData,
-    })
+    if (parsed.data.expectedUpdatedAt) {
+      const changed = await prisma.onboardingState.updateMany({
+        where: { userId: session.userId, updatedAt: new Date(parsed.data.expectedUpdatedAt) },
+        data: updateData,
+      })
+      if (changed.count !== 1)
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "ONBOARDING_CHANGED",
+              message: "Setup changed in another tab. Reload to continue from the latest step.",
+            },
+          },
+          { status: 409 }
+        )
+    }
+    const state = parsed.data.expectedUpdatedAt
+      ? await getOrCreateOnboardingState(session.userId)
+      : await prisma.onboardingState.update({ where: { userId: session.userId }, data: updateData })
 
     return NextResponse.json({
       success: true,
       data: {
         id: state.id,
+        updatedAt: state.updatedAt?.toISOString(),
         currentStep: state.currentStep,
         completed: state.completed,
         skipped: state.skipped,

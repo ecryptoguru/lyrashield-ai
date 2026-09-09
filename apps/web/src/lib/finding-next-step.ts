@@ -64,12 +64,21 @@ export function getFindingNextAction(input: {
     }
   }
   if (status === "FIXED") {
-    return { action: "NONE", reason: "A trusted retest receipt verified this fix." }
+    return {
+      action: "NONE",
+      reason: "This finding is marked fixed. Review its retest evidence in the history.",
+    }
+  }
+  if (input.latestRetestStatus === "pending" || input.latestRetestStatus === "running") {
+    return {
+      action: "RETEST_IN_PROGRESS",
+      reason: "A retest is running; its receipt will update this finding.",
+    }
   }
   if (status === "FIXED_PENDING_RETEST") {
     return {
       action: "RETEST",
-      reason: "The fix is applied; a deterministic retest must confirm it before FIXED.",
+      reason: "A deterministic retest must confirm this finding before it can be marked fixed.",
     }
   }
   if (
@@ -82,7 +91,12 @@ export function getFindingNextAction(input: {
       reason: "Review the retained evidence before choosing remediation.",
     }
   }
-  const step = getFindingNextStep(input)
+  const step = getFindingNextStep({
+    ...input,
+    // An unresolved current finding cannot inherit a historical passing retest.
+    latestRetestStatus:
+      status && input.latestRetestStatus === "passed" ? undefined : input.latestRetestStatus,
+  })
   switch (step) {
     case "REPORT":
       return {

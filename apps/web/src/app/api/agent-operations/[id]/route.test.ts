@@ -1,3 +1,4 @@
+import { OperationStatusSchema } from "../../../../../../../packages/sdk/src/resources/operations"
 import { describe, expect, it } from "vitest"
 import { toOperationStatusView, type AgentOperation } from "@lyrashield/db"
 
@@ -36,7 +37,11 @@ describe("operation status contract (W3-08)", () => {
     const failed = toOperationStatusView(
       operation({ status: "FAILED", error: "raw provider body" })
     )
-    expect(failed.recovery).toBe("retry_new_key")
+    expect(failed.recovery).toBe("wait")
+    expect(
+      toOperationStatusView(operation({ status: "FAILED", error: "OPERATION_NOT_SUBMITTED" }))
+        .recovery
+    ).toBe("retry_new_key")
     // The raw error text never leaves the service; only the safe reason code.
     expect(failed.reasonCode).toBe("OPERATION_FAILED")
     expect(JSON.stringify(failed)).not.toContain("raw provider")
@@ -45,5 +50,6 @@ describe("operation status contract (W3-08)", () => {
   it("keeps the stable operation identity across reconnect retries", () => {
     const view = toOperationStatusView(operation({ id: "op-stable" }))
     expect(view.operationId).toBe("op-stable")
+    expect(OperationStatusSchema.parse(view)).toEqual(view)
   })
 })

@@ -357,17 +357,19 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   expect(dashboardPageErrors).toEqual([])
   expect(dashboardConsoleErrors).toEqual([])
 
+  // Keep authorization proof independent of the owner's API rate-limit bucket.
+  const otherForwardedFor = `192.0.2.${((simulatedClientOctet + testInfo.workerIndex) % 250) + 1}`
   const other = await browser.newContext({
-    extraHTTPHeaders: { "x-forwarded-for": forwardedFor },
+    extraHTTPHeaders: { "x-forwarded-for": otherForwardedFor },
   })
   try {
     const otherPage = await other.newPage()
-    await signUp(otherPage, forwardedFor, otherEmail, "E2E Other")
+    await signUp(otherPage, otherForwardedFor, otherEmail, "E2E Other")
     for (const path of ["/api/scans", "/api/findings", "/api/reports"]) {
       expect(
         (
           await otherPage.request.get(`${path}?workspaceId=${workspaceId}`, {
-            headers: { "x-forwarded-for": forwardedFor },
+            headers: { "x-forwarded-for": otherForwardedFor },
           })
         ).status()
       ).toBe(403)

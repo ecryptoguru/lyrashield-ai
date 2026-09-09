@@ -221,6 +221,7 @@ export function ScansClient({
   const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(initialShowCreate)
+  const reviewChoiceVersion = useRef(0)
   const [selectedTarget, setSelectedTarget] = useState(initialTargetId)
   const [selectedPreset, setSelectedPreset] = useState(() => {
     const target = targets.find((item) => item.id === initialTargetId)
@@ -233,6 +234,10 @@ export function ScansClient({
       initialMode
     )
   })
+  const choosePreset = useCallback((id: string) => {
+    reviewChoiceVersion.current++
+    setSelectedPreset(id)
+  }, [])
   const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -255,7 +260,7 @@ export function ScansClient({
     targets,
     selectedPreset,
     setSelectedTarget,
-    setSelectedPreset,
+    setSelectedPreset: choosePreset,
     setShowCreate,
     setModeResetNotice,
   })
@@ -560,6 +565,31 @@ export function ScansClient({
     eligibilityBlocked
 
   function handleSelectTarget(targetId: string) {
+    const choiceVersion = ++reviewChoiceVersion.current
+    if (targetId) {
+      void apiGet(
+        "/api/scans?" +
+          new URLSearchParams({ workspaceId, targetId, status: "COMPLETED", limit: "1" }),
+        {
+          schema: paginatedResponseSchema(scanItemSchema),
+        }
+      )
+        .then((history) => {
+          if (choiceVersion !== reviewChoiceVersion.current) return
+          const latest = history.items[0]
+          const target = targets.find((item) => item.id === targetId)
+          const options = getManualScanOptions({
+            type: target?.type ?? "",
+            hasApiSpec: Boolean(target?.apiSpecUrl),
+          })
+          const remembered = latest ? findRecoveryPreset(options, latest.goal, latest.mode) : ""
+          if (remembered && options.some((option) => option.id === remembered && option.available))
+            setSelectedPreset(remembered)
+        })
+        .catch(() => {
+          /* Advisory preference lookup; eligibility remains authoritative. */
+        })
+    }
     setSelectedTarget(targetId)
     if (!targetId) {
       setSelectedPreset("")
@@ -841,7 +871,7 @@ export function ScansClient({
                         aria-label={`${option.label}: ${option.description}${isDisabled ? ` (${option.disabledReason})` : ""}`}
                         tabIndex={isSelected ? 0 : -1}
                         disabled={isDisabled}
-                        onClick={() => !isDisabled && setSelectedPreset(option.id)}
+                        onClick={() => !isDisabled && choosePreset(option.id)}
                         onKeyDown={(e) => {
                           if (isDisabled) return
                           if (e.key === "ArrowRight" || e.key === "ArrowDown") {
@@ -849,7 +879,7 @@ export function ScansClient({
                             const idx = enabledOptions.findIndex((o) => o.id === option.id)
                             const next = enabledOptions[(idx + 1) % enabledOptions.length]
                             if (next) {
-                              setSelectedPreset(next.id)
+                              choosePreset(next.id)
                               document.getElementById(`preset-${next.id}`)?.focus()
                             }
                           }
@@ -861,7 +891,7 @@ export function ScansClient({
                                 (idx - 1 + enabledOptions.length) % enabledOptions.length
                               ]
                             if (prev) {
-                              setSelectedPreset(prev.id)
+                              choosePreset(prev.id)
                               document.getElementById(`preset-${prev.id}`)?.focus()
                             }
                           }

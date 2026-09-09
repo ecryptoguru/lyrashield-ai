@@ -30,15 +30,23 @@ function sign(payload: string): string {
 export function createInstallState(
   workspaceId: string,
   returnTo: InstallReturnDestination = "integrations",
-  now: number = Date.now()
+  now: number = Date.now(),
+  oauthReturnState?: string
 ): string {
-  const nonce = b64url(randomBytes(12))
+  const nonce = oauthReturnState
+    ? b64url(JSON.stringify({ nonce: b64url(randomBytes(12)), oauthReturnState }))
+    : b64url(randomBytes(12))
   const payload = `${b64url(workspaceId)}.${returnTo}.${nonce}.${now + TTL_MS}`
   return `${payload}.${sign(payload)}`
 }
 
 export type InstallStateResult =
-  | { valid: true; workspaceId: string; returnTo: InstallReturnDestination }
+  | {
+      valid: true
+      workspaceId: string
+      returnTo: InstallReturnDestination
+      oauthReturnState?: string
+    }
   | { valid: false; reason: "malformed" | "bad_signature" | "expired" }
 
 export function verifyInstallState(state: string, now: number = Date.now()): InstallStateResult {
@@ -79,5 +87,18 @@ export function verifyInstallState(state: string, now: number = Date.now()): Ins
   }
   if (!workspaceId) return { valid: false, reason: "malformed" }
 
-  return { valid: true, workspaceId, returnTo: returnTo as InstallReturnDestination }
+  let oauthReturnState: string | undefined
+  try {
+    const context = JSON.parse(Buffer.from(nonce, "base64url").toString("utf8"))
+    if (typeof context.oauthReturnState === "string" && context.oauthReturnState.length <= 8192)
+      oauthReturnState = context.oauthReturnState
+  } catch {
+    /* Older states contain only a random nonce. */
+  }
+  return {
+    valid: true,
+    workspaceId,
+    returnTo: returnTo as InstallReturnDestination,
+    ...(oauthReturnState ? { oauthReturnState } : {}),
+  }
 }

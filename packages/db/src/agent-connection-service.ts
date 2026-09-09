@@ -36,6 +36,7 @@ export interface AgentConnectionDTO {
   pausedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  lastSuccessfulOperationAt?: Date | null
 }
 
 export function toAgentConnectionDTO(connection: AgentConnection): AgentConnectionDTO {
@@ -114,9 +115,20 @@ export async function listAgentConnections(
         ...(options.status ? { status: options.status } : {}),
       },
       orderBy: { createdAt: "desc" },
+      include: {
+        operations: {
+          where: { status: "COMPLETED" },
+          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { updatedAt: true },
+        },
+      },
     })
   )
-  return connections.map(toAgentConnectionDTO)
+  return connections.map((connection) => ({
+    ...toAgentConnectionDTO(connection),
+    lastSuccessfulOperationAt: connection.operations?.[0]?.updatedAt ?? null,
+  }))
 }
 
 export async function pauseAgentConnection(

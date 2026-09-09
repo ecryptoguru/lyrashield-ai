@@ -301,6 +301,7 @@ export const OnboardingStepSchema = z.enum([
 ])
 
 export const UpdateOnboardingSchema = z.object({
+  expectedUpdatedAt: z.string().datetime().optional(),
   currentStep: z.number().int().min(0).max(6).optional(),
   completed: z.boolean().optional(),
   skipped: z.boolean().optional(),

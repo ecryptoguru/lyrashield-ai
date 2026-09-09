@@ -1,4 +1,4 @@
-import { getOperationStatus } from "@lyrashield/db"
+import { getOperationStatus, resolveOperationPrincipal } from "@lyrashield/db"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { requirePermission } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
@@ -21,8 +21,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.agent.view)
-    const status = await getOperationStatus(id, workspaceId)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.agent.view)
+    const status = await getOperationStatus(id, workspaceId, {
+      ...resolveOperationPrincipal({
+        connectionId: session.oauth?.connectionId,
+        apiKeyId: session.apiKey?.keyId,
+        userId: session.apiKey || session.oauth ? undefined : session.userId,
+      }),
+      authorizationVersion: session.oauth?.authorizationVersion,
+    })
     if (!status) {
       return apiError("NOT_FOUND", "Operation not found in this workspace", 404)
     }

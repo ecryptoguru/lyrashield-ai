@@ -43,11 +43,33 @@ describe("getFindingNextAction (W3-02)", () => {
     }
   })
 
+  it.each(["pending", "running"])(
+    "shows an existing %s retest before proposing another",
+    (latestRetestStatus) => {
+      expect(
+        getFindingNextAction({
+          status: "FIXED_PENDING_RETEST",
+          hasFixProposal: true,
+          latestRetestStatus,
+        }).action
+      ).toBe("RETEST_IN_PROGRESS")
+    }
+  )
+
   it("routes an applied-but-unverified fix to retest, never to FIXED", () => {
     const next = getFindingNextAction({ hasFixProposal: true, status: "FIXED_PENDING_RETEST" })
     expect(next.action).toBe("RETEST")
     expect(next.reason).toMatch(/deterministic retest/)
   })
+
+  it.each(["OPEN", "FIX_READY"])(
+    "does not reuse an old passing retest for a %s finding",
+    (status) => {
+      expect(
+        getFindingNextAction({ status, hasFixProposal: true, latestRetestStatus: "passed" }).action
+      ).not.toBe("REPORT")
+    }
+  )
 
   it("returns status instead of starting another operation", () => {
     const next = getFindingNextAction({ hasFixProposal: true, operationInFlight: true })

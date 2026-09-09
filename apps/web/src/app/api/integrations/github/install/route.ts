@@ -1,3 +1,4 @@
+import { verifyOAuthOnboardingReturn } from "@/lib/oauth-onboarding-return"
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import { NextResponse, type NextRequest } from "next/server"
 import { env } from "@lyrashield/config"
@@ -17,6 +18,7 @@ import { z } from "zod"
 
 const InstallRequestSchema = z.object({
   workspaceId: z.string().min(1),
+  oauthReturnState: z.string().max(8192).optional(),
   returnTo: z.enum(["onboarding", "integrations"]).default("integrations"),
 })
 
@@ -104,7 +106,17 @@ export async function GET(request: NextRequest) {
     )
   }
   const workspaceId = stateResult.workspaceId
-  const returnPath = installReturnPath(stateResult.returnTo)
+  let returnPath = installReturnPath(stateResult.returnTo)
+  const oauthReturn = stateResult.oauthReturnState
+    ? verifyOAuthOnboardingReturn(stateResult.oauthReturnState)
+    : null
+  if (
+    stateResult.returnTo === "onboarding" &&
+    oauthReturn?.valid &&
+    oauthReturn.userId === session.userId
+  ) {
+    returnPath += `?oauth_return=${encodeURIComponent(stateResult.oauthReturnState!)}`
+  }
 
   try {
     const { session: authSession } = await requirePermission(
@@ -291,15 +303,33 @@ async function post(request: NextRequest) {
       { status: 400 }
     )
   }
-  const { workspaceId, returnTo } = parsed.data
+  const { workspaceId, returnTo, oauthReturnState } = parsed.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.integration.manage)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.integration.manage)
+    if (oauthReturnState) {
+      const verified = verifyOAuthOnboardingReturn(oauthReturnState)
+      if (!verified.valid || verified.userId !== session.userId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "INVALID_STATE",
+              message: "Authorization expired. Reconnect from your coding agent.",
+            },
+          },
+          { status: 400 }
+        )
+      }
+    }
 
     const installUrl = getInstallAppUrl()
     const url = new URL(installUrl)
     // Signed, expiring, workspace-bound state (verified in the GET callback). (S2)
-    url.searchParams.set("state", createInstallState(workspaceId, returnTo))
+    url.searchParams.set(
+      "state",
+      createInstallState(workspaceId, returnTo, Date.now(), oauthReturnState)
+    )
 
     return NextResponse.json({ success: true, data: { installUrl: url.toString() } })
   } catch (error) {

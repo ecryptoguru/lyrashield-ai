@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { getSession } from "@lyrashield/auth/server"
+import { getWorkspaceMembership, getSession } from "@lyrashield/auth/server"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { ShieldCheck } from "lucide-react"
 import { OnboardingWizard } from "./onboarding-wizard"
@@ -38,9 +38,10 @@ export default async function OnboardingPage({
       ? oauthReturn.oauthQuery
       : null
 
-  const state = await getOrCreateOnboardingState(session.userId)
+  let state = await getOrCreateOnboardingState(session.userId)
 
   if (state?.completed) {
+    if (oauthReturnQuery) redirect(`/oauth/consent?${oauthReturnQuery}`)
     redirect(selectedPlan ? planIntentPath("/dashboard/billing", selectedPlan) : "/dashboard")
   }
 
@@ -50,6 +51,13 @@ export default async function OnboardingPage({
   // so merely visiting onboarding (or skipping it) never creates a workspace
   // or trial the user did not ask for.
   let workspaceId = state.workspaceId
+  if (workspaceId && !(await getWorkspaceMembership(workspaceId, session.userId))) {
+    workspaceId = null
+    state = await prisma.onboardingState.update({
+      where: { userId: session.userId },
+      data: { workspaceId: null, targetId: null, currentStep: 0 },
+    })
+  }
   if (!workspaceId) {
     const memberships = await prisma.workspaceMember.findMany({
       where: { userId: session.userId, status: "active", workspace: { deletedAt: null } },
@@ -58,7 +66,7 @@ export default async function OnboardingPage({
     })
     if (memberships.length > 0) {
       workspaceId = memberships[0]!.workspaceId
-      await prisma.onboardingState.update({
+      state = await prisma.onboardingState.update({
         where: { userId: session.userId },
         data: { workspaceId, currentStep: Math.max(state.currentStep, 1) },
       })
@@ -69,11 +77,18 @@ export default async function OnboardingPage({
     state.targetId && workspaceId
       ? await withWorkspaceRLS(workspaceId, (tx) =>
           tx.target.findFirst({
-            where: { id: state.targetId!, workspaceId },
+            where: { id: state.targetId!, workspaceId, deletedAt: null },
             select: { type: true, name: true },
           })
         )
       : null
+
+  if (state.targetId && !target) {
+    state = await prisma.onboardingState.update({
+      where: { userId: session.userId },
+      data: { targetId: null, currentStep: workspaceId ? 1 : 0 },
+    })
+  }
 
   const initialState = {
     currentStep: state.workspaceId ? state.currentStep : Math.max(state.currentStep, 1),
@@ -103,12 +118,14 @@ export default async function OnboardingPage({
       </div>
 
       <OnboardingWizard
-        initialState={initialState}
+        key={state.updatedAt.toISOString()}
+        initialState={{ ...initialState, updatedAt: state.updatedAt.toISOString() }}
         selectedPlan={selectedPlan}
         suggestedWorkspaceName={
           session.userName?.trim() ? `${session.userName.trim()}'s workspace` : "My workspace"
         }
         oauthReturnQuery={oauthReturnQuery}
+        oauthReturnState={oauthReturnQuery ? params.oauth_return : undefined}
       />
       <InvitationAcceptBridge />
     </div>

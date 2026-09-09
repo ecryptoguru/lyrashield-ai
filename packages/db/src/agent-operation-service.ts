@@ -21,6 +21,7 @@ export type PrincipalIdentity = {
   principalType: "OAUTH_CONNECTION" | "API_KEY" | "BROWSER_SESSION"
   principalId: string
   connectionId?: string
+  authorizationVersion?: number
 }
 
 /**
@@ -204,7 +205,7 @@ export async function completeAgentOperation(
 export async function failAgentOperation(
   operationId: string,
   workspaceId: string,
-  params: { error: string }
+  params: { error: string; resultReference?: string }
 ): Promise<AgentOperation> {
   return withWorkspaceRLS(workspaceId, (tx) =>
     tx.agentOperation.update({
@@ -212,6 +213,7 @@ export async function failAgentOperation(
       data: {
         status: "FAILED",
         error: params.error,
+        resultReference: params.resultReference,
       },
     })
   )
@@ -304,10 +306,18 @@ export interface OperationStatusView {
  */
 export async function getOperationStatus(
   operationId: string,
-  workspaceId: string
+  workspaceId: string,
+  principal: PrincipalIdentity
 ): Promise<OperationStatusView | null> {
   const operation = await getAgentOperation(operationId, workspaceId)
-  if (!operation) return null
+  if (
+    !operation ||
+    operation.principalType !== principal.principalType ||
+    operation.principalId !== principal.principalId ||
+    (principal.authorizationVersion !== undefined &&
+      operation.authorizationVersion !== principal.authorizationVersion)
+  )
+    return null
   return toOperationStatusView(operation)
 }
 
@@ -318,7 +328,7 @@ export function toOperationStatusView(operation: AgentOperation): OperationStatu
       ? "none"
       : operation.status === "EXECUTING" || operation.status === "PENDING"
         ? "poll"
-        : operation.status === "FAILED"
+        : operation.status === "FAILED" && operation.error === "OPERATION_NOT_SUBMITTED"
           ? "retry_new_key"
           : "wait"
   return {

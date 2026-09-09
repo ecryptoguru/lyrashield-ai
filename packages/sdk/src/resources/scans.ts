@@ -13,6 +13,7 @@ export interface ScanQuery {
 }
 
 export interface ScanInput {
+  idempotencyKey?: string
   workspaceId?: string
   targetId: string
   goal?: string
@@ -52,11 +53,12 @@ export function createScan(
   input: ScanInput
 ): Promise<z.infer<typeof ScanSchema>> {
   const body = {
-    ...input,
+    ...Object.fromEntries(Object.entries(input).filter(([key]) => key !== "idempotencyKey")),
     workspaceId: input.workspaceId ?? client.workspaceId,
   }
   return client.request("POST", "/scans", {
     body,
+    headers: { "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID() },
     parse: (data) => ScanSchema.parse(data),
   })
 }

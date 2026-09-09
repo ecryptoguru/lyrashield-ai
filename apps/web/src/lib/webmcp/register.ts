@@ -165,11 +165,11 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
       const executionController = new AbortController()
 
       const onExternalAbort = () => executionController.abort()
-      if (executeOptions.signal) {
-        if (executeOptions.signal.aborted) {
+      if (executeOptions?.signal) {
+        if (executeOptions?.signal.aborted) {
           executionController.abort()
         } else {
-          executeOptions.signal.addEventListener("abort", onExternalAbort, { once: true })
+          executeOptions?.signal.addEventListener("abort", onExternalAbort, { once: true })
         }
       }
       if (registrationController.signal.aborted) {
@@ -192,7 +192,7 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
       receiptStore.update(receipt.id, { summary: `${boundedName} started` })
 
       const cleanupAbortListeners = () => {
-        executeOptions.signal?.removeEventListener("abort", onExternalAbort)
+        executeOptions?.signal?.removeEventListener("abort", onExternalAbort)
         registrationController.signal.removeEventListener("abort", onExternalAbort)
       }
 
@@ -225,7 +225,18 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
             endedAt: new Date().toISOString(),
             summary: `${boundedName} cancelled`,
           })
-          return boundOutputValue(wrapToolCancellation(), WEBMCP_BUDGETS.output)
+          return boundOutputValue(
+            {
+              ...wrapToolCancellation(),
+              ...(durableMutation
+                ? {
+                    error:
+                      "Stopped waiting. The server may already have accepted this action. Reuse the same request ID to inspect its outcome; do not start another action.",
+                  }
+                : {}),
+            },
+            WEBMCP_BUDGETS.output
+          )
         }
 
         const wrapped = wrapToolError(err instanceof Error ? err : "Tool execution failed")

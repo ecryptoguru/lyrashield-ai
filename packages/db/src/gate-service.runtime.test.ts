@@ -13,6 +13,8 @@ vi.mock("@lyrashield/config", async (original) => {
     },
   }
 })
+import { createReport } from "./report-service"
+import * as reportGenerator from "./report-generator"
 import { createApproval, claimApprovalExecution } from "./agent-approval-service"
 import { handleFixPrMergedAndReevaluate } from "./gate-service"
 import { prisma as runtime } from "./client"
@@ -95,6 +97,63 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     await owner.$disconnect()
     await runtime.$disconnect()
   })
+
+  it("accepts old connection-only operation writes and rejects mismatched principals", async () => {
+    const connection = await owner.agentConnection.create({
+      data: { workspaceId: id, userId: id, clientType: "test" },
+    })
+    const operationId = `legacy-${randomUUID()}`
+    await rls.withWorkspaceRLS(
+      id,
+      (tx) => tx.$executeRaw`
+      INSERT INTO agent_operations ("id", "workspaceId", "connectionId", "operationName", "idempotencyKey", "inputHash", "updatedAt")
+      VALUES (${operationId}, ${id}, ${connection.id}, 'report.create', ${operationId}, 'fixture', NOW())
+    `
+    )
+    const operation = await owner.agentOperation.findUniqueOrThrow({ where: { id: operationId } })
+    expect(operation.principalType).toBe("OAUTH_CONNECTION")
+    expect(operation.principalId).toBe(connection.id)
+    await expect(
+      rls.withWorkspaceRLS(id, (tx) =>
+        tx.agentOperation.create({
+          data: {
+            workspaceId: id,
+            connectionId: connection.id,
+            principalId: "other",
+            principalType: "OAUTH_CONNECTION",
+            operationName: "report.create",
+            idempotencyKey: randomUUID(),
+            inputHash: "fixture",
+          },
+        })
+      )
+    ).rejects.toThrow()
+  })
+
+  it("serializes concurrent report snapshots under the restricted runtime role", async () => {
+    const scan = await owner.scan.findFirstOrThrow({ where: { workspaceId: id, targetId } })
+    const gather = vi.spyOn(reportGenerator, "gatherReportData").mockResolvedValue({} as never)
+    try {
+      const reports = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          createReport({
+            workspaceId: id,
+            scanId: scan.id,
+            type: "developer",
+            title: "Concurrent snapshot",
+            createdById: id,
+          })
+        )
+      )
+      expect(new Set(reports.map((report) => report.id)).size).toBe(1)
+      expect(
+        await owner.report.count({ where: { workspaceId: id, scanId: scan.id, type: "developer" } })
+      ).toBe(1)
+    } finally {
+      gather.mockRestore()
+    }
+  })
+
   it("audits automatic authorization under the restricted runtime role before a single execution claim", async () => {
     const receipt = await createApproval({
       workspaceId: id,

@@ -54,6 +54,19 @@ describe("MCP safety metadata", () => {
 })
 
 describe("createScanTargetTool", () => {
+  it("preserves retry identity without colliding with the hosted outer operation", async () => {
+    mockFetch.mockResolvedValue(makeApiResponse({ id: "scan-1", status: "QUEUED" }))
+    const tool = createScanTargetTool(context)
+    const input = { workspaceId: "ws-1", targetId: "t-1", idempotencyKey: "same-request" }
+    await tool.handler(input)
+    await tool.handler(input)
+    const requests = mockFetch.mock.calls.map((call) => call[1] as RequestInit)
+    const first = new Headers(requests[0]!.headers).get("Idempotency-Key")
+    expect(first).toMatch(/^mcp:[a-f0-9]{64}$/)
+    expect(new Headers(requests[1]!.headers).get("Idempotency-Key")).toBe(first)
+    expect(JSON.parse(String(requests[0]!.body))).not.toHaveProperty("idempotencyKey")
+  })
+
   it("triggers a scan via POST /api/scans", async () => {
     mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "scan-1", status: "QUEUED" }))
     const tool = createScanTargetTool(context)
