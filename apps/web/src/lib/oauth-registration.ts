@@ -11,12 +11,7 @@ export function normalizeLoopbackOAuthClient(body: unknown): unknown {
   const client = body as Record<string, unknown>
   if (client.application_type !== "web" || !Array.isArray(client.redirect_uris)) return body
   if (client.redirect_uris.length === 0) return body
-  if (
-    client.token_endpoint_auth_method !== undefined &&
-    client.token_endpoint_auth_method !== "none"
-  ) {
-    return body
-  }
+  if (client.token_endpoint_auth_method !== "none") return body
 
   const onlyNativeLoopbacks = client.redirect_uris.every((value) => {
     if (typeof value !== "string") return false

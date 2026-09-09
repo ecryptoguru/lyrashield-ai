@@ -8,11 +8,13 @@ describe("normalizeLoopbackOAuthClient", () => {
         application_type: "web",
         redirect_uris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
         client_name: "OpenCode",
+        token_endpoint_auth_method: "none",
       })
     ).toEqual({
       application_type: "native",
       redirect_uris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
       client_name: "OpenCode",
+      token_endpoint_auth_method: "none",
     })
   })
 
@@ -30,6 +32,14 @@ describe("normalizeLoopbackOAuthClient", () => {
       application_type: "web",
       redirect_uris: ["http://127.0.0.1:19876/callback"],
       token_endpoint_auth_method: "client_secret_basic",
+    }
+    expect(normalizeLoopbackOAuthClient(input)).toBe(input)
+  })
+
+  it("does not reclassify a client that omits its token authentication method", () => {
+    const input = {
+      application_type: "web",
+      redirect_uris: ["http://127.0.0.1:19876/callback"],
     }
     expect(normalizeLoopbackOAuthClient(input)).toBe(input)
   })

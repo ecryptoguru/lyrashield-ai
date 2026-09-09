@@ -34,9 +34,12 @@ export async function resolveSecretMode(opts: SecretModeOptions): Promise<Resolv
 
   const envVar = "LYRASHIELD_API_KEY"
 
+  if (opts.transport === "remote-http" && agent.remoteAuth === "oauth") {
+    return { mode: "shell", envVar }
+  }
+
   if (opts.useCredentialStore) {
     if (opts.transport !== "stdio") {
-      if (agent.remoteAuth === "oauth") return { mode: "shell", envVar }
       return {
         mode: "manual",
         reason:
