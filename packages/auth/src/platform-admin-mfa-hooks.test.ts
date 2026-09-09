@@ -91,6 +91,7 @@ it("keeps the lifetime trial claim private and rejects auth input writes", () =>
 
 type HookContext = {
   path: string
+  body?: unknown
   headers: Headers
   getSignedCookie: ReturnType<typeof vi.fn>
   context: {
@@ -105,7 +106,7 @@ type HookContext = {
 
 function hooks() {
   return (captured.options?.hooks ?? {}) as {
-    before: (context: HookContext) => Promise<void>
+    before: (context: HookContext) => Promise<unknown>
     after: (context: HookContext) => Promise<void>
   }
 }
@@ -127,6 +128,38 @@ function context(headers = new Headers({ "x-forwarded-for": "198.51.100.1, 203.0
   }
   return hookContext
 }
+
+describe("OAuth client registration hook", () => {
+  it("classifies OpenCode's public loopback registration as native", async () => {
+    const hookContext = context()
+    hookContext.path = "/oauth2/register"
+    hookContext.body = {
+      redirect_uris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
+      client_name: "OpenCode",
+      token_endpoint_auth_method: "none",
+    }
+
+    await expect(hooks().before(hookContext)).resolves.toEqual({
+      context: { body: { ...hookContext.body, application_type: "native" } },
+    })
+  })
+
+  it.each([
+    ["https web client", "none", ["https://client.example/callback"]],
+    ["confidential client", "client_secret_basic", ["http://127.0.0.1/callback"]],
+    ["mixed callbacks", "none", ["http://127.0.0.1/callback", "https://example.com/callback"]],
+  ])("does not reclassify a %s", async (_case, method, redirect_uris) => {
+    const hookContext = context()
+    hookContext.path = "/oauth2/register"
+    hookContext.body = {
+      application_type: "web",
+      redirect_uris,
+      token_endpoint_auth_method: method,
+    }
+
+    await expect(hooks().before(hookContext)).resolves.toBeUndefined()
+  })
+})
 
 describe("platform admin Better Auth TOTP hooks", () => {
   beforeEach(() => {

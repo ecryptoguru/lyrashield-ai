@@ -43,6 +43,7 @@ export default defineConfig({
       "BETTER_AUTH_URL=http://127.0.0.1:3100 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 " +
       "NEXT_PUBLIC_MARKETING_URL=https://lyrashieldai.com " +
       "ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3100 TRUSTED_PROXY_IP_HEADER=x-forwarded-for " +
+      "PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com " +
       "HOSTNAME=127.0.0.1 PORT=3100 NODE_ENV=production LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 " +
       // The e2e suite fires many auth calls (sign-up/sign-in/sign-out) from a
       // small set of simulated client IPs in rapid succession. Raise the

@@ -431,7 +431,16 @@ jobs:
       - name: Install Playwright browser
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
         timeout-minutes: 15
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          # Playwright needs Ubuntu packages, not GitHub's preconfigured Google
+          # Chrome repository. Disable that unrelated repository so an upstream
+          # metadata publication race cannot break apt update.
+          for source in /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources; do
+            if [ -f "$source" ]; then
+              sudo mv "$source" "$source.disabled"
+            fi
+          done
+          pnpm exec playwright install --with-deps chromium
 
       - name: Marketing browser E2E
         if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'

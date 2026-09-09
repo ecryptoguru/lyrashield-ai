@@ -44,6 +44,31 @@ const oauthScopes = [
   OAUTH_SCOPE_READ,
   OAUTH_SCOPE_WRITE,
 ]
+const oauthLoopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"])
+
+function normalizeNativeLoopbackClient(body: unknown): unknown {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body
+  const client = body as Record<string, unknown>
+  if (
+    (client.application_type !== undefined && client.application_type !== "web") ||
+    !Array.isArray(client.redirect_uris) ||
+    client.redirect_uris.length === 0 ||
+    client.token_endpoint_auth_method !== "none"
+  )
+    return body
+
+  const onlyNativeLoopbacks = client.redirect_uris.every((value) => {
+    if (typeof value !== "string") return false
+    try {
+      const url = new URL(value)
+      return url.protocol === "http:" && oauthLoopbackHosts.has(url.hostname)
+    } catch {
+      return false
+    }
+  })
+
+  return onlyNativeLoopbacks ? { ...client, application_type: "native" } : body
+}
 
 async function selectedOAuthWorkspaceId({
   userId,
@@ -386,6 +411,11 @@ export const auth = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (context) => {
+      if (context.path === "/oauth2/register") {
+        const body = normalizeNativeLoopbackClient(context.body)
+        if (body !== context.body) return { context: { body } }
+      }
+
       if (
         context.path !== "/two-factor/verify-totp" &&
         context.path !== "/two-factor/verify-backup-code"
