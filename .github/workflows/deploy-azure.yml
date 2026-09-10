@@ -320,6 +320,13 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      # v16 4.3: production Azure login moved from the long-lived
+      # AZURE_CREDENTIALS service-principal secret to federated OIDC, the
+      # same model the desktop release already uses. Requires the
+      # AZURE_DEPLOY_CLIENT_ID / AZURE_DEPLOY_TENANT_ID /
+      # AZURE_DEPLOY_SUBSCRIPTION_ID secrets (federated-credential setup is a
+      # one-time founder action; no client secret is stored).
+      id-token: write
     environment:
       name: azure-production
       url: ${{ env.APP_URL }}
@@ -410,9 +417,14 @@ jobs:
           echo "Billing provider and protected admission configuration is valid."
 
       - name: Log in to Azure
+        # v16 4.3: OIDC federated login — no stored client secret. The
+        # workload identity (client id) must carry the same role assignments
+        # the old service principal had.
         uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
 
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
@@ -1453,6 +1465,25 @@ jobs:
           deactivate_superseded egress-proxy "$EGRESS_NAME" "$EGRESS_CURRENT" "$EGRESS_ROLLBACK" || CLEANUP_FAILED=1
           exit "$CLEANUP_FAILED"
 
+      # v16 4.3 — why worker-VM promotion may run AFTER the app traffic
+      # cutover (deliberate ordering, not an oversight):
+      #
+      # 1. The empty-queue preflight above already verified the worker queues
+      #    are drained BEFORE traffic was promoted, so the gap window carries
+      #    only jobs created by the NEW app after cutover.
+      # 2. Those jobs are consumed by the OLD worker, which is safe because
+      #    the app↔worker contract is pinned and CI-enforced in both
+      #    directions: the app's ENGINE_REVISION pin (verified by
+      #    verify-engine-revision.sh with green engine checks at that exact
+      #    SHA) and the engine's .lyrashield-worker-pin contract tests. A
+      #    merge that changed the job/result contract incompatible with the
+      #    deployed worker cannot reach this step — the pinned-contract CI
+      #    jobs fail first.
+      # 3. The promotion is digest-exact and idempotent: promote-worker-vm.sh
+      #    verifies the digest, swaps the systemd unit and restarts. A
+      #    failure here rolls traffic back (the rollback step below keys on
+      #    this step's outcome) while the old worker keeps serving until a
+      #    retry succeeds.
       - name: Promote verified worker digest on VM
         id: worker-vm
         env:
