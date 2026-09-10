@@ -1,6 +1,6 @@
 {
   "name": "lyrashield",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "LyraShield AI CLI — install, scan, and gate your AI coding agents.",
   "license": "Apache-2.0",
   "type": "module",
@@ -56,5 +56,6 @@
     "tsup": "^8.5.1",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
-  }
+  },
+  "author": ""
 }
