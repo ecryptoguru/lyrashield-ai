@@ -9,6 +9,7 @@ import {
   AccountDeletionConfirmationRequiredError,
   AccountDeletionActiveScanError,
   AccountDeletionUnsupportedArtifactError,
+  AccountDeletionAffiliateError,
 } from "./account-deletion"
 
 const suffix = randomUUID().replace(/-/g, "")
@@ -22,6 +23,8 @@ const activeUserId = `active-user-${suffix}`
 const legacyUserId = `legacy-user-${suffix}`
 const auditFailureUserId = `audit-failure-user-${suffix}`
 const auditFailureOwnerId = `audit-failure-owner-${suffix}`
+const affiliateUserId = `affiliate-user-${suffix}`
+const licenseUserId = `license-user-${suffix}`
 
 const deletableWorkspaceId = `deletable-ws-${suffix}`
 const retainWorkspaceId = `retain-ws-${suffix}`
@@ -88,6 +91,32 @@ async function cleanup() {
   await prisma.artifactDeletionTask.deleteMany({
     where: { workspaceId: { in: [richWorkspaceId, activeWorkspaceId, legacyWorkspaceId] } },
   })
+  // v16 2.2 fixtures: paid affiliate + license owner.
+  await prisma.payoutItem
+    .deleteMany({
+      where: { payout: { affiliate: { userId: affiliateUserId } } },
+    })
+    .catch(() => {})
+  await prisma.payout
+    .deleteMany({ where: { affiliate: { userId: affiliateUserId } } })
+    .catch(() => {})
+  await prisma.commission
+    .deleteMany({ where: { affiliate: { userId: affiliateUserId } } })
+    .catch(() => {})
+  await prisma.conversion
+    .deleteMany({ where: { affiliate: { userId: affiliateUserId } } })
+    .catch(() => {})
+  await prisma.affiliate.deleteMany({ where: { userId: affiliateUserId } }).catch(() => {})
+  await prisma.license
+    .deleteMany({
+      where: { ownerEmail: `${licenseUserId}@example.com` },
+    })
+    .catch(() => {})
+  await prisma.user
+    .deleteMany({
+      where: { id: { in: [affiliateUserId, licenseUserId] } },
+    })
+    .catch(() => {})
 }
 
 describe("account deletion", () => {
@@ -681,5 +710,96 @@ describe("account deletion", () => {
     })
     expect(entries.some((entry) => entry.action === "account.deleted")).toBe(true)
     expect(verifyAuditChain(entries)).toBe(true)
+  })
+
+  it("refuses deletion with a clear error when the account is a paid affiliate (v16 2.2)", async () => {
+    // User delete cascades Affiliate -> Commission, and Commission ->
+    // PayoutItem is onDelete: Restrict — without the guard this throws a raw
+    // FK error mid-transaction instead of a refusal the UI can present.
+    await prisma.user.create({
+      data: { id: affiliateUserId, name: "Affiliate", email: `${affiliateUserId}@example.com` },
+    })
+    const affiliate = await prisma.affiliate.create({
+      data: { userId: affiliateUserId, status: "APPROVED" },
+    })
+    const conversion = await prisma.conversion.create({
+      data: {
+        externalId: `conv-${suffix}`,
+        idempotencyKey: `idem-${suffix}`,
+        affiliateId: affiliate.id,
+        grossAmount: 100,
+        commissionableAmount: 100,
+        currency: "USD",
+        method: "promo",
+        occurredAt: new Date(),
+      },
+    })
+    const commission = await prisma.commission.create({
+      data: {
+        conversionId: conversion.id,
+        affiliateId: affiliate.id,
+        rateBps: 2500,
+        amount: 25,
+        currency: "USD",
+      },
+    })
+    const payout = await prisma.payout.create({
+      data: {
+        affiliateId: affiliate.id,
+        amount: 25,
+        currency: "USD",
+        idempotencyKey: `payout-${suffix}`,
+      },
+    })
+    await prisma.payoutItem.create({
+      data: { payoutId: payout.id, commissionId: commission.id, amount: 25 },
+    })
+
+    await expect(deleteUserAccount(affiliateUserId, "DELETE")).rejects.toBeInstanceOf(
+      AccountDeletionAffiliateError
+    )
+    expect(await prisma.user.findUnique({ where: { id: affiliateUserId } })).not.toBeNull()
+  })
+
+  it("scrubs License.ownerEmail on account deletion, including cross-workspace licenses (v16 2.2)", async () => {
+    // The scrub runs through the system client: License RLS hides
+    // NULL-workspaceId rows (and other workspaces' rows) from the RLS client,
+    // so an in-transaction scrub would silently miss them.
+    await prisma.user.create({
+      data: { id: licenseUserId, name: "License", email: `${licenseUserId}@example.com` },
+    })
+    const licenseInWorkspace = await prisma.license.create({
+      data: {
+        workspaceId: retainWorkspaceId,
+        ownerEmail: `${licenseUserId}@example.com`,
+        sku: "INDIVIDUAL_LAUNCH",
+        seatCount: 1,
+        updateEligibleUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        signingKeyId: `key-${suffix}`,
+        signature: "fixture",
+        issuedAt: new Date(),
+      },
+    })
+    const licenseWithoutWorkspace = await prisma.license.create({
+      data: {
+        workspaceId: null,
+        ownerEmail: `${licenseUserId}@example.com`,
+        sku: "INDIVIDUAL_LAUNCH",
+        seatCount: 1,
+        updateEligibleUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        signingKeyId: `key-${suffix}`,
+        signature: "fixture",
+        issuedAt: new Date(),
+      },
+    })
+
+    await deleteUserAccount(licenseUserId, "DELETE")
+
+    expect(await prisma.user.findUnique({ where: { id: licenseUserId } })).toBeNull()
+    for (const license of [licenseInWorkspace, licenseWithoutWorkspace]) {
+      const row = await prisma.license.findUnique({ where: { id: license.id } })
+      expect(row?.ownerEmail).toMatch(/^deleted-user:/)
+      expect(row?.ownerEmail).not.toContain("example.com")
+    }
   })
 })

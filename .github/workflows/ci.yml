@@ -213,6 +213,11 @@ jobs:
     env:
       DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
+      # v16 2.2: getSystemPrisma() no longer silently falls back to the RLS
+      # client in test environments, so tests exercising system paths (e.g.
+      # account deletion's License scrub) need the privileged URL — the same
+      # value the Playwright job already provides.
+      DATABASE_SYSTEM_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       REDIS_URL: "redis://localhost:6379"
       # The test step imports packages that load the full env config. These are the
       # minimum required vars to pass env validation. The secret is a dummy value that

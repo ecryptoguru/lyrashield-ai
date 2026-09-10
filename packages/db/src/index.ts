@@ -109,6 +109,7 @@ export {
   AccountDeletionConfirmationRequiredError,
   AccountDeletionActiveScanError,
   AccountDeletionUnsupportedArtifactError,
+  AccountDeletionAffiliateError,
   type AccountDeletionPlan,
 } from "./account-deletion"
 export {

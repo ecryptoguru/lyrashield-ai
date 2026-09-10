@@ -1,5 +1,5 @@
 import { PrismaClient } from "./generated/prisma"
-import { env, isProd } from "@lyrashield/config"
+import { env, isProd, isTest } from "@lyrashield/config"
 import { prisma } from "./client"
 import { createBoundedPgAdapter } from "./pool"
 import { registerSlowQueryLogging } from "./slow-query-log"
@@ -28,11 +28,14 @@ function createSystemPrismaClient() {
 
 /**
  * Return the narrowly scoped client for verified cross-workspace operations.
- * Tests and local development reuse the ordinary client; production must
- * provide an explicit privileged URL and never silently falls back.
+ * Production and TESTS must provide an explicit privileged URL — tests that
+ * exercise a system path without one now fail loudly instead of silently
+ * exercising the ordinary (RLS-extended) client and passing for the wrong
+ * reason (v16 2.2). Local development without the URL still reuses the
+ * ordinary client so a single-database dev setup keeps working.
  */
 export function getSystemPrisma(): typeof prisma {
-  if (!isProd && !env.DATABASE_SYSTEM_URL) return prisma
+  if (!isProd && !isTest && !env.DATABASE_SYSTEM_URL) return prisma
 
   const client = globalForSystemPrisma.systemPrisma ?? createSystemPrismaClient()
   if (!globalForSystemPrisma.systemPrisma) globalForSystemPrisma.systemPrisma = client
