@@ -618,10 +618,22 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
       scanId: "scan-batch-stale",
       identity: { kind: "COMMIT", value: "e".repeat(40) },
     }
+    // Drift proof on a DEDICATED target: the suite writes its own verdicts to
+    // the original target during the run, and DISTINCT ON would pick one of
+    // those instead of this fixture. This target gets exactly one verdict,
+    // whose assessment predates a scan created after it.
+    const driftedTarget = await owner.target.create({
+      data: {
+        workspaceId: id,
+        name: "Batch drifted",
+        type: "REPO",
+        repoFullName: "test/batch-drifted",
+      },
+    })
     await owner.gateVerdict.create({
       data: {
         workspaceId: id,
-        targetId,
+        targetId: driftedTarget.id,
         standardVersion: "lyrashield-gate/2.0.0",
         state: "READY",
         coverageStatement: {},
@@ -639,8 +651,25 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         evaluatedAt: new Date(now - 2 * 60 * 60 * 1000 - 4000),
       },
     })
+    // A scan created AFTER the assessment completed: the newer-attempt check
+    // must fail the drifted target's verdict closed.
+    await owner.scan.create({
+      data: {
+        workspaceId: id,
+        targetId: driftedTarget.id,
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        status: "COMPLETED",
+        createdById: id,
+        endedAt: new Date(),
+      },
+    })
 
-    const batch = await getCurrentGateVerdicts(id, [targetId, cleanTarget.id, verdictlessTarget.id])
+    const batch = await getCurrentGateVerdicts(id, [
+      cleanTarget.id,
+      driftedTarget.id,
+      verdictlessTarget.id,
+    ])
 
     // The verdictless target is absent from the map (the caller renders
     // NO_GATE_VERDICT), never a fabricated entry.
@@ -659,10 +688,10 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     })
     expect(verdict?.applicability.reasons).toEqual([])
 
-    // Original target: its assessment predates the suite's scans, so the
-    // set-wide newer-attempt join must fail it closed (the drift check the
-    // batch exists to preserve).
-    const drifted = batch.get(targetId)
+    // Drifted target: a scan was created after its assessment completed, so
+    // the set-wide newer-attempt join must fail it closed (the drift check
+    // the batch exists to preserve).
+    const drifted = batch.get(driftedTarget.id)
     expect(drifted?.state).toBe("INSUFFICIENT_EVIDENCE")
     expect(drifted?.applicability.reasons.map((reason) => reason.code)).toContain(
       "NEWER_ASSESSMENT_ATTEMPT"
