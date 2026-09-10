@@ -171,8 +171,9 @@ describe("plain-client FORCE-RLS reads (v16 2.2 tripwire)", () => {
   it("the tripwire itself detects the historical bug shape", () => {
     // Self-check: the exact v16 1.4 offender shape (billing reconciliation's
     // WebhookEvent read) must be caught by the scanner, proving the test
-    // cannot silently rot into a no-op.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    // cannot silently rot into a no-op. (No eslint-disable here: the rule
+    // does not flag this call — the constant join is fine — and an unused
+    // directive would itself fail lint under --max-warnings 0.)
     const fixtureSource = readFileSync(join(__dirname, FIXTURE), "utf8")
     const offenders = scanSource(fixtureSource)
     expect(offenders.join("\n")).toContain("prisma.webhookEvent.findMany")
