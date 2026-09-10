@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const verifyTurnstile = vi.fn()
-vi.mock("../../../lib/turnstile", () => ({ verifyTurnstile }))
+// vi.mock factories are hoisted above every declaration, so the mock fn must
+// come from vi.hoisted (the launch-readiness-server test pattern).
+const mocks = vi.hoisted(() => ({ verifyTurnstile: vi.fn() }))
+vi.mock("../../../lib/turnstile", () => ({ verifyTurnstile: mocks.verifyTurnstile }))
 
 import { parseLiteScorecardToken } from "../../../lib/lite-scorecard"
 import { POST } from "./route"
@@ -19,7 +21,7 @@ describe("POST /api/lite-scorecards", () => {
     vi.clearAllMocks()
     process.env.BETTER_AUTH_SECRET = "test-secret-at-least-32-characters-long"
     process.env.NEXT_PUBLIC_MARKETING_URL = "http://localhost:4321"
-    verifyTurnstile.mockResolvedValue(true)
+    mocks.verifyTurnstile.mockResolvedValue(true)
   })
 
   it("creates a signed public card containing only aggregate counters", async () => {
@@ -42,7 +44,7 @@ describe("POST /api/lite-scorecards", () => {
   })
 
   it("rejects a mint without a valid Turnstile token (v16 2.3)", async () => {
-    verifyTurnstile.mockResolvedValue(false)
+    mocks.verifyTurnstile.mockResolvedValue(false)
     const response = await POST(
       request({
         needsAttention: 1,
