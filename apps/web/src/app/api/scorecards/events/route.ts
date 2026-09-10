@@ -14,7 +14,6 @@ const Body = z
     channel: z.enum(SCORECARD_CHANNELS).optional(),
     variant: z.enum(["grade", "fixes"]).default("grade"),
     source: z.enum(["dashboard", "public"]).default("public"),
-    visitorId: z.uuid().optional(),
   })
   .strict()
 
@@ -41,7 +40,11 @@ export async function POST(request: Request) {
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${VISITOR_COOKIE}=`))
     ?.slice(VISITOR_COOKIE.length + 1)
-  const visitorId = verifyVisitorToken(existing, secret) ?? parsed.data.visitorId ?? randomUUID()
+  // v16 2.3: visitor identity is ONLY the signed cookie or a server-minted
+  // UUID — never a body-supplied value. The old `?? body.visitorId` fallback
+  // let a script bypass the per-visitor daily dedupe and inflate VIEW and
+  // SHARE counts by posting fresh UUIDs.
+  const visitorId = verifyVisitorToken(existing, secret) ?? randomUUID()
   const result = await recordScorecardEvent(parsed.data.slug, {
     eventType: parsed.data.eventType,
     channel: parsed.data.channel,

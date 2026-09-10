@@ -24,7 +24,6 @@ const valid = {
   channel: "linkedin",
   variant: "grade",
   source: "public",
-  visitorId: "019f5bb9-ac8b-7d33-b722-e441080b4c5a",
 }
 
 describe("POST /api/scorecards/events", () => {
@@ -34,7 +33,7 @@ describe("POST /api/scorecards/events", () => {
     recordScorecardEvent.mockResolvedValue({ recorded: true })
   })
 
-  it("accepts only the privacy-safe event allowlist", async () => {
+  it("mints the visitor server-side when no signed cookie exists", async () => {
     const response = await POST(request(valid))
     expect(response.status).toBe(201)
     expect(recordScorecardEvent).toHaveBeenCalledWith(
@@ -45,19 +44,34 @@ describe("POST /api/scorecards/events", () => {
         visitorId: expect.any(String),
       })
     )
-    expect(recordScorecardEvent.mock.calls[0]?.[1].visitorId).toBe(valid.visitorId)
+    // v16 2.3: the id is server-minted, never client-supplied.
+    expect(recordScorecardEvent.mock.calls[0]?.[1].visitorId).not.toBe(
+      "019f5bb9-ac8b-7d33-b722-e441080b4c5a"
+    )
     expect(response.headers.getSetCookie().join(";")).toContain("ls_scorecard_visitor=")
   })
 
-  it("uses the client UUID for concurrent first-page events", async () => {
-    await Promise.all([POST(request(valid)), POST(request(valid))])
-    expect(recordScorecardEvent.mock.calls.map((call) => call[1].visitorId)).toEqual([
-      valid.visitorId,
-      valid.visitorId,
-    ])
+  it("rejects a body-supplied visitorId outright (per-visitor dedupe cannot be bypassed)", async () => {
+    // The strict schema refuses the field: a script posting fresh UUIDs must
+    // not be able to inflate VIEW and SHARE counts past the daily dedupe.
+    const response = await POST(
+      request({ ...valid, visitorId: "019f5bb9-ac8b-7d33-b722-e441080b4c5a" })
+    )
+    expect(response.status).toBe(400)
+    expect(recordScorecardEvent).not.toHaveBeenCalled()
   })
 
-  it("prefers a valid signed cookie over a submitted UUID", async () => {
+  it("mints independent visitors for concurrent cookieless first events", async () => {
+    // Two first-visit posts with no cookie each get their own server-minted
+    // id (each response sets its own cookie); repeat visits dedupe by the
+    // signed cookie, asserted below.
+    await Promise.all([POST(request(valid)), POST(request(valid))])
+    const ids = recordScorecardEvent.mock.calls.map((call) => call[1].visitorId)
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(2)
+  })
+
+  it("prefers a valid signed cookie over minting a new visitor", async () => {
     const secret = process.env.BETTER_AUTH_SECRET!
     const cookieId = "019f5bb9-ac8b-7d33-b722-e441080b4c5b"
     const signature = createHmac("sha256", secret).update(cookieId).digest("hex")

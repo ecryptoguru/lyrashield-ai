@@ -271,7 +271,7 @@ const jsonLd = [
 
     type LiteCheck = { category: string; severity: "needs_attention" | "worth_reviewing" | "ok"; title: string; whatItIs: string; whyItMatters: string; learnMoreUrl: string }
     type LiteResult = { target: string; scannedAt: string; checks: LiteCheck[]; liteResultSummary: { needsAttention: number; worthReviewing: number; looksOk: number; findingCount: number }; disclaimers: string[] }
-    type TurnstileWindow = Window & { turnstile?: { render: (element: string | HTMLElement, options: Record<string, unknown>) => string; reset: (id: string) => void } }
+    type TurnstileWindow = Window & { turnstile?: { render: (element: string | HTMLElement, options: Record<string, unknown>) => string; reset: (id: string) => void; getResponse: (id?: string) => string | undefined } }
 
     const scanForm = document.querySelector<HTMLFormElement>("#scan-form")
     const scanning = document.querySelector<HTMLElement>("#scanning")
@@ -584,6 +584,20 @@ const jsonLd = [
         status.textContent = "You’re subscribed. We’ll email product updates and new feature announcements."
         if (lastAction === "scorecard") {
           const s = currentResult.liteResultSummary
+          // v16 2.3: the mint endpoint now requires its own Turnstile check.
+          // The scan's token was already consumed by the scan call, so read
+          // the widget's CURRENT response (the widget auto-refreshes a solved
+          // challenge; if it has expired, ask the visitor to solve it again).
+          const turnstile = (window as TurnstileWindow).turnstile
+          // getResponse returns the widget's CURRENT solved token. The
+          // scan-time token was consumed by the scan call, so never fall back
+          // to the stale variable — a consumed token fails siteverify.
+          const mintToken = turnstile?.getResponse(turnstileWidget) || ""
+          if (!mintToken) {
+            turnstile?.reset(turnstileWidget)
+            status.textContent = "Please complete the verification challenge, then try again."
+            return
+          }
           const card = await fetch(`${appOrigin}/api/lite-scorecards`, {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -592,10 +606,18 @@ const jsonLd = [
               worthReviewing: s.worthReviewing,
               looksOk: s.looksOk,
               referralCode: waitlistBody.referralCode,
+              turnstileToken: mintToken,
             }),
           })
           const cardBody = await card.json() as { url?: string }
-          if (!card.ok || !cardBody.url) throw new Error("Could not create the scorecard.")
+          if (!card.ok || !cardBody.url) {
+            if (card.status === 403) {
+              turnstile?.reset(turnstileWidget)
+              status.textContent = "The verification check failed. Please complete it again, then retry."
+              return
+            }
+            throw new Error("Could not create the scorecard.")
+          }
           const absolute = new URL(cardBody.url, appOrigin).toString()
           const link = document.querySelector<HTMLAnchorElement>("#scorecard-link")!
           link.href = absolute

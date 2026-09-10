@@ -26,19 +26,6 @@ function trackingAllowed() {
   return scorecardTrackingAllowed(navigatorWithGpc)
 }
 
-function visitorId() {
-  const key = "lyrashield-scorecard-visitor"
-  try {
-    const existing = sessionStorage.getItem(key)
-    if (existing) return existing
-    const id = crypto.randomUUID()
-    sessionStorage.setItem(key, id)
-    return id
-  } catch {
-    return crypto.randomUUID()
-  }
-}
-
 export async function writeClipboard(value: string) {
   if (navigator.clipboard?.writeText) {
     try {
@@ -92,13 +79,15 @@ export function ScorecardShareComposer({
       await fetch("/api/scorecards/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // No visitorId in the body: the server derives identity from its
+        // signed cookie (set on the first event) or mints one itself. A
+        // client-supplied id would let scripts bypass per-visitor dedupe.
         body: JSON.stringify({
           slug,
           eventType,
           channel,
           variant,
           source,
-          visitorId: visitorId(),
         }),
         signal: AbortSignal.timeout(5_000),
       })
