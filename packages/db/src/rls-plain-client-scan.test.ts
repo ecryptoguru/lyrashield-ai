@@ -130,6 +130,7 @@ function scanSource(source: string): string[] {
 
 function scanFile(path: string): string[] {
   if (path.endsWith(FIXTURE)) return [] // covered by the self-check, not the rule
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const source = readFileSync(path, "utf8")
   if (RLS_CONTEXT_MARKERS.some((marker) => source.includes(marker))) return []
   const prefix = relative(join(__dirname, "..", "..", ".."), path)
@@ -171,6 +172,7 @@ describe("plain-client FORCE-RLS reads (v16 2.2 tripwire)", () => {
     // Self-check: the exact v16 1.4 offender shape (billing reconciliation's
     // WebhookEvent read) must be caught by the scanner, proving the test
     // cannot silently rot into a no-op.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const fixtureSource = readFileSync(join(__dirname, FIXTURE), "utf8")
     const offenders = scanSource(fixtureSource)
     expect(offenders.join("\n")).toContain("prisma.webhookEvent.findMany")
