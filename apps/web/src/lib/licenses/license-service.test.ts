@@ -7,7 +7,7 @@ const envState = vi.hoisted(() => ({ NODE_ENV: "test" }) as Record<string, strin
 vi.mock("@lyrashield/config", () => ({
   env: envState,
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: loggerMocks }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: loggerMocks }))
 vi.mock("@lyrashield/db", () => ({ getSystemPrisma: vi.fn() }))
 
 import { INTERNAL_API_KEY_HEADER, requireInternalApiKey } from "./license-service"

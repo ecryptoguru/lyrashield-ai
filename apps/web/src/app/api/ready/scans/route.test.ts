@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/integrations", () => ({ isScanWorkerAvailable: vi.fn() }))
-vi.mock("@lyrashield/logger", () => ({ logger: { warn: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { warn: vi.fn() } }))
 
 import { isScanWorkerAvailable } from "@lyrashield/integrations"
 import { GET } from "./route"

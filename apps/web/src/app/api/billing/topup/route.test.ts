@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: vi.fn() }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
-vi.mock("@lyrashield/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { warn: vi.fn(), error: vi.fn() },
+}))
 vi.mock("@/lib/rate-limit", () => ({
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: false })),
   claimBillingCheckoutCreation: vi.fn(() => mocks.checkoutClaim),

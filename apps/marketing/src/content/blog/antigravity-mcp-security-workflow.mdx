@@ -23,7 +23,7 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 
 | Step          | Command or file                       | Purpose                          |
 | ------------- | ------------------------------------- | -------------------------------- |
-| Prerequisites | Node 20 plus, git, LyraShield account | Prepare the environment          |
+| Prerequisites | Node 24 plus, git, LyraShield account | Prepare the environment          |
 | Install       | npx lyrashield install antigravity    | Write the MCP server entry       |
 | Manual path   | ~/.gemini/config/mcp_config.json      | Fallback if CLI is unavailable   |
 | Verify        | npx lyrashield doctor                 | Check config and credentials     |
@@ -32,7 +32,7 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 
 ## 1. Meet the prerequisites
 
-Install Node 20 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://lyrashieldai.com) if you do not have one, because the MCP server needs credentials to authenticate. Run npx lyrashield login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
+Install Node 24 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://lyrashieldai.com) if you do not have one, because the MCP server needs credentials to authenticate. Run npx lyrashield login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
 
 If you are migrating from Gemini CLI, Antigravity reuses the same ~/.gemini/ path, so your existing MCP config carries forward. The install step below adds the LyraShield entry to that shared location. Keep your credentials file outside the working tree, and never paste a token directly into a config file the agent can read.
 

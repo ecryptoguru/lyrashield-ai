@@ -71,6 +71,13 @@ export interface GateReadinessTarget {
   applicable: boolean
   blockingFindings: number
   reasons: { code: string; message: string }[]
+  /**
+   * The release identity the verdict covers (the assessment's own identity
+   * when the caller enforces none). Absent when there is no assessment to
+   * describe. Rendered so a verdict reads "ready for commit abc1234" rather
+   * than an unexplained all-clear.
+   */
+  identity?: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
 }
 
 export interface FindingReadinessAggregate {
@@ -260,10 +267,61 @@ export function generateLaunchReadinessReportFromAggregate(
 }
 
 /**
+ * Plain-language sentence for a gate applicability reason. The canonical reason
+ * codes live in @lyrashield/gate; their `message` fields are internal phrasing
+ * ("no supported assessment binding", "Gate v2 evidence"), so the rendering
+ * layer maps known codes to direct sentences and falls back to the raw message
+ * for codes this module does not know yet. The gate package is never edited to
+ * suit the UI.
+ */
+export function gateReasonSentence(reason: { code: string; message: string }): string {
+  switch (reason.code) {
+    case "ASSESSMENT_UNAVAILABLE":
+      return "No completed scan assessment exists yet. Run a scan to create one."
+    case "EXPECTED_IDENTITY_REQUIRED":
+    case "EXPECTED_IDENTITY_MISSING":
+      return "Name the exact commit or artifact this launch covers so the verdict can be checked against it."
+    case "IDENTITY_MISMATCH":
+      return "The last assessment was for a different commit or artifact. Run a new scan for this release."
+    case "UNSUPPORTED_IDENTITY":
+      return "The release identity for this launch does not match what the assessment can cover."
+    case "ASSESSMENT_EXPIRED":
+      return "The last assessment is more than 24 hours old. Run a new scan to refresh it."
+    case "POLICY_CHANGED":
+      return "The scan policy changed after the last assessment. Run a new scan under the current policy."
+    case "NEWER_ASSESSMENT_ATTEMPT":
+      return "A newer scan attempt is still running. Wait for it to finish before deciding."
+    case "EVIDENCE_CHANGED":
+      return "Findings or verification evidence changed after the last assessment. Run a new scan to confirm the verdict still holds."
+    case "NO_GATE_VERDICT":
+      return "No completed scan verdict exists for this target yet. Run a scan first."
+    default:
+      return reason.message
+  }
+}
+
+/**
  * Present the canonical Gate v2 result with score data retained only as triage
  * context. This adapter does not make a readiness decision from scores or
  * finding workflow states.
  */
+/**
+ * Human description of the release identity a target's verdict covers. Used
+ * to label ready verdicts on read-only surfaces: "commit abc1234" (short
+ * hash) or "artifact sha256:abcd1234…" (first 19 chars). Returns null when
+ * the target has no identity to describe.
+ */
+export function describeGateIdentity(
+  target: Pick<GateReadinessTarget, "identity" | "state">
+): string | null {
+  if (!target.identity) return null
+  if (target.identity.kind === "COMMIT") {
+    const short = target.identity.value.slice(0, 7)
+    return `Ready for commit ${short}`
+  }
+  return `Ready for artifact ${target.identity.value.slice(0, 19)}`
+}
+
 export function projectGateReadinessReport(
   groups: FindingReadinessAggregate[],
   targets: GateReadinessTarget[]
@@ -287,7 +345,7 @@ export function projectGateReadinessReport(
     (target) => target.state === "INSUFFICIENT_EVIDENCE" || !target.applicable
   )
   const conditions = targets.flatMap((target) =>
-    target.reasons.map((reason) => `${target.targetName}: ${reason.message}`)
+    target.reasons.map((reason) => `${target.targetName}: ${gateReasonSentence(reason)}`)
   )
 
   if (notReady.length > 0) {
@@ -298,11 +356,11 @@ export function projectGateReadinessReport(
       score: null,
       triageScore: triage.score,
       blockingFindings,
-      summary: `${notReady.length} target assessment(s) are not ready under LyraShield Gate v2.`,
+      summary: `${notReady.length} target assessment(s) are not ready.`,
       conditions:
         conditions.length > 0
           ? conditions
-          : ["Resolve the blocking Gate v2 findings and complete a trusted retest."],
+          : ["Resolve the blocking findings and complete a trusted retest."],
     }
   }
 
@@ -314,13 +372,20 @@ export function projectGateReadinessReport(
       score: null,
       triageScore: triage.score,
       blockingFindings,
-      summary: `${insufficient.length} of ${targets.length} target assessment(s) lack applicable Gate v2 evidence.`,
+      summary: `${insufficient.length} of ${targets.length} target assessment(s) could not be reused — their evidence is missing or out of date.`,
       conditions:
         conditions.length > 0
           ? conditions
           : ["Run a current assessment bound to the release commit or artifact digest."],
     }
   }
+
+  // 1.1: label what the READY verdicts actually cover — the assessment's own
+  // identity when none was enforced, so "ready" never reads as an unscoped
+  // all-clear.
+  const identityLabels = targets
+    .map((target) => describeGateIdentity(target))
+    .filter((label): label is string => label !== null)
 
   return {
     ...triage,
@@ -329,7 +394,10 @@ export function projectGateReadinessReport(
     score: null,
     triageScore: triage.score,
     blockingFindings,
-    summary: `All ${targets.length} active target assessment(s) are READY and currently applicable under LyraShield Gate v2.`,
+    summary:
+      identityLabels.length > 0
+        ? `All ${targets.length} active target assessment(s) are ready and currently applicable. ${identityLabels.join(" · ")}`
+        : `All ${targets.length} active target assessment(s) are ready and currently applicable.`,
     conditions: [],
   }
 }

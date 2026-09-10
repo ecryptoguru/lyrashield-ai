@@ -135,7 +135,24 @@ describe("worker Docker runtime", () => {
     expect(deployWorkflow).not.toContain("continue-on-error: true")
     expect(deployWorkflow.match(/persist-credentials: false/g) ?? []).toHaveLength(2)
     expect(deployWorkflow).not.toContain("runs-on: ubuntu-latest")
-    expect(deployWorkflow).not.toContain("id-token: write")
+    // v16 4.3: the deploy job now uses federated OIDC for Azure login
+    // (id-token: write in ITS permissions block only). The reproducibility
+    // guard keeps its original meaning scoped to the BUILD pipeline: image
+    // builds must never gain token-minting permissions. The deploy job must
+    // carry exactly one id-token: write alongside the OIDC client-id login,
+    // and the old client-secret login must be gone entirely.
+    const buildStart = deployWorkflow.indexOf("  build:")
+    const cleanupStart = deployWorkflow.indexOf("  cleanup-old-images:")
+    expect(buildStart).toBeGreaterThanOrEqual(0)
+    expect(cleanupStart).toBeGreaterThan(buildStart)
+    const buildJob = deployWorkflow.slice(buildStart, cleanupStart)
+    expect(buildJob).not.toContain("id-token: write")
+    const deployStart = deployWorkflow.indexOf("  deploy:")
+    expect(deployStart).toBeGreaterThanOrEqual(0)
+    const deployJob = deployWorkflow.slice(deployStart)
+    expect(deployJob.match(/id-token: write/g) ?? []).toHaveLength(1)
+    expect(deployJob).toContain("client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}")
+    expect(deployWorkflow).not.toContain("creds: ${{ secrets.AZURE_CREDENTIALS }}")
     expect(deployWorkflow).toContain("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020")
     expect(deployWorkflow).toContain(
       "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"

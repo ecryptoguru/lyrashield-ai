@@ -18,7 +18,7 @@ describe("sanitizeProperties", () => {
   })
 
   it("drops forbidden properties even when allowed by event", () => {
-    const result = sanitizeProperties("github_connected", {
+    const result = sanitizeProperties("repos_loaded", {
       repo_count_bucket: "small",
       repo_name: "secret-repo",
       file_path: "/etc/passwd",
@@ -37,7 +37,7 @@ describe("sanitizeProperties", () => {
   })
 
   it("returns null when no properties remain", () => {
-    const result = sanitizeProperties("run_started", { unknown: "value" })
+    const result = sanitizeProperties("github_connect_started", { unknown: "value" })
     expect(result).toBeNull()
   })
 

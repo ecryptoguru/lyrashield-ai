@@ -15,7 +15,7 @@ faq:
   - q: What is the fastest win for Cline security
     a: Rotate leaked secrets, enforce branch protection with SARIF upload, and restrict MCP tool permissions to read only where possible to reduce blast radius.
   - q: Where does Cline store MCP server config?
-    a: Cline CLI uses ~/.cline/mcp.json. IDE extensions open their client-owned settings JSON from the MCP Servers panel. Entries live under mcpServers.
+    a: Cline CLI uses ~/.cline/data/settings/cline_mcp_settings.json. IDE extensions open their client-owned settings JSON from the MCP Servers panel. Entries live under mcpServers.
 ---
 
 When you ship apps with Cline, AI generated code can introduce secrets, vulnerable dependencies, and weak auth that reach production fast. This checklist gives a direct security review for Cline, from MCP hardening to merge gates and retest, with verified configs you can copy. Pair it with our pillar guide at [vibe coding security guide](/blog/vibe-coding-security-guide) and apply it on every pull request.
@@ -28,7 +28,7 @@ The official MCP spec defines how tool listing and invocation works over stdio a
 
 ## Locking down MCP configuration for Cline
 
-Cline CLI uses `~/.cline/mcp.json`. IDE extensions open their own settings JSON through MCP Servers → Configure → Configure MCP Servers. Both use `mcpServers`; local entries use `command` and `args`, while remote entries use `type: "streamableHttp"` and `url`. Keep `autoApprove` empty by default. Reference the [official Cline MCP guide](https://docs.cline.bot/mcp/mcp-overview).
+Cline CLI uses `~/.cline/data/settings/cline_mcp_settings.json`. IDE extensions open their own settings JSON through MCP Servers → Configure → Configure MCP Servers. Both use `mcpServers`; local entries use `command` and `args`, while remote entries use `type: "streamableHttp"` and `url`. Keep `autoApprove` empty by default. Reference the [official Cline MCP guide](https://docs.cline.bot/mcp/mcp-overview).
 
 Secure it in four practical steps.
 

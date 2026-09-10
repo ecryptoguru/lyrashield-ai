@@ -18,6 +18,7 @@ import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 import { PageHeader } from "@/components/page-header"
+import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
 interface Project {
   id: string
@@ -131,16 +132,7 @@ export function ProjectsClient({
   }
 
   if (fetchError) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12">
-        <p className="text-destructive mb-4 text-sm" role="alert">
-          {fetchError}
-        </p>
-        <Button variant="secondary" onClick={() => fetchProjects()}>
-          Retry
-        </Button>
-      </div>
-    )
+    return <DashboardErrorCard message={fetchError} onRetry={() => fetchProjects()} className="" />
   }
 
   return (

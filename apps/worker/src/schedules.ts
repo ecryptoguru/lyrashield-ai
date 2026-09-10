@@ -56,8 +56,13 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
           return
         }
 
+        // P1-8 (v16): workspaceId is passed EXPLICITLY so the guard never
+        // depends on ambient context propagation — a scheduled scan starting
+        // on top of a running one double-spends the customer's agent-minutes.
+        // The extension binds the RLS transaction from the explicit arg.
         const activeScans = await prisma.scan.count({
           where: {
+            workspaceId: schedule.workspaceId,
             targetId: schedule.targetId,
             status: { in: [...ACTIVE_SCAN_STATUSES] },
           },

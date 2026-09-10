@@ -144,12 +144,22 @@ export async function startTrial(
 
 /**
  * Get the current trial state for a workspace.
+ *
+ * `prefetchedWorkspace` lets a caller that already read the Workspace row
+ * pass it in — the billing page reads plan and trialStartedAt for its own
+ * rendering, and duplicate reads were the Deep Review v16 2.1 finding.
  */
-export async function getTrialState(workspaceId: string): Promise<TrialState> {
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: workspaceId },
-    select: { plan: true, trialStartedAt: true },
-  })
+export async function getTrialState(
+  workspaceId: string,
+  prefetchedWorkspace?: { plan: string; trialStartedAt: Date | null } | null
+): Promise<TrialState> {
+  const workspace =
+    prefetchedWorkspace !== undefined
+      ? prefetchedWorkspace
+      : await prisma.workspace.findUnique({
+          where: { id: workspaceId },
+          select: { plan: true, trialStartedAt: true },
+        })
 
   if (!workspace || !workspace.trialStartedAt) {
     return {
@@ -174,27 +184,23 @@ export async function getTrialState(workspaceId: string): Promise<TrialState> {
     Math.ceil((endsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
   )
 
-  // Get remaining minutes
+  // Get remaining minutes. Aggregated in the database over the
+  // (workspaceId, kind) index — never an unbounded row fetch. The trial plan
+  // reference is kept for the target cap below.
   const trialPlan = CLOUD_PLAN_MAP.TRIAL
-  const grantRecords = await prisma.usageRecord.findMany({
-    where: {
-      workspaceId,
-      kind: "trial_grant",
-      deletedAt: null,
-    },
-    select: { quantity: true },
-  })
-  const consumeRecords = await prisma.usageRecord.findMany({
-    where: {
-      workspaceId,
-      kind: "agent_minutes",
-      deletedAt: null,
-    },
-    select: { quantity: true },
-  })
-  const granted = grantRecords.reduce((s, r) => s + r.quantity, 0)
-  const consumed = consumeRecords.reduce((s, r) => s + r.quantity, 0)
-  const minutesLeft = Math.max(0, granted - consumed)
+  const [granted, consumed] = await Promise.all([
+    prisma.usageRecord.aggregate({
+      where: { workspaceId, kind: "trial_grant", deletedAt: null },
+      _sum: { quantity: true },
+    }),
+    prisma.usageRecord.aggregate({
+      where: { workspaceId, kind: "agent_minutes", deletedAt: null },
+      _sum: { quantity: true },
+    }),
+  ])
+  const grantedMinutes = granted._sum.quantity ?? 0
+  const consumedMinutes = consumed._sum.quantity ?? 0
+  const minutesLeft = Math.max(0, grantedMinutes - consumedMinutes)
 
   // Get target count
   const targetsUsed = await prisma.target.count({

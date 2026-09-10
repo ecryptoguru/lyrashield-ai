@@ -27,7 +27,7 @@ LyraShield follows a clear loop of Target to Scan to Evidence State to Fix Propo
 
 ## 1. Prerequisites and project baseline
 
-You need Node.js 20 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Hermes installed locally, Git with PR workflow, and a LyraShield API key shaped as lsk\_... Export LYRASHIELD_API_KEY in your shell and never commit the raw value. Hermes reads `${env:VAR}` inside config.yaml at startup, so the indirect reference stays safe.
+You need Node.js 24 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Hermes installed locally, Git with PR workflow and a LyraShield API key shaped as lsk\_... Export LYRASHIELD_API_KEY in your shell and never commit the raw value. Hermes reads `${env:VAR}` inside config.yaml at startup, so the indirect reference stays safe.
 
 LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action, and SARIF. Findings retain their recorded evidence states; scan detection alone is not independent verification. Fix proposals and retests remain approval-gated, and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) to see why local stdio suits desktop tools and streamable HTTP suits remote servers.
 

@@ -2,7 +2,10 @@ import { beforeEach, expect, it, vi } from "vitest"
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: vi.fn() }))
 vi.mock("@lyrashield/billing", () => ({ startTrial: vi.fn() }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
-vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
 vi.mock("@/lib/api-auth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api-auth")>()),
   authErrorResponse: (error: Error) =>

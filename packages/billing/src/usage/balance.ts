@@ -6,7 +6,7 @@
  *   pool (monthly grant) + Σ unexpired pack minutes − consumed minutes
  *
  * Draw order when consuming minutes: monthly pool first, then oldest pack,
- * then overage (Team opt-in only). Overage is consumed AFTER pool + packs,
+ * then overage (Launch Assurance opt-in only). Overage is consumed AFTER pool + packs,
  * so it does NOT reduce the pool or pack remaining.
  *
  * Pack consumption is computed from UsageRecords rather than trusting the
@@ -37,7 +37,7 @@ export interface UsageBalance {
   packs: PackBalance[]
   /** Total remaining across pool + packs. */
   totalRemaining: number
-  /** Overage minutes consumed beyond pool + packs (Team opt-in only). */
+  /** Overage minutes consumed beyond pool + packs (Launch Assurance opt-in only). */
   overageConsumed: number
   /** Cycle start timestamp for the current billing period. */
   cycleStart: Date | null
@@ -62,20 +62,42 @@ const CONSUME_KINDS = new Set(["agent_minutes", "overage_minutes"])
  * Pool grants and consumption are scoped to the current billing cycle
  * (cycleStart on the BillingAccount). Pack balances are independent of
  * the cycle — they persist until expiry.
+ *
+ * `prefetched` lets a caller that already read the BillingAccount (and the
+ * Workspace trial fallback) pass those rows in instead of re-reading them —
+ * the billing page and usage route both need the account row for their own
+ * rendering, and duplicate reads were the Deep Review v16 2.1 finding.
+ * Omitted fields are fetched as before.
  */
-export async function getUsageBalance(workspaceId: string): Promise<UsageBalance> {
-  // First fetch the billing account to get the cycle start
-  const billingAccount = await prisma.billingAccount.findUnique({
-    where: { workspaceId },
-    select: { currentPeriodStart: true, currentPlan: true },
-  })
+export interface UsageBalancePrefetched {
+  /** BillingAccount row: only currentPeriodStart and currentPlan are used. */
+  billingAccount?: { currentPeriodStart: Date | null; currentPlan: string } | null
+  /** Workspace row: only trialStartedAt is used (cycle fallback). */
+  workspace?: { trialStartedAt: Date | null } | null
+}
 
-  const workspace = !billingAccount?.currentPeriodStart
-    ? await prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { trialStartedAt: true },
-      })
-    : null
+export async function getUsageBalance(
+  workspaceId: string,
+  prefetched?: UsageBalancePrefetched
+): Promise<UsageBalance> {
+  // First fetch the billing account to get the cycle start
+  const billingAccount =
+    prefetched?.billingAccount !== undefined
+      ? prefetched.billingAccount
+      : await prisma.billingAccount.findUnique({
+          where: { workspaceId },
+          select: { currentPeriodStart: true, currentPlan: true },
+        })
+
+  const workspace =
+    prefetched?.workspace !== undefined
+      ? prefetched.workspace
+      : !billingAccount?.currentPeriodStart
+        ? await prisma.workspace.findUnique({
+            where: { id: workspaceId },
+            select: { trialStartedAt: true },
+          })
+        : null
   const cycleStart = billingAccount?.currentPeriodStart ?? workspace?.trialStartedAt ?? null
   const cycleStartFilter = cycleStart ? { cycleStart: { gte: cycleStart } } : {}
 

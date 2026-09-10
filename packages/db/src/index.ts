@@ -109,6 +109,7 @@ export {
   AccountDeletionConfirmationRequiredError,
   AccountDeletionActiveScanError,
   AccountDeletionUnsupportedArtifactError,
+  AccountDeletionAffiliateError,
   type AccountDeletionPlan,
 } from "./account-deletion"
 export {
@@ -201,12 +202,25 @@ export {
 export {
   evaluateGateForTarget,
   getCurrentGateVerdict,
+  getCurrentGateVerdicts,
   getLatestGateVerdict,
   handleFixPrMergedAndReevaluate,
   type GateEvaluationResult,
   type GateApplicabilityOptions,
+  type GateVerdictBatchResult,
   type FixPrMergeOutcome,
 } from "./gate-service"
+export {
+  LOOP_CLOSURE_MAX_ATTEMPTS,
+  LOOP_CLOSURE_BACKOFF_MINUTES,
+  classifyLoopClosureError,
+  nextLoopClosureRetryAt,
+  recordDeferredLoopClosure,
+  completeLoopClosure,
+  failLoopClosureTerminally,
+  claimDueLoopClosures,
+  type LoopClosureReason,
+} from "./loop-closure-service"
 export {
   buildLaunchReportPayload,
   computeLaunchReportChecksum,

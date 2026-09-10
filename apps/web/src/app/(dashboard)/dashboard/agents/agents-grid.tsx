@@ -40,7 +40,7 @@ function StrategyBadge({ strategy }: { strategy: AgentCardData["installStrategy"
           ? ("info" as const)
           : ("muted" as const)
   return (
-    <Badge variant={variant} className="shrink-0 text-[11px]">
+    <Badge variant={variant} className="shrink-0 text-xs">
       {label}
     </Badge>
   )
@@ -75,16 +75,16 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
         </div>
         <div className="mt-1.5 flex items-center gap-1.5">
           <CircleDashed className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
-          <span className="text-muted-foreground text-[11px] leading-5 font-medium">
+          <span className="text-muted-foreground text-xs leading-5 font-medium">
             Verify local setup with lyrashield doctor
           </span>
         </div>
         {primaryLocation ? (
-          <p className="text-muted-foreground mt-2 line-clamp-2 font-mono text-[11px] leading-5 break-all">
+          <p className="text-muted-foreground mt-2 line-clamp-2 font-mono text-xs leading-5 break-all">
             {locations.map((l) => l.path).join(" · ")}
           </p>
         ) : (
-          <p className="text-muted-foreground mt-2 text-[11px] leading-5">
+          <p className="text-muted-foreground mt-2 text-xs leading-5">
             Managed inside the agent UI
           </p>
         )}
@@ -92,22 +92,22 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
       <CardContent className="flex flex-1 flex-col gap-4 pt-0">
         {agent.rulesFiles.length > 0 ? (
           <div className="space-y-1.5">
-            <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Rules / skills
             </p>
             <div className="flex flex-wrap gap-1.5">
               {agent.rulesFiles.map((file) => (
                 <code
                   key={file}
-                  className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px] leading-5"
+                  className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-xs leading-5"
                 >
                   {file}
                 </code>
               ))}
             </div>
-            <p className="text-muted-foreground text-[11px] leading-4">
+            <p className="text-muted-foreground text-xs leading-4">
               Keep in sync with{" "}
-              <code className="bg-muted rounded px-1 py-0 font-mono text-[11px]">
+              <code className="bg-muted rounded px-1 py-0 font-mono text-xs">
                 lyrashield rules add
               </code>
             </p>
@@ -118,7 +118,7 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
 
         <div className="mt-auto flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <code className="bg-muted min-w-0 flex-1 truncate rounded-md px-2.5 py-2 font-mono text-[11px]">
+            <code className="bg-muted min-w-0 flex-1 truncate rounded-md px-2.5 py-2 font-mono text-xs">
               {installCmd}
             </code>
             <Button
@@ -159,7 +159,7 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
               Docs
             </a>
             <div
-              className="bg-muted/60 text-muted-foreground col-span-2 inline-flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-md border px-2 font-mono text-[11px] sm:min-h-9"
+              className="bg-muted/60 text-muted-foreground col-span-2 inline-flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-md border px-2 font-mono text-xs sm:min-h-9"
               title={installCmd}
             >
               <Terminal className="size-3 shrink-0" aria-hidden="true" />

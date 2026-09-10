@@ -32,7 +32,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative flex h-full w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors duration-(--duration-fast) ease-out",
+        "relative flex h-full w-full flex-col items-center justify-center gap-1 px-1 py-2 text-xs font-medium transition-colors duration-(--duration-fast) ease-out",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
         "active:scale-[0.97] active:transition-transform active:duration-(--duration-instant)",
         active ? "text-primary" : "text-muted-foreground hover:text-foreground"
@@ -164,7 +164,7 @@ export function BottomNav({
               ]
                 .filter(Boolean)
                 .join(", ")}
-              className="text-muted-foreground focus-visible:ring-ring relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-[10px] font-medium focus-visible:ring-2 focus-visible:ring-inset"
+              className="text-muted-foreground focus-visible:ring-ring relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-xs font-medium focus-visible:ring-2 focus-visible:ring-inset"
             >
               <Menu className="size-5" aria-hidden="true" />
               <span>Workspace</span>

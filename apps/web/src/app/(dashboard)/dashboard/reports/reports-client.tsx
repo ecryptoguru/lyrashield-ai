@@ -1,16 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import {
-  FileText,
-  Share2,
-  Trash2,
-  Copy,
-  CheckCircle2,
-  AlertCircle,
-  Download,
-  Plus,
-} from "lucide-react"
+import { FileText, Share2, Trash2, Copy, CheckCircle2, Download, Plus } from "lucide-react"
 import Link from "next/link"
 import {
   Button,
@@ -28,6 +19,7 @@ import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
+import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import { formatDate } from "@/lib/date-format"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -387,23 +379,13 @@ export function ReportsClient({
       )}
 
       {error && (
-        <Card className="border-destructive/50 mb-4 p-4">
-          <div className="text-destructive flex items-center gap-2 text-sm" role="alert">
-            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{error}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto"
-              onClick={() => {
-                setError(null)
-                void loadReports()
-              }}
-            >
-              Retry
-            </Button>
-          </div>
-        </Card>
+        <DashboardErrorCard
+          message={error}
+          onRetry={() => {
+            setError(null)
+            void loadReports()
+          }}
+        />
       )}
 
       {shareUrl && (

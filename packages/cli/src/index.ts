@@ -55,7 +55,10 @@ const COMMANDS: Record<string, CommandThunk> = {
 }
 
 function usage(): string {
-  return `lyrashield <command> [args]
+  return `LyraShield AI CLI — release assurance for AI-built software.
+Docs: https://lyrashieldai.com/docs · Support: https://lyrashieldai.com/support
+
+lyrashield <command> [args]
 
 Commands:
   connect              Connect an agent with verified setup and read test

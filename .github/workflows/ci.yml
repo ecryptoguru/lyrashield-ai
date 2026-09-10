@@ -213,6 +213,11 @@ jobs:
     env:
       DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
+      # v16 2.2: getSystemPrisma() no longer silently falls back to the RLS
+      # client in test environments, so tests exercising system paths (e.g.
+      # account deletion's License scrub) need the privileged URL — the same
+      # value the Playwright job already provides.
+      DATABASE_SYSTEM_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       REDIS_URL: "redis://localhost:6379"
       # The test step imports packages that load the full env config. These are the
       # minimum required vars to pass env validation. The secret is a dummy value that
@@ -575,6 +580,10 @@ jobs:
       NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
       TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
+      # The P1-7 regression test exercises the billing downgrade sweep, which
+      # reads through getSystemPrisma() — the privileged URL the worker uses
+      # in production for cross-workspace system operations.
+      DATABASE_SYSTEM_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
 
     steps:
       - name: Configure git default branch
@@ -636,7 +645,7 @@ jobs:
           # The test suite in rls-fail-closed.test.ts is now un-skipped and
           # validates catalog flags, read-path isolation, and write-path safety.
           cd packages/db
-          npx vitest run src/rls-fail-closed.test.ts src/gate-service.runtime.test.ts --maxWorkers=2 2>&1
+          npx vitest run src/rls-fail-closed.test.ts src/gate-service.runtime.test.ts src/worker-rls-regressions.runtime.test.ts --maxWorkers=2 2>&1
           EXIT_CODE=$?
           echo "RLS test exit code: $EXIT_CODE"
           if [ "$EXIT_CODE" -ne 0 ]; then

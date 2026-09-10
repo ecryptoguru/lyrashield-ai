@@ -94,12 +94,24 @@ export default async function AffiliateAdminPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left">
-                <th className="pb-2 pr-4">Affiliate</th>
-                <th className="pb-2 pr-4">Active Referrals</th>
-                <th className="pb-2 pr-4">Commissions</th>
-                <th className="pb-2 pr-4">Clicks</th>
-                <th className="pb-2 pr-4">Payouts</th>
-                <th className="pb-2 pr-4">Actions</th>
+                <th scope="col" className="pb-2 pr-4">
+                  Affiliate
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Active Referrals
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Commissions
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Clicks
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Payouts
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>

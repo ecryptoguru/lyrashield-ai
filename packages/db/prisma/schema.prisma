@@ -577,6 +577,7 @@ model Workspace {
   syncCursors          SyncCursor[]
   agentConnections     AgentConnection[]
   agentOperations      AgentOperation[]
+  loopClosures         LoopClosure[]
 }
 
 model WorkspaceMember {
@@ -858,6 +859,9 @@ model Scan {
   // Covers the active-scan poll (workspaceId + status IN (...) ORDER BY
   // createdAt DESC) — the most frequent automated query in the app.
   @@index([workspaceId, status, createdAt])
+  // Covers the target-scoped scan history (target detail page and the gate's
+  // newer-attempt existence check) without a wide workspace scan.
+  @@index([workspaceId, targetId, createdAt])
 }
 
 model ScanEvent {
@@ -975,6 +979,7 @@ model Finding {
   @@index([workspaceId, severity, createdAt])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, targetId, canonicalFindingId])
+  @@index([workspaceId, targetId, severity, createdAt])
 }
 
 model Evidence {
@@ -1142,6 +1147,30 @@ model PullRequest {
   @@index([fixProposalId])
 }
 
+/// Durable retry state for automatic retests after merged fix PRs.
+model LoopClosure {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  repoFullName String
+  branchName   String
+  prNumber     Int
+  /// "pending" | "completed" | "failed"
+  status       String    @default("pending")
+  attempts     Int       @default(0)
+  /// Bounded reason code; never raw provider payloads.
+  lastReason   String?
+  nextRetryAt  DateTime  @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, repoFullName, prNumber])
+  @@index([status, nextRetryAt])
+  @@map("loop_closures")
+}
+
 model Ticket {
   id         String    @id @default(cuid())
   findingId  String
@@ -1200,6 +1229,7 @@ model UsageRecord {
   @@index([workspaceId, createdAt])
   @@index([workspaceId, cycleStart])
   @@index([workspaceId, cycleStart, kind])
+  @@index([workspaceId, kind])
 }
 
 model ScoreSnapshot {

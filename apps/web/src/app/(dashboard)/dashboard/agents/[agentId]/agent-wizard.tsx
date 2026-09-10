@@ -58,11 +58,11 @@ function StepBody({
       {step.snippet ? (
         <div className="space-y-1.5">
           {step.snippetPath ? (
-            <p className="text-muted-foreground font-mono text-[11px]">{step.snippetPath}</p>
+            <p className="text-muted-foreground font-mono text-xs">{step.snippetPath}</p>
           ) : null}
           <div className="relative">
             <pre
-              className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5"
+              className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-xs leading-5"
               tabIndex={0}
               aria-label="Configuration snippet"
             >

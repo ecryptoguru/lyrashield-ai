@@ -70,7 +70,11 @@ export default async function BillingPage({
     billingRequest
   ).allowed
 
-  const [billingAccount, balance, trialState, graceState, trialAvailable] = await Promise.all([
+  // 2.1: fetch BillingAccount and Workspace ONCE here and pass the rows into
+  // the balance/trial/grace helpers — previously this page re-read the
+  // BillingAccount inside getUsageBalance and the Workspace inside both
+  // getTrialState and getGraceState.
+  const [billingAccount, workspaceRow, trialAvailable] = await Promise.all([
     prisma.billingAccount.findUnique({
       where: { workspaceId },
       select: {
@@ -84,10 +88,38 @@ export default async function BillingPage({
         spendLimitCents: true,
       },
     }),
-    getUsageBalance(workspaceId),
-    getTrialState(workspaceId),
-    getGraceState(workspaceId),
+    prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: {
+        plan: true,
+        trialStartedAt: true,
+        graceUsedMs: true,
+        graceCycleStart: true,
+      },
+    }),
     canManageBilling ? isTrialAvailable(workspaceId, session.userId) : Promise.resolve(false),
+  ])
+
+  const [balance, trialState, graceState] = await Promise.all([
+    getUsageBalance(workspaceId, {
+      billingAccount: billingAccount
+        ? {
+            currentPeriodStart: billingAccount.currentPeriodStart,
+            currentPlan: billingAccount.currentPlan,
+          }
+        : null,
+      workspace: workspaceRow ? { trialStartedAt: workspaceRow.trialStartedAt } : null,
+    }),
+    getTrialState(
+      workspaceId,
+      workspaceRow ? { plan: workspaceRow.plan, trialStartedAt: workspaceRow.trialStartedAt } : null
+    ),
+    getGraceState(
+      workspaceId,
+      workspaceRow
+        ? { graceUsedMs: workspaceRow.graceUsedMs, graceCycleStart: workspaceRow.graceCycleStart }
+        : null
+    ),
   ])
 
   const plan = billingAccount?.currentPlan ?? "FREE"
@@ -253,6 +285,14 @@ export default async function BillingPage({
                 You are only billed for usable scans: a failed scan bills nothing, and a cancelled
                 scan bills only the time it actually ran.
               </p>
+              <p className="text-xs text-muted-foreground">
+                A partial scan keeps its completed findings and bills only the portion that ran —
+                partial minutes are metered the same as completed minutes.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                A budget-stopped scan ended because its spend ceiling was reached. Minutes already
+                used are billed; nothing further runs until usage is available again.
+              </p>
             </div>
 
             {/* Grace state */}
@@ -321,8 +361,11 @@ export default async function BillingPage({
           </Card>
         )}
 
-        {/* Portal Link */}
-        {canManageBilling && plan !== "FREE" && billingAccount?.provider === "polar" && (
+        {/* Portal Link — rendered for ANY provider: the portal route decides
+            the destination (Polar portal, or the Razorpay billing-support
+            path). Gating the card on provider === "polar" left Razorpay
+            subscribers with no manage path at all. */}
+        {canManageBilling && plan !== "FREE" && billingAccount && (
           <Card>
             <CardHeader>
               <CardTitle>Manage Subscription</CardTitle>

@@ -1,9 +1,10 @@
 /**
  * Overage debit logic.
  *
- * Team plan workspaces can opt into overage: when pool + packs are exhausted,
- * additional agent-minutes are billed at $0.15/min (STANDARD_OVERAGE_PER_MINUTE_USD),
- * up to a spend limit set by the billing admin (spendLimitCents on BillingAccount).
+ * Launch Assurance workspaces can opt into overage: when pool + packs are
+ * exhausted, additional agent-minutes are billed at $0.15/min
+ * (STANDARD_OVERAGE_PER_MINUTE_USD), up to a spend limit set by the billing
+ * admin (spendLimitCents on BillingAccount).
  *
  * Overages are tracked as UsageRecord with kind="overage_minutes".
  * The actual charge is processed by the provider (Polar/Razorpay) — this

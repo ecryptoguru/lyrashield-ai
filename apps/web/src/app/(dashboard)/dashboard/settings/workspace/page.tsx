@@ -8,6 +8,17 @@ import { ApiKeysSection } from "../api-keys"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 
+/**
+ * User-facing plan label. A FREE workspace with a trial claim is on the trial
+ * — the billing pages already treat it that way (CLOUD_PLAN_MAP.TRIAL) — so it
+ * must not read as the bare plan enum. Other plans keep their canonical name.
+ */
+function workspacePlanLabel(plan: string, trialStartedAt: Date | null): string {
+  if (plan === "FREE" && trialStartedAt) return "Trial"
+  if (plan === "FREE") return "Free"
+  return plan.charAt(0) + plan.slice(1).toLowerCase().replace(/_/g, " ")
+}
+
 export const metadata: Metadata = {
   title: "Workspace settings",
 }
@@ -32,13 +43,14 @@ export default async function WorkspaceSettingsPage() {
     )
   }
 
-  const [workspace, integrationCount, unreadNotifications, enabledSchedules, membership] =
+  const [workspace, agentConnectionCount, unreadNotifications, enabledSchedules, membership] =
     await Promise.all([
       prisma.workspace.findUnique({
         where: { id: workspaceId },
         select: {
           name: true,
           plan: true,
+          trialStartedAt: true,
           retentionDays: true,
           _count: {
             select: {
@@ -47,7 +59,9 @@ export default async function WorkspaceSettingsPage() {
           },
         },
       }),
-      prisma.integration.count({ where: { workspaceId, deletedAt: null } }),
+      // Count the coding-agent connections the Connections page lists, not
+      // Integration catalog rows — the number must match what that page shows.
+      prisma.agentConnection.count({ where: { workspaceId } }),
       prisma.notification.count({
         where: { workspaceId, status: { not: "read" }, deletedAt: null },
       }),
@@ -79,7 +93,9 @@ export default async function WorkspaceSettingsPage() {
             </div>
             <div>
               <p className="text-muted-foreground text-xs font-medium uppercase">Plan</p>
-              <p className="mt-1 truncate text-lg font-semibold">{workspace.plan}</p>
+              <p className="mt-1 truncate text-lg font-semibold">
+                {workspacePlanLabel(workspace.plan, workspace.trialStartedAt)}
+              </p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs font-medium uppercase">Retention</p>
@@ -114,7 +130,7 @@ export default async function WorkspaceSettingsPage() {
           href="/dashboard/connections"
           icon={Plug}
           title="Connections"
-          description={`${integrationCount} connected`}
+          description={`${agentConnectionCount} connected`}
         />
         <SettingsLink
           href="/dashboard/notifications"

@@ -63,8 +63,8 @@ export function RepositoryRefEditor({
         </Button>
       </div>
       <p id="repository-ref-help" className="text-muted-foreground text-xs">
-        Set the exact branch or release tag before the first trust run. It becomes immutable after a
-        run is created.
+        Set the exact branch or release tag before the first scan. It becomes immutable after a scan
+        is created.
       </p>
       <p id="repository-ref-status" className="text-xs" aria-live="polite">
         {error ? <span className="text-destructive">{error}</span> : saved ? "Saved." : null}

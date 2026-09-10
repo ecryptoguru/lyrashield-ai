@@ -33,7 +33,10 @@ vi.mock("./connection-auth", () => ({
   requireBrowserConnectionManager: (...args: unknown[]) => requireBrowserConnectionManager(...args),
 }))
 
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn(), info: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { error: vi.fn(), info: vi.fn() },
+}))
 
 const verifyOAuthConsentState = vi.fn()
 const connectionGrantMatchesConsent = vi.fn()
@@ -162,7 +165,7 @@ describe("POST /api/connections", () => {
     expect(body.data.id).toBe("conn-new")
     expect(verifyOAuthConsentState).toHaveBeenCalledWith("signed-state")
     expect(createAgentConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ clientType: "Cursor IDE", clientName: "Cursor IDE" })
+      expect.objectContaining({ clientType: "oauth:client-cursor", clientName: "Cursor IDE" })
     )
     expect(updateSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -198,7 +201,7 @@ describe("POST /api/connections", () => {
 
     expect(res.status).toBe(201)
     expect(createAgentConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ clientType: "Cursor IDE", clientName: "Cursor IDE" })
+      expect.objectContaining({ clientType: "oauth:client-cursor", clientName: "Cursor IDE" })
     )
   })
 

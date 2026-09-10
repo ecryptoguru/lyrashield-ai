@@ -1,12 +1,13 @@
 import { getManualScanOptions, type ManualScanOption } from "@/lib/scan-presets"
+import { TARGET_SINGULAR } from "@/lib/terminology"
 
 /**
  * Pure decision logic for the onboarding four-way flow.
  *
- * Step 2 ("Add your first target") offers four ways forward — Connect GitHub,
- * Add app URL, Add API endpoint, or Skip. This module owns the transitions and
- * the target-creation payload so the wizard component stays thin and every path
- * is unit-testable without rendering React.
+ * Step 1 ("Add your first target") offers four ways forward — Connect GitHub,
+ * Add app URL, Add API endpoint, or Skip. This module owns the transitions,
+ * the step model, and the target-creation payload so the wizard component
+ * stays thin and every path is unit-testable without rendering React.
  *
  * The P0 this fixes: the wizard previously hard-depended on GitHub connect,
  * which 500s in production when the GitHub App env vars are absent — bricking
@@ -45,25 +46,91 @@ export interface UrlTargetPayload {
 }
 
 /**
- * The index the wizard jumps to after step 2 for each path. GitHub goes to
- * repo-select (step 2); URL/API go straight to product details (step 3); skip
- * leaves the wizard entirely (no onward step).
+ * Where the wizard lands after the chooser for each path. GitHub goes to
+ * repo-select; URL/API go straight to target details; skip leaves the wizard
+ * entirely (no onward step).
+ *
+ * This is the ONLY place a step index is written. The rendered progress list
+ * is derived from the same `stepModelForPath` definition below, so the wizard's
+ * "Step N of M" indicator cannot disagree with the steps it shows (v16 3.1:
+ * URL/API previously jumped to a step the two-item progress list did not have).
  */
 export function nextStepForPath(path: Exclude<OnboardingPath, null>): number | null {
   switch (path) {
     case "github":
-      return 2
+      return GITHUB_STEPS.repoSelect.index
     case "url":
     case "api":
-      return 3
+      return URL_API_STEPS.details.index
     case "skip":
       return null
   }
 }
 
-/** Step 3 (product details) needs a repo only for the GitHub path. */
+/** Step 3 (target details) needs a repo only for the GitHub path. */
 export function pathNeedsRepo(path: OnboardingPath): boolean {
   return path === "github"
+}
+
+// ---------------------------------------------------------------------------
+// Single source of truth for the wizard's step model (v16 3.1).
+//
+// Every step the wizard can render is declared once, keyed by the flow that
+// shows it (github vs url/api — the skip path leaves the wizard, so it has no
+// steps), with its wizard index and its label. `nextStepForPath` and the
+// wizard's progress list both read from these objects, so the highlighted
+// progress item, the "Step N of M" eyebrow/live region, and the section
+// headings can never drift apart again.
+// ---------------------------------------------------------------------------
+
+export interface OnboardingStepDef {
+  /** Index used for `step` state, persistence (currentStep) and lookups. */
+  readonly index: number
+  /** Label in the progress list and the step eyebrow. */
+  readonly label: string
+}
+
+/** Shared first step: the four-way chooser (Connect GitHub / URL / API / Skip). */
+const CHOOSER: OnboardingStepDef = { index: 1, label: "Add target" }
+/** Shared final step where the name and review are confirmed. */
+const DETAILS: OnboardingStepDef = { index: 3, label: `${TARGET_SINGULAR} details` }
+
+/** Steps for the GitHub flow: chooser → repo-select → details. */
+export const GITHUB_STEPS = {
+  chooser: CHOOSER,
+  repoSelect: { index: 2, label: "Select repository" },
+  details: DETAILS,
+} as const
+
+/** Steps for the URL / API flows: chooser → details (no repo-select). */
+export const URL_API_STEPS = {
+  chooser: CHOOSER,
+  details: DETAILS,
+} as const
+
+/**
+ * The ordered steps a given flow renders — the one list the wizard draws its
+ * progress bar from. `path === null` (user still on the chooser, or restored
+ * with an unknown target type) renders the longer GitHub list: step 2 is then
+ * only reachable through the GitHub connect redirect, and falling back to the
+ * two-item list would repeat the original off-by-one ("Step 3 of 2").
+ */
+export function stepModelForPath(path: OnboardingPath): readonly OnboardingStepDef[] {
+  if (path === "url" || path === "api") return [URL_API_STEPS.chooser, URL_API_STEPS.details]
+  return [GITHUB_STEPS.chooser, GITHUB_STEPS.repoSelect, GITHUB_STEPS.details]
+}
+
+/**
+ * Which rendered progress item (0-based) is current for wizard `step` in the
+ * given flow. Derived from the same step definitions as `stepModelForPath`, so
+ * the live region's "Step N of M" always names a step the list shows.
+ */
+export function displayStepForPath(step: number, path: OnboardingPath): number {
+  const model = stepModelForPath(path)
+  const match = model.find((entry) => entry.index === step)
+  // A step the model does not know (stale persisted value) still needs a sane
+  // announcement: clamp into range rather than point past the last item.
+  return match ? model.indexOf(match) : Math.min(Math.max(step, 1), model.length) - 1
 }
 
 /**

@@ -15,7 +15,7 @@ vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: { report: { create: "report:create", download: "report:download" } },
 }))
 
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 vi.mock("../../../lib/cache", () => ({ revalidateDashboardAggregates: vi.fn() }))
 
 import { POST } from "./route"

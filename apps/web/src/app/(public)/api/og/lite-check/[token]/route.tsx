@@ -90,7 +90,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
             }}
           >
             {reviewCount === 0
-              ? "No surface issues found"
+              ? "No surface findings found"
               : `thing${reviewCount === 1 ? "" : "s"} worth a look`}
           </div>
         </div>

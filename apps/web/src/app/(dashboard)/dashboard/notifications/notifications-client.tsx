@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Bell, AlertCircle, CheckCircle2, Mail, MessageSquare } from "lucide-react"
+import { Bell, CheckCircle2, Mail, MessageSquare } from "lucide-react"
 import { Button, Badge, type BadgeProps, Card, EmptyState, LoadMore } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
+import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPatch } from "@/lib/api-client"
@@ -143,23 +144,13 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
       />
 
       {error && (
-        <Card className="border-destructive/50 mb-4 p-4">
-          <div className="text-destructive flex items-center gap-2 text-sm" role="alert">
-            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{error}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto"
-              onClick={() => {
-                setError(null)
-                void loadNotifications()
-              }}
-            >
-              Retry
-            </Button>
-          </div>
-        </Card>
+        <DashboardErrorCard
+          message={error}
+          onRetry={() => {
+            setError(null)
+            void loadNotifications()
+          }}
+        />
       )}
 
       {loading && notifications.length === 0 ? (

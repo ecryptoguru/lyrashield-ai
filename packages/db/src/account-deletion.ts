@@ -4,6 +4,7 @@ import { computeAuditHash } from "./audit-hash"
 import type { AuditLog } from "./generated/prisma"
 import { ACTIVE_SCAN_STATUSES, lockWorkspaceScanAdmission } from "./scan-service"
 import { runWithDatabaseRLSContext } from "./scoping"
+import { getSystemPrisma } from "./system-client"
 import { lockWorkspaceMembership } from "./workspace-membership-lock"
 
 const DELETED_USER = "deleted-user"
@@ -57,6 +58,22 @@ export class AccountDeletionUnsupportedArtifactError extends Error {
   constructor(public workspaces: AccountDeletionWorkspace[]) {
     super("Workspace contains external artifacts with no verified deletion contract")
     this.name = "AccountDeletionUnsupportedArtifactError"
+  }
+}
+
+/**
+ * The user is an affiliate with paid commissions. Deleting the user cascades
+ * Affiliate -> Commission, and Commission -> PayoutItem is onDelete: Restrict
+ * (a paid commission must never be silently destroyed), so the delete would
+ * throw a mid-transaction FK error. This upfront guard turns that into a
+ * clear refusal, mirroring the sole-owner-workspace guard.
+ */
+export class AccountDeletionAffiliateError extends Error {
+  constructor() {
+    super(
+      "This account is an affiliate with paid commission history. Settle or export payout records before deleting it."
+    )
+    this.name = "AccountDeletionAffiliateError"
   }
 }
 
@@ -182,6 +199,16 @@ export async function deleteUserAccount(
     throw new AccountDeletionBlockedError(plan.blocked)
   }
 
+  // Affiliate guard (v16 2.2): a paid affiliate's User delete would cascade
+  // Affiliate -> Commission and hit PayoutItem.commissionId's onDelete:
+  // Restrict — a mid-transaction FK error. Refuse upfront instead.
+  const paidCommissions = await prisma.commission.count({
+    where: { affiliate: { userId }, payoutItems: { some: {} } },
+  })
+  if (paidCommissions > 0) {
+    throw new AccountDeletionAffiliateError()
+  }
+
   const expectedConfirmation =
     plan.deletable.length > 0
       ? plan.deletable
@@ -192,6 +219,28 @@ export async function deleteUserAccount(
 
   if (confirmation !== expectedConfirmation) {
     throw new AccountDeletionConfirmationRequiredError(plan.deletable, expectedConfirmation)
+  }
+
+  // License.ownerEmail scrub (v16 2.2): a direct identifier and the license
+  // lookup key. Runs AFTER confirmation validation so a rejected attempt
+  // never scrubs anything. Licenses live across workspaces — including
+  // NULL-workspaceId rows the RLS-restricted client cannot see — so the scrub
+  // runs through the system client as a cross-workspace erasure operation,
+  // before the deletion transaction (the tx's transaction-local RLS context
+  // would silently filter every license outside whatever workspace context
+  // was last set). Per-row non-identifying suffix, idempotent by the WHERE on
+  // the user's real email: a retried deletion after a later transaction
+  // failure re-runs harmlessly. License re-activation and renewal lookups by
+  // the real email stop matching — correct for erasure.
+  const userForLicenseScrub = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  })
+  if (userForLicenseScrub) {
+    await getSystemPrisma().$executeRaw`
+      UPDATE "License"
+      SET "ownerEmail" = ${`${DELETED_USER}:`} || "id"
+      WHERE "ownerEmail" = ${userForLicenseScrub.email}`
   }
 
   const memberships = await prisma.workspaceMember.findMany({

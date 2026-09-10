@@ -15,7 +15,7 @@ faq:
   - q: "When should I choose Semgrep over LyraShield?"
     a: "Choose Semgrep when you need deterministic, developer-controlled scanning with custom rules, open-source local CLI, and reachability-aware SCA. Its registry with 1000+ rules and AI-assisted triage makes it ideal for continuous feedback. Use LyraShield when the bottleneck is proving exploitability and signing off before ship."
   - q: "Is LyraShield free like Semgrep Community Edition?"
-    a: "No, not in the same way. Semgrep CE is free and open-source; Semgrep AppSec Platform has a free tier up to 10 contributors and Teams from $30 per contributor per month. LyraShield is live in open beta with open registration and pricing to be announced, so evaluate on outcome, not list price."
+    a: "No, not in the same way. Semgrep CE is free and open-source; Semgrep's platform has a free tier for small teams and paid Team tiers, which are priced per contributor on the vendor's pricing page. LyraShield is live in open beta with open registration and published pricing at lyrashieldai.com/pricing, so evaluate on outcome, not list price."
 ---
 
 ## Core approach

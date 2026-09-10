@@ -14,15 +14,22 @@ import { z } from "zod"
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
-import { PRODUCT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
+import {
+  RUN_SINGULAR,
+  TARGET_DETAILS_LABEL,
+  TARGET_NAME_LABEL,
+  TARGET_SINGULAR,
+} from "@/lib/terminology"
 import {
   buildUrlTargetPayload,
+  displayStepForPath,
   ensureOnboardingTargetId,
   getOnboardingReviewOptions,
   nextStepForPath,
   onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
+  stepModelForPath,
   targetNameFromUrl,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
@@ -323,9 +330,9 @@ export function OnboardingWizard({
         setLoading(false)
       }
     }
-    // URL / API: prefill a sensible product name, then collect the URL. The
-    // onward step comes from the shared helper so the wizard and the flow logic
-    // cannot diverge.
+    // URL / API: prefill a sensible target name, then collect the URL. The
+    // onward step comes from the shared step model so the wizard and the flow
+    // logic cannot diverge.
     setPath(next)
     if (!productName) {
       setProductName(next === "api" ? "Production API" : "Staging Site")
@@ -345,11 +352,11 @@ export function OnboardingWizard({
     }
   }
 
-  // Validate the URL/API inputs and advance to product details. The target is
-  // NOT created here — creation is deferred to createProductAndStart (the same
-  // step the GitHub path uses) so the name/environment the user confirms on the
-  // final step are what actually get saved, and so going Back -> Continue never
-  // orphans a duplicate target.
+  // Validate the URL/API inputs and advance to target details. The target is
+  // NOT created here — creation is deferred to createTargetAndStart (the same
+  // step the GitHub path uses) so the name/environment the user confirmed on
+  // the first screen are what actually get saved, and so going Back ->
+  // Continue never orphans a duplicate target.
   function continueWithUrlTarget() {
     const payload = buildUrlTargetPayload({
       workspaceId: data.workspaceId,
@@ -382,7 +389,7 @@ export function OnboardingWizard({
     setStep(3)
   }
 
-  async function createProductAndStart() {
+  async function createTargetAndStart() {
     if (!data.workspaceId) {
       setError("Workspace is required.")
       return
@@ -412,7 +419,7 @@ export function OnboardingWizard({
       return
     }
     if (!hasExistingTarget && !productName.trim()) {
-      setError(`Name your ${PRODUCT_SINGULAR.toLowerCase()} to continue.`)
+      setError(`Name your ${TARGET_SINGULAR.toLowerCase()} to continue.`)
       return
     }
     if (!selectedReview) {
@@ -489,15 +496,13 @@ export function OnboardingWizard({
     }
   }
 
-  // The progress bar adapts to the chosen path: GitHub users see a
-  // "Select repository" step; URL/API users skip it, so we collapse it
-  // and show "Target details" as the third step instead. Workspace naming is
-  // no longer a step (W2-01): the server provisions the workspace.
-  const isGithubFlow = path === "github" || (path === null && step <= 2)
-  const steps = isGithubFlow
-    ? ["Add target", "Select repository", `${PRODUCT_SINGULAR} details`]
-    : ["Add target", `${PRODUCT_SINGULAR} details`]
-  const displayStep = Math.max(step - 1, 0)
+  // The progress list and the current-step indicator both derive from the step
+  // model in onboarding-flow.utils (v16 3.1) — the same definitions the
+  // wizard's step transitions use, so the highlight and the "Step N of M"
+  // announcement cannot drift from the rendered list. Workspace naming is not
+  // a step (W2-01): the server provisions the workspace.
+  const steps = stepModelForPath(path)
+  const displayStep = displayStepForPath(step, path)
 
   return (
     <div className="w-full max-w-2xl">
@@ -505,7 +510,8 @@ export function OnboardingWizard({
         className={`mb-2 grid border-y ${steps.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}
         aria-label="Getting started progress"
       >
-        {steps.map((label, index) => {
+        {steps.map((entry, index) => {
+          const label = entry.label
           const current = index === displayStep
           const done = index < displayStep
           return (
@@ -547,7 +553,7 @@ export function OnboardingWizard({
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 1
+                Step {step} of {steps.length} · {steps[0]!.label}
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Add your first target</h2>
               <p className="text-muted-foreground mt-2 text-sm">
@@ -610,8 +616,10 @@ export function OnboardingWizard({
             }}
           >
             <div>
+              {/* Same step model as the progress list — the eyebrow and the
+                  highlighted item always describe the same step (v16 3.1). */}
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 2
+                Step {step} of {steps.length} · {steps[0]!.label}
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">
                 {path === "api" ? "Add your API" : "Add your app URL"}
@@ -620,11 +628,13 @@ export function OnboardingWizard({
                 {path === "api"
                   ? "Point LyraShield at the API's base URL. Scans run over HTTP against the public surface."
                   : "Point LyraShield at the app's URL. Scans run over HTTP against the public surface."}{" "}
-                You can connect GitHub later from Integrations.
+                You can connect GitHub later from Connections.
               </p>
             </div>
 
-            <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="url-name">
+            {/* The name asked here is the name saved: the details step shows it
+                read-only instead of asking again (v16 3.1). */}
+            <FormField label={TARGET_NAME_LABEL} htmlFor="url-name">
               <Input
                 id="url-name"
                 type="text"
@@ -708,7 +718,7 @@ export function OnboardingWizard({
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 2
+                Step {step} of {steps.length} · {steps[1]!.label}
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Select a repository</h2>
               <p className="text-muted-foreground mt-2 text-sm">
@@ -783,29 +793,30 @@ export function OnboardingWizard({
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step {pathNeedsRepo(path) ? 3 : 2}
+                Step {step} of {steps.length} · {steps[steps.length - 1]!.label}
               </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">{PRODUCT_SINGULAR} details</h2>
+              <h2 className="mt-1 text-2xl font-bold tracking-tight">{TARGET_DETAILS_LABEL}</h2>
               <p className="text-muted-foreground mt-2 text-sm">
                 {retryingExistingTarget
-                  ? `Retry the review for ${productName || `this ${PRODUCT_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
+                  ? `Retry the review for ${productName || `this ${TARGET_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
                   : pathNeedsRepo(path)
-                    ? `Name your ${PRODUCT_SINGULAR.toLowerCase()}. You can classify its environment later in target settings.`
-                    : `Reviewing your ${pathLabel(path)}. Name it and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
+                    ? `Name your ${TARGET_SINGULAR.toLowerCase()}. You can classify its environment later in target settings.`
+                    : `Reviewing your ${pathLabel(path)}. Confirm the details and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
               </p>
             </div>
 
             {retryingExistingTarget ? (
               <div className="bg-muted/40 rounded-lg border p-4">
                 <p className="text-sm font-medium">
-                  {productName || `Existing ${PRODUCT_SINGULAR}`}
+                  {productName || `Existing ${TARGET_SINGULAR}`}
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">
                   Existing {pathLabel(path)} · target details are locked for this retry
                 </p>
               </div>
-            ) : (
-              <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
+            ) : pathNeedsRepo(path) ? (
+              // GitHub flow: the name is chosen here (v16 3.1 — asked once).
+              <FormField label={TARGET_NAME_LABEL} htmlFor="product-name">
                 <Input
                   id="product-name"
                   value={productName}
@@ -813,6 +824,13 @@ export function OnboardingWizard({
                   placeholder="My web app"
                 />
               </FormField>
+            ) : (
+              // URL/API flow: the name was asked on the previous screen and is
+              // the name saved — shown here for confirmation only.
+              <div className="bg-muted/40 rounded-lg border p-4">
+                <p className="text-muted-foreground text-xs font-medium">{TARGET_NAME_LABEL}</p>
+                <p className="mt-1 text-sm font-medium">{productName || "Unnamed target"}</p>
+              </div>
             )}
 
             {/* W2-04: one recommended eligible review, with alternatives behind
@@ -892,7 +910,7 @@ export function OnboardingWizard({
                   <ChevronLeft className="size-4" /> Back
                 </Button>
               )}
-              <Button type="button" onClick={createProductAndStart} disabled={loading}>
+              <Button type="button" onClick={createTargetAndStart} disabled={loading}>
                 <ShieldCheck className="size-4" />
                 {loading ? "Starting…" : `Start ${selectedReview?.label.toLowerCase() ?? "review"}`}
               </Button>

@@ -91,9 +91,12 @@ export default async function ConnectionsPage() {
                             : "No scopes granted"}
                           {" · "}
                           {health.usability}
+                          {" · "}
+                          Connected {new Date(connection.createdAt).toLocaleDateString()}
+                          {" · "}
                           {connection.lastSuccessfulOperationAt
-                            ? ` · Last successful operation ${new Date(connection.lastSuccessfulOperationAt).toLocaleString()}`
-                            : " · No successful operation recorded"}
+                            ? `Last used ${new Date(connection.lastSuccessfulOperationAt).toLocaleString()}`
+                            : "No successful operation recorded"}
                           {connection.allTargets ? " · all current and future targets" : ""}
                           {connection.expiresAt
                             ? ` · authorization expires ${new Date(connection.expiresAt).toLocaleDateString()}`

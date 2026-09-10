@@ -67,6 +67,7 @@ import {
 import { getManualScanOptions } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { getGoalLabel, modeLabel } from "@/lib/labels"
+import { getScanModeLabel, getTargetTypeLabel } from "@/lib/enum-labels"
 import { formatEstimate } from "@/lib/estimator"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 
@@ -222,9 +223,12 @@ export function ScansClient({
   const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const reviewChoiceVersion = useRef(0)
-  const [selectedTarget, setSelectedTarget] = useState(initialTargetId)
+  // One active target and no explicit selection: preselect it. Choosing among
+  // several is the user's call, but being asked to pick the only option is not.
+  const initialSelectedTarget = initialTargetId || (targets.length === 1 ? targets[0]!.id : "")
+  const [selectedTarget, setSelectedTarget] = useState(initialSelectedTarget)
   const [selectedPreset, setSelectedPreset] = useState(() => {
-    const target = targets.find((item) => item.id === initialTargetId)
+    const target = targets.find((item) => item.id === initialSelectedTarget)
     return findRecoveryPreset(
       getManualScanOptions({
         type: target?.type ?? "",
@@ -371,7 +375,18 @@ export function ScansClient({
       )
       setScans((prev) => [result, ...prev])
       setShowCreate(false)
-      setSelectedTarget("")
+      // Clear back to the preselect default (the sole target when there is
+      // exactly one) rather than an unconditional blank.
+      setSelectedTarget(initialSelectedTarget)
+      setSelectedPreset(() => {
+        const target = targets.find((item) => item.id === initialSelectedTarget)
+        if (!target) return ""
+        const options = getManualScanOptions({
+          type: target.type,
+          hasApiSpec: Boolean(target.apiSpecUrl),
+        })
+        return options.find((o) => o.available)?.id ?? ""
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create scan")
       setErrorCode(err instanceof ApiError ? err.code : null)
@@ -842,7 +857,7 @@ export function ScansClient({
                   <option value="">Select a {TARGET_SINGULAR.toLowerCase()}…</option>
                   {targets.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.type})
+                      {t.name} ({getTargetTypeLabel(t.type)})
                     </option>
                   ))}
                 </Select>
@@ -851,9 +866,7 @@ export function ScansClient({
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="block text-sm font-medium">Review type</p>
-                  <span className="text-muted-foreground text-[11px]">
-                    Simple options: pick one
-                  </span>
+                  <span className="text-muted-foreground text-xs">Simple options: pick one</span>
                 </div>
 
                 <div role="radiogroup" aria-label="Review type" className="grid grid-cols-1 gap-3">
@@ -912,9 +925,9 @@ export function ScansClient({
                           <div className="flex items-center gap-1.5">
                             <Badge
                               variant={modeBadgeVariant(option.mode)}
-                              className="px-2 py-0 text-[10px] font-semibold tracking-wide uppercase"
+                              className="px-2 py-0 text-xs font-semibold tracking-wide uppercase"
                             >
-                              {option.mode}
+                              {getScanModeLabel(option.mode)}
                             </Badge>
                             {isSelected ? (
                               <span className="bg-primary text-primary-foreground inline-flex size-5 items-center justify-center rounded-full">
@@ -927,7 +940,7 @@ export function ScansClient({
                           {option.description}
                         </span>
                         {isDisabled && option.disabledReason ? (
-                          <span className="mt-2 text-[11px] text-amber-600">
+                          <span className="mt-2 text-xs text-amber-600">
                             {option.disabledReason}
                           </span>
                         ) : null}
@@ -1095,9 +1108,9 @@ export function ScansClient({
                           {selectedOption.hint}
                         </p>
                       </div>
-                      <p className="text-muted-foreground text-[11px] leading-relaxed">
-                        The completed run records the applicable evidence and any limitations so you
-                        can decide what to fix or retest next.
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        The completed scan records the applicable evidence and any limitations so
+                        you can decide what to fix or retest next.
                       </p>
                     </div>
                   </div>
@@ -1208,8 +1221,8 @@ export function ScansClient({
                       )}
                       {scan.findingCount !== undefined && scan.findingCount > 0 && (
                         <span className="text-foreground font-medium whitespace-nowrap">
-                          {scan.findingCount} issue{scan.findingCount !== 1 ? "s" : ""} from this
-                          run
+                          {scan.findingCount} finding{scan.findingCount !== 1 ? "s" : ""} from this
+                          scan
                         </span>
                       )}
                     </div>
@@ -1231,9 +1244,9 @@ export function ScansClient({
                           triggerLabel="Cancel"
                           triggerIcon={<X className="mr-1 h-4 w-4" aria-hidden="true" />}
                           triggerVariant="outline"
-                          confirmLabel="Stop run"
-                          message="Stop this run?"
-                          aria-label="Cancel this run"
+                          confirmLabel="Stop scan"
+                          message="Stop this scan?"
+                          aria-label="Cancel this scan"
                           onConfirm={() => handleCancelScan(scan.id)}
                         />
                       ))}
@@ -1244,7 +1257,7 @@ export function ScansClient({
                           goal: scan.goal,
                           mode: scan.mode,
                         })}
-                        aria-label={`Retry setup for ${scan.target?.name ?? "run"}`}
+                        aria-label={`Retry setup for ${scan.target?.name ?? "scan"}`}
                         className={buttonVariants({ variant: "outline", size: "sm" })}
                       >
                         <RotateCcw className="mr-1 h-4 w-4" aria-hidden="true" />
@@ -1254,21 +1267,21 @@ export function ScansClient({
                     {!active &&
                       !needsAttention &&
                       (removing === scan.id ? (
-                        <Button variant="ghost" size="sm" disabled aria-label="Removing run">
+                        <Button variant="ghost" size="sm" disabled aria-label="Removing scan">
                           <Spinner className="h-4 w-4" />
                         </Button>
                       ) : (
                         <InlineConfirm
                           triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
-                          aria-label="Remove run"
-                          message="Remove this run from the workspace?"
+                          aria-label="Remove scan"
+                          message="Remove this scan from the workspace?"
                           confirmLabel="Remove"
                           onConfirm={() => handleRemoveScan(scan.id)}
                         />
                       ))}
                     <Link
                       href={`/dashboard/scans/${scan.id}`}
-                      aria-label={`Open details for ${scan.target?.name ?? "run"}`}
+                      aria-label={`Open details for ${scan.target?.name ?? "scan"}`}
                       className="text-muted-foreground hover:text-foreground inline-flex min-h-11 min-w-11 items-center justify-center"
                     >
                       <ChevronRight className="h-5 w-5" aria-hidden="true" />

@@ -47,6 +47,15 @@ export const SOFT_DELETE_MODELS = new Set<string>([
 //  - OnboardingState: a per-user record keyed by userId, not tenant data.
 //  - ReferralCode, ReferralAttribution, ScorecardShare, and ScorecardEvent:
 //    no workspaceId column; score-service.ts owns their explicit isolation invariants.
+//  - WebhookEventTrack: delivery tracking for provider webhook processing.
+//    Its workspaceId is a nullable, best-effort attribution stamp written
+//    during webhook fan-out — the parent WebhookEvent resolves the workspace
+//    cross-workspace before any track row exists (billing/license/affiliate
+//    webhooks arrive before the workspace is known). Track rows are only ever
+//    read by the reconciliation sweep and admin surfaces, never by a
+//    workspace-scoped request, so RLS scoping would be both wrong (rows with
+//    NULL workspaceId are the normal case mid-fan-out) and useless (no
+//    workspace request path queries it).
 // Injecting `workspaceId` on a model without the column throws, so — as with
 // soft-delete — this set must match the schema exactly.
 export const WORKSPACE_SCOPED_MODELS = new Set<string>([
@@ -83,6 +92,7 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "GateVerdict",
   "AgentConnection",
   "AgentOperation",
+  "LoopClosure",
 ])
 
 export const READ_OPS = new Set<string>([

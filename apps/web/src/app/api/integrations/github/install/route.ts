@@ -331,6 +331,15 @@ async function post(request: NextRequest) {
       createInstallState(workspaceId, returnTo, Date.now(), oauthReturnState)
     )
 
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId: session.userId,
+        action: "integration.github.connect_started",
+        resourceType: "integration",
+      },
+    })
+
     return NextResponse.json({ success: true, data: { installUrl: url.toString() } })
   } catch (error) {
     const authErr = authErrorResponse(error)

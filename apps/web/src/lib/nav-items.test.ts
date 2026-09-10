@@ -90,13 +90,21 @@ describe("nav-items workspace destinations", () => {
     }
   })
   it("keeps Connections in the workspace group with agents and integrations reachable (W2-08)", () => {
+    // Deep Review v16 3.2: Fixes folded into Findings as the "Proposed fixes"
+    // tab; /dashboard/fixes remains a redirect for old links.
     expect(SECONDARY_NAV_ITEMS.map((item) => item.href)).toEqual([
-      "/dashboard/fixes",
       "/dashboard/notifications",
       "/dashboard/connections",
       "/dashboard/team",
       "/dashboard/settings",
     ])
+  })
+
+  it("reaches Proposed fixes through the Findings tab, not a separate destination", () => {
+    expect(SECONDARY_NAV_ITEMS.map((item) => item.href)).not.toContain("/dashboard/fixes")
+    // The compatibility redirect keeps its page-title entry and stays reachable
+    // by URL; it is deliberately not a nav destination.
+    expect(NAV_TITLE_ITEMS.map((item) => item.href)).toContain("/dashboard/fixes")
   })
 
   it("surfaces Evidence Vault only when the active role has aiAssurance:view", () => {

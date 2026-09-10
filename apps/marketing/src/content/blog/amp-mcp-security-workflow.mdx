@@ -25,9 +25,9 @@ LyraShield AI is designed to keep the loop of Target to Scan to Evidence State t
 
 ## 1. Prerequisites and project setup
 
-You need Node.js 20 or newer, Amp installed and logged in, Git, and a LyraShield OAuth login. The local MCP package reads LyraShield's credential store. Amp settings support `${VAR_NAME}` interpolation when a separate environment value is required.
+You need Node.js 24 or newer, Amp installed and logged in, Git and a LyraShield OAuth login. The local MCP package reads LyraShield's credential store. Amp settings support `${VAR_NAME}` interpolation when a separate environment value is required.
 
-LyraShield v1 scope is agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Current MCP tools scan, read findings, record fix proposals, and queue retests. They do not edit code or open branches or pull requests, so remediation remains developer-controlled. Check [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for transport options and [Node.js docs](https://nodejs.org/en/docs) if you need to upgrade Node for stdio stability. Node 20 improves stdio reliability for long running MCP sessions, which matters when Amp keeps servers alive across tasks.
+LyraShield v1 scope is agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Current MCP tools scan, read findings, record fix proposals and queue retests. They do not edit code or open branches or pull requests, so remediation remains developer-controlled. Check [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for transport options and [Node.js docs](https://nodejs.org/en/docs) if you need to upgrade Node for stdio stability. Node 24 improves stdio reliability for long running MCP sessions, which matters when Amp keeps servers alive across tasks.
 
 Verification starts with package existence and key presence:
 

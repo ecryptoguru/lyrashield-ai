@@ -4,6 +4,7 @@ import { env, isDev } from "@lyrashield/config"
 import { workspaceExtension } from "./extension"
 import { computeAuditHash } from "./audit-hash"
 import { createBoundedPgAdapter } from "./pool"
+import { registerSlowQueryLogging } from "./slow-query-log"
 
 const globalForPrisma = globalThis as unknown as {
   prisma: ReturnType<typeof createPrismaClient> | undefined
@@ -11,10 +12,22 @@ const globalForPrisma = globalThis as unknown as {
 
 function createPrismaClient() {
   const adapter = createBoundedPgAdapter(env.DATABASE_URL)
+  // Same stdout levels as before (errors always, warnings in dev), plus a
+  // query event emitter consumed by the slow-query logger below. Query events
+  // are never printed wholesale — full query text must not reach stdout.
+  const stdoutLevels = isDev ? (["error", "warn"] as const) : (["error"] as const)
   const baseClient = new PrismaClient({
     adapter,
-    log: isDev ? ["error", "warn"] : ["error"],
+    log: [
+      ...stdoutLevels.map((level) => ({ emit: "stdout" as const, level })),
+      { emit: "event" as const, level: "query" },
+    ],
   })
+
+  // Subscribe on the BASE client before $extends: extended clients do not
+  // expose $on. Logs queries slower than the threshold with duration and the
+  // model/action — never query text or parameters.
+  registerSlowQueryLogging(baseClient, { scope: "db" })
 
   const prismaWithWorkspace = baseClient.$extends(workspaceExtension)
 

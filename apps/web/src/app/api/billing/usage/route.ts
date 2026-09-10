@@ -26,10 +26,9 @@ export async function GET(request: Request) {
 
     await requirePermission(workspaceId, PERMISSIONS.billing.manage)
 
-    const [balance, trialState, graceState, billingAccount] = await Promise.all([
-      getUsageBalance(workspaceId),
-      getTrialState(workspaceId),
-      getGraceState(workspaceId),
+    // 2.1: fetch BillingAccount and Workspace once and pass the rows into the
+    // balance/trial/grace helpers instead of each helper re-reading them.
+    const [billingAccount, workspaceRow] = await Promise.all([
       prisma.billingAccount.findUnique({
         where: { workspaceId },
         select: {
@@ -40,6 +39,39 @@ export async function GET(request: Request) {
           currentPeriodEnd: true,
         },
       }),
+      prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: {
+          plan: true,
+          trialStartedAt: true,
+          graceUsedMs: true,
+          graceCycleStart: true,
+        },
+      }),
+    ])
+
+    const [balance, trialState, graceState] = await Promise.all([
+      getUsageBalance(workspaceId, {
+        billingAccount: billingAccount
+          ? {
+              currentPeriodStart: billingAccount.currentPeriodStart,
+              currentPlan: billingAccount.currentPlan,
+            }
+          : null,
+        workspace: workspaceRow ? { trialStartedAt: workspaceRow.trialStartedAt } : null,
+      }),
+      getTrialState(
+        workspaceId,
+        workspaceRow
+          ? { plan: workspaceRow.plan, trialStartedAt: workspaceRow.trialStartedAt }
+          : null
+      ),
+      getGraceState(
+        workspaceId,
+        workspaceRow
+          ? { graceUsedMs: workspaceRow.graceUsedMs, graceCycleStart: workspaceRow.graceCycleStart }
+          : null
+      ),
     ])
 
     return apiSuccess(

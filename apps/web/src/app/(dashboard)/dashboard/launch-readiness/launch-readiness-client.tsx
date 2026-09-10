@@ -167,8 +167,8 @@ export function LaunchReadinessClient({
 
   // This page does not poll (readiness only moves when a scan finishes), so it
   // can otherwise show an SSR snapshot indefinitely. Revalidate quietly when the
-  // tab regains focus — the API's 30s max-age/stale-while-revalidate makes this
-  // cheap, and `silent` keeps the current report on screen while it refreshes.
+  // tab regains focus — the API serves the report with no-store, and `silent`
+  // keeps the current report on screen while it refreshes.
   useEffect(() => {
     const onVisibility = () => {
       if (!document.hidden) loadReport(undefined, { silent: true })

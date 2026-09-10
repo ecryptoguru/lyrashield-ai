@@ -36,8 +36,8 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 `lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs via three strategies, all driven by the same `packages/agent-registry` source of truth:
 
 - **Agent Plugin** — for the 5 preferred clients with Agent Plugins v1.0.0 support today (Claude Code, Cursor, OpenAI Codex, GitHub Copilot, Kiro), `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
-- **Config-file** — for 16 clients whose settings can be safely written, the CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
-- **Guided manual** — for 7 clients whose tooling has no writable config file (Cline, JetBrains, PiCode, OpenClaw, Hermes, Goose, Aider), the CLI prints exact copy-paste command/argument/env values.
+- **Config-file** — for 17 clients whose settings can be safely written, the CLI merges into the existing file, never overwrites and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Guided manual** — for 6 clients whose tooling has no writable config file (Devin, JetBrains, PiCode, OpenClaw, Goose, Aider), the CLI prints exact copy-paste command/argument/env values.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
 
 Run `npx lyrashield doctor` any time to check what's configured and what's missing.
@@ -56,7 +56,7 @@ Run `npx lyrashield doctor` any time to check what's configured and what's missi
 }
 ```
 
-`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions gated behind human approval) and both stdio and remote Streamable-HTTP transports. Full per-agent setup for 26 preferred client surfaces is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is now v0.1.18 with Cursor streamable-http support, and the `packages/agent-registry` resolves its 30 install entries into those preferred surfaces.
+`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions) and both stdio and remote Streamable-HTTP transports. A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client (an API key) receives one structured `connect_required` response pointing at OAuth connect — no approval cycle and no execution. Full per-agent setup for 26 preferred client surfaces is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is now v0.1.27 with Cursor streamable-http support and the `packages/agent-registry` resolves its 30 install entries into those preferred surfaces.
 
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
@@ -77,7 +77,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/desktop` — Tauri v2 BYOK desktop app (LyraShield Local/Desktop). Rust core + React frontend, ed25519 license verification, OS keychain BYOK credentials, and optional cloud sync.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
 - `packages/agent-registry` — the single source of truth for 30 install entries resolving to 26 preferred client surfaces. It retains three explicit config-file alternatives for plugin-preferred clients plus one experimental VS Code plugin entry. The CLI installers and the docs site are both generated against it.
-- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package (now v0.1.18 with Cursor streamable-http support) that bundles the MCP server and a `lyrashield` skill for the five preferred Agent Plugin clients (Claude Code, Cursor, OpenAI Codex, GitHub Copilot, Kiro). GitHub Copilot remains experimental until a retained client-runtime receipt exists.
+- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package (now v0.1.27 with Cursor streamable-http support) that bundles the MCP server and a `lyrashield` skill for the five preferred Agent Plugin clients (Claude Code, Cursor, OpenAI Codex, GitHub Copilot, Kiro). GitHub Copilot remains experimental until a retained client-runtime receipt exists.
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
@@ -159,7 +159,7 @@ The application pins an exact engine commit in `.github/workflows/deploy-azure.y
 - URL/API targets use pinned deterministic URL scanners with a versioned `url-scan/2.0.0` capability registry (six profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.
 - Public scorecard payloads are allowlisted and sharing is revocable.
-- The MCP server's mutating tools (start a scan, record a fix, queue a retest) require human approval before executing, both locally and over the remote endpoint.
+- The MCP server's mutating tools (start a scan, record a fix, queue a retest) run within the connection grant for a connected OAuth client — their authorized operations execute automatically without a per-action approval. A caller without a connected client receives one structured `connect_required` response pointing at OAuth connect. Historical approval records remain viewable and resolvable.
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
 - Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before any deploy. Operator promotion of that digest on the worker VM remains a separate manual action.
 

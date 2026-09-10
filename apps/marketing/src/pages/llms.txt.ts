@@ -29,7 +29,7 @@ const evidenceControlCount = VIBE_SECURITY_CONTROLS.filter(
 // schedule to either believe the site changes constantly or to stop trusting
 // the field. See astro.config.mjs's sitemap lastmod comment for the same
 // principle applied to the sitemap.
-const LLMS_TXT_CONTENT_DATE = "2026-08-29"
+const LLMS_TXT_CONTENT_DATE = "2026-09-10"
 
 const docsLinks = [
   { label: "REST API reference", path: "/docs/api" },

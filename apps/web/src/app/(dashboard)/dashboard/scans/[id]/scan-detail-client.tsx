@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   ArrowRight,
@@ -31,6 +32,7 @@ import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel } from "@/lib/labels"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { scanRecoveryHref } from "../scans-client.utils"
+import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 
 interface ScanEvent {
   id: string
@@ -109,6 +111,8 @@ interface ScanPollData {
   events?: Array<
     Omit<ScanEvent, "metadata" | "createdAt"> & { metadata?: unknown; createdAt: string | Date }
   >
+  /** Echoed when an incremental event window was applied to this response. */
+  eventsCursorApplied?: string
   resultManifest?: { checksum?: string | null } | null
   coverageReceipts?: Array<{
     scanner: string
@@ -135,6 +139,21 @@ interface FindingItem {
   verificationMethod: string | null
   verificationReason: string | null
   createdAt: string
+}
+
+interface CleanResultScorecard {
+  targetId: string
+  grade: string
+  canPublish: boolean
+  existingShare?: {
+    id: string
+    slug: string
+    url: string
+    resolvedFindings: number
+    views: number
+    shareHandoffs: number
+    referredSignups: number
+  }
 }
 
 const findingItemSchema = z
@@ -167,6 +186,11 @@ const scanPollEventSchema = z
   })
   .passthrough()
 
+// Echoed by the API only when an incremental event window was actually applied
+// to the poll (see eventsAfter); lets the client prove the cursor took effect
+// before merging the tail into the full list.
+const eventsCursorAppliedSchema = z.string().optional()
+
 const scanPollCoverageReceiptSchema = z
   .object({
     scanner: z.string(),
@@ -197,6 +221,7 @@ const scanPollDataSchema = z
     llmOutputTokens: z.number().nullable().optional(),
     createdAt: z.string().datetime().or(z.string()).or(z.date()),
     events: z.array(scanPollEventSchema).optional(),
+    eventsCursorApplied: eventsCursorAppliedSchema,
     resultManifest: z
       .object({
         checksum: z.string().nullable().optional(),
@@ -255,6 +280,8 @@ const SCANNER_LABELS: Record<string, string> = {
 
 const ELAPSED_TIME_INTERVAL_MS = 1_000
 const COMPLETION_NOTICE_DISMISS_MS = 6_000
+/** Matches the service's event window cap (getScanWithEvents take: 200). */
+const MAX_EVENT_WINDOW = 200
 
 /** Ticking elapsed time from a start timestamp, returning a formatted string. */
 function useElapsedTime(startedAt: string | null): string {
@@ -285,6 +312,39 @@ function asIsoString(value: string | Date | null): string | null {
   return value instanceof Date ? value.toISOString() : String(value)
 }
 
+// Event ordering for the incremental merge. The API returns events newest-first
+// and the client stores them ascending; a stale full window and a fresh
+// incremental tail can interleave, so comparisons never assume response order.
+function isEventAtOrAfterCursor(event: { createdAt: string; id: string }, cursor: ScanEvent) {
+  if (event.createdAt > cursor.createdAt) return true
+  if (event.createdAt < cursor.createdAt) return false
+  return event.id >= cursor.id
+}
+
+/**
+ * Merge a poll's events into the full client-side history. With a proven
+ * cursor (`eventsCursorApplied` echoed by the server) the payload is a tail:
+ * append strictly-new events and trim back to the 200-event window. Without
+ * one — initial load, no cursor sent, unknown-cursor fallback, or a response
+ * that raced a local trim — the payload is the authoritative full window and
+ * replaces local state wholesale.
+ */
+function mergeEvents(current: ScanEvent[], incoming: ScanEvent[], cursorApplied: boolean) {
+  if (!cursorApplied) return incoming
+  const cursor = current.at(-1)
+  if (!cursor) return incoming
+  const seen = new Set(current.map((event) => event.id))
+  // A retried poll can re-deliver the same tail; a late response from a poll
+  // started before the newest one can also arrive. Dropping ids the client
+  // already holds covers both; the at-or-after check is belt-and-braces for a
+  // malformed tail.
+  const newEvents = incoming.filter(
+    (event) => !seen.has(event.id) && isEventAtOrAfterCursor(event, cursor)
+  )
+  const merged = [...current, ...newEvents]
+  return merged.length > MAX_EVENT_WINDOW ? merged.slice(merged.length - MAX_EVENT_WINDOW) : merged
+}
+
 function asMetadata(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -294,10 +354,13 @@ function asMetadata(value: unknown): Record<string, unknown> | null {
 export function ScanDetailClient({
   scan: initialScan,
   findings,
+  scorecard,
 }: {
   scan: ScanData
   findings: FindingItem[]
+  scorecard: CleanResultScorecard | null
 }) {
+  const router = useRouter()
   const [scan, setScan] = useState<ScanData>(initialScan)
   const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
   const [expandedEvents, setExpandedEvents] = useState(false)
@@ -320,6 +383,12 @@ export function ScanDetailClient({
   useEffect(() => {
     scanRef.current = scan
   }, [scan])
+  // Incremental event polling cursor: the id of the newest event already held
+  // client-side. Each poll sends `eventsAfter` so the server returns only the
+  // tail. A ref (not state) so the in-flight poll callback always reads the
+  // latest cursor without re-render churn; it only advances after a successful
+  // merge, so a failed or aborted poll re-delivers the same tail next tick.
+  const eventCursorRef = useRef<string | null>(initialScan.events.at(-1)?.id ?? null)
 
   // Announce the active→terminal transition. Polling swaps the in-progress view
   // for the stat grid silently otherwise, so users who looked away (or use a
@@ -343,6 +412,13 @@ export function ScanDetailClient({
     })
   }, [scan.errorCategory, scan.errorMessage, scan.status])
 
+  // A successful commit re-derives the cursor from the merged list (single
+  // source of truth), so a failed, aborted, or validation-rejected poll never
+  // advances it and the next tick re-delivers the same tail.
+  useEffect(() => {
+    eventCursorRef.current = scan.events.at(-1)?.id ?? null
+  }, [scan])
+
   // Auto-dismiss the completion banner after 6s; the outcome stays visible in
   // the status badge and stat grid.
   useEffect(() => {
@@ -354,8 +430,13 @@ export function ScanDetailClient({
   const refresh = useCallback(
     async (signal: AbortSignal) => {
       try {
+        // Incremental polling: once a cursor exists, ask only for events after
+        // it. The first tick (or a full-window fallback) repopulates the whole
+        // list; manual refresh clears the cursor below to force that path.
+        const eventCursor = eventCursorRef.current
+        const cursorParam = eventCursor ? `&eventsAfter=${encodeURIComponent(eventCursor)}` : ""
         const { data, etag } = await apiGetConditional<ScanPollData>(
-          `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}`,
+          `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}${cursorParam}`,
           { signal, etag: etagRef.current, schema: scanPollDataSchema }
         )
         etagRef.current = etag
@@ -377,14 +458,21 @@ export function ScanDetailClient({
           errorCategory: updated.errorCategory,
           errorMessage: updated.errorMessage,
           createdAt: asIsoString(updated.createdAt)!,
-          events: (updated.events ?? []).map((event) => ({
-            id: event.id,
-            stage: event.stage,
-            level: event.level,
-            message: event.message,
-            metadata: asMetadata(event.metadata),
-            createdAt: asIsoString(event.createdAt)!,
-          })),
+          events: mergeEvents(
+            scanRef.current.events,
+            (updated.events ?? []).map((event) => ({
+              id: event.id,
+              stage: event.stage,
+              level: event.level,
+              message: event.message,
+              metadata: asMetadata(event.metadata),
+              createdAt: asIsoString(event.createdAt)!,
+            })),
+            // A tail page is only merged when the server echoes that the
+            // cursor sent on this very request was applied; anything else is a
+            // full replacement.
+            updated.eventsCursorApplied === eventCursor && eventCursor !== null
+          ),
           integrity: {
             ...scanRef.current.integrity,
             manifestChecksum: updated.resultManifest?.checksum ?? null,
@@ -423,12 +511,15 @@ export function ScanDetailClient({
           // and retries instead of rendering a false zero until page reload.
           setScan(nextScan)
           if (refreshedFindings) setCurrentFindings(refreshedFindings)
+          if (updated.status === "COMPLETED" && refreshedFindings?.length === 0) {
+            router.refresh()
+          }
         }
       } catch {
         if (!signal.aborted) setRefreshError(true)
       }
     },
-    [scan.id, scan.workspaceId]
+    [router, scan.id, scan.workspaceId]
   )
 
   useEffect(() => {
@@ -479,6 +570,9 @@ export function ScanDetailClient({
   async function handleManualRefresh() {
     setRefreshing(true)
     etagRef.current = undefined
+    // Force a full-window refetch: manual refresh is the user's "prove it"
+    // action, so re-fetch every event instead of trusting the incremental tail.
+    eventCursorRef.current = null
     const controller = new AbortController()
     try {
       await refresh(controller.signal)
@@ -745,7 +839,7 @@ export function ScanDetailClient({
             </Card>
           )}
 
-          {presentation.assuranceAvailable && (
+          {presentation.assuranceAvailable && topFinding && (
             <Card className="border-primary/30 bg-primary/5 mb-6 p-5 sm:p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -753,25 +847,17 @@ export function ScanDetailClient({
                     Next step
                   </p>
                   <h2 className="mt-1 text-lg font-semibold">
-                    {topFinding
-                      ? "Review the highest-priority finding"
-                      : "Create an assurance report"}
+                    Review the highest-priority finding
                   </h2>
                   <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-                    {topFinding
-                      ? "Understand the evidence, record a fix proposal, then queue a fresh retest."
-                      : "Package this completed scan and its retained scope into an immutable report."}
+                    Understand the evidence, record a fix proposal, then queue a fresh retest.
                   </p>
                 </div>
                 <Link
-                  href={
-                    topFinding
-                      ? `/dashboard/findings?finding=${encodeURIComponent(topFinding.id)}`
-                      : `/dashboard/findings?tab=reports&scanId=${encodeURIComponent(scan.id)}`
-                  }
+                  href={`/dashboard/findings?finding=${encodeURIComponent(topFinding.id)}`}
                   className={buttonVariants({ className: "shrink-0" })}
                 >
-                  {topFinding ? "Review finding" : "Generate report"}
+                  Review finding
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </Link>
               </div>
@@ -1183,18 +1269,56 @@ export function ScanDetailClient({
           )}
 
           {currentFindings.length === 0 && !isActive && presentation.assuranceAvailable && (
-            <EmptyState
-              icon={ShieldCheck}
-              title="No findings were reported"
-              description={
-                hasLimitedCoverage
-                  ? "Some scanner coverage was limited. Review the coverage notice above before treating this as a clean result."
-                  : scan.status === "COMPLETED"
-                    ? "No findings were reported within this scan's completed coverage. Review the retained scope before relying on the result."
-                    : "No findings were recorded before this scan ended."
-              }
-              action={null}
-            />
+            <div className="space-y-4">
+              <EmptyState
+                icon={ShieldCheck}
+                title="No findings were reported"
+                description={
+                  hasLimitedCoverage
+                    ? "Some scanner coverage was limited. Review the coverage notice above before treating this as a clean result. Absence of findings is not verification."
+                    : "No findings were reported within this scan's completed coverage. Review the retained scope before relying on the result. Absence of findings is not verification."
+                }
+                action={null}
+              />
+              {scan.status === "COMPLETED" && (
+                <Card className="border-primary/30 bg-primary/5 p-5 sm:p-6">
+                  <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                    Next actions
+                  </p>
+                  <div className="mt-3 grid gap-5 lg:grid-cols-2">
+                    <div className="min-w-0">
+                      <h2 className="font-semibold">Create an assurance report</h2>
+                      <p className="text-muted-foreground mt-1 text-sm">
+                        Package this completed scan and its retained scope into an immutable report.
+                      </p>
+                      <Link
+                        href={`/dashboard/findings?tab=reports&scanId=${encodeURIComponent(scan.id)}`}
+                        className={buttonVariants({ className: "mt-3" })}
+                      >
+                        Generate report
+                        <ArrowRight className="size-4" aria-hidden="true" />
+                      </Link>
+                    </div>
+                    {scorecard && (
+                      <div className="min-w-0 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
+                        <h2 className="font-semibold">Share the scorecard</h2>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                          Publish only the approved public score fields. Target and vulnerability
+                          details stay private.
+                        </p>
+                        <ScorecardControls
+                          targetId={scorecard.targetId}
+                          workspaceId={scan.workspaceId}
+                          grade={scorecard.grade}
+                          canPublish={scorecard.canPublish}
+                          existingShare={scorecard.existingShare}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </div>
           )}
         </>
       )}

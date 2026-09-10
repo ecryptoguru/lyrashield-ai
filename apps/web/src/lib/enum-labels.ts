@@ -5,6 +5,9 @@ export const SCAN_GOAL_LABELS: Record<string, string> = {
   WEEKLY_MONITOR: "Weekly monitor",
   FULL_PENTEST: "Deep security review",
   COMPLIANCE_REVIEW: "Compliance review",
+  // Legacy identifier from the pre-V2 goal enum; kept so historical rows and
+  // old clients still render a human label instead of the raw token.
+  SECURITY_REVIEW: "Security review",
 }
 
 export const SCAN_MODE_LABELS: Record<string, string> = {
@@ -56,6 +59,45 @@ export const TARGET_TYPE_LABELS: Record<string, string> = {
   IAC: "IaC",
 }
 
+export const SCAN_STATUS_LABELS: Record<string, string> = {
+  QUEUED: "Queued",
+  PREFLIGHT: "Checking setup",
+  RUNNING: "Scanning",
+  VERIFYING: "Verifying evidence",
+  COMPLETED: "Completed",
+  PARTIAL: "Partial",
+  FAILED: "Failed",
+  CANCELLED: "Cancelled",
+  REQUIRES_APPROVAL: "Approval required",
+  STOPPED_BUDGET: "Stopped by budget",
+  TIMED_OUT: "Timed out",
+}
+
+// The user-facing surface is TargetEnvironment (LOCAL/PREVIEW/STAGING/
+// PRODUCTION in the Prisma schema and @lyrashield/types). "EnvironmentKind"
+// and the TARGET_ENVIRONMENT_LABELS alias are kept so callers using either
+// name resolve.
+export const ENVIRONMENT_KIND_LABELS: Record<string, string> = {
+  LOCAL: "Local",
+  PREVIEW: "Preview",
+  STAGING: "Staging",
+  PRODUCTION: "Production",
+}
+
+export const TARGET_ENVIRONMENT_LABELS: Record<string, string> = ENVIRONMENT_KIND_LABELS
+
+export const WORKSPACE_PLAN_LABELS: Record<string, string> = {
+  FREE: "Free",
+  TRIAL: "Trial",
+  STARTER: "Starter",
+  PRO: "Pro",
+  TEAM: "Team",
+  AGENCY: "Agency",
+  BUSINESS: "Business",
+  LAUNCH_ASSURANCE: "Launch Assurance",
+  ENTERPRISE: "Enterprise",
+}
+
 export function getScanGoalLabel(value: string): string {
   return SCAN_GOAL_LABELS[value] ?? value
 }
@@ -82,4 +124,46 @@ export function getVerificationStatusLabel(value: string): string {
 
 export function getTargetTypeLabel(value: string): string {
   return TARGET_TYPE_LABELS[value] ?? value
+}
+
+export function getScanStatusLabel(value: string): string {
+  return SCAN_STATUS_LABELS[value] ?? value.replaceAll("_", " ")
+}
+
+export function getEnvironmentKindLabel(value: string): string {
+  return ENVIRONMENT_KIND_LABELS[value] ?? value.replaceAll("_", " ")
+}
+
+export function getWorkspacePlanLabel(value: string): string {
+  return WORKSPACE_PLAN_LABELS[value] ?? value.replaceAll("_", " ")
+}
+
+/**
+ * One lookup for every user-facing enum (v16 3.2): resolves `value` against
+ * all label families and returns the first match, so callers that hold a
+ * value without knowing its enum can still render human words. Returns
+ * undefined when no family knows the value — callers decide their own
+ * fallback (raw token, dash, "Unknown").
+ */
+export function describeEnum(value: string): string | undefined {
+  for (const labels of [
+    SCAN_GOAL_LABELS,
+    SCAN_MODE_LABELS,
+    SCAN_TRIGGER_LABELS,
+    FINDING_SEVERITY_LABELS,
+    FINDING_STATUS_LABELS,
+    VERIFICATION_STATUS_LABELS,
+    TARGET_TYPE_LABELS,
+    SCAN_STATUS_LABELS,
+    ENVIRONMENT_KIND_LABELS,
+    WORKSPACE_PLAN_LABELS,
+  ]) {
+    const label = labels[value]
+    if (label !== undefined) return label
+  }
+  return undefined
+}
+
+export function getEnvironmentLabel(value: string): string {
+  return TARGET_ENVIRONMENT_LABELS[value] ?? value
 }

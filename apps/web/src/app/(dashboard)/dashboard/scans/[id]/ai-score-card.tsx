@@ -1,5 +1,3 @@
-"use client"
-
 import { Card } from "@lyrashield/ui"
 import { Brain } from "lucide-react"
 

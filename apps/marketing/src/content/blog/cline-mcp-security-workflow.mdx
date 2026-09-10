@@ -8,7 +8,7 @@ draft: false
 heroImage: agent-security-16
 faq:
   - q: "Where does Cline store MCP config?"
-    a: "Cline CLI stores MCP servers in ~/.cline/mcp.json. IDE extensions open their client-owned settings JSON from the MCP Servers panel. Both use mcpServers."
+    a: "Cline CLI stores MCP servers in ~/.cline/data/settings/cline_mcp_settings.json. IDE extensions open their client-owned settings JSON from the MCP Servers panel. Both use mcpServers."
   - q: "How do I use LyraShield remote with Cline?"
     a: "Use type streamableHttp with URL https://app.lyrashieldai.com/api/mcp and Authorization Bearer LYRASHIELD_API_KEY. Local uses npx -y @lyrashield/mcp@0.2.8 via stdio."
   - q: "What is LyraShield build status?"
@@ -25,11 +25,11 @@ Cline automates file edits and terminal actions, which speeds up feature work bu
 
 ## 1. Prerequisites and setup
 
-You need a current Cline extension or CLI, Node 20 or newer, and permission to add workflows. Cline CLI reads `~/.cline/mcp.json`; IDE extensions open their client-owned settings JSON from MCP Servers → Configure. Both use `mcpServers`. Local entries use `command` and `args`; remote entries use `type: "streamableHttp"`, `url`, and optional headers. See the [official Cline MCP documentation](https://docs.cline.bot/mcp/mcp-overview) and the [Cline integration guide](/docs/integrations/cline).
+You need a current Cline extension or CLI, Node 24 or newer and permission to add workflows. Cline CLI reads `~/.cline/data/settings/cline_mcp_settings.json`; IDE extensions open their client-owned settings JSON from MCP Servers → Configure. Both use `mcpServers`. Local entries use `command` and `args`; remote entries use `type: "streamableHttp"`, `url` and optional headers. See the [official Cline MCP documentation](https://docs.cline.bot/mcp/mcp-overview) and the [Cline integration guide](/docs/integrations/cline).
 
 ## 2. Configure Cline MCP servers
 
-Use the Cline MCP panel or edit `~/.cline/mcp.json` for Cline CLI. The safe default is local stdio with the credential store created by `lyrashield login --oauth`.
+Use the Cline MCP panel or edit `~/.cline/data/settings/cline_mcp_settings.json` for Cline CLI. The safe default is local stdio with the credential store created by `lyrashield login --oauth`.
 
 Local stdio:
 
@@ -118,11 +118,11 @@ This codifies consistent security behavior between Cline, GitHub, and other edit
 
 Agent rules work because Cline reads `.clinerules` files at the start of every session and treats them as standing instructions. When you commit `.clinerules/security.md` to the repository, every contributor gets the same scan requirement without reading a wiki page. Keep rules short and imperative, five to seven lines maximum, because long rule files dilute attention. Pair the rules with a PR template that asks for the scan ID and SARIF link.
 
-| Mode    | Config file                      | Launch style                 | Auth                                        |
-| ------- | -------------------------------- | ---------------------------- | ------------------------------------------- |
-| Local   | `~/.cline/mcp.json` or IDE-managed settings | `npx -y @lyrashield/mcp@0.2.8` | LyraShield OAuth credential store            |
-| Remote  | IDE-managed settings                      | `streamableHttp`                  | Private Bearer header                         |
-| CI gate | .github/workflows/lyrashield.yml | ecryptoguru/lyrashield-ai@v2 | no LyraShield secret required               |
+| Mode    | Config file                                                              | Launch style                   | Auth                              |
+| ------- | ------------------------------------------------------------------------ | ------------------------------ | --------------------------------- |
+| Local   | `~/.cline/data/settings/cline_mcp_settings.json` or IDE-managed settings | `npx -y @lyrashield/mcp@0.2.8` | LyraShield OAuth credential store |
+| Remote  | IDE-managed settings                                                     | `streamableHttp`               | Private Bearer header             |
+| CI gate | .github/workflows/lyrashield.yml                                         | ecryptoguru/lyrashield-ai@v2   | no LyraShield secret required     |
 
 ## 7. Why pair Cline with LyraShield
 

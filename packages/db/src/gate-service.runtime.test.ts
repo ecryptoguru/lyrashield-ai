@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { PrismaClient } from "./generated/prisma"
@@ -16,7 +16,7 @@ vi.mock("@lyrashield/config", async (original) => {
 import { createReport } from "./report-service"
 import * as reportGenerator from "./report-generator"
 import { createApproval, claimApprovalExecution } from "./agent-approval-service"
-import { handleFixPrMergedAndReevaluate } from "./gate-service"
+import { handleFixPrMergedAndReevaluate, getCurrentGateVerdicts } from "./gate-service"
 import { prisma as runtime } from "./client"
 import {
   recordAgentMinutes,
@@ -500,5 +500,211 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     )
     expect(await owner.scoreSnapshot.findUnique({ where: { scanId: terminal.id } })).not.toBeNull()
     expect(await owner.usageRecord.count({ where: { workspaceId: id } })).toBe(usageBeforeFailure)
+  })
+
+  it("reads every target's current verdict in one batched call under the restricted runtime role", async () => {
+    // Deep Review v16 2.1: the batched set-based read must return, per target,
+    // exactly what the single-target read returns — under the NOBYPASSRLS
+    // runtime role, with DISTINCT ON picking each target's latest verdict.
+    // A target with no other suite fixtures: its verdict can be assessed
+    // cleanly. The ORIGINAL target carries the suite's scans and findings, so
+    // it becomes the drift proof — its assessment predates those scans and
+    // the newer-attempt check must fire.
+    const cleanTarget = await owner.target.create({
+      data: {
+        workspaceId: id,
+        name: "Batch clean",
+        type: "REPO",
+        repoFullName: "test/batch-clean",
+      },
+    })
+    const verdictlessTarget = await owner.target.create({
+      data: {
+        workspaceId: id,
+        name: "Batch no verdict",
+        type: "REPO",
+        repoFullName: "test/batch-no-verdict",
+      },
+    })
+    // A real Policy row whose fingerprint matches the snapshot: the read-mode
+    // applicability check compares the stored snapshot fingerprint against
+    // the live policy, so a missing/mismatched policy would (correctly) fail
+    // the verdict closed with POLICY_CHANGED.
+    const policyRow = await owner.policy.create({
+      data: {
+        workspaceId: id,
+        name: "Batch fixture policy",
+        networkEgressPolicy: "target_only",
+        maxDurationMinutes: 60,
+        piiRedactionEnabled: true,
+        evidenceRetentionDays: 30,
+      },
+    })
+    // Mirror of the service's 15-field policy select + canonicalize + sha256.
+    const policyFingerprintFields = {
+      id: policyRow.id,
+      workspaceId: policyRow.workspaceId,
+      name: policyRow.name,
+      description: policyRow.description,
+      scanWindow: policyRow.scanWindow,
+      blockedPaths: policyRow.blockedPaths,
+      allowedDomains: policyRow.allowedDomains,
+      rateLimit: policyRow.rateLimit,
+      networkEgressPolicy: policyRow.networkEgressPolicy,
+      destructiveTestsAllowed: policyRow.destructiveTestsAllowed,
+      approvalRequired: policyRow.approvalRequired,
+      maxBudgetUsd: policyRow.maxBudgetUsd,
+      maxDurationMinutes: policyRow.maxDurationMinutes,
+      piiRedactionEnabled: policyRow.piiRedactionEnabled,
+      evidenceRetentionDays: policyRow.evidenceRetentionDays,
+    }
+    const canonicalize = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(canonicalize)
+      if (value && typeof value === "object") {
+        return Object.fromEntries(
+          Object.entries(value as Record<string, unknown>)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([key, child]) => [key, canonicalize(child)])
+        )
+      }
+      return value
+    }
+    const policyFingerprint = createHash("sha256")
+      .update(JSON.stringify(canonicalize(policyFingerprintFields)))
+      .digest("hex")
+    // The clean target's assessment dates BEFORE any suite fixture could
+    // interfere but stays inside the 24h freshness window: one hour ago.
+    const now = Date.now()
+    const commit = "c".repeat(40)
+    const cleanSnapshot = {
+      version: 2,
+      scanId: "scan-batch-clean",
+      completedAtMs: now - 60 * 60 * 1000,
+      manifestChecksum: "a".repeat(64),
+      manifestVersion: 7,
+      policyId: policyRow.id,
+      policyFingerprint,
+      identity: { kind: "COMMIT", value: commit },
+    }
+    // A stale older verdict and the current one on the clean target: the
+    // DISTINCT ON ordering must pick the newer row.
+    for (const [evaluatedAt, state] of [
+      [new Date(now - 2 * 60 * 60 * 1000), "INSUFFICIENT_EVIDENCE"],
+      [new Date(now - 60 * 60 * 1000 - 2000), "READY"],
+    ] as const) {
+      await owner.gateVerdict.create({
+        data: {
+          workspaceId: id,
+          targetId: cleanTarget.id,
+          standardVersion: "lyrashield-gate/2.0.0",
+          state,
+          coverageStatement: {},
+          nonCoverage: {},
+          blockingReasons: [],
+          evidenceSummary: {},
+          staleness: {},
+          inputChecksum: "fixture",
+          verdictChecksum: "fixture",
+          assessmentVersion: 2,
+          assessmentSnapshot: cleanSnapshot,
+          evaluatedAt,
+        },
+      })
+    }
+    // The original target gets an assessment dated BEFORE the suite's scans
+    // were created, so the newer-attempt drift check must fire on it.
+    const staleSnapshot = {
+      ...cleanSnapshot,
+      scanId: "scan-batch-stale",
+      identity: { kind: "COMMIT", value: "e".repeat(40) },
+    }
+    // Drift proof on a DEDICATED target: the suite writes its own verdicts to
+    // the original target during the run, and DISTINCT ON would pick one of
+    // those instead of this fixture. This target gets exactly one verdict,
+    // whose assessment predates a scan created after it.
+    const driftedTarget = await owner.target.create({
+      data: {
+        workspaceId: id,
+        name: "Batch drifted",
+        type: "REPO",
+        repoFullName: "test/batch-drifted",
+      },
+    })
+    await owner.gateVerdict.create({
+      data: {
+        workspaceId: id,
+        targetId: driftedTarget.id,
+        standardVersion: "lyrashield-gate/2.0.0",
+        state: "READY",
+        coverageStatement: {},
+        nonCoverage: {},
+        blockingReasons: [],
+        evidenceSummary: {},
+        staleness: {},
+        inputChecksum: "fixture",
+        verdictChecksum: "fixture",
+        assessmentVersion: 2,
+        assessmentSnapshot: {
+          ...staleSnapshot,
+          completedAtMs: now - 2 * 60 * 60 * 1000 - 5000,
+        },
+        evaluatedAt: new Date(now - 2 * 60 * 60 * 1000 - 4000),
+      },
+    })
+    // A scan created AFTER the assessment completed: the newer-attempt check
+    // must fail the drifted target's verdict closed.
+    await owner.scan.create({
+      data: {
+        workspaceId: id,
+        targetId: driftedTarget.id,
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        status: "COMPLETED",
+        createdById: id,
+        endedAt: new Date(),
+      },
+    })
+
+    const batch = await getCurrentGateVerdicts(id, [
+      cleanTarget.id,
+      driftedTarget.id,
+      verdictlessTarget.id,
+    ])
+
+    // The verdictless target is absent from the map (the caller renders
+    // NO_GATE_VERDICT), never a fabricated entry.
+    expect(batch.size).toBe(2)
+    expect(batch.has(verdictlessTarget.id)).toBe(false)
+
+    // Clean target: read mode applies the assessment's own identity, READY.
+    const verdict = batch.get(cleanTarget.id)
+    expect(verdict).toMatchObject({
+      schemaVersion: "lyrashield-gate-response/2.0.0",
+      state: "READY",
+      applicability: {
+        applicable: true,
+        evaluatedIdentity: { kind: "COMMIT", value: commit },
+      },
+    })
+    expect(verdict?.applicability.reasons).toEqual([])
+
+    // Drifted target: a scan was created after its assessment completed, so
+    // the set-wide newer-attempt join must fail it closed (the drift check
+    // the batch exists to preserve).
+    const drifted = batch.get(driftedTarget.id)
+    expect(drifted?.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(drifted?.applicability.reasons.map((reason) => reason.code)).toContain(
+      "NEWER_ASSESSMENT_ATTEMPT"
+    )
+
+    // Strict mode through the same batch: a mismatched enforced commit still
+    // fails closed with IDENTITY_MISMATCH.
+    const strict = await getCurrentGateVerdicts(id, [cleanTarget.id], {
+      expectedCommit: "d".repeat(40),
+    })
+    expect(strict.get(cleanTarget.id)?.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(
+      strict.get(cleanTarget.id)?.applicability.reasons.map((reason) => reason.code)
+    ).toContain("IDENTITY_MISMATCH")
   })
 })

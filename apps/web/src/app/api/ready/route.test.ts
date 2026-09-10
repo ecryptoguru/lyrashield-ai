@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@lyrashield/db", () => ({ prisma: { $queryRaw: mocks.query } }))
 vi.mock("@lyrashield/integrations", () => ({ getRedis: () => ({ ping: mocks.ping }) }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { GET } from "./route"
 

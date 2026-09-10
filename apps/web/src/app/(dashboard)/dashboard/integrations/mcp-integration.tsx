@@ -133,7 +133,7 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
             </Button>
           </div>
           <pre
-            className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5"
+            className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-xs leading-5"
             tabIndex={0}
             aria-label="MCP local configuration"
           >
@@ -162,7 +162,7 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
             </Button>
           </div>
           <pre
-            className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5"
+            className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-xs leading-5"
             tabIndex={0}
             aria-label="MCP remote configuration"
           >

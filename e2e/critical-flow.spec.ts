@@ -260,7 +260,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
 
   await page.goto("/dashboard/scans?new=1")
   const targetSelect = page.getByLabel("Target", { exact: true })
-  await targetSelect.selectOption({ label: "Example target (WEB_APP)" })
+  await targetSelect.selectOption({ label: "Example target (Web app)" })
   await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
   await expect(page.getByRole("radio", { name: /^Expanded Surface Review:/ })).toBeEnabled()
   const webDeep = page.getByRole("radio", { name: /^Behavioral Surface Review:/ })

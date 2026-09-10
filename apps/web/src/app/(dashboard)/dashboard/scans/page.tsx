@@ -14,7 +14,9 @@ import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-se
 import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
 
 const SCANS_TABS: SectionTab[] = [
-  { value: "runs", label: "Runs", href: "/dashboard/scans?tab=runs" },
+  // The `runs` tab value is a compatibility URL parameter; the visible label
+  // uses the canonical "Scans" noun.
+  { value: "runs", label: "Scans", href: "/dashboard/scans?tab=runs" },
   { value: "monitoring", label: "Monitoring", href: "/dashboard/scans?tab=monitoring" },
 ]
 

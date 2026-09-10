@@ -1,4 +1,4 @@
-import { getCurrentGateVerdict, withWorkspaceRLS } from "@lyrashield/db"
+import { getCurrentGateVerdicts, withWorkspaceRLS } from "@lyrashield/db"
 import type { GateReadinessTarget } from "./launch-readiness"
 
 export interface ReadinessIdentityOptions {
@@ -6,8 +6,12 @@ export interface ReadinessIdentityOptions {
   expectedArtifactDigest?: string
 }
 
-const GATE_READ_CONCURRENCY = 4
-
+/**
+ * Uncached gate readiness for every active target. Reads are set-based: one
+ * RLS transaction with a statement count constant in the number of targets
+ * (Deep Review v16 2.1) — never a per-target verdict fan-out. The result must
+ * stay uncached: release decisions are computed on every request.
+ */
 export async function getGateReadinessTargets(
   workspaceId: string,
   targetId?: string,
@@ -20,47 +24,47 @@ export async function getGateReadinessTargets(
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     })
   )
+  if (targets.length === 0) return []
 
-  const results: GateReadinessTarget[] = []
-  for (let offset = 0; offset < targets.length; offset += GATE_READ_CONCURRENCY) {
-    const batch = targets.slice(offset, offset + GATE_READ_CONCURRENCY)
-    results.push(
-      ...(await Promise.all(
-        batch.map(async (target) => {
-          const result = await getCurrentGateVerdict(workspaceId, target.id, {
-            expectedCommit: identity.expectedCommit,
-            expectedArtifactDigest: identity.expectedArtifactDigest,
-          })
-          if (!result) {
-            return {
-              targetId: target.id,
-              targetName: target.name,
-              state: "INSUFFICIENT_EVIDENCE" as const,
-              applicable: false,
-              blockingFindings: 0,
-              reasons: [
-                {
-                  code: "NO_GATE_VERDICT",
-                  message: "No Gate v2 assessment exists for this target.",
-                },
-              ],
-            }
-          }
+  const verdictsByTarget = await getCurrentGateVerdicts(
+    workspaceId,
+    targets.map((target) => target.id),
+    {
+      expectedCommit: identity.expectedCommit,
+      expectedArtifactDigest: identity.expectedArtifactDigest,
+    }
+  )
 
-          const historical = result.historical as unknown as {
-            blockingReasons?: unknown[]
-          }
-          return {
-            targetId: target.id,
-            targetName: target.name,
-            state: result.state,
-            applicable: result.applicability.applicable,
-            blockingFindings: historical.blockingReasons?.length ?? 0,
-            reasons: result.applicability.reasons,
-          }
-        })
-      ))
-    )
-  }
-  return results
+  return targets.map((target) => {
+    const result = verdictsByTarget.get(target.id)
+    if (!result) {
+      return {
+        targetId: target.id,
+        targetName: target.name,
+        state: "INSUFFICIENT_EVIDENCE" as const,
+        applicable: false,
+        blockingFindings: 0,
+        identity: null,
+        reasons: [
+          {
+            code: "NO_GATE_VERDICT",
+            message: "No Gate v2 assessment exists for this target.",
+          },
+        ],
+      }
+    }
+
+    const historical = result.historical as unknown as {
+      blockingReasons?: unknown[]
+    }
+    return {
+      targetId: target.id,
+      targetName: target.name,
+      state: result.state,
+      applicable: result.applicability.applicable,
+      blockingFindings: historical.blockingReasons?.length ?? 0,
+      identity: result.applicability.evaluatedIdentity ?? null,
+      reasons: result.applicability.reasons,
+    }
+  })
 }

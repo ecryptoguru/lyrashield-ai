@@ -61,10 +61,10 @@ beforeEach(() => {
 })
 
 it.each(["WEB_APP", "API"])(
-  "preserves the entered %s name when advancing to product details",
+  "preserves the entered %s name through to target details (asked once)",
   (targetType) => {
     render(targetType).find((element) => element.props.id === "url-name")!.props.onChange!({
-      target: { value: "My entered product name" },
+      target: { value: "My entered target name" },
     })
     render(targetType).find((element) => element.props.id === "url-input")!.props.onChange!({
       target: { value: "https://example.test" },
@@ -75,8 +75,13 @@ it.each(["WEB_APP", "API"])(
     render(targetType).find((element) => element.type === "form")!.props.onSubmit!({
       preventDefault: vi.fn(),
     })
+    // v16 3.1: the name is asked once. The details step confirms the entered
+    // name (the name saved) instead of asking for it again in a second input.
     expect(
-      render(targetType).find((element) => element.props.id === "product-name")?.props.value
-    ).toBe("My entered product name")
+      render(targetType).find((element) => element.props.children === "My entered target name")
+    ).toBeDefined()
+    expect(
+      render(targetType).find((element) => element.props.id === "product-name")
+    ).toBeUndefined()
   }
 )

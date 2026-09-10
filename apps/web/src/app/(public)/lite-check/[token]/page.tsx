@@ -87,7 +87,7 @@ export default async function LiteCheckPage({ params }: { params: Promise<{ toke
               </p>
               <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
                 {reviewCount === 0
-                  ? "No surface issues found"
+                  ? "No surface findings found"
                   : `thing${reviewCount === 1 ? "" : "s"} worth a look`}
               </h1>
               <p className="text-muted-foreground mt-4 max-w-xl leading-7">

@@ -11,7 +11,7 @@
  * downgrade to FREE happens only after the period ends.
  */
 
-import { prisma } from "@lyrashield/db"
+import { getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { downgradeToFree } from "@lyrashield/billing"
 
@@ -30,6 +30,15 @@ export interface BillingDowngradeJobResult {
  * Process the billing downgrade job.
  * Finds all billing accounts that are canceled/past_due and past their
  * period end, and downgrades them to FREE.
+ *
+ * P1-7 (v16): the sweep runs through the SYSTEM client. This is a
+ * cross-workspace system operation by definition — every expired account in
+ * the database is in scope, no single workspace context exists, and
+ * BillingAccount is FORCE RLS strict, so the plain client returned zero rows
+ * under the runtime role and the downgrade never happened: canceled and
+ * past-due workspaces kept their agent-minute allowance, target cap and
+ * Deep eligibility indefinitely. Each per-workspace downgrade below already
+ * runs inside its own withWorkspaceRLS.
  */
 export async function processBillingDowngradeJob(
   _data: BillingDowngradeJobData
@@ -38,7 +47,7 @@ export async function processBillingDowngradeJob(
 
   const now = new Date()
 
-  const expiredAccounts = await prisma.billingAccount.findMany({
+  const expiredAccounts = await getSystemPrisma().billingAccount.findMany({
     where: {
       status: { in: ["canceled", "past_due"] },
       currentPeriodEnd: { lt: now },

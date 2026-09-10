@@ -37,7 +37,10 @@ vi.mock("@lyrashield/fix", () => ({
   applyUnifiedDiff: vi.fn().mockReturnValue("patched"),
   extractFileDiff: vi.fn(),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { error: vi.fn(), warn: vi.fn() },
+}))
 import { requestFixPrApproval, executeApprovedFixPr, type FixPrRequest } from "./fix-pr"
 const request: FixPrRequest & { approvalId: string } = {
   workspaceId: "ws-1",

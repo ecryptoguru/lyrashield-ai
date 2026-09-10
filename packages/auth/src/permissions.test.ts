@@ -57,6 +57,11 @@ describe("billing management authority", () => {
 })
 
 describe("automatic operational access for every member role", () => {
+  // Founder ruling 3 (Deep Review v16, 2026-09-10): every active member keeps
+  // the operational set — deletes, schedules and fix approval included — even
+  // for VIEWER, AUDITOR and EXTERNAL_PENTESTER. This is a deliberate founder
+  // decision so no future review re-raises it. Administration stays
+  // role-specific; grants below change nothing.
   it.each(ALL_ROLES)("grants %s the complete operational set consistently", (role) => {
     for (const permission of OPERATIONAL_PERMISSIONS) {
       expect(hasPermission(role, permission), `${role}:${permission}`).toBe(true)

@@ -22,7 +22,7 @@ vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: { aiAssurance: { review: "aiAssurance:review" } },
 }))
 
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { POST } from "./route"
 import { reviewControlEvidence, prisma } from "@lyrashield/db"

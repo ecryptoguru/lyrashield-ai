@@ -252,13 +252,14 @@ export async function POST(request: NextRequest) {
                   if (!entitlement.allowed)
                     throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
                   await assertScanWorkerAvailable()
-                }
+                },
+                repository.full_name
               )
               if (outcome) {
                 // The retest scan exists but is not queued yet — packages/db
-                // cannot reach the scan queue. Enqueue it here; a queue outage
-                // deletes the delivery marker below so GitHub redelivers and
-                // the merge step no-ops cleanly while the enqueue retries.
+                // cannot reach the scan queue. Enqueue it here; a queue
+                // outage defers into the durable LoopClosure sweep instead
+                // of relying on a GitHub redelivery that never comes.
                 await enqueueScanJob({
                   scanId: outcome.retestScanId,
                   workspaceId: integration.workspaceId,
@@ -268,6 +269,12 @@ export async function POST(request: NextRequest) {
                   ...(outcome.policyId ? { policyId: outcome.policyId } : {}),
                 })
                 loopClosureDelivered = true
+                const { completeLoopClosure } = await import("@lyrashield/db")
+                await completeLoopClosure(
+                  integration.workspaceId,
+                  repository.full_name,
+                  pullRequest.number
+                )
                 logger.info("Fix PR merge closed the loop", {
                   retestId: outcome.retestId,
                   findingId: outcome.findingId,
@@ -277,19 +284,54 @@ export async function POST(request: NextRequest) {
                 loopClosureDelivered = true
               }
             } catch (loopErr) {
-              // Clear the incomplete delivery marker and return 5xx so a
-              // redelivery can resume the durable merge/retest association.
+              // GitHub never redelivers a failed delivery automatically. A
+              // deferrable failure (concurrency cap, active scan, worker
+              // unavailability, entitlement) persists a durable LoopClosure
+              // record the worker sweep retries with backoff; the delivery is
+              // acknowledged so the merge webhook is not lost to a rethrow.
+              // Only genuinely unexpected errors still rethrow.
+              const { recordDeferredLoopClosure, classifyLoopClosureError } =
+                await import("@lyrashield/db")
+              const reason = classifyLoopClosureError(loopErr)
+              if (reason !== "UNEXPECTED_ERROR") {
+                try {
+                  await recordDeferredLoopClosure({
+                    workspaceId: integration.workspaceId,
+                    repoFullName: repository.full_name,
+                    branchName: pullRequest.head.ref,
+                    prNumber: pullRequest.number,
+                    reason,
+                  })
+                  loopClosureDelivered = true
+                  logger.warn("Fix PR loop-closure deferred to the worker sweep", {
+                    workspaceId: integration.workspaceId,
+                    branchName: pullRequest.head.ref,
+                    reason,
+                  })
+                } catch (persistErr) {
+                  logger.error("Failed to persist deferred loop closure", {
+                    workspaceId: integration.workspaceId,
+                    branchName: pullRequest.head.ref,
+                    reason,
+                    error: String(persistErr),
+                  })
+                }
+              } else {
+                logger.error("Fix PR loop-closure failed (marker cleared for redelivery)", {
+                  error: String(loopErr),
+                })
+              }
               if (!loopClosureDelivered) {
+                // Clear the incomplete delivery marker and return 5xx so a
+                // manual redelivery can resume the durable merge/retest
+                // association for this genuinely unexpected error.
                 await systemPrisma.webhookEvent
                   .deleteMany({
                     where: { provider: "github", externalId: deliveryId },
                   })
                   .catch(() => undefined)
+                throw loopErr
               }
-              logger.error("Fix PR loop-closure failed (marker cleared for redelivery)", {
-                error: String(loopErr),
-              })
-              if (!loopClosureDelivered) throw loopErr
             }
           }
         } catch (err) {

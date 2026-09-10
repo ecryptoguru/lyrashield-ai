@@ -6,7 +6,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/cline", origin).toString()
 const title = "LyraShield MCP for Cline — Setup Guide"
 const description =
-  'Connect LyraShield to Cline CLI through ~/.cline/mcp.json, or use Cline IDE\'s MCP panel. Remote entries require "type":"streamableHttp".'
+  'Connect LyraShield to Cline CLI through ~/.cline/data/settings/cline_mcp_settings.json or use Cline IDE\'s MCP panel. Remote entries require "type":"streamableHttp".'
 const updatedDate = "2026-09-08"
 
 const jsonLd: unknown[] = [
@@ -48,8 +48,8 @@ const jsonLd: unknown[] = [
 >
   <h1>Cline</h1>
   <p>
-    Cline CLI reads MCP servers from <code>~/.cline/mcp.json</code>. Cline IDE extensions expose
-    their own MCP settings JSON through the MCP Servers panel.
+    Cline CLI reads MCP servers from <code>~/.cline/data/settings/cline_mcp_settings.json</code>. Cline
+    IDE extensions expose their own MCP settings JSON through the MCP Servers panel.
   </p>
 
   <h2>Get the exact values with the CLI</h2>

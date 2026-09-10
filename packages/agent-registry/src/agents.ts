@@ -167,7 +167,7 @@ const cline: AgentEntry = {
   locations: [
     {
       scope: "global",
-      path: "~/.cline/mcp.json",
+      path: "~/.cline/data/settings/cline_mcp_settings.json",
       sharedByConvention: false,
     },
   ],
@@ -182,7 +182,7 @@ const cline: AgentEntry = {
     url: "https://docs.cline.bot/mcp/mcp-overview",
   },
   gotchas: [
-    "Cline CLI reads `~/.cline/mcp.json`; IDE extensions expose their own MCP settings JSON through the Cline panel.",
+    "Cline CLI reads `~/.cline/data/settings/cline_mcp_settings.json` (override with `CLINE_MCP_SETTINGS_PATH`); IDE extensions expose their own MCP settings JSON through the Cline panel.",
     'Cline defaults to legacy SSE when `type` is omitted; the remote endpoint needs `type: "streamableHttp"` explicitly.',
   ],
 }

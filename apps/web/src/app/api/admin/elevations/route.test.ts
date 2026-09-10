@@ -14,7 +14,7 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@lyrashield/db", () => ({
   issuePlatformAdminElevation: (...args: unknown[]) => issuePlatformAdminElevation(...args),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { warn: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { warn: vi.fn() } }))
 vi.mock("@lyrashield/config", () => ({
   env: { NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com" },
 }))

@@ -17,7 +17,10 @@ vi.mock("@lyrashield/db", () => ({
 }))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: vi.fn() }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
-vi.mock("@lyrashield/logger", () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
+}))
 vi.mock("@lyrashield/affiliate", () => ({ resolveAttribution: vi.fn().mockResolvedValue(null) }))
 vi.mock("@/lib/rate-limit", () => ({
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: false })),

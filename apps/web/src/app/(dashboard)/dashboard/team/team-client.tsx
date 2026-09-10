@@ -10,6 +10,7 @@ import type { MemberRole } from "@lyrashield/db"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { formatDate } from "@/lib/date-format"
 import { PageHeader } from "@/components/page-header"
+import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
 interface Member {
   id: string
@@ -175,16 +176,7 @@ export function TeamClient({
   }
 
   if (fetchError) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12">
-        <p className="text-destructive mb-4 text-sm" role="alert">
-          {fetchError}
-        </p>
-        <Button variant="secondary" onClick={() => fetchMembers()}>
-          Retry
-        </Button>
-      </div>
-    )
+    return <DashboardErrorCard message={fetchError} onRetry={() => fetchMembers()} className="" />
   }
 
   return (
@@ -279,11 +271,23 @@ export function TeamClient({
         <table className="w-full text-sm">
           <thead className="bg-muted/30 border-b">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold">Name</th>
-              <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Email</th>
-              <th className="px-4 py-3 text-left font-semibold">Role</th>
-              <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Joined</th>
-              {(canRemove || canUpdateRole) && <th className="px-4 py-3 text-left">Actions</th>}
+              <th scope="col" className="px-4 py-3 text-left font-semibold">
+                Name
+              </th>
+              <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                Email
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold">
+                Role
+              </th>
+              <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                Joined
+              </th>
+              {(canRemove || canUpdateRole) && (
+                <th scope="col" className="px-4 py-3 text-left">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -369,10 +373,20 @@ export function TeamClient({
           <table className="w-full text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Email</th>
-                <th className="px-4 py-3 text-left font-semibold">Role</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Expires</th>
-                {canManage && <th className="px-4 py-3 text-left">Actions</th>}
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Email
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">
+                  Role
+                </th>
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                  Expires
+                </th>
+                {canManage && (
+                  <th scope="col" className="px-4 py-3 text-left">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>

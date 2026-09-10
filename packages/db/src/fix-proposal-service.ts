@@ -235,11 +235,18 @@ export async function handleFixPrMerged(params: {
   workspaceId: string
   branchName: string
   prNumber?: number
+  repoFullName?: string
 }): Promise<FixPrMergeResult | null> {
+  const [repoOwner, repoName, ...extra] = params.repoFullName?.split("/") ?? []
+  if (params.repoFullName && (!repoOwner || !repoName || extra.length > 0)) {
+    throw new Error("Invalid GitHub repository identity")
+  }
   return withWorkspaceRLS(params.workspaceId, async (tx) => {
     const pr = await tx.pullRequest.findFirst({
       where: {
         branchName: params.branchName,
+        ...(repoOwner && repoName ? { repoOwner, repoName } : {}),
+        ...(params.prNumber ? { OR: [{ prNumber: params.prNumber }, { prNumber: null }] } : {}),
         status: { in: ["open", "merged"] },
         deletedAt: null,
         fixProposal: { finding: { workspaceId: params.workspaceId, deletedAt: null } },

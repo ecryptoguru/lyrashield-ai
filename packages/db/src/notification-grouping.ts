@@ -24,6 +24,9 @@ const CRITICAL_NOTIFICATION_TYPES = new Set([
   "schedule.failed",
   "budget.exhausted",
   "queue.blocked",
+  // A merged fix PR whose automatic retest could not be scheduled after the
+  // maximum retry count. Blocked automation with a manual recovery action.
+  "loop_closure_failed",
 ])
 
 export type NotificationPriority = "critical" | "routine"

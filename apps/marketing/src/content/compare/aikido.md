@@ -11,7 +11,7 @@ faq:
   - q: "Does LyraShield replace Aikido?"
     a: "No. Aikido is a unified code to cloud to runtime platform covering SAST, SCA, secrets, IaC, containers, CSPM, DAST, AI pentesting, and runtime protection, with AutoFix PRs and a free forever tier. LyraShield in open beta is not a broad AppSec stack; it is a focused loop for AI-built apps with approval-gated fixes and immutable assurance."
   - q: "Can I use Aikido and LyraShield together?"
-    a: "Yes. Use Aikido for broad, continuous scanning and runtime protection across your estate, and add LyraShield for the release assurance run before you ship AI-built apps. Both support GitHub integrations, so findings can coexist. Aikido offers transparent pricing from $300 per month for small teams; LyraShield pricing will be announced as it matures."
+    a: "Yes. Use Aikido for broad, continuous scanning and runtime protection across your estate and add LyraShield for the release assurance run before you ship AI-built apps. Both support GitHub integrations, so findings can coexist. Aikido publishes its plan pricing on its pricing page; LyraShield pricing is live at lyrashieldai.com/pricing."
   - q: "When should I choose Aikido over LyraShield?"
     a: "Choose Aikido when you want one platform for code, cloud, and runtime, with auto-generated fix PRs, malware detection in dependencies, and published pricing including a free tier. Its 200+ AI agents for continuous pentesting are a genuine strength for coverage. Choose LyraShield when you need explicit approval gates and immutable evidence for release decisions."
   - q: "How do their fix models differ?"

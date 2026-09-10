@@ -15,7 +15,7 @@ vi.mock("@lyrashield/db", () => ({
   findLicenseForSyncByKeyHash: mocks.findByKeyHash,
   prisma: { workspace: { findUnique: mocks.findWorkspace } },
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { warn: mocks.warn } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { warn: mocks.warn } }))
 vi.mock("./licenses/license-service", () => ({ hashLicenseKey: () => "key_hash" }))
 
 import { markLegacySyncResponse, resolveSyncCredential } from "./sync-license-auth"

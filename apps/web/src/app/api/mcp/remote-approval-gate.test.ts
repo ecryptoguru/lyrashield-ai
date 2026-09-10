@@ -33,7 +33,10 @@ vi.mock("@lyrashield/mcp", () => ({
 }))
 
 vi.mock("@lyrashield/config", () => ({ env: { NEXT_PUBLIC_APP_URL: "https://app.example.com" } }))
-vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
 vi.mock("../../../lib/rate-limit", () => ({
   checkApprovalCreateRateLimit: vi.fn(() => ({ limited: false })),
 }))

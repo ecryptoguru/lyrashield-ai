@@ -32,11 +32,21 @@ export default async function PlatformAdminUsersPage({
         <table className="w-full min-w-3xl text-left text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">Email</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Platform role</th>
-              <th className="px-4 py-3 font-medium">MFA</th>
-              <th className="px-4 py-3 font-medium">Created</th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Email
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Platform role
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                MFA
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Created
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y">

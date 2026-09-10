@@ -39,6 +39,13 @@ export class WorkspaceScanConcurrencyLimitError extends Error {
 export interface ScanWithEvents extends Scan {
   events: ScanEvent[]
   /**
+   * When an incremental event window was applied (a valid `eventsAfter` cursor
+   * was supplied), echoes that cursor so the caller can prove the merge
+   * semantics; `undefined` means `events` is the full latest window (initial
+   * load, no cursor requested, or unknown cursor fallback).
+   */
+  eventsCursorApplied?: string
+  /**
    * Checksum only. The manifest's `manifest` Json column can reach tens of KB,
    * and this shape is returned on every scan-detail poll, so fetching the whole
    * row would pull that blob out of Postgres every few seconds for a field no
@@ -54,6 +61,17 @@ export interface ScanWithEvents extends Scan {
     url: string | null
     repoFullName: string | null
   } | null
+}
+
+export interface GetScanWithEventsOptions {
+  /**
+   * Event-id cursor: when set, only events strictly AFTER the cursor in the
+   * (createdAt, id) order are returned, so incremental pollers fetch the tail
+   * instead of re-fetching the full 200-event window on every tick. An unknown
+   * or foreign cursor (e.g. soft-deleted, or from another scan) falls back to
+   * the full window — never an empty one.
+   */
+  eventsAfter?: string
 }
 
 export const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
@@ -301,14 +319,43 @@ export async function addScanEvent(
 
 export async function getScanWithEvents(
   scanId: string,
-  workspaceId: string
+  workspaceId: string,
+  options?: GetScanWithEventsOptions
 ): Promise<ScanWithEvents | null> {
   return withWorkspaceRLS(workspaceId, async (tx) => {
+    const eventsAfter = options?.eventsAfter
+    let eventCursor: { createdAt: Date; id: string } | null = null
+    if (eventsAfter) {
+      // Resolve the cursor inside the RLS transaction: an event from another
+      // scan (or a soft-deleted/unknown id) yields null and falls back to the
+      // full window instead of an empty incremental page.
+      eventCursor = await tx.scanEvent.findFirst({
+        where: { id: eventsAfter, scanId, deletedAt: null },
+        select: { createdAt: true, id: true },
+      })
+    }
+
     const scan = await tx.scan.findFirst({
       where: { id: scanId, workspaceId, deletedAt: null },
       include: {
         events: {
-          where: { deletedAt: null },
+          where: {
+            deletedAt: null,
+            // Keyset pagination on (createdAt, id) — must exactly match the
+            // orderBy below. Compound cuid-id cursors are stable even for
+            // events sharing a createdAt timestamp.
+            ...(eventCursor
+              ? {
+                  OR: [
+                    { createdAt: { gt: eventCursor.createdAt } },
+                    {
+                      createdAt: eventCursor.createdAt,
+                      id: { gt: eventCursor.id },
+                    },
+                  ],
+                }
+              : {}),
+          },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 200,
         },
@@ -331,6 +378,10 @@ export async function getScanWithEvents(
     return {
       ...scan,
       events: scan.events.reverse(),
+      // Echoed only when an incremental window was actually applied, so the
+      // API layer can distinguish "full list" (initial load, no cursor, or
+      // unknown-cursor fallback) from a delta — see GetScanWithEventsOptions.
+      ...(eventCursor ? { eventsCursorApplied: eventCursor.id } : {}),
       resultManifest: scan.resultManifest,
       coverageReceipts: scan.coverageReceipts,
       target: scan.target,

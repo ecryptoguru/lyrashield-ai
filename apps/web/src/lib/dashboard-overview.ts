@@ -114,7 +114,7 @@ const APPLICABLE_RECEIPT_STATUSES = new Set([
 ])
 
 /**
- * Coverage state for one run from its coverage-receipt statuses.
+ * Coverage state for one scan from its coverage-receipt statuses.
  *
  * NOT_APPLICABLE receipts are excluded first: a scanner that does not apply to
  * the target says nothing about coverage. With no applicable receipts the run
@@ -414,15 +414,15 @@ export function buildDashboardOverview(input: {
 export function userSafeRunFailure(status: string, errorCategory: string | null): string {
   switch (status) {
     case "STOPPED_BUDGET":
-      return "The run stopped because its protected limit was reached before completing."
+      return "The scan stopped because its protected limit was reached before completing."
     case "TIMED_OUT":
-      return "The run timed out before completing. Check the target is reachable and retry."
+      return "The scan timed out before completing. Check the target is reachable and retry."
     case "FAILED":
       return errorCategory === "QUEUE"
-        ? "The run could not start because worker capacity was unavailable."
-        : "The run failed before producing a complete result."
+        ? "The scan could not start because worker capacity was unavailable."
+        : "The scan failed before producing a complete result."
     default:
-      return "The run did not produce a complete result."
+      return "The scan did not produce a complete result."
   }
 }
 
@@ -566,31 +566,14 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
   const allTerminalRuns = [...terminalRuns, ...perTargetRuns]
   // Add receipts for the per-target runs the window fetch had not covered.
   const extraScanIds = perTargetRuns.map((run) => run.id).filter((id) => !windowScanIds.has(id))
-  if (extraScanIds.length) {
-    const extraReceipts = await withWorkspaceRLS(workspaceId, (tx) =>
-      tx.scanCoverageReceipt.findMany({
-        where: { scanId: { in: extraScanIds }, scan: { workspaceId, deletedAt: null } },
-        select: { scanId: true, status: true },
-      })
-    )
-    for (const receipt of extraReceipts) {
-      const statuses = receiptsByScanId.get(receipt.scanId)
-      if (statuses) statuses.push(receipt.status)
-      else receiptsByScanId.set(receipt.scanId, [receipt.status])
-    }
-  }
-
-  const findingGroups: DashboardFindingGroup[] = findingGroupRows.map((group) => ({
-    severity: group.severity as FindingSeverity,
-    status: group.status as FindingStatus,
-    verified: group.verified,
-    count: group._count._all,
-  }))
 
   // The newest active (non-terminal) scan, for the home decision: during an
   // active scan the header CTA leads with its progress instead of recommending
   // a duplicate. Bounded by the workspace's three-scan concurrency limit.
-  const activeScanRow = await prisma.scan.findFirst({
+  // Reads only non-terminal scans, so it shares no data dependency with the
+  // per-target-runs receipt fetch (which reads receipts of terminal scan ids)
+  // — start it now and await it together with that fetch below.
+  const activeScanRowPromise = prisma.scan.findFirst({
     where: {
       workspaceId,
       deletedAt: null,
@@ -599,6 +582,34 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     orderBy: { createdAt: "desc" },
     select: { id: true, target: { select: { name: true } } },
   })
+
+  let activeScanRow: { id: string; target: { name: string } | null } | null
+  if (extraScanIds.length) {
+    const [row, extraReceipts] = await Promise.all([
+      activeScanRowPromise,
+      withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scanCoverageReceipt.findMany({
+          where: { scanId: { in: extraScanIds }, scan: { workspaceId, deletedAt: null } },
+          select: { scanId: true, status: true },
+        })
+      ),
+    ])
+    activeScanRow = row
+    for (const receipt of extraReceipts) {
+      const statuses = receiptsByScanId.get(receipt.scanId)
+      if (statuses) statuses.push(receipt.status)
+      else receiptsByScanId.set(receipt.scanId, [receipt.status])
+    }
+  } else {
+    activeScanRow = await activeScanRowPromise
+  }
+
+  const findingGroups: DashboardFindingGroup[] = findingGroupRows.map((group) => ({
+    severity: group.severity as FindingSeverity,
+    status: group.status as FindingStatus,
+    verified: group.verified,
+    count: group._count._all,
+  }))
 
   const evaluatedCandidates = evaluatedSnapshots
     .filter((snapshot) => snapshot.scan.endedAt && snapshot.scan.target)
@@ -614,16 +625,54 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
       receiptStatuses: receiptsByScanId.get(snapshot.scanId) ?? [],
     }))
 
-  const overview = buildDashboardOverview({
+  return finalizeOverview({
     targets,
-    terminalRuns: allTerminalRuns,
+    allTerminalRuns,
     receiptsByScanId,
     findingGroups,
     completedRunCount,
     reportCount,
     project,
+    evaluatedSnapshots,
     evaluatedCandidates,
-    scoreHistory: evaluatedSnapshots.map((snapshot) => ({
+    activeScanRow,
+  })
+}
+
+/**
+ * Shared tail of getDashboardOverview: pure derivation from already-fetched
+ * rows, factored out so both the parallelised receipt fetch path and the
+ * no-extra-receipts path return the same shape.
+ */
+function finalizeOverview(input: {
+  targets: { id: string; name: string }[]
+  allTerminalRuns: ScanRowLike[]
+  receiptsByScanId: Map<string, string[]>
+  findingGroups: DashboardFindingGroup[]
+  completedRunCount: number
+  reportCount: number
+  project: { name: string; riskScore: number; trustPlan: unknown } | null
+  evaluatedSnapshots: {
+    scanId: string
+    score: number
+    grade: ScoreGrade
+    expiresAt: Date
+    computedAt: Date
+    scan: { mode: string; endedAt: Date | null; target: { id: string; name: string } | null }
+  }[]
+  evaluatedCandidates: Parameters<typeof buildDashboardOverview>[0]["evaluatedCandidates"]
+  activeScanRow: { id: string; target: { name: string } | null } | null
+}): DashboardOverview {
+  const overview = buildDashboardOverview({
+    targets: input.targets,
+    terminalRuns: input.allTerminalRuns,
+    receiptsByScanId: input.receiptsByScanId,
+    findingGroups: input.findingGroups,
+    completedRunCount: input.completedRunCount,
+    reportCount: input.reportCount,
+    project: input.project,
+    evaluatedCandidates: input.evaluatedCandidates,
+    scoreHistory: input.evaluatedSnapshots.map((snapshot) => ({
       scanId: snapshot.scanId,
       score: snapshot.score,
       grade: snapshot.grade,
@@ -634,8 +683,8 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
 
   return {
     ...overview,
-    activeScan: activeScanRow
-      ? { id: activeScanRow.id, targetName: activeScanRow.target?.name ?? null }
+    activeScan: input.activeScanRow
+      ? { id: input.activeScanRow.id, targetName: input.activeScanRow.target?.name ?? null }
       : null,
   }
 }

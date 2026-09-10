@@ -229,6 +229,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     const physicalTableNames: Record<string, string> = {
       AgentConnection: "agent_connections",
       AgentOperation: "agent_operations",
+      LoopClosure: "loop_closures",
     }
     const tenantTables = [...WORKSPACE_SCOPED_MODELS, ...children, ...Object.keys(explicit)].map(
       (model) => physicalTableNames[model] ?? model
@@ -673,6 +674,52 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       expect(await count(otherWorkspaceId)).toBe(0)
     } finally {
       await prisma.gateVerdict.delete({ where: { id: verdict.id } })
+    }
+  })
+
+  it("fails closed and writes LoopClosure only with its workspace context", async () => {
+    // The durable loop-closure table must behave like every other
+    // workspace-scoped table under the NOBYPASSRLS runtime role — same-
+    // workspace writes succeed, absent and foreign contexts read and write
+    // nothing.
+    const { recordDeferredLoopClosure, completeLoopClosure } =
+      await import("./loop-closure-service")
+    const branchName = `lyrashield/fix-rls-${suffix}`
+    await recordDeferredLoopClosure({
+      workspaceId,
+      repoFullName: "acme/rls-fixture",
+      branchName,
+      prNumber: 1,
+      reason: "SCAN_CONCURRENCY_LIMIT",
+    })
+
+    try {
+      const count = async (id: string | null) =>
+        asWorkspace(id, async (tx) => {
+          const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "loop_closures"
+            WHERE "workspaceId" = ${workspaceId} AND "branchName" = ${branchName}
+          `
+          return Number(rows[0]?.count ?? 0)
+        })
+      expect(await count(workspaceId)).toBe(1)
+      expect(await count(null)).toBe(0)
+      expect(await count(otherWorkspaceId)).toBe(0)
+
+      // A same-workspace WRITE through the service completes the closure.
+      await completeLoopClosure(workspaceId, "acme/rls-fixture", 1)
+      const status = await asWorkspace(workspaceId, async (tx) => {
+        const rows = await tx.$queryRaw<Array<{ status: string }>>`
+          SELECT status FROM "loop_closures"
+          WHERE "workspaceId" = ${workspaceId} AND "branchName" = ${branchName}
+        `
+        return rows[0]?.status
+      })
+      expect(status).toBe("completed")
+    } finally {
+      await prisma.loopClosure.deleteMany({
+        where: { workspaceId, branchName },
+      })
     }
   })
 

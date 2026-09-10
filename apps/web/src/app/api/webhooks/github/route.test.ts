@@ -16,11 +16,21 @@ const handleMerged = vi.fn()
 const assertScanAllowed = vi.fn()
 const assertScanWorkerAvailable = vi.fn()
 const enqueueScanJob = vi.fn()
+const recordDeferredLoopClosure = vi.fn(() => Promise.resolve())
+const completeLoopClosure = vi.fn(() => Promise.resolve())
 
 vi.mock("@lyrashield/db", () => ({
   getSystemPrisma: () => systemPrisma,
   prisma,
   handleFixPrMergedAndReevaluate: handleMerged,
+  recordDeferredLoopClosure,
+  completeLoopClosure,
+  classifyLoopClosureError: (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message === "NO_MINUTES_REMAINING") return "RETEST_NOT_ENTITLED"
+    if (message === "worker outage") return "WORKER_UNAVAILABLE"
+    return "UNEXPECTED_ERROR"
+  },
 }))
 vi.mock("@lyrashield/billing", () => ({ assertScanAllowed }))
 vi.mock("@/lib/queue", () => ({ assertScanWorkerAvailable, enqueueScanJob }))
@@ -31,7 +41,10 @@ vi.mock("@lyrashield/integrations", () => ({
   // define the ORIGINAL export name.
   enqueueScan: vi.fn(async () => "queued-job-id"),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+}))
 
 const { POST } = await import("./route")
 
@@ -203,6 +216,7 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     expect(enqueueScanJob).toHaveBeenCalledWith(
       expect.objectContaining({ scanId: "scan-retest", workspaceId: "workspace-1" })
     )
+    expect(completeLoopClosure).toHaveBeenCalledWith("workspace-1", "test/repo", 7)
   })
 
   it("replays a duplicate delivery without enqueueing a second retest", async () => {
@@ -228,9 +242,11 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     expect(enqueueScanJob).not.toHaveBeenCalled()
   })
 
-  it("clears the delivery marker and returns 500 when the retest is not entitled, so GitHub redelivers without duplicate paid work", async () => {
+  it("records a durable deferred closure and returns 200 when the retest is not entitled", async () => {
+    // GitHub never redelivers a failed delivery automatically. An entitlement
+    // deferral must persist a LoopClosure record the worker sweep retries —
+    // not clear the marker and rethrow into a silent loss.
     assertScanAllowed.mockResolvedValue({ allowed: false, code: "NO_MINUTES_REMAINING" })
-    systemPrisma.webhookEvent.deleteMany.mockResolvedValue({ count: 1 })
     // The route passes an entitlement callback into the loop-closure handler;
     // the mock must exercise it the way the real handler does.
     handleMerged.mockImplementation(
@@ -247,11 +263,62 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
 
     const response = await POST(pullRequestRequest() as never)
 
+    expect(response.status).toBe(200)
+    expect(recordDeferredLoopClosure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        repoFullName: "test/repo",
+        branchName: "lyrashield/fix-finding-1",
+        prNumber: 7,
+        reason: "RETEST_NOT_ENTITLED",
+      })
+    )
+    // The delivery marker stays: the closure is durably recorded, so the
+    // delivery itself is acknowledged (no redelivery will ever come).
+    expect(systemPrisma.webhookEvent.deleteMany).not.toHaveBeenCalled()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("records a durable deferred closure when the scan worker is unavailable", async () => {
+    handleMerged.mockImplementation(async () => {
+      throw new Error("worker outage")
+    })
+
+    const response = await POST(pullRequestRequest() as never)
+
+    expect(response.status).toBe(200)
+    expect(recordDeferredLoopClosure).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "WORKER_UNAVAILABLE" })
+    )
+    expect(systemPrisma.webhookEvent.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("clears the delivery marker when persisting a deferred closure fails", async () => {
+    handleMerged.mockRejectedValueOnce(new Error("worker outage"))
+    recordDeferredLoopClosure.mockRejectedValueOnce(new Error("database outage"))
+    systemPrisma.webhookEvent.deleteMany.mockResolvedValue({ count: 1 })
+
+    const response = await POST(pullRequestRequest() as never)
+
     expect(response.status).toBe(500)
     expect(systemPrisma.webhookEvent.deleteMany).toHaveBeenCalledWith({
       where: { provider: "github", externalId: "merge-1" },
     })
-    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("clears the delivery marker and returns 500 only for genuinely unexpected errors", async () => {
+    handleMerged.mockImplementation(async () => {
+      throw new Error("database connection exploded")
+    })
+    systemPrisma.webhookEvent.deleteMany.mockResolvedValue({ count: 1 })
+
+    const response = await POST(pullRequestRequest() as never)
+
+    expect(response.status).toBe(500)
+    expect(systemPrisma.webhookEvent.deleteMany).toHaveBeenCalledWith({
+      where: { provider: "github", externalId: "merge-1" },
+    })
+    expect(recordDeferredLoopClosure).not.toHaveBeenCalled()
   })
 
   it("never merges: the route contains no merge call", async () => {

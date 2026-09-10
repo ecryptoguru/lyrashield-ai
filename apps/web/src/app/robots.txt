@@ -1,0 +1,11 @@
+# LyraShield AI application host (app.lyrashieldai.com).
+# This host serves the authenticated product and token-gated share pages —
+# there is nothing to index here. Public product content lives on the
+# marketing site (https://lyrashieldai.com), which is fully crawlable and
+# carries llms.txt.
+User-agent: *
+Disallow: /
+
+# Uptime and health verifiers only need these; they do not follow robots,
+# but listing them keeps the policy honest about what is public.
+# GET /api/health and GET /api/ready/* are unauthenticated liveness probes.

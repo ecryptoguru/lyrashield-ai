@@ -1,73 +1,11 @@
-import type { Metadata } from "next"
-import { listFixProposals } from "@lyrashield/db"
-import { redirect } from "next/navigation"
-import { Wrench } from "lucide-react"
-import { FixesClient } from "./fixes-client"
-import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { NoWorkspaceState } from "@/components/no-workspace-state"
-import { PageHeader } from "@/components/page-header"
+import { permanentRedirect } from "next/navigation"
 
-export const metadata: Metadata = {
-  title: "Proposed fixes",
-}
-
-export default async function FixesPage() {
-  const session = await getCachedSession()
-  if (!session) redirect("/sign-in")
-
-  const workspaceId = await getCachedWorkspaceId(session.userId)
-
-  if (!workspaceId) {
-    return (
-      <div>
-        <PageHeader
-          title="Proposed fixes"
-          description="Review proposed fixes and track pull requests for your issues."
-        />
-        <NoWorkspaceState
-          icon={Wrench}
-          description="Create a workspace first to manage fix proposals."
-        />
-      </div>
-    )
-  }
-
-  const limit = 20
-  const { items, nextCursor } = await listFixProposals({ workspaceId, limit })
-
-  const initialData = items.map((p) => ({
-    id: p.id,
-    kind: p.kind,
-    summary: p.summary,
-    status: p.status,
-    safetyScore: p.safetyScore,
-    generatedByModel: p.generatedByModel,
-    createdAt: p.createdAt.toISOString(),
-    finding: {
-      id: p.finding.id,
-      title: p.finding.title,
-      severity: p.finding.severity,
-      status: p.finding.status,
-      cwe: p.finding.cwe,
-      target: p.finding.target,
-    },
-    pullRequests: p.pullRequests.map((pr) => ({
-      id: pr.id,
-      provider: pr.provider,
-      repoOwner: pr.repoOwner,
-      repoName: pr.repoName,
-      branchName: pr.branchName,
-      prNumber: pr.prNumber,
-      prUrl: pr.prUrl,
-      status: pr.status,
-    })),
-  }))
-
-  return (
-    <FixesClient
-      workspaceId={workspaceId}
-      initialData={initialData}
-      initialNextCursor={nextCursor}
-    />
-  )
+/**
+ * Compatibility route (Deep Review v16 3.2). Proposed fixes are a Findings
+ * view at /dashboard/findings?tab=fixes, not an independent destination —
+ * the same fold that moved reports under /dashboard/reports (W2-10). The old
+ * route forwards so existing links keep working.
+ */
+export default async function FixesRedirect() {
+  permanentRedirect("/dashboard/findings?tab=fixes")
 }

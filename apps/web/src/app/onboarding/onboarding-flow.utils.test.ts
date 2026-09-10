@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
 import {
   buildUrlTargetPayload,
+  displayStepForPath,
   ensureOnboardingTargetId,
   getOnboardingReviewOptions,
   nextStepForPath,
   onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
+  stepModelForPath,
   targetNameFromUrl,
 } from "./onboarding-flow.utils"
 
@@ -63,13 +65,69 @@ describe("nextStepForPath", () => {
     expect(nextStepForPath("github")).toBe(2)
   })
 
-  it("sends URL and API straight to product details (step 3)", () => {
+  it("sends URL and API straight to target details (step 3)", () => {
     expect(nextStepForPath("url")).toBe(3)
     expect(nextStepForPath("api")).toBe(3)
   })
 
   it("sends skip out of the wizard (no onward step)", () => {
     expect(nextStepForPath("skip")).toBeNull()
+  })
+})
+
+describe("stepModelForPath (v16 3.1 single source of truth)", () => {
+  it("gives the GitHub flow chooser, repo-select, and details", () => {
+    expect(stepModelForPath("github").map((entry) => [entry.index, entry.label])).toEqual([
+      [1, "Add target"],
+      [2, "Select repository"],
+      [3, "Target details"],
+    ])
+  })
+
+  it("gives the URL and API flows chooser and details — no repo-select", () => {
+    expect(stepModelForPath("url").map((entry) => [entry.index, entry.label])).toEqual([
+      [1, "Add target"],
+      [3, "Target details"],
+    ])
+    expect(stepModelForPath("api").map((entry) => [entry.index, entry.label])).toEqual(
+      stepModelForPath("url").map((entry) => [entry.index, entry.label])
+    )
+  })
+
+  it("falls back to the three-step model while the path is unset", () => {
+    // Step 2 is only reachable through the GitHub connect redirect, so the
+    // unknown-path list must still contain it (the old "Step 3 of 2" bug).
+    expect(stepModelForPath(null)).toHaveLength(3)
+    expect(stepModelForPath("skip")).toHaveLength(3)
+  })
+
+  it("keeps the onward step inside the rendered list for every flow", () => {
+    for (const path of ["github", "url", "api"] as const) {
+      const model = stepModelForPath(path)
+      const onward = nextStepForPath(path)
+      expect(onward).not.toBeNull()
+      expect(model.some((entry) => entry.index === onward)).toBe(true)
+    }
+  })
+})
+
+describe("displayStepForPath (v16 3.1 progress indicator)", () => {
+  it("highlights the right item for every rendered step", () => {
+    // GitHub flow: chooser, repo-select, details are items 0, 1, 2.
+    expect(displayStepForPath(1, "github")).toBe(0)
+    expect(displayStepForPath(2, "github")).toBe(1)
+    expect(displayStepForPath(3, "github")).toBe(2)
+    // URL/API flow: the details step is the SECOND item — the old code
+    // announced "Step 3 of 2" here.
+    expect(displayStepForPath(1, "url")).toBe(0)
+    expect(displayStepForPath(3, "url")).toBe(1)
+    expect(displayStepForPath(3, "api")).toBe(1)
+  })
+
+  it("clamps an unknown step into the rendered range instead of pointing past it", () => {
+    expect(displayStepForPath(4, "url")).toBe(1)
+    expect(displayStepForPath(99, "github")).toBe(2)
+    expect(displayStepForPath(0, "github")).toBe(0)
   })
 })
 

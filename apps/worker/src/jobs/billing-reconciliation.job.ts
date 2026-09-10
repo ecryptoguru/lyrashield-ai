@@ -11,7 +11,7 @@
  * job catches the ones that fall through the cracks.
  */
 
-import { prisma } from "@lyrashield/db"
+import { prisma, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { getPolarClient, getRazorpayClient, WEBHOOK_TRACK_MAX_ATTEMPTS } from "@lyrashield/billing"
 import { enqueueWebhookTrackRetry } from "@lyrashield/integrations"
@@ -147,8 +147,13 @@ async function reconcilePolar(since: Date, result: ReconciliationResult): Promis
       for (const order of orders) {
         result.polarChecked++
 
-        // Check if we have a WebhookEvent for this order
-        const existing = await prisma.webhookEvent.findFirst({
+        // Check if we have a WebhookEvent for this order. WebhookEvent is
+        // FORCE RLS strict, so a cross-workspace reconciliation sweep must
+        // read it through the system client (same justification as the
+        // GitHub webhook route) — the plain client returns empty rows under
+        // the NOBYPASSRLS runtime role and every order false-flags as
+        // "webhook may have been missed".
+        const existing = await getSystemPrisma().webhookEvent.findFirst({
           where: {
             provider: "polar",
             eventType: "order.paid",
@@ -234,7 +239,9 @@ async function reconcileRazorpay(_since: Date, result: ReconciliationResult): Pr
 
         if (payment.status !== "captured") continue
 
-        const existing = await prisma.webhookEvent.findFirst({
+        // Cross-workspace provider reconciliation — system client (see the
+        // Polar note above: WebhookEvent is FORCE RLS strict).
+        const existing = await getSystemPrisma().webhookEvent.findFirst({
           where: {
             provider: "razorpay",
             eventType: "payment.captured",
@@ -280,7 +287,10 @@ async function reconcileRazorpay(_since: Date, result: ReconciliationResult): Pr
  * Check for unprocessed WebhookEvent rows in the database.
  */
 async function checkUnprocessedEvents(result: ReconciliationResult): Promise<void> {
-  const unprocessed = await prisma.webhookEvent.findMany({
+  // Cross-workspace sweep over every provider's events — system client
+  // (WebhookEvent is FORCE RLS strict; the plain client sees nothing under
+  // the runtime role).
+  const unprocessed = await getSystemPrisma().webhookEvent.findMany({
     where: {
       processed: false,
       createdAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) }, // last 48 hours

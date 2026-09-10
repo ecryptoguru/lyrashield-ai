@@ -98,7 +98,8 @@ export async function evaluateScanEntitlement(
       return {
         allowed: false,
         code: "DEEP_NOT_ALLOWED",
-        message: "Deep is a Pro feature. Upgrade to Pro or Team to run Deep/Custom scans.",
+        message:
+          "Deep is a Pro feature. Upgrade to Pro or Launch Assurance to run Deep/Custom scans.",
         isTrial,
         plan,
         remainingMinutes: 0,
@@ -109,7 +110,8 @@ export async function evaluateScanEntitlement(
       return {
         allowed: false,
         code: "DEEP_NOT_ALLOWED",
-        message: "Deep is a Pro feature. Upgrade to Pro or Team to run Deep/Custom scans.",
+        message:
+          "Deep is a Pro feature. Upgrade to Pro or Launch Assurance to run Deep/Custom scans.",
         isTrial,
         plan,
         remainingMinutes: 0,

@@ -365,7 +365,7 @@ describe("buildDashboardOverview", () => {
       evaluatedCandidates: [],
     })
     expect(overview.latestRun?.userSafeFailure).toBe(
-      "The run stopped because its protected limit was reached before completing."
+      "The scan stopped because its protected limit was reached before completing."
     )
     expect(overview.latestRun?.userSafeFailure).not.toContain("BUDGET_EXCEEDED")
   })

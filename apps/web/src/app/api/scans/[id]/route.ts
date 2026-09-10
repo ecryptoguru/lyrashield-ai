@@ -21,6 +21,9 @@ function scanEtag(scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>
     updatedAt: scan.updatedAt,
     eventsCount: events.length,
     lastEventAt: lastEvent?.createdAt,
+    // Included so a cursor-scoped response can never collide with the full
+    // window (same event count) or a page after a different cursor.
+    eventsCursorApplied: scan.eventsCursorApplied ?? null,
   })
   return `"${createHash("sha256").update(payload).digest("hex")}"`
 }
@@ -29,9 +32,8 @@ const WorkspaceSchema = z.string().min(1)
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const parsedWorkspace = WorkspaceSchema.safeParse(
-    new URL(request.url).searchParams.get("workspaceId")
-  )
+  const url = new URL(request.url)
+  const parsedWorkspace = WorkspaceSchema.safeParse(url.searchParams.get("workspaceId"))
 
   if (!parsedWorkspace.success) {
     return apiError("MISSING_PARAM", "workspaceId is required", 400)
@@ -40,7 +42,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     await requirePermission(workspaceId, PERMISSIONS.scan.view)
-    const scan = await getScanWithEvents(id, workspaceId)
+    // Optional event-id cursor: when present, the service returns only events
+    // strictly AFTER the cursor (keyset on createdAt+id), so the dashboard's
+    // poll loop fetches the tail instead of the full 200-event window on every
+    // tick. Omitted (or unknown/foreign cursor) = full window, unchanged for
+    // existing consumers; an applied cursor is echoed as `eventsCursorApplied`.
+    const eventsAfterParam = url.searchParams.get("eventsAfter")
+    const eventsAfter =
+      eventsAfterParam && ScanIdSchema.safeParse(eventsAfterParam).success
+        ? eventsAfterParam
+        : undefined
+    const scan = await getScanWithEvents(id, workspaceId, { eventsAfter })
     if (!scan) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
