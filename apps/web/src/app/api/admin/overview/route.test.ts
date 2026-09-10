@@ -9,7 +9,7 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@/lib/platform-admin-overview", () => ({
   getPlatformAdminOverview: () => getPlatformAdminOverview(),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { GET } from "./route"
 

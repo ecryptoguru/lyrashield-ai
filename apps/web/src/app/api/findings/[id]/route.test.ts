@@ -18,7 +18,7 @@ vi.mock("@lyrashield/db", () => ({
 }))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 const { GET } = await import("./route")
 

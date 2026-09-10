@@ -33,7 +33,10 @@ vi.mock("./connection-auth", () => ({
   requireBrowserConnectionManager: (...args: unknown[]) => requireBrowserConnectionManager(...args),
 }))
 
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn(), info: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { error: vi.fn(), info: vi.fn() },
+}))
 
 const verifyOAuthConsentState = vi.fn()
 const connectionGrantMatchesConsent = vi.fn()

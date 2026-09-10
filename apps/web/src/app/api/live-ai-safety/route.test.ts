@@ -25,7 +25,7 @@ vi.mock("@lyrashield/auth", () => ({
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import {
   createLiveAiSafetyPlan,

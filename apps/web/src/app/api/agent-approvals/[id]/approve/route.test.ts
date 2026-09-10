@@ -14,7 +14,7 @@ vi.mock("@lyrashield/db", () => ({
   approveApproval: mocks.approve,
 }))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.permission }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 vi.mock("@/lib/fix-pr-context", () => ({
   FixPrContextError: class extends Error {},
   resolveFixPrRequest: mocks.resolve,

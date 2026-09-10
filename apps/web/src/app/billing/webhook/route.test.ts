@@ -30,6 +30,7 @@ vi.mock("@lyrashield/db", () => ({
   getSystemPrisma: vi.fn(() => ({})),
 }))
 vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 const dispatchAffiliateMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))

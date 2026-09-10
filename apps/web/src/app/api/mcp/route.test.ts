@@ -9,7 +9,7 @@ vi.mock("@lyrashield/mcp", () => ({
 }))
 
 vi.mock("@lyrashield/config", () => ({ env: { NEXT_PUBLIC_APP_URL: "https://app.example.com" } }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 const verifyOAuthBearer = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
   verifyOAuthBearer: (...args: unknown[]) => verifyOAuthBearer(...args),

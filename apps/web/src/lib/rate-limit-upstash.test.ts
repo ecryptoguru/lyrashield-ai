@@ -15,6 +15,7 @@ vi.mock("@lyrashield/config", () => ({
   isProd: true,
 }))
 vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
   logger: { error: mocks.loggerError, warn: vi.fn() },
 }))
 vi.mock("@upstash/redis", () => ({

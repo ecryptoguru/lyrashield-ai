@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ requirePermission: vi.fn(), getFindingHistoryP
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.requirePermission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))
 vi.mock("@lyrashield/db", () => ({ getFindingHistoryPage: mocks.getFindingHistoryPage }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { GET } from "./route"
 

@@ -19,7 +19,10 @@ vi.mock("@lyrashield/auth", () => ({
 }))
 vi.mock("@lyrashield/db", () => ({ getFixProposal, prisma }))
 vi.mock("@lyrashield/evidence-storage", () => ({ readEncryptedArtifact }))
-vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
 vi.mock("@lyrashield/config", () => ({ env: { NEXT_PUBLIC_APP_URL: "https://app.test" } }))
 vi.mock("@/lib/fix-pr", () => ({ requestFixPrApproval }))
 

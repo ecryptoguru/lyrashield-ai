@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ evidence: vi.fn(), error: vi.fn() }))
 vi.mock("@lyrashield/evidence-storage", () => ({
   assertEvidenceStorageConfigured: mocks.evidence,
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: mocks.error } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: mocks.error } }))
 
 import { GET } from "./route"
 

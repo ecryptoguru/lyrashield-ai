@@ -22,7 +22,10 @@ vi.mock("@lyrashield/config", () => ({
     NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com",
   },
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { error: vi.fn(), warn: vi.fn() },
+}))
 vi.mock("@lyrashield/affiliate", () => ({
   parseAffiliateCookie: () => "opaque-cookie-token",
   resolveAttribution: mocks.resolveAttribution,

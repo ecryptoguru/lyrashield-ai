@@ -42,6 +42,7 @@ vi.mock("@lyrashield/integrations", () => ({
   enqueueScan: vi.fn(async () => "queued-job-id"),
 }))
 vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }))
 

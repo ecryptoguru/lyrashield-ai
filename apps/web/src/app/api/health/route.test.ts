@@ -8,7 +8,7 @@ const getRedis = vi.fn(() => ({ ping }))
 vi.mock("@lyrashield/db", () => ({ prisma: { $queryRaw: queryRaw } }))
 vi.mock("@lyrashield/evidence-storage", () => ({ assertEvidenceStorageConfigured }))
 vi.mock("@lyrashield/integrations", () => ({ getRedis }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 const health = await import("./route")
 const ready = await import("../ready/route")

@@ -18,6 +18,7 @@ vi.mock("@lyrashield/auth/server", () => ({
   getSession: vi.fn().mockResolvedValue({ userId: "user-1" }),
 }))
 vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
   logger: { info: vi.fn(), error: vi.fn() },
 }))
 vi.mock("@lyrashield/billing", () => ({

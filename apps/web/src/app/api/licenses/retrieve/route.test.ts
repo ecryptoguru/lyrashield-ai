@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ retrieve: vi.fn() }))
 
-vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({
+  setRequestId: vi.fn(),
+  logger: { info: vi.fn(), error: vi.fn() },
+}))
 vi.mock("@/lib/licenses/license-service", () => ({
   retrieveLicenseByToken: mocks.retrieve,
 }))

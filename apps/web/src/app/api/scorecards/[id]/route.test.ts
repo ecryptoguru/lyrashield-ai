@@ -6,7 +6,7 @@ const requireWorkspaceAccess = vi.hoisted(() => vi.fn())
 vi.mock("@lyrashield/auth/server", () => ({
   requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { revokeScorecardShare } from "@lyrashield/db"
 import { DELETE } from "./route"

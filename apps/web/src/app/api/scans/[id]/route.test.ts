@@ -24,9 +24,7 @@ vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: { scan: { view: "scan:view", cancel: "scan:cancel" } },
 }))
 
-vi.mock("@lyrashield/logger", () => ({
-  logger: { error: vi.fn() },
-}))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { DELETE, GET, POST } from "./route"
 import { cancelScan, getScanWithEvents, prisma, removeScan } from "@lyrashield/db"

@@ -37,7 +37,7 @@ vi.mock("@lyrashield/auth/server", () => ({
   requirePermission,
 }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { retest: { create: "retest:create" } } }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 vi.mock("../../../../../lib/queue", () => ({
   enqueueScanJob,
   assertScanWorkerAvailable,

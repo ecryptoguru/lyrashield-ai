@@ -4,7 +4,7 @@ vi.mock("@lyrashield/db", () => ({
   completeAgentOperation: vi.fn(),
   failAgentOperation: vi.fn(),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 import {
   claimOrGetAgentOperation,
   completeAgentOperation,

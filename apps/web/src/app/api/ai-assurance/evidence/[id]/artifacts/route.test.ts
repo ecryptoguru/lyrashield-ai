@@ -21,8 +21,10 @@ vi.mock("@lyrashield/evidence-storage", () => ({
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
 }))
-vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { aiAssurance: { manage: "aiAssurance:manage" } } }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/auth", () => ({
+  PERMISSIONS: { aiAssurance: { manage: "aiAssurance:manage" } },
+}))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { prisma } from "@lyrashield/db"
 import { POST } from "./route"
@@ -39,16 +41,19 @@ function uploadRequest(
     contentLength,
   }: { filename?: string; mediaType?: string; contentLength?: string } = {}
 ): Request {
-  return new Request("http://localhost/api/ai-assurance/evidence/evidence-1/artifacts?workspaceId=ws-1", {
-    method: "POST",
-    headers: {
-      "content-type": mediaType,
-      "x-lyrashield-artifact-filename": encodeURIComponent(filename),
-      ...(contentLength ? { "content-length": contentLength } : {}),
-    },
-    body: content,
-    ...(content instanceof ReadableStream ? { duplex: "half" as never } : {}),
-  })
+  return new Request(
+    "http://localhost/api/ai-assurance/evidence/evidence-1/artifacts?workspaceId=ws-1",
+    {
+      method: "POST",
+      headers: {
+        "content-type": mediaType,
+        "x-lyrashield-artifact-filename": encodeURIComponent(filename),
+        ...(contentLength ? { "content-length": contentLength } : {}),
+      },
+      body: content,
+      ...(content instanceof ReadableStream ? { duplex: "half" as never } : {}),
+    }
+  )
 }
 
 describe("evidence artifact upload", () => {
@@ -132,7 +137,9 @@ describe("evidence artifact upload", () => {
       params: Promise.resolve({ id: "evidence-1" }),
     })
 
-    expect(await response.json()).toMatchObject({ error: { code: "EVIDENCE_ARTIFACT_COUNT_EXCEEDED" } })
+    expect(await response.json()).toMatchObject({
+      error: { code: "EVIDENCE_ARTIFACT_COUNT_EXCEEDED" },
+    })
     expect(response.status).toBe(400)
     expect(deleteEncryptedArtifact).toHaveBeenCalledWith("s3://private/proof.txt", "ws-1")
   })

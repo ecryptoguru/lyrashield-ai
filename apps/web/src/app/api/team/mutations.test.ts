@@ -22,7 +22,7 @@ vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: mocks.permission,
   getSession: vi.fn(),
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 vi.mock("@lyrashield/config", () => ({ env: {} }))
 vi.mock("@lyrashield/integrations", () => ({ sendNotification: vi.fn() }))
 vi.mock("../../../lib/rate-limit", () => ({ checkInvitationCreateRateLimit: vi.fn() }))

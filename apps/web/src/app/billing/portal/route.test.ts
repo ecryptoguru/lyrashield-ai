@@ -31,7 +31,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/billing", () => ({
   getPolarPortalUrl: state.getPolarPortalUrl,
 }))
-vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 const { GET } = await import("./route")
 
