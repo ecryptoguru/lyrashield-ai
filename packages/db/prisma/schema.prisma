@@ -859,6 +859,9 @@ model Scan {
   // Covers the active-scan poll (workspaceId + status IN (...) ORDER BY
   // createdAt DESC) — the most frequent automated query in the app.
   @@index([workspaceId, status, createdAt])
+  // Covers the target-scoped scan history (target detail page and the gate's
+  // newer-attempt existence check) without a wide workspace scan.
+  @@index([workspaceId, targetId, createdAt])
 }
 
 model ScanEvent {
@@ -976,6 +979,7 @@ model Finding {
   @@index([workspaceId, severity, createdAt])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, targetId, canonicalFindingId])
+  @@index([workspaceId, targetId, severity, createdAt])
 }
 
 model Evidence {
@@ -1225,6 +1229,7 @@ model UsageRecord {
   @@index([workspaceId, createdAt])
   @@index([workspaceId, cycleStart])
   @@index([workspaceId, cycleStart, kind])
+  @@index([workspaceId, kind])
 }
 
 model ScoreSnapshot {

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const mocks = vi.hoisted(() => ({ getCurrentGateVerdict: vi.fn(), findMany: vi.fn() }))
+const mocks = vi.hoisted(() => ({ getCurrentGateVerdicts: vi.fn(), findMany: vi.fn() }))
 vi.mock("@lyrashield/db", () => ({
-  getCurrentGateVerdict: mocks.getCurrentGateVerdict,
+  getCurrentGateVerdicts: mocks.getCurrentGateVerdicts,
   withWorkspaceRLS: (_workspaceId: string, run: (tx: unknown) => unknown) =>
     run({ target: { findMany: mocks.findMany } }),
 }))
@@ -14,60 +14,96 @@ describe("getGateReadinessTargets", () => {
 
   it("returns insufficient evidence when a target has no gate verdict", async () => {
     mocks.findMany.mockResolvedValue([{ id: "target-1", name: "API" }])
-    mocks.getCurrentGateVerdict.mockResolvedValue(null)
+    mocks.getCurrentGateVerdicts.mockResolvedValue(new Map())
 
     const result = await getGateReadinessTargets("workspace-1")
 
     expect(result[0]).toMatchObject({
       state: "INSUFFICIENT_EVIDENCE",
       applicable: false,
+      identity: null,
       reasons: [{ code: "NO_GATE_VERDICT" }],
     })
   })
 
-  it("passes the exact release identity to Gate v2", async () => {
+  it("passes the exact release identity to the batched gate read", async () => {
     mocks.findMany.mockResolvedValue([{ id: "target-1", name: "API" }])
-    mocks.getCurrentGateVerdict.mockResolvedValue({
-      state: "READY",
-      applicability: { applicable: true, reasons: [] },
-      historical: { blockingReasons: [] },
-    })
+    mocks.getCurrentGateVerdicts.mockResolvedValue(
+      new Map([
+        [
+          "target-1",
+          {
+            state: "READY",
+            applicability: { applicable: true, reasons: [], evaluatedIdentity: null },
+            historical: { blockingReasons: [] },
+          },
+        ],
+      ])
+    )
     const commit = "a".repeat(40)
 
     const result = await getGateReadinessTargets("workspace-1", "target-1", {
       expectedCommit: commit,
     })
 
-    expect(mocks.getCurrentGateVerdict).toHaveBeenCalledWith("workspace-1", "target-1", {
+    expect(mocks.getCurrentGateVerdicts).toHaveBeenCalledWith("workspace-1", ["target-1"], {
       expectedCommit: commit,
       expectedArtifactDigest: undefined,
     })
     expect(result[0]).toMatchObject({ state: "READY", applicable: true })
   })
 
-  it("preserves every target in order while bounding verdict reads", async () => {
+  it("reads every target's verdict in ONE batched call instead of a per-target fan-out", async () => {
     const targets = Array.from({ length: 10 }, (_, index) => ({
       id: `target-${index}`,
       name: `Target ${index}`,
     }))
     mocks.findMany.mockResolvedValue(targets)
-    let active = 0
-    let peak = 0
-    mocks.getCurrentGateVerdict.mockImplementation(async () => {
-      active += 1
-      peak = Math.max(peak, active)
-      await new Promise((resolve) => setTimeout(resolve, 1))
-      active -= 1
-      return {
-        state: "READY",
-        applicability: { applicable: true, reasons: [] },
-        historical: { blockingReasons: [] },
-      }
-    })
+    mocks.getCurrentGateVerdicts.mockImplementation(
+      async (_workspaceId: string, ids: string[]) =>
+        new Map(
+          ids.map((id) => [
+            id,
+            {
+              state: "READY",
+              applicability: { applicable: true, reasons: [], evaluatedIdentity: null },
+              historical: { blockingReasons: [] },
+            },
+          ])
+        )
+    )
 
     const result = await getGateReadinessTargets("workspace-1")
 
-    expect(peak).toBeLessThanOrEqual(4)
+    // The v16 2.1 fix: exactly one batched read regardless of target count —
+    // never N calls through the single-target gate read.
+    expect(mocks.getCurrentGateVerdicts).toHaveBeenCalledTimes(1)
+    expect(mocks.getCurrentGateVerdicts).toHaveBeenCalledWith(
+      "workspace-1",
+      targets.map((target) => target.id),
+      { expectedCommit: undefined, expectedArtifactDigest: undefined }
+    )
     expect(result.map((target) => target.targetId)).toEqual(targets.map((target) => target.id))
+  })
+
+  it("surfaces the evaluated identity per target for read-only labelling", async () => {
+    mocks.findMany.mockResolvedValue([{ id: "target-1", name: "API" }])
+    const identity = { kind: "COMMIT" as const, value: "b".repeat(40) }
+    mocks.getCurrentGateVerdicts.mockResolvedValue(
+      new Map([
+        [
+          "target-1",
+          {
+            state: "READY",
+            applicability: { applicable: true, reasons: [], evaluatedIdentity: identity },
+            historical: { blockingReasons: [] },
+          },
+        ],
+      ])
+    )
+
+    const result = await getGateReadinessTargets("workspace-1")
+
+    expect(result[0]).toMatchObject({ identity })
   })
 })

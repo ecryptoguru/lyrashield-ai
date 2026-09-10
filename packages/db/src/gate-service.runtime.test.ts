@@ -16,7 +16,7 @@ vi.mock("@lyrashield/config", async (original) => {
 import { createReport } from "./report-service"
 import * as reportGenerator from "./report-generator"
 import { createApproval, claimApprovalExecution } from "./agent-approval-service"
-import { handleFixPrMergedAndReevaluate } from "./gate-service"
+import { handleFixPrMergedAndReevaluate, getCurrentGateVerdicts } from "./gate-service"
 import { prisma as runtime } from "./client"
 import {
   recordAgentMinutes,
@@ -500,5 +500,82 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     )
     expect(await owner.scoreSnapshot.findUnique({ where: { scanId: terminal.id } })).not.toBeNull()
     expect(await owner.usageRecord.count({ where: { workspaceId: id } })).toBe(usageBeforeFailure)
+  })
+
+  it("reads every target's current verdict in one batched call under the restricted runtime role", async () => {
+    // Deep Review v16 2.1: the batched set-based read must return, per target,
+    // exactly what the single-target read returns — under the NOBYPASSRLS
+    // runtime role, with DISTINCT ON picking each target's latest verdict.
+    const secondTarget = await owner.target.create({
+      data: {
+        workspaceId: id,
+        name: "Batch sibling",
+        type: "REPO",
+        repoFullName: "test/batch-sibling",
+      },
+    })
+    const now = Date.now()
+    const commit = "c".repeat(40)
+    const snapshot = {
+      version: 2,
+      scanId: "scan-batch-fixture",
+      completedAtMs: now - 1000,
+      manifestChecksum: "a".repeat(64),
+      manifestVersion: 7,
+      policyId: "policy-batch-fixture",
+      policyFingerprint: "policy-batch-fixture",
+      identity: { kind: "COMMIT", value: commit },
+    }
+    // A stale older verdict and the current one for the original target: the
+    // DISTINCT ON ordering must pick the newer row.
+    for (const [evaluatedAt, state] of [
+      [new Date(now - 60_000), "INSUFFICIENT_EVIDENCE"],
+      [new Date(now - 2000), "READY"],
+    ] as const) {
+      await owner.gateVerdict.create({
+        data: {
+          workspaceId: id,
+          targetId,
+          standardVersion: "lyrashield-gate/2.0.0",
+          state,
+          coverageStatement: {},
+          nonCoverage: {},
+          blockingReasons: [],
+          evidenceSummary: {},
+          staleness: {},
+          inputChecksum: "fixture",
+          verdictChecksum: "fixture",
+          assessmentVersion: 2,
+          assessmentSnapshot: snapshot,
+          evaluatedAt,
+        },
+      })
+    }
+
+    const batch = await getCurrentGateVerdicts(id, [targetId, secondTarget.id])
+
+    // The sibling has no verdict: absent from the map (the caller renders
+    // NO_GATE_VERDICT), never a fabricated entry.
+    expect(batch.size).toBe(1)
+    expect(batch.has(secondTarget.id)).toBe(false)
+
+    const verdict = batch.get(targetId)
+    expect(verdict).toMatchObject({
+      schemaVersion: "lyrashield-gate-response/2.0.0",
+      state: "READY",
+      applicability: {
+        applicable: true,
+        evaluatedIdentity: { kind: "COMMIT", value: commit },
+      },
+    })
+    expect(verdict?.applicability.reasons).toEqual([])
+
+    // Strict mode through the same batch: a mismatched enforced commit still
+    // fails closed with IDENTITY_MISMATCH.
+    const strict = await getCurrentGateVerdicts(id, [targetId], { expectedCommit: "d".repeat(40) })
+    expect(strict.get(targetId)?.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(strict.get(targetId)?.applicability.reasons.map((reason) => reason.code)).toContain(
+      "IDENTITY_MISMATCH"
+    )
   })
 })

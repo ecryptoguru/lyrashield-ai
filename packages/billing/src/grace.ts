@@ -33,12 +33,21 @@ export interface GraceState {
 
 /**
  * Get the current grace state for a workspace.
+ *
+ * `prefetchedWorkspace` lets a caller that already read the Workspace row
+ * pass it in — see UsageBalancePrefetched (Deep Review v16 2.1).
  */
-export async function getGraceState(workspaceId: string): Promise<GraceState> {
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: workspaceId },
-    select: { graceUsedMs: true, graceCycleStart: true },
-  })
+export async function getGraceState(
+  workspaceId: string,
+  prefetchedWorkspace?: { graceUsedMs: number; graceCycleStart: Date | null } | null
+): Promise<GraceState> {
+  const workspace =
+    prefetchedWorkspace !== undefined
+      ? prefetchedWorkspace
+      : await prisma.workspace.findUnique({
+          where: { id: workspaceId },
+          select: { graceUsedMs: true, graceCycleStart: true },
+        })
 
   if (!workspace) {
     return {

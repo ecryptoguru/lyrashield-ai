@@ -28,7 +28,12 @@ export {
 } from "./entitlements"
 
 // Usage balance
-export { getUsageBalance, type UsageBalance, type PackBalance } from "./usage/balance"
+export {
+  getUsageBalance,
+  type UsageBalance,
+  type UsageBalancePrefetched,
+  type PackBalance,
+} from "./usage/balance"
 
 // Usage metering
 export {
