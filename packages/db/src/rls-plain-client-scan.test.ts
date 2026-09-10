@@ -114,14 +114,16 @@ const RLS_CONTEXT_MARKERS = [
  * list was built.
  */
 const ALLOWLIST: Record<string, string> = {
+  // P1-7 (billing-downgrade.job.ts) was CONVERTED, not allowlisted: the
+  // downgrade sweep now reads through getSystemPrisma (marker present). P1-8
+  // (schedules.ts) was fixed by passing workspaceId explicitly on the guard
+  // count; its remaining reads stay extension-wrapped below.
   "apps/worker/src/engine/deterministic-retest.ts":
     "retest/findingCandidate/scanResultManifest/scanCoverageReceipt reads with explicit workspaceId args (extension-wrapped)",
-  "apps/worker/src/jobs/billing-downgrade.job.ts":
-    "deliberate cross-workspace billingAccount sweep (system-shaped cron; flagged for a future getSystemPrisma conversion in review)",
   "apps/worker/src/jobs/preflight.job.ts":
     "target/scan reads with explicit workspaceId or bare-id lookups inside the scan pipeline (extension-wrapped)",
   "apps/worker/src/schedules.ts":
-    "scan counts with explicit workspaceId (extension-wrapped; the targetId-only count is flagged for review)",
+    "scan counts and schedule updates with explicit workspaceId args (extension-wrapped; the P1-8 guard count passes workspaceId explicitly — regression-tested in worker-rls-regressions.runtime.test.ts)",
   "packages/billing/src/entitlements.ts":
     "billingAccount/usageRecord/target reads with explicit workspaceId args (extension-wrapped)",
   "packages/billing/src/usage/balance.ts":
