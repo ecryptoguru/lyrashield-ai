@@ -119,6 +119,7 @@ export default async function DashboardPage() {
       state: target.state,
       applicable: target.applicable,
       blockingFindings: target.blockingFindings,
+      reasons: target.reasons,
     })),
     activeScan: overview.activeScan,
   })
