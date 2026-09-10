@@ -31,6 +31,7 @@ import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel } from "@/lib/labels"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { scanRecoveryHref } from "../scans-client.utils"
+import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 
 interface ScanEvent {
   id: string
@@ -137,6 +138,21 @@ interface FindingItem {
   verificationMethod: string | null
   verificationReason: string | null
   createdAt: string
+}
+
+interface CleanResultScorecard {
+  targetId: string
+  grade: string
+  canPublish: boolean
+  existingShare?: {
+    id: string
+    slug: string
+    url: string
+    resolvedFindings: number
+    views: number
+    shareHandoffs: number
+    referredSignups: number
+  }
 }
 
 const findingItemSchema = z
@@ -337,9 +353,11 @@ function asMetadata(value: unknown): Record<string, unknown> | null {
 export function ScanDetailClient({
   scan: initialScan,
   findings,
+  scorecard,
 }: {
   scan: ScanData
   findings: FindingItem[]
+  scorecard: CleanResultScorecard | null
 }) {
   const [scan, setScan] = useState<ScanData>(initialScan)
   const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
@@ -816,7 +834,7 @@ export function ScanDetailClient({
             </Card>
           )}
 
-          {presentation.assuranceAvailable && (
+          {presentation.assuranceAvailable && topFinding && (
             <Card className="border-primary/30 bg-primary/5 mb-6 p-5 sm:p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -824,25 +842,17 @@ export function ScanDetailClient({
                     Next step
                   </p>
                   <h2 className="mt-1 text-lg font-semibold">
-                    {topFinding
-                      ? "Review the highest-priority finding"
-                      : "Create an assurance report"}
+                    Review the highest-priority finding
                   </h2>
                   <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-                    {topFinding
-                      ? "Understand the evidence, record a fix proposal, then queue a fresh retest."
-                      : "Package this completed scan and its retained scope into an immutable report."}
+                    Understand the evidence, record a fix proposal, then queue a fresh retest.
                   </p>
                 </div>
                 <Link
-                  href={
-                    topFinding
-                      ? `/dashboard/findings?finding=${encodeURIComponent(topFinding.id)}`
-                      : `/dashboard/findings?tab=reports&scanId=${encodeURIComponent(scan.id)}`
-                  }
+                  href={`/dashboard/findings?finding=${encodeURIComponent(topFinding.id)}`}
                   className={buttonVariants({ className: "shrink-0" })}
                 >
-                  {topFinding ? "Review finding" : "Generate report"}
+                  Review finding
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </Link>
               </div>
@@ -1254,18 +1264,56 @@ export function ScanDetailClient({
           )}
 
           {currentFindings.length === 0 && !isActive && presentation.assuranceAvailable && (
-            <EmptyState
-              icon={ShieldCheck}
-              title="No findings were reported"
-              description={
-                hasLimitedCoverage
-                  ? "Some scanner coverage was limited. Review the coverage notice above before treating this as a clean result."
-                  : scan.status === "COMPLETED"
-                    ? "No findings were reported within this scan's completed coverage. Review the retained scope before relying on the result."
-                    : "No findings were recorded before this scan ended."
-              }
-              action={null}
-            />
+            <div className="space-y-4">
+              <EmptyState
+                icon={ShieldCheck}
+                title="No findings were reported"
+                description={
+                  hasLimitedCoverage
+                    ? "Some scanner coverage was limited. Review the coverage notice above before treating this as a clean result. Absence of findings is not verification."
+                    : "No findings were reported within this scan's completed coverage. Review the retained scope before relying on the result. Absence of findings is not verification."
+                }
+                action={null}
+              />
+              {scan.status === "COMPLETED" && (
+                <Card className="border-primary/30 bg-primary/5 p-5 sm:p-6">
+                  <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                    Next actions
+                  </p>
+                  <div className="mt-3 grid gap-5 lg:grid-cols-2">
+                    <div className="min-w-0">
+                      <h2 className="font-semibold">Create an assurance report</h2>
+                      <p className="text-muted-foreground mt-1 text-sm">
+                        Package this completed scan and its retained scope into an immutable report.
+                      </p>
+                      <Link
+                        href={`/dashboard/findings?tab=reports&scanId=${encodeURIComponent(scan.id)}`}
+                        className={buttonVariants({ className: "mt-3" })}
+                      >
+                        Generate report
+                        <ArrowRight className="size-4" aria-hidden="true" />
+                      </Link>
+                    </div>
+                    {scorecard && (
+                      <div className="min-w-0 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
+                        <h2 className="font-semibold">Share the scorecard</h2>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                          Publish only the approved public score fields. Target and vulnerability
+                          details stay private.
+                        </p>
+                        <ScorecardControls
+                          targetId={scorecard.targetId}
+                          workspaceId={scan.workspaceId}
+                          grade={scorecard.grade}
+                          canPublish={scorecard.canPublish}
+                          existingShare={scorecard.existingShare}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </div>
           )}
         </>
       )}

@@ -141,12 +141,15 @@ describe("worker Docker runtime", () => {
     // builds must never gain token-minting permissions. The deploy job must
     // carry exactly one id-token: write alongside the OIDC client-id login,
     // and the old client-secret login must be gone entirely.
-    const buildJob = deployWorkflow.slice(
-      deployWorkflow.indexOf("  build:"),
-      deployWorkflow.indexOf("  cleanup-old-images:")
-    )
+    const buildStart = deployWorkflow.indexOf("  build:")
+    const cleanupStart = deployWorkflow.indexOf("  cleanup-old-images:")
+    expect(buildStart).toBeGreaterThanOrEqual(0)
+    expect(cleanupStart).toBeGreaterThan(buildStart)
+    const buildJob = deployWorkflow.slice(buildStart, cleanupStart)
     expect(buildJob).not.toContain("id-token: write")
-    const deployJob = deployWorkflow.slice(deployWorkflow.indexOf("  deploy:"))
+    const deployStart = deployWorkflow.indexOf("  deploy:")
+    expect(deployStart).toBeGreaterThanOrEqual(0)
+    const deployJob = deployWorkflow.slice(deployStart)
     expect(deployJob.match(/id-token: write/g) ?? []).toHaveLength(1)
     expect(deployJob).toContain("client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}")
     expect(deployWorkflow).not.toContain("creds: ${{ secrets.AZURE_CREDENTIALS }}")

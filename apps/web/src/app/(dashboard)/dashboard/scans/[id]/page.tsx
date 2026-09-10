@@ -62,6 +62,43 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     orderBy: { severity: "desc" },
   })
 
+  const [scoreSnapshot, membership] =
+    scan.status === "COMPLETED" && findings.length === 0 && scan.targetId
+      ? await Promise.all([
+          prisma.scoreSnapshot.findFirst({
+            where: {
+              scanId: scan.id,
+              workspaceId,
+              targetId: scan.targetId,
+              shareEligible: true,
+              expiresAt: { gt: new Date() },
+            },
+            select: {
+              grade: true,
+              shares: {
+                where: { revokedAt: null, createdById: session.userId },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+                select: {
+                  id: true,
+                  slug: true,
+                  publicPayload: true,
+                  viewCount: true,
+                  _count: { select: { events: { where: { eventType: "SHARE" } } } },
+                  referralCode: {
+                    select: { code: true, _count: { select: { attributions: true } } },
+                  },
+                },
+              },
+            },
+          }),
+          prisma.workspaceMember.findFirst({
+            where: { workspaceId, userId: session.userId, status: "active" },
+            select: { role: true },
+          }),
+        ])
+      : [null, null]
+
   // One-time server fetch of the manifest detail (urlExecution lives inside the
   // tens-of-KB manifest JSON, which getScanWithEvents deliberately excludes so
   // the polling API does not ship it on every request).
@@ -156,5 +193,32 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     createdAt: f.createdAt.toISOString(),
   }))
 
-  return <ScanDetailClient scan={scanData} findings={findingsData} />
+  const existingShare = scoreSnapshot?.shares[0]
+  const scorecard =
+    scoreSnapshot && scan.targetId
+      ? {
+          targetId: scan.targetId,
+          grade: scoreSnapshot.grade,
+          canPublish:
+            membership !== null &&
+            ["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"].includes(membership.role),
+          existingShare: existingShare
+            ? {
+                id: existingShare.id,
+                slug: existingShare.slug,
+                resolvedFindings: (
+                  existingShare.publicPayload as unknown as { resolvedFindings: number }
+                ).resolvedFindings,
+                views: existingShare.viewCount,
+                shareHandoffs: existingShare._count.events,
+                referredSignups: existingShare.referralCode?._count.attributions ?? 0,
+                url: existingShare.referralCode?.code
+                  ? `/score/${existingShare.slug}?ref=${existingShare.referralCode.code}`
+                  : `/score/${existingShare.slug}`,
+              }
+            : undefined,
+        }
+      : null
+
+  return <ScanDetailClient scan={scanData} findings={findingsData} scorecard={scorecard} />
 }

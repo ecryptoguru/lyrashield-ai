@@ -96,9 +96,16 @@ describe.skipIf(!runtimeUrl)(
     it("sees the expired account and downgrades the workspace (getSystemPrisma sweep)", async () => {
       // The defect: through the plain client the sweep sees zero rows under
       // the runtime role and nobody is ever downgraded.
+      const eligibleAccounts = await owner.billingAccount.count({
+        where: {
+          status: { in: ["canceled", "past_due"] },
+          currentPeriodEnd: { lt: new Date() },
+        },
+      })
       const result = await processBillingDowngradeJob({ scheduledAt: new Date().toISOString() })
 
-      expect(result.downgraded).toBe(1)
+      expect(eligibleAccounts).toBeGreaterThanOrEqual(1)
+      expect(result.downgraded).toBe(eligibleAccounts)
       const workspace = await owner.workspace.findUniqueOrThrow({
         where: { id: p17WorkspaceId },
       })

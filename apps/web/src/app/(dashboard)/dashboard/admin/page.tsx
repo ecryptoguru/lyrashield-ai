@@ -53,6 +53,15 @@ function Datum({ label, value }: { label: string; value: number | null }) {
   )
 }
 
+function sampledRate(
+  metric: { numerator: number; denominator: number; percent: number | null },
+  minimum: number
+) {
+  return metric.percent === null
+    ? `Insufficient sample (${metric.denominator}/${minimum})`
+    : `${metric.percent}% (${metric.numerator}/${metric.denominator})`
+}
+
 export const metadata: Metadata = {
   title: "Platform Admin",
 }
@@ -121,6 +130,106 @@ export default async function PlatformAdminPage() {
           <Datum label="Pending payouts" value={overview.affiliates.pendingPayouts} />
         </AdminCard>
       </section>
+
+      {overview.activation && (
+        <section aria-labelledby="activation-heading">
+          <div className="mb-3">
+            <h2 id="activation-heading" className="text-lg font-semibold">
+              Activation
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              Headline activation is accounts with a server-recorded COMPLETED or PARTIAL scan
+              divided by accounts created:{" "}
+              {sampledRate(overview.activation.activation, overview.activation.minimumSample)}.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <Card className="p-5">
+              <h3 className="font-semibold">Setup abandonment</h3>
+              <p className="mt-2 text-xl font-semibold tabular-nums">
+                {sampledRate(
+                  overview.activation.setupAbandonment,
+                  overview.activation.minimumSample
+                )}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Accounts created that never started a server-recorded scan divided by all accounts
+                created.
+              </p>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-semibold">Time to first valid assessment</h3>
+              <p className="mt-2 text-xl font-semibold tabular-nums">
+                {overview.activation.timeToFirstValidAssessment.medianMinutes === null
+                  ? `Insufficient sample (${overview.activation.timeToFirstValidAssessment.denominator}/${overview.activation.minimumSample})`
+                  : `${overview.activation.timeToFirstValidAssessment.medianMinutes.toFixed(1)}m median · ${overview.activation.timeToFirstValidAssessment.p90Minutes?.toFixed(1)}m p90`}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Account creation to its first server-recorded COMPLETED or PARTIAL scan.
+                Denominator: accounts reaching that state.
+              </p>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-semibold">Connection success</h3>
+              <p className="mt-2 text-xl font-semibold tabular-nums">
+                {sampledRate(
+                  overview.activation.connectionSuccess,
+                  overview.activation.minimumSample
+                )}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Unique users with a GitHub connection completion divided by unique users who started
+                the signed install flow.
+              </p>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-semibold">Repeated input</h3>
+              <p className="mt-2 text-base font-semibold tabular-nums">
+                {overview.activation.repeatedInput.sufficient
+                  ? `0: ${overview.activation.repeatedInput.zero} · 1: ${overview.activation.repeatedInput.one} · 2: ${overview.activation.repeatedInput.two} · 3+: ${overview.activation.repeatedInput.threePlus}`
+                  : `Insufficient sample (${overview.activation.repeatedInput.denominator}/${overview.activation.minimumSample})`}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Distribution of targets created per account during the first 30 minutes after
+                account creation. Denominator: accounts created.
+              </p>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-semibold">Recovery success</h3>
+              <p className="mt-2 text-xl font-semibold tabular-nums">
+                {sampledRate(
+                  overview.activation.recoverySuccess,
+                  overview.activation.minimumSample
+                )}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Agent operations with a structured failure reason followed by a successful operation
+                of the same type and principal within 30 minutes divided by those failures.
+              </p>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-semibold">Repeat assessment</h3>
+              <p className="mt-2 text-base font-semibold tabular-nums">
+                7d:{" "}
+                {sampledRate(
+                  overview.activation.repeatAssessment.sevenDays,
+                  overview.activation.minimumSample
+                )}
+                <br />
+                28d:{" "}
+                {sampledRate(
+                  overview.activation.repeatAssessment.twentyEightDays,
+                  overview.activation.minimumSample
+                )}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Accounts with a second COMPLETED scan inside 7 or 28 days divided by accounts with
+                at least one COMPLETED scan.
+              </p>
+            </Card>
+          </div>
+        </section>
+      )}
 
       <section className="flex flex-wrap gap-3" aria-label="Admin destinations">
         <Link
