@@ -580,6 +580,10 @@ jobs:
       NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
       TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
+      # The P1-7 regression test exercises the billing downgrade sweep, which
+      # reads through getSystemPrisma() — the privileged URL the worker uses
+      # in production for cross-workspace system operations.
+      DATABASE_SYSTEM_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
 
     steps:
       - name: Configure git default branch

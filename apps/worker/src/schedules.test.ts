@@ -238,9 +238,11 @@ describe("processDueSchedules", () => {
   })
 
   it("enqueues when the workspace is below the cap", async () => {
-    mockPrisma.scan.count.mockImplementation(
-      async (args: { where?: { targetId?: string; workspaceId?: string } }) =>
-        args?.where?.workspaceId ? 2 : 0
+    // Both guard counts carry workspaceId since the P1-8 fix, so the mock
+    // discriminates by the targetId: the target guard passes (0 active),
+    // the workspace cap reports 2 of 3.
+    mockPrisma.scan.count.mockImplementation(async (args: { where?: { targetId?: string } }) =>
+      args?.where?.targetId ? 0 : 2
     )
 
     const enqueued = await processDueSchedules(new Date("2026-01-01T12:00:00Z"))
@@ -250,9 +252,9 @@ describe("processDueSchedules", () => {
   })
 
   it("skips a scheduled scan when the workspace is at MAX_CONCURRENT_WORKSPACE_SCANS", async () => {
-    mockPrisma.scan.count.mockImplementation(
-      async (args: { where?: { targetId?: string; workspaceId?: string } }) =>
-        args?.where?.workspaceId ? 3 : 0
+    // Target guard passes (0 active), workspace cap reports the full cap.
+    mockPrisma.scan.count.mockImplementation(async (args: { where?: { targetId?: string } }) =>
+      args?.where?.targetId ? 0 : 3
     )
 
     const enqueued = await processDueSchedules(new Date("2026-01-01T12:00:00Z"))
