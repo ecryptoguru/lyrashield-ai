@@ -103,6 +103,11 @@ describe("getPlatformAdminOverview", () => {
     expect(systemPrisma.webhookEventTrack.count).toHaveBeenCalledWith({
       where: { status: "dead_letter" },
     })
+    const query = (systemPrisma.$queryRaw.mock.calls[0]?.[0] as TemplateStringsArray).join("")
+    expect(query).toContain('target_event."actorUserId" = users.id')
+    expect(query).toContain('target_event."createdAt" >= users."createdAt"')
+    expect(query).toContain('connected."createdAt" >= started.started_at')
+    expect(query).toContain('connected."workspaceId" = started.workspace_id')
   })
 
   it("keeps other cards available when one dependency fails", async () => {

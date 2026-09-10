@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   ArrowRight,
@@ -359,6 +360,7 @@ export function ScanDetailClient({
   findings: FindingItem[]
   scorecard: CleanResultScorecard | null
 }) {
+  const router = useRouter()
   const [scan, setScan] = useState<ScanData>(initialScan)
   const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
   const [expandedEvents, setExpandedEvents] = useState(false)
@@ -509,12 +511,15 @@ export function ScanDetailClient({
           // and retries instead of rendering a false zero until page reload.
           setScan(nextScan)
           if (refreshedFindings) setCurrentFindings(refreshedFindings)
+          if (updated.status === "COMPLETED" && refreshedFindings?.length === 0) {
+            router.refresh()
+          }
         }
       } catch {
         if (!signal.aborted) setRefreshError(true)
       }
     },
-    [scan.id, scan.workspaceId]
+    [router, scan.id, scan.workspaceId]
   )
 
   useEffect(() => {

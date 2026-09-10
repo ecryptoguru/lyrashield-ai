@@ -11,5 +11,7 @@ describe("completed clean-result payoff", () => {
     expect(source).toContain("Generate report")
     expect(source).toContain("<ScorecardControls")
     expect(source).toContain("Absence of findings is not verification.")
+    expect(source).toContain('updated.status === "COMPLETED" && refreshedFindings?.length === 0')
+    expect(source).toContain("router.refresh()")
   })
 })

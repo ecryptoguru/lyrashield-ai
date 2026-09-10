@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("./client", () => ({
   prisma: {
     loopClosure: { create: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
-    notification: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+    notification: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn(), upsert: vi.fn() },
   },
 }))
 
@@ -17,16 +17,11 @@ vi.mock("./rls", () => ({
   ),
 }))
 
-vi.mock("./notification-service", () => ({
-  createNotification: vi.fn(),
-}))
-
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }))
 
 import { prisma } from "./client"
-import { createNotification } from "./notification-service"
 import { Prisma } from "./generated/prisma"
 import {
   LOOP_CLOSURE_MAX_ATTEMPTS,
@@ -46,6 +41,7 @@ const mockPrisma = prisma as unknown as {
     updateMany: ReturnType<typeof vi.fn>
     findMany: ReturnType<typeof vi.fn>
   }
+  notification: { upsert: ReturnType<typeof vi.fn> }
 }
 
 describe("classifyLoopClosureError", () => {
@@ -139,7 +135,7 @@ describe("failLoopClosureTerminally", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPrisma.loopClosure.updateMany.mockResolvedValue({ count: 1 })
-    vi.mocked(createNotification).mockResolvedValue({ id: "notif-1" } as never)
+    mockPrisma.notification.upsert.mockResolvedValue({ id: "notif-1" })
   })
 
   it("marks the closure failed and notifies the workspace with a recovery action", async () => {
@@ -161,13 +157,27 @@ describe("failLoopClosureTerminally", () => {
         data: { status: "failed", lastReason: "RETEST_NOT_ENTITLED" },
       })
     )
-    expect(createNotification).toHaveBeenCalledWith(
+    expect(mockPrisma.notification.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        workspaceId: "ws-1",
-        type: "loop_closure_failed",
-        body: expect.stringContaining("Start the retest manually"),
+        create: expect.objectContaining({
+          workspaceId: "ws-1",
+          type: "loop_closure_failed",
+          body: expect.stringContaining("Start the retest manually"),
+        }),
       })
     )
+  })
+
+  it("keeps the closure pending when notification persistence fails", async () => {
+    mockPrisma.notification.upsert.mockRejectedValue(new Error("notification unavailable"))
+
+    await expect(
+      failLoopClosureTerminally("ws-1", "acme/repo", "lyrashield/fix-abc", 42, "WORKER_UNAVAILABLE")
+    ).rejects.toThrow("notification unavailable")
+
+    // withWorkspaceRLS owns the real transaction; both writes share its tx.
+    expect(mockPrisma.loopClosure.updateMany).toHaveBeenCalledOnce()
+    expect(mockPrisma.notification.upsert).toHaveBeenCalledOnce()
   })
 })
 

@@ -16,7 +16,6 @@
 import { Prisma } from "./generated/prisma"
 import { getSystemPrisma } from "./system-client"
 import { withWorkspaceRLS } from "./rls"
-import { createNotification } from "./notification-service"
 import { logger } from "@lyrashield/logger"
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -181,24 +180,36 @@ export async function failLoopClosureTerminally(
   prNumber: number,
   reason: LoopClosureReason
 ): Promise<void> {
-  const updated = await withWorkspaceRLS(workspaceId, (tx) =>
-    tx.loopClosure.updateMany({
+  const transitioned = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const updated = await tx.loopClosure.updateMany({
       where: { workspaceId, repoFullName, prNumber, status: "pending" },
       data: { status: "failed", lastReason: reason },
     })
-  )
-  if (updated.count === 0) return
-  await createNotification({
-    workspaceId,
-    channel: "in_app",
-    type: "loop_closure_failed",
-    title: "Automatic retest could not be scheduled",
-    body:
+    if (updated.count === 0) return false
+
+    const channel = "in_app"
+    const dedupeKey = `loop_closure_failed:${workspaceId}:${repoFullName}:${prNumber}`
+    const title = "Automatic retest could not be scheduled"
+    const body =
       `A fix PR was merged (branch ${branchName}${prNumber != null ? `, PR #${prNumber}` : ""}) ` +
       `but its automatic retest could not be scheduled after ${LOOP_CLOSURE_MAX_ATTEMPTS} attempts ` +
-      `(${reason}). The merge is recorded. Start the retest manually from the finding when you are ready.`,
-    dedupeKey: `loop_closure_failed:${workspaceId}:${repoFullName}:${prNumber}`,
+      `(${reason}). The merge is recorded. Start the retest manually from the finding when you are ready.`
+    await tx.notification.upsert({
+      where: { channel_dedupeKey: { channel, dedupeKey } },
+      create: {
+        workspaceId,
+        channel,
+        type: "loop_closure_failed",
+        title,
+        body,
+        status: "pending",
+        dedupeKey,
+      },
+      update: { title, body },
+    })
+    return true
   })
+  if (!transitioned) return
   logger.warn("Loop closure terminated as failed after max attempts", {
     workspaceId,
     repoFullName,

@@ -63,20 +63,34 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
       WHERE first.ordinal = 1
     ),
     target_counts AS (
-      SELECT users.id AS user_id, COUNT(DISTINCT target.id) AS target_count
+      SELECT users.id AS user_id, COUNT(DISTINCT target_event."resourceId") AS target_count
       FROM users
-      LEFT JOIN "WorkspaceMember" member ON member."userId" = users.id AND member.status = 'active'
-      LEFT JOIN "Target" target ON target."workspaceId" = member."workspaceId"
-        AND target."deletedAt" IS NULL
-        AND target."createdAt" <= users."createdAt" + INTERVAL '30 minutes'
+      LEFT JOIN "AuditLog" target_event ON target_event."actorUserId" = users.id
+        AND target_event.action = 'target.created'
+        AND target_event."resourceType" = 'target'
+        AND target_event."resourceId" IS NOT NULL
+        AND target_event."createdAt" >= users."createdAt"
+        AND target_event."createdAt" <= users."createdAt" + INTERVAL '30 minutes'
       GROUP BY users.id
     ),
-    connection_events AS (
-      SELECT action, COUNT(DISTINCT "actorUserId") AS actors
+    connection_starts AS (
+      SELECT "actorUserId" AS user_id, "workspaceId" AS workspace_id, MIN("createdAt") AS started_at
       FROM "AuditLog"
-      WHERE action IN ('integration.github.connect_started', 'integration.github.connected')
-        AND "actorUserId" IS NOT NULL
-      GROUP BY action
+      WHERE action = 'integration.github.connect_started' AND "actorUserId" IS NOT NULL
+      GROUP BY "actorUserId", "workspaceId"
+    ),
+    connection_events AS (
+      SELECT
+        COUNT(DISTINCT started.user_id) AS started_actors,
+        COUNT(DISTINCT started.user_id) FILTER (WHERE EXISTS (
+          SELECT 1
+          FROM "AuditLog" connected
+          WHERE connected.action = 'integration.github.connected'
+            AND connected."actorUserId" = started.user_id
+            AND connected."workspaceId" = started.workspace_id
+            AND connected."createdAt" >= started.started_at
+        )) AS connected_actors
+      FROM connection_starts started
     ),
     failed_operations AS (
       SELECT * FROM agent_operations
@@ -92,8 +106,8 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
       PERCENTILE_CONT(0.9) WITHIN GROUP (
         ORDER BY EXTRACT(EPOCH FROM (first_valid.completed_at - users."createdAt")) / 60
       ) FILTER (WHERE first_valid.completed_at IS NOT NULL)::double precision AS "ttfvP90Minutes",
-      COALESCE((SELECT actors FROM connection_events WHERE action = 'integration.github.connect_started'), 0)::bigint AS "githubConnectStarted",
-      COALESCE((SELECT actors FROM connection_events WHERE action = 'integration.github.connected'), 0)::bigint AS "githubConnected",
+      COALESCE((SELECT started_actors FROM connection_events), 0)::bigint AS "githubConnectStarted",
+      COALESCE((SELECT connected_actors FROM connection_events), 0)::bigint AS "githubConnected",
       COUNT(*) FILTER (WHERE target_counts.target_count = 0)::bigint AS "targetsZero",
       COUNT(*) FILTER (WHERE target_counts.target_count = 1)::bigint AS "targetsOne",
       COUNT(*) FILTER (WHERE target_counts.target_count = 2)::bigint AS "targetsTwo",
