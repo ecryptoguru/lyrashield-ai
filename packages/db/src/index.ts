@@ -201,10 +201,12 @@ export {
 export {
   evaluateGateForTarget,
   getCurrentGateVerdict,
+  getCurrentGateVerdicts,
   getLatestGateVerdict,
   handleFixPrMergedAndReevaluate,
   type GateEvaluationResult,
   type GateApplicabilityOptions,
+  type GateVerdictBatchResult,
   type FixPrMergeOutcome,
 } from "./gate-service"
 export {

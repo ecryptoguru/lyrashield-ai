@@ -481,8 +481,8 @@ export async function getCurrentGateVerdicts(
   workspaceId: string,
   targetIds: string[],
   options: GateApplicabilityOptions = {}
-): Promise<Map<string, Awaited<ReturnType<typeof getCurrentGateVerdict>>>> {
-  const results = new Map<string, Awaited<ReturnType<typeof getCurrentGateVerdict>>>()
+): Promise<Map<string, GateVerdictBatchResult>> {
+  const results = new Map<string, GateVerdictBatchResult>()
   if (targetIds.length === 0) return results
 
   const nowMs = (options.now ?? new Date()).getTime()
@@ -491,12 +491,16 @@ export async function getCurrentGateVerdicts(
     // 1) Latest verdict per target — DISTINCT ON over the existing
     // (workspaceId, targetId, evaluatedAt) index. RLS applies: this runs
     // inside the transaction after SET LOCAL app.current_workspace_id.
-    const verdicts = await tx.$queryRaw<GateVerdictRow[]>`
+    // GateVerdict has no deletedAt column (not in SOFT_DELETE_MODELS), so no
+    // soft-delete predicate is due here — same as the per-target read. The
+    // array binds with = ANY(...): `IN (${array})` binds a text[] parameter
+    // against a text column and fails with P2010 text = text[].
+    const verdicts = await tx.$queryRaw<GateVerdictRawRow[]>`
       SELECT * FROM (
         SELECT DISTINCT ON ("targetId") *
         FROM "GateVerdict"
         WHERE "workspaceId" = ${workspaceId}
-          AND "targetId" IN (${targetIds}::text[])
+          AND "targetId" = ANY(${targetIds}::text[])
         ORDER BY "targetId", "evaluatedAt" DESC, "id" DESC
       ) latest
       ORDER BY "targetId"`
@@ -542,6 +546,10 @@ export async function getCurrentGateVerdicts(
     // 3) The three evidence-drift existence checks, set-wide. Each verdict's
     // thresholds differ, so the per-target parameters travel as an unnest row
     // set joined against the table — one statement per check, not per target.
+    // Scan and Finding carry deletedAt and the predicate is explicit (raw SQL
+    // bypasses the Prisma extension's soft-delete injection); GateVerdict and
+    // FindingVerification have no deletedAt column, matching the per-target
+    // read's filters exactly.
     const rowsWithSnapshot = verdicts.filter(
       (verdict) => snapshotByTarget.get(verdict.targetId) !== null
     )
@@ -598,25 +606,24 @@ export async function getCurrentGateVerdicts(
       verificationChangedTargets = new Set(verificationRows.map((row) => row.targetId))
     }
 
-    // 4) Apply the same applicability rules per target, in memory.
-    for (const historical of verdicts) {
-      const snapshot = snapshotByTarget.get(historical.targetId) ?? null
+    // 4) Apply the same applicability rules per target, in memory. The raw
+    // row is MAPPED explicitly into the historical payload — never asserted
+    // to be the Prisma model type (raw queries return JSON as parsed objects
+    // and timestamps as Date, which this mapping preserves).
+    for (const row of verdicts) {
+      const snapshot = snapshotByTarget.get(row.targetId) ?? null
       const policy = snapshot ? (policyById.get(snapshot.policyId) ?? null) : null
-      const applicability = evaluateGateApplicability(
-        historical.state as GateVerdictResult["state"],
-        {
-          snapshot,
-          expectedCommit: options.expectedCommit,
-          expectedArtifactDigest: options.expectedArtifactDigest,
-          policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
-          nowMs,
-          newerAssessmentAttempt: newerAttemptTargets.has(historical.targetId),
-          evidenceChanged:
-            findingChangedTargets.has(historical.targetId) ||
-            verificationChangedTargets.has(historical.targetId),
-        }
-      )
-      results.set(historical.targetId, {
+      const applicability = evaluateGateApplicability(row.state as GateVerdictResult["state"], {
+        snapshot,
+        expectedCommit: options.expectedCommit,
+        expectedArtifactDigest: options.expectedArtifactDigest,
+        policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
+        nowMs,
+        newerAssessmentAttempt: newerAttemptTargets.has(row.targetId),
+        evidenceChanged:
+          findingChangedTargets.has(row.targetId) || verificationChangedTargets.has(row.targetId),
+      })
+      results.set(row.targetId, {
         schemaVersion: "lyrashield-gate-response/2.0.0",
         state: applicability.effectiveState,
         applicability: {
@@ -626,7 +633,24 @@ export async function getCurrentGateVerdicts(
           // when supplied, otherwise the assessment's own.
           evaluatedIdentity: applicability.evaluatedIdentity,
         },
-        historical,
+        historical: {
+          id: row.id,
+          workspaceId: row.workspaceId,
+          targetId: row.targetId,
+          scanId: row.scanId,
+          standardVersion: row.standardVersion,
+          state: row.state,
+          coverageStatement: row.coverageStatement,
+          nonCoverage: row.nonCoverage,
+          blockingReasons: row.blockingReasons,
+          evidenceSummary: row.evidenceSummary,
+          staleness: row.staleness,
+          inputChecksum: row.inputChecksum,
+          verdictChecksum: row.verdictChecksum,
+          assessmentVersion: row.assessmentVersion,
+          assessmentSnapshot: row.assessmentSnapshot,
+          evaluatedAt: row.evaluatedAt,
+        },
       })
     }
   })
@@ -634,8 +658,45 @@ export async function getCurrentGateVerdicts(
   return results
 }
 
-/** Raw GateVerdict row shape (camelCase columns; JSON fields stay opaque). */
-type GateVerdictRow = {
+/**
+ * Result of a batched current-verdict read. Same per-target shape as the
+ * single-target read; `historical` is the explicitly-mapped GateVerdict
+ * payload (a raw row mapped field by field, not the Prisma model instance).
+ */
+export interface GateVerdictBatchResult {
+  schemaVersion: "lyrashield-gate-response/2.0.0"
+  state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
+  applicability: {
+    applicable: boolean
+    reasons: { code: string; message: string }[]
+    evaluatedIdentity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
+  }
+  historical: {
+    id: string
+    workspaceId: string
+    targetId: string
+    scanId: string | null
+    standardVersion: string
+    state: string
+    coverageStatement: unknown
+    nonCoverage: unknown
+    blockingReasons: unknown
+    evidenceSummary: unknown
+    staleness: unknown
+    inputChecksum: string
+    verdictChecksum: string
+    assessmentVersion: number | null
+    assessmentSnapshot: unknown
+    evaluatedAt: Date
+  }
+}
+
+/**
+ * Raw GateVerdict row from the DISTINCT ON read: camelCase quoted columns,
+ * JSON columns arrive as parsed objects, timestamps as Date. This is the
+ * $queryRaw wire shape — deliberately NOT the Prisma model type.
+ */
+type GateVerdictRawRow = {
   id: string
   workspaceId: string
   targetId: string
