@@ -86,30 +86,31 @@ assert_eq "mixed: app" "true" "$(get_field "$out" "app")"
 out=$(run_classify $'.github/workflows/ci.yml')
 assert_eq "github: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "github: shared" "true" "$(get_field "$out" "shared")"
-assert_eq "github: marketing deploy" "true" "$(get_field "$out" "marketing-deploy")"
-assert_eq "github: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "github: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+assert_eq "github: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 out=$(run_classify $'.github/workflows/deploy-azure.yml')
 assert_eq "Azure workflow: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 assert_eq "Azure workflow: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 
 out=$(run_classify $'.github/workflows/configure-cloud-billing-admission.yml')
-assert_eq "Billing admission workflow: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "Billing admission workflow: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 assert_eq "Billing admission workflow: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 
 out=$(run_classify $'.github/scripts/configure-cloud-billing-admission.sh')
-assert_eq "Billing admission script: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "Billing admission script: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 out=$(run_classify $'.github/scripts/classify-paths.sh')
-assert_eq "Release classifier: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "Release classifier: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
-# --- Test 6b: ANY .github/scripts change routes to Azure deploy (wholesale) ---
-# The routing contract covers the whole scripts dir, not two files by name: a
-# future release-gating script added under .github/scripts/ must never
-# silently skip the Azure release path. (v14: widened from a two-file
-# allowlist after a review found new scripts fell through to shared_pattern.)
-out=$(run_classify $'.github/scripts/some-future-gating-script.sh')
-assert_eq "Future CI script: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+# --- Test 6b: only scripts executed by Azure deployment trigger it ---
+for path in .github/scripts/promote-worker-vm.sh .github/scripts/verify-engine-revision.sh .github/scripts/verify-engine-worker-contract.sh; do
+  out=$(run_classify "$path")
+  assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+done
+
+out=$(run_classify $'.github/scripts/tests/test-promote-worker-vm.sh')
+assert_eq "Deployment test only: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # --- Test 7: an uncovered path falls back to shared (fail-closed, v13 P1-7) ---
 # ops/, e2e/, root tooling, and new root configs must not silently skip deploys.

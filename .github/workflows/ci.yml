@@ -44,14 +44,11 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        if: needs.changes.outputs.docs-only != 'true'
-        run: pnpm install --frozen-lockfile
 
       - name: Dependency vulnerability scan
         if: needs.changes.outputs.docs-only != 'true'
+        # pnpm audit reads the locked graph directly; installing/linking the
+        # workspace first adds no coverage and wastes runner time.
         # Bounded retry around the registry round-trip: on 2026-09-03 an npm
         # degraded-performance incident made pnpm audit's advisory POST time
         # out (after already reporting 0 vulnerabilities), failing green
@@ -374,6 +371,9 @@ jobs:
 
       - name: Test affected suites
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        # The core suite includes the restricted-role RLS runtime tests. This
+        # job already provisions RLS_RUNTIME_DATABASE_URL above, so a second
+        # database job would only repeat the same migrations and assertions.
         env:
           APP_CHANGED: ${{ needs.changes.outputs.app }}
           MARKETING_CHANGED: ${{ needs.changes.outputs.marketing }}
@@ -537,127 +537,10 @@ jobs:
       - name: Verify pinned engine-worker contract
         run: bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"
 
-  rls-child-write-repro:
-    # Deep Review v12 P0-1: reproduce the production 42501 that took down the
-    # scan pipeline when child-table RLS was enabled (20260803000002).
-    #
-    # This job runs the full migration chain (which now re-enables child-table
-    # RLS via 20260807000003), then runs the write-path test in
-    # rls-fail-closed.test.ts to confirm all write paths respect RLS.
-    #
-    # If the write-path test PASSES: the root cause has been fixed and RLS is
-    # safely enforced. If it FAILS with 42501: a write path is bypassing RLS.
-    #
-    # This job is now GATED (continue-on-error removed) — a failure blocks merge.
-    name: RLS Child-Table Write Reproduction
-    needs: changes
-    if: needs.changes.outputs.docs-only != 'true'
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: lyrashield
-          POSTGRES_PASSWORD: lyrashield
-          POSTGRES_DB: lyrashield
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
-      SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
-      # The RLS test imports from ./client which loads the full env config.
-      # These are the minimum required vars to pass env validation. The secret
-      # is a dummy value that only exists in CI — it is not a real credential.
-      BETTER_AUTH_SECRET: dummy-ci-only-secret-not-a-real-credential-32chars
-      BETTER_AUTH_URL: "http://127.0.0.1:3100"
-      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
-      TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
-      LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
-      # The P1-7 regression test exercises the billing downgrade sweep, which
-      # reads through getSystemPrisma() — the privileged URL the worker uses
-      # in production for cross-workspace system operations.
-      DATABASE_SYSTEM_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
-
-    steps:
-      - name: Configure git default branch
-        run: git config --global init.defaultBranch main
-
-      - name: Checkout
-        if: needs.changes.outputs.docs-only != 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup pnpm
-        if: needs.changes.outputs.docs-only != 'true'
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
-        with:
-          # Every workflow runs pnpm install as an explicit step; the
-          # successor action's install default is true, so opt out.
-          install: false
-
-      - name: Setup Node.js
-        if: needs.changes.outputs.docs-only != 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        if: needs.changes.outputs.docs-only != 'true'
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma Client
-        if: needs.changes.outputs.docs-only != 'true'
-        run: pnpm db:generate
-
-      - name: Create shadow database
-        if: needs.changes.outputs.docs-only != 'true'
-        run: docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'
-
-      - name: Run database migrations
-        if: needs.changes.outputs.docs-only != 'true'
-        run: pnpm --filter @lyrashield/db migrate:deploy
-
-      - name: Create restricted RLS runtime role
-        if: needs.changes.outputs.docs-only != 'true'
-        shell: bash
-        run: |
-          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
-            -c "CREATE ROLE app_runtime_ci LOGIN PASSWORD 'runtime-ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS" \
-            -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
-            -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
-            -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_ci" \
-            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci" \
-            -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci"
-          echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
-
-      - name: Run child-table RLS tests
-        if: needs.changes.outputs.docs-only != 'true'
-        shell: bash
-        run: |
-          # Migration 20260807000003 re-enables RLS on all 9 child tables.
-          # The test suite in rls-fail-closed.test.ts is now un-skipped and
-          # validates catalog flags, read-path isolation, and write-path safety.
-          cd packages/db
-          npx vitest run src/rls-fail-closed.test.ts src/gate-service.runtime.test.ts src/worker-rls-regressions.runtime.test.ts --maxWorkers=2 2>&1
-          EXIT_CODE=$?
-          echo "RLS test exit code: $EXIT_CODE"
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            echo "::error::Child-table RLS tests FAILED — a write path may be bypassing RLS."
-            exit 1
-          fi
-          echo "::notice::Child-table RLS tests PASSED — RLS is enforced on all child tables."
-
   deploy-marketing:
     name: Deploy Marketing to Cloudflare
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.marketing-deploy == 'true'
-    needs: [security, lint-and-typecheck, changes, rls-child-write-repro]
+    needs: [security, lint-and-typecheck, changes]
     runs-on: ubuntu-latest
     environment:
       name: cloudflare-production
