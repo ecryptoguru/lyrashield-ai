@@ -17,7 +17,7 @@ describe("CLI version", () => {
 
     expect(CLI_VERSION).toBe("0.2.11")
     expect(packageJson.version).toBe(CLI_VERSION)
-    expect(packageJson.engines.node).toBe(">=22.0.0 <25.0.0")
+    expect(packageJson.engines.node).toBe(">=24.0.0")
     expect(packageJson.bin.lyrashield).toBe("bin/lyrashield.mjs")
     expect(packageJson.dependencies["@lyrashield/agent-plugin"]).toBe("^0.1.26")
     expect(Object.values(packageJson.dependencies)).not.toContainEqual(
