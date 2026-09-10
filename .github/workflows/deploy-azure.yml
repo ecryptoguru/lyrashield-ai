@@ -30,7 +30,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: 4b8db2eec617541f591834999693b7dba407fc05
+  ENGINE_REVISION: b9193d8ed7dd3e73791dcc3ad04b35c0bdc22d58
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
