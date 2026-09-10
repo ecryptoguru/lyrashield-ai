@@ -140,4 +140,16 @@ describe("processLoopClosureSweep — durable retry with terminal visibility", (
     expect(result).toEqual({ claimed: 0, completed: 0, deferred: 0, failedTerminal: 0 })
     expect(handleMergedMock).not.toHaveBeenCalled()
   })
+
+  it("continues after retry-state persistence fails for one closure", async () => {
+    const nextClosure = { ...closure, id: "closure-2", prNumber: 43 }
+    claimDueMock.mockResolvedValue([closure, nextClosure])
+    handleMergedMock.mockRejectedValueOnce(new Error("worker")).mockResolvedValueOnce(null)
+    recordDeferredMock.mockRejectedValueOnce(new Error("database outage"))
+
+    const result = await processLoopClosureSweep({ now: new Date() })
+
+    expect(result).toEqual({ claimed: 2, completed: 1, deferred: 0, failedTerminal: 0 })
+    expect(completeMock).toHaveBeenCalledWith("ws-1", "acme/repo", 43)
+  })
 })

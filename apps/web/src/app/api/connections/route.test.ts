@@ -165,7 +165,7 @@ describe("POST /api/connections", () => {
     expect(body.data.id).toBe("conn-new")
     expect(verifyOAuthConsentState).toHaveBeenCalledWith("signed-state")
     expect(createAgentConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ clientType: "Cursor IDE", clientName: "Cursor IDE" })
+      expect.objectContaining({ clientType: "oauth:client-cursor", clientName: "Cursor IDE" })
     )
     expect(updateSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -201,7 +201,7 @@ describe("POST /api/connections", () => {
 
     expect(res.status).toBe(201)
     expect(createAgentConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ clientType: "Cursor IDE", clientName: "Cursor IDE" })
+      expect.objectContaining({ clientType: "oauth:client-cursor", clientName: "Cursor IDE" })
     )
   })
 

@@ -24,6 +24,8 @@ function isUniqueConstraintError(error: unknown): boolean {
 }
 
 export const LOOP_CLOSURE_MAX_ATTEMPTS = 5
+/** Claim lease; must exceed the five-minute worker sweep interval. */
+export const LOOP_CLOSURE_LEASE_MINUTES = 20
 /** Backoff schedule in minutes; index is min(attempts - 1, length - 1). */
 export const LOOP_CLOSURE_BACKOFF_MINUTES = [1, 5, 15, 60, 240]
 
@@ -242,7 +244,7 @@ export async function claimDueLoopClosures(
       lastReason: true,
     },
   })
-  const leaseUntil = new Date(now.getTime() + 5 * 60 * 1000)
+  const leaseUntil = new Date(now.getTime() + LOOP_CLOSURE_LEASE_MINUTES * 60 * 1000)
   const claimed: typeof due = []
   for (const closure of due) {
     const result = await systemPrisma.loopClosure.updateMany({

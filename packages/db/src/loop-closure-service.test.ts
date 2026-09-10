@@ -30,6 +30,7 @@ import { createNotification } from "./notification-service"
 import { Prisma } from "./generated/prisma"
 import {
   LOOP_CLOSURE_MAX_ATTEMPTS,
+  LOOP_CLOSURE_LEASE_MINUTES,
   LOOP_CLOSURE_BACKOFF_MINUTES,
   classifyLoopClosureError,
   nextLoopClosureRetryAt,
@@ -233,6 +234,7 @@ describe("backoff schedule", () => {
       LOOP_CLOSURE_BACKOFF_MINUTES[LOOP_CLOSURE_BACKOFF_MINUTES.length - 1] * 60_000
     )
     expect(LOOP_CLOSURE_MAX_ATTEMPTS).toBeGreaterThan(1)
+    expect(LOOP_CLOSURE_LEASE_MINUTES).toBeGreaterThan(5)
   })
 })
 

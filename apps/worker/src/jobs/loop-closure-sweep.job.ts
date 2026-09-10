@@ -87,25 +87,33 @@ export async function processLoopClosureSweep(
     } catch (error) {
       const reason = classifyLoopClosureError(error)
       const attempts = closure.attempts
-      if (attempts >= LOOP_CLOSURE_MAX_ATTEMPTS) {
-        await failLoopClosureTerminally(
-          closure.workspaceId,
-          closure.repoFullName,
-          closure.branchName,
-          closure.prNumber,
-          reason
-        )
-        result.failedTerminal++
-      } else {
-        await recordDeferredLoopClosure({
+      try {
+        if (attempts >= LOOP_CLOSURE_MAX_ATTEMPTS) {
+          await failLoopClosureTerminally(
+            closure.workspaceId,
+            closure.repoFullName,
+            closure.branchName,
+            closure.prNumber,
+            reason
+          )
+          result.failedTerminal++
+        } else {
+          await recordDeferredLoopClosure({
+            workspaceId: closure.workspaceId,
+            repoFullName: closure.repoFullName,
+            branchName: closure.branchName,
+            prNumber: closure.prNumber,
+            reason: reason as LoopClosureReason,
+            attempts,
+          })
+          result.deferred++
+        }
+      } catch (persistError) {
+        logger.error("Loop-closure sweep could not persist retry state", {
           workspaceId: closure.workspaceId,
-          repoFullName: closure.repoFullName,
           branchName: closure.branchName,
-          prNumber: closure.prNumber,
-          reason: reason as LoopClosureReason,
-          attempts,
+          error: String(persistError),
         })
-        result.deferred++
       }
     }
   }

@@ -161,7 +161,7 @@ async function post(request: Request) {
     const connection = await createAgentConnection({
       workspaceId,
       userId: session.userId,
-      clientType: trustedClientName,
+      clientType: `oauth:${oauthClientId}`,
       clientName: trustedClientName,
       oauthClientId,
       scopes,

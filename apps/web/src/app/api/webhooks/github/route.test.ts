@@ -293,6 +293,19 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     expect(systemPrisma.webhookEvent.deleteMany).not.toHaveBeenCalled()
   })
 
+  it("clears the delivery marker when persisting a deferred closure fails", async () => {
+    handleMerged.mockRejectedValueOnce(new Error("worker outage"))
+    recordDeferredLoopClosure.mockRejectedValueOnce(new Error("database outage"))
+    systemPrisma.webhookEvent.deleteMany.mockResolvedValue({ count: 1 })
+
+    const response = await POST(pullRequestRequest() as never)
+
+    expect(response.status).toBe(500)
+    expect(systemPrisma.webhookEvent.deleteMany).toHaveBeenCalledWith({
+      where: { provider: "github", externalId: "merge-1" },
+    })
+  })
+
   it("clears the delivery marker and returns 500 only for genuinely unexpected errors", async () => {
     handleMerged.mockImplementation(async () => {
       throw new Error("database connection exploded")

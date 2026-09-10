@@ -294,19 +294,28 @@ export async function POST(request: NextRequest) {
                 await import("@lyrashield/db")
               const reason = classifyLoopClosureError(loopErr)
               if (reason !== "UNEXPECTED_ERROR") {
-                await recordDeferredLoopClosure({
-                  workspaceId: integration.workspaceId,
-                  repoFullName: repository.full_name,
-                  branchName: pullRequest.head.ref,
-                  prNumber: pullRequest.number,
-                  reason,
-                })
-                loopClosureDelivered = true
-                logger.warn("Fix PR loop-closure deferred to the worker sweep", {
-                  workspaceId: integration.workspaceId,
-                  branchName: pullRequest.head.ref,
-                  reason,
-                })
+                try {
+                  await recordDeferredLoopClosure({
+                    workspaceId: integration.workspaceId,
+                    repoFullName: repository.full_name,
+                    branchName: pullRequest.head.ref,
+                    prNumber: pullRequest.number,
+                    reason,
+                  })
+                  loopClosureDelivered = true
+                  logger.warn("Fix PR loop-closure deferred to the worker sweep", {
+                    workspaceId: integration.workspaceId,
+                    branchName: pullRequest.head.ref,
+                    reason,
+                  })
+                } catch (persistErr) {
+                  logger.error("Failed to persist deferred loop closure", {
+                    workspaceId: integration.workspaceId,
+                    branchName: pullRequest.head.ref,
+                    reason,
+                    error: String(persistErr),
+                  })
+                }
               } else {
                 logger.error("Fix PR loop-closure failed (marker cleared for redelivery)", {
                   error: String(loopErr),
