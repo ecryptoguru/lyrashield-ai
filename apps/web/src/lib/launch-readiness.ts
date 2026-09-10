@@ -71,6 +71,13 @@ export interface GateReadinessTarget {
   applicable: boolean
   blockingFindings: number
   reasons: { code: string; message: string }[]
+  /**
+   * The release identity the verdict covers (the assessment's own identity
+   * when the caller enforces none). Absent when there is no assessment to
+   * describe. Rendered so a verdict reads "ready for commit abc1234" rather
+   * than an unexplained all-clear.
+   */
+  identity?: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
 }
 
 export interface FindingReadinessAggregate {

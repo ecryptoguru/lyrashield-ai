@@ -38,6 +38,7 @@ export async function getGateReadinessTargets(
               state: "INSUFFICIENT_EVIDENCE" as const,
               applicable: false,
               blockingFindings: 0,
+              identity: null,
               reasons: [
                 {
                   code: "NO_GATE_VERDICT",
@@ -56,6 +57,7 @@ export async function getGateReadinessTargets(
             state: result.state,
             applicable: result.applicability.applicable,
             blockingFindings: historical.blockingReasons?.length ?? 0,
+            identity: result.applicability.evaluatedIdentity ?? null,
             reasons: result.applicability.reasons,
           }
         })

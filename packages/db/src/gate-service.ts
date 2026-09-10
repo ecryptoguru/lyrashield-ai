@@ -457,6 +457,10 @@ export async function getCurrentGateVerdict(
       applicability: {
         applicable: applicability.applicable,
         reasons: applicability.reasons,
+        // The identity this read was evaluated against: the enforced release
+        // identity when the caller supplied one, otherwise the assessment's
+        // own identity (read-only surfaces label the verdict with it).
+        evaluatedIdentity: applicability.evaluatedIdentity,
       },
       historical,
     }
