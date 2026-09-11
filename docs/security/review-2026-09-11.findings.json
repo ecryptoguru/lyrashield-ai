@@ -5,6 +5,30 @@
   "date": "2026-09-11",
   "status": "remediated",
   "scope": "monorepo only; engine reviewed at TypeScript boundary contract; sibling repos out of scope",
+  "rollout": {
+    "pullRequest": 660,
+    "headRevision": "9eff3b30ebd20a36e6767f3f7eaced92bcefbaef",
+    "mergeRevision": "ddc42df4dd75076750ff49da08346f9d37369924",
+    "ciRun": 34614103823,
+    "releaseRun": 34615053797,
+    "marketingRevision": "ddc42df4dd75076750ff49da08346f9d37369924",
+    "engineRevision": "b9193d8ed7dd3e73791dcc3ad04b35c0bdc22d58",
+    "appRevision": "lyrashield-app--0000346",
+    "scannerRevision": "lyrashield-scanner--0000319",
+    "egressRevision": "lyrashield-egress-proxy--0000187",
+    "webDigest": "sha256:51bdda6681b6e256cd4d4d44bb816dd418a720e8b6e76b1b734df5f94b7acd7e",
+    "workerDigest": "sha256:1a8bfe26acc776257052effb5548007a5839a81ee49e6b94ecb5610cea356f0e",
+    "egressDigest": "sha256:ba88b23be0e6d9a88668d6a10596869fec9715b0b94a3c08f4436ee08ac0ef03",
+    "trafficPercent": 100,
+    "liveChecks": {
+      "marketingHttpToHttps": 301,
+      "wwwHttpsToApex": 301,
+      "marketingHttps": 200,
+      "appHealth": 200,
+      "appReadiness": 200,
+      "scanReadiness": 200
+    }
+  },
   "threatActors": {
     "T1": "external unauthenticated attacker",
     "T2": "authenticated/tenant attacker (incl. holder of a workspace-bound credential)",
@@ -364,7 +388,7 @@
       "remediation": {
         "status": "fixed",
         "commit": "bb1537d0",
-        "note": "postbuild worker-entry guard 301s http:->https: for every request incl. static assets; middleware mirrors for SSR/API"
+        "note": "Cloudflare Always Use HTTPS enabled and live-proven after merge; worker-entry and middleware guards remain defense in depth"
       }
     },
     {
@@ -934,8 +958,10 @@
     }
   ],
   "remediation": {
-    "branch": "codex/security-remediation-2026-09-11",
+    "pullRequest": 660,
     "baseSha": "d6fc3384",
+    "headSha": "9eff3b30ebd20a36e6767f3f7eaced92bcefbaef",
+    "mergeSha": "ddc42df4dd75076750ff49da08346f9d37369924",
     "commits": [
       "977b3b83",
       "6963b559",
@@ -944,7 +970,9 @@
       "cb206b6c",
       "9b2c06e3",
       "bb1537d0",
-      "621d58a8"
+      "621d58a8",
+      "7f3591c4",
+      "421b4d71"
     ],
     "note": "All 15 confirmed findings + 11 promoted NV items fixed with regression coverage. Remaining NV items closed with evidence, accepted with owner+review date, or assigned to external evidence gates (deployment/provider config not visible in repo)."
   }
