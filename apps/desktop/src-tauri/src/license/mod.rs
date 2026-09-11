@@ -596,9 +596,6 @@ mod tests {
             issued_at: String::new(),
         };
         let pubkey = test_pubkey_and_sign(&mut file);
-        // F-001: stored licenses carry an integrity tag over the row; the
-        // guard tests persist+reload, so they need a stable integrity key.
-        crate::license::store::set_test_integrity_key(Some(b"guard-test-integrity-key".to_vec()));
         let stored = types::StoredLicense {
             version: 1,
             license_id: "lic_test_123".into(),
@@ -608,6 +605,19 @@ mod tests {
             integrity: None,
         };
         (stored, pubkey)
+    }
+
+    /// Lock the shared test env AND install the guard integrity key.
+    /// The key is global state — it must only be written while the lock is
+    /// held, which is why persist+reload tests take this (not bare
+    /// `TEST_ENV_LOCK`) and pure-function tests never touch it.
+    fn guard_lock() -> std::sync::MutexGuard<'static, ()> {
+        let lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+        crate::license::store::set_test_integrity_key(Some(b"guard-test-integrity-key".to_vec()));
+        lock
     }
 
     #[test]
@@ -664,10 +674,7 @@ mod tests {
 
     #[test]
     fn test_guard_wrong_machine_non_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, _pubkey) = make_valid_stored(&machine_id);
         // Tamper to wrong machine
@@ -696,10 +703,7 @@ mod tests {
 
     #[test]
     fn test_guard_revoked_signature_non_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, pubkey) = make_valid_stored(&machine_id);
         stored.license.signature = "REVOKED".into();
@@ -718,10 +722,7 @@ mod tests {
 
     #[test]
     fn test_guard_expired_eligibility_keeps_current_build_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, _pubkey) = make_valid_stored(&machine_id);
         stored.license.update_eligible_until = "2020-01-01T00:00:00.000Z".into();
@@ -765,10 +766,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_v1_envelope_requires_online_verification_and_rewrites_v2() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, pubkey) = make_valid_stored(&machine_id);
         stored.version = 1;
@@ -809,10 +807,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_guard_unreachable_uses_fresh_offline_grace() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
@@ -830,10 +825,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_guard_5xx_uses_fresh_offline_grace() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
@@ -867,10 +859,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_guard_malformed_non_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
@@ -903,10 +892,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_guard_unknown_id_non_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();

@@ -70,7 +70,7 @@ describe("Razorpay refund.created", () => {
       action: "refund.created.reversed",
       workspaceId: "ws-1",
     })
-    expect(reverseRefund).toHaveBeenCalledWith("ws-1", "pay-1", "rfnd-1")
+    expect(reverseRefund).toHaveBeenCalledWith("ws-1", "pay-1", "rfnd-1", "razorpay")
   })
 
   it("records partial and currency-mismatched refunds without mutation", async () => {

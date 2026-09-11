@@ -78,7 +78,7 @@ describe("Polar refund evidence", () => {
     })
 
     expect(result.action).toBe("order.refunded.reversed")
-    expect(reverseRefund).toHaveBeenCalledWith("ws-1", "order-xyz", "order-xyz")
+    expect(reverseRefund).toHaveBeenCalledWith("ws-1", "order-xyz", "order-xyz", "polar")
   })
 
   it("records partial order refunds without entitlement mutation", async () => {
