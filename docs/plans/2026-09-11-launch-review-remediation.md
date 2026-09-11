@@ -1,13 +1,12 @@
 # Launch-review remediation verification — 11 September 2026
 
-Candidate branch: `codex/launch-remediation-billing`, based on app main
-`e4a6a11b4c01be607adc30db660d8f51c9e69215`. See
+The remediation merged in PR #657 as `71aa4db3` and production release
+`34552773295` deployed it to `lyrashield-app--0000343` at 100% traffic. See
 [account ownership and cutover](2026-09-11-account-billing-ownership.md).
 
-This is a source/PR candidate, not a deployment receipt. No production migration,
-backfill, complimentary grant, purchase-admission change, payment or scan was performed.
-The founder authorized account-owned subscriptions and the initiating-account / explicitly
-recorded sponsor policy. Production cutover still requires its own reviewed execution.
+The source verification below records the pre-merge candidate evidence. The production
+receipt and cutover results are recorded separately so local tests are not presented as
+runtime proof. No purchase-admission change, payment, or billable scan was performed.
 
 ## Findings and corrections
 
@@ -30,7 +29,8 @@ recorded sponsor policy. Production cutover still requires its own reviewed exec
 - Complimentary access: dry-run-first account operation, explicit operator/audit context,
   intent/completion audit, no workspace plan mutation, no-workspace grants, and reversal
   scoped to the exact complimentary billing row's grant metadata. No provider payment is
-  created. The two requested grants remain unexecuted.
+  created. The operation was later applied to the two authorized administrator accounts;
+  each has a 6,000-minute Launch Assurance allowance.
 - F2/F3/F4: constrained docs/blog/admin content and local table scrolling; added wrapping
   for inline paths and literal long list text found during Brave follow-up.
 - F5: async-context log correlation with a runtime-compatible logger resolver and tests.
@@ -77,22 +77,25 @@ command inherited a local DATABASE_DIRECT_URL pointing to 5432 and returned "No 
 migrations"; no migration was applied there. Subsequent commands explicitly override
 both direct and runtime destinations. No production connection was used.
 
-## Remaining execution and evidence boundaries
+## Production completion and remaining evidence boundaries
 
-1. Account-owned billing must not be deployed as an unexamined rolling migration.
-   The owner policy intentionally prevents an old workspace-only image reading mapped
-   account rows. The account/grant key change is not bidirectionally compatible with old
-   writers. See the coordinated cutover and rollback restrictions in the design document.
-2. Obtain the actual legacy ownership exception report and reconcile all existing credits,
-   grants, debits, packs, trial markers and provider references before production cutover.
-   No mapping for the founder's existing 100-minute credit was guessed or duplicated.
-3. Live settlement, payout, tax, payment-method and capacity evidence remains external.
+1. The coordinated production cutover completed with zero unmapped billing, usage, or
+   pack rows. The 12 non-admin test accounts were deleted through the normal deletion
+   lifecycle; exactly the two authorized administrators remain. Historical ledger amounts
+   were preserved, and the founder's 100-minute entry was neither guessed nor duplicated.
+2. Account ownership is now the production contract. Rollback must use an account-aware
+   image or a forward fix; an old workspace-only image cannot safely read or write the
+   mapped rows.
+3. The three Azure deployment identity secrets and federated credential are operational:
+   release `34552773295` recorded successful Azure CLI OIDC login. The former v16 founder
+   provisioning action is closed.
+4. Live settlement, payout, tax, payment-method and capacity evidence remains external.
    Green checks do not prove those gates.
-4. Engine source was unchanged. Marketplace provenance/copy is handled in its own PR;
+5. Engine source was unchanged. Marketplace provenance/copy is handled in its own PR;
    generated artifact validation is not an all-client installation/lifecycle acceptance.
-5. No claims are made that inaccessible live shared-report, approved-affiliate, or full
+6. No claims are made that inaccessible live shared-report, approved-affiliate, or full
    permission-state coverage gaps from the original review have disappeared.
 
-The original review remains historical evidence. These changes are ready for code review
-subject to the exact CI result; full paid-launch signoff remains blocked on the stated
-production migration and commercial evidence gates.
+The original review remains historical evidence. The account-billing remediation is merged,
+deployed, and cut over. Full paid-launch signoff remains separate from these engineering
+receipts and depends on the stated commercial evidence gates.

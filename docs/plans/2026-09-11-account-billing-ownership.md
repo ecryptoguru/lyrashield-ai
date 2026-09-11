@@ -91,10 +91,12 @@ downgrade job flips it, but entitles as FREE the instant `currentPeriodEnd`
 lapses. Display surfaces keep `currentPlan` + `status` (the contract record);
 money/entitlement checks use `effectivePlan`.
 
-## Migration and production cutover constraints
+## Migration and production cutover
 
-This branch has not been deployed or backfilled in production. Expansion is additive,
-but **an old image is not safe to run after ownership cutover**: it does not bind
+PR #657 merged as `71aa4db3` and production release `34552773295` deployed it to
+`lyrashield-app--0000343` at 100% traffic. The coordinated cutover completed on
+2026-09-11 after admission and queue checks. Expansion is additive, but **an old image
+is not safe to run after ownership cutover**: it does not bind
 account context or use the new allowance identity. The legacy-key probe is one-way
 compatibility after an owner is mapped; it is not protection against an old writer
 creating a different workspace-keyed grant after a new writer. Do not describe this
@@ -112,7 +114,7 @@ as a verified rolling migration or automatic image rollback.
    same mapped owner. Do not retroactively move old debits to scan creators while
    moving their grants elsewhere. New admissions use the approved initiating-account
    payer policy. Backfill updates only ownership columns, never monetary/minute amounts.
-4. Before production apply, resolve all affected exceptions and independently reconcile
+4. Before a future production apply, resolve all affected exceptions and independently reconcile
    counts, grant totals, usage, pack balances, provider IDs and trial history. The script
    is not a complete financial reconciliation tool. Retain the approved mapping and
    review evidence alongside receipts. No production mappings have been fabricated.
@@ -130,7 +132,28 @@ records are attributed to an explicitly supplied administrative workspace; that 
 does not receive plan access or minutes. The operation requires `--audit-workspace` and
 `--actor-user` identifying a verified platform operator, records intent/completion, and
 revokes only grants carrying the exact complimentary BillingAccount ID. No operation was
-run in production. Review credit reconciliation and operation receipts before applying it.
+run in production during branch verification.
+
+Production cutover evidence recorded on 2026-09-11:
+
+- The approved mapping assigned the one retained legacy billing contract and all 12
+  retained usage records to `ecryptoguru@gmail.com`; zero billing, usage, or pack rows
+  remained unmapped. Historical grant and debit amounts were unchanged.
+- The 12 non-admin test accounts were deleted through the normal account-deletion
+  lifecycle. PR #658 (`3b289a43`) raised that lifecycle's bounded transaction timeout
+  after the largest test workspace rolled back at the original five-second limit.
+- Production now retains exactly `ecryptoguru@gmail.com` and
+  `ankit@lyrashieldai.com`. Each received an account-only complimentary Launch Assurance
+  row and a 6,000-minute monthly allowance. No provider subscription or charge was
+  created, and the founder's historical 100-minute ledger was neither duplicated nor
+  rewritten.
+- Restricted runtime-role readback confirmed `rolsuper=false`, `rolbypassrls=false`,
+  zero unmapped account-owned rows, and account isolation in both workspace-plus-account
+  and account-only contexts.
+- Repository Azure deployment identity secrets are provisioned. Production release
+  `34552773295` logged a successful Azure CLI OIDC login, closing the former v16 founder
+  action to provision the client, tenant, subscription, and federated credential before
+  deployment.
 
 ## Non-goals
 
