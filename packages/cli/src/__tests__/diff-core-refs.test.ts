@@ -17,7 +17,8 @@ describe("resolveDiffRange — git option injection guard", () => {
     ["-o/tmp/evil"],
     ["--ext-diff"],
     ["--"],
-  ])("rejects option-shaped ref %s", async (ref) => {
+  ])("rejects option-shaped ref %s", async (...row: string[]) => {
+    const ref = row[0]!
     await expect(resolveDiffRange(false, ref, "HEAD")).rejects.toThrow(/git ref/i)
     await expect(resolveDiffRange(false, "HEAD", ref)).rejects.toThrow(/git ref/i)
   })
