@@ -603,7 +603,7 @@ Billing, Local/Desktop licensing, and the affiliate application/ledger are imple
 
 Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 
-LyraShield does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework), or "adversarial robustness proven." Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate. See `docs/claims-readiness.md` for the full map.
+LyraShield does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework), or "adversarial robustness proven." Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate. See `docs/whitepaper.md` §9 for the claims boundary.
 
 ## AI assurance workspace
 

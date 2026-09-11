@@ -106,3 +106,5 @@ PR_BODY.md
 ciwait.py
 verify-*.mts
 *-stubs-loader.mjs
+
+dogfood-output/
