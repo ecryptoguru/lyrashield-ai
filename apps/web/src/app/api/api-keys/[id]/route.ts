@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { revokeApiKey, prisma } from "@lyrashield/db"
-import { requireWorkspaceAccess } from "@lyrashield/auth/server"
+import { assertBrowserSession, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
@@ -16,9 +16,7 @@ async function remove(request: Request, context: { params: Promise<{ id: string 
     }
 
     const { session } = await requireWorkspaceAccess(workspaceId, "ADMIN")
-    if (session.apiKey) {
-      return apiError("FORBIDDEN", "API keys cannot manage API keys", 403)
-    }
+    assertBrowserSession(session)
 
     const revoked = await revokeApiKey(id, workspaceId)
     if (!revoked) {

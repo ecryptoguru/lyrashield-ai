@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { cookies, headers } from "next/headers"
-import { auth, requireWorkspaceAccess } from "@lyrashield/auth/server"
+import { assertBrowserSession, auth, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { isProd } from "@lyrashield/config"
 import { z } from "zod"
@@ -22,16 +22,14 @@ async function post(request: Request) {
 
   try {
     const { session } = await requireWorkspaceAccess(parsed.data.workspaceId)
-    if (session.apiKey && !session.apiKey.scopes.includes("write")) {
-      return apiError("FORBIDDEN", "You do not have permission to perform this action", 403)
-    }
+    // A bound credential has exactly one workspace — switching it would be a
+    // no-op whose only effect is mutating browser state it cannot use.
+    assertBrowserSession(session)
     const cookieStore = await cookies()
-    if (!session.apiKey && !session.oauth) {
-      await auth.api.updateSession({
-        headers: await headers(),
-        body: { activeWorkspaceId: parsed.data.workspaceId },
-      })
-    }
+    await auth.api.updateSession({
+      headers: await headers(),
+      body: { activeWorkspaceId: parsed.data.workspaceId },
+    })
     cookieStore.set("activeWorkspaceId", parsed.data.workspaceId, {
       httpOnly: true,
       sameSite: "lax",

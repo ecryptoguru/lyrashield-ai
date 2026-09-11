@@ -62,6 +62,12 @@ export const PERMISSIONS = {
     create: "report:create",
     download: "report:download",
   },
+  scorecard: {
+    // Publishing/revoking a public scorecard share. Write-scope required for
+    // credentials; no canonical delegated operation exists, so agent
+    // connections cannot publish.
+    publish: "scorecard:publish",
+  },
   aiAssurance: {
     view: "aiAssurance:view",
     manage: "aiAssurance:manage",
@@ -144,6 +150,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.retest.view,
     PERMISSIONS.report.create,
     PERMISSIONS.report.download,
+    PERMISSIONS.scorecard.publish,
     PERMISSIONS.notification.view,
     PERMISSIONS.notification.manage,
     PERMISSIONS.schedule.view,
@@ -185,6 +192,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.retest.view,
     PERMISSIONS.report.create,
     PERMISSIONS.report.download,
+    PERMISSIONS.scorecard.publish,
     PERMISSIONS.notification.view,
     PERMISSIONS.notification.manage,
     PERMISSIONS.schedule.view,
@@ -216,6 +224,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.retest.view,
     PERMISSIONS.report.create,
     PERMISSIONS.report.download,
+    PERMISSIONS.scorecard.publish,
     PERMISSIONS.notification.view,
     PERMISSIONS.notification.manage,
     PERMISSIONS.schedule.view,

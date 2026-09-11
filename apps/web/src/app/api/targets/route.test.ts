@@ -19,9 +19,15 @@ vi.mock("@lyrashield/db", () => ({
   },
 }))
 
+const requireWorkspaceAccess = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
   getSession: vi.fn(),
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
+  requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
+}))
+
+vi.mock("@/lib/target-domain-status", () => ({
+  getTargetDomainStatuses: vi.fn(async () => new Map()),
 }))
 
 vi.mock("@lyrashield/auth", () => ({
@@ -43,7 +49,46 @@ vi.mock("@lyrashield/billing", () => ({
 
 import { prisma } from "@lyrashield/db"
 import { assertTargetAllowed } from "@lyrashield/billing"
-import { POST } from "./route"
+import { GET, POST } from "./route"
+
+describe("GET /api/targets", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    requireWorkspaceAccess.mockResolvedValue({
+      session: { userId: "user-1" },
+      workspace: { role: "MEMBER" },
+    })
+    vi.mocked(prisma.target.findMany).mockResolvedValue([])
+  })
+
+  it("routes authorization through requireWorkspaceAccess and returns targets", async () => {
+    const response = await GET(new Request("http://localhost:3000/api/targets?workspaceId=ws-1"))
+
+    expect(requireWorkspaceAccess).toHaveBeenCalledWith("ws-1")
+    expect(prisma.target.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ workspaceId: "ws-1" }) })
+    )
+    expect(response.status).toBe(200)
+  })
+
+  it("returns 403 for a credential bound to another workspace", async () => {
+    requireWorkspaceAccess.mockRejectedValue(new Error("FORBIDDEN"))
+
+    const response = await GET(new Request("http://localhost:3000/api/targets?workspaceId=ws-2"))
+
+    expect(response.status).toBe(403)
+    expect(prisma.target.findMany).not.toHaveBeenCalled()
+  })
+
+  it("returns 401 when unauthenticated", async () => {
+    requireWorkspaceAccess.mockRejectedValue(new Error("UNAUTHORIZED"))
+
+    const response = await GET(new Request("http://localhost:3000/api/targets?workspaceId=ws-1"))
+
+    expect(response.status).toBe(401)
+    expect(prisma.target.findMany).not.toHaveBeenCalled()
+  })
+})
 
 describe("POST /api/targets", () => {
   beforeEach(() => vi.clearAllMocks())

@@ -1,7 +1,7 @@
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import { z } from "zod"
 import { getSystemPrisma, prisma, lockWorkspaceMembership } from "@lyrashield/db"
-import { getSession } from "@lyrashield/auth/server"
+import { assertBrowserSession, getSession } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
@@ -75,6 +75,9 @@ async function post(request: Request) {
     if (!session) {
       return apiError("UNAUTHORIZED", "Sign in to accept a team invitation", 401)
     }
+    // Joining a workspace is account-owned browser activity — a workspace-bound
+    // credential must not convert an invitation into membership.
+    assertBrowserSession(session)
     const userEmail = (session.userEmail ?? "").toLowerCase()
 
     const invitation = await getSystemPrisma().invitation.findUnique({

@@ -53,6 +53,22 @@ describe("POST /api/referrals/claim", () => {
     expect(cookieStore.delete).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { apiKey: { keyId: "k-1", workspaceId: "ws-1", scopes: ["read", "write"], prefix: "lsk_x" } },
+    { oauth: { userId: "new-user", workspaceId: "ws-1", scopes: ["lyrashield.write"] } },
+  ])(
+    "rejects workspace-bound credentials — referral attribution is browser-owned",
+    async (credential) => {
+      getSession.mockResolvedValue({ userId: "new-user", ...credential })
+
+      const response = await POST(new Request("http://localhost/api/referrals/claim") as never)
+
+      expect(response.status).toBe(403)
+      expect(attributeReferral).not.toHaveBeenCalled()
+      expect(cookieStore.delete).not.toHaveBeenCalled()
+    }
+  )
+
   it("does nothing without a referral cookie", async () => {
     cookieStore.get.mockReturnValue(undefined)
     const response = await POST(new Request("http://localhost/api/referrals/claim") as never)

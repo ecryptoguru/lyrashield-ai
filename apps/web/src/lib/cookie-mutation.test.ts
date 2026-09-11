@@ -262,7 +262,9 @@ describe("cookie mutation route boundary", () => {
     expect(mocks.setCookie).not.toHaveBeenCalled()
   })
 
-  it("allows a verified write API key with unrelated cookies and no browser origin", async () => {
+  // A bound credential has exactly one workspace: it is verified, then the
+  // browser-only boundary rejects the switch before any state mutates.
+  it("rejects a verified write API key — workspace switching is browser-only", async () => {
     mocks.browserSession.mockResolvedValue(null)
     mocks.apiKey.mockResolvedValue({
       keyId: "key",
@@ -273,12 +275,13 @@ describe("cookie mutation route boundary", () => {
     })
     expect(
       (await POST(request({ cookie: "analytics=1", authorization: "Bearer lsk_valid" }))).status
-    ).toBe(200)
+    ).toBe(403)
     expect(mocks.apiKey).toHaveBeenCalledWith("lsk_valid")
     expect(mocks.updateSession).not.toHaveBeenCalled()
+    expect(mocks.setCookie).not.toHaveBeenCalled()
   })
 
-  it("allows verified OAuth without requiring browser origin metadata", async () => {
+  it("rejects verified OAuth — workspace switching is browser-only", async () => {
     mocks.browserSession.mockResolvedValue(null)
     mocks.oauth.mockResolvedValue({
       userId: "user",
@@ -288,8 +291,10 @@ describe("cookie mutation route boundary", () => {
     })
     expect(
       (await POST(request({ cookie: "analytics=1", authorization: "Bearer oauth-valid" }))).status
-    ).toBe(200)
+    ).toBe(403)
     expect(mocks.oauth).toHaveBeenCalledWith("oauth-valid")
+    expect(mocks.updateSession).not.toHaveBeenCalled()
+    expect(mocks.setCookie).not.toHaveBeenCalled()
   })
 
   it("rejects an unverified bearer without a browser session", async () => {

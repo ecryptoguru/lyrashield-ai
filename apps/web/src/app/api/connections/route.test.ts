@@ -387,4 +387,88 @@ describe("POST /api/connections", () => {
     expect(res.status).toBe(400)
     expect(createAgentConnection).not.toHaveBeenCalled()
   })
+
+  it("bounds the grant lifetime server-side when expiresAt is omitted", async () => {
+    vi.mocked(createAgentConnection).mockResolvedValue({ id: "conn-new" } as never)
+    const before = Date.now()
+
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          consentState: "signed-state",
+        }),
+      })
+    )
+
+    expect(res.status).toBe(201)
+    const expiresAt = vi.mocked(createAgentConnection).mock.calls[0]![0].expiresAt
+    expect(expiresAt).toBeInstanceOf(Date)
+    expect(expiresAt!.getTime() - before).toBeLessThanOrEqual(90 * 86_400_000 + 5_000)
+    expect(expiresAt!.getTime()).toBeGreaterThan(before)
+  })
+
+  it("rejects a delegated grant expiring beyond the server-side maximum", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          expiresAt: new Date(Date.now() + 400 * 86_400_000).toISOString(),
+          consentState: "signed-state",
+        }),
+      })
+    )
+
+    expect(res.status).toBe(400)
+    expect(createAgentConnection).not.toHaveBeenCalled()
+  })
+
+  it("rejects a delegated grant expiring in the past", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          expiresAt: "2000-01-01T00:00:00.000Z",
+          consentState: "signed-state",
+        }),
+      })
+    )
+
+    expect(res.status).toBe(400)
+    expect(createAgentConnection).not.toHaveBeenCalled()
+  })
+
+  it("accepts a delegated grant expiring inside the maximum lifetime", async () => {
+    vi.mocked(createAgentConnection).mockResolvedValue({ id: "conn-new" } as never)
+    const expiresAt = new Date(Date.now() + 30 * 86_400_000).toISOString()
+
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          expiresAt,
+          consentState: "signed-state",
+        }),
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(vi.mocked(createAgentConnection).mock.calls[0]![0].expiresAt).toEqual(new Date(expiresAt))
+  })
 })

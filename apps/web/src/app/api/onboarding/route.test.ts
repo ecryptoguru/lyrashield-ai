@@ -90,6 +90,22 @@ describe("PATCH /api/onboarding", () => {
     expect(response.status).toBe(401)
   })
 
+  it.each([
+    { apiKey: { keyId: "k-1", workspaceId: "ws-1", scopes: ["read", "write"], prefix: "lsk_x" } },
+    { oauth: { userId: "user-1", workspaceId: "ws-1", scopes: ["lyrashield.write"] } },
+  ])(
+    "rejects workspace-bound credentials — onboarding state is browser-owned",
+    async (credential) => {
+      getSession.mockResolvedValue({ userId: "user-1", ...credential })
+
+      const response = await PATCH(patchRequest({ currentStep: 2 }))
+
+      expect(response.status).toBe(403)
+      expect(prisma.onboardingState.update).not.toHaveBeenCalled()
+      expect(prisma.onboardingState.updateMany).not.toHaveBeenCalled()
+    }
+  )
+
   it("rejects invalid JSON", async () => {
     const response = await PATCH(
       new Request("http://localhost:3000/api/onboarding", {

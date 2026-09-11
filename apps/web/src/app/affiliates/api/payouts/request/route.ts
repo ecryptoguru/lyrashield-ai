@@ -14,6 +14,9 @@ async function post(request: Request) {
   if (!session) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
   }
+  if (session.apiKey || session.oauth) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
+  }
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
