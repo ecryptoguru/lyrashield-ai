@@ -4,7 +4,13 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { verify } from "node:crypto"
 import { verifyLicense, isBuildInstallable, type LicenseFile } from "./verify"
-import { signLicense, canonicalJSON, encodeLicenseBlob, loadPublicKey } from "./sign"
+import {
+  signLicense,
+  signRevalidationReceipt,
+  canonicalJSON,
+  encodeLicenseBlob,
+  loadPublicKey,
+} from "./sign"
 import { generateKeyPairSync } from "node:crypto"
 
 // Generate a test key pair for signing/verifying
@@ -13,6 +19,30 @@ const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toStri
 const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString()
 
 const TEST_SIGNING_KEY_ID = "test-key-v1"
+
+describe("revalidation receipt signing", () => {
+  it("signs the immutable offline-grace fields", () => {
+    const receipt = signRevalidationReceipt(
+      {
+        licenseId: "lic_123",
+        licenseSignature: "license-signature",
+        verifiedAt: "2026-09-11T00:00:00.000Z",
+        expiresAt: "2026-09-18T00:00:00.000Z",
+      },
+      privateKeyPem,
+      TEST_SIGNING_KEY_ID
+    )
+
+    expect(receipt).toMatchObject({
+      licenseId: "lic_123",
+      licenseSignature: "license-signature",
+      verifiedAt: "2026-09-11T00:00:00.000Z",
+      expiresAt: "2026-09-18T00:00:00.000Z",
+      signingKeyId: TEST_SIGNING_KEY_ID,
+    })
+    expect(receipt.signature).toMatch(/^[A-Za-z0-9+/]+={0,2}$/)
+  })
+})
 
 function makeSignedLicense(overrides: Partial<LicenseFile> = {}): LicenseFile {
   const payload = {

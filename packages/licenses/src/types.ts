@@ -54,6 +54,19 @@ export interface LicenseFile extends LicensePayload {
 /** Fields used to construct the canonical signing input (payload only). */
 export type LicenseSigningInput = LicensePayload
 
+/** Server-signed proof that a specific license passed revocation checks. */
+export interface LicenseRevalidationReceiptPayload {
+  licenseId: string
+  licenseSignature: string
+  verifiedAt: string
+  expiresAt: string
+}
+
+export interface LicenseRevalidationReceipt extends LicenseRevalidationReceiptPayload {
+  signingKeyId: string
+  signature: string
+}
+
 /**
  * Detached wire format exchanged with the desktop client.
  *
@@ -92,6 +105,7 @@ export interface VerifyEnvelopeV1 {
   reason?: string
   sku?: LicenseSku
   updateEligibleUntil?: string
+  revalidationReceipt?: LicenseRevalidationReceipt
 }
 
 /** Generic API envelope {success,data} used by /api/licenses/* */

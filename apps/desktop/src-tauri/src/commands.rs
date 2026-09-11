@@ -36,8 +36,7 @@ pub async fn activate_license(
         ));
     }
     // Store the raw key in OS keychain BEFORE the license file — the
-    // StoredLicense integrity tag derives from it (F-001). Never exposed to
-    // React/localStorage.
+    // Never exposed to React/localStorage.
     let _ = store::save_license_key(&license_key);
     store::save_license(&response.license, &response.license_id, &response.blob)?;
     Ok(license_status_from_file(&response.license, None))
