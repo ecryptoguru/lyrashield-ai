@@ -63,6 +63,23 @@ promotion path.
 3. **`lyrashield-engine` visibility** — engine checkouts use `secrets.GITHUB_TOKEN` (deploy-azure.yml:105, release-tauri.yml:107/319, ci.yml:504), which cannot read a private cross-repo. Passing deploys imply it is public — confirm intent.
 4. **`ADMISSION_CONFIG_TOKEN`** — configure-cloud-billing-admission.yml:60 is the last long-lived PAT (rest went OIDC in v16 `11d1a868`). Confirm fine-grained scope (env vars only) + expiry.
 
+### Platform closure — 2026-09-11
+
+1. `VERIFY-H-001` is evidence-closed. GitHub API readback confirms required
+   reviewer `ecryptoguru` on `azure-production`, `cloudflare-production`, and
+   `desktop-release`; Azure and Cloudflare deployments accept protected branches
+   only.
+2. `VERIFY-H-002` is fixed by `e9162054`. Upstash remains for public abuse
+   controls and BullMQ Redis remains for the shared readiness/route contract.
+   Six GitHub App credentials have no passive-scanner caller and are removed from
+   both the scanner revision and its Container App secret store.
+3. `VERIFY-H-003` is evidence-closed. GitHub reports `lyrashield-engine` public;
+   its Apache-2.0 README explicitly documents its public controlled-derivative
+   and worker-contract role.
+4. `VERIFY-H-004` is fixed by `e9162054`. The admission job now grants its
+   short-lived `github.token` only `contents:write` and `id-token:write`; the
+   long-lived PAT is no longer referenced and is removed after rollout.
+
 ## Verified-safe (spot-checked, no action)
 
 - No `pull_request_target`; `workflow_run` consumers require `conclusion == 'success'`, `branches: [main]`, `head_sha == origin/main`, and scope the routing artifact to `run-id` — stale/PR-origin runs cannot reach deploy-azure.

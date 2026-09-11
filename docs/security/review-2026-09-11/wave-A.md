@@ -45,6 +45,19 @@
 - **User-scope resources via workspace credentials:** `PATCH /api/onboarding`, `notifications/preferences`, `referrals/claim` accept Bearer credentials and mutate the _creator's_ user-level state (onboarding pointers, notification prefs, referral attribution). Membership/ownership checks hold and no cross-user access was found; whether a workspace-bound credential _should_ act on user-scope state is a design question, not a confirmed vulnerability.
 - **In-memory rate-limit fallback under Upstash outage:** cooldown/fallback semantics verified in code; whether sustained Upstash failure plus distributed app instances materially weakens `api`/`lite-scan` buckets is environment-dependent.
 
+### Platform closure — 2026-09-11
+
+- `VERIFY-A-001` is evidence-closed. Azure readback shows the authenticated app
+  requires client certificates and rejects direct requests without one. The
+  passive scanner uses direct Azure Container Apps ingress; Azure documents that
+  it appends the authoritative client IP as the rightmost `X-Forwarded-For`
+  value, matching `getClientIP`'s rightmost-only parser.
+- `VERIFY-A-003` is evidence-closed for the current launch. Neither production
+  origin has RazorpayX/Payoneer payout environment values or secrets, and
+  `RAZORPAYX_PAYOUT_ADMISSION` defaults to `off`; the provider call is therefore
+  unreachable. Provider/operator controls require a new review before admission
+  is enabled.
+
 ## Verified safe (controls that held)
 
 - **Credential binding where `requireWorkspaceAccess`/`requirePermission` is used** (`session.ts:308-383`): workspace equality for `apiKey`+`oauth`, active membership, role, read-scope allowlist fail-closed for new permissions, delegated-operation grants on mutating permissions. Correctly applied across targets POST, findings, retests, fix-proposals, agent-approvals (approve/deny), schedules, team PATCH/DELETE/invite (with role-ceiling `canGrantRole`, last-owner protection, membership lock), invitations/[id], GitHub repos/install.
