@@ -32,6 +32,23 @@ const PERMANENT_REDIRECTS: Record<string, string> = {
 // redirects below and the security headers for every response that does
 // flow through Astro's pipeline.
 export const onRequest = defineMiddleware(async ({ url }, next) => {
+  // VULN-P-001: SSR/API routes must also refuse plaintext — the static-page
+  // path is covered by the worker-entry guard applied in postbuild
+  // (scripts/apply-worker-scheme-guard.mjs); middleware never runs for it.
+  // Scoped to the public hostnames so local `wrangler dev`/`astro dev` on
+  // http://localhost keeps working.
+  if (url.protocol === "http:" && url.hostname.endsWith("lyrashieldai.com")) {
+    const https = new URL(url)
+    https.protocol = "https:"
+    return new Response(null, {
+      status: 301,
+      headers: {
+        Location: https.toString(),
+        "X-Robots-Tag": "noindex",
+      },
+    })
+  }
+
   const redirectTarget = PERMANENT_REDIRECTS[url.pathname]
   if (redirectTarget) {
     return new Response(null, {
