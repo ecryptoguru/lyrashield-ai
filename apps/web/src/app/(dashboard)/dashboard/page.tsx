@@ -262,15 +262,15 @@ export default async function DashboardPage() {
                 : "—"
           }
           detail={
-            overview.activeScan
-              ? `${overview.activeScan.targetName ?? "Workspace"} scan in progress`
-              : latestRun
-                ? (
-                    <>
-                      Last run <LocalTime withTime value={latestRun.createdAt} />
-                    </>
-                  )
-                : "No scan activity yet"
+            overview.activeScan ? (
+              `${overview.activeScan.targetName ?? "Workspace"} scan in progress`
+            ) : latestRun ? (
+              <>
+                Last run <LocalTime withTime value={latestRun.createdAt} />
+              </>
+            ) : (
+              "No scan activity yet"
+            )
           }
           icon={Activity}
         />

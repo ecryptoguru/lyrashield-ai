@@ -5,9 +5,7 @@ import { EmailText } from "./email-text"
 
 describe("EmailText", () => {
   it("splits the address at the @ so CDN email obfuscation cannot match it", () => {
-    const html = renderToStaticMarkup(
-      createElement(EmailText, { value: "user@example.com" })
-    )
+    const html = renderToStaticMarkup(createElement(EmailText, { value: "user@example.com" }))
     // The wire HTML must not contain a literal local@domain run that
     // Cloudflare's obfuscator rewrites into a __cf_email__ anchor.
     expect(html).not.toMatch(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)

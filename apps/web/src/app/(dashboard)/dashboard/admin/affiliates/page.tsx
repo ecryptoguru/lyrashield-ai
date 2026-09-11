@@ -80,7 +80,9 @@ export default async function AffiliateAdminPage() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
               >
                 <div className="min-w-0">
-                  <div className="font-medium break-words"><EmailText value={aff.user.name ?? aff.user.email} /></div>
+                  <div className="font-medium break-words">
+                    <EmailText value={aff.user.name ?? aff.user.email} />
+                  </div>
                   <div className="text-sm text-muted-foreground">
                     Applied {new Date(aff.createdAt).toLocaleDateString()}
                   </div>
@@ -121,7 +123,9 @@ export default async function AffiliateAdminPage() {
             <tbody>
               {approved.map((aff) => (
                 <tr key={aff.id} className="border-b">
-                  <td className="py-2 pr-4"><EmailText value={aff.user.name ?? aff.user.email} /></td>
+                  <td className="py-2 pr-4">
+                    <EmailText value={aff.user.name ?? aff.user.email} />
+                  </td>
                   <td className="py-2 pr-4">{aff.activeReferrals}</td>
                   <td className="py-2 pr-4">{aff._count.commissions}</td>
                   <td className="py-2 pr-4">{aff._count.clicks}</td>
@@ -189,7 +193,9 @@ export default async function AffiliateAdminPage() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
               >
                 <div className="min-w-0">
-                  <div className="font-medium break-words"><EmailText value={aff.user.name ?? aff.user.email} /></div>
+                  <div className="font-medium break-words">
+                    <EmailText value={aff.user.name ?? aff.user.email} />
+                  </div>
                 </div>
                 <AffiliateAdminActions affiliateId={aff.id} showReactivate />
               </div>

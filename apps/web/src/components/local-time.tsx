@@ -18,9 +18,7 @@ export function LocalTime({
   withTime?: boolean
   className?: string
 }) {
-  const [text, setText] = useState(() =>
-    withTime ? formatDateTime(value) : formatDate(value)
-  )
+  const [text, setText] = useState(() => (withTime ? formatDateTime(value) : formatDate(value)))
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-mount timezone flip; first render must match the SSR'd UTC label
     setText(withTime ? formatLocalDateTime(value) : formatLocalDate(value))
