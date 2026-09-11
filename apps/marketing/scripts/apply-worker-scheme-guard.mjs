@@ -42,8 +42,17 @@ export default {
   fetch(request, env, ctx) {
     const url = new URL(request.url)
     if (url.protocol === "http:") {
-      url.protocol = "https:"
-      return Response.redirect(url.toString(), 301)
+      // Local dev (wrangler dev/miniflare) serves plain http — exempt
+      // loopback hosts or every local request would redirect-loop.
+      const loopback =
+        url.hostname === "localhost" ||
+        url.hostname === "127.0.0.1" ||
+        url.hostname === "[::1]" ||
+        url.hostname.endsWith(".localhost")
+      if (!loopback) {
+        url.protocol = "https:"
+        return Response.redirect(url.toString(), 301)
+      }
     }
     return generated.fetch(request, env, ctx)
   },
