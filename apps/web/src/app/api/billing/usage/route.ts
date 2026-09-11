@@ -1,13 +1,22 @@
-import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { getUsageBalance, getTrialState, getGraceState } from "@lyrashield/billing"
+import {
+  getUsageBalance,
+  getAccountTrialState,
+  getGraceState,
+  resolveAccountBilling,
+} from "@lyrashield/billing"
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
 
 /**
- * GET /api/billing/usage — returns the workspace's current usage state.
+ * GET /api/billing/usage — returns the ACCOUNT's current usage state.
+ *
+ * Subscriptions and minute balances are account-owned: the workspaceId
+ * parameter authorizes the viewer (billing.manage) but the payload describes
+ * the caller's account — pool, packs, trial, and grace all follow the
+ * account across its workspaces.
  *
  * Returns: usage balance (minutes used/pool, targets used/cap), trial state,
  * unexpired packs with expiry dates, and grace state.
@@ -24,58 +33,24 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const accountId = session.userId
 
-    // 2.1: fetch BillingAccount and Workspace once and pass the rows into the
-    // balance/trial/grace helpers instead of each helper re-reading them.
-    const [billingAccount, workspaceRow] = await Promise.all([
-      prisma.billingAccount.findUnique({
-        where: { workspaceId },
-        select: {
-          currentPlan: true,
-          status: true,
-          interval: true,
-          currentPeriodStart: true,
-          currentPeriodEnd: true,
-        },
-      }),
-      prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: {
-          plan: true,
-          trialStartedAt: true,
-          graceUsedMs: true,
-          graceCycleStart: true,
-        },
-      }),
-    ])
+    // 2.1: fetch the account's governing BillingAccount once and pass it into
+    // the balance/trial/grace helpers instead of each helper re-reading it.
+    const billingAccount = await resolveAccountBilling(accountId)
 
     const [balance, trialState, graceState] = await Promise.all([
-      getUsageBalance(workspaceId, {
-        billingAccount: billingAccount
-          ? {
-              currentPeriodStart: billingAccount.currentPeriodStart,
-              currentPlan: billingAccount.currentPlan,
-            }
-          : null,
-        workspace: workspaceRow ? { trialStartedAt: workspaceRow.trialStartedAt } : null,
+      getUsageBalance(accountId, {
+        billing: billingAccount,
       }),
-      getTrialState(
-        workspaceId,
-        workspaceRow
-          ? { plan: workspaceRow.plan, trialStartedAt: workspaceRow.trialStartedAt }
-          : null
-      ),
-      getGraceState(
-        workspaceId,
-        workspaceRow
-          ? { graceUsedMs: workspaceRow.graceUsedMs, graceCycleStart: workspaceRow.graceCycleStart }
-          : null
-      ),
+      getAccountTrialState(accountId),
+      getGraceState(accountId, billingAccount),
     ])
 
     return apiSuccess(
       {
+        accountId,
         plan: billingAccount?.currentPlan ?? "FREE",
         status: billingAccount?.status ?? "free",
         interval: billingAccount?.interval ?? null,

@@ -13,7 +13,7 @@ import type { MemberRole } from "@lyrashield/db"
 import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { buildMicrosoftSocialProvider, isOAuthProviderConfigured } from "./oauth-providers"
-import { activeWorkspaceIdFromCookie, needsOAuthWorkspaceSelection } from "./oauth-workspace"
+import { needsOAuthWorkspaceSelection } from "./oauth-workspace"
 import { resourcesMatch } from "./oauth-resource"
 import { hasPermission, PERMISSIONS } from "./permissions"
 
@@ -32,8 +32,9 @@ const platformAdminEmails = new Set(env.PLATFORM_ADMIN_EMAILS.split(","))
 export const OAUTH_WORKSPACE_CLAIM = "https://lyrashieldai.com/workspace_id"
 export const OAUTH_CONNECTION_CLAIM = "https://lyrashieldai.com/connection_id"
 export const OAUTH_AUTH_VERSION_CLAIM = "https://lyrashieldai.com/auth_version"
-export const OAUTH_SCOPE_READ = "lyrashield.read"
-export const OAUTH_SCOPE_WRITE = "lyrashield.write"
+import { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE } from "./oauth-scopes"
+import { oauthConsentReferenceId, selectedOAuthWorkspaceId } from "./oauth-consent-reference"
+export { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE }
 export const OAUTH_RESOURCE = new URL("/api/mcp", env.NEXT_PUBLIC_APP_URL).toString()
 export const OAUTH_ISSUER = new URL("/api/auth", env.BETTER_AUTH_URL).toString().replace(/\/$/, "")
 const oauthScopes = [
@@ -68,31 +69,6 @@ function normalizeNativeLoopbackClient(body: unknown): unknown {
   })
 
   return onlyNativeLoopbacks ? { ...client, application_type: "native" } : body
-}
-
-async function selectedOAuthWorkspaceId({
-  userId,
-  session,
-  requestHeaders,
-}: {
-  userId: string
-  session: Record<string, unknown>
-  requestHeaders: Headers
-}) {
-  const candidates = [
-    activeWorkspaceIdFromCookie(requestHeaders.get("cookie")),
-    typeof session.activeWorkspaceId === "string" ? session.activeWorkspaceId : undefined,
-  ].filter((workspaceId): workspaceId is string => Boolean(workspaceId))
-
-  for (const workspaceId of new Set(candidates)) {
-    const member = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { status: true },
-    })
-    if (member?.status === "active") return workspaceId
-  }
-
-  return undefined
 }
 
 const oauthProviderPlugin = oauthProvider({
@@ -136,30 +112,7 @@ const oauthProviderPlugin = oauthProvider({
         user.id
       )
     },
-    consentReferenceId: async (context) => {
-      const { user, session, scopes } = context
-      const needsWorkspace = scopes.includes(OAUTH_SCOPE_READ) || scopes.includes(OAUTH_SCOPE_WRITE)
-      if (!needsWorkspace || !session) return undefined
-      const workspaceId = await selectedOAuthWorkspaceId({
-        userId: user.id,
-        session,
-        requestHeaders: new Headers(),
-      })
-      if (!workspaceId) throw new Error("OAUTH_WORKSPACE_REQUIRED")
-
-      const connectionId =
-        typeof session.pendingAgentConnectionId === "string"
-          ? session.pendingAgentConnectionId
-          : undefined
-      if (!connectionId) throw new Error("OAUTH_CONNECTION_REQUIRED")
-      const conn = await withWorkspaceRLS(workspaceId, (tx) =>
-        tx.agentConnection.findFirst({
-          where: { id: connectionId, userId: user.id, workspaceId, status: "ACTIVE" },
-        })
-      )
-      if (!conn) throw new Error("OAUTH_CONNECTION_REQUIRED")
-      return `${workspaceId}:${conn.id}`
-    },
+    consentReferenceId: oauthConsentReferenceId,
   },
   customAccessTokenClaims: async ({ user, scopes, referenceId, resources }) => {
     if (!user || !referenceId || !resourcesMatch(resources, OAUTH_RESOURCE)) return {}

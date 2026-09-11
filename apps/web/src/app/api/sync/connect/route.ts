@@ -83,7 +83,7 @@ async function post(request: Request) {
     }
 
     const sku = license.sku as LocalSkuId
-    const hasSyncEntitlement = await checkSyncEntitlement(sku, workspaceId)
+    const hasSyncEntitlement = await checkSyncEntitlement(sku, session.userId)
     if (!hasSyncEntitlement) {
       return apiError(
         "SYNC_NOT_ENTITLED",

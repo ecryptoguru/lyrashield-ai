@@ -7,6 +7,8 @@ export interface BillingQuote {
   provider: "razorpay"
   kind: QuoteKind
   workspaceId: string
+  /** Owning account — binds the quote so it cannot be replayed for another buyer. */
+  accountId?: string
   catalogKey: string
   amountMinor: number
   currency: "INR"
@@ -30,6 +32,7 @@ function canonicalQuote(quote: BillingQuote): string {
     quote.provider,
     quote.kind,
     quote.workspaceId,
+    quote.accountId ?? "",
     quote.catalogKey,
     String(quote.amountMinor),
     quote.currency,

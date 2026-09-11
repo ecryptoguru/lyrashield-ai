@@ -9,7 +9,7 @@
  * Idempotent on the refund external ID.
  */
 
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, getSystemPrisma, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 
 export interface ReverseRefundResult {
@@ -36,39 +36,56 @@ export async function reverseRefund(
   refundExternalId = resourceExternalId
 ): Promise<ReverseRefundResult> {
   const idempotencyKey = `${workspaceId}:${refundExternalId}`
+  // Called only after verified provider refund classification. Resolve the
+  // stored owner through the bounded resource identity, never caller metadata.
+  const identity = await getSystemPrisma().minutePack.findUnique({
+    where: { workspaceId_externalId: { workspaceId, externalId: resourceExternalId } },
+    select: { accountId: true },
+  })
   let result: ReverseRefundResult
   try {
-    result = await withWorkspaceRLS(workspaceId, async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`refund:${workspaceId}:${resourceExternalId}`}, 0))`
-      const existing = await tx.usageRecord.findUnique({
-        where: { idempotencyKey },
-        select: { id: true },
-      })
-      if (existing) return { created: false, reversed: "none" as const, minutesReversed: 0 }
+    result = await withWorkspaceRLS(
+      workspaceId,
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`refund:${workspaceId}:${resourceExternalId}`}, 0))`
+        const existing = await tx.usageRecord.findUnique({
+          where: { idempotencyKey },
+          select: { id: true },
+        })
+        if (existing) return { created: false, reversed: "none" as const, minutesReversed: 0 }
 
-      const pack = await tx.minutePack.findUnique({
-        where: { workspaceId_externalId: { workspaceId, externalId: resourceExternalId } },
-        select: { id: true, remainingMinutes: true },
-      })
-      if (!pack) throw new Error("refund_entitlement_not_resolved")
+        const pack = await tx.minutePack.findUnique({
+          where: { workspaceId_externalId: { workspaceId, externalId: resourceExternalId } },
+          select: { id: true, remainingMinutes: true, accountId: true },
+        })
+        if (!pack) throw new Error("refund_entitlement_not_resolved")
 
-      const minutesReversed = pack.remainingMinutes
-      const updated = await tx.minutePack.updateMany({
-        where: { id: pack.id, workspaceId, remainingMinutes: pack.remainingMinutes },
-        data: { remainingMinutes: 0 },
-      })
-      if (updated.count !== 1) throw new Error("refund_entitlement_balance_changed")
-      await tx.usageRecord.create({
-        data: {
-          workspaceId,
-          kind: "refund_reversal",
-          quantity: minutesReversed,
-          idempotencyKey,
-          metadata: { refundExternalId, resourceExternalId, reversed: "pack", minutesReversed },
-        },
-      })
-      return { created: true, reversed: "pack" as const, minutesReversed }
-    })
+        const minutesReversed = pack.remainingMinutes
+        const updated = await tx.minutePack.updateMany({
+          where: { id: pack.id, workspaceId, remainingMinutes: pack.remainingMinutes },
+          data: { remainingMinutes: 0 },
+        })
+        if (updated.count !== 1) throw new Error("refund_entitlement_balance_changed")
+        await tx.usageRecord.create({
+          data: {
+            workspaceId,
+            accountId: pack.accountId,
+            kind: "refund_reversal",
+            quantity: minutesReversed,
+            idempotencyKey,
+            metadata: {
+              refundExternalId,
+              resourceExternalId,
+              reversed: "pack",
+              minutesReversed,
+              accountId: pack.accountId,
+            },
+          },
+        })
+        return { created: true, reversed: "pack" as const, minutesReversed }
+      },
+      { accountId: identity?.accountId }
+    )
   } catch (error) {
     if (
       error &&

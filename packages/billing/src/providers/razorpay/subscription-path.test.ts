@@ -87,7 +87,15 @@ describe("Razorpay subscription lifecycle", () => {
       action: "subscription.ended",
       workspaceId: "ws_1",
     })
-    expect(downgradeToFreeMock).toHaveBeenCalledWith("ws_1", "subscription.completed")
+    expect(downgradeToFreeMock).toHaveBeenCalledWith(
+      {
+        provider: "razorpay",
+        externalId: "sub_1",
+        accountId: null,
+        workspaceId: "ws_1",
+      },
+      "subscription.completed"
+    )
     expect(syncSubscriptionMock).not.toHaveBeenCalled()
   })
 

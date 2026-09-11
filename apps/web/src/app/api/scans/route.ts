@@ -25,7 +25,7 @@ import { normalizeDomainForProof } from "@lyrashield/security"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { assertScanAllowed } from "@lyrashield/billing"
+import { assertScanAllowed, resolveAccountBilling } from "@lyrashield/billing"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
@@ -123,12 +123,12 @@ async function post(request: Request) {
     // so require one current workspace proof before the first server-side
     // request. DNS proof is deliberately reusable for the domain rather than
     // creating an approval chore for every scan.
+    // The gate follows the SPONSOR's effective plan — workspace.plan is a
+    // display field under account-owned billing and must never decide this.
     if (target.type === "WEB_APP" || target.type === "API") {
-      const workspace = await prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { plan: true },
-      })
-      if (!workspace || workspace.plan === "FREE") {
+      const sponsorBilling = await resolveAccountBilling(session.userId)
+      const sponsorPlan = sponsorBilling?.effectivePlan ?? "FREE"
+      if (sponsorPlan === "FREE") {
         // Free tier skips domain verification, so a free account could
         // otherwise drive server-side reviews of arbitrary third-party
         // sites. Bound it per client IP; Turnstile is the follow-up.
@@ -142,7 +142,7 @@ async function post(request: Request) {
           )
         }
       }
-      if (workspace && workspace.plan !== "FREE") {
+      if (sponsorPlan !== "FREE") {
         const domain = target.url ? normalizeDomainForProof(target.url) : null
         const proof = domain
           ? await prisma.targetDomainVerification.findFirst({
@@ -191,10 +191,11 @@ async function post(request: Request) {
       return apiError("TARGET_TYPE_UNSUPPORTED", "This target cannot be reviewed yet.", 400)
     }
 
-    // ─── Billing entitlement gate (Sprint 10) ───────────────────────────
-    // Block DEEP/CUSTOM scans on TRIAL and STARTER plans; check usage balance;
-    // enforce trial scan-frequency throttle.
-    const entitlement = await assertScanAllowed(workspaceId, canonicalMode)
+    // ─── Billing entitlement gate (Sprint 10, account-owned) ────────────
+    // The sponsoring account pays: the caller's subscription/balance is
+    // evaluated, not this workspace's billing row. Block DEEP/CUSTOM on
+    // TRIAL/STARTER plans; check usage balance; enforce trial throttle.
+    const entitlement = await assertScanAllowed(workspaceId, canonicalMode, session.userId)
     if (!entitlement.allowed) {
       return apiError(
         entitlement.code ?? "SCAN_NOT_ALLOWED",

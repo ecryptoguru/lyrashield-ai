@@ -85,7 +85,14 @@ export { Prisma } from "./generated/prisma"
 export { prisma } from "./client"
 export { getSystemPrisma } from "./system-client"
 export { createBoundedPgAdapter, resolveDbPoolMax } from "./pool"
-export { setWorkspaceContext, getWorkspaceContext, runWithWorkspaceContext } from "./extension"
+export {
+  setWorkspaceContext,
+  getWorkspaceContext,
+  runWithWorkspaceContext,
+  setAccountContext,
+  getAccountContext,
+  runWithAccountContext,
+} from "./extension"
 export { computeAuditHash, verifyAuditChain, type AuditLogChainFields } from "./audit-hash"
 export {
   assertEvidenceEncrypted,
@@ -93,7 +100,13 @@ export {
   isValidKeyRefFormat,
   EvidenceEncryptionError,
 } from "./evidence"
-export { withWorkspaceRLS, withoutWorkspaceRLS } from "./rls"
+export {
+  withWorkspaceRLS,
+  withAccountRLS,
+  withoutWorkspaceRLS,
+  bindAccountRLSContext,
+  type ScopedTransaction,
+} from "./rls"
 export { lockWorkspaceMembership } from "./workspace-membership-lock"
 export {
   issuePlatformAdminElevation,

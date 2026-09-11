@@ -54,10 +54,11 @@ async function post(request: Request) {
   try {
     // Validate the caller has billing.manage on the specified workspace.
     // No findFirst fallback — the workspaceId must be explicitly provided.
-    await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const accountId = session.userId
 
-    // A-M08: Rate limit topup creation per workspace
-    const rateLimit = await checkBillingCheckoutRateLimit(workspaceId)
+    // A-M08: Rate limit topup creation per account
+    const rateLimit = await checkBillingCheckoutRateLimit(`account:${accountId}`)
     if (rateLimit.limited) {
       return apiError("RATE_LIMITED", "Too many top-up requests. Please try again later.", 429)
     }
@@ -76,6 +77,7 @@ async function post(request: Request) {
     const successUrl = `${appUrl}/dashboard/billing?topup=success`
     const metadata = {
       workspaceId,
+      accountId,
       packId,
     }
 
@@ -87,6 +89,7 @@ async function post(request: Request) {
         return paymentsUnavailableError()
       }
       const checkoutClaim = await claimBillingCheckoutCreation({
+        accountId,
         workspaceId,
         provider,
         kind: "pack",
@@ -122,11 +125,13 @@ async function post(request: Request) {
         provider: "razorpay",
         kind: "pack",
         workspaceId,
+        accountId,
         catalogKey: packId,
         amountMinor: amountInr,
         currency: "INR",
       })
       const checkoutClaim = await claimBillingCheckoutCreation({
+        accountId,
         workspaceId,
         provider,
         kind: "pack",

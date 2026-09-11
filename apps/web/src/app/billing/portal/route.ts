@@ -1,8 +1,7 @@
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { requirePermission } from "@lyrashield/auth/server"
-import { getPolarPortalUrl } from "@lyrashield/billing"
+import { getPolarPortalUrl, listAccountBilling } from "@lyrashield/billing"
 import { env } from "@lyrashield/config"
 import { apiError } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
@@ -28,14 +27,20 @@ export async function GET(request: Request) {
   const workspaceId = parsedWorkspaceId.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.billing.manage)
 
-    const billingAccount = await prisma.billingAccount.findUnique({
-      where: { workspaceId },
-      select: { externalId: true, provider: true },
-    })
+    // Subscriptions are account-owned: the portal manages the CALLER's
+    // account subscription, regardless of which workspace they initiated
+    // from. An account can hold several rows (trial marker, complimentary
+    // grant, provider contract) — the portal needs the row that carries a
+    // real provider subscription id, not the entitlement-governing row.
+    const rows = await listAccountBilling(session.userId)
+    const billingAccount = rows.find(
+      (row) =>
+        row.externalId !== null && row.provider !== "trial" && row.provider !== "complimentary"
+    )
 
-    if (!billingAccount || !billingAccount.externalId) {
+    if (!billingAccount?.externalId) {
       return apiError(
         "NO_SUBSCRIPTION",
         "No active subscription found. Subscribe to a plan first.",

@@ -1,15 +1,18 @@
 /**
  * Entitlement checks — the gate between billing state and scan/feature access.
  *
- * These functions are called by the scan-create API route and the worker
- * to determine whether a workspace is allowed to perform an action.
+ * Subscriptions are account-owned: every check evaluates the SPONSORING
+ * ACCOUNT (`sponsorAccountId` — the authenticated user for direct actions,
+ * the recorded creator for scheduled/delegated work), never the workspace's
+ * billing row. `workspaceId` scopes the resource, not the payer.
  */
 
-import { prisma } from "@lyrashield/db"
+import { prisma, type ScopedTransaction } from "@lyrashield/db"
 import { CLOUD_PLAN_MAP, STANDARD_OVERAGE_PER_MINUTE_USD } from "@lyrashield/pricing"
 import type { ScanMode } from "@lyrashield/types"
-import { getUsageBalance } from "./usage/balance"
-import { getTrialState, blockOnExpiry } from "./trial"
+import { resolveAccountBilling, type ResolvedAccountBilling } from "./account"
+import { getUsageBalance, getUsageBalanceForTx, resolveBalanceCycleStart } from "./usage/balance"
+import { getAccountTrialState, blockOnExpiry, type TrialState } from "./trial"
 import { getGraceState as getGraceStateFromGrace } from "./grace"
 
 export type ScanModeAllowed = "SAFE" | "QUICK" | "STANDARD" | "DEEP" | "CUSTOM"
@@ -20,36 +23,133 @@ export interface EntitlementResult {
   code?: string
   /** Human-readable message if not allowed. */
   message?: string
-  /** Whether this is a trial workspace. */
+  /** Whether the sponsoring account is on an active trial. */
   isTrial: boolean
-  /** Current plan. */
+  /** The sponsoring account's current plan. */
   plan: string
-  /** Remaining minutes. */
+  /** Remaining minutes on the sponsoring account. */
   remainingMinutes: number
+  /** The sponsoring account evaluated. */
+  accountId: string
+}
+
+type DbTx = ScopedTransaction
+
+export interface ScanEntitlementInput {
+  /** Resource workspace (target must live here). */
+  workspaceId: string
+  mode: ScanMode
+  /**
+   * The account whose subscription and balance pay for this scan — the
+   * authenticated user for direct actions, or the recorded creator for
+   * scheduled/delegated work. Required: a missing sponsor fails closed.
+   */
+  sponsorAccountId: string | null | undefined
+  /**
+   * Read-only by default: the POST path opts into the lazy billing-account
+   * status write on trial expiry. The advisory preflight
+   * (GET /api/scans/eligibility) must never mutate state.
+   */
+  mutateOnTrialExpiry?: boolean
+  /** Caller-owned transaction — must already carry the account context. */
+  tx?: DbTx
+}
+
+interface SponsorContext {
+  billing: ResolvedAccountBilling | null
+  trial: TrialState
+}
+
+async function loadSponsorContext(sponsorAccountId: string, tx?: DbTx): Promise<SponsorContext> {
+  if (tx) {
+    const [billing, user] = await Promise.all([
+      resolveAccountBilling(sponsorAccountId, tx),
+      tx.user.findUnique({
+        where: { id: sponsorAccountId },
+        select: { trialStartedAt: true },
+      }),
+    ])
+    return {
+      billing,
+      trial: await accountTrialStateFrom(sponsorAccountId, user?.trialStartedAt ?? null, tx),
+    }
+  }
+  const [billing, trial] = await Promise.all([
+    resolveAccountBilling(sponsorAccountId),
+    getAccountTrialState(sponsorAccountId),
+  ])
+  return { billing, trial }
+}
+
+async function accountTrialStateFrom(
+  accountId: string,
+  trialStartedAt: Date | null,
+  tx: DbTx
+): Promise<TrialState> {
+  const now = new Date()
+  const endsAt = trialStartedAt
+    ? new Date(trialStartedAt.getTime() + 14 * 24 * 60 * 60 * 1000)
+    : null
+  const isExpired = Boolean(endsAt && now > endsAt)
+  if (!trialStartedAt) {
+    return {
+      isActive: false,
+      isExpired: false,
+      startedAt: null,
+      endsAt: null,
+      daysLeft: 0,
+      minutesLeft: 0,
+      targetsUsed: 0,
+      targetCap: 3,
+    }
+  }
+  const billing = await resolveAccountBilling(accountId, tx)
+  const balance = await getUsageBalanceForTx(tx, {
+    accountId,
+    billing,
+    trialStartedAt,
+  })
+  return {
+    isActive: !isExpired && (billing?.effectivePlan ?? "FREE") === "FREE",
+    isExpired,
+    startedAt: trialStartedAt,
+    endsAt,
+    daysLeft: Math.max(0, Math.ceil(((endsAt?.getTime() ?? 0) - now.getTime()) / 86_400_000)),
+    minutesLeft: balance.poolRemaining,
+    targetsUsed: 0,
+    targetCap: 3,
+  }
 }
 
 /**
- * Evaluate whether a scan with the given mode is allowed for this workspace.
+ * Evaluate whether a scan with the given mode is allowed, billed to the
+ * sponsoring account.
  *
  * Rules:
- * - DEEP/CUSTOM scans require a plan with deepAllowed=true (PRO and above)
- * - TRIAL and STARTER plans cannot run DEEP/CUSTOM scans
- * - The workspace must have remaining agent-minutes > 0
- * - Trial workspaces may scan any target already admitted to the workspace
- *
- * Read-only by default: `mutateOnTrialExpiry` opts the POST path into the
- * lazy billing-account status write on trial expiry. The advisory preflight
- * (GET /api/scans/eligibility) must never mutate trial, billing, scan, or
- * audit state, so it keeps this false.
+ * - DEEP/CUSTOM scans require the sponsor's plan to allow deep (PRO and above)
+ * - The sponsor must have remaining agent-minutes > 0 (or overage budget)
+ * - Trial accounts scan while their account trial is active
  */
 export async function evaluateScanEntitlement(
-  workspaceId: string,
-  mode: ScanMode,
-  options: { mutateOnTrialExpiry?: boolean } = {}
+  input: ScanEntitlementInput
 ): Promise<EntitlementResult> {
-  const workspace = await prisma.workspace.findUnique({
+  const { workspaceId, mode, sponsorAccountId, tx } = input
+
+  if (!sponsorAccountId) {
+    return {
+      allowed: false,
+      code: "SPONSOR_REQUIRED",
+      message: "No sponsoring account could be resolved for this scan.",
+      isTrial: false,
+      plan: "FREE",
+      remainingMinutes: 0,
+      accountId: "",
+    }
+  }
+
+  const workspace = await (tx ?? prisma).workspace.findUnique({
     where: { id: workspaceId },
-    select: { plan: true, deepAllowed: true, trialStartedAt: true },
+    select: { id: true },
   })
 
   if (!workspace) {
@@ -60,25 +160,22 @@ export async function evaluateScanEntitlement(
       isTrial: false,
       plan: "FREE",
       remainingMinutes: 0,
+      accountId: sponsorAccountId,
     }
   }
 
-  const plan = workspace.plan
+  const { billing, trial: trialState } = await loadSponsorContext(sponsorAccountId, tx)
+
+  // Entitlement uses the effective plan: a canceled/past_due row past its
+  // paid term entitles as FREE immediately — no wait on the downgrade job.
+  const plan = billing?.effectivePlan ?? "FREE"
   const cloudPlan = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
-  const isTrial = plan === "FREE" && workspace.trialStartedAt !== null
+  const isTrial = trialState.isActive
 
-  // A-L05: Call getTrialState once and reuse the result for both the
-  // expiry check and the target-cap throttle check below.
-  const trialState = isTrial ? await getTrialState(workspaceId) : null
-
-  // Check trial expiry: if the workspace is on trial and the trial has expired,
-  // block the scan. The POST path additionally records the billing account
-  // status via blockOnExpiry; read-only callers skip that write.
-  if (isTrial && trialState?.isExpired) {
-    if (options.mutateOnTrialExpiry) {
-      await blockOnExpiry(workspaceId).catch(() => {
-        // Non-blocking — the scan is already blocked below
-      })
+  // Trial expiry: block + (on the POST path) lazily record the status.
+  if (trialState.isExpired) {
+    if (input.mutateOnTrialExpiry) {
+      await blockOnExpiry(sponsorAccountId, workspaceId).catch(() => {})
     }
     return {
       allowed: false,
@@ -87,61 +184,48 @@ export async function evaluateScanEntitlement(
       isTrial,
       plan,
       remainingMinutes: 0,
+      accountId: sponsorAccountId,
     }
   }
 
-  // Check deep scan permission
+  // Deep scan permission comes from the sponsor's plan.
   const isDeepMode = mode === "DEEP" || mode === "CUSTOM"
-  if (isDeepMode) {
-    // Check workspace.deepAllowed flag (set by the billing sync)
-    if (!workspace.deepAllowed) {
-      return {
-        allowed: false,
-        code: "DEEP_NOT_ALLOWED",
-        message:
-          "Deep is a Pro feature. Upgrade to Pro or Launch Assurance to run Deep/Custom scans.",
-        isTrial,
-        plan,
-        remainingMinutes: 0,
-      }
-    }
-    // Also verify the plan supports deep
-    if (cloudPlan && !cloudPlan.deepAllowed) {
-      return {
-        allowed: false,
-        code: "DEEP_NOT_ALLOWED",
-        message:
-          "Deep is a Pro feature. Upgrade to Pro or Launch Assurance to run Deep/Custom scans.",
-        isTrial,
-        plan,
-        remainingMinutes: 0,
-      }
+  if (isDeepMode && !(cloudPlan?.deepAllowed ?? false)) {
+    return {
+      allowed: false,
+      code: "DEEP_NOT_ALLOWED",
+      message:
+        "Deep is a Pro feature. Upgrade to Pro or Launch Assurance to run Deep/Custom scans.",
+      isTrial,
+      plan,
+      remainingMinutes: 0,
+      accountId: sponsorAccountId,
     }
   }
 
-  // Check usage balance
-  const balance = await getUsageBalance(workspaceId)
-  if (balance.totalRemaining <= 0) {
-    // Check if overage is available (Launch Assurance plan with spend limit)
-    const billingAccount = await prisma.billingAccount.findUnique({
-      where: { workspaceId },
-      select: {
-        currentPlan: true,
-        spendLimitCents: true,
-        currentPeriodStart: true,
-      },
-    })
-    const overagePlanEligible =
-      billingAccount?.currentPlan === "LAUNCH_ASSURANCE" &&
-      (billingAccount.spendLimitCents ?? 0) > 0
+  // Account balance — the sponsor's pool + packs across all workspaces.
+  const balance = tx
+    ? await getUsageBalanceForTx(tx, {
+        accountId: sponsorAccountId,
+        billing,
+        trialStartedAt: trialState.startedAt,
+      })
+    : await getUsageBalance(sponsorAccountId, { billing, trialStartedAt: trialState.startedAt })
 
-    if (overagePlanEligible) {
-      // S14: Also verify remaining overage spend budget > 0.
-      // Query current cycle overage minutes and compute the remaining budget.
-      const cycleStart = billingAccount?.currentPeriodStart ?? new Date(0)
-      const overageAggregate = await prisma.usageRecord.aggregate({
+  if (balance.totalRemaining <= 0) {
+    // Overage is available only to Launch Assurance accounts with a limit.
+    const overagePlanEligible =
+      billing?.effectivePlan === "LAUNCH_ASSURANCE" && (billing.spendLimitCents ?? 0) > 0
+
+    if (overagePlanEligible && billing) {
+      const cycleStart =
+        resolveBalanceCycleStart({
+          billing,
+          trialStartedAt: trialState.startedAt,
+        }) ?? new Date(0)
+      const overageAggregate = await (tx ?? prisma).usageRecord.aggregate({
         where: {
-          workspaceId,
+          accountId: sponsorAccountId,
           kind: "overage_minutes",
           deletedAt: null,
           cycleStart: { gte: cycleStart },
@@ -150,8 +234,8 @@ export async function evaluateScanEntitlement(
       })
       const currentOverageMinutes = overageAggregate._sum.quantity ?? 0
       const overagePerMinuteCents = Math.round(STANDARD_OVERAGE_PER_MINUTE_USD * 100)
-      const currentOverageCostCents = currentOverageMinutes * overagePerMinuteCents
-      const remainingBudgetCents = (billingAccount?.spendLimitCents ?? 0) - currentOverageCostCents
+      const remainingBudgetCents =
+        (billing.spendLimitCents ?? 0) - currentOverageMinutes * overagePerMinuteCents
 
       if (remainingBudgetCents <= 0) {
         return {
@@ -162,6 +246,7 @@ export async function evaluateScanEntitlement(
           isTrial,
           plan,
           remainingMinutes: 0,
+          accountId: sponsorAccountId,
         }
       }
     } else {
@@ -174,6 +259,7 @@ export async function evaluateScanEntitlement(
         isTrial,
         plan,
         remainingMinutes: 0,
+        accountId: sponsorAccountId,
       }
     }
   }
@@ -183,20 +269,30 @@ export async function evaluateScanEntitlement(
     isTrial,
     plan,
     remainingMinutes: balance.totalRemaining,
+    accountId: sponsorAccountId,
   }
 }
 
 /**
- * Assert that a scan with the given mode is allowed for this workspace.
+ * Assert that a scan with the given mode is allowed for the sponsoring
+ * account in this workspace.
  *
  * Authoritative POST-side gate: on trial expiry it also lazily records the
  * billing-account status. See `evaluateScanEntitlement` for the rules.
  */
 export async function assertScanAllowed(
   workspaceId: string,
-  mode: ScanMode
+  mode: ScanMode,
+  sponsorAccountId: string | null | undefined,
+  tx?: DbTx
 ): Promise<EntitlementResult> {
-  return evaluateScanEntitlement(workspaceId, mode, { mutateOnTrialExpiry: true })
+  return evaluateScanEntitlement({
+    workspaceId,
+    mode,
+    sponsorAccountId,
+    mutateOnTrialExpiry: true,
+    tx,
+  })
 }
 
 export interface TargetAllowedResult {
@@ -208,15 +304,24 @@ export interface TargetAllowedResult {
 }
 
 /**
- * Assert that the workspace can add another target.
- * A positive targetCaps value is a hard limit. Enterprise uses 0 for its
- * contract-defined limit and must not be blocked by the self-serve caps.
+ * Assert that the acting account's plan allows another target in this
+ * workspace. The cap comes from the ACTING ACCOUNT's plan (or its active
+ * trial); the count is the workspace's existing targets. A positive cap is a
+ * hard limit. Enterprise uses 0 for its contract-defined limit and must not
+ * be blocked by the self-serve caps.
  */
-export async function assertTargetAllowed(workspaceId: string): Promise<TargetAllowedResult> {
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: workspaceId },
-    select: { plan: true, trialStartedAt: true },
-  })
+export async function assertTargetAllowed(
+  workspaceId: string,
+  actingAccountId: string
+): Promise<TargetAllowedResult> {
+  const [workspace, billing, trial] = await Promise.all([
+    prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true },
+    }),
+    resolveAccountBilling(actingAccountId),
+    getAccountTrialState(actingAccountId),
+  ])
 
   if (!workspace) {
     return {
@@ -228,9 +333,10 @@ export async function assertTargetAllowed(workspaceId: string): Promise<TargetAl
     }
   }
 
-  const isTrial = workspace.plan === "FREE" && workspace.trialStartedAt !== null
-  const cloudPlan = CLOUD_PLAN_MAP[workspace.plan as keyof typeof CLOUD_PLAN_MAP]
-  const targetCap = cloudPlan?.targetCaps ?? (isTrial ? 3 : 5)
+  const plan = billing?.effectivePlan ?? "FREE"
+  const isTrial = trial.isActive
+  const cloudPlan = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
+  const targetCap = isTrial ? 3 : (cloudPlan?.targetCaps ?? 5)
 
   const targetCount = await prisma.target.count({
     where: { workspaceId, deletedAt: null },
@@ -260,8 +366,8 @@ export async function assertTargetAllowed(workspaceId: string): Promise<TargetAl
 }
 
 /**
- * Get the grace state for a workspace (used by the worker mid-scan).
+ * Get the grace state for an account (used by the worker mid-scan).
  */
-export async function getGraceState(workspaceId: string) {
-  return getGraceStateFromGrace(workspaceId)
+export async function getGraceState(accountId: string) {
+  return getGraceStateFromGrace(accountId)
 }

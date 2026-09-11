@@ -108,6 +108,11 @@ vi.mock("@lyrashield/billing", () => ({
   getUsageBalance: vi.fn().mockResolvedValue({ totalRemaining: 100 }),
   enterGrace: vi.fn().mockResolvedValue({ shouldContinue: true }),
   debitOverage: vi.fn().mockResolvedValue(undefined),
+  resolveAccountBilling: vi.fn().mockResolvedValue({
+    currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
+    currentPlan: "STARTER",
+    spendLimitCents: 0,
+  }),
 }))
 
 vi.mock("../engine/runner", () => ({
@@ -227,6 +232,7 @@ import {
   enterGrace,
   recordAgentMinutes,
   hasUnsettledScanIntent,
+  resolveAccountBilling,
 } from "@lyrashield/billing"
 import {
   AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
@@ -270,6 +276,7 @@ function mockStoredScanAuthority(
     goal: "TEST_APP",
     mode: "SAFE",
     policyId: null,
+    createdById: "user-1",
     ...overrides,
   })
 }
@@ -607,14 +614,28 @@ describe("processScanJob", () => {
     )
     vi.mocked(prisma.target.findFirst).mockResolvedValue(mockRepoTarget as never)
     vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
-    vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
+    vi.mocked(prisma.scan.findUnique).mockResolvedValue({
+      status: "RUNNING",
+      createdById: "user-1",
+    } as never)
     vi.mocked(prisma.scan.update).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(prisma.scan.updateMany).mockResolvedValue({ count: 1 } as never)
     vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
       currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
       currentPlan: "STARTER",
+      effectivePlan: "STARTER",
       spendLimitCents: 0,
     } as never)
+    // Sponsoring-account billing state — reset per test so an overage/grace
+    // variant never leaks into a later case.
+    vi.mocked(resolveAccountBilling).mockResolvedValue({
+      currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
+      currentPlan: "STARTER",
+      effectivePlan: "STARTER",
+      spendLimitCents: 0,
+    } as never)
+    vi.mocked(debitOverage).mockResolvedValue(undefined)
+    vi.mocked(enterGrace).mockResolvedValue({ shouldContinue: true })
     vi.mocked(runScannerOrchestrator).mockResolvedValue({
       allFindings: [],
       engineFindings: [],
@@ -776,9 +797,22 @@ describe("processScanJob", () => {
     "fails closed when %s fails once before a durable billing obligation exists",
     async (stage) => {
       const error = new Error(`injected ${stage} failure`)
-      if (stage === "account lookup")
-        vi.mocked(prisma.billingAccount.findUnique).mockRejectedValueOnce(error)
-      else vi.mocked(recordAgentMinutes).mockRejectedValueOnce(error)
+      if (stage === "account lookup") {
+        // The sponsor account is resolved inside the settlement overage path.
+        vi.mocked(recordAgentMinutes).mockImplementationOnce(
+          async (_workspaceId, _scanId, _ms, options) => {
+            await options?.settleOverage?.(prisma as never, 3)
+            return {
+              created: true,
+              minutes: 5,
+              idempotencyKey: "test",
+              overageMinutes: 3,
+              accountId: "user-1",
+            }
+          }
+        )
+        vi.mocked(resolveAccountBilling).mockRejectedValueOnce(error)
+      } else vi.mocked(recordAgentMinutes).mockRejectedValueOnce(error)
       const result = await processScanJob(mockJob)
       expect(result.status).toBe("failed")
       expect(completeScanWithScore).not.toHaveBeenCalled()
@@ -787,7 +821,7 @@ describe("processScanJob", () => {
       expect(debitOverage).not.toHaveBeenCalled()
       expect(enterGrace).not.toHaveBeenCalled()
       expect(runEngine).toHaveBeenCalledOnce()
-      expect(recordAgentMinutes).toHaveBeenCalledTimes(stage === "account lookup" ? 0 : 1)
+      expect(recordAgentMinutes).toHaveBeenCalledTimes(1)
       // Database availability returns on redelivery, but the failed paid run
       // is terminal: do not try the engine or settlement again.
       vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
@@ -796,7 +830,7 @@ describe("processScanJob", () => {
       } as never)
       await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
       expect(runEngine).toHaveBeenCalledOnce()
-      expect(recordAgentMinutes).toHaveBeenCalledTimes(stage === "account lookup" ? 0 : 1)
+      expect(recordAgentMinutes).toHaveBeenCalledTimes(1)
     }
   )
   it.each(["manifest", "retests", "score"])(
@@ -960,9 +994,10 @@ describe("processScanJob", () => {
         return { created: true, minutes: 5, idempotencyKey: "test", overageMinutes: 3 }
       }
     )
-    vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
+    vi.mocked(resolveAccountBilling).mockResolvedValue({
       currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
       currentPlan: "LAUNCH_ASSURANCE",
+      effectivePlan: "LAUNCH_ASSURANCE",
       spendLimitCents: 100,
     } as never)
     vi.mocked(debitOverage).mockResolvedValueOnce({
@@ -975,7 +1010,14 @@ describe("processScanJob", () => {
       status: "failed",
       errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
     })
-    expect(debitOverage).toHaveBeenCalledWith("ws-1", 3, "scan-1", "engine_overage", prisma)
+    expect(debitOverage).toHaveBeenCalledWith({
+      accountId: "user-1",
+      workspaceId: "ws-1",
+      minutes: 3,
+      scanId: "scan-1",
+      phase: "engine_overage",
+      transaction: prisma,
+    })
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: expect.objectContaining({ llmRequestCount: 1, llmInputTokens: 1_000 }),

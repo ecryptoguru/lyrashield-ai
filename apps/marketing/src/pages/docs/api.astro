@@ -8,6 +8,27 @@ const title = "LyraShield API v1 Reference"
 const description = "OpenAPI 3.1 reference for the LyraShield /api/v1 endpoints."
 const updatedDate = "2026-07-31"
 
+interface OpenApiOperation {
+  summary?: string
+  description?: string
+  parameters?: { name?: string; in?: string; required?: boolean; schema?: { type?: string } }[]
+  requestBody?: { content?: Record<string, unknown> }
+  responses?: Record<string, { description?: string }>
+  tags?: string[]
+}
+
+const methods = ["get", "post", "put", "patch", "delete"] as const
+
+/** Flatten spec.paths into renderable operation rows, path-sorted. */
+const operations = Object.entries(spec.paths ?? {})
+  .flatMap(([path, item]) =>
+    methods.flatMap((method) => {
+      const op = (item as Record<string, OpenApiOperation | undefined>)[method]
+      return op ? [{ path, method, op }] : []
+    })
+  )
+  .sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method))
+
 const jsonLd: unknown[] = [
   {
     "@context": "https://schema.org",
@@ -55,6 +76,149 @@ const jsonLd: unknown[] = [
     Download the OpenAPI 3.1 spec as JSON: <a href="/openapi.json" download>openapi.json</a>
   </p>
 
-  <h2>OpenAPI 3.1 Specification</h2>
-  <pre><code>{JSON.stringify(spec, null, 2)}</code></pre>
+  <h2>Endpoints ({operations.length})</h2>
+
+  <div class="api-ref">
+    {
+      operations.map(({ path, method, op }) => (
+        <details class="api-op">
+          <summary>
+            <span class={`api-op__method api-op__method--${method}`}>{method.toUpperCase()}</span>
+            <code class="api-op__path">{path}</code>
+            {op.summary ? <span class="api-op__summary">{op.summary}</span> : null}
+          </summary>
+          <div class="api-op__body">
+            {op.description ? <p>{op.description}</p> : null}
+            {op.parameters?.length ? (
+              <>
+                <h3>Parameters</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>In</th>
+                      <th>Required</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {op.parameters.map((param) => (
+                      <tr>
+                        <td>
+                          <code>{param.name}</code>
+                        </td>
+                        <td>{param.in}</td>
+                        <td>{param.required ? "yes" : "no"}</td>
+                        <td>{param.schema?.type ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+            {op.requestBody?.content ? (
+              <p>
+                <strong>Request body:</strong>{" "}
+                <code>{Object.keys(op.requestBody.content).join(", ")}</code>
+              </p>
+            ) : null}
+            {op.responses ? (
+              <>
+                <h3>Responses</h3>
+                <ul>
+                  {Object.entries(op.responses).map(([code, response]) => (
+                    <li>
+                      <code>{code}</code> — {response.description ?? ""}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
+        </details>
+      ))
+    }
+  </div>
 </DocsLayout>
+
+<style>
+  .api-ref {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .api-op {
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    background: var(--color-bg-raised);
+  }
+
+  .api-op summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 0.75rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .api-op summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .api-op summary::after {
+    content: "+";
+    margin-left: auto;
+    color: var(--color-text-muted);
+  }
+
+  .api-op[open] summary::after {
+    content: "−";
+  }
+
+  .api-op__method {
+    border-radius: 0.35rem;
+    padding: 0.1rem 0.45rem;
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--color-bg);
+    background: var(--color-accent);
+  }
+
+  .api-op__method--post {
+    background: var(--color-danger);
+  }
+
+  .api-op__path {
+    overflow-wrap: anywhere;
+    font-weight: 600;
+  }
+
+  .api-op__summary {
+    flex-basis: 100%;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+  }
+
+  .api-op__body {
+    border-top: 1px solid var(--color-border);
+    padding: 0.75rem 1rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .api-op__body h3 {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+
+  .api-op__body table {
+    font-size: 0.8rem;
+  }
+</style>

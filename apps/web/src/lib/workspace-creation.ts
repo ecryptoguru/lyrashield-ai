@@ -35,39 +35,47 @@ export async function createWorkspaceWithTrial(input: {
   if (!slug) throw new Error("INVALID_NAME")
 
   const workspaceId = randomUUID()
-  const { result, trial } = await withWorkspaceRLS(workspaceId, async (tx) => {
-    const workspace = await tx.workspace.create({
-      data: {
-        id: workspaceId,
-        name: input.name,
-        slug,
-        mode: input.mode,
-        plan: "FREE",
-        members: {
-          create: {
-            userId: input.userId,
-            role: "OWNER",
-            status: "active",
+  // Bind the account context too: the trial's BillingAccount/UsageRecord rows
+  // are account-owned — if this workspace's attribution slot is already taken
+  // the row is created account-only (workspaceId NULL) and needs the account
+  // RLS policy, not the workspace one.
+  const { result, trial } = await withWorkspaceRLS(
+    workspaceId,
+    async (tx) => {
+      const workspace = await tx.workspace.create({
+        data: {
+          id: workspaceId,
+          name: input.name,
+          slug,
+          mode: input.mode,
+          plan: "FREE",
+          members: {
+            create: {
+              userId: input.userId,
+              role: "OWNER",
+              status: "active",
+            },
+          },
+          policies: {
+            create: {
+              name: "Default Policy",
+              description: "Default scan policy with safe settings",
+              networkEgressPolicy: "target_only",
+              destructiveTestsAllowed: false,
+              approvalRequired: false,
+              maxDurationMinutes: 60,
+              piiRedactionEnabled: true,
+              evidenceRetentionDays: 30,
+            },
           },
         },
-        policies: {
-          create: {
-            name: "Default Policy",
-            description: "Default scan policy with safe settings",
-            networkEgressPolicy: "target_only",
-            destructiveTestsAllowed: false,
-            approvalRequired: false,
-            maxDurationMinutes: 60,
-            piiRedactionEnabled: true,
-            evidenceRetentionDays: 30,
-          },
-        },
-      },
-    })
+      })
 
-    const trial = await startTrial(workspace.id, input.userId, tx)
-    return { result: workspace, trial }
-  })
+      const trial = await startTrial(workspace.id, input.userId, tx)
+      return { result: workspace, trial }
+    },
+    { accountId: input.userId }
+  )
 
   await prisma.auditLog.create({
     data: {

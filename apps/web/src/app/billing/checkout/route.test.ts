@@ -15,12 +15,11 @@ vi.mock("@lyrashield/db", () => ({
     billingAccount: { findUnique: mocks.billingAccount },
   },
 }))
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission: vi.fn() }))
-vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
-vi.mock("@lyrashield/logger", () => ({
-  setRequestId: vi.fn(),
-  logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
+vi.mock("@lyrashield/auth/server", () => ({
+  requirePermission: vi.fn().mockResolvedValue({ session: { userId: "acct_1" } }),
 }))
+vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
+vi.mock("@lyrashield/logger", async () => (await import("@/__tests__/mocks")).loggerModule())
 vi.mock("@lyrashield/affiliate", () => ({ resolveAttribution: vi.fn().mockResolvedValue(null) }))
 vi.mock("@/lib/rate-limit", () => ({
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: false })),
@@ -46,8 +45,15 @@ vi.mock("@lyrashield/billing", () => ({
   createPolarCheckout: mocks.createPolar,
   createRazorpaySubscription: mocks.createRazorpay,
   getRazorpaySubscriptionCycleCount: () => 1200,
+  // Account-owned subscription lookup — the test's billingAccount mock stands
+  // in for the resolved row.
+  resolveAccountBilling: vi.fn((accountId: string) => mocks.billingAccount(accountId)),
   resolveProviderId: (raw: string, key: string) => JSON.parse(raw)[key] ?? null,
-  CLOUD_PLAN_MAP: { STARTER: { selfServe: true } },
+  CLOUD_PLAN_MAP: {
+    STARTER: { selfServe: true },
+    PRO: { selfServe: true },
+    LAUNCH_ASSURANCE: { selfServe: true },
+  },
 }))
 
 import { POST } from "./route"
@@ -87,7 +93,11 @@ describe("Cloud checkout admission", () => {
     "rejects paid %s on both rails before provider calls",
     async (plan) => {
       mocks.workspace.mockResolvedValue({ plan })
-      mocks.billingAccount.mockResolvedValue({ currentPlan: plan })
+      mocks.billingAccount.mockResolvedValue({
+        currentPlan: plan,
+        provider: "polar",
+        status: "active",
+      })
       for (const provider of ["polar", "razorpay"] as const) {
         mocks.provider = provider
         const response = await POST(request())
@@ -100,23 +110,29 @@ describe("Cloud checkout admission", () => {
   )
 
   it("fails closed when the billing account is paid but workspace plan is stale", async () => {
-    mocks.billingAccount.mockResolvedValue({ currentPlan: "PRO" })
+    mocks.billingAccount.mockResolvedValue({
+      currentPlan: "PRO",
+      provider: "polar",
+      status: "active",
+    })
     expect((await POST(request())).status).toBe(409)
     expect(mocks.createPolar).not.toHaveBeenCalled()
     expect(mocks.createRazorpay).not.toHaveBeenCalled()
   })
 
   it("permits a FREE trial's first purchase on both rails", async () => {
-    mocks.billingAccount.mockResolvedValue({ currentPlan: "FREE", status: "trialing" })
+    mocks.billingAccount.mockResolvedValue({
+      currentPlan: "FREE",
+      provider: "trial",
+      status: "trialing",
+    })
     for (const provider of ["polar", "razorpay"] as const) {
       mocks.provider = provider
       expect((await POST(request())).status).toBe(200)
     }
     expect(mocks.workspace).toHaveBeenCalledWith({ where: { id: "ws_1" }, select: { plan: true } })
-    expect(mocks.billingAccount).toHaveBeenCalledWith({
-      where: { workspaceId: "ws_1" },
-      select: { currentPlan: true },
-    })
+    // The duplicate check resolves the ACCOUNT's billing row.
+    expect(mocks.billingAccount).toHaveBeenCalledWith("acct_1")
     expect(mocks.createPolar).toHaveBeenCalledOnce()
     expect(mocks.createRazorpay).toHaveBeenCalledOnce()
   })

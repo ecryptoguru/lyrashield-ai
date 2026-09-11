@@ -27,12 +27,26 @@ export {
   type TargetAllowedResult,
 } from "./entitlements"
 
+// Account-owned subscription resolution
+export { resolveAccountBilling, listAccountBilling, type ResolvedAccountBilling } from "./account"
+
+// Allowance cycles (F1: monthly pool per cycle, incl. annual subscriptions)
+export {
+  resolveAllowanceCycle,
+  addMonthsClamped,
+  isWithinPaidTerm,
+  type AllowanceCycle,
+  type AllowanceInterval,
+} from "./usage/allowance-cycle"
+
 // Usage balance
 export {
   getUsageBalance,
+  getUsageBalanceForTx,
+  resolveBalanceCycleStart,
   type UsageBalance,
   type UsageBalancePrefetched,
-  type PackBalance,
+  type MinutePackBalance,
 } from "./usage/balance"
 
 // Usage metering
@@ -44,7 +58,12 @@ export {
 } from "./usage/meter"
 
 // Usage grants
-export { grantMonthlyPool, type GrantSource, type GrantMonthlyPoolResult } from "./usage/grants"
+export {
+  grantMonthlyPool,
+  monthlyPoolGrantKey,
+  legacyMonthlyPoolGrantKey,
+  type MonthlyPoolGrantParams,
+} from "./usage/grants"
 
 // Usage packs
 export { creditTopUp, type PackProvider, type CreditTopUpResult } from "./usage/packs"
@@ -93,6 +112,7 @@ export {
   startTrial,
   isTrialAvailable,
   getTrialState,
+  getAccountTrialState,
   blockOnExpiry,
   TRIAL_DURATION_DAYS,
   TRIAL_AGENT_MINUTES,

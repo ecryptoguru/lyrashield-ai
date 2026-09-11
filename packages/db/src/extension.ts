@@ -1,12 +1,17 @@
 import { Prisma } from "./generated/prisma"
 import {
+  ACCOUNT_OWNED_MODELS,
   SOFT_DELETE_MODELS,
   WORKSPACE_SCOPED_MODELS,
   applyQueryGuards,
+  getAccountContext,
+  getExplicitAccountId,
   getExplicitWorkspaceId,
   getWorkspaceContext,
   isDatabaseRLSContextBound,
+  runWithAccountContext,
   runWithDatabaseRLSContext,
+  setAccountContext,
   setWorkspaceContext,
   runWithWorkspaceContext,
 } from "./scoping"
@@ -14,12 +19,17 @@ import {
 // Re-export the request-context helpers + policy sets so existing import sites
 // (`@lyrashield/db`) keep working.
 export {
+  ACCOUNT_OWNED_MODELS,
   SOFT_DELETE_MODELS,
   WORKSPACE_SCOPED_MODELS,
+  getAccountContext,
+  getExplicitAccountId,
   getExplicitWorkspaceId,
   getWorkspaceContext,
   isDatabaseRLSContextBound,
+  runWithAccountContext,
   runWithDatabaseRLSContext,
+  setAccountContext,
   setWorkspaceContext,
   runWithWorkspaceContext,
 }
@@ -37,8 +47,16 @@ export const workspaceExtension = Prisma.defineExtension((client) =>
     query: {
       async $allOperations({ model, operation, args, query }) {
         const activeWorkspaceId = getWorkspaceContext()
+        const activeAccountId = getAccountContext()
         const workspaceId =
           activeWorkspaceId ?? getExplicitWorkspaceId(args as Record<string, unknown>)
+        // An account-owned model query self-declares its account scope via
+        // accountId in where/data; the bound account context wins when set.
+        const accountId =
+          activeAccountId ??
+          (model && ACCOUNT_OWNED_MODELS.has(model)
+            ? getExplicitAccountId(args as Record<string, unknown>)
+            : null)
         const guardedArgs = applyQueryGuards(
           model,
           operation,
@@ -93,7 +111,10 @@ export const workspaceExtension = Prisma.defineExtension((client) =>
           return callDelegate(client, effectiveOperation, finalArgs)
         }
 
-        if (!model || !workspaceId || !WORKSPACE_SCOPED_MODELS.has(model)) {
+        if (!model) return query(finalArgs)
+        const workspaceScoped = workspaceId != null && WORKSPACE_SCOPED_MODELS.has(model)
+        const accountScoped = accountId != null && ACCOUNT_OWNED_MODELS.has(model)
+        if (!workspaceScoped && !accountScoped) {
           return query(finalArgs)
         }
 
@@ -113,9 +134,16 @@ export const workspaceExtension = Prisma.defineExtension((client) =>
         // the transaction delegate directly also prevents this extension from
         // recursively wrapping its own query.
         return client.$transaction(async (tx) => {
-          await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
-          return runWithDatabaseRLSContext(workspaceId, () =>
-            callDelegate(tx, effectiveOperation, finalArgs)
+          if (workspaceId) {
+            await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
+          }
+          if (accountId) {
+            await tx.$executeRaw`SELECT set_config('app.current_account_id', ${accountId}, true)`
+          }
+          return runWithDatabaseRLSContext(
+            workspaceId ?? null,
+            () => callDelegate(tx, effectiveOperation, finalArgs),
+            accountId
           )
         })
       },

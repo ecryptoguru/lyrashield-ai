@@ -45,6 +45,8 @@ interface NormalizedEventBase {
   refundId: string | null
   /** Binding is resolved downstream (notes/metadata when present). */
   workspaceId: string | null
+  /** Owning account (metadata `accountId`, stamped by checkout). */
+  accountId: string | null
   customerId: string | null
   productKind: ProductKind
   occurredAt: Date | null
@@ -374,6 +376,7 @@ export function normalizeProviderEvent(input: {
         ? (str(facts.refundEntity.id) ?? str(facts.entity.id))
         : null),
     workspaceId: refundEvidence?.workspaceId ?? str(facts.metaBag?.workspaceId),
+    accountId: str(facts.metaBag?.accountId),
     customerId:
       idOf(facts.entity.customer) ??
       str(facts.entity.customer_id) ??

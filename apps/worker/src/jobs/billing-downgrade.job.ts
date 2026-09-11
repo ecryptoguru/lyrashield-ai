@@ -1,10 +1,10 @@
 /**
- * Billing downgrade job.
+ * Billing downgrade job — account-owned.
  *
  * Hourly BullMQ repeatable job that:
  * 1. Queries BillingAccount where status IN ("canceled", "past_due")
  *    AND currentPeriodEnd < now()
- * 2. For each, calls downgradeToFree(workspaceId)
+ * 2. For each, calls downgradeToFree({ billingAccountId })
  *
  * This handles the "keep plan until period end, then downgrade to FREE"
  * lifecycle: the webhook sets status to canceled/past_due, but the actual
@@ -37,8 +37,8 @@ export interface BillingDowngradeJobResult {
  * BillingAccount is FORCE RLS strict, so the plain client returned zero rows
  * under the runtime role and the downgrade never happened: canceled and
  * past-due workspaces kept their agent-minute allowance, target cap and
- * Deep eligibility indefinitely. Each per-workspace downgrade below already
- * runs inside its own withWorkspaceRLS.
+ * Deep eligibility indefinitely. Each per-account downgrade below already
+ * runs inside its own RLS-bound transaction.
  */
 export async function processBillingDowngradeJob(
   _data: BillingDowngradeJobData
@@ -49,10 +49,17 @@ export async function processBillingDowngradeJob(
 
   const expiredAccounts = await getSystemPrisma().billingAccount.findMany({
     where: {
+      deletedAt: null,
       status: { in: ["canceled", "past_due"] },
       currentPeriodEnd: { lt: now },
     },
-    select: { id: true, workspaceId: true, status: true, currentPeriodEnd: true },
+    select: {
+      id: true,
+      workspaceId: true,
+      accountId: true,
+      status: true,
+      currentPeriodEnd: true,
+    },
   })
 
   logger.info("Found expired billing accounts to downgrade", {
@@ -64,16 +71,27 @@ export async function processBillingDowngradeJob(
 
   for (const account of expiredAccounts) {
     try {
-      await downgradeToFree(account.workspaceId, `period_ended:${account.status}`)
+      await downgradeToFree(
+        {
+          billingAccountId: account.id,
+          accountId: account.accountId,
+          workspaceId: account.workspaceId,
+        },
+        `period_ended:${account.status}`
+      )
       downgraded++
-      logger.info("Downgraded workspace to FREE", {
+      logger.info("Downgraded subscription to FREE", {
+        billingAccountId: account.id,
+        accountId: account.accountId,
         workspaceId: account.workspaceId,
         previousStatus: account.status,
         periodEnd: account.currentPeriodEnd?.toISOString() ?? "null",
       })
     } catch (error) {
       errors++
-      logger.error("Failed to downgrade workspace", {
+      logger.error("Failed to downgrade subscription", {
+        billingAccountId: account.id,
+        accountId: account.accountId,
         workspaceId: account.workspaceId,
         error: error instanceof Error ? error.message : String(error),
       })

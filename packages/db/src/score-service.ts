@@ -607,10 +607,15 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
       where: { idempotencyKey: attribution.id },
       create: {
         workspaceId,
+        accountId: attribution.referredUserId,
         kind: "referral_bonus",
         quantity: REFERRAL_BONUS_MINUTES,
         idempotencyKey: attribution.id,
-        metadata: { denomination: "agent_minutes", side: "referred" },
+        metadata: {
+          denomination: "agent_minutes",
+          side: "referred",
+          accountId: attribution.referredUserId,
+        },
       },
       update: {},
     })
@@ -618,10 +623,15 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
       where: { idempotencyKey: `${attribution.id}:referrer` },
       create: {
         workspaceId: referrerWorkspace.workspaceId,
+        accountId: attribution.code.userId,
         kind: "referral_bonus",
         quantity: REFERRAL_BONUS_MINUTES,
         idempotencyKey: `${attribution.id}:referrer`,
-        metadata: { denomination: "agent_minutes", side: "referrer" },
+        metadata: {
+          denomination: "agent_minutes",
+          side: "referrer",
+          accountId: attribution.code.userId,
+        },
       },
       update: {},
     })

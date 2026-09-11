@@ -94,7 +94,9 @@ async function post(request: Request) {
       }
     }
 
-    const entitlement = await assertTargetAllowed(workspaceId)
+    // The target cap comes from the ACTING account's plan — subscriptions are
+    // account-owned, so a member's limits travel with them across workspaces.
+    const entitlement = await assertTargetAllowed(workspaceId, session.userId)
     if (!entitlement.allowed) {
       return apiError(
         entitlement.code ?? "TARGET_NOT_ALLOWED",

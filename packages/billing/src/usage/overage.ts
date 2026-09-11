@@ -1,21 +1,24 @@
 /**
- * Overage debit logic.
+ * Overage debit logic — account-owned.
  *
- * Launch Assurance workspaces can opt into overage: when pool + packs are
+ * Launch Assurance accounts can opt into overage: when pool + packs are
  * exhausted, additional agent-minutes are billed at $0.15/min
  * (STANDARD_OVERAGE_PER_MINUTE_USD), up to a spend limit set by the billing
- * admin (spendLimitCents on BillingAccount).
+ * admin (spendLimitCents on the account's BillingAccount).
  *
- * Overages are tracked as UsageRecord with kind="overage_minutes".
- * The actual charge is processed by the provider (Polar/Razorpay) — this
- * module only tracks the minute consumption and checks the spend limit.
+ * Overages are tracked as UsageRecord with kind="overage_minutes" scoped to
+ * the sponsoring account. The actual charge is processed by the provider
+ * (Polar/Razorpay) — this module only tracks the minute consumption and
+ * checks the spend limit.
  *
  * All money is in integer cents (Decimal-safe, never Float).
  */
 
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { withAccountRLS, type ScopedTransaction } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { STANDARD_OVERAGE_PER_MINUTE_USD } from "@lyrashield/pricing"
+import { resolveAccountBilling } from "../account"
+import { resolveAllowanceCycle } from "./allowance-cycle"
 
 export interface DebitOverageResult {
   /** Whether the overage was debited (false = limit reached or not opted in). */
@@ -31,30 +34,33 @@ export interface DebitOverageResult {
 /** Overage rate per minute in cents (from $0.15). */
 const OVERAGE_PER_MINUTE_CENTS = Math.round(STANDARD_OVERAGE_PER_MINUTE_USD * 100)
 const MAX_TRANSACTION_ATTEMPTS = 3
-type BillingTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+type BillingTransaction = ScopedTransaction
 
 function hasPrismaCode(error: unknown, code: string): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === code)
 }
 
-/**
- * Debit overage minutes for a workspace.
- *
- * Only Launch Assurance plan workspaces with a spend limit > 0 are eligible.
- * The spend limit is checked against the cumulative overage cost
- * for the current billing cycle.
- *
- * @param minutes - Minutes to debit as overage
- * @param scanId  - Scan ID for the idempotency key
- * @param phase   - Phase label for the idempotency key
- */
-export async function debitOverage(
-  workspaceId: string,
-  minutes: number,
-  scanId: string,
-  phase: string,
+export interface DebitOverageInput {
+  /** Owning account (sponsor) — resolved by the caller from trusted state. */
+  accountId: string
+  /** Attribution workspace for the usage record. */
+  workspaceId: string
+  minutes: number
+  scanId: string
+  phase: string
+  /** Caller-owned transaction already bound to the account context. */
   transaction?: BillingTransaction
-): Promise<DebitOverageResult> {
+}
+
+/**
+ * Debit overage minutes for an account.
+ *
+ * Only Launch Assurance accounts with a spend limit > 0 are eligible. The
+ * spend limit is checked against the cumulative overage cost for the
+ * account's current allowance cycle.
+ */
+export async function debitOverage(input: DebitOverageInput): Promise<DebitOverageResult> {
+  const { accountId, workspaceId, minutes, scanId, phase, transaction } = input
   if (minutes <= 0) {
     return { debited: false, minutes: 0, estimatedCostCents: 0, reason: "no_minutes" }
   }
@@ -64,26 +70,30 @@ export async function debitOverage(
   for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
     try {
       const apply = async (tx: BillingTransaction) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
+        // Serialize overage decisions per account.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`account:${accountId}`}, 0))`
         const existing = await tx.usageRecord.findUnique({
           where: { idempotencyKey },
           select: { id: true, quantity: true },
         })
         if (existing) return { minutes: existing.quantity, replayed: true }
 
-        const billingAccount = await tx.billingAccount.findUnique({
-          where: { workspaceId },
-          select: { currentPlan: true, spendLimitCents: true, currentPeriodStart: true },
-        })
-        if (!billingAccount || billingAccount.currentPlan !== "LAUNCH_ASSURANCE")
+        const billingAccount = await resolveAccountBilling(accountId, tx)
+        if (!billingAccount || billingAccount.effectivePlan !== "LAUNCH_ASSURANCE")
           throw new Error("overage_not_available")
         if (!billingAccount.spendLimitCents || billingAccount.spendLimitCents <= 0)
           throw new Error("no_spend_limit")
 
-        const cycleStart = billingAccount.currentPeriodStart ?? new Date(0)
+        const cycleStart = billingAccount.currentPeriodStart
+          ? resolveAllowanceCycle({
+              interval: billingAccount.interval,
+              periodStart: billingAccount.currentPeriodStart,
+              periodEnd: billingAccount.currentPeriodEnd,
+            }).cycleStart
+          : new Date(0)
         const overageRecords = await tx.usageRecord.findMany({
           where: {
-            workspaceId,
+            accountId,
             kind: "overage_minutes",
             deletedAt: null,
             cycleStart: { gte: cycleStart },
@@ -102,6 +112,7 @@ export async function debitOverage(
         await tx.usageRecord.create({
           data: {
             workspaceId,
+            accountId,
             kind: "overage_minutes",
             quantity: allowedMinutes,
             idempotencyKey,
@@ -109,6 +120,7 @@ export async function debitOverage(
             metadata: {
               scanId,
               phase,
+              accountId,
               costCents: allowedMinutes * OVERAGE_PER_MINUTE_CENTS,
               rateCentsPerMinute: OVERAGE_PER_MINUTE_CENTS,
             },
@@ -118,7 +130,7 @@ export async function debitOverage(
       }
       debitResult = transaction
         ? await apply(transaction)
-        : await withWorkspaceRLS(workspaceId, apply, { isolationLevel: "Serializable" })
+        : await withAccountRLS(accountId, apply, { isolationLevel: "Serializable" })
       break
     } catch (error) {
       // The outer meter owns retries when sharing its transaction.
@@ -140,6 +152,7 @@ export async function debitOverage(
 
   if (!transaction)
     logger.info("Debited overage minutes", {
+      accountId,
       workspaceId,
       minutes: debitedMinutes,
       costCents: debitedMinutes * OVERAGE_PER_MINUTE_CENTS,

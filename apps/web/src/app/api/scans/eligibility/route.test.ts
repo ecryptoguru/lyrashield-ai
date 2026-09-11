@@ -19,12 +19,19 @@ vi.mock("@lyrashield/auth", () => ({
 vi.mock("@lyrashield/billing", () => ({
   evaluateScanEntitlement: vi.fn(),
   isTrialAvailable: vi.fn(),
+  // Sponsor account billing is the plan source now; the tests' existing
+  // `workspace.findUnique → { plan }` fixtures stand in for it.
+  resolveAccountBilling: vi.fn(async () => {
+    const ws = await prisma.workspace.findUnique({
+      where: { id: "ws-1" },
+      select: { plan: true },
+    })
+    const plan = (ws as { plan?: string } | null)?.plan ?? "FREE"
+    return { effectivePlan: plan, currentPlan: plan }
+  }),
 }))
 
-vi.mock("@lyrashield/logger", () => ({
-  setRequestId: vi.fn(),
-  logger: { info: vi.fn(), error: vi.fn() },
-}))
+vi.mock("@lyrashield/logger", async () => (await import("@/__tests__/mocks")).loggerModule())
 
 vi.mock("../../../../lib/rate-limit", () => ({
   checkScanEligibilityRateLimit: vi.fn(async () => ({
@@ -151,7 +158,10 @@ describe("GET /api/scans/eligibility", () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get("Cache-Control")).toBe("private, no-store")
-    expect(evaluateScanEntitlement).toHaveBeenCalledWith("ws-1", "QUICK", {
+    expect(evaluateScanEntitlement).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      sponsorAccountId: "user-1",
+      mode: "QUICK",
       mutateOnTrialExpiry: false,
     })
     expect(await response.json()).toEqual({

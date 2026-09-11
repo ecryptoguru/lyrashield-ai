@@ -218,6 +218,10 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     border-radius: 0.2rem;
   }
 
+  .docs-main {
+    min-width: 0;
+  }
+
   .docs-updated {
     margin: 0 0 1.5rem;
     color: var(--color-text-muted);
@@ -278,6 +282,10 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     padding-left: 1.5rem;
     color: var(--color-text-muted);
     line-height: 1.75;
+  }
+
+  .docs-main :global(li) {
+    overflow-wrap: anywhere;
   }
 
   .docs-main :global(li + li) {
@@ -347,6 +355,10 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     .docs-main :global(.code-copy) {
       transition: none;
     }
+  }
+
+  .docs-main :global(:not(pre) > code) {
+    overflow-wrap: anywhere;
   }
 
   .docs-main :global(code) {
@@ -424,8 +436,12 @@ const navGroups: { heading: string; links: NavLink[] }[] =
   }
 
   .docs-main :global(table) {
+    /* display:block + overflow-x:auto keeps wide tables in a local scroll
+       region instead of expanding the page. */
+    display: block;
     width: 100%;
     margin-top: 1.25rem;
+    overflow-x: auto;
     border-collapse: collapse;
     font-size: 0.875rem;
   }
@@ -449,7 +465,9 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 
   @media (max-width: 768px) {
     .docs-shell {
-      grid-template-columns: 1fr;
+      /* minmax(0, …) — a bare 1fr track floors at max-content, so wide
+         code/table content overflows a narrow viewport. */
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .docs-sidebar {

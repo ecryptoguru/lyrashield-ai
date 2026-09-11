@@ -21,6 +21,7 @@ vi.mock("./rls", () => ({
   withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
     fn(prisma)
   ),
+  bindAccountRLSContext: vi.fn(async () => {}),
 }))
 
 vi.mock("@lyrashield/logger", () => ({
@@ -175,7 +176,7 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
       { scannerSource: "secrets" },
     ] as never)
     const outcome = await handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
-    expect(admission).toHaveBeenCalledWith("SAFE")
+    expect(admission).toHaveBeenCalledWith("SAFE", "owner-user", expect.anything())
     expect(outcome?.mode).toBe("SAFE")
     expect(createScan).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "SAFE", determinismMode: "targeted_scanner" }),

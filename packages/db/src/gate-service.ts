@@ -28,7 +28,7 @@ import {
   type ScanMode,
 } from "@lyrashield/types"
 import type { FixPrMergeResult } from "./fix-proposal-service"
-import { withWorkspaceRLS } from "./rls"
+import { bindAccountRLSContext, withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export interface GateEvaluationResult {
   verdict: GateVerdictResult
@@ -735,7 +735,11 @@ export async function handleFixPrMergedAndReevaluate(
   workspaceId: string,
   branchName: string,
   prNumber: number | undefined,
-  assertRetestAllowed: (mode: ScanMode) => Promise<void>,
+  assertRetestAllowed: (
+    mode: ScanMode,
+    sponsorAccountId: string,
+    tx: ScopedTransaction
+  ) => Promise<void>,
   repoFullName?: string
 ): Promise<FixPrMergeOutcome | null> {
   if (typeof assertRetestAllowed !== "function") throw new Error("Retest admission guard required")
@@ -824,6 +828,11 @@ export async function handleFixPrMergedAndReevaluate(
       })
       if (!result) return null
 
+      // The retest's sponsoring account is the recorded actor — bind the
+      // account RLS context inside this transaction so the entitlement check
+      // sees the sponsor's ledger rows across workspaces.
+      await bindAccountRLSContext(lockTx, result.actedById)
+
       const marker = `Automatic fix PR retest: ${result.pullRequestId}`
       const prior = await lockTx.retest.findFirst({
         where: { workspaceId, findingId: anchor.findingId, resultBefore: marker },
@@ -833,7 +842,7 @@ export async function handleFixPrMergedAndReevaluate(
       if (prior) {
         // A queue failure leaves the same durable scan available for redelivery.
         if (prior.scan.status !== "QUEUED") return null
-        await assertRetestAllowed(prior.scan.mode)
+        await assertRetestAllowed(prior.scan.mode, result.actedById, lockTx)
         return {
           ...result,
           retestId: prior.id,
@@ -867,7 +876,7 @@ export async function handleFixPrMergedAndReevaluate(
         hasApiSpec: Boolean(target.apiSpecUrl),
       })
       if (!resolved.ok) throw new Error(resolved.reason)
-      await assertRetestAllowed(profile.mode as ScanMode)
+      await assertRetestAllowed(profile.mode as ScanMode, result.actedById, lockTx)
 
       // Create the REAL retest scan + Retest row bound to it. This mirrors the
       // user retest route (api/findings/[id]/retests): createScan with

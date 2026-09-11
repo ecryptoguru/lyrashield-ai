@@ -5,7 +5,12 @@ const resetGraceMock = vi.hoisted(() => vi.fn())
 const transactionMock = vi.hoisted(() =>
   vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
     callback({
-      billingAccount: { upsert: vi.fn().mockResolvedValue({}) },
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      billingAccount: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        findUnique: vi.fn().mockResolvedValue(null),
+        upsert: vi.fn().mockResolvedValue({}),
+      },
       workspace: { update: vi.fn().mockResolvedValue({}) },
     })
   )
@@ -17,6 +22,10 @@ vi.mock("@lyrashield/db", () => ({
     auditLog: { create: vi.fn().mockResolvedValue({}) },
   },
   withWorkspaceRLS: (_workspaceId: string, callback: unknown) => transactionMock(callback),
+  withAccountRLS: (_accountId: string, callback: unknown) => transactionMock(callback),
+  getSystemPrisma: () => ({
+    billingAccount: { findFirst: vi.fn().mockResolvedValue(null) },
+  }),
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -33,6 +42,7 @@ import { syncSubscription } from "./sync"
 
 const activeSubscription = {
   workspaceId: "ws_1",
+  accountId: "acct_1",
   provider: "razorpay" as const,
   externalId: "sub_1",
   plan: "PRO" as const,

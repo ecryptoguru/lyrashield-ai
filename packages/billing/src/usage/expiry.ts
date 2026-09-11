@@ -6,7 +6,7 @@
  * usage balance. The MinutePack row is NOT deleted — it remains for audit.
  */
 
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, getSystemPrisma, withAccountRLS, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 
 export interface ExpirePacksResult {
@@ -19,32 +19,92 @@ export interface ExpirePacksResult {
  * remaining minutes. This is a scheduled job — call it from a BullMQ
  * repeatable job or a cron handler.
  *
+ * Packs are account-owned: the sweep iterates accounts (covering packs whose
+ * attribution workspace was deleted) and workspaces (covering legacy rows
+ * whose accountId is still NULL pending backfill).
+ *
  * A-L03: Audit logs each expired pack for traceability.
  */
 export async function expirePacks(): Promise<ExpirePacksResult> {
   const now = new Date()
-  // Workspace itself is deliberately unscoped. Sweep its IDs, then bind each
-  // tenant transaction through FORCE RLS instead of broadening the privileged
-  // system client's license-only trust boundary.
-  const workspaces = await prisma.workspace.findMany({ select: { id: true } })
-  const packsToExpire: { id: string; workspaceId: string; remainingMinutes: number }[] = []
+  // Sweep the candidate packs once through the privileged system client, then
+  // bind one tenant transaction per affected scope — never a transaction per
+  // workspace/account that has nothing to expire.
+  const candidates = await getSystemPrisma().minutePack.findMany({
+    where: {
+      deletedAt: null,
+      expiresAt: { lt: now },
+      remainingMinutes: { gt: 0 },
+    },
+    select: { accountId: true, workspaceId: true },
+  })
+  const accounts = [
+    ...new Set(candidates.map((p) => p.accountId).filter((id): id is string => id !== null)),
+  ]
+  const workspaces = [
+    ...new Set(
+      candidates
+        .filter((p) => p.accountId === null)
+        .map((p) => p.workspaceId)
+        .filter((id): id is string => id !== null)
+    ),
+  ]
+  const packsToExpire: {
+    id: string
+    workspaceId: string | null
+    accountId: string | null
+    remainingMinutes: number
+  }[] = []
   let expired = 0
-  for (const workspace of workspaces) {
-    const outcome = await withWorkspaceRLS(workspace.id, async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspace.id}, 0))`
+
+  // Account-owned packs — including rows whose attribution workspace is NULL.
+  for (const accountId of accounts) {
+    const outcome = await withAccountRLS(accountId, async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`account:${accountId}`}, 0))`
       const packs = await tx.minutePack.findMany({
         where: {
-          workspaceId: workspace.id,
+          accountId,
           deletedAt: null,
           expiresAt: { lt: now },
           remainingMinutes: { gt: 0 },
         },
-        select: { id: true, workspaceId: true, remainingMinutes: true },
+        select: { id: true, workspaceId: true, accountId: true, remainingMinutes: true },
       })
       if (packs.length === 0) return { packs, count: 0 }
       const result = await tx.minutePack.updateMany({
         where: {
-          workspaceId: workspace.id,
+          accountId,
+          deletedAt: null,
+          expiresAt: { lt: now },
+          remainingMinutes: { gt: 0 },
+        },
+        data: { remainingMinutes: 0 },
+      })
+      return { packs, count: result.count }
+    })
+    packsToExpire.push(...outcome.packs)
+    expired += outcome.count
+  }
+
+  // Legacy workspace-attributed packs whose accountId is still NULL.
+  for (const workspaceId of workspaces) {
+    const outcome = await withWorkspaceRLS(workspaceId, async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
+      const packs = await tx.minutePack.findMany({
+        where: {
+          workspaceId,
+          accountId: null,
+          deletedAt: null,
+          expiresAt: { lt: now },
+          remainingMinutes: { gt: 0 },
+        },
+        select: { id: true, workspaceId: true, accountId: true, remainingMinutes: true },
+      })
+      if (packs.length === 0) return { packs, count: 0 }
+      const result = await tx.minutePack.updateMany({
+        where: {
+          workspaceId,
+          accountId: null,
           deletedAt: null,
           expiresAt: { lt: now },
           remainingMinutes: { gt: 0 },
@@ -61,8 +121,10 @@ export async function expirePacks(): Promise<ExpirePacksResult> {
     return { expired: 0 }
   }
 
-  // A-L03: Create audit log entries for each expired pack
+  // A-L03: Create audit log entries for each expired pack. AuditLog needs a
+  // workspace FK — skip packs whose attribution workspace is gone.
   for (const pack of packsToExpire) {
+    if (!pack.workspaceId) continue
     await prisma.auditLog
       .create({
         data: {
@@ -70,7 +132,7 @@ export async function expirePacks(): Promise<ExpirePacksResult> {
           action: "billing.pack_expired",
           resourceType: "minute_pack",
           resourceId: pack.id,
-          metadata: { remainingMinutes: pack.remainingMinutes },
+          metadata: { remainingMinutes: pack.remainingMinutes, accountId: pack.accountId },
         },
       })
       .catch(() => {

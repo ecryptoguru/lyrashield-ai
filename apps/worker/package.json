@@ -10,7 +10,8 @@
     "verify:queue-orphan-fixture": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-queue-orphan-fixture.ts",
     "review:terminal-cost-disposition": "node --env-file-if-exists=../../.env --import tsx src/operations/review-terminal-cost-disposition.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --max-warnings 0"
+    "lint": "eslint src --max-warnings 0",
+    "comp:grant": "node --env-file-if-exists=../../.env --import tsx src/operations/complimentary-grant.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1113.0",
