@@ -87,6 +87,18 @@ pub struct VerifyServerResponse {
     pub sku: Option<LicenseSku>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_eligible_until: Option<String>,
+    pub revalidation_receipt: Option<LicenseRevalidationReceipt>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicenseRevalidationReceipt {
+    pub license_id: String,
+    pub license_signature: String,
+    pub verified_at: String,
+    pub expires_at: String,
+    pub signing_key_id: String,
+    pub signature: String,
 }
 
 /// Persisted license on disk — includes immutable licenseId and version.
@@ -99,6 +111,8 @@ pub struct StoredLicense {
     pub blob: String,
     #[serde(default)]
     pub last_server_verified_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revalidation_receipt: Option<LicenseRevalidationReceipt>,
 }
 
 /// Client-side license status summary.

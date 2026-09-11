@@ -489,7 +489,11 @@ export async function resolveCredentials(
     // Explicit origin mismatch check:
     // If stored credentials specify an explicit apiUrl and its origin does not match envUrl,
     // reject accidental transmission of the stored bearer to the overridden arbitrary origin.
-    if (stored.apiUrl && normalizeOrigin(stored.apiUrl) !== envOrigin && !matchingProfile) {
+    // VERIFY-E-001: a legacy/hand-edited file may LACK apiUrl — its credentials were
+    // minted against the default API origin, so the guard binds them to it rather
+    // than skipping the check entirely.
+    const storedOrigin = normalizeOrigin(stored.apiUrl ?? DEFAULT_API_URL)
+    if (storedOrigin !== envOrigin && !matchingProfile) {
       return {
         apiKey: undefined,
         credentialKind: "none",

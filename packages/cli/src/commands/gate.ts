@@ -36,11 +36,14 @@ export async function handleGate(args: string[], output: Output): Promise<number
     return 2
   }
 
-  const { base, head } = resolveDiffRange(
-    parsed.staged,
-    parsed.base as string,
-    parsed.head as string
-  )
+  let diffRange: { base: string; head: string }
+  try {
+    diffRange = await resolveDiffRange(parsed.staged, parsed.base as string, parsed.head as string)
+  } catch (err) {
+    output.error(err instanceof Error ? err.message : String(err))
+    return 2
+  }
+  const { base, head } = diffRange
 
   let hadError = false
 
@@ -268,7 +271,11 @@ async function runVerdictGate(
       )
     }
 
-    return state === "READY" && applicable ? 0 : state === "NOT_READY" && applicable ? 1 : 2
+    // VERIFY-E-004: a stale READY is not current evidence for this commit —
+    // it must not exit 0. Insufficient-evidence code (2), same as a target
+    // whose coverage does not support a verdict.
+    const readyCurrent = state === "READY" && applicable && !stale
+    return readyCurrent ? 0 : state === "NOT_READY" && applicable ? 1 : 2
   } catch (err) {
     output.error(`Gate verdict unavailable: ${err instanceof Error ? err.message : String(err)}`, 2)
     return 2

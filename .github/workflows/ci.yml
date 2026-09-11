@@ -623,7 +623,10 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/marketing
-          wranglerVersion: "4"
+          # VULN-H-002: no wranglerVersion — the action uses the wrangler
+          # resolved by pnpm-lock.yaml (4.125.0), which the frozen lockfile
+          # and minimumReleaseAge already vet. A floating major would hand
+          # the production Cloudflare token to whatever 4.x is newest.
           command: |
             d1 migrations apply lyrashield-marketing-waitlist --remote --config dist/server/wrangler.json
             deploy --config dist/server/wrangler.json

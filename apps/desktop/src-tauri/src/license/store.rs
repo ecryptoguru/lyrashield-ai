@@ -23,6 +23,7 @@ pub fn save_license(file: &LicenseFile, license_id: &str, blob: &str) -> Result<
         license: file.clone(),
         blob: blob.to_string(),
         last_server_verified_at: Some(chrono::Utc::now().to_rfc3339()),
+        revalidation_receipt: None,
     };
     save_stored(&stored)
 }
@@ -79,6 +80,7 @@ pub fn load_license() -> Result<Option<StoredLicense>, String> {
             license: file,
             blob: String::new(),
             last_server_verified_at: None,
+            revalidation_receipt: None,
         }));
     }
     Err("failed to parse license: unknown format".into())

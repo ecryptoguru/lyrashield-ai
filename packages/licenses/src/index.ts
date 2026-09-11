@@ -1,4 +1,11 @@
-export { signLicense, canonicalJSON, signingBytes, loadPublicKey, encodeLicenseBlob } from "./sign"
+export {
+  signLicense,
+  signRevalidationReceipt,
+  canonicalJSON,
+  signingBytes,
+  loadPublicKey,
+  encodeLicenseBlob,
+} from "./sign"
 
 export { verifyLicense, isBuildInstallable } from "./verify"
 
@@ -9,4 +16,6 @@ export type {
   LicenseSigningInput,
   LicenseVerificationResult,
   LicenseBlob,
+  LicenseRevalidationReceipt,
+  LicenseRevalidationReceiptPayload,
 } from "./types"

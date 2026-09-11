@@ -59,6 +59,10 @@ afterEach(async () => {
   vi.clearAllMocks()
 })
 
+// Registry plugin locations are scope-anchored and resolved under a
+// containment check (VERIFY-E-006): global entries live under $HOME, project
+// entries under the project cwd. Fixture agents use project scope with an
+// explicit cwd so tests never touch the real home directory.
 function makeAgent(pluginPath: string): AgentEntry {
   return {
     id: "test-agent-plugin",
@@ -70,7 +74,7 @@ function makeAgent(pluginPath: string): AgentEntry {
     locations: [],
     pluginLocations: [
       {
-        scope: "global",
+        scope: "project",
         path: pluginPath,
         sharedByConvention: false,
       },
@@ -131,10 +135,10 @@ describe("installAgentPlugin", () => {
 
   it("copies the canonical plugin directory to the destination with --yes", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
-    const result = await installAgentPlugin({ agent, yes: true })
+    const result = await installAgentPlugin({ agent, cwd: tempDir, yes: true })
     expect(result.outcome).toBe("CONFIGURED")
     expect(result.path).toBe(dest)
 
@@ -156,10 +160,10 @@ describe("installAgentPlugin", () => {
   it("fails when no credentials are available", async () => {
     delete process.env.LYRASHIELD_API_KEY
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
-    const result = await installAgentPlugin({ agent, yes: true })
+    const result = await installAgentPlugin({ agent, cwd: tempDir, yes: true })
     expect(result.outcome).toBe("MANUAL_REQUIRED")
     expect(result.message).toContain("lyrashield login")
 
@@ -169,10 +173,10 @@ describe("installAgentPlugin", () => {
   it("installs a remote OAuth plugin before client authentication", async () => {
     delete process.env.LYRASHIELD_API_KEY
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent: AgentEntry = { ...makeAgent(dest), transports: ["remote-http"] }
 
-    const result = await installAgentPlugin({ agent })
+    const result = await installAgentPlugin({ agent, cwd: tempDir })
     expect(result.outcome).toBe("CONFIGURED")
     await expect(access(path.join(dest, "plugin.json"))).resolves.toBeUndefined()
 
@@ -181,10 +185,10 @@ describe("installAgentPlugin", () => {
 
   it("dry-run does not write files", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
-    const result = await installAgentPlugin({ agent, dryRun: true })
+    const result = await installAgentPlugin({ agent, cwd: tempDir, dryRun: true })
     expect(result.outcome).toBe("CONFIGURED")
     expect(result.message).toContain("Would copy")
 
@@ -195,10 +199,10 @@ describe("installAgentPlugin", () => {
 
   it("installs to a fresh destination without --yes", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
-    const result = await installAgentPlugin({ agent })
+    const result = await installAgentPlugin({ agent, cwd: tempDir })
     expect(result.outcome).toBe("CONFIGURED")
     expect(result.path).toBe(dest)
 
@@ -209,7 +213,7 @@ describe("installAgentPlugin", () => {
 
   it("preserves existing install on copy failure and restores backup", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
     // Simulate an existing install with user customizations
@@ -219,7 +223,7 @@ describe("installAgentPlugin", () => {
     // Point getPluginDir to a non-existent source so `cp` fails.
     mockedGetPluginDir.mockReturnValue(path.join(tempDir, "nonexistent-source"))
 
-    const result = await installAgentPlugin({ agent, yes: true })
+    const result = await installAgentPlugin({ agent, cwd: tempDir, yes: true })
     expect(result.outcome).toBe("FAILED")
     expect(result.message).toContain("Plugin copy failed")
 
@@ -232,14 +236,14 @@ describe("installAgentPlugin", () => {
 
   it("overwrites existing install and removes backup on success", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
     // Simulate an existing install with user customizations
     await mkdir(dest, { recursive: true })
     await writeFile(path.join(dest, "user-custom.txt"), "user data", "utf-8")
 
-    const result = await installAgentPlugin({ agent, yes: true })
+    const result = await installAgentPlugin({ agent, cwd: tempDir, yes: true })
     expect(result.outcome).toBe("CONFIGURED")
 
     // The new plugin files should be present
@@ -280,7 +284,7 @@ describe("uninstallAgentPlugin", () => {
 
   it("does not delete a client-managed marketplace or MCP install", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = {
       ...makeAgent(dest),
       manualInstructions: "Install through the client marketplace.",
@@ -288,7 +292,7 @@ describe("uninstallAgentPlugin", () => {
     await mkdir(dest, { recursive: true })
     await writeFile(path.join(dest, "client-owned.txt"), "keep", "utf-8")
 
-    const result = await uninstallAgentPlugin({ agent })
+    const result = await uninstallAgentPlugin({ agent, cwd: tempDir })
     expect(result.outcome).toBe("MANUAL_REQUIRED")
     await expect(access(path.join(dest, "client-owned.txt"))).resolves.toBeUndefined()
 
@@ -297,11 +301,11 @@ describe("uninstallAgentPlugin", () => {
 
   it("removes the plugin directory", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
-    await installAgentPlugin({ agent, yes: true })
-    const result = await uninstallAgentPlugin({ agent })
+    await installAgentPlugin({ agent, cwd: tempDir, yes: true })
+    const result = await uninstallAgentPlugin({ agent, cwd: tempDir })
     expect(result.outcome).toBe("CONFIGURED")
     expect(result.message).toContain("Plugin removed")
 
@@ -310,13 +314,38 @@ describe("uninstallAgentPlugin", () => {
 
   it("reports already-configured when plugin is not present", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "lyrashield")
+    const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
-    const result = await uninstallAgentPlugin({ agent })
+    const result = await uninstallAgentPlugin({ agent, cwd: tempDir })
     expect(result.outcome).toBe("ALREADY_CONFIGURED")
     expect(result.message).toContain("not present")
 
     await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it("refuses to delete a path that escapes the project scope root (VERIFY-E-006)", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
+    // An attacker-influenced registry entry would resolve outside cwd —
+    // containment must refuse before rm -r runs.
+    const outside = await mkdtemp(path.join(tmpdir(), "lyra-plugin-outside-"))
+    const victim = path.join(outside, "victim", "keep.txt")
+    await mkdir(path.dirname(victim), { recursive: true })
+    await writeFile(victim, "keep", "utf-8")
+
+    const agent = makeAgent("../outside-scope")
+    const result = await uninstallAgentPlugin({ agent, cwd: tempDir })
+    expect(result.outcome).toBe("FAILED")
+    expect(result.message).toContain("outside its scope root")
+
+    // A depth-1 destination (e.g. the project root's direct child at scale,
+    // or worse "~/.config" under global scope) is never an rm -r target.
+    const shallow = makeAgent("top-level-only")
+    const shallowResult = await uninstallAgentPlugin({ agent: shallow, cwd: tempDir })
+    expect(shallowResult.outcome).toBe("FAILED")
+
+    await expect(access(victim)).resolves.toBeUndefined()
+    await rm(tempDir, { recursive: true, force: true })
+    await rm(outside, { recursive: true, force: true })
   })
 })

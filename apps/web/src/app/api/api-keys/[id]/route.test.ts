@@ -7,6 +7,9 @@ vi.mock("@lyrashield/db", () => ({
 const requireWorkspaceAccess = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
   requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
+  assertBrowserSession: (session: { apiKey?: unknown; oauth?: unknown }) => {
+    if (session.apiKey || session.oauth) throw new Error("FORBIDDEN")
+  },
 }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
@@ -53,6 +56,19 @@ describe("DELETE /api/api-keys/[id]", () => {
   it("rejects API-key-authenticated callers", async () => {
     requireWorkspaceAccess.mockResolvedValue({
       session: { userId: "user-1", apiKey: { keyId: "k", workspaceId: "ws-1", scopes: ["write"] } },
+      workspace: { role: "ADMIN" },
+    })
+    const res = await call()
+    expect(res.status).toBe(403)
+    expect(revokeApiKey).not.toHaveBeenCalled()
+  })
+
+  it("rejects OAuth-authenticated callers — revocation is browser-only", async () => {
+    requireWorkspaceAccess.mockResolvedValue({
+      session: {
+        userId: "user-1",
+        oauth: { userId: "user-1", workspaceId: "ws-1", scopes: ["lyrashield.write"] },
+      },
       workspace: { role: "ADMIN" },
     })
     const res = await call()

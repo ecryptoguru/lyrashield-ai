@@ -5,10 +5,14 @@ vi.mock("next/headers", () => ({
   headers: () => Promise.resolve(new Headers()),
 }))
 
+const updateSessionMock = vi.fn()
 const requireWorkspaceAccess = vi.hoisted(() => vi.fn())
 vi.mock("@lyrashield/auth/server", () => ({
   requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
-  auth: { api: { updateSession: vi.fn() } },
+  assertBrowserSession: (session: { apiKey?: unknown; oauth?: unknown }) => {
+    if (session.apiKey || session.oauth) throw new Error("FORBIDDEN")
+  },
+  auth: { api: { updateSession: (...args: unknown[]) => updateSessionMock(...args) } },
 }))
 
 import { POST } from "./route"
@@ -16,12 +20,14 @@ import { POST } from "./route"
 function makeRequest({
   workspaceId = "workspace-1",
   apiKey,
+  oauth,
 }: {
   workspaceId?: string
   apiKey?: { keyId: string; workspaceId: string; scopes: string[] }
+  oauth?: { userId: string; workspaceId: string; scopes: string[] }
 } = {}) {
   requireWorkspaceAccess.mockResolvedValue({
-    session: { userId: "user-1", apiKey },
+    session: { userId: "user-1", apiKey, oauth },
     workspace: { role: "MEMBER" },
   })
   return new Request("http://localhost/api/workspaces/active", {
@@ -40,21 +46,38 @@ describe("POST /api/workspaces/active", () => {
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.data).toMatchObject({ workspaceId: "workspace-1" })
+    expect(updateSessionMock).toHaveBeenCalled()
   })
 
-  it("blocks a read-only API key from setting the active workspace", async () => {
+  it("rejects a read-only API key — workspace switching is browser-only", async () => {
     const response = await POST(
       makeRequest({ apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read"] } })
     )
     expect(response.status).toBe(403)
+    expect(updateSessionMock).not.toHaveBeenCalled()
   })
 
-  it("allows a write-scope API key to set the active workspace", async () => {
+  it("rejects a write-scope API key — a bound credential has exactly one workspace", async () => {
     const response = await POST(
       makeRequest({
         apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read", "write"] },
       })
     )
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(403)
+    expect(updateSessionMock).not.toHaveBeenCalled()
+  })
+
+  it("rejects an OAuth session regardless of scope", async () => {
+    const response = await POST(
+      makeRequest({
+        oauth: {
+          userId: "user-1",
+          workspaceId: "workspace-1",
+          scopes: ["lyrashield.read", "lyrashield.write"],
+        },
+      })
+    )
+    expect(response.status).toBe(403)
+    expect(updateSessionMock).not.toHaveBeenCalled()
   })
 })

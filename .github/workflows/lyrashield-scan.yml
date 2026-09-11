@@ -146,6 +146,7 @@ jobs:
           SEVERITY: ${{ steps.diff.outputs.fail_on_severity }}
         run: |
           VULN_FOUND=0
+          SCANNER_ERROR=0
 
           # Check package-lock.json/pnpm-lock.yaml if changed
           if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -qE '(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)'; then
@@ -153,7 +154,16 @@ jobs:
             if [ -f "package-lock.json" ]; then
               npm audit --audit-level="${SEVERITY,,}" --json > audit_result.json 2>/dev/null || VULN_FOUND=1
             elif [ -f "pnpm-lock.yaml" ]; then
-              npx pnpm audit --audit-level="${SEVERITY,,}" --json > audit_result.json 2>/dev/null || VULN_FOUND=1
+              # VULN-H-004: `npx pnpm` fetches the latest pnpm from npm and
+              # executes it in every adopting repo's CI. Install an exact pin
+              # instead — the version is ours, not the PR's packageManager
+              # field (corepack would honor the PR-controlled value).
+              if ! npm install --global --no-audit --no-fund pnpm@12.2.0 >/dev/null 2>&1; then
+                echo "::error::Failed to install pinned pnpm — cannot audit pnpm-lock.yaml"
+                SCANNER_ERROR=1
+              else
+                pnpm audit --audit-level="${SEVERITY,,}" --json > audit_result.json 2>/dev/null || VULN_FOUND=1
+              fi
             fi
           fi
 
@@ -166,16 +176,24 @@ jobs:
           #   1. safety ran and found nothing            -> VULN_FOUND=0
           #   2. safety ran and found vulnerabilities     -> VULN_FOUND=1
           #   3. safety could not run at all               -> SCANNER_ERROR=1 (job fails)
-          SCANNER_ERROR=0
           if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -qE '(requirements\.txt|Pipfile|pyproject\.toml)'; then
             echo "Python dependency file changed — checking for known vulnerabilities"
             if [ -f "requirements.txt" ]; then
-              if ! pip install --quiet safety; then
+              # VULN-H-004: exact-pinned scanner — an unpinned PyPI install
+              # executes the newest release in the consumer's CI.
+              if ! pip install --quiet "safety==3.8.1"; then
                 echo "::error::Failed to install 'safety' scanner — cannot verify Python dependencies are safe"
                 SCANNER_ERROR=1
               else
+                # VERIFY-E-005: requirements.txt is PR-controlled. Pip-style
+                # directive lines (-r, -e, --index-url, --find-links, VCS/URL
+                # direct refs) could redirect the scanner's own resolution;
+                # strip them so only bare requirement lines reach safety.
+                scrubbed_requirements="$RUNNER_TEMP/requirements-safety.txt"
+                grep -vE '^[[:space:]]*(-|--|#)' requirements.txt \
+                  | grep -vE '://' > "$scrubbed_requirements" || true
                 set +e
-                safety check --file requirements.txt --json > safety_result.json 2>safety_stderr.log
+                safety check --file "$scrubbed_requirements" --json > safety_result.json 2>safety_stderr.log
                 SAFETY_EXIT=$?
                 set -e
                 if [ "$SAFETY_EXIT" -eq 0 ]; then

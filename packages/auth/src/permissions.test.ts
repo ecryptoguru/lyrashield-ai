@@ -105,3 +105,13 @@ describe("automatic operational access for every member role", () => {
     }
   })
 })
+
+describe("scorecard publishing authority", () => {
+  it("grants scorecard:publish only to publisher roles", () => {
+    for (const role of ALL_ROLES) {
+      expect(hasPermission(role, PERMISSIONS.scorecard.publish), `${role}`).toBe(
+        ["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"].includes(role)
+      )
+    }
+  })
+})

@@ -2,26 +2,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({ createScorecardShare: vi.fn() }))
 
-const requireWorkspaceAccess = vi.hoisted(() => vi.fn())
+const requirePermission = vi.hoisted(() => vi.fn())
 vi.mock("@lyrashield/auth/server", () => ({
-  requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
+  requirePermission: (...args: unknown[]) => requirePermission(...args),
+}))
+vi.mock("@lyrashield/auth", () => ({
+  PERMISSIONS: { scorecard: { publish: "scorecard:publish" } },
 }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { createScorecardShare } from "@lyrashield/db"
 import { POST } from "./route"
 
-function makeRequest({
-  workspaceId = "workspace-1",
-  role = "OWNER",
-  apiKey,
-}: {
-  workspaceId?: string
-  role?: string
-  apiKey?: { keyId: string; workspaceId: string; scopes: string[] }
-} = {}) {
-  requireWorkspaceAccess.mockResolvedValue({
-    session: { userId: "user-1", apiKey },
+function makeRequest({ workspaceId = "workspace-1", role = "OWNER" } = {}) {
+  requirePermission.mockResolvedValue({
+    session: { userId: "user-1" },
     workspace: { role },
   })
   return new Request("http://localhost/api/targets/target-1/scorecard", {
@@ -33,6 +28,22 @@ function makeRequest({
 describe("POST target scorecard", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it("authorizes publishing through the scorecard:publish permission", async () => {
+    vi.mocked(createScorecardShare).mockResolvedValue({
+      share: { id: "share-1", slug: "SLUG", publicPayload: { resolvedFindings: 1 }, viewCount: 0 },
+      referralCode: "12345678",
+      shareHandoffs: 0,
+      referredSignups: 0,
+    } as never)
+
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ id: "target-1" }),
+    })
+
+    expect(requirePermission).toHaveBeenCalledWith("workspace-1", "scorecard:publish")
+    expect(response.status).toBe(201)
   })
 
   it("returns persisted counters when publishing an existing share", async () => {
@@ -47,28 +58,14 @@ describe("POST target scorecard", () => {
     expect(body.data).toMatchObject({ views: 12, shareHandoffs: 7, referredSignups: 3 })
   })
 
-  it("allows a write-scope API key to publish a scorecard", async () => {
-    vi.mocked(createScorecardShare).mockResolvedValue({
-      share: { id: "share-1", slug: "SLUG", publicPayload: { resolvedFindings: 1 }, viewCount: 0 },
-      referralCode: "12345678",
-      shareHandoffs: 0,
-      referredSignups: 0,
-    } as never)
-    const response = await POST(
-      makeRequest({
-        apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read", "write"] },
-      }),
-      { params: Promise.resolve({ id: "target-1" }) }
-    )
-    expect(response.status).toBe(201)
-    expect(createScorecardShare).toHaveBeenCalled()
-  })
+  it("returns 403 when authorization fails (non-publisher role or insufficient credential scope)", async () => {
+    const request = makeRequest()
+    requirePermission.mockRejectedValue(new Error("FORBIDDEN"))
 
-  it("blocks a read-only API key from publishing a scorecard", async () => {
-    const response = await POST(
-      makeRequest({ apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read"] } }),
-      { params: Promise.resolve({ id: "target-1" }) }
-    )
+    const response = await POST(request, {
+      params: Promise.resolve({ id: "target-1" }),
+    })
+
     expect(response.status).toBe(403)
     expect(createScorecardShare).not.toHaveBeenCalled()
   })

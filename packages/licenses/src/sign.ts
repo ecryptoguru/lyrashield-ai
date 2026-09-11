@@ -12,7 +12,13 @@
  */
 
 import { createPrivateKey, createPublicKey, sign, KeyObject } from "node:crypto"
-import type { LicenseFile, LicensePayload, LicenseSigningInput } from "./types"
+import type {
+  LicenseFile,
+  LicensePayload,
+  LicenseRevalidationReceipt,
+  LicenseRevalidationReceiptPayload,
+  LicenseSigningInput,
+} from "./types"
 
 /**
  * Produce a deterministic JSON string for signing.
@@ -42,7 +48,9 @@ export function canonicalJSON(value: unknown): string {
 }
 
 /** The exact bytes that the ed25519 signature covers. */
-export function signingBytes(payload: LicenseSigningInput): Buffer {
+export function signingBytes(
+  payload: LicenseSigningInput | LicenseRevalidationReceiptPayload
+): Buffer {
   return Buffer.from(canonicalJSON(payload), "utf8")
 }
 
@@ -84,6 +92,18 @@ export function signLicense(
     signature: signature.toString("base64"),
     issuedAt: new Date().toISOString(),
   }
+}
+
+/** Sign a bounded offline-grace receipt after a successful server revocation check. */
+export function signRevalidationReceipt(
+  payload: LicenseRevalidationReceiptPayload,
+  privateKeyPem: string,
+  signingKeyId: string
+): LicenseRevalidationReceipt {
+  const privateKey = createPrivateKey({ key: privateKeyPem, format: "pem" })
+  assertEd25519Key(privateKey)
+  const signature = sign(null, signingBytes(payload), privateKey)
+  return { ...payload, signingKeyId, signature: signature.toString("base64") }
 }
 
 /**

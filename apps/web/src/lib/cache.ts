@@ -13,18 +13,30 @@ export const getCachedSession = cache(async () => {
 })
 
 export const getCachedWorkspaceContext = cache(async (userId: string) => {
-  const cookieStore = await cookies()
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId, status: "active" },
-    select: {
-      role: true,
-      workspaceId: true,
-      workspace: {
-        select: { id: true, name: true, slug: true, mode: true, plan: true },
+  const [session, cookieStore] = await Promise.all([getCachedSession(), cookies()])
+  // Fail closed for non-browser resolution: the dashboard only exists behind
+  // an authenticated session, so a missing/mismatched session yields no
+  // workspace rather than a trust decision on stale data.
+  if (!session || session.userId !== userId) {
+    return { workspaceId: null, workspaces: [] }
+  }
+  // A workspace-bound credential (API key or OAuth grant) sees exactly one
+  // workspace — never the client-settable activeWorkspaceId cookie nor the
+  // creator's other memberships. Browser sessions keep full selection.
+  const boundWorkspaceId = session.apiKey?.workspaceId ?? session.oauth?.workspaceId ?? null
+  const memberships = (
+    await prisma.workspaceMember.findMany({
+      where: { userId, status: "active" },
+      select: {
+        role: true,
+        workspaceId: true,
+        workspace: {
+          select: { id: true, name: true, slug: true, mode: true, plan: true },
+        },
       },
-    },
-    orderBy: { createdAt: "asc" },
-  })
+      orderBy: { createdAt: "asc" },
+    })
+  ).filter((membership) => boundWorkspaceId === null || membership.workspaceId === boundWorkspaceId)
   const workspaceId = selectActiveWorkspaceId(
     memberships,
     cookieStore.get("activeWorkspaceId")?.value

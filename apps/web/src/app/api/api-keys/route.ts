@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { createApiKey, listApiKeys, prisma, API_KEY_SCOPES } from "@lyrashield/db"
-import { requireWorkspaceAccess } from "@lyrashield/auth/server"
+import { assertBrowserSession, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
@@ -10,8 +10,9 @@ import { z } from "zod"
  * Workspace API keys (for the MCP server, CLI, and CI).
  *
  * Management requires an ADMIN+ browser session — API keys cannot mint or
- * list other API keys (no self-propagation), which is why both handlers
- * reject key-authenticated callers explicitly.
+ * list other API keys (no self-propagation), and delegated OAuth grants are
+ * never allowed to mint a durable credential with different scope. Both
+ * handlers reject credential-authenticated callers explicitly.
  */
 
 export async function GET(request: Request) {
@@ -23,9 +24,7 @@ export async function GET(request: Request) {
     }
 
     const { session } = await requireWorkspaceAccess(workspaceId, "ADMIN")
-    if (session.apiKey) {
-      return apiError("FORBIDDEN", "API keys cannot manage API keys", 403)
-    }
+    assertBrowserSession(session)
 
     const keys = await listApiKeys(workspaceId)
     return apiSuccess(keys)
@@ -54,9 +53,7 @@ async function post(request: Request) {
     const { workspaceId, name, scopes, expiresAt } = parsed.data
 
     const { session } = await requireWorkspaceAccess(workspaceId, "ADMIN")
-    if (session.apiKey) {
-      return apiError("FORBIDDEN", "API keys cannot manage API keys", 403)
-    }
+    assertBrowserSession(session)
 
     const created = await createApiKey({
       workspaceId,

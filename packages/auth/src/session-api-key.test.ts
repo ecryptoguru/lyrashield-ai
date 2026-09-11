@@ -26,10 +26,12 @@ vi.mock("@lyrashield/db", async () => ({
 }))
 
 import {
+  assertBrowserSession,
   assertOAuthDelegatedScope,
   getSession,
   requireWorkspaceAccess,
   requirePermission,
+  type AuthSession,
 } from "./session"
 
 function withHeaders(map: Record<string, string>) {
@@ -161,6 +163,104 @@ describe("API key bearer auth", () => {
     stubMembership("OWNER")
 
     await expect(requirePermission("ws-1", "scan:create")).resolves.toBeTruthy()
+  })
+})
+
+describe("browser-only boundary (assertBrowserSession)", () => {
+  const browser = { userId: "user-1" } as AuthSession
+  const apiKeySession = {
+    userId: "user-1",
+    apiKey: { keyId: "key-1", workspaceId: "ws-1", scopes: ["read", "write"], prefix: "lsk_x" },
+  } as unknown as AuthSession
+  const oauthSession = {
+    userId: "user-1",
+    oauth: {
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+    },
+  } as unknown as AuthSession
+
+  it("passes for a browser session", () => {
+    expect(() => assertBrowserSession(browser)).not.toThrow()
+  })
+
+  it("rejects API-key sessions", () => {
+    expect(() => assertBrowserSession(apiKeySession)).toThrow("FORBIDDEN")
+  })
+
+  it("rejects OAuth sessions, including write-scoped ones", () => {
+    expect(() => assertBrowserSession(oauthSession)).toThrow("FORBIDDEN")
+  })
+})
+
+describe("scorecard:publish via requirePermission", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getSessionApi.mockResolvedValue(null)
+    vi.mocked(verifyOAuthBearer).mockResolvedValue(null)
+  })
+
+  it("allows a write-scope API key held by a publisher role", async () => {
+    withHeaders({ authorization: `Bearer ${RAW_KEY}` })
+    stubVerifiedKey({ scopes: ["read", "write"] })
+    stubMembership("ADMIN")
+
+    await expect(requirePermission("ws-1", "scorecard:publish")).resolves.toBeTruthy()
+  })
+
+  it("rejects a read-only API key", async () => {
+    withHeaders({ authorization: `Bearer ${RAW_KEY}` })
+    stubVerifiedKey({ scopes: ["read"] })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "scorecard:publish")).rejects.toThrow("FORBIDDEN")
+  })
+
+  it("allows a non-delegated OAuth token with lyrashield.write", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+    })
+    stubMembership("SECURITY_ADMIN")
+
+    await expect(requirePermission("ws-1", "scorecard:publish")).resolves.toBeTruthy()
+  })
+
+  it("rejects a read-only OAuth token", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read"],
+    })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "scorecard:publish")).rejects.toThrow("FORBIDDEN")
+  })
+
+  it("rejects a delegated connection even with write scope (no canonical operation)", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.create"],
+    })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "scorecard:publish")).rejects.toThrow("FORBIDDEN")
+  })
+
+  it("rejects non-publisher roles regardless of credential scope", async () => {
+    withHeaders({ authorization: `Bearer ${RAW_KEY}` })
+    stubVerifiedKey({ scopes: ["read", "write"] })
+    stubMembership("DEVELOPER")
+
+    await expect(requirePermission("ws-1", "scorecard:publish")).rejects.toThrow("FORBIDDEN")
   })
 })
 

@@ -12,6 +12,11 @@ import { isReferralSource } from "../../../../lib/scorecard-sharing"
 async function post(request: NextRequest) {
   const session = await getSession()
   if (!session) return apiError("UNAUTHORIZED", "Authentication required", 401)
+  // Referral attribution is account-owned browser state — workspace-bound
+  // credentials must never write it.
+  if (session.apiKey || session.oauth) {
+    return apiError("FORBIDDEN", "You do not have permission to perform this action", 403)
+  }
   const cookieStore = await cookies()
   const code = cookieStore.get("ls_ref")?.value
   if (!code) return apiSuccess({ attributed: false })

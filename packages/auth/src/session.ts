@@ -343,6 +343,20 @@ export async function requireWorkspaceAccess(
   return { session, workspace: ctx }
 }
 
+/**
+ * Browser-only surfaces reject both workspace credential types outright.
+ * `requireWorkspaceAccess` binds them to one workspace — these operations
+ * (credential lifecycle, affiliate payouts, user-scope mutations like
+ * onboarding state, notification preferences, and invitation acceptance) are
+ * account-owned browser activity that must never be delegated to an `lsk_`
+ * key or an OAuth grant.
+ */
+export function assertBrowserSession(session: AuthSession): void {
+  if (session.apiKey || session.oauth) {
+    throw new Error("FORBIDDEN")
+  }
+}
+
 export async function requirePermission(
   workspaceId: string,
   permission: Permission

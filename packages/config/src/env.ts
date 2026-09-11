@@ -82,9 +82,9 @@ const envSchema = z
     // MCP / Agent Action Layer
     LYRASHIELD_API_URL: z.string().url().optional().or(z.literal("")),
     LYRASHIELD_API_KEY: z.string().optional().or(z.literal("")),
-    // Fail-closed opt-outs for the MCP human-approval gate. Only enable in trusted CI contexts.
-    LYRASHIELD_MCP_ALLOW_MUTATIONS: z.enum(["true", "false"]).optional().or(z.literal("")),
-    LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS: z.enum(["true", "false"]).optional().or(z.literal("")),
+    // Mutation gating is code-driven (allowMutations options), never env-
+    // driven — an env var that looked like a mutation gate but did nothing
+    // was removed (VERIFY-I-005).
 
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
@@ -454,6 +454,28 @@ const envSchema = z
       message:
         "LYRASHIELD_EGRESS_PROXY_URL must use https:// in production — the proxy is authenticated " +
         "with the LYRASHIELD_EGRESS_PROXY_SECRET bearer token, which an http:// URL would send in cleartext",
+    }
+  )
+  // VULN-I-001: `secureCookies`/session `Secure` flags derive from the
+  // BETTER_AUTH_URL scheme — a production typo (`http://...`) silently ships
+  // session cookies transmittable over plaintext. Require https in
+  // production; loopback http stays allowed for local prod-mode runs.
+  .refine(
+    (val) => {
+      if (val.NODE_ENV !== "production") return true
+      try {
+        const url = new URL(val.BETTER_AUTH_URL)
+        if (url.protocol === "https:") return true
+        const host = url.hostname
+        return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]"
+      } catch {
+        return false
+      }
+    },
+    {
+      path: ["BETTER_AUTH_URL"],
+      message:
+        "BETTER_AUTH_URL must use https:// in production (loopback http excepted) — an http:// origin ships session cookies without the Secure flag",
     }
   )
   // Claiming to verify email addresses without a way to send the mail is worse than not

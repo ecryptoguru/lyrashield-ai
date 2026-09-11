@@ -50,6 +50,19 @@ async function patch(request: Request) {
         { status: 401 }
       )
     }
+    // Notification preferences are account-owned browser state.
+    if (session.apiKey || session.oauth) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "You do not have permission to perform this action",
+          },
+        },
+        { status: 403 }
+      )
+    }
 
     let body: unknown
     try {

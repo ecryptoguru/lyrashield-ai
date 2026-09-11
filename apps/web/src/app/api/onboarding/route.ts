@@ -52,6 +52,21 @@ async function patch(request: Request) {
         { status: 401 }
       )
     }
+    // Onboarding state is account-owned browser activity — workspace-bound
+    // credentials (API key, OAuth grant) must never move another surface's
+    // onboarding progress.
+    if (session.apiKey || session.oauth) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "You do not have permission to perform this action",
+          },
+        },
+        { status: 403 }
+      )
+    }
 
     let body: unknown
     try {

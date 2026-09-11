@@ -5,8 +5,98 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::process::{Child, Command};
+
+// VULN-F-002: engine stdout/stderr is untrusted output — a hostile scan
+// target can drive arbitrary bytes. `BufReader::lines()` buffers each line
+// unbounded and every line was persisted + emitted, so one no-newline line
+// could OOM the process and a line flood could fill the event table. Bound
+// per-line length, per-stream total bytes, and event count; an engine that
+// exceeds the budget is hostile or malfunctioning and gets killed.
+const MAX_STREAM_BYTES: usize = 32 * 1024 * 1024;
+const MAX_LINE_BYTES: usize = 64 * 1024;
+const MAX_STREAM_EVENTS: usize = 50_000;
+
+#[derive(Default)]
+struct StreamReadState {
+    total_bytes: usize,
+    exhausted: bool,
+    pending: Vec<u8>,
+    line_truncated: bool,
+}
+
+/// Read one newline-terminated line bounded by MAX_LINE_BYTES and a running
+/// per-stream byte total. Returns Ok(None) at clean EOF or once the stream
+/// budget is exhausted (flagged via `state.exhausted` so the caller can kill
+/// the still-writing child instead of letting it block on a full pipe).
+async fn next_bounded_line<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+    state: &mut StreamReadState,
+) -> Result<Option<String>, String> {
+    loop {
+        if state.exhausted || state.total_bytes >= MAX_STREAM_BYTES {
+            state.exhausted = true;
+            if !state.pending.is_empty() {
+                let bytes = std::mem::take(&mut state.pending);
+                let mut text = String::from_utf8_lossy(&bytes).to_string();
+                text.push_str("…[truncated]");
+                state.line_truncated = false;
+                return Ok(Some(text));
+            }
+            return Ok(None);
+        }
+        let avail = reader
+            .fill_buf()
+            .await
+            .map_err(|e| format!("engine stream read failed: {}", e))?;
+        if avail.is_empty() {
+            if state.pending.is_empty() && !state.line_truncated {
+                return Ok(None);
+            }
+            let bytes = std::mem::take(&mut state.pending);
+            let mut text = String::from_utf8_lossy(&bytes).to_string();
+            if state.line_truncated {
+                text.push_str("…[truncated]");
+                state.line_truncated = false;
+            }
+            if text.ends_with('\r') {
+                text.pop();
+            }
+            return Ok(Some(text));
+        }
+        let remaining = MAX_STREAM_BYTES - state.total_bytes;
+        let take = avail.len().min(remaining);
+        let slice = &avail[..take];
+        let newline = slice.iter().position(|b| *b == b'\n');
+        let data_len = newline.unwrap_or(slice.len());
+        let consume_len = newline.map(|n| n + 1).unwrap_or(slice.len());
+        let room = MAX_LINE_BYTES.saturating_sub(state.pending.len());
+        if data_len > room {
+            state.pending.extend_from_slice(&slice[..room]);
+            state.line_truncated = true;
+        } else {
+            state.pending.extend_from_slice(&slice[..data_len]);
+        }
+        reader.consume(consume_len);
+        state.total_bytes += consume_len;
+        if newline.is_some() {
+            let mut bytes = std::mem::take(&mut state.pending);
+            if bytes.last() == Some(&b'\r') {
+                bytes.pop();
+            }
+            let mut text = String::from_utf8_lossy(&bytes).to_string();
+            if state.line_truncated {
+                text.push_str("…[truncated]");
+                state.line_truncated = false;
+            }
+            return Ok(Some(text));
+        }
+        if state.total_bytes >= MAX_STREAM_BYTES {
+            state.exhausted = true;
+        }
+    }
+}
 
 static CHILDREN: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<Child>>>>> = OnceLock::new();
 
@@ -431,15 +521,40 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
         return Ok(());
     }
 
+    // Kill-signal channel: a stream task that trips an output budget cannot
+    // kill the child itself — `wait()` already holds the child mutex, so a
+    // competing `kill()` would deadlock. The main flow owns the guard and
+    // kills the engine on signal instead.
+    let (kill_tx, mut kill_rx) = tokio::sync::mpsc::channel::<String>(2);
+
     let app_clone = app.clone();
     let scan_id_clone = scan_id.clone();
     let seq_clone = seq.clone();
+    let stdout_kill = kill_tx.clone();
     let stdout_task = tokio::spawn(async move {
-        let reader = BufReader::new(stdout);
-        let mut lines = reader.lines();
+        let mut reader = BufReader::with_capacity(MAX_LINE_BYTES, stdout);
+        let mut state = StreamReadState::default();
         let mut findings: Vec<Finding> = Vec::new();
         let mut persistence_error: Option<String> = None;
-        while let Ok(Some(line)) = lines.next_line().await {
+        let mut event_count: usize = 0;
+        loop {
+            let line = match next_bounded_line(&mut reader, &mut state).await {
+                Ok(Some(line)) => line,
+                Ok(None) => break,
+                Err(error) => {
+                    let _ = stdout_kill.try_send(error.clone());
+                    return Err(error);
+                }
+            };
+            event_count += 1;
+            if event_count > MAX_STREAM_EVENTS {
+                let error = format!(
+                    "engine exceeded the per-scan event budget ({})",
+                    MAX_STREAM_EVENTS
+                );
+                let _ = stdout_kill.try_send(error.clone());
+                return Err(error);
+            }
             let line = redact_credentials(&line);
             let cur = seq_clone.fetch_add(1, Ordering::SeqCst);
             let progress = ScanEvent::Progress {
@@ -476,6 +591,16 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
                 findings.push(finding);
             }
         }
+        if state.exhausted {
+            // Engine wrote past the output budget — signal the main flow to
+            // kill it rather than leave it blocked on a full pipe.
+            let error = format!(
+                "engine output exceeded the {}-byte stream budget",
+                MAX_STREAM_BYTES
+            );
+            let _ = stdout_kill.try_send(error.clone());
+            return Err(error);
+        }
         if let Some(error) = persistence_error {
             Err(format!("scan persistence failed: {}", error))
         } else {
@@ -486,10 +611,29 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
     let app_clone2 = app.clone();
     let scan_id_clone2 = scan_id.clone();
     let seq_clone2 = seq.clone();
+    let stderr_kill = kill_tx.clone();
     let stderr_task = tokio::spawn(async move {
-        let reader = BufReader::new(stderr);
-        let mut lines = reader.lines();
-        while let Ok(Some(line)) = lines.next_line().await {
+        let mut reader = BufReader::with_capacity(MAX_LINE_BYTES, stderr);
+        let mut state = StreamReadState::default();
+        let mut event_count: usize = 0;
+        loop {
+            let line = match next_bounded_line(&mut reader, &mut state).await {
+                Ok(Some(line)) => line,
+                Ok(None) => break,
+                Err(error) => {
+                    let _ = stderr_kill.try_send(error.clone());
+                    return Err(error);
+                }
+            };
+            event_count += 1;
+            if event_count > MAX_STREAM_EVENTS {
+                let error = format!(
+                    "engine exceeded the per-scan event budget ({})",
+                    MAX_STREAM_EVENTS
+                );
+                let _ = stderr_kill.try_send(error.clone());
+                return Err(error);
+            }
             let line = redact_credentials(&line);
             let cur = seq_clone2.fetch_add(1, Ordering::SeqCst);
             let progress = ScanEvent::Progress {
@@ -500,16 +644,34 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
             crate::scan::store::append_event(&app_clone2, &scan_id_clone2, cur, &progress).await?;
             let _ = app_clone2.emit("scan://progress", &progress);
         }
+        if state.exhausted {
+            let error = format!(
+                "engine output exceeded the {}-byte stream budget",
+                MAX_STREAM_BYTES
+            );
+            let _ = stderr_kill.try_send(error.clone());
+            return Err(error);
+        }
         Ok::<(), String>(())
     });
 
-    // Wait for child with registered handle
+    // Wait for child with registered handle — the guard is held across the
+    // select, so a stream-task kill signal can kill the engine without
+    // competing for the lock.
     let exit_status = {
         let mut guard = child_arc.lock().await;
-        guard
-            .wait()
-            .await
-            .map_err(|e| format!("engine wait failed: {}", e))?
+        tokio::select! {
+            status = guard.wait() => {
+                status.map_err(|e| format!("engine wait failed: {}", e))?
+            }
+            _ = kill_rx.recv() => {
+                let _ = guard.kill().await;
+                guard
+                    .wait()
+                    .await
+                    .map_err(|e| format!("engine wait failed: {}", e))?
+            }
+        }
     };
     // Remove from registry
     {
@@ -751,5 +913,59 @@ mod tests {
         assert!(validate_max_budget_usd(0.0).is_err());
         assert!(validate_max_budget_usd(f64::NAN).is_err());
         assert!(validate_max_budget_usd(101.0).is_err());
+    }
+
+    // VULN-F-002 — bounded engine-output reader (next_bounded_line)
+
+    async fn bounded_lines(input: &[u8]) -> (Vec<String>, bool) {
+        let (_w, r) = tokio::io::duplex(input.len() + 64);
+        use tokio::io::AsyncWriteExt;
+        let mut w = _w;
+        w.write_all(input).await.unwrap();
+        drop(w); // close the write half → clean EOF
+        let mut reader = BufReader::new(r);
+        let mut state = StreamReadState::default();
+        let mut out = Vec::new();
+        while let Some(line) = next_bounded_line(&mut reader, &mut state).await.unwrap() {
+            out.push(line);
+        }
+        (out, state.exhausted)
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_reads_normal_lines() {
+        let (lines, exhausted) = bounded_lines(b"one\ntwo\nthree\n").await;
+        assert_eq!(lines, vec!["one", "two", "three"]);
+        assert!(!exhausted);
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_truncates_giant_line() {
+        let mut input = vec![b'x'; MAX_LINE_BYTES + 10_000];
+        input.extend_from_slice(b"\ntail\n");
+        let (lines, exhausted) = bounded_lines(&input).await;
+        assert!(!exhausted);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].ends_with("…[truncated]"));
+        assert!(lines[0].len() <= MAX_LINE_BYTES + 20);
+        assert_eq!(lines[1], "tail");
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_flags_stream_budget_exhaustion() {
+        // A no-newline flood larger than the stream budget must exhaust the
+        // reader rather than buffer it — the caller then kills the engine.
+        let input = vec![b'y'; MAX_STREAM_BYTES + 1];
+        let (lines, exhausted) = bounded_lines(&input).await;
+        assert!(exhausted);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].ends_with("…[truncated]"));
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_emits_partial_final_line() {
+        let (lines, exhausted) = bounded_lines(b"no-trailing-newline").await;
+        assert!(!exhausted);
+        assert_eq!(lines, vec!["no-trailing-newline"]);
     }
 }

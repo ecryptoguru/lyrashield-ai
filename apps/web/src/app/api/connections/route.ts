@@ -53,6 +53,11 @@ const CreateConnectionSchema = z.object({
   consentState: z.string().min(1).max(2048),
 })
 
+// A delegated grant is a live authorization: bound its lifetime server-side
+// (90 days) so a client cannot park a far-future or never-expiring grant.
+// Renewal is a fresh consent flow, which mints a new bounded connection.
+const MAX_CONNECTION_GRANT_MS = 90 * 24 * 60 * 60 * 1000
+
 async function post(request: Request) {
   try {
     const body: unknown = await request.json().catch(() => null)
@@ -71,6 +76,16 @@ async function post(request: Request) {
       expiresAt,
       consentState,
     } = parsed.data
+
+    const now = Date.now()
+    const grantExpiry = expiresAt ? new Date(expiresAt) : new Date(now + MAX_CONNECTION_GRANT_MS)
+    if (grantExpiry.getTime() <= now || grantExpiry.getTime() > now + MAX_CONNECTION_GRANT_MS) {
+      return apiError(
+        "VALIDATION_ERROR",
+        "expiresAt must be a future timestamp within the maximum grant lifetime (90 days)",
+        400
+      )
+    }
 
     const { session } = await requireBrowserConnectionManager(workspaceId)
 
@@ -169,7 +184,7 @@ async function post(request: Request) {
       allowedTargetIds,
       allTargets,
       allowedProfiles,
-      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+      expiresAt: grantExpiry,
     })
 
     await prisma.auditLog.create({

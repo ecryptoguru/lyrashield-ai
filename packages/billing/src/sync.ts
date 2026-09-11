@@ -52,6 +52,14 @@ export interface SyncSubscriptionParams {
   currentPeriodStart?: Date
   currentPeriodEnd?: Date
   canceledAt?: Date
+  /**
+   * Provider-side occurrence time of this event (Razorpay `created_at`,
+   * Polar entity `modified_at`). Applied monotonically: an out-of-order
+   * signed delivery older than the row's lastEventAt — or one regressing
+   * currentPeriodStart — is skipped so stale events cannot resurrect a
+   * prior cycle's allowance window or flip canceled -> active.
+   */
+  eventOccurredAt?: Date
 }
 
 /**
@@ -73,6 +81,7 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
     currentPeriodStart,
     currentPeriodEnd,
     canceledAt,
+    eventOccurredAt,
   } = params
 
   const cloudPlan = CLOUD_PLAN_MAP[plan]
@@ -158,18 +167,41 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
   // upsert share one scope.
   let attributedWorkspaceId = existing?.workspaceId ?? null
 
-  const runSync = async (tx: ScopedTransaction) => {
+  const runSync = async (tx: ScopedTransaction): Promise<boolean> => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing:${accountId}`}, 0))`
+
+    // Out-of-order guard under the advisory lock: a signed delivery older
+    // than the last applied event — or one regressing the period start —
+    // describes state we have already moved past. Skipping prevents the
+    // stale event from resurrecting a prior cycle's balance window or
+    // flipping canceled -> active.
+    const persisted = await tx.billingAccount.findUnique({
+      where: { provider_externalId: { provider, externalId } },
+      select: { currentPeriodStart: true, lastEventAt: true },
+    })
+    const stale =
+      (eventOccurredAt !== undefined &&
+        persisted?.lastEventAt !== undefined &&
+        persisted.lastEventAt !== null &&
+        eventOccurredAt < persisted.lastEventAt) ||
+      (currentPeriodStart !== undefined &&
+        persisted?.currentPeriodStart !== undefined &&
+        persisted.currentPeriodStart !== null &&
+        currentPeriodStart < persisted.currentPeriodStart)
+    if (stale) return false
+
     await tx.billingAccount.upsert({
       where: { provider_externalId: { provider, externalId } },
       create: {
         ...writeData,
+        lastEventAt: eventOccurredAt ?? null,
         workspaceId: attributedWorkspaceId,
         purchaseWorkspaceId,
         accountId,
       },
       update: {
         ...writeData,
+        lastEventAt: eventOccurredAt ?? undefined,
         currentPeriodStart: currentPeriodStart ?? undefined,
         currentPeriodEnd: currentPeriodEnd ?? undefined,
         canceledAt: canceledAt ?? undefined,
@@ -185,18 +217,57 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
         data: { plan: effectivePlan, deepAllowed },
       })
     }
+    return true
   }
 
   const writeWorkspaceId = attributedWorkspaceId ?? existing?.workspaceId ?? params.workspaceId
+  let applied: boolean
   if (accountId && writeWorkspaceId) {
-    await withWorkspaceRLS(writeWorkspaceId, runSync, { accountId })
+    applied = await withWorkspaceRLS(writeWorkspaceId, runSync, { accountId })
   } else if (accountId) {
-    await withAccountRLS(accountId, runSync)
+    applied = await withAccountRLS(accountId, runSync)
   } else if (writeWorkspaceId) {
-    await withWorkspaceRLS(writeWorkspaceId, runSync)
+    applied = await withWorkspaceRLS(writeWorkspaceId, runSync)
   } else {
     // No account and no workspace: the row cannot be written under RLS.
     throw new Error("subscription_sync_no_scope")
+  }
+
+  if (!applied) {
+    logger.warn("Skipped stale subscription event", {
+      provider,
+      externalId,
+      accountId,
+      eventOccurredAt: eventOccurredAt?.toISOString() ?? null,
+      currentPeriodStart: currentPeriodStart?.toISOString() ?? null,
+    })
+    const staleAuditWorkspaceId =
+      attributedWorkspaceId ?? purchaseWorkspaceId ?? params.workspaceId ?? null
+    if (staleAuditWorkspaceId) {
+      try {
+        await prisma.auditLog.create({
+          data: {
+            workspaceId: staleAuditWorkspaceId,
+            action: "billing.subscription_stale_event",
+            resourceType: "billing_account",
+            resourceId: externalId,
+            metadata: {
+              provider,
+              accountId,
+              eventOccurredAt: eventOccurredAt?.toISOString() ?? null,
+              currentPeriodStart: currentPeriodStart?.toISOString() ?? null,
+            },
+          },
+        })
+      } catch (error) {
+        logger.error("Failed to create audit log", {
+          workspaceId: staleAuditWorkspaceId,
+          action: "billing.subscription_stale_event",
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+    return
   }
 
   const auditWorkspaceId =
@@ -381,7 +452,9 @@ export async function downgradeToFree(identity: DowngradeIdentity, reason: strin
   const apply = async (tx: ScopedTransaction) => {
     await tx.billingAccount.update({
       where: { id: row.id },
-      data: { status: "downgraded", currentPlan: "FREE" },
+      // Participates in the monotonic event clock: a provider delivery that
+      // occurred before this internal decision must not re-activate the row.
+      data: { status: "downgraded", currentPlan: "FREE", lastEventAt: new Date() },
     })
     if (row.workspaceId) {
       await tx.workspace.update({

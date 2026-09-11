@@ -43,6 +43,11 @@ export async function GET(request: Request) {
   }
 }
 
+const DEFAULT_APPROVAL_TTL_MS = 15 * 60 * 1000
+// A pending approval is a live authorization intent: cap its lifetime so a
+// caller cannot park a never-expiring grant in the queue.
+const MAX_APPROVAL_TTL_MS = 24 * 60 * 60 * 1000
+
 async function post(request: Request) {
   let body: unknown
   try {
@@ -70,9 +75,23 @@ async function post(request: Request) {
     if (rate.limited) {
       return apiError("RATE_LIMITED", "Approval creation rate limit exceeded", 429)
     }
-    const expiresAt = typed.expiresAt
-      ? new Date(typed.expiresAt)
-      : new Date(Date.now() + 15 * 60 * 1000)
+    const now = Date.now()
+    let expiresAt = new Date(now + DEFAULT_APPROVAL_TTL_MS)
+    if (typed.expiresAt !== undefined) {
+      const requested = new Date(typed.expiresAt).getTime()
+      if (
+        !Number.isFinite(requested) ||
+        requested <= now ||
+        requested > now + MAX_APPROVAL_TTL_MS
+      ) {
+        return apiError(
+          "VALIDATION_ERROR",
+          "expiresAt must be a future timestamp no more than 24 hours out",
+          400
+        )
+      }
+      expiresAt = new Date(requested)
+    }
     const approval = await createApproval({
       workspaceId: typed.workspaceId,
       actionName: typed.actionName,

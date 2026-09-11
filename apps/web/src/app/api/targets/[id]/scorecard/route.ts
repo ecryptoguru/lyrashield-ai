@@ -1,23 +1,22 @@
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import { createScorecardShare } from "@lyrashield/db"
-import { requireWorkspaceAccess } from "@lyrashield/auth/server"
+import { requirePermission } from "@lyrashield/auth/server"
+import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 
 const Body = z.object({ workspaceId: z.string().min(1) })
-const PUBLISHERS = new Set(["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"])
 
 async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const parsed = Body.safeParse(await request.json())
     if (!parsed.success) return apiError("INVALID_PARAM", "workspaceId is required", 400)
-    const { session, workspace } = await requireWorkspaceAccess(parsed.data.workspaceId)
-    if (session.apiKey && !session.apiKey.scopes.includes("write")) {
-      throw new Error("FORBIDDEN")
-    }
-    if (!PUBLISHERS.has(workspace.role)) throw new Error("FORBIDDEN")
+    const { session } = await requirePermission(
+      parsed.data.workspaceId,
+      PERMISSIONS.scorecard.publish
+    )
     const { id } = await params
     const { share, referralCode, shareHandoffs, referredSignups } = await createScorecardShare(
       id,

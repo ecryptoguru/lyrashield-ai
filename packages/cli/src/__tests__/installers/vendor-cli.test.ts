@@ -10,12 +10,19 @@ vi.mock("node:child_process", () => ({
 const API_URL = "https://app.lyrashieldai.com"
 const API_KEY = "lsk_testkey123"
 
-function fakeVendorAgent(command: string): AgentEntry {
+// VERIFY-E-007: argv is exact-match allowlisted per vendor command — the
+// fixtures use the real registry argvs.
+const VENDOR_ARGV: Record<string, string[]> = {
+  claude: ["mcp", "add"],
+  amp: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.8"],
+}
+
+function fakeVendorAgent(command: string, args?: string[]): AgentEntry {
   return {
     id: `vendor-${command}`,
     displayName: `Vendor ${command}`,
     installStrategy: "vendor-cli",
-    vendorCli: { command, args: ["mcp", "add"] },
+    vendorCli: { command, args: args ?? VENDOR_ARGV[command] ?? ["mcp", "add"] },
     docsSlug: command,
     format: null,
     rootKey: null,
@@ -107,6 +114,19 @@ describe("vendor CLI allowlist", () => {
     expect(result.outcome).toBe("FAILED")
     expect(result.message).toMatch(/exit code 1/)
   })
+
+  it("rejects argv not in the per-command allowlist even for an allowlisted binary", async () => {
+    const result = await installAgent({
+      agent: fakeVendorAgent("claude", ["--dangerously-skip-permissions", "mcp", "add"]),
+      transport: "stdio",
+      apiUrl: API_URL,
+      apiKey: API_KEY,
+    })
+
+    expect(result.outcome).toBe("FAILED")
+    expect(result.message).toMatch(/arguments are not allowlisted/)
+    expect(execFile).not.toHaveBeenCalled()
+  })
 })
 
 it("does not execute an allowlisted vendor CLI during a dry run", async () => {
@@ -121,7 +141,7 @@ it("does not execute an allowlisted vendor CLI during a dry run", async () => {
 
   expect(result).toMatchObject({
     outcome: "DELEGATED",
-    message: "Would run amp mcp add",
+    message: `Would run amp ${VENDOR_ARGV.amp!.join(" ")}`,
   })
   expect(mockedExec).not.toHaveBeenCalled()
 })

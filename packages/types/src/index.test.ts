@@ -396,22 +396,30 @@ describe("CreateRepoTargetSchema", () => {
     ).toBe(false)
   })
 
-  it.each(["feature bad", "feature..bad", ".hidden", "release.lock", "topic~1", "topic@{1}"])(
-    "rejects invalid Git ref %s",
-    (branch) => {
-      expect(
-        CreateRepoTargetSchema.safeParse({
-          workspaceId: "ws-1",
-          type: "REPO",
-          name: "My Repo",
-          repoOwner: "ecryptoguru",
-          repoName: "lyrashield-ai",
-          branch,
-        }).success
-      ).toBe(false)
-      expect(PatchRepoRefSchema.safeParse({ workspaceId: "ws-1", branch }).success).toBe(false)
-    }
-  )
+  it.each([
+    "feature bad",
+    "feature..bad",
+    ".hidden",
+    "release.lock",
+    "topic~1",
+    "topic@{1}",
+    // Option-shaped refs — the deterministic retest already rejects a
+    // leading "-"; the persisted-target validators must agree (VERIFY-D-002).
+    "-x",
+    "--hard-reset",
+  ])("rejects invalid Git ref %s", (branch) => {
+    expect(
+      CreateRepoTargetSchema.safeParse({
+        workspaceId: "ws-1",
+        type: "REPO",
+        name: "My Repo",
+        repoOwner: "ecryptoguru",
+        repoName: "lyrashield-ai",
+        branch,
+      }).success
+    ).toBe(false)
+    expect(PatchRepoRefSchema.safeParse({ workspaceId: "ws-1", branch }).success).toBe(false)
+  })
 })
 
 describe("CreateUrlTargetSchema", () => {

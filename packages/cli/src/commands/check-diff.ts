@@ -8,11 +8,14 @@ export async function handleCheckDiff(args: string[], output: Output): Promise<n
     string: ["base", "head", "sarif"],
   })
 
-  const { base, head } = resolveDiffRange(
-    parsed.staged,
-    parsed.base as string,
-    parsed.head as string
-  )
+  let diffRange: { base: string; head: string }
+  try {
+    diffRange = await resolveDiffRange(parsed.staged, parsed.base as string, parsed.head as string)
+  } catch (err) {
+    output.error(err instanceof Error ? err.message : String(err))
+    return 4
+  }
+  const { base, head } = diffRange
 
   try {
     const findings = await runDiffChecks(base, head)

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("../../sync", () => ({
   syncSubscription: vi.fn().mockResolvedValue(undefined),
@@ -19,6 +19,8 @@ import { syncSubscription } from "../../sync"
 import { processPolarEvent } from "./adapter"
 
 describe("Polar subscription events", () => {
+  beforeEach(() => vi.clearAllMocks())
+
   it("uses Polar's snake_case period fields and preserves scheduled cancellation access", async () => {
     const event = {
       type: "subscription.canceled",
@@ -28,6 +30,7 @@ describe("Polar subscription events", () => {
         current_period_start: "2026-08-20T00:00:00Z",
         current_period_end: "2026-09-20T00:00:00Z",
         canceled_at: "2026-08-20T12:00:00Z",
+        modified_at: "2026-08-20T12:00:01Z",
         metadata: { workspaceId: "ws_1", plan: "PRO", interval: "annual" },
       },
     }
@@ -43,6 +46,7 @@ describe("Polar subscription events", () => {
         currentPeriodStart: new Date("2026-08-20T00:00:00Z"),
         currentPeriodEnd: new Date("2026-09-20T00:00:00Z"),
         canceledAt: new Date("2026-08-20T12:00:00Z"),
+        eventOccurredAt: new Date("2026-08-20T12:00:01Z"),
       })
     )
   })
@@ -51,8 +55,22 @@ describe("Polar subscription events", () => {
     await expect(
       processPolarEvent({
         type: "subscription.past_due",
-        data: { id: "sub_2", metadata: { workspaceId: "ws_1" } },
+        data: {
+          id: "sub_2",
+          modified_at: "2026-08-20T12:00:01Z",
+          metadata: { workspaceId: "ws_1" },
+        },
       })
     ).resolves.toMatchObject({ action: "subscription.past_due" })
+  })
+
+  it("fails closed when the provider event clock is missing", async () => {
+    await expect(
+      processPolarEvent({
+        type: "subscription.active",
+        data: { id: "sub_3", metadata: { workspaceId: "ws_1" } },
+      })
+    ).rejects.toThrow("polar_subscription_event_time_invalid")
+    expect(syncSubscription).not.toHaveBeenCalled()
   })
 })

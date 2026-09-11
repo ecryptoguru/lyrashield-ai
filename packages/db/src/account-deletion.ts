@@ -142,7 +142,12 @@ export async function getAccountDeletionPlan(userId: string): Promise<AccountDel
     where: { userId },
     select: { workspaceId: true },
   })
-  const actorWorkspaces = await prisma.auditLog.findMany({
+  // Erasure must find every workspace where the user appears as an audit
+  // actor — including workspaces they no longer belong to. With no workspace
+  // context bound, strict RLS filters this to [] and orphan-actor rows would
+  // keep the deleted user's id. Cross-workspace read through the system
+  // client, same as the license scrub below. (B-001)
+  const actorWorkspaces = await getSystemPrisma().auditLog.findMany({
     where: { actorUserId: userId },
     select: { workspaceId: true },
   })
@@ -247,7 +252,9 @@ export async function deleteUserAccount(
     where: { userId },
     select: { workspaceId: true },
   })
-  const actorWorkspaces = await prisma.auditLog.findMany({
+  // See getAccountDeletionPlan — the actor scan is cross-workspace by design
+  // and must not be silently filtered to [] by strict RLS.
+  const actorWorkspaces = await getSystemPrisma().auditLog.findMany({
     where: { actorUserId: userId },
     select: { workspaceId: true },
   })

@@ -5,14 +5,17 @@ const checkInvitationCreateRateLimit = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
   prisma: {
-    workspaceMember: { findFirst: vi.fn() },
-    invitation: { findFirst: vi.fn(), create: vi.fn() },
+    workspaceMember: { findFirst: vi.fn(), findMany: vi.fn() },
+    invitation: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     auditLog: { create: vi.fn() },
+    user: { findMany: vi.fn() },
     workspace: { findUnique: vi.fn() },
   },
 }))
+const requireWorkspaceAccess = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
   getSession: vi.fn().mockResolvedValue(null),
+  requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
   requirePermission: vi.fn().mockResolvedValue({
     session: { userId: "inviter-1" },
     workspace: { role: "OWNER", member: { workspaceId: "ws-1", role: "OWNER" } },
@@ -33,7 +36,7 @@ vi.mock("../../../lib/rate-limit", () => ({
 }))
 
 import { prisma } from "@lyrashield/db"
-import { POST } from "./route"
+import { GET, POST } from "./route"
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 
@@ -126,5 +129,46 @@ describe("POST /api/team", () => {
     expect(checkInvitationCreateRateLimit).toHaveBeenCalledWith("ws-1")
     expect(mockPrisma.invitation.create).not.toHaveBeenCalled()
     expect(sendNotification).not.toHaveBeenCalled()
+  })
+})
+
+describe("GET /api/team", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    requireWorkspaceAccess.mockResolvedValue({
+      session: { userId: "user-1" },
+      workspace: { role: "MEMBER", member: { workspaceId: "ws-1" } },
+    })
+    mockPrisma.workspaceMember.findMany.mockResolvedValue([])
+    mockPrisma.invitation.findMany.mockResolvedValue([])
+    mockPrisma.user.findMany.mockResolvedValue([])
+  })
+
+  it("routes authorization through requireWorkspaceAccess and lists members", async () => {
+    const response = await GET(new Request("http://localhost/api/team?workspaceId=ws-1"))
+
+    expect(requireWorkspaceAccess).toHaveBeenCalledWith("ws-1")
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { members: [], invitations: [] },
+    })
+  })
+
+  it("returns 403 for a credential bound to another workspace", async () => {
+    requireWorkspaceAccess.mockRejectedValue(new Error("FORBIDDEN"))
+
+    const response = await GET(new Request("http://localhost/api/team?workspaceId=ws-2"))
+
+    expect(response.status).toBe(403)
+    expect(mockPrisma.workspaceMember.findMany).not.toHaveBeenCalled()
+  })
+
+  it("returns 401 when unauthenticated", async () => {
+    requireWorkspaceAccess.mockRejectedValue(new Error("UNAUTHORIZED"))
+
+    const response = await GET(new Request("http://localhost/api/team?workspaceId=ws-1"))
+
+    expect(response.status).toBe(401)
   })
 })

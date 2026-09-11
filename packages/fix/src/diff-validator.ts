@@ -84,7 +84,19 @@ function normalizePath(raw: string): string {
   // Strip a/ b/ prefixes and normalize separators.
   let p = raw.trim()
   if (p.startsWith("a/") || p.startsWith("b/")) p = p.slice(2)
-  return p.replace(/\\/g, "/")
+  p = p.replace(/\\/g, "/")
+  // VERIFY-D-001: reject traversal and degenerate segments outright. The
+  // forbidden-path check is a prefix test and the GitHub write normalizes
+  // "x/../" — a path must never contain ".."/"." segments, be absolute, or
+  // carry control characters.
+  if (
+    /[\x00-\x1f]/.test(p) ||
+    p.startsWith("/") ||
+    p.split("/").some((seg) => seg === ".." || seg === ".")
+  ) {
+    throw new Error(`Unsafe path in diff: ${JSON.stringify(raw)}`)
+  }
+  return p
 }
 
 function baseName(p: string): string {

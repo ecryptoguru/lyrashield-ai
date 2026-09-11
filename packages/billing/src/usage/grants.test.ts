@@ -4,13 +4,14 @@ const withWorkspaceRLSMock = vi.hoisted(() => vi.fn())
 const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
 const findFirstMock = vi.hoisted(() => vi.fn().mockResolvedValue(null))
 const createMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "usage_1" }))
+const updateManyMock = vi.hoisted(() => vi.fn().mockResolvedValue({ count: 0 }))
 
 vi.mock("@lyrashield/db", () => ({
   withWorkspaceRLS: withWorkspaceRLSMock,
   withAccountRLS: (_id: string, callback: (tx: unknown) => unknown) =>
     callback({
       $executeRaw: executeRawMock,
-      usageRecord: { findFirst: findFirstMock, create: createMock },
+      usageRecord: { findFirst: findFirstMock, create: createMock, updateMany: updateManyMock },
     }),
 }))
 vi.mock("@lyrashield/logger", () => ({
@@ -42,7 +43,7 @@ beforeEach(() => {
     expect(options).toEqual(expect.objectContaining({ accountId: "acct_1" }))
     return callback({
       $executeRaw: executeRawMock,
-      usageRecord: { findFirst: findFirstMock, create: createMock },
+      usageRecord: { findFirst: findFirstMock, create: createMock, updateMany: updateManyMock },
     })
   })
 })
@@ -123,6 +124,44 @@ describe("grantMonthlyPool — replay-safe per allowance cycle", () => {
 
     expect(result.created).toBe(true)
     expect(result.idempotencyKey).toBe(monthlyPoolGrantKey("acct_1", nextCycle, "PRO"))
+  })
+})
+
+describe("grantMonthlyPool — mid-cycle plan change (VERIFY-C-002)", () => {
+  it("retires the replaced plan's same-cycle pool so the cycle carries one grant", async () => {
+    // Same account + cycleStart, different plan key → the replaced plan's
+    // grant is the updateMany target (notIn excludes only the incoming keys).
+    await grantMonthlyPool({ ...params, source: "subscription" })
+
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        accountId: "acct_1",
+        kind: "pool_grant",
+        deletedAt: null,
+        cycleStart,
+        idempotencyKey: {
+          notIn: [
+            monthlyPoolGrantKey("acct_1", cycleStart, "PRO"),
+            legacyMonthlyPoolGrantKey("ws_1", cycleStart, "PRO"),
+          ],
+        },
+      }),
+      data: { deletedAt: expect.any(Date) },
+    })
+    expect(createMock).toHaveBeenCalledOnce()
+  })
+
+  it("does not retire same-cycle grants when the grant is manual", async () => {
+    await grantMonthlyPool({ ...params, source: "manual" })
+
+    expect(updateManyMock).not.toHaveBeenCalled()
+  })
+
+  it("never retires grants from other cycles", async () => {
+    await grantMonthlyPool(params)
+
+    const where = updateManyMock.mock.calls[0]?.[0]?.where
+    expect(where?.cycleStart).toBe(cycleStart)
   })
 })
 

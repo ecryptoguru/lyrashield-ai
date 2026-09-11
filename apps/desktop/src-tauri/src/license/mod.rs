@@ -7,7 +7,7 @@ use base64::Engine;
 use ed25519_dalek::{Signature, VerifyingKey};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
-use types::{LicenseFile, LicenseVerificationResult};
+use types::{LicenseFile, LicenseRevalidationReceipt, LicenseVerificationResult};
 
 pub static TEST_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -120,6 +120,47 @@ pub fn decode_blob(blob: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
 fn load_public_key(pem: &str) -> Result<VerifyingKey, String> {
     use ed25519_dalek::pkcs8::DecodePublicKey;
     VerifyingKey::from_public_key_pem(pem).map_err(|e| format!("invalid public key PEM: {}", e))
+}
+
+fn revalidation_receipt_remaining_seconds(
+    receipt: &LicenseRevalidationReceipt,
+    license_id: &str,
+    license_signature: &str,
+    public_key_pem: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<u64> {
+    if receipt.license_id != license_id || receipt.license_signature != license_signature {
+        return None;
+    }
+    let verified_at = chrono::DateTime::parse_from_rfc3339(&receipt.verified_at)
+        .ok()?
+        .with_timezone(&chrono::Utc);
+    let expires_at = chrono::DateTime::parse_from_rfc3339(&receipt.expires_at)
+        .ok()?
+        .with_timezone(&chrono::Utc);
+    if verified_at > now + chrono::Duration::minutes(CLOCK_SKEW_MINUTES)
+        || expires_at <= verified_at
+        || expires_at - verified_at > chrono::Duration::days(OFFLINE_GRACE_DAYS)
+    {
+        return None;
+    }
+
+    let payload = serde_json::json!({
+        "licenseId": receipt.license_id,
+        "licenseSignature": receipt.license_signature,
+        "verifiedAt": receipt.verified_at,
+        "expiresAt": receipt.expires_at,
+    });
+    let signature_bytes = BASE64.decode(receipt.signature.as_bytes()).ok()?;
+    let signature = Signature::from_slice(&signature_bytes).ok()?;
+    let public_key = load_public_key(public_key_pem).ok()?;
+    use ed25519_dalek::Verifier;
+    public_key
+        .verify(canonical_json(&payload).as_bytes(), &signature)
+        .ok()?;
+
+    let remaining = expires_at.signed_duration_since(now).num_seconds();
+    (remaining > 0).then_some(remaining as u64)
 }
 
 /// Verify a license file's ed25519 signature against a public key (SPKI PEM).
@@ -311,17 +352,28 @@ pub enum LicenseOperationalError {
 
 fn refresh_server_verified_license(
     mut stored: types::StoredLicense,
+    receipt: LicenseRevalidationReceipt,
+    public_key_pem: &str,
     persist: impl FnOnce(&types::StoredLicense) -> Result<(), String>,
-) -> OperationalLicense {
+) -> Result<OperationalLicense, LicenseOperationalError> {
+    revalidation_receipt_remaining_seconds(
+        &receipt,
+        &stored.license_id,
+        &stored.license.signature,
+        public_key_pem,
+        chrono::Utc::now(),
+    )
+    .ok_or_else(|| LicenseOperationalError::Invalid("invalid revalidation receipt".into()))?;
     stored.version = 2;
-    stored.last_server_verified_at = Some(chrono::Utc::now().to_rfc3339());
+    stored.last_server_verified_at = Some(receipt.verified_at.clone());
+    stored.revalidation_receipt = Some(receipt);
     if persist(&stored).is_err() {
         eprintln!("failed to persist license verification timestamp");
     }
-    OperationalLicense {
+    Ok(OperationalLicense {
         stored,
         offline_grace_remaining_seconds: None,
-    }
+    })
 }
 
 pub async fn ensure_license_operational(
@@ -375,12 +427,15 @@ pub async fn ensure_license_operational(
                     server.reason.unwrap_or_else(|| "unknown".into())
                 )));
             }
-            Ok(refresh_server_verified_license(stored, store::save_stored))
+            let receipt = server.revalidation_receipt.ok_or_else(|| {
+                LicenseOperationalError::Invalid("missing revalidation receipt".into())
+            })?;
+            refresh_server_verified_license(stored, receipt, public_key_pem, store::save_stored)
         }
         Err(error) => {
             if error.allows_offline_grace() {
                 if let Some(remaining) =
-                    offline_grace_remaining_seconds(&stored, chrono::Utc::now())
+                    offline_grace_remaining_seconds(&stored, public_key_pem, chrono::Utc::now())
                 {
                     Ok(OperationalLicense {
                         stored,
@@ -402,27 +457,26 @@ pub async fn ensure_license_operational(
 const OFFLINE_GRACE_DAYS: i64 = 7;
 const CLOCK_SKEW_MINUTES: i64 = 5;
 
-fn offline_grace_valid(stored: &types::StoredLicense, now: chrono::DateTime<chrono::Utc>) -> bool {
-    offline_grace_remaining_seconds(stored, now).is_some()
+fn offline_grace_valid(
+    stored: &types::StoredLicense,
+    public_key_pem: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    offline_grace_remaining_seconds(stored, public_key_pem, now).is_some()
 }
 
 fn offline_grace_remaining_seconds(
     stored: &types::StoredLicense,
+    public_key_pem: &str,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Option<u64> {
-    let Some(value) = &stored.last_server_verified_at else {
-        return None;
-    };
-    let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) else {
-        return None;
-    };
-    let verified_at = parsed.with_timezone(&chrono::Utc);
-    if verified_at > now + chrono::Duration::minutes(CLOCK_SKEW_MINUTES) {
-        return None;
-    }
-    let expires_at = verified_at + chrono::Duration::days(OFFLINE_GRACE_DAYS);
-    let remaining = expires_at.signed_duration_since(now).num_seconds();
-    (remaining > 0).then_some(remaining as u64)
+    revalidation_receipt_remaining_seconds(
+        stored.revalidation_receipt.as_ref()?,
+        &stored.license_id,
+        &stored.license.signature,
+        public_key_pem,
+        now,
+    )
 }
 
 /// Check eligibility for a specific build version under the operational license.
@@ -602,8 +656,60 @@ mod tests {
             license: file,
             blob: "testblob".into(),
             last_server_verified_at: None,
+            revalidation_receipt: None,
         };
         (stored, pubkey)
+    }
+
+    fn sign_test_receipt(
+        stored: &types::StoredLicense,
+        verified_at: &str,
+        expires_at: &str,
+    ) -> types::LicenseRevalidationReceipt {
+        use ed25519_dalek::{Signer, SigningKey};
+        let payload = serde_json::json!({
+            "licenseId": stored.license_id,
+            "licenseSignature": stored.license.signature,
+            "verifiedAt": verified_at,
+            "expiresAt": expires_at,
+        });
+        let signature =
+            SigningKey::from_bytes(&[1u8; 32]).sign(canonical_json(&payload).as_bytes());
+        types::LicenseRevalidationReceipt {
+            license_id: stored.license_id.clone(),
+            license_signature: stored.license.signature.clone(),
+            verified_at: verified_at.into(),
+            expires_at: expires_at.into(),
+            signing_key_id: "test-key".into(),
+            signature: BASE64.encode(signature.to_bytes()),
+        }
+    }
+
+    fn verified_server_body(stored: &types::StoredLicense) -> String {
+        let verified_at = chrono::Utc::now();
+        let receipt = sign_test_receipt(
+            stored,
+            &verified_at.to_rfc3339(),
+            &(verified_at + chrono::Duration::days(7)).to_rfc3339(),
+        );
+        serde_json::json!({
+            "success": true,
+            "data": {
+                "version": 1,
+                "valid": true,
+                "revoked": false,
+                "updateEligible": true,
+                "revalidationReceipt": receipt,
+            }
+        })
+        .to_string()
+    }
+
+    fn guard_lock() -> std::sync::MutexGuard<'static, ()> {
+        crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap()
     }
 
     #[test]
@@ -611,9 +717,13 @@ mod tests {
         let now = chrono::DateTime::parse_from_rfc3339("2026-08-23T12:00:00Z")
             .unwrap()
             .with_timezone(&chrono::Utc);
-        let (mut stored, _) = make_valid_stored("machine");
-        stored.last_server_verified_at = Some("2026-08-16T12:00:00Z".into());
-        assert!(!offline_grace_valid(&stored, now));
+        let (mut stored, pubkey) = make_valid_stored("machine");
+        stored.revalidation_receipt = Some(sign_test_receipt(
+            &stored,
+            "2026-08-16T12:00:00Z",
+            "2026-08-23T12:00:00Z",
+        ));
+        assert!(!offline_grace_valid(&stored, &pubkey, now));
     }
 
     #[test]
@@ -621,9 +731,13 @@ mod tests {
         let now = chrono::DateTime::parse_from_rfc3339("2026-08-23T12:00:01Z")
             .unwrap()
             .with_timezone(&chrono::Utc);
-        let (mut stored, _) = make_valid_stored("machine");
-        stored.last_server_verified_at = Some("2026-08-16T12:00:00Z".into());
-        assert!(!offline_grace_valid(&stored, now));
+        let (mut stored, pubkey) = make_valid_stored("machine");
+        stored.revalidation_receipt = Some(sign_test_receipt(
+            &stored,
+            "2026-08-16T12:00:00Z",
+            "2026-08-23T12:00:00Z",
+        ));
+        assert!(!offline_grace_valid(&stored, &pubkey, now));
     }
 
     #[test]
@@ -631,24 +745,50 @@ mod tests {
         let now = chrono::DateTime::parse_from_rfc3339("2026-08-23T12:00:00Z")
             .unwrap()
             .with_timezone(&chrono::Utc);
-        let (mut stored, _) = make_valid_stored("machine");
-        stored.last_server_verified_at = Some("2026-08-23T12:05:01Z".into());
-        assert!(!offline_grace_valid(&stored, now));
+        let (mut stored, pubkey) = make_valid_stored("machine");
+        stored.revalidation_receipt = Some(sign_test_receipt(
+            &stored,
+            "2026-08-23T12:05:01Z",
+            "2026-08-30T12:05:01Z",
+        ));
+        assert!(!offline_grace_valid(&stored, &pubkey, now));
     }
 
     #[test]
     fn test_offline_grace_rejects_missing_or_malformed_timestamp() {
         let now = chrono::Utc::now();
-        let (mut stored, _) = make_valid_stored("machine");
-        assert!(!offline_grace_valid(&stored, now));
+        let (mut stored, pubkey) = make_valid_stored("machine");
+        assert!(!offline_grace_valid(&stored, &pubkey, now));
         stored.last_server_verified_at = Some("not-a-date".into());
-        assert!(!offline_grace_valid(&stored, now));
+        assert!(!offline_grace_valid(&stored, &pubkey, now));
+    }
+
+    #[test]
+    fn test_tampered_revalidation_receipt_cannot_extend_offline_grace() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-11T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let (mut stored, pubkey) = make_valid_stored("machine");
+        let mut receipt =
+            sign_test_receipt(&stored, "2026-09-01T12:00:00Z", "2026-09-08T12:00:00Z");
+        receipt.verified_at = "2026-09-11T12:00:00Z".into();
+        receipt.expires_at = "2026-09-18T12:00:00Z".into();
+        stored.revalidation_receipt = Some(receipt);
+        stored.last_server_verified_at = Some("2026-09-11T12:00:00Z".into());
+
+        assert!(!offline_grace_valid(&stored, &pubkey, now));
     }
 
     #[test]
     fn successful_server_verification_remains_operational_when_cache_write_fails() {
-        let (stored, _) = make_valid_stored("machine");
-        let operational = refresh_server_verified_license(stored, |_| Err("read only".into()));
+        let (stored, pubkey) = make_valid_stored("machine");
+        let body = verified_server_body(&stored);
+        let response: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let receipt =
+            serde_json::from_value(response["data"]["revalidationReceipt"].clone()).unwrap();
+        let operational =
+            refresh_server_verified_license(stored, receipt, &pubkey, |_| Err("read only".into()))
+                .unwrap();
         assert_eq!(operational.stored.version, 2);
         assert!(operational.stored.last_server_verified_at.is_some());
         assert_eq!(operational.offline_grace_remaining_seconds, None);
@@ -660,10 +800,7 @@ mod tests {
 
     #[test]
     fn test_guard_wrong_machine_non_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, _pubkey) = make_valid_stored(&machine_id);
         // Tamper to wrong machine
@@ -692,10 +829,7 @@ mod tests {
 
     #[test]
     fn test_guard_revoked_signature_non_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, pubkey) = make_valid_stored(&machine_id);
         stored.license.signature = "REVOKED".into();
@@ -714,10 +848,7 @@ mod tests {
 
     #[test]
     fn test_guard_expired_eligibility_keeps_current_build_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, _pubkey) = make_valid_stored(&machine_id);
         stored.license.update_eligible_until = "2020-01-01T00:00:00.000Z".into();
@@ -728,6 +859,7 @@ mod tests {
         std::env::set_var("XDG_DATA_HOME", tmp.path());
         crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
             .unwrap();
+        let body = verified_server_body(&stored);
         // Mock server that returns success
         let rt = tokio::runtime::Runtime::new().unwrap();
         let res = rt.block_on(async {
@@ -739,11 +871,9 @@ mod tests {
                     use tokio::io::{AsyncReadExt, AsyncWriteExt};
                     let mut buf = [0u8; 4096];
                     let _ = stream.read(&mut buf).await;
-                    let body = r#"{"success":true,"data":{"version":1,"valid":true,"revoked":false,"updateEligible":true}}"#;
                     let resp = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                        body.len(),
-                        body
+                        body.len(), body
                     );
                     let _ = stream.write_all(resp.as_bytes()).await;
                 }
@@ -761,10 +891,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_v1_envelope_requires_online_verification_and_rewrites_v2() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (mut stored, pubkey) = make_valid_stored(&machine_id);
         stored.version = 1;
@@ -773,6 +900,7 @@ mod tests {
         std::env::set_var("HOME", tmp.path());
         std::env::set_var("XDG_DATA_HOME", tmp.path());
         crate::license::store::save_stored(&stored).unwrap();
+        let body = verified_server_body(&stored);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -781,11 +909,9 @@ mod tests {
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
                 let mut buf = [0u8; 4096];
                 let _ = stream.read(&mut buf).await;
-                let body = r#"{"success":true,"data":{"version":1,"valid":true,"revoked":false,"updateEligible":true}}"#;
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                    body.len(),
-                    body
+                    body.len(), body
                 );
                 let _ = stream.write_all(response.as_bytes()).await;
             }
@@ -805,17 +931,20 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_guard_unreachable_uses_fresh_offline_grace() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
-        let (stored, pubkey) = make_valid_stored(&machine_id);
+        let (mut stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", tmp.path());
         std::env::set_var("XDG_DATA_HOME", tmp.path());
-        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
-            .unwrap();
+        let now = chrono::Utc::now();
+        stored.revalidation_receipt = Some(sign_test_receipt(
+            &stored,
+            &now.to_rfc3339(),
+            &(now + chrono::Duration::days(7)).to_rfc3339(),
+        ));
+        stored.last_server_verified_at = Some(now.to_rfc3339());
+        crate::license::store::save_stored(&stored).unwrap();
         // Use an unreachable address (port 1 is typically closed)
         let res =
             crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey)
@@ -826,17 +955,20 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_guard_5xx_uses_fresh_offline_grace() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
-        let (stored, pubkey) = make_valid_stored(&machine_id);
+        let (mut stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", tmp.path());
         std::env::set_var("XDG_DATA_HOME", tmp.path());
-        crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
-            .unwrap();
+        let now = chrono::Utc::now();
+        stored.revalidation_receipt = Some(sign_test_receipt(
+            &stored,
+            &now.to_rfc3339(),
+            &(now + chrono::Duration::days(7)).to_rfc3339(),
+        ));
+        stored.last_server_verified_at = Some(now.to_rfc3339());
+        crate::license::store::save_stored(&stored).unwrap();
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -863,10 +995,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_guard_malformed_non_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();
@@ -899,10 +1028,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_guard_unknown_id_non_operational() {
-        let _lock = crate::license::TEST_ENV_LOCK
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap();
+        let _lock = guard_lock();
         let machine_id = crate::machine_id::generate_machine_id().unwrap();
         let (stored, pubkey) = make_valid_stored(&machine_id);
         let tmp = tempfile::tempdir().unwrap();

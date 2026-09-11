@@ -9,6 +9,9 @@ vi.mock("@lyrashield/db", () => ({
 const requireWorkspaceAccess = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
   requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
+  assertBrowserSession: (session: { apiKey?: unknown; oauth?: unknown }) => {
+    if (session.apiKey || session.oauth) throw new Error("FORBIDDEN")
+  },
 }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
@@ -43,6 +46,17 @@ describe("GET /api/api-keys", () => {
   it("rejects API-key-authenticated callers (no self-management)", async () => {
     requireWorkspaceAccess.mockResolvedValue(
       sessionResult({ apiKey: { keyId: "k", workspaceId: "ws-1", scopes: ["write"] } })
+    )
+    const res = await GET(new Request("http://localhost/api/api-keys?workspaceId=ws-1"))
+    expect(res.status).toBe(403)
+    expect(listApiKeys).not.toHaveBeenCalled()
+  })
+
+  it("rejects OAuth-authenticated callers — key management is browser-only", async () => {
+    requireWorkspaceAccess.mockResolvedValue(
+      sessionResult({
+        oauth: { userId: "user-1", workspaceId: "ws-1", scopes: ["lyrashield.write"] },
+      })
     )
     const res = await GET(new Request("http://localhost/api/api-keys?workspaceId=ws-1"))
     expect(res.status).toBe(403)
@@ -102,6 +116,23 @@ describe("POST /api/api-keys", () => {
     expect(res.status).toBe(403)
     expect(createApiKey).not.toHaveBeenCalled()
   })
+
+  it.each([["lyrashield.read"], ["lyrashield.read", "lyrashield.write"]])(
+    "rejects OAuth callers with scopes %j — no durable key is minted",
+    async (scopes) => {
+      requireWorkspaceAccess.mockResolvedValue(
+        sessionResult({ oauth: { userId: "user-1", workspaceId: "ws-1", scopes } })
+      )
+      const res = await POST(
+        new Request("http://localhost/api/api-keys", {
+          method: "POST",
+          body: JSON.stringify({ workspaceId: "ws-1", name: "CI", scopes: ["read"] }),
+        })
+      )
+      expect(res.status).toBe(403)
+      expect(createApiKey).not.toHaveBeenCalled()
+    }
+  )
 
   it("maps the key limit error to a 400", async () => {
     vi.mocked(createApiKey).mockRejectedValue(new Error("KEY_LIMIT_REACHED"))

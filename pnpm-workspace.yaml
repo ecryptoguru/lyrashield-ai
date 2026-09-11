@@ -73,8 +73,19 @@ globalShims: false
 # version for every tool that reads it (pnpm/setup, corepack, dev machines).
 pmOnFail: ignore
 
-minimumReleaseAge: 7
+# pnpm interprets this as MINUTES — "7" was a 7-minute delay, no cooldown
+# at all. 10080 = 7 days (VULN-H-003).
+minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
+  # We are the publisher of @lyrashield/* — an age gate on our own releases
+  # would deadlock the publish pipeline and buys nothing (we control the
+  # artifact end-to-end). Exempt the whole scope permanently.
+  - "@lyrashield/*"
+  # Grandfathered lockfile entries resolved before the corrected gate —
+  # already pinned and integrity-verified in pnpm-lock.yaml. Remove once the
+  # entry ages past the cutoff and the lockfile re-resolves.
+  - "entities@8.1.0"
+  - "hono@4.13.7"
   - "@turbo/darwin-64@2.10.3"
   - "@turbo/darwin-arm64@2.10.3"
   - "@turbo/linux-64@2.10.3"

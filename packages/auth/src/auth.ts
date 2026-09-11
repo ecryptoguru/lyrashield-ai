@@ -34,6 +34,7 @@ export const OAUTH_CONNECTION_CLAIM = "https://lyrashieldai.com/connection_id"
 export const OAUTH_AUTH_VERSION_CLAIM = "https://lyrashieldai.com/auth_version"
 import { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE } from "./oauth-scopes"
 import { oauthConsentReferenceId, selectedOAuthWorkspaceId } from "./oauth-consent-reference"
+import { validateSessionFieldWrite } from "./session-field-guard"
 export { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE }
 export const OAUTH_RESOURCE = new URL("/api/mcp", env.NEXT_PUBLIC_APP_URL).toString()
 export const OAUTH_ISSUER = new URL("/api/auth", env.BETTER_AUTH_URL).toString().replace(/\/$/, "")
@@ -364,6 +365,18 @@ export const auth = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (context) => {
+      // VERIFY-A-002: better-auth's POST /update-session writes any
+      // `input: true` session field verbatim — a client could stamp
+      // activeWorkspaceId / pendingAgentConnectionId it never validated.
+      // Every consumer re-checks membership, but enforce the binding at
+      // write time so no future reader can trust a forged field.
+      if (context.path === "/update-session") {
+        const sess = await getSessionFromCtx(context)
+        if (sess?.user.id) {
+          await validateSessionFieldWrite(context.body, sess.user.id)
+        }
+      }
+
       if (context.path === "/oauth2/register") {
         const body = normalizeNativeLoopbackClient(context.body)
         if (body !== context.body) return { context: { body } }

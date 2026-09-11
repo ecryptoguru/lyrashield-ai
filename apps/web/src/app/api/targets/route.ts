@@ -1,7 +1,7 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
-import { getSession, requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateRepoTargetSchema, CreateUrlTargetSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
@@ -270,11 +270,6 @@ async function post(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const session = await getSession()
-    if (!session) {
-      return apiError("UNAUTHORIZED", "Authentication required", 401)
-    }
-
     const { searchParams } = new URL(request.url)
     const workspaceId = searchParams.get("workspaceId")
     const projectId = searchParams.get("projectId")
@@ -283,15 +278,7 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    const membership = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId, userId: session.userId },
-      },
-    })
-
-    if (!membership || membership.status !== "active") {
-      return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
-    }
+    await requireWorkspaceAccess(workspaceId)
 
     const { cursor, limit } = parsePaginationParams(searchParams)
 
@@ -338,6 +325,8 @@ export async function GET(request: Request) {
       nextCursor
     )
   } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
     logger.error("Failed to list targets", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to list targets", 500)
   }

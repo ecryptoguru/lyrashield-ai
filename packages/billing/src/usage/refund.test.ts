@@ -5,10 +5,21 @@ const auditCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "audit_
 const packUpdateMock = vi.hoisted(() => vi.fn().mockResolvedValue({ count: 1 }))
 const usageCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "usage_1" }))
 const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
+const identityFindMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ accountId: "buyer", workspaceId: "ws_1" })
+)
+const packFindMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    id: "pack_1",
+    remainingMinutes: 40,
+    accountId: "buyer",
+    workspaceId: "ws_1",
+  })
+)
 
 vi.mock("@lyrashield/db", () => ({
   getSystemPrisma: () => ({
-    minutePack: { findUnique: vi.fn().mockResolvedValue({ accountId: "buyer" }) },
+    minutePack: { findFirst: identityFindMock },
   }),
   prisma: { auditLog: { create: auditCreateMock } },
   withWorkspaceRLS: withWorkspaceRLSMock,
@@ -21,6 +32,13 @@ import { reverseRefund } from "./refund"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  identityFindMock.mockResolvedValue({ accountId: "buyer", workspaceId: "ws_1" })
+  packFindMock.mockResolvedValue({
+    id: "pack_1",
+    remainingMinutes: 40,
+    accountId: "buyer",
+    workspaceId: "ws_1",
+  })
   const tx = {
     $executeRaw: executeRawMock,
     usageRecord: {
@@ -28,7 +46,7 @@ beforeEach(() => {
       create: usageCreateMock,
     },
     minutePack: {
-      findUnique: vi.fn().mockResolvedValue({ id: "pack_1", remainingMinutes: 40 }),
+      findFirst: packFindMock,
       updateMany: packUpdateMock,
     },
   }
@@ -43,7 +61,7 @@ describe("reverseRefund", () => {
     const result = await reverseRefund("ws_1", "order_1", "refund_1")
 
     expect(packUpdateMock).toHaveBeenCalledWith({
-      where: { id: "pack_1", workspaceId: "ws_1", remainingMinutes: 40 },
+      where: { id: "pack_1", remainingMinutes: 40 },
       data: { remainingMinutes: 0 },
     })
     expect(executeRawMock).toHaveBeenCalledOnce()
@@ -65,7 +83,7 @@ describe("reverseRefund", () => {
       callback({
         $executeRaw: executeRawMock,
         usageRecord: { findUnique: vi.fn().mockResolvedValue(null) },
-        minutePack: { findUnique: vi.fn().mockResolvedValue(null) },
+        minutePack: { findFirst: vi.fn().mockResolvedValue(null) },
       })
     )
 
@@ -73,5 +91,48 @@ describe("reverseRefund", () => {
       "refund_entitlement_not_resolved"
     )
     expect(auditCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("reverses a pack whose attribution workspace was hard-deleted (VERIFY-C-003)", async () => {
+    // workspaceId SET NULL on the pack — the {workspaceId, externalId} key can
+    // never match again; the account-keyed lookup must still find it.
+    identityFindMock.mockResolvedValue({ accountId: "buyer", workspaceId: null })
+    packFindMock.mockResolvedValue({
+      id: "pack_orphan",
+      remainingMinutes: 40,
+      accountId: "buyer",
+      workspaceId: null,
+    })
+    withWorkspaceRLSMock.mockImplementation((_workspaceId, callback) =>
+      callback({
+        $executeRaw: executeRawMock,
+        usageRecord: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: usageCreateMock,
+        },
+        minutePack: { findFirst: packFindMock, updateMany: packUpdateMock },
+      })
+    )
+
+    const result = await reverseRefund("ws_gone", "order_1", "refund_1", "polar")
+
+    expect(identityFindMock).toHaveBeenCalledWith({
+      where: { externalId: "order_1", provider: "polar", deletedAt: null },
+      select: { accountId: true },
+    })
+    expect(packFindMock).toHaveBeenCalledWith({
+      where: { externalId: "order_1", provider: "polar", deletedAt: null },
+      select: { id: true, remainingMinutes: true, accountId: true, workspaceId: true },
+    })
+    expect(packUpdateMock).toHaveBeenCalledWith({
+      where: { id: "pack_orphan", remainingMinutes: 40 },
+      data: { remainingMinutes: 0 },
+    })
+    // The reversal ledger row keeps the pack's (now NULL) attribution — never
+    // the deleted workspace id, which would violate the FK.
+    expect(usageCreateMock).toHaveBeenCalledWith({
+      data: expect.objectContaining({ workspaceId: null, accountId: "buyer" }),
+    })
+    expect(result).toEqual({ created: true, reversed: "pack", minutesReversed: 40 })
   })
 })

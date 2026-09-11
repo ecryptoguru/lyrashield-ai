@@ -15,6 +15,14 @@ vi.mock("./client", () => ({
   },
 }))
 
+const mockWorkspaceMemberFindUnique = vi.fn()
+vi.mock("./rls", () => ({
+  // verifyApiKey resolves the workspace from the key, then re-checks the
+  // creator's membership under that RLS context (VERIFY-A-006).
+  withWorkspaceRLS: (_workspaceId: string, fn: (tx: unknown) => unknown) =>
+    fn({ workspaceMember: { findUnique: mockWorkspaceMemberFindUnique } }),
+}))
+
 import { prisma } from "./client"
 import {
   createApiKey,
@@ -134,6 +142,7 @@ describe("verifyApiKey", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPrisma.$executeRaw.mockResolvedValue(1)
+    mockWorkspaceMemberFindUnique.mockResolvedValue({ status: "active" })
   })
 
   it("verifies a live key via the SECURITY DEFINER lookup and returns its workspace binding", async () => {
@@ -169,6 +178,25 @@ describe("verifyApiKey", () => {
   it("rejects malformed input without touching the database", async () => {
     expect(await verifyApiKey("not-a-key")).toBeNull()
     expect(mockPrisma.$queryRaw).not.toHaveBeenCalled()
+  })
+
+  it("VERIFY-A-006: a key dies when its creator loses workspace membership", async () => {
+    const { rawKey, row } = storedKey()
+    mockPrisma.$queryRaw.mockResolvedValue([row])
+
+    mockWorkspaceMemberFindUnique.mockResolvedValue({ status: "removed" })
+    expect(await verifyApiKey(rawKey)).toBeNull()
+
+    mockWorkspaceMemberFindUnique.mockResolvedValue(null)
+    expect(await verifyApiKey(rawKey)).toBeNull()
+
+    mockWorkspaceMemberFindUnique.mockResolvedValue({ status: "active" })
+    expect(await verifyApiKey(rawKey)).toMatchObject({ workspaceId: "ws-1" })
+    expect(mockWorkspaceMemberFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workspaceId_userId: { workspaceId: "ws-1", userId: "user-1" } },
+      })
+    )
   })
 
   it("throttles lastUsedAt writes to once per minute", async () => {

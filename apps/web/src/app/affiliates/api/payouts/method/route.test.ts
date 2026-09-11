@@ -60,6 +60,28 @@ describe("affiliate payout method", () => {
     })
   })
 
+  it.each([
+    { apiKey: { keyId: "k-1", workspaceId: "ws-1", scopes: ["read", "write"], prefix: "lsk_x" } },
+    { oauth: { userId: "user-1", workspaceId: "ws-1", scopes: ["lyrashield.write"] } },
+  ])("rejects workspace-bound credentials — payout method is browser-only", async (credential) => {
+    getCachedSessionMock.mockResolvedValue({ userId: "user-1", ...credential })
+
+    const response = await POST(
+      request({
+        affiliateId: "aff-1",
+        payoutMethod: {
+          type: "razorpayx",
+          fundAccountId: "fa_123",
+          maskedDisplay: "Bank •••• 4242",
+        },
+      })
+    )
+
+    expect(response.status).toBe(403)
+    expect(affiliate.findUnique).not.toHaveBeenCalled()
+    expect(affiliate.update).not.toHaveBeenCalled()
+  })
+
   it("rejects raw banking fields instead of persisting generic JSON", async () => {
     const response = await POST(
       request({

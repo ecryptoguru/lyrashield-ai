@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/auth/server", () => ({
   getSession: vi.fn(),
+  assertBrowserSession: (session: { apiKey?: unknown; oauth?: unknown }) => {
+    if (session.apiKey || session.oauth) throw new Error("FORBIDDEN")
+  },
 }))
 
 vi.mock("@lyrashield/logger", () => ({
@@ -110,6 +113,27 @@ describe("POST /api/team/invitations/accept", () => {
 
     expect(response.status).toBe(401)
   })
+
+  it.each([
+    { apiKey: { keyId: "k-1", workspaceId: "ws-1", scopes: ["read", "write"], prefix: "lsk_x" } },
+    { oauth: { userId: "user-1", workspaceId: "ws-1", scopes: ["lyrashield.write"] } },
+  ])(
+    "rejects workspace-bound credentials — invitation acceptance is browser-owned",
+    async (credential) => {
+      mockGetSession.mockResolvedValue({ ...SESSION, ...credential } as never)
+
+      const response = await POST(
+        new Request("http://localhost/api/team/invitations/accept", {
+          method: "POST",
+          body: JSON.stringify({ token: "tok-1" }),
+        })
+      )
+
+      expect(response.status).toBe(403)
+      expect(systemPrismaMocks.invitation.findUnique).not.toHaveBeenCalled()
+      expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
+    }
+  )
 
   it("consumes an old invitation without overwriting an active member role", async () => {
     systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)

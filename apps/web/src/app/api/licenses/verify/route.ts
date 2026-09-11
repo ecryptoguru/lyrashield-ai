@@ -2,8 +2,13 @@ import { z } from "zod"
 import { getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { verifyLicense, type LicenseFile } from "@lyrashield/licenses"
-import { hashLicenseKey, resolveSigningPublicKey } from "../../../../lib/licenses/license-service"
+import { signRevalidationReceipt, verifyLicense, type LicenseFile } from "@lyrashield/licenses"
+import {
+  hashLicenseKey,
+  resolveSigningKeyId,
+  resolveSigningPrivateKey,
+  resolveSigningPublicKey,
+} from "../../../../lib/licenses/license-service"
 import { checkLicenseApiRateLimit, clientIpFromRequest } from "../../../../lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -83,24 +88,29 @@ export async function POST(request: Request) {
     // revoked license. Look the row up by key hash (or id) via the system
     // client — NULL-workspaceId licenses are FORCE-RLS-scoped.
     // Identified path requires licenseId; unknown id is treated as revoked/non-operational.
+    let resolvedLicenseId = licenseId
     if (licenseKey || licenseId) {
       const systemPrisma = getSystemPrisma()
       let revoked = false
       let unknown = false
+      let storedSignature: string | null = null
       if (licenseKey) {
         const keyRow = await systemPrisma.licenseKey.findUnique({
           where: { keyHash: hashLicenseKey(licenseKey) },
-          include: { license: { select: { id: true, revoked: true } } },
+          include: { license: { select: { id: true, revoked: true, signature: true } } },
         })
         if (!keyRow) unknown = true
         revoked = keyRow?.license.revoked === true
+        storedSignature = keyRow?.license.signature ?? null
+        resolvedLicenseId = keyRow?.license.id
       } else if (licenseId) {
         const licenseRow = await systemPrisma.license.findUnique({
           where: { id: licenseId },
-          select: { id: true, revoked: true },
+          select: { id: true, revoked: true, signature: true },
         })
         if (!licenseRow) unknown = true
         revoked = licenseRow?.revoked === true
+        storedSignature = licenseRow?.signature ?? null
       }
       if (unknown) {
         return apiSuccess(
@@ -122,6 +132,18 @@ export async function POST(request: Request) {
             updateEligible: false,
             revoked: true,
             reason: "LICENSE_REVOKED",
+          },
+          200
+        )
+      }
+      if (licenseFile && storedSignature !== licenseFile.signature) {
+        return apiSuccess(
+          {
+            version: 1 as const,
+            valid: false,
+            updateEligible: false,
+            revoked: false,
+            reason: "LICENSE_MISMATCH",
           },
           200
         )
@@ -165,6 +187,19 @@ export async function POST(request: Request) {
 
     // B-L06: Don't echo full payload to unauthenticated callers.
     // Return only the essential fields needed for client decisions.
+    const verifiedAt = new Date()
+    const expiresAt = new Date(verifiedAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const revalidationReceipt = signRevalidationReceipt(
+      {
+        licenseId: resolvedLicenseId ?? "",
+        licenseSignature: licenseFile.signature,
+        verifiedAt: verifiedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+      },
+      await resolveSigningPrivateKey(),
+      resolveSigningKeyId()
+    )
+
     return apiSuccess(
       {
         version: 1 as const,
@@ -176,6 +211,7 @@ export async function POST(request: Request) {
         // the full machineIds list or perpetualFallbackBuild.
         sku: licenseFile.sku,
         updateEligibleUntil: licenseFile.updateEligibleUntil,
+        revalidationReceipt,
       },
       200
     )

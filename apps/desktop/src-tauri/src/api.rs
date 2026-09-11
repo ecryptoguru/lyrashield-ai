@@ -2,6 +2,34 @@ use crate::license::types::{ActivateData, LicenseFile, VerifyServerResponse};
 
 const DEFAULT_API_URL: &str = "https://app.lyrashieldai.com";
 
+/// VULN-F-003: `resp.text()` buffers the whole body — a hostile server can
+/// stream unbounded bytes inside the 30s timeout. API envelopes are small
+/// JSON, so a few MiB is a hard ceiling.
+const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+
+/// Read a response body bounded to MAX_RESPONSE_BYTES. Checks
+/// content-length up front and then accumulates chunks, failing the moment
+/// the cap is exceeded (chunked bodies may omit content-length).
+async fn read_body_capped(mut resp: reqwest::Response) -> Result<String, String> {
+    if let Some(len) = resp.content_length() {
+        if len > MAX_RESPONSE_BYTES as u64 {
+            return Err(format!("response exceeds {}-byte cap", MAX_RESPONSE_BYTES));
+        }
+    }
+    let mut buf = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("failed to read response: {}", e))?
+    {
+        if buf.len() + chunk.len() > MAX_RESPONSE_BYTES {
+            return Err(format!("response exceeds {}-byte cap", MAX_RESPONSE_BYTES));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    String::from_utf8(buf).map_err(|_| "response is not valid UTF-8".to_string())
+}
+
 /// A simple HTTP response wrapper.
 pub struct HttpResponse {
     pub status: reqwest::StatusCode,
@@ -94,10 +122,7 @@ impl ApiClient {
             .map_err(|e| format!("request failed: {}", e))?;
 
         let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("failed to read response: {}", e))?;
+        let text = read_body_capped(resp).await?;
 
         Ok(HttpResponse { status, body: text })
     }
@@ -111,10 +136,7 @@ impl ApiClient {
             .await
             .map_err(|e| format!("request failed: {}", e))?;
         let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("failed to read response: {}", e))?;
+        let text = read_body_capped(resp).await?;
         Ok(HttpResponse { status, body: text })
     }
 
@@ -128,10 +150,7 @@ impl ApiClient {
             .await
             .map_err(|e| format!("request failed: {}", e))?;
         let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("failed to read response: {}", e))?;
+        let text = read_body_capped(resp).await?;
         Ok(HttpResponse { status, body: text })
     }
 
@@ -156,27 +175,27 @@ impl ApiClient {
             .map_err(|e| format!("activate request failed: {}", e))?;
 
         let status = resp.status();
-        let text = resp
-            .text()
+        // F-003: non-success bodies are attacker-influenced markup — they are
+        // never echoed into errors that reach the UI; only the status is kept.
+        if status.as_u16() == 409 {
+            return Err("MACHINE_CAP_REACHED".to_string());
+        }
+        if !status.is_success() {
+            return Err(format!("activate failed ({})", status));
+        }
+
+        let text = read_body_capped(resp)
             .await
             .map_err(|e| format!("failed to read activate response: {}", e))?;
-
-        if status.as_u16() == 409 {
-            return Err(format!("MACHINE_CAP_REACHED: {}", text));
-        }
-
-        if !status.is_success() {
-            return Err(format!("activate failed ({}): {}", status, text));
-        }
 
         let envelope: ApiEnvelope<ActivateData> = serde_json::from_str(&text)
             .map_err(|e| format!("failed to parse activate response: {}", e))?;
         if !envelope.success {
-            return Err(format!("activate failed envelope success=false: {}", text));
+            return Err("activate failed: envelope success=false".to_string());
         }
         let data = envelope
             .data
-            .ok_or_else(|| format!("activate response missing data: {}", text))?;
+            .ok_or_else(|| "activate response missing data".to_string())?;
         if data.version != 1 {
             return Err(format!(
                 "unsupported activate envelope version: {}",
@@ -207,11 +226,10 @@ impl ApiClient {
             .map_err(|_| VerifyError::Offline("verify request unavailable".into()))?;
 
         let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|_| VerifyError::Offline("verify response unavailable".into()))?;
 
+        // F-003: classify on status first — a non-2xx body is never read, so a
+        // huge error page can't consume memory or blur the offline-grace
+        // boundary. Only success responses are body-parsed.
         if !status.is_success() {
             return if is_transient_verify_status(status) {
                 Err(VerifyError::Offline(format!(
@@ -225,6 +243,10 @@ impl ApiClient {
                 )))
             };
         }
+
+        let text = read_body_capped(resp)
+            .await
+            .map_err(|_| VerifyError::InvalidResponse("invalid verify response".into()))?;
 
         let envelope: ApiEnvelope<VerifyServerResponse> = serde_json::from_str(&text)
             .map_err(|_| VerifyError::InvalidResponse("invalid verify response".into()))?;
