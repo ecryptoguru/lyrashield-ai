@@ -34,6 +34,7 @@ export const OAUTH_CONNECTION_CLAIM = "https://lyrashieldai.com/connection_id"
 export const OAUTH_AUTH_VERSION_CLAIM = "https://lyrashieldai.com/auth_version"
 import { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE } from "./oauth-scopes"
 import { oauthConsentReferenceId, selectedOAuthWorkspaceId } from "./oauth-consent-reference"
+import { validateSessionFieldWrite } from "./session-field-guard"
 export { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE }
 export const OAUTH_RESOURCE = new URL("/api/mcp", env.NEXT_PUBLIC_APP_URL).toString()
 export const OAUTH_ISSUER = new URL("/api/auth", env.BETTER_AUTH_URL).toString().replace(/\/$/, "")
@@ -370,45 +371,9 @@ export const auth = betterAuth({
       // Every consumer re-checks membership, but enforce the binding at
       // write time so no future reader can trust a forged field.
       if (context.path === "/update-session") {
-        const body = context.body
-        if (body && typeof body === "object" && !Array.isArray(body)) {
-          const sess = await getSessionFromCtx(context)
-          const uid = sess?.user.id
-          if (!uid) return
-          const candidateWorkspace =
-            typeof (body as Record<string, unknown>).activeWorkspaceId === "string"
-              ? ((body as Record<string, unknown>).activeWorkspaceId as string)
-              : undefined
-          const candidateConnection =
-            typeof (body as Record<string, unknown>).pendingAgentConnectionId === "string"
-              ? ((body as Record<string, unknown>).pendingAgentConnectionId as string)
-              : undefined
-          if (candidateWorkspace) {
-            const member = await prisma.workspaceMember.findUnique({
-              where: {
-                workspaceId_userId: { workspaceId: candidateWorkspace, userId: uid },
-              },
-              select: { status: true },
-            })
-            if (member?.status !== "active") {
-              throw new APIError("FORBIDDEN", {
-                code: "WORKSPACE_SELECTION_FORBIDDEN",
-                message: "Cannot select a workspace without active membership",
-              })
-            }
-          }
-          if (candidateConnection) {
-            const connection = await prisma.agentConnection.findFirst({
-              where: { id: candidateConnection, userId: uid, status: "ACTIVE" },
-              select: { id: true },
-            })
-            if (!connection) {
-              throw new APIError("FORBIDDEN", {
-                code: "CONNECTION_BINDING_FORBIDDEN",
-                message: "Cannot bind a connection you do not own",
-              })
-            }
-          }
+        const sess = await getSessionFromCtx(context)
+        if (sess?.user.id) {
+          await validateSessionFieldWrite(context.body, sess.user.id)
         }
       }
 
