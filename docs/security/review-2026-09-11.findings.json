@@ -278,8 +278,8 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "9b2c06e3",
-        "note": "StoredLicense carries HMAC-SHA256 integrity keyed by keychain-held license key; tampered/missing tag clears the grace anchor"
+        "commit": "7f3591c4",
+        "note": "Server-signed Ed25519 receipt binds licenseId, exact license signature, verifiedAt, and seven-day expiresAt; Desktop verifies it before offline grace"
       }
     },
     {
