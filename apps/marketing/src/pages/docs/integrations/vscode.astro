@@ -92,14 +92,14 @@ const jsonLd: unknown[] = [
   <pre><code>npx lyrashield install vscode</code></pre>
   <p>
     VS Code is a config-guided MCP client. For a user-profile server, use <em>MCP: Open User
-    Configuration</em> or <em>MCP: Add Server</em>; VS Code owns the profile-specific
+    Configuration</em> or <em>MCP: Add Server</em>; VS Code owns the profile-specific{" "}
     <code>mcp.json</code> path. Do not edit <code>settings.json</code> for MCP configuration.
   </p>
 
   <h2>Credentials</h2>
   <div class="callout">
     <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>,
-    the local MCP server reads the selected workspace credential from
+    the local MCP server reads the selected workspace credential from{" "}
     <code>~/.lyrashield/credentials.json</code>. No key needs to be inlined in{" "}
     <code>.vscode/mcp.json</code> or any other file you might commit.
   </div>
@@ -112,8 +112,8 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace OAuth login. The
-    <code>@lyrashield/mcp</code> package is published on npm, so
+    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace OAuth login. The{" "}
+    <code>@lyrashield/mcp</code> package is published on npm, so{" "}
     <code>npx -y @lyrashield/mcp@0.2.8</code> resolves directly.
   </div>
 </DocsLayout>

@@ -207,7 +207,7 @@ const jsonLd = [
               class="text-2xl font-semibold text-text"
               data-reveal
             >
-              {group.label}
+              {group.label}{" "}
               <span class="ml-3 font-mono text-sm font-normal text-text-muted">
                 {group.items.length} of {totalControls}
               </span>
@@ -250,7 +250,7 @@ const jsonLd = [
               <summary
                 class="flex cursor-pointer items-center justify-between gap-4 font-medium text-text marker:hidden"
               >
-                {entry.q}
+                {entry.q}{" "}
                 <span class="text-text-muted transition-transform group-open:rotate-45" aria-hidden="true">+</span>
               </summary>
               <p class="mt-3 leading-7 text-text-muted">{entry.a}</p>

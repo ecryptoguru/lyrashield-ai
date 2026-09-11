@@ -20,7 +20,7 @@ import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
-import { formatDate } from "@/lib/date-format"
+import { LocalTime } from "@/components/local-time"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
@@ -460,7 +460,14 @@ export function ReportsClient({
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex items-center gap-2">
                     <h3 className="truncate font-medium" title={report.title}>
-                      {report.title}
+                      <a
+                        href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {report.title}
+                      </a>
                     </h3>
                     <Badge variant="info">{REPORT_TYPE_LABEL[report.type] ?? report.type}</Badge>
                     <Badge
@@ -475,26 +482,24 @@ export function ReportsClient({
                     {report.revokedAt && <Badge variant="muted">revoked</Badge>}
                   </div>
                   <p className="text-muted-foreground text-sm">
-                    Created {formatDate(report.createdAt)}
+                    Created <LocalTime value={report.createdAt} />
                     {report.shareExpiresAt && !report.revokedAt && (
-                      <> · Expires {formatDate(report.shareExpiresAt)}</>
+                      <>
+                        {" "}
+                        · Expires <LocalTime value={report.shareExpiresAt} />
+                      </>
                     )}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Download report"
-                    onClick={() => {
-                      window.open(
-                        `/api/reports/${report.id}/download?workspaceId=${workspaceId}`,
-                        "_blank"
-                      )
-                    }}
+                  <a
+                    href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}
+                    download={`${report.title.replace(/[^\w\- ]+/g, "").trim() || "report"}.html`}
+                    aria-label={`Download ${report.title}`}
+                    className={buttonVariants({ size: "sm", variant: "ghost" })}
                   >
                     <Download className="h-4 w-4" aria-hidden="true" />
-                  </Button>
+                  </a>
                   {!report.revokedAt && (
                     <Button
                       size="sm"

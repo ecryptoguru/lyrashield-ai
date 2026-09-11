@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { Badge, buttonVariants } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
+import { EmailText } from "@/components/email-text"
 import { getPlatformAdminUsers, parseAdminCursor } from "@/lib/platform-admin-lists"
 
 export const dynamic = "force-dynamic"
@@ -52,7 +53,9 @@ export default async function PlatformAdminUsersPage({
           <tbody className="divide-y">
             {page.items.map((user) => (
               <tr key={user.id}>
-                <td className="px-4 py-3">{user.email}</td>
+                <td className="px-4 py-3">
+                  <EmailText value={user.email} />
+                </td>
                 <td className="px-4 py-3">
                   <Badge variant={user.emailVerified ? "success" : "warning"}>
                     {user.emailVerified ? "Verified" : "Unverified"}
