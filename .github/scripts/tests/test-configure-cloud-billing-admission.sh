@@ -28,7 +28,12 @@ if grep -Fq -- '-H "Host: app.lyrashieldai.com"' "$script"; then
   echo 'FAIL: candidate readiness must use its Azure revision host.' >&2
   exit 1
 fi
-grep -Fq 'GH_TOKEN: ${{ secrets.ADMISSION_CONFIG_TOKEN }}' "$workflow"
+grep -Fq 'contents: write' "$workflow"
+grep -Fq 'GH_TOKEN: ${{ github.token }}' "$workflow"
+if grep -Fq 'ADMISSION_CONFIG_TOKEN' "$workflow"; then
+  echo 'FAIL: billing admission must use the job-scoped GitHub token, not a long-lived PAT.' >&2
+  exit 1
+fi
 grep -Fq 'options: ["off", canary, public]' "$workflow"
 grep -Fq 'web_image_digest:' "$workflow"
 grep -Fq 'source_sha:' "$workflow"

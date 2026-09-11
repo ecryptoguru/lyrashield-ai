@@ -41,7 +41,9 @@ jobs:
     # AZURE_CREDENTIALS secret to federated OIDC (same as deploy-azure and
     # the desktop release). No client secret is stored.
     permissions:
-      contents: read
+      # repository_dispatch is the only repository write; the job-scoped token
+      # expires with this run and replaces the former long-lived PAT.
+      contents: write
       id-token: write
     environment: azure-production
     steps:
@@ -57,7 +59,7 @@ jobs:
       - run: az extension add --name containerapp --yes --only-show-errors
       - name: Apply joint Cloud admission without rebuilding
         env:
-          GH_TOKEN: ${{ secrets.ADMISSION_CONFIG_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           CLOUD_BILLING_MODE: ${{ inputs.mode }}
           BILLING_CANARY_WORKSPACE_IDS: ${{ inputs.canary_workspace_ids }}
           DEPLOY_SHA: ${{ inputs.source_sha }}

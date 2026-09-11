@@ -833,7 +833,7 @@ jobs:
             echo "GitHub App OAuth credentials present."
           fi
 
-      - name: Sync GitHub App secrets to Container Apps
+      - name: Sync GitHub App secrets to app Container App
         id: sync-github-app
         env:
           GITHUB_APP_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_ID }}
@@ -844,7 +844,6 @@ jobs:
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
-          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: |
           if [ -z "${GITHUB_APP_ID}" ] || [ -z "${GITHUB_APP_SLUG}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY}" ] || [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
             echo "Skipping GitHub App secret sync — not all secrets set (see verify step above)."
@@ -871,9 +870,6 @@ jobs:
           }
           if [ -n "$AZURE_APP_CONTAINER_APP_NAME" ]; then
             sync_github_app_secrets "$AZURE_APP_CONTAINER_APP_NAME"
-          fi
-          if [ -n "$AZURE_SCANNER_CONTAINER_APP_NAME" ]; then
-            sync_github_app_secrets "$AZURE_SCANNER_CONTAINER_APP_NAME"
           fi
 
       - name: Deploy app Container App
@@ -1058,19 +1054,13 @@ jobs:
 
       - name: Deploy scanner Container App
         id: deploy-scanner
-        if: steps.sync-upstash.outcome == 'success' && steps.sync-github-app.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        if: steps.sync-upstash.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
         env:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
-          GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
-          GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
           EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: |
-          OAUTH_ENV=()
-          if [ -n "${GITHUB_APP_CLIENT_ID}" ] && [ -n "${GITHUB_APP_CLIENT_SECRET}" ]; then
-            OAUTH_ENV=("GITHUB_APP_CLIENT_ID=secretref:github-app-client-id" "GITHUB_APP_CLIENT_SECRET=secretref:github-app-client-secret")
-          fi
           EMAIL_ENV=()
           if [ "$EMAIL_VERIFICATION_REQUIRED" = "1" ]; then
             EMAIL_ENV=("BREVO_API_KEY=secretref:brevo-api-key")
@@ -1085,6 +1075,12 @@ jobs:
               BILLING_STAGING_ADMISSION \
               BILLING_STAGING_ACCESS_TOKEN \
               BILLING_STAGING_REGION \
+              GITHUB_APP_ID \
+              GITHUB_APP_SLUG \
+              GITHUB_APP_PRIVATE_KEY \
+              GITHUB_WEBHOOK_SECRET \
+              GITHUB_APP_CLIENT_ID \
+              GITHUB_APP_CLIENT_SECRET \
             --set-env-vars \
               "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
@@ -1102,12 +1098,7 @@ jobs:
               "REDIS_URL=secretref:bullmq-redis-url" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
-              "GITHUB_APP_ID=secretref:github-app-id" \
-              "GITHUB_APP_SLUG=secretref:github-app-slug" \
-              "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
-              "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
               "${EMAIL_ENV[@]}" \
-              "${OAUTH_ENV[@]}" \
             --output none
           CANDIDATE_REVISION=$(az containerapp show \
             --name "$AZURE_SCANNER_CONTAINER_APP_NAME" \
@@ -1469,6 +1460,40 @@ jobs:
           deactivate_superseded scanner "$SCANNER_NAME" "$SCANNER_CURRENT" "$SCANNER_ROLLBACK" || CLEANUP_FAILED=1
           deactivate_superseded egress-proxy "$EGRESS_NAME" "$EGRESS_CURRENT" "$EGRESS_ROLLBACK" || CLEANUP_FAILED=1
           exit "$CLEANUP_FAILED"
+
+      - name: Remove excess scanner secrets
+        if: steps.smoke-public.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: |
+          mapfile -t existing_secrets < <(az containerapp secret list \
+            --name "$SCANNER_NAME" \
+            --resource-group "$RG" \
+            --query '[].name' \
+            --output tsv)
+          excess_secrets=()
+          for secret in \
+            github-app-id \
+            github-app-slug \
+            github-app-private-key \
+            github-webhook-secret \
+            github-app-client-id \
+            github-app-client-secret
+          do
+            if printf '%s\n' "${existing_secrets[@]}" | grep -Fxq "$secret"; then
+              excess_secrets+=("$secret")
+            fi
+          done
+          if [ "${#excess_secrets[@]}" -eq 0 ]; then
+            echo "Public scanner has no GitHub App secrets."
+            exit 0
+          fi
+          az containerapp secret remove \
+            --name "$SCANNER_NAME" \
+            --resource-group "$RG" \
+            --secret-names "${excess_secrets[@]}" \
+            --output none
 
       # v16 4.3 — why worker-VM promotion may run AFTER the app traffic
       # cutover (deliberate ordering, not an oversight):

@@ -372,7 +372,9 @@ Trust-boundary rules:
 
 - Auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, OAuth provider values, trusted origins.
 - Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, and a separately scoped `DATABASE_SYSTEM_URL` where a verified cross-workspace path requires it. Production app and worker each receive separately provisioned, bounded system credentials for reviewed global operations; Lite Scanner receives none.
-- Queue: `REDIS_URL`; production BullMQ requires authenticated `rediss://`.
+- Queue: `REDIS_URL`; production BullMQ requires authenticated `rediss://`. The
+  passive scanner retains this for the shared readiness/route contract but holds
+  no GitHub App credentials; Upstash remains its public abuse limiter.
 - Rate limit: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` only.
 - Engine: `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LYRASHIELD_LLM`, Azure API values.
 - Evidence: `S3_*` plus encryption/key references.
