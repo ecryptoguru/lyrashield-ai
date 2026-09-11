@@ -544,6 +544,12 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Install dependencies (no secrets)
+        # VULN-H-001: install-time build scripts inherit step env. Dependency
+        # installation must never share a step with a bound secret — a
+        # malicious allowlisted build script could read the production DB URL.
+        run: pnpm install --frozen-lockfile
+
       - name: Run database migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
@@ -552,7 +558,6 @@ jobs:
             echo "::error::DATABASE_DIRECT_URL secret is not set — refusing to deploy code against an unmigrated schema."
             exit 1
           fi
-          pnpm install --frozen-lockfile
           pnpm --filter @lyrashield/db exec prisma migrate deploy
 
       - name: Verify shared rate-limiting credentials

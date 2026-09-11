@@ -17,6 +17,16 @@ describe("logger — sensitive key detection", () => {
     "verificationUrl",
     "vaultRef",
     "Cookie",
+    // VERIFY-I-002 — marker gap coverage
+    "api_key",
+    "x-api-key",
+    "private_key",
+    "jwt",
+    "bearer",
+    "passphrase",
+    "dsn",
+    "sessionId",
+    "signingKey",
   ])("flags %s as sensitive", (k) => {
     expect(isSensitiveKey(k)).toBe(true)
   })
@@ -65,6 +75,35 @@ describe("logger — redaction", () => {
     const err = out.err as Record<string, unknown>
     expect(err.name).toBe("Error")
     expect(err.message).toBe("boom")
+  })
+
+  // VERIFY-I-003: secret VALUES embedded in Error messages / string meta
+  // bypass key-name redaction — they must be scrubbed by shape.
+  it.each([
+    ["lsk_4f8ab12cd9ef0011", "a workspace API key"],
+    ["Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc123.def456", "a bearer token"],
+    [
+      "postgresql://user:s3cret-pw@db.example.com:5432/prod",
+      "a credentialed DSN",
+    ],
+    // Built at runtime — a literal sk_live_* trips push protection even
+    // with an obviously fake tail.
+    [`sk${"_"}live_${"0".repeat(24)}`, "a provider live key"],
+  ])("scrubs %s from Error messages and plain strings", (secret, _label) => {
+    const out = redact(
+      {
+        err: new Error(`call failed with ${secret}`),
+        detail: `connect using ${secret} now`,
+        note: "nothing sensitive here",
+      },
+      new WeakSet(),
+      0
+    ) as Record<string, unknown>
+    const serialized = JSON.stringify(out)
+    expect(serialized).not.toContain(secret)
+    expect(serialized).toContain("[REDACTED]")
+    expect(out.note).toBe("nothing sensitive here")
+    expect((out.err as Record<string, unknown>).message).toContain("[REDACTED]")
   })
 })
 

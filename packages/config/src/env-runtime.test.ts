@@ -61,4 +61,21 @@ describe("runtime environment validation", () => {
     vi.stubEnv("LYRASHIELD_EGRESS_PROXY_SECRET", "test-proxy-secret")
     await expect(import("./env")).resolves.toBeDefined()
   })
+
+  // VULN-I-001: secureCookies derives the session Secure flag from the
+  // BETTER_AUTH_URL scheme — an http:// production origin ships cookies
+  // transmittable in cleartext.
+  it("rejects a non-loopback http BETTER_AUTH_URL in production", async () => {
+    vi.stubEnv("BETTER_AUTH_URL", "http://app.lyrashieldai.com")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+  })
+
+  it("accepts https and loopback-http BETTER_AUTH_URL in production", async () => {
+    vi.stubEnv("BETTER_AUTH_URL", "https://app.lyrashieldai.com")
+    await expect(import("./env")).resolves.toBeDefined()
+
+    vi.resetModules()
+    vi.stubEnv("BETTER_AUTH_URL", "http://127.0.0.1:3100")
+    await expect(import("./env")).resolves.toBeDefined()
+  })
 })

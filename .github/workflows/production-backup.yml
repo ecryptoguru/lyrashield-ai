@@ -21,14 +21,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+  # VULN-H-001: workflow-level env lands in EVERY step — including
+  # `pnpm install`/`db:generate`, whose dependency build scripts run package
+  # code. Secrets are bound per-step below; only non-secret settings live here.
   AWS_DEFAULT_REGION: auto
   AWS_EC2_METADATA_DISABLED: "true"
-  BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
-  DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
-  R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
-  R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
   # Keep the most recent N days of daily backups. Older objects under daily/ are
   # deleted after each successful upload. 30 days covers a month of audit recovery;
   # adjust here (or override via a repository variable of the same name).
@@ -41,6 +38,13 @@ jobs:
     steps:
       - name: Verify production backup configuration
         shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+          DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
+          R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
         run: |
           set -euo pipefail
           for name in \
@@ -57,6 +61,13 @@ jobs:
 
       - name: Create, encrypt, and upload backup
         shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+          DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
+          R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
         run: |
           set -euo pipefail
           backup_name="lyrashield-$(date -u +%F)-${GITHUB_RUN_ID}.dump"
@@ -78,7 +89,7 @@ jobs:
           docker run --rm \
             --env PG_URL="$pg_dump_url" \
             --volume "$RUNNER_TEMP:/backup" \
-            postgres:17-alpine \
+            postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 \
             sh -ceu 'pg_dump --format=custom --schema=public --schema=app --no-owner --no-acl --file="/backup/'"$backup_name"'" "$PG_URL"'
 
           dump_sha256="$(sha256sum "$dump_path" | awk '{print $1}')"
@@ -98,6 +109,11 @@ jobs:
 
       - name: Retain last N days of backups
         shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
         run: |
           set -euo pipefail
           # Only delete old backups after the current upload succeeds, so a failed
@@ -194,6 +210,12 @@ jobs:
 
       - name: Restore latest encrypted backup into PostgreSQL 16
         shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+          R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
         run: |
           set -euo pipefail
           command -v aws >/dev/null
@@ -216,7 +238,7 @@ jobs:
 
           docker run -d --name lyrashield-restore-postgres \
             -e POSTGRES_USER=restore -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=lyrashield_restore \
-            -p 5433:5432 postgres:17-alpine >/dev/null
+            -p 5433:5432 postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 >/dev/null
           for _ in $(seq 1 30); do
             docker exec lyrashield-restore-postgres pg_isready -U restore -d lyrashield_restore && break
             sleep 2
@@ -227,7 +249,7 @@ jobs:
           # and a trigger that reference these functions. Bootstrap them only for
           # those retained legacy archives so pg_restore can recreate public.
           legacy_public_only=0
-          if ! docker run --rm --volume "$RUNNER_TEMP:/backup:ro" postgres:17-alpine \
+          if ! docker run --rm --volume "$RUNNER_TEMP:/backup:ro" postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 \
             pg_restore --list /backup/backup.dump | grep -Eq ' SCHEMA - app( |$)'; then
             legacy_public_only=1
             docker exec -i lyrashield-restore-postgres psql -v ON_ERROR_STOP=1 \
@@ -363,7 +385,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run -d --name lyrashield-restore-redis -p 6379:6379 redis:7-alpine >/dev/null
+          docker run -d --name lyrashield-restore-redis -p 6379:6379 redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf >/dev/null
           for _ in $(seq 1 30); do
             docker exec lyrashield-restore-redis redis-cli ping | grep -qx PONG && break
             sleep 1

@@ -54,7 +54,6 @@ vi.mock("@lyrashield/mcp", () => {
 vi.mock("@lyrashield/config", () => ({
   env: {
     NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com",
-    LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS: "false",
   },
 }))
 

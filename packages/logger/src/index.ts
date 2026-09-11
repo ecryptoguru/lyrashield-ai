@@ -86,8 +86,19 @@ const SENSITIVE_KEY_MARKERS = [
   "token", // accessToken, refreshToken, idToken, csrfToken, webhookSecret handled by "secret"
   "authorization",
   "apikey",
+  "api_key",
+  "api-key", // x-api-key
   "accesskey",
   "privatekey",
+  "private_key",
+  "jwt",
+  "bearer",
+  "passphrase",
+  "dsn",
+  "sessionid",
+  "session_id",
+  "signingkey",
+  "signing_key",
   "cookie",
   "credential",
   "vaultref",
@@ -96,6 +107,31 @@ const SENSITIVE_KEY_MARKERS = [
 ]
 
 const REDACTED = "[REDACTED]"
+
+// Secret-shaped VALUES, independent of the key they are logged under
+// (VERIFY-I-003): Error.message/stack and plain string meta values carry
+// whatever the thrower/interpolator put in them — e.g. a thrown message
+// embedding the failed credential. Substring markers can't see those, so
+// string leaves are scrubbed for known credential shapes.
+const SECRET_VALUE_PATTERNS: RegExp[] = [
+  /lsk_[A-Za-z0-9_-]{8,}/g, // LyraShield workspace API keys
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{10,}/g,
+  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, // JWTs
+  /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^\s'"]+/g, // DSNs with creds
+  /\b(?:sk_live|sk_test|rk_live|rk_test|whsec)_[A-Za-z0-9]{8,}/g, // provider keys
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g, // AWS access key ids
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+]
+
+function scrubSecretValues(text: string): string {
+  let out = text
+  for (const pattern of SECRET_VALUE_PATTERNS) {
+    pattern.lastIndex = 0
+    out = out.replace(pattern, REDACTED)
+  }
+  return out
+}
 const MAX_DEPTH = 8
 const MAX_SERIALIZED_CHARS = 20_000
 
@@ -106,7 +142,9 @@ function isSensitiveKey(key: string): boolean {
 
 // Recursively copy `value`, masking sensitive keys and breaking cycles.
 function redact(value: unknown, seen: WeakSet<object>, depth: number): unknown {
-  if (value === null || typeof value !== "object") return value
+  if (value === null || typeof value !== "object") {
+    return typeof value === "string" ? scrubSecretValues(value) : value
+  }
   if (depth > MAX_DEPTH) return "[Truncated: max depth]"
   if (seen.has(value as object)) return "[Circular]"
   seen.add(value as object)
@@ -115,9 +153,14 @@ function redact(value: unknown, seen: WeakSet<object>, depth: number): unknown {
     return value.map((v) => redact(v, seen, depth + 1))
   }
 
-  // Errors don't enumerate message/stack via spread — capture them explicitly.
+  // Errors don't enumerate message/stack via spread — capture them explicitly,
+  // scrubbed for secret-shaped values a thrower may have embedded.
   if (value instanceof Error) {
-    return { name: value.name, message: value.message, stack: value.stack }
+    return {
+      name: value.name,
+      message: scrubSecretValues(value.message),
+      stack: value.stack ? scrubSecretValues(value.stack) : undefined,
+    }
   }
 
   const out: Record<string, unknown> = {}
