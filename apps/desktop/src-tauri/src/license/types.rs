@@ -99,6 +99,13 @@ pub struct StoredLicense {
     pub blob: String,
     #[serde(default)]
     pub last_server_verified_at: Option<String>,
+    /// VULN-F-001: HMAC-SHA256 over the rest of this row, keyed by a
+    /// keychain-held secret derived from the license key. The ed25519
+    /// signature covers only the license payload — never this timestamp —
+    /// so without a local MAC the user-writable file could anchor perpetual
+    /// offline grace by rewriting lastServerVerifiedAt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrity: Option<String>,
 }
 
 /// Client-side license status summary.

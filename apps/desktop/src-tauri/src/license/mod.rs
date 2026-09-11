@@ -596,12 +596,16 @@ mod tests {
             issued_at: String::new(),
         };
         let pubkey = test_pubkey_and_sign(&mut file);
+        // F-001: stored licenses carry an integrity tag over the row; the
+        // guard tests persist+reload, so they need a stable integrity key.
+        crate::license::store::set_test_integrity_key(Some(b"guard-test-integrity-key".to_vec()));
         let stored = types::StoredLicense {
             version: 1,
             license_id: "lic_test_123".into(),
             license: file,
             blob: "testblob".into(),
             last_server_verified_at: None,
+            integrity: None,
         };
         (stored, pubkey)
     }

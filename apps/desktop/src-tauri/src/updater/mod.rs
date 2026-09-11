@@ -193,6 +193,7 @@ mod tests {
             },
             blob: "blob".into(),
             last_server_verified_at: Some(chrono::Utc::now().to_rfc3339()),
+            integrity: None,
         }
     }
 

@@ -485,8 +485,10 @@ pub async fn sync_findings(
                 break;
             }
             Ok(resp) => {
+                // F-003: never copy an attacker-influenced response body into
+                // a UI-visible error — status code only.
                 results.push(SyncResult::Error {
-                    message: format!("sync failed ({}): {}", resp.status, resp.body),
+                    message: format!("sync failed ({})", resp.status),
                 });
                 break;
             }

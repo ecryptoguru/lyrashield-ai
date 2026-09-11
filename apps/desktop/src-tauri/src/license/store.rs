@@ -1,7 +1,132 @@
+use crate::license::canonical_json;
 use crate::license::types::{LicenseFile, StoredLicense};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+
+// ── StoredLicense integrity (VULN-F-001) ────────────────────────────────────
+// license.json is user-writable, so its fields — in particular the offline
+// grace anchor `lastServerVerifiedAt` — need a local authenticity check that
+// a file editor cannot reproduce. We HMAC-SHA256 the canonical row over a key
+// derived from the keychain-held license key:
+//   integrity_key = SHA-256("lyrashield/license-integrity-v1" || license_key)
+// The license key is high-entropy, per-license, and lives only in the OS
+// keychain — it never touches disk, so a tampered timestamp fails the MAC and
+// the grace anchor is untrusted (load_license nulls it → offline grace denied
+// → forced online re-verification, which reveals revocation).
+const INTEGRITY_DOMAIN: &[u8] = b"lyrashield/license-integrity-v1\x00";
+
+/// RFC 2104 HMAC-SHA256 (no `hmac` crate in the dependency set — sha2 only).
+fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    const BLOCK: usize = 64;
+    let mut block_key = [0u8; BLOCK];
+    if key.len() > BLOCK {
+        block_key[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        block_key[..key.len()].copy_from_slice(key);
+    }
+    let mut ipad = [0x36u8; BLOCK];
+    let mut opad = [0x5cu8; BLOCK];
+    for i in 0..BLOCK {
+        ipad[i] ^= block_key[i];
+        opad[i] ^= block_key[i];
+    }
+    let mut inner_input = Vec::with_capacity(BLOCK + message.len());
+    inner_input.extend_from_slice(&ipad);
+    inner_input.extend_from_slice(message);
+    let inner = Sha256::digest(&inner_input);
+    let mut outer_input = Vec::with_capacity(BLOCK + inner.len());
+    outer_input.extend_from_slice(&opad);
+    outer_input.extend_from_slice(&inner);
+    Sha256::digest(&outer_input).into()
+}
+
+fn license_integrity_key() -> Option<Vec<u8>> {
+    #[cfg(test)]
+    if let Some(key) = test_integrity_key() {
+        return Some(key);
+    }
+    let license_key = load_license_key().ok()??;
+    let mut hasher = Sha256::new();
+    hasher.update(INTEGRITY_DOMAIN);
+    hasher.update(license_key.as_bytes());
+    Some(hasher.finalize().to_vec())
+}
+
+/// HMAC tag for a StoredLicense over every field except `integrity` itself.
+fn stored_integrity_tag(stored: &StoredLicense, key: &[u8]) -> String {
+    let mut value = match serde_json::to_value(stored) {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+    if let Some(obj) = value.as_object_mut() {
+        obj.remove("integrity");
+    }
+    let canonical = canonical_json(&value);
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(hmac_sha256(key, canonical.as_bytes()))
+}
+
+/// Constant-time tag comparison — both values are base64 MACs, so a fast
+/// timing oracle is implausible, but compare on decoded bytes anyway.
+fn tags_equal(a: &str, b: &str) -> bool {
+    use base64::Engine;
+    let (Ok(x), Ok(y)) = (
+        base64::engine::general_purpose::STANDARD.decode(a),
+        base64::engine::general_purpose::STANDARD.decode(b),
+    ) else {
+        return false;
+    };
+    if x.len() != y.len() {
+        return false;
+    }
+    x.iter()
+        .zip(y.iter())
+        .fold(0u8, |acc, (p, q)| acc | (p ^ q))
+        == 0
+}
+
+/// Verify a loaded row's integrity tag. When the keychain-derived key is
+/// unavailable (key never stored / keychain inaccessible) or the tag is
+/// absent or mismatched, the offline-grace anchor is untrusted and cleared —
+/// the signed license body itself is unaffected and still drives the normal
+/// online verification path.
+fn enforce_stored_integrity(stored: &mut StoredLicense) {
+    let Some(key) = license_integrity_key() else {
+        stored.last_server_verified_at = None;
+        return;
+    };
+    let expected = stored_integrity_tag(stored, &key);
+    let trusted = stored
+        .integrity
+        .as_deref()
+        .is_some_and(|tag| tags_equal(tag, &expected));
+    if !trusted {
+        stored.last_server_verified_at = None;
+    }
+}
+
+#[cfg(test)]
+static TEST_INTEGRITY_KEY: std::sync::OnceLock<std::sync::Mutex<Option<Vec<u8>>>> =
+    std::sync::OnceLock::new();
+
+#[cfg(test)]
+fn test_integrity_key() -> Option<Vec<u8>> {
+    TEST_INTEGRITY_KEY
+        .get_or_init(|| std::sync::Mutex::new(None))
+        .lock()
+        .unwrap()
+        .clone()
+}
+
+#[cfg(test)]
+pub(super) fn set_test_integrity_key(key: Option<Vec<u8>>) {
+    *TEST_INTEGRITY_KEY
+        .get_or_init(|| std::sync::Mutex::new(None))
+        .lock()
+        .unwrap() = key;
+}
 
 /// Returns the path to the local license file in the OS app data directory.
 ///
@@ -23,6 +148,7 @@ pub fn save_license(file: &LicenseFile, license_id: &str, blob: &str) -> Result<
         license: file.clone(),
         blob: blob.to_string(),
         last_server_verified_at: Some(chrono::Utc::now().to_rfc3339()),
+        integrity: None,
     };
     save_stored(&stored)
 }
@@ -33,7 +159,14 @@ pub(super) fn save_stored(stored: &StoredLicense) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| format!("failed to create license dir: {}", e))?;
     }
 
-    let json = serde_json::to_string_pretty(stored)
+    // Stamp the integrity tag when the keychain-derived key is available. On
+    // first activation the license key lands in the keychain before this
+    // write; when it is unavailable the row persists untagged and load clears
+    // the grace anchor — fail closed, never silently trusted.
+    let mut stored = stored.clone();
+    stored.integrity = license_integrity_key().map(|key| stored_integrity_tag(&stored, &key));
+
+    let json = serde_json::to_string_pretty(&stored)
         .map_err(|e| format!("failed to serialize license: {}", e))?;
 
     // Write atomically via a temp file + rename.
@@ -66,8 +199,9 @@ pub fn load_license() -> Result<Option<StoredLicense>, String> {
     let contents =
         fs::read_to_string(&path).map_err(|e| format!("failed to read license file: {}", e))?;
     // Try v1 envelope first.
-    if let Ok(stored) = serde_json::from_str::<StoredLicense>(&contents) {
+    if let Ok(mut stored) = serde_json::from_str::<StoredLicense>(&contents) {
         if matches!(stored.version, 1 | 2) && !stored.license_id.is_empty() {
+            enforce_stored_integrity(&mut stored);
             return Ok(Some(stored));
         }
     }
@@ -79,6 +213,7 @@ pub fn load_license() -> Result<Option<StoredLicense>, String> {
             license: file,
             blob: String::new(),
             last_server_verified_at: None,
+            integrity: None,
         }));
     }
     Err("failed to parse license: unknown format".into())
@@ -222,5 +357,77 @@ mod tests {
         // Legacy migrates to stored with empty license_id (triggers re-activation requirement)
         assert_eq!(loaded.license.seat_count, 1);
         assert_eq!(loaded.license_id, "");
+    }
+
+    // VULN-F-001: rewriting lastServerVerifiedAt in the user-writable file
+    // must not extend offline grace — the row's integrity tag is HMAC'd over
+    // all fields with a keychain-derived key.
+    #[test]
+    fn test_tampered_grace_timestamp_fails_integrity() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        set_test_integrity_key(Some(b"test-integrity-key".to_vec()));
+
+        save_license(&test_license(), "lic_test_456", "blob").unwrap();
+        let path = license_path().unwrap();
+
+        // Attacker refreshes the grace anchor to "now" — the whole point of
+        // the finding. Rewrite on disk and reload.
+        let mut json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        json["lastServerVerifiedAt"] = serde_json::Value::String(chrono::Utc::now().to_rfc3339());
+        std::fs::write(&path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
+
+        let loaded = load_license().unwrap().unwrap();
+        assert!(
+            loaded.last_server_verified_at.is_none(),
+            "tampered grace anchor must be cleared"
+        );
+        set_test_integrity_key(None);
+    }
+
+    #[test]
+    fn test_untampered_license_keeps_grace_anchor() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        set_test_integrity_key(Some(b"test-integrity-key".to_vec()));
+
+        save_license(&test_license(), "lic_test_789", "blob").unwrap();
+        let loaded = load_license().unwrap().unwrap();
+        assert!(loaded.integrity.is_some());
+        assert!(loaded.last_server_verified_at.is_some());
+        set_test_integrity_key(None);
+    }
+
+    #[test]
+    fn test_missing_integrity_key_clears_grace_anchor() {
+        let _lock = crate::license::TEST_ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
+
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("XDG_DATA_HOME", tmp.path());
+        set_test_integrity_key(Some(b"test-integrity-key".to_vec()));
+        save_license(&test_license(), "lic_test_nokey", "blob").unwrap();
+
+        // Keychain key unavailable (e.g. cleared) → cannot verify the row →
+        // the grace anchor is untrusted and cleared.
+        set_test_integrity_key(None);
+        let loaded = load_license().unwrap().unwrap();
+        assert!(loaded.last_server_verified_at.is_none());
     }
 }

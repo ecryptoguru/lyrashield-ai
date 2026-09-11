@@ -73,11 +73,14 @@ pub fn logout_chatgpt() -> Result<(), String> {
 }
 
 fn mask_key(key: &str) -> String {
-    if key.len() <= 8 {
+    // VULN-F-004: byte-slicing (&key[..4]) panics mid-multibyte-char. Count
+    // and slice on char boundaries instead.
+    let len = key.chars().count();
+    if len <= 8 {
         return "***".to_string();
     }
-    let start = &key[..4];
-    let end = &key[key.len() - 4..];
+    let start: String = key.chars().take(4).collect();
+    let end: String = key.chars().skip(len - 4).collect();
     format!("{}…{}", start, end)
 }
 
@@ -114,6 +117,11 @@ fn validate_azure_endpoint(endpoint: &str) -> Result<(), String> {
 pub fn validate_azure_credentials(api_key: &str, endpoint: &str) -> Result<(), String> {
     if api_key.trim().len() < 8 {
         return Err("API key too short".into());
+    }
+    // VULN-F-004: Azure API keys are ASCII; a multibyte key would also panic
+    // the status/metadata masker on every read.
+    if !api_key.is_ascii() {
+        return Err("API key must be ASCII".into());
     }
     validate_azure_endpoint(endpoint)?;
     Ok(())
@@ -226,5 +234,27 @@ mod tests {
         assert!(validate_azure_endpoint("https://openai.azure.com.attacker.example").is_err());
         assert!(validate_azure_endpoint("https://attacker@my.openai.azure.com").is_err());
         assert!(validate_azure_endpoint("https://my.openai.azure.com:8443").is_err());
+    }
+
+    // VULN-F-004: byte-slicing panicked mid-multibyte char — mask must be
+    // boundary-safe and validation must refuse non-ASCII keys.
+    #[test]
+    fn mask_key_is_utf8_boundary_safe() {
+        let key = "キー-🔑-αβγδ-test"; // gitleaks:allow — not a credential
+        let masked = mask_key(key);
+        assert!(masked.contains("…"));
+        assert!(masked.starts_with("キー-"));
+        assert!(masked.ends_with("st") || masked.ends_with("est"));
+    }
+
+    #[test]
+    fn azure_credentials_reject_multibyte_key() {
+        assert!(
+            validate_azure_credentials("キー-🔑-αβγδ-1234", "https://my.openai.azure.com").is_err()
+        );
+        assert!(
+            validate_azure_credentials("plain-ascii-key-123", "https://my.openai.azure.com")
+                .is_ok()
+        );
     }
 }
