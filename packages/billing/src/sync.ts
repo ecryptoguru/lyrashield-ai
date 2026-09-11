@@ -1,17 +1,31 @@
 /**
- * Subscription synchronization.
+ * Subscription synchronization — account-owned.
  *
- * Maps provider subscription states to workspace plan/billing state.
- * On canceled/past_due: move workspace to read-only at period end,
- * keep data, stop paid-only scans, audit-log.
+ * Maps provider subscription states to the ACCOUNT's billing state. The
+ * durable subscription identity is (provider, externalId); `accountId` is the
+ * owner. `workspaceId` on the row is purchase attribution only — the
+ * attributed workspace's `plan`/`deepAllowed` remain display fields, never
+ * the entitlement source.
+ *
+ * On canceled/past_due: the account keeps its plan until period end, then the
+ * downgrade job moves the row to FREE. Usage, packs, overage, and grace all
+ * follow the account, so canceling or switching workspaces never strands or
+ * duplicates allowance.
  */
 
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import {
+  prisma,
+  getSystemPrisma,
+  withAccountRLS,
+  withWorkspaceRLS,
+  type ScopedTransaction,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { CLOUD_PLAN_MAP, type CloudPlanId } from "@lyrashield/pricing"
 import type { WorkspacePlan } from "@lyrashield/types"
 import { grantMonthlyPool } from "./usage/grants"
 import { resetGrace } from "./grace"
+import { resolveAllowanceCycle } from "./usage/allowance-cycle"
 
 export type SubscriptionProvider = "polar" | "razorpay"
 export type SubscriptionStatus =
@@ -19,7 +33,17 @@ export type SubscriptionStatus =
 export type BillingInterval = "monthly" | "annual"
 
 export interface SyncSubscriptionParams {
-  workspaceId: string
+  /**
+   * Purchase-attribution workspace (provider metadata). Optional after
+   * account-ownership cutover — the durable identity is (provider,
+   * externalId); the workspace is only where the row was first attributed.
+   */
+  workspaceId?: string | null
+  /**
+   * Owning account (provider metadata `accountId`, stamped by checkout).
+   * When absent on an existing row, the row's persisted accountId wins.
+   */
+  accountId?: string | null
   provider: SubscriptionProvider
   externalId: string
   plan: CloudPlanId
@@ -32,20 +56,15 @@ export interface SyncSubscriptionParams {
 
 /**
  * Synchronize a subscription state from a provider webhook into the
- * workspace billing state.
+ * account's billing state.
  *
- * - active: update plan, grant monthly pool, reset grace
+ * - active: update plan, grant the current allowance cycle's pool, reset grace
  * - canceled: keep plan until period end, then downgrade to FREE
  * - past_due: keep plan until period end, then downgrade to FREE
  * - trialing: set trial state
- *
- * All changes are audit-logged and wrapped in a single transaction so
- * the billing account, workspace plan, and audit log are committed
- * atomically.
  */
 export async function syncSubscription(params: SyncSubscriptionParams): Promise<void> {
   const {
-    workspaceId,
     provider,
     externalId,
     plan,
@@ -81,11 +100,9 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
       billingStatus = "trialing"
       break
     case "canceled":
-      // Keep plan until period end, then will be downgraded
       billingStatus = "canceled"
       break
     case "past_due":
-      // Keep plan until period end, then will be downgraded
       billingStatus = "past_due"
       break
     case "paused":
@@ -98,81 +115,145 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
       billingStatus = status
   }
 
-  // Wrap domain writes in a single transaction for atomicity.
-  // Audit log is created post-commit best-effort so a hash-chain failure
-  // cannot roll back the billing state transition.
-  await withWorkspaceRLS(workspaceId, async (tx) => {
-    // Update billing account
+  // Resolve the durable row by subscription identity, then ownership.
+  // (provider, externalId) is the contract id; accountId comes from the
+  // checkout-stamped provider metadata or the persisted row. A workspace
+  // match alone never transfers ownership between accounts. The lookup runs
+  // under the account RLS context when the owner is known, falling back to
+  // the workspace context for unmigrated legacy rows (accountId NULL).
+  const selectIdentity = {
+    id: true,
+    accountId: true,
+    workspaceId: true,
+    purchaseWorkspaceId: true,
+  } as const
+  // A verified provider event identifies the contract globally. RLS scoped
+  // lookup alone can hide an existing contract under conflicting metadata.
+  const existing = await getSystemPrisma().billingAccount.findFirst({
+    where: { provider, externalId, deletedAt: null },
+    select: selectIdentity,
+  })
+  if (existing?.accountId && params.accountId && existing.accountId !== params.accountId) {
+    throw new Error("subscription_account_mismatch")
+  }
+  const accountId = existing?.accountId ?? params.accountId ?? null
+  if (!accountId) throw new Error("subscription_account_unresolved")
+
+  const purchaseWorkspaceId = existing?.purchaseWorkspaceId ?? params.workspaceId ?? null
+
+  const writeData = {
+    provider,
+    externalId,
+    status: billingStatus,
+    currentPlan: effectivePlan,
+    interval,
+    currentPeriodStart: currentPeriodStart ?? null,
+    currentPeriodEnd: currentPeriodEnd ?? null,
+    canceledAt: canceledAt ?? null,
+  }
+
+  // Attribution: keep the row's existing workspace, else attribute the
+  // metadata workspace when it is free, else record purchase provenance only.
+  // Resolved inside the write transaction so the uniqueness probe and the
+  // upsert share one scope.
+  let attributedWorkspaceId = existing?.workspaceId ?? null
+
+  const runSync = async (tx: ScopedTransaction) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing:${accountId}`}, 0))`
     await tx.billingAccount.upsert({
-      where: { workspaceId },
+      where: { provider_externalId: { provider, externalId } },
       create: {
-        workspaceId,
-        provider,
-        externalId,
-        status: billingStatus,
-        currentPlan: effectivePlan,
-        interval,
-        currentPeriodStart: currentPeriodStart ?? null,
-        currentPeriodEnd: currentPeriodEnd ?? null,
-        canceledAt: canceledAt ?? null,
+        ...writeData,
+        workspaceId: attributedWorkspaceId,
+        purchaseWorkspaceId,
+        accountId,
       },
       update: {
-        provider,
-        externalId,
-        status: billingStatus,
-        currentPlan: effectivePlan,
-        interval,
+        ...writeData,
         currentPeriodStart: currentPeriodStart ?? undefined,
         currentPeriodEnd: currentPeriodEnd ?? undefined,
         canceledAt: canceledAt ?? undefined,
+        ...(accountId ? { accountId } : {}),
+        ...(purchaseWorkspaceId ? { purchaseWorkspaceId } : {}),
       },
     })
 
-    // Update workspace plan + deepAllowed
-    await tx.workspace.update({
-      where: { id: workspaceId },
-      data: {
-        plan: effectivePlan,
-        deepAllowed,
-      },
-    })
-  })
-
-  try {
-    await prisma.auditLog.create({
-      data: {
-        workspaceId,
-        action: "billing.subscription_synced",
-        resourceType: "billing_account",
-        resourceId: externalId,
-        metadata: {
-          provider,
-          plan,
-          status,
-          interval,
-          deepAllowed,
-        },
-      },
-    })
-  } catch (error) {
-    logger.error("Failed to create audit log", {
-      workspaceId,
-      action: "billing.subscription_synced",
-      error: error instanceof Error ? error.message : String(error),
-    })
+    // The attributed workspace mirrors the plan for display only.
+    if (attributedWorkspaceId) {
+      await tx.workspace.update({
+        where: { id: attributedWorkspaceId },
+        data: { plan: effectivePlan, deepAllowed },
+      })
+    }
   }
 
-  // Grant monthly pool on active subscription (outside the transaction —
-  // grantMonthlyPool and resetGrace perform their own idempotent writes).
-  // A-L10: Log failures at error level so monitoring can alert.
-  if (status === "active" && currentPeriodStart && cloudPlan.agentMinutes > 0) {
-    const source = interval === "annual" ? "annual_monthly" : "subscription"
+  const writeWorkspaceId = attributedWorkspaceId ?? existing?.workspaceId ?? params.workspaceId
+  if (accountId && writeWorkspaceId) {
+    await withWorkspaceRLS(writeWorkspaceId, runSync, { accountId })
+  } else if (accountId) {
+    await withAccountRLS(accountId, runSync)
+  } else if (writeWorkspaceId) {
+    await withWorkspaceRLS(writeWorkspaceId, runSync)
+  } else {
+    // No account and no workspace: the row cannot be written under RLS.
+    throw new Error("subscription_sync_no_scope")
+  }
+
+  const auditWorkspaceId =
+    attributedWorkspaceId ?? purchaseWorkspaceId ?? params.workspaceId ?? null
+
+  if (auditWorkspaceId) {
     try {
-      await grantMonthlyPool(workspaceId, plan, currentPeriodStart, source)
-      await resetGrace(workspaceId)
+      await prisma.auditLog.create({
+        data: {
+          workspaceId: auditWorkspaceId,
+          action: "billing.subscription_synced",
+          resourceType: "billing_account",
+          resourceId: externalId,
+          metadata: {
+            provider,
+            plan,
+            status,
+            interval,
+            deepAllowed,
+            accountId,
+          },
+        },
+      })
+    } catch (error) {
+      logger.error("Failed to create audit log", {
+        workspaceId: auditWorkspaceId,
+        action: "billing.subscription_synced",
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  // Grant the CURRENT allowance cycle's pool on active subscriptions.
+  // For annual plans the provider period spans the term — the cycle is the
+  // monthly anniversary containing now, not the term start. The
+  // replenishment job owns later cycles; this covers activation/renewal.
+  // A-L10: Log failures at error level so monitoring can alert.
+  if (status === "active" && currentPeriodStart && cloudPlan.agentMinutes > 0 && accountId) {
+    const cycle = resolveAllowanceCycle({
+      interval,
+      periodStart: currentPeriodStart,
+      periodEnd: currentPeriodEnd ?? null,
+    })
+    const source = interval === "annual" ? "annual_monthly" : "subscription"
+    const grantWorkspaceId = attributedWorkspaceId ?? null
+    try {
+      await grantMonthlyPool({
+        accountId,
+        workspaceId: grantWorkspaceId,
+        plan,
+        cycleStart: cycle.cycleStart,
+        source,
+      })
+      await resetGrace(accountId)
     } catch (grantError) {
       logger.error("Monthly pool grant or grace reset failed after subscription sync", {
-        workspaceId,
+        accountId,
         plan,
         error: grantError instanceof Error ? grantError.message : String(grantError),
       })
@@ -181,7 +262,8 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
   }
 
   logger.info("Subscription synced", {
-    workspaceId,
+    accountId,
+    workspaceId: attributedWorkspaceId,
     provider,
     externalId,
     plan,
@@ -191,47 +273,158 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
 }
 
 /**
- * Downgrade a workspace to FREE after the subscription period ends.
+ * Downgrade a billing account's subscription after the period ends.
  *
- * Called by a scheduled job that checks for expired canceled/past_due subs.
- * Data is preserved; scans are blocked by the entitlement gate.
+ * Called by the scheduled job on expired canceled/past_due rows. The
+ * attributed workspace's display plan resets too; the account's usage
+ * history and packs are untouched.
  */
-export async function downgradeToFree(workspaceId: string, reason: string): Promise<void> {
-  await withWorkspaceRLS(workspaceId, async (tx) => {
-    await tx.workspace.update({
-      where: { id: workspaceId },
-      data: {
-        plan: "FREE",
-        deepAllowed: false,
-      },
-    })
+type DowngradeIdentity =
+  | {
+      provider: string
+      externalId: string
+      accountId?: string | null
+      workspaceId?: string | null
+    }
+  | {
+      billingAccountId: string
+      accountId?: string | null
+      workspaceId?: string | null
+    }
+  | { workspaceId: string; accountId?: string | null }
+  | { accountId: string; workspaceId?: string | null }
 
-    await tx.billingAccount.update({
-      where: { workspaceId },
-      data: {
-        status: "downgraded",
-        currentPlan: "FREE",
-      },
-    })
-  })
+const DOWNGRADE_SELECT = {
+  id: true,
+  accountId: true,
+  workspaceId: true,
+} as const
 
-  try {
-    await prisma.auditLog.create({
-      data: {
-        workspaceId,
-        action: "billing.downgraded",
-        resourceType: "workspace",
-        resourceId: workspaceId,
-        metadata: { reason },
+/**
+ * Resolve the billing row under the narrowest available RLS context:
+ * account context when the owner is known, workspace context for legacy
+ * attribution, and the privileged system client only when the caller
+ * supplied a bare row identity (the worker downgrade sweep's shape).
+ */
+async function resolveDowngradeRow(identity: DowngradeIdentity) {
+  const hints = identity as { accountId?: string | null; workspaceId?: string | null }
+  const byKey = (tx: ScopedTransaction) => {
+    if ("billingAccountId" in identity) {
+      return tx.billingAccount.findUnique({
+        where: { id: identity.billingAccountId },
+        select: DOWNGRADE_SELECT,
+      })
+    }
+    if ("provider" in identity) {
+      return tx.billingAccount.findFirst({
+        where: {
+          provider: identity.provider,
+          externalId: identity.externalId,
+          deletedAt: null,
+        },
+        select: DOWNGRADE_SELECT,
+      })
+    }
+    if (typeof hints.workspaceId === "string") {
+      return tx.billingAccount.findUnique({
+        where: { workspaceId: hints.workspaceId },
+        select: DOWNGRADE_SELECT,
+      })
+    }
+    // Account-level identity (e.g. Polar customer.state_changed with only
+    // customer metadata): pick the account's live subscription row.
+    return tx.billingAccount.findFirst({
+      where: {
+        accountId: hints.accountId ?? undefined,
+        deletedAt: null,
+        status: { in: ["active", "trialing", "canceled", "past_due"] },
       },
-    })
-  } catch (error) {
-    logger.error("Failed to create audit log", {
-      workspaceId,
-      action: "billing.downgraded",
-      error: error instanceof Error ? error.message : String(error),
+      orderBy: { currentPeriodEnd: "desc" },
+      select: DOWNGRADE_SELECT,
     })
   }
+  // The account context resolves an account-owned row even when its
+  // workspace attribution moved or was cleared — prefer it when present.
+  if (hints.accountId) return withAccountRLS(hints.accountId, byKey)
+  if (hints.workspaceId) return withWorkspaceRLS(hints.workspaceId, byKey)
+  // No context hint: only the worker's privileged sweep calls this shape.
+  const system = getSystemPrisma()
+  if ("billingAccountId" in identity) {
+    return system.billingAccount.findUnique({
+      where: { id: identity.billingAccountId },
+      select: DOWNGRADE_SELECT,
+    })
+  }
+  if ("provider" in identity) {
+    return system.billingAccount.findFirst({
+      where: { provider: identity.provider, externalId: identity.externalId, deletedAt: null },
+      select: DOWNGRADE_SELECT,
+    })
+  }
+  if (typeof hints.workspaceId === "string") {
+    return system.billingAccount.findUnique({
+      where: { workspaceId: hints.workspaceId },
+      select: DOWNGRADE_SELECT,
+    })
+  }
+  return system.billingAccount.findFirst({
+    where: { accountId: hints.accountId ?? undefined, deletedAt: null },
+    orderBy: { currentPeriodEnd: "desc" },
+    select: DOWNGRADE_SELECT,
+  })
+}
 
-  logger.info("Workspace downgraded to FREE", { workspaceId, reason })
+export async function downgradeToFree(identity: DowngradeIdentity, reason: string): Promise<void> {
+  const row = await resolveDowngradeRow(identity)
+  if (!row) return
+
+  const apply = async (tx: ScopedTransaction) => {
+    await tx.billingAccount.update({
+      where: { id: row.id },
+      data: { status: "downgraded", currentPlan: "FREE" },
+    })
+    if (row.workspaceId) {
+      await tx.workspace.update({
+        where: { id: row.workspaceId },
+        data: { plan: "FREE", deepAllowed: false },
+      })
+    }
+  }
+
+  if (row.accountId && row.workspaceId) {
+    await withWorkspaceRLS(row.workspaceId, apply, { accountId: row.accountId })
+  } else if (row.accountId) {
+    await withAccountRLS(row.accountId, apply)
+  } else if (row.workspaceId) {
+    await withWorkspaceRLS(row.workspaceId, apply)
+  } else {
+    return
+  }
+
+  if (row.workspaceId) {
+    try {
+      await prisma.auditLog.create({
+        data: {
+          workspaceId: row.workspaceId,
+          action: "billing.downgraded",
+          resourceType: "billing_account",
+          resourceId: row.id,
+          metadata: { reason, accountId: row.accountId },
+        },
+      })
+    } catch (error) {
+      logger.error("Failed to create audit log", {
+        workspaceId: row.workspaceId,
+        action: "billing.downgraded",
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  logger.info("Subscription downgraded to FREE", {
+    billingAccountId: row.id,
+    accountId: row.accountId,
+    workspaceId: row.workspaceId,
+    reason,
+  })
 }

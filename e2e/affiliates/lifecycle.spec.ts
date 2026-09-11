@@ -18,26 +18,13 @@ const affiliateEmail = `e2e-affiliate-${suffix}@example.com`
 const referredEmail = `e2e-referred-${suffix}@example.com`
 
 test.describe("Affiliate lifecycle", () => {
-  // This is a full browser end-to-end flow: apply form (HTML form POST) →
-  // admin approve → ?ref= click → referred-user signup → sign-in session
-  // switching between two users → the affiliate dashboard. Each browser-session
-  // switch (sign-out of one user, sign-in of another, sharing a single page
-  // cookie jar) is fragile in the CI Playwright environment — the referred
-  // user's session lingers and the affiliate dashboard resolves the wrong user.
-  // A fresh-context sign-in was tried (browser.newContext) but the flow still
-  // races the apply-form POST + session establishment.
-  //
-  // The affiliate LOGIC this flow exercises — apply gating, approval, click
-  // recording, attribution (promo code), commission creation, the 30-day hold,
-  // and commission release — is fully covered by:
-  //   - packages/affiliate vitest unit tests (commission/clawback/reserve/webhook-dispatch)
-  //   - e2e/affiliates/attribution-matrix.spec.ts (the real attribution matrix against the DB)
-  //   - e2e/affiliates/commission-rules.spec.ts (the commission rules against the real engine)
-  // The only unique-to-this-spec assertion is the browser dashboard UI render,
-  // which belongs as a live-deployment smoke test, not a CI-matrix unit. Skip
-  // in CI until the flow can be made deterministic (or moved to a staging smoke
-  // suite).
-  test.skip("apply → approve → click → signup → commission → payout", async ({
+  // Full browser end-to-end flow: apply form → admin approve → ?ref= click →
+  // referred-user signup → commission → release → affiliate dashboard.
+  // Session switching is deterministic: the affiliate dashboard step runs in a
+  // fresh browser context (isolated cookie jar) so the referred user's session
+  // cannot leak into it, and every cross-step boundary polls the database
+  // rather than racing a redirect.
+  test("apply → approve → click → signup → commission → payout", async ({
     page,
     browser,
   }, testInfo) => {
@@ -176,12 +163,13 @@ test.describe("Affiliate lifecycle", () => {
     const referredUser = await prisma.user.findUnique({
       where: { email: referredEmail },
     })
+    expect(referredUser).not.toBeNull()
 
-    // Manually attribute (in production, the middleware cookie would do this)
-    await prisma.user.update({
-      where: { id: referredUser!.id },
-      data: { affiliate: { connect: { id: affiliate.id } } },
-    })
+    // No User.affiliate connect here: the unique FK lives on
+    // Affiliate.userId, so `connect` would REASSIGN the affiliate record to
+    // the referred user and break the affiliate's own dashboard. Commission
+    // attribution below resolves through the promo code — the same path the
+    // middleware cookie takes in production.
 
     // 6. Simulate a paid webhook (Polar sandbox order.paid).
     // Attribution: pass the affiliate's promo code so resolveAttribution

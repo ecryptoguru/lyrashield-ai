@@ -43,6 +43,7 @@ vi.mock("@lyrashield/auth", () => ({
 
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
+  setRequestIdResolver: vi.fn(),
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }))
 

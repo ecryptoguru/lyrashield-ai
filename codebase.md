@@ -287,7 +287,9 @@ Primary locations:
 - `packages/billing/src/entitlements.ts`: scan/target admission.
 - `apps/web/src/app/billing`: checkout, webhook, portal, UI.
 
-Billing webhook inserts `WebhookEvent` before synchronous Track A/B/C processing. Money uses `Decimal(19,4)`, never Float. Usage, pack purchase, subscription, refund, commission, and payout operations are idempotent. Agent-minute recording and FIFO pack debit share one workspace advisory-locked serializable transaction; each tick debits only its incremental spill beyond the monthly pool, and conditional pack updates prevent negative balances.
+Billing webhook inserts `WebhookEvent` before synchronous Track A/B/C processing. Money uses `Decimal(19,4)`, never Float. Usage, pack purchase, subscription, refund, commission, and payout operations are idempotent. Agent-minute recording and FIFO pack debit share one workspace+account advisory-locked serializable transaction; each tick debits only its incremental spill beyond the monthly pool, and conditional pack updates prevent negative balances.
+
+Subscriptions, entitlements, usage balances, allowances, grace, overage, and minute packs are **account-owned** (`BillingAccount.accountId`, `UsageRecord.accountId`, `MinutePack.accountId`); `workspaceId` fields on those rows are purchase attribution only. The sponsoring account is the persisted scan creator (`Scan.createdById` / `Schedule.createdById` / `ApiKey.createdById` / `AgentConnection.userId`); missing sponsor fails closed. `workspace.plan`/`deepAllowed` are display mirrors; entitlement decisions use the sponsor account's `effectivePlan`. Annual subscriptions receive monthly allowance cycles derived from the term anchor via the hourly `billing-allowance-replenishment` job. See `docs/plans/2026-09-11-account-billing-ownership.md` for the ownership model, RLS boundary, and migration stages.
 
 Exact health/readiness requests use a local 120/minute bound and do not call the
 Upstash REST limiter. A failed Upstash initialization or request opens a 60-second process-local cooldown;
@@ -380,13 +382,11 @@ Trust-boundary rules:
 - License: Key Vault and signing key identifiers.
 - Optional search: `LYRASHIELD_WEB_SEARCH_*`.
 
-### Desktop
+### Desktop environment
 
 Public verification key and updater public key may ship. Private signing keys and LyraShield model keys may not.
 
-### Marketing
-
-Public build values select canonical site/app/scanner origins and Turnstile. Worker secrets include D1/KV/Rate Limit bindings and `WAITLIST_IP_SALT`.
+### Marketing environment
 
 Environment validation fails closed in production where a capability is required.
 
@@ -533,6 +533,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 18. New production migrations are additive and forward-only; container rollback does not reverse schema.
 19. Keep Brevo binding while email verification is required.
 20. Keep engine upstream imports review-gated; no mechanical rebrand or force-push.
+21. Never resolve a billing payer from workspace role, membership, or client-supplied account IDs; the sponsor comes from trusted persisted state and missing sponsor identity fails closed.
 
 ## 14. Compact implementation ledger
 
@@ -545,5 +546,6 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 - **2026-08-21:** backup/restore proof, worker egress proxy, Upstash TLS BullMQ cutover, public `6379` removal, restart-safe DNS refresh, immutable worker promotion, current Standard/Luna production acceptance, and AI App Security coverage/evidence remediation.
 - **2026-08-24 to 08-25:** current assurance hardening (PRs #428–#430): nonnegative policy budget constraint, explainable finding priority, immutable retest validation bound to stored manifests, raw evidence-storage URI removal, worker execution provenance in manifest v5 with production fail-closed readiness, actionable Azure alert provisioning with readback, and a bounded host-side dry-run-first launch-assurance orchestrator.
 - **2026-08-26:** exact-two administrator provisioning/browser proof, evidence-storage and Key Vault signing proofs, operator alert acknowledgment, terminal-cost disposition, controlled queue-orphan recovery, current exact-SHA deployment, and temporary public-scorecard verification/revocation. The scorecard pass found and fixed a shared-image canonical-origin regression; deployment readback remains pending.
+- **2026-09-11 (branch, unmerged):** launch-review remediation — account-owned subscriptions/usage/packs/grace with account RLS context, annual monthly allowance replenishment, sponsor-from-persisted-state payer policy, `effectivePlan` entitlement resolution, logger request-ID ALS scoping, mobile layout fixes, bounded API reference, desktop clippy fix, and the additive `20260911000000_account_billing_ownership` migration with dry-run backfill. See `docs/plans/2026-09-11-account-billing-ownership.md` and `docs/plans/2026-09-11-launch-review-remediation.md`.
 
 PR history remains in Git and GitHub. Use `git log`, PRs, migrations, and executable tests for forensic detail; this guide retains only current architecture and durable decisions.

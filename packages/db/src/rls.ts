@@ -6,6 +6,13 @@ interface WorkspaceTransactionOptions {
   maxWait?: number
   timeout?: number
   isolationLevel?: Prisma.TransactionIsolationLevel
+  /**
+   * Bind `app.current_account_id` alongside the workspace context. Required
+   * when the transaction reads or writes the account-owned ledger
+   * (BillingAccount / UsageRecord / MinutePack) by accountId — e.g. scan
+   * metering draws the sponsoring account's balance across workspaces.
+   */
+  accountId?: string | null
 }
 
 /**
@@ -40,8 +47,46 @@ export async function withWorkspaceRLS<T>(
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
-    return runWithDatabaseRLSContext(workspaceId, () => fn(tx))
+    await tx.$executeRaw`SELECT set_config('app.current_account_id', ${options?.accountId ?? ""}, true)`
+    return runWithDatabaseRLSContext(workspaceId, () => fn(tx), options?.accountId ?? null)
   }, options)
+}
+
+/**
+ * Run a callback inside a transaction bound to an account context only.
+ * Account-owned billing rows (BillingAccount / UsageRecord / MinutePack) are
+ * visible via the account RLS policy; every other workspace-scoped table
+ * fails closed because no workspace context is set.
+ */
+export async function withAccountRLS<T>(
+  accountId: string,
+  fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>,
+  options?: Omit<WorkspaceTransactionOptions, "accountId">
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
+    await tx.$executeRaw`SELECT set_config('app.current_account_id', ${accountId}, true)`
+    return runWithDatabaseRLSContext(null, () => fn(tx), accountId)
+  }, options)
+}
+
+/** Transactional Prisma client as passed to `withWorkspaceRLS`/`withAccountRLS` callbacks. */
+export type ScopedTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+type BoundTx = ScopedTransaction
+
+/**
+ * Bind `app.current_account_id` inside an ALREADY-OPEN transaction.
+ *
+ * For callers that learn the owning account after the transaction begins
+ * (e.g. the fix-PR loop-closure resolves the retest sponsor mid-lock), this
+ * upgrades the tx so account-scoped reads/writes resolve through the account
+ * RLS policy on the same connection. `SET LOCAL` keeps it transaction-scoped.
+ * The ALS context is left untouched: inside a bound tx the extension already
+ * skips re-wrapping, and `applyQueryGuards` only needs the workspace context.
+ */
+export async function bindAccountRLSContext(tx: BoundTx, accountId: string): Promise<void> {
+  await tx.$executeRaw`SELECT set_config('app.current_account_id', ${accountId}, true)`
 }
 
 /**
@@ -53,7 +98,8 @@ export async function withoutWorkspaceRLS<T>(
   fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`RESET app.current_workspace_id`
+    await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
+    await tx.$executeRaw`SELECT set_config('app.current_account_id', '', true)`
     return fn(tx)
   })
 }

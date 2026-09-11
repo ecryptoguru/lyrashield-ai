@@ -147,9 +147,11 @@ export async function requireAuth(): Promise<AuthSession> {
   if (!session) {
     throw new Error("UNAUTHORIZED")
   }
-  // Correlate every subsequent log line (incl. Prisma slow-query warnings) with
-  // this request's session. Cleared by the route's finally handler via
-  // setRequestId(undefined) — see withRequestId in apps/web/src/lib/api-auth.
+  // Correlate subsequent log lines (incl. Prisma slow-query warnings) with
+  // this request's session. In the API path the AsyncLocalStorage-bound
+  // resolver takes precedence over this module variable, so the stamp cannot
+  // overwrite in-flight request correlation — see withApiRequest in
+  // apps/web/src/lib/api-auth.
   setRequestId(session.sessionId)
   return session
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// Mock dependencies so assertScanAllowed only needs prisma.workspace.findUnique.
+// Mock dependencies so entitlement checks only need prisma.workspace.findUnique.
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     workspace: {
@@ -8,17 +8,6 @@ vi.mock("@lyrashield/db", () => ({
     },
     target: {
       count: vi.fn(),
-    },
-    billingAccount: {
-      update: vi.fn(),
-      // The overage path (no minutes remaining) calls findUnique. Return a
-      // non-TEAM account so overage is not eligible and the gate returns
-      // NO_MINUTES_REMAINING without needing the spend-limit overage branch.
-      findUnique: vi.fn().mockResolvedValue({
-        currentPlan: "PRO",
-        spendLimitCents: null,
-        currentPeriodStart: new Date(),
-      }),
     },
     usageRecord: {
       aggregate: vi.fn(),
@@ -29,6 +18,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/pricing", () => ({
   CLOUD_PLAN_MAP: {
     FREE: { id: "FREE", deepAllowed: false, agentMinutes: 0, targetCaps: 3 },
+    TRIAL: { id: "TRIAL", deepAllowed: false, agentMinutes: 100, targetCaps: 3 },
     STARTER: { id: "STARTER", deepAllowed: false, agentMinutes: 300, targetCaps: 5 },
     PRO: { id: "PRO", deepAllowed: true, agentMinutes: 1200, targetCaps: 15 },
     LAUNCH_ASSURANCE: {
@@ -42,14 +32,20 @@ vi.mock("@lyrashield/pricing", () => ({
   STANDARD_OVERAGE_PER_MINUTE_USD: 0.15,
 }))
 
-// Mock the usage/trial/grace modules so the Deep-gating logic is exercised
-// in isolation without a full DB balance/trial computation.
+// Mock the account/usage/trial/grace modules so plan gating is exercised in
+// isolation without a full DB balance/trial computation.
+vi.mock("./account", () => ({
+  resolveAccountBilling: vi.fn(),
+}))
+
 vi.mock("./usage/balance", () => ({
   getUsageBalance: vi.fn(),
+  getUsageBalanceForTx: vi.fn(),
+  resolveBalanceCycleStart: vi.fn(),
 }))
 
 vi.mock("./trial", () => ({
-  getTrialState: vi.fn().mockResolvedValue({ isExpired: false }),
+  getAccountTrialState: vi.fn().mockResolvedValue({ isExpired: false, isActive: false }),
   blockOnExpiry: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -63,108 +59,156 @@ vi.mock("@lyrashield/logger", () => ({
 
 import { assertScanAllowed, assertTargetAllowed } from "./entitlements"
 import { prisma } from "@lyrashield/db"
+import { resolveAccountBilling } from "./account"
 import { getUsageBalance } from "./usage/balance"
-import { getTrialState } from "./trial"
+import { getAccountTrialState } from "./trial"
 
-describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
+function billing(plan: string, extra: Record<string, unknown> = {}) {
+  return {
+    id: "ba_1",
+    accountId: "acct_1",
+    workspaceId: "ws_1",
+    purchaseWorkspaceId: "ws_1",
+    provider: "polar",
+    externalId: "sub_1",
+    status: "active",
+    currentPlan: plan,
+    effectivePlan: plan,
+    interval: "monthly",
+    currentPeriodStart: new Date("2026-09-01T00:00:00Z"),
+    currentPeriodEnd: null,
+    canceledAt: null,
+    trialEndsAt: null,
+    spendLimitCents: null,
+    graceUsedMs: 0,
+    graceCycleStart: null,
+    ...extra,
+  }
+}
+
+describe("entitlements — Deep scan gating on the sponsoring account (Deep = Pro+)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Default: trial not expired, plenty of minutes, not in grace.
-    vi.mocked(getTrialState).mockResolvedValue({ isExpired: false })
-    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 600 })
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ id: "ws_1" } as never)
+    // Default: account trial not expired, plenty of minutes.
+    vi.mocked(getAccountTrialState).mockResolvedValue({
+      isActive: false,
+      isExpired: false,
+      startedAt: null,
+      endsAt: null,
+      daysLeft: 0,
+      minutesLeft: 0,
+      targetsUsed: 0,
+      targetCap: 3,
+    })
+    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 600 } as never)
   })
 
-  it("blocks DEEP on STARTER (deepAllowed=false)", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "STARTER",
-      deepAllowed: false,
-      trialStartedAt: null,
-    })
+  it("blocks DEEP on a STARTER account (deepAllowed=false)", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("STARTER") as never)
 
-    const result = await assertScanAllowed("ws-starter", "DEEP")
+    const result = await assertScanAllowed("ws-starter", "DEEP", "acct_1")
 
     expect(result.allowed).toBe(false)
     expect(result.code).toBe("DEEP_NOT_ALLOWED")
     expect(result.isTrial).toBe(false)
   })
 
-  it("blocks DEEP on a TRIAL workspace (FREE + trialStartedAt, deepAllowed=false)", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "FREE",
-      deepAllowed: false,
-      trialStartedAt: new Date("2026-08-01"),
+  it("blocks DEEP on a TRIAL account (FREE + active trial)", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("FREE") as never)
+    vi.mocked(getAccountTrialState).mockResolvedValue({
+      isActive: true,
+      isExpired: false,
+      startedAt: new Date("2026-08-01"),
+      endsAt: null,
+      daysLeft: 5,
+      minutesLeft: 80,
+      targetsUsed: 0,
+      targetCap: 3,
     })
-    vi.mocked(getTrialState).mockResolvedValue({ isExpired: false })
 
-    const result = await assertScanAllowed("ws-trial", "DEEP")
+    const result = await assertScanAllowed("ws-trial", "DEEP", "acct_1")
 
     expect(result.allowed).toBe(false)
     expect(result.code).toBe("DEEP_NOT_ALLOWED")
     expect(result.isTrial).toBe(true)
   })
 
-  it("allows DEEP on PRO (deepAllowed=true) with minutes remaining", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "PRO",
-      deepAllowed: true,
-      trialStartedAt: null,
-    })
+  it("allows DEEP on a PRO account with minutes remaining", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("PRO") as never)
 
-    const result = await assertScanAllowed("ws-pro", "DEEP")
+    const result = await assertScanAllowed("ws-pro", "DEEP", "acct_1")
 
     expect(result.allowed).toBe(true)
     expect(result.isTrial).toBe(false)
     expect(result.plan).toBe("PRO")
   })
 
-  it("allows STANDARD on STARTER (core detection not gated by plan)", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "STARTER",
-      deepAllowed: false,
-      trialStartedAt: null,
-    })
+  it("blocks DEEP on a canceled account past its paid term (effective plan FREE)", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(
+      billing("PRO", {
+        status: "canceled",
+        currentPeriodEnd: new Date(Date.now() - 60_000),
+        effectivePlan: "FREE",
+      }) as never
+    )
 
-    const result = await assertScanAllowed("ws-starter", "STANDARD")
+    const result = await assertScanAllowed("ws-lapsed", "DEEP", "acct_1")
 
-    // STARTER gets real scans (Safe/Quick/Standard) — only Deep is gated.
+    expect(result.allowed).toBe(false)
+    expect(result.code).toBe("DEEP_NOT_ALLOWED")
+    expect(result.plan).toBe("FREE")
+  })
+
+  it("keeps DEEP for a canceled account still inside its paid term", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(
+      billing("PRO", {
+        status: "canceled",
+        currentPeriodEnd: new Date(Date.now() + 60_000),
+      }) as never
+    )
+
+    const result = await assertScanAllowed("ws-in-term", "DEEP", "acct_1")
+
+    expect(result.allowed).toBe(true)
+    expect(result.plan).toBe("PRO")
+  })
+
+  it("allows STANDARD on a STARTER account (core detection not gated by plan)", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("STARTER") as never)
+
+    const result = await assertScanAllowed("ws-starter", "STANDARD", "acct_1")
+
     expect(result.allowed).toBe(true)
   })
 
-  it("blocks scans when the workspace has no remaining minutes", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "PRO",
-      deepAllowed: true,
-      trialStartedAt: null,
-    })
-    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 0 })
+  it("blocks scans when the account has no remaining minutes", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("PRO") as never)
+    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 0 } as never)
 
-    const result = await assertScanAllowed("ws-empty", "STANDARD")
+    const result = await assertScanAllowed("ws-empty", "STANDARD", "acct_1")
 
     expect(result.allowed).toBe(false)
+    expect(result.code).toBe("NO_MINUTES_REMAINING")
   })
 
   it("uses a database aggregate for current-cycle overage", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "LAUNCH_ASSURANCE",
-      deepAllowed: true,
-      trialStartedAt: null,
-    })
-    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 0 })
-    vi.mocked(prisma.billingAccount.findUnique).mockResolvedValue({
-      currentPlan: "LAUNCH_ASSURANCE",
-      spendLimitCents: 1500,
-      currentPeriodStart: new Date("2026-09-01T00:00:00Z"),
-    } as never)
+    vi.mocked(resolveAccountBilling).mockResolvedValue(
+      billing("LAUNCH_ASSURANCE", { spendLimitCents: 1500 }) as never
+    )
+    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 0 } as never)
+    const { resolveBalanceCycleStart } = await import("./usage/balance")
+    vi.mocked(resolveBalanceCycleStart).mockReturnValue(new Date("2026-09-01T00:00:00Z"))
     vi.mocked(prisma.usageRecord.aggregate).mockResolvedValue({
       _sum: { quantity: 10 },
     } as never)
 
-    const result = await assertScanAllowed("ws-overage", "STANDARD")
+    const result = await assertScanAllowed("ws-overage", "STANDARD", "acct_1")
 
     expect(result.allowed).toBe(true)
     expect(prisma.usageRecord.aggregate).toHaveBeenCalledWith({
       where: {
-        workspaceId: "ws-overage",
+        accountId: "acct_1",
         kind: "overage_minutes",
         deletedAt: null,
         cycleStart: { gte: new Date("2026-09-01T00:00:00Z") },
@@ -173,59 +217,74 @@ describe("entitlements — Deep scan gating (Deep = Pro+)", () => {
     })
   })
 
-  it("blocks STANDARD on an expired trial (TRIAL_EXPIRED)", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "FREE",
-      deepAllowed: false,
-      trialStartedAt: new Date("2026-01-01"),
-    })
-    vi.mocked(getTrialState).mockResolvedValue({
+  it("blocks STANDARD on an expired account trial (TRIAL_EXPIRED)", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("FREE") as never)
+    vi.mocked(getAccountTrialState).mockResolvedValue({
+      isActive: false,
       isExpired: true,
+      startedAt: new Date("2026-01-01"),
+      endsAt: new Date("2026-01-15"),
+      daysLeft: 0,
+      minutesLeft: 0,
       targetsUsed: 0,
       targetCap: 3,
     })
 
-    const result = await assertScanAllowed("ws-trial-expired", "STANDARD")
+    const result = await assertScanAllowed("ws-trial-expired", "STANDARD", "acct_1")
 
     expect(result.allowed).toBe(false)
     expect(result.code).toBe("TRIAL_EXPIRED")
-    expect(result.isTrial).toBe(true)
   })
 
-  it("allows STANDARD for an existing target when the trial target cap is reached", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "FREE",
-      deepAllowed: false,
-      trialStartedAt: new Date("2026-08-01"),
-    })
-    vi.mocked(getTrialState).mockResolvedValue({
+  it("allows STANDARD when the account trial target cap is reached (targets are separate)", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("FREE") as never)
+    vi.mocked(getAccountTrialState).mockResolvedValue({
+      isActive: true,
       isExpired: false,
+      startedAt: new Date("2026-08-01"),
+      endsAt: null,
+      daysLeft: 5,
+      minutesLeft: 80,
       targetsUsed: 3,
       targetCap: 3,
     })
-    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 80 })
+    vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 80 } as never)
 
-    const result = await assertScanAllowed("ws-trial-capped", "STANDARD")
+    const result = await assertScanAllowed("ws-trial-capped", "STANDARD", "acct_1")
 
     expect(result.allowed).toBe(true)
     expect(result.isTrial).toBe(true)
   })
+
+  it("fails closed when no sponsoring account is resolvable", async () => {
+    const result = await assertScanAllowed("ws-any", "STANDARD", null)
+
+    expect(result.allowed).toBe(false)
+    expect(result.code).toBe("SPONSOR_REQUIRED")
+  })
 })
 
-describe("entitlements — protected-target cap (hard-enforced, founder-confirmed 2026-08-29)", () => {
+describe("entitlements — protected-target cap on the acting account's plan", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ id: "ws_1" } as never)
+    vi.mocked(getAccountTrialState).mockResolvedValue({
+      isActive: false,
+      isExpired: false,
+      startedAt: null,
+      endsAt: null,
+      daysLeft: 0,
+      minutesLeft: 0,
+      targetsUsed: 0,
+      targetCap: 3,
+    })
   })
 
   it("blocks a paid plan at its target cap (Pro = 15)", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "PRO",
-      deepAllowed: true,
-      trialStartedAt: null,
-    })
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("PRO") as never)
     vi.mocked(prisma.target.count).mockResolvedValue(15)
 
-    const result = await assertTargetAllowed("ws-pro-full")
+    const result = await assertTargetAllowed("ws-pro-full", "acct_1")
 
     expect(result.allowed).toBe(false)
     expect(result.code).toBe("TARGET_LIMIT_REACHED")
@@ -234,15 +293,11 @@ describe("entitlements — protected-target cap (hard-enforced, founder-confirme
   })
 
   it("blocks a paid plan over its cap (over-cap after downgrade) but never deletes", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "STARTER",
-      deepAllowed: false,
-      trialStartedAt: null,
-    })
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("STARTER") as never)
     // Over cap: 6 targets on a 5-cap Starter plan
     vi.mocked(prisma.target.count).mockResolvedValue(6)
 
-    const result = await assertTargetAllowed("ws-starter-over")
+    const result = await assertTargetAllowed("ws-starter-over", "acct_1")
 
     expect(result.allowed).toBe(false)
     expect(result.code).toBe("TARGET_LIMIT_REACHED")
@@ -251,42 +306,40 @@ describe("entitlements — protected-target cap (hard-enforced, founder-confirme
   })
 
   it("allows a paid plan below its cap", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "LAUNCH_ASSURANCE",
-      deepAllowed: true,
-      trialStartedAt: null,
-    })
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("LAUNCH_ASSURANCE") as never)
     vi.mocked(prisma.target.count).mockResolvedValue(12)
 
-    const result = await assertTargetAllowed("ws-la-ok")
+    const result = await assertTargetAllowed("ws-la-ok", "acct_1")
 
     expect(result.allowed).toBe(true)
     expect(result.targetCap).toBe(50)
   })
 
   it("allows Enterprise to add targets because its limits are contract-defined", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "ENTERPRISE",
-      deepAllowed: true,
-      trialStartedAt: null,
-    })
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("ENTERPRISE") as never)
     vi.mocked(prisma.target.count).mockResolvedValue(0)
 
-    const result = await assertTargetAllowed("ws-enterprise")
+    const result = await assertTargetAllowed("ws-enterprise", "acct_1")
 
     expect(result.allowed).toBe(true)
     expect(result.targetCap).toBe(0)
   })
 
-  it("blocks a trial workspace at the trial cap", async () => {
-    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({
-      plan: "FREE",
-      deepAllowed: false,
-      trialStartedAt: new Date("2026-08-01"),
+  it("blocks an active account trial at the trial cap", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("FREE") as never)
+    vi.mocked(getAccountTrialState).mockResolvedValue({
+      isActive: true,
+      isExpired: false,
+      startedAt: new Date("2026-08-01"),
+      endsAt: null,
+      daysLeft: 5,
+      minutesLeft: 80,
+      targetsUsed: 0,
+      targetCap: 3,
     })
     vi.mocked(prisma.target.count).mockResolvedValue(3)
 
-    const result = await assertTargetAllowed("ws-trial-capped")
+    const result = await assertTargetAllowed("ws-trial-capped", "acct_1")
 
     expect(result.allowed).toBe(false)
     expect(result.code).toBe("TARGET_LIMIT_REACHED")

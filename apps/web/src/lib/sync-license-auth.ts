@@ -1,5 +1,6 @@
 import type { AuthSession } from "@lyrashield/auth/server"
-import { findLicenseForSyncById, findLicenseForSyncByKeyHash, prisma } from "@lyrashield/db"
+import { resolveAccountBilling } from "@lyrashield/billing"
+import { findLicenseForSyncById, findLicenseForSyncByKeyHash } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import type { LocalSkuId } from "@lyrashield/pricing"
 import { hashLicenseKey } from "./licenses/license-service"
@@ -14,16 +15,12 @@ type SyncLicense = {
 
 const LEGACY_SYNC_FALLBACK_SUNSET = Date.parse("2026-10-01T00:00:00.000Z")
 
-export async function checkSyncEntitlement(
-  sku: LocalSkuId,
-  targetWorkspaceId: string
-): Promise<boolean> {
+export async function checkSyncEntitlement(sku: LocalSkuId, accountId: string): Promise<boolean> {
   if (sku === "sync_addon" || sku === "team_subscription") return true
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: targetWorkspaceId },
-    select: { plan: true },
-  })
-  return Boolean(workspace && workspace.plan !== "FREE")
+  // Cloud subscription is account-owned — the workspace's display plan is
+  // not the entitlement source.
+  const billing = await resolveAccountBilling(accountId)
+  return (billing?.effectivePlan ?? "FREE") !== "FREE"
 }
 
 export type SyncCredentialResult =
@@ -44,6 +41,7 @@ export type SyncCredentialResult =
 async function validateSyncLicense(
   license: SyncLicense | null,
   workspaceId: string,
+  accountId: string,
   notFoundMessage: string,
   mismatchMessage: string
 ): Promise<SyncCredentialResult> {
@@ -66,7 +64,7 @@ async function validateSyncLicense(
       status: 403,
     }
   }
-  if (!(await checkSyncEntitlement(license.sku as LocalSkuId, workspaceId))) {
+  if (!(await checkSyncEntitlement(license.sku as LocalSkuId, accountId))) {
     return {
       ok: false,
       code: "SYNC_NOT_ENTITLED",
@@ -103,6 +101,7 @@ export async function resolveSyncCredential(input: {
     return validateSyncLicense(
       await findLicenseForSyncById(verified.licenseId),
       input.workspaceId,
+      input.session.userId,
       "The sync license is no longer available",
       "This license is no longer linked to this workspace"
     )
@@ -132,6 +131,7 @@ export async function resolveSyncCredential(input: {
   const result = await validateSyncLicense(
     (await findLicenseForSyncByKeyHash(hashLicenseKey(input.licenseKey)))?.license ?? null,
     input.workspaceId,
+    input.session.userId,
     "The provided license key is not recognized",
     "This license is not linked to this workspace"
   )

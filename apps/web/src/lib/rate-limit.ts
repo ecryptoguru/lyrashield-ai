@@ -385,21 +385,24 @@ async function getCheckoutLockRedis(): Promise<CheckoutLockRedis | null> {
 }
 
 /**
- * Claim one provider checkout creation for a workspace/catalog pair.
+ * Claim one provider checkout creation for an account/catalog pair.
  * Production never falls back to per-instance state: that could create a
  * duplicate provider object on another replica.
  */
 export async function claimBillingCheckoutCreation(input: {
+  /** Owning account — subscriptions are account-owned. */
+  accountId: string
+  /** Purchase-context workspace (pack lock attribution). */
   workspaceId: string
   provider: "polar" | "razorpay"
   kind: "subscription" | "pack"
   catalogKey: string
 }): Promise<"claimed" | "duplicate" | "unavailable"> {
-  // One initial subscription per workspace, even across plans and providers.
+  // One initial subscription per account, even across plans and providers.
   // Packs remain independently purchasable by catalog item.
   const key =
     input.kind === "subscription"
-      ? `billing-checkout-lock:${input.workspaceId}:subscription`
+      ? `billing-checkout-lock:${input.accountId}:subscription`
       : `billing-checkout-lock:${input.workspaceId}:${input.provider}:pack:${input.catalogKey}`
   if (!isProd) return claimLocalBillingCheckoutLock(key) ? "claimed" : "duplicate"
 

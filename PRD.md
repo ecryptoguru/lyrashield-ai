@@ -245,6 +245,8 @@ Minute packs: 100/$15, 250/$30, 500/$50; 180-day validity.
 
 Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 minutes of non-bankable mid-scan grace; a scan starting at zero is rejected.
 
+Subscriptions, allowances, usage balances, packs, grace, and overage belong to the **account** (the user), not the workspace: one subscription follows the person across workspaces, workspace membership never shares another member's allowance or billing history, and the account starting a scan (or its explicitly recorded sponsor for scheduled/delegated work) is the payer. Annual plans receive a fresh monthly allowance each month of the term. Workspaces remain the resource/tenancy boundary and mirror plan state for display only.
+
 Cloud subscriptions, Local licenses, and minute packs are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error. Provider-confirmed reversals still revoke entitlements and claw back related commissions.
 
 Do not publish or change pricing without founder approval.

@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from 
 import { prisma } from "@lyrashield/db"
 import {
   getUsageBalance,
-  getTrialState,
+  getAccountTrialState,
   getGraceState,
   isTrialAvailable,
+  resolveAccountBilling,
   CLOUD_PLAN_MAP,
 } from "@lyrashield/billing"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
@@ -70,56 +71,18 @@ export default async function BillingPage({
     billingRequest
   ).allowed
 
-  // 2.1: fetch BillingAccount and Workspace ONCE here and pass the rows into
-  // the balance/trial/grace helpers — previously this page re-read the
-  // BillingAccount inside getUsageBalance and the Workspace inside both
-  // getTrialState and getGraceState.
-  const [billingAccount, workspaceRow, trialAvailable] = await Promise.all([
-    prisma.billingAccount.findUnique({
-      where: { workspaceId },
-      select: {
-        currentPlan: true,
-        status: true,
-        interval: true,
-        currentPeriodStart: true,
-        currentPeriodEnd: true,
-        canceledAt: true,
-        provider: true,
-        spendLimitCents: true,
-      },
-    }),
-    prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: {
-        plan: true,
-        trialStartedAt: true,
-        graceUsedMs: true,
-        graceCycleStart: true,
-      },
-    }),
+  // 2.1: fetch the account's governing BillingAccount once here — previously
+  // this page re-read it inside each helper. Subscriptions are account-owned:
+  // the page renders the CALLER's account billing state.
+  const [billingAccount, trialAvailable] = await Promise.all([
+    resolveAccountBilling(session.userId),
     canManageBilling ? isTrialAvailable(workspaceId, session.userId) : Promise.resolve(false),
   ])
 
   const [balance, trialState, graceState] = await Promise.all([
-    getUsageBalance(workspaceId, {
-      billingAccount: billingAccount
-        ? {
-            currentPeriodStart: billingAccount.currentPeriodStart,
-            currentPlan: billingAccount.currentPlan,
-          }
-        : null,
-      workspace: workspaceRow ? { trialStartedAt: workspaceRow.trialStartedAt } : null,
-    }),
-    getTrialState(
-      workspaceId,
-      workspaceRow ? { plan: workspaceRow.plan, trialStartedAt: workspaceRow.trialStartedAt } : null
-    ),
-    getGraceState(
-      workspaceId,
-      workspaceRow
-        ? { graceUsedMs: workspaceRow.graceUsedMs, graceCycleStart: workspaceRow.graceCycleStart }
-        : null
-    ),
+    getUsageBalance(session.userId, { billing: billingAccount }),
+    getAccountTrialState(session.userId),
+    getGraceState(session.userId, billingAccount),
   ])
 
   const plan = billingAccount?.currentPlan ?? "FREE"
@@ -198,8 +161,9 @@ export default async function BillingPage({
           </CardContent>
         </Card>
 
-        {/* Trial Status */}
-        {isTrial && (
+        {/* Trial Status — also rendered for an EXPIRED trial: the expiry
+            notice below must stay reachable, not hide with `isTrial`. */}
+        {(isTrial || trialState.isExpired) && (
           <Card>
             <CardHeader>
               <CardTitle>Trial Status</CardTitle>

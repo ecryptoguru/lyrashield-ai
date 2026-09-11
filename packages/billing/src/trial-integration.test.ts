@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { beforeAll, describe, expect, it } from "vitest"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, withAccountRLS, withWorkspaceRLS, bindAccountRLSContext } from "@lyrashield/db"
 import { startTrial, isTrialAvailable } from "./trial"
 
 // Explicit opt-in: exercise the real scoped client against a disposable local database.
@@ -47,8 +47,10 @@ describe.skipIf(process.env.TRIAL_INTEGRATION_TEST !== "1")(
       expect(await isTrialAvailable(second, userId)).toBe(false)
       const total = await Promise.all(
         [workspaceId, second].map((id) =>
-          withWorkspaceRLS(id, (tx) =>
-            tx.usageRecord.count({ where: { workspaceId: id, kind: "trial_grant" } })
+          withWorkspaceRLS(
+            id,
+            (tx) => tx.usageRecord.count({ where: { workspaceId: id, kind: "trial_grant" } }),
+            { accountId: userId }
           )
         )
       )
@@ -66,6 +68,7 @@ describe.skipIf(process.env.TRIAL_INTEGRATION_TEST !== "1")(
           await tx.workspace.create({
             data: { id: workspaceId, name: "Rollback", slug: workspaceId },
           })
+          await bindAccountRLSContext(tx, userId)
           await startTrial(workspaceId, userId, tx)
           throw new Error("transaction failed")
         })
@@ -74,6 +77,7 @@ describe.skipIf(process.env.TRIAL_INTEGRATION_TEST !== "1")(
       expect((await prisma.user.findUnique({ where: { id: userId } }))?.trialStartedAt).toBeNull()
       await withWorkspaceRLS(workspaceId, async (tx) => {
         await tx.workspace.create({ data: { id: workspaceId, name: "Retry", slug: workspaceId } })
+        await bindAccountRLSContext(tx, userId)
         expect((await startTrial(workspaceId, userId, tx)).started).toBe(true)
       })
     })
@@ -85,54 +89,26 @@ describe.skipIf(process.env.TRIAL_INTEGRATION_TEST !== "1")(
         startTrial(workspaceId, userId),
       ])
       expect(results.filter((result) => result.started)).toHaveLength(1)
-      expect(results.every((result) => !result.alreadyUsed)).toBe(true)
+      expect(results.filter((result) => result.alreadyUsed)).toHaveLength(1)
     })
 
-    it("does not overwrite an upgrade committed between trial read and conditional write", async () => {
+    it("rejects an account with a paid contract without consuming its trial", async () => {
       const { userId, workspaceId } = await fixture()
-      await expect(
-        withWorkspaceRLS(workspaceId, (tx) =>
-          startTrial(workspaceId, userId, {
-            $executeRaw: tx.$executeRaw.bind(tx),
-            user: tx.user,
-            billingAccount: tx.billingAccount,
-            usageRecord: tx.usageRecord,
-            workspace: {
-              findUnique: tx.workspace.findUnique.bind(tx.workspace),
-              findFirst: tx.workspace.findFirst.bind(tx.workspace),
-              updateMany: async (args: Parameters<typeof tx.workspace.updateMany>[0]) => {
-                await withWorkspaceRLS(workspaceId, async (upgrade) => {
-                  await upgrade.billingAccount.create({
-                    data: { workspaceId, currentPlan: "PRO", status: "active" },
-                  })
-                  await upgrade.workspace.update({
-                    where: { id: workspaceId },
-                    data: { plan: "PRO", deepAllowed: true },
-                  })
-                })
-                return tx.workspace.updateMany(args)
-              },
-            },
-          } as typeof tx)
-        )
-      ).rejects.toThrow("TRIAL_PAID_PLAN")
+      await withAccountRLS(userId, (tx) =>
+        tx.billingAccount.create({
+          data: { accountId: userId, workspaceId: null, currentPlan: "PRO", status: "active" },
+        })
+      )
+      await expect(startTrial(workspaceId, userId)).rejects.toThrow("TRIAL_PAID_PLAN")
       expect((await prisma.user.findUnique({ where: { id: userId } }))?.trialStartedAt).toBeNull()
-      expect((await prisma.workspace.findUnique({ where: { id: workspaceId } }))?.plan).toBe("PRO")
-      expect(
-        await withWorkspaceRLS(workspaceId, (tx) =>
-          tx.usageRecord.count({ where: { workspaceId } })
-        )
-      ).toBe(0)
     })
-
-    it("rejects paid workspaces without consuming the user claim", async () => {
+    it("allows a new account trial in a coworker's paid workspace", async () => {
       const { userId, workspaceId } = await fixture()
       await prisma.workspace.update({
         where: { id: workspaceId },
         data: { plan: "PRO", deepAllowed: true },
       })
-      await expect(startTrial(workspaceId, userId)).rejects.toThrow("TRIAL_PAID_PLAN")
-      expect((await prisma.user.findUnique({ where: { id: userId } }))?.trialStartedAt).toBeNull()
+      expect(await startTrial(workspaceId, userId)).toMatchObject({ started: true })
       expect((await prisma.workspace.findUnique({ where: { id: workspaceId } }))?.plan).toBe("PRO")
     })
   }

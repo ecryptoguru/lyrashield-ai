@@ -40,6 +40,7 @@ export async function createPolarCheckout(params: {
   successUrl: string
   customerId?: string
   metadata?: Record<string, string>
+  customerMetadata?: Record<string, string>
 }): Promise<string | null> {
   const client = getPolarClient()
   if (!client) return null
@@ -50,6 +51,9 @@ export async function createPolarCheckout(params: {
       successUrl: params.successUrl,
       ...(params.customerId ? { customerId: params.customerId } : {}),
       ...(params.metadata ? { metadata: params.metadata } : {}),
+      // Customer-level metadata lets `customer.state_changed` events resolve
+      // the owning account without a subscription payload.
+      ...(params.customerMetadata ? { customerMetadata: params.customerMetadata } : {}),
     })
 
     return checkout.url

@@ -57,11 +57,7 @@ export async function processRazorpayEvent(
 
         const notes = payment.notes ?? {}
         const workspaceId = notes.workspaceId ?? null
-
-        if (!workspaceId) {
-          logger.warn("Razorpay payment.captured without workspaceId", { paymentId: payment.id })
-          return { handled: false, action: "payment.captured.no_workspace", workspaceId: null }
-        }
+        const accountId = notes.accountId ?? null
 
         const catalog = resolveRazorpayCatalogEvent(
           event.event,
@@ -70,15 +66,27 @@ export async function processRazorpayEvent(
         if (!catalog) {
           return { handled: false, action: "payment.captured.non_pack", workspaceId }
         }
+
+        // Pack crediting requires the account identity stamped by checkout.
+        if (!workspaceId || !accountId) {
+          logger.warn("Razorpay payment.captured without workspace/account", {
+            paymentId: payment.id,
+            hasWorkspace: Boolean(workspaceId),
+            hasAccount: Boolean(accountId),
+          })
+          return { handled: false, action: "payment.captured.no_identity", workspaceId }
+        }
+
         if (catalog.kind !== "pack") throw new Error("razorpay_pack_catalog_mismatch")
         const pack = MINUTE_PACK_MAP[catalog.packId]
-        await creditTopUp(
+        await creditTopUp({
+          accountId,
           workspaceId,
-          "razorpay",
-          pack.minutes,
-          new Date(Date.now() + pack.validityDays * 24 * 60 * 60 * 1000),
-          payment.id
-        )
+          provider: "razorpay",
+          minutes: pack.minutes,
+          expiresAt: new Date(Date.now() + pack.validityDays * 24 * 60 * 60 * 1000),
+          externalId: payment.id,
+        })
 
         return { handled: true, action: "payment.captured.credited", workspaceId }
       }
@@ -100,12 +108,13 @@ export async function processRazorpayEvent(
 
         const notes = subscription.notes ?? {}
         const workspaceId = notes.workspaceId ?? null
-        if (!workspaceId) {
-          logger.warn("Razorpay subscription event without workspaceId", {
+        const accountId = notes.accountId ?? null
+        if (!workspaceId && !accountId) {
+          logger.warn("Razorpay subscription event without workspace/account", {
             event: event.event,
             subscriptionId: subscription.id,
           })
-          return { handled: false, action: "subscription.no_workspace", workspaceId: null }
+          return { handled: false, action: "subscription.no_identity", workspaceId: null }
         }
 
         const catalog = resolveRazorpayCatalogEvent(
@@ -125,7 +134,15 @@ export async function processRazorpayEvent(
         }
 
         if (event.event === "subscription.completed") {
-          await downgradeToFree(workspaceId, "subscription.completed")
+          await downgradeToFree(
+            {
+              provider: "razorpay",
+              externalId: subscription.id,
+              accountId,
+              workspaceId,
+            },
+            "subscription.completed"
+          )
           return { handled: true, action: "subscription.ended", workspaceId }
         }
         const status = mapRazorpaySubscriptionStatus(event.event, subscription.status)
@@ -142,6 +159,7 @@ export async function processRazorpayEvent(
 
         await syncSubscription({
           workspaceId,
+          accountId,
           provider: "razorpay",
           externalId: subscription.id,
           plan: catalog.plan,

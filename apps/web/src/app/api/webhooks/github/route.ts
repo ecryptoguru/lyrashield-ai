@@ -247,8 +247,13 @@ export async function POST(request: NextRequest) {
                 integration.workspaceId,
                 pullRequest.head.ref,
                 pullRequest.number,
-                async (mode) => {
-                  const entitlement = await assertScanAllowed(integration.workspaceId, mode)
+                async (mode, sponsorAccountId, tx) => {
+                  const entitlement = await assertScanAllowed(
+                    integration.workspaceId,
+                    mode,
+                    sponsorAccountId,
+                    tx
+                  )
                   if (!entitlement.allowed)
                     throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
                   await assertScanWorkerAvailable()

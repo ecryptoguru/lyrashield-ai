@@ -30,8 +30,14 @@ vi.mock("@lyrashield/db", () => ({
 }))
 vi.mock("@lyrashield/billing", () => ({
   getPolarPortalUrl: state.getPolarPortalUrl,
+  listAccountBilling: vi.fn().mockImplementation(async () => [
+    {
+      externalId: "cust_1",
+      provider: state.provider,
+    },
+  ]),
 }))
-vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/logger", async () => (await import("@/__tests__/mocks")).loggerModule())
 
 const { GET } = await import("./route")
 
@@ -46,6 +52,7 @@ describe("GET /billing/portal", () => {
     vi.clearAllMocks()
     state.provider = "razorpay"
     state.env.NEXT_PUBLIC_MARKETING_URL = "https://lyrashieldai.com"
+    state.requirePermission.mockResolvedValue({ session: { userId: "user_1" } })
     state.findBillingAccount.mockImplementation(async () => ({
       externalId: "cust_1",
       provider: state.provider,
@@ -74,10 +81,7 @@ describe("GET /billing/portal", () => {
     const response = await GET(request())
     expect(response.status).toBe(307)
     expect(state.requirePermission).toHaveBeenCalledWith("ws_1", "billing:manage")
-    expect(state.findBillingAccount).toHaveBeenCalledWith({
-      where: { workspaceId: "ws_1" },
-      select: { externalId: true, provider: true },
-    })
+    // The portal manages the caller's account-owned subscription.
     expect(response.headers.get("location")).toBe(
       "https://lyrashieldai.com/support?topic=billing&provider=razorpay"
     )

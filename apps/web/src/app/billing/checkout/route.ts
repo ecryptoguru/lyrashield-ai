@@ -7,6 +7,7 @@ import {
   createPolarCheckout,
   createRazorpaySubscription,
   getRazorpaySubscriptionCycleCount,
+  resolveAccountBilling,
   resolveProviderId,
   CLOUD_PLAN_MAP,
   type CloudPlanId,
@@ -51,10 +52,12 @@ async function post(request: Request) {
   try {
     // Validate the caller has billing.manage on the specified workspace.
     // No findFirst fallback — the workspaceId must be explicitly provided.
-    await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const accountId = session.userId
 
-    // A-M08: Rate limit checkout creation per workspace
-    const rateLimit = await checkBillingCheckoutRateLimit(workspaceId)
+    // A-M08: Rate limit checkout creation per account (subscriptions are
+    // account-owned; a user hopping workspaces must not multiply checkouts).
+    const rateLimit = await checkBillingCheckoutRateLimit(`account:${accountId}`)
     if (rateLimit.limited) {
       return apiError("RATE_LIMITED", "Too many checkout requests. Please try again later.", 429)
     }
@@ -72,13 +75,20 @@ async function post(request: Request) {
     if (admissionError) return admissionError
 
     // This endpoint creates subscriptions; paid plan/interval changes belong
-    // to existing subscription management, including stale or direct callers.
+    // to existing subscription management. The subscription is the ACCOUNT's:
+    // one active paid subscription per account regardless of workspace.
     const [workspace, billingAccount] = await Promise.all([
       prisma.workspace.findUnique({ where: { id: workspaceId }, select: { plan: true } }),
-      prisma.billingAccount.findUnique({ where: { workspaceId }, select: { currentPlan: true } }),
+      resolveAccountBilling(accountId),
     ])
     if (!workspace) return apiError("WORKSPACE_NOT_FOUND", "Workspace not found", 404)
-    if (workspace.plan !== "FREE" || (billingAccount && billingAccount.currentPlan !== "FREE")) {
+    const hasPaidSubscription = Boolean(
+      billingAccount &&
+      billingAccount.provider !== "trial" &&
+      billingAccount.currentPlan !== "FREE" &&
+      ["active", "trialing", "canceled", "past_due"].includes(billingAccount.status)
+    )
+    if (hasPaidSubscription) {
       return apiError(
         "SUBSCRIPTION_ALREADY_EXISTS",
         "Use Manage Subscription to update your existing subscription.",
@@ -118,6 +128,7 @@ async function post(request: Request) {
     const successUrl = `${appUrl}/dashboard/billing?checkout=success`
     const metadata = {
       workspaceId,
+      accountId,
       plan,
       interval,
       ...(promoCode ? { promoCode } : {}),
@@ -133,6 +144,7 @@ async function post(request: Request) {
         return paymentsUnavailableError()
       }
       const checkoutClaim = await claimBillingCheckoutCreation({
+        accountId,
         workspaceId,
         provider,
         kind: "subscription",
@@ -150,6 +162,9 @@ async function post(request: Request) {
         productId,
         successUrl,
         metadata,
+        // Customer-level events (customer.state_changed) carry only the
+        // customer's own metadata — stamp the identity fields there too.
+        customerMetadata: { workspaceId, accountId },
       })
 
       if (!url) {
@@ -167,6 +182,7 @@ async function post(request: Request) {
         return paymentsUnavailableError()
       }
       const checkoutClaim = await claimBillingCheckoutCreation({
+        accountId,
         workspaceId,
         provider,
         kind: "subscription",

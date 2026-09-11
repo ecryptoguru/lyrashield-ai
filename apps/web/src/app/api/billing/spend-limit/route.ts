@@ -3,6 +3,8 @@ import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
+import { resolveAccountBilling } from "@lyrashield/billing"
+import { withAccountRLS } from "@lyrashield/db"
 import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { logger } from "@lyrashield/logger"
@@ -12,10 +14,12 @@ const SpendLimitSchema = z.object({
 })
 
 /**
- * POST /api/billing/spend-limit — set the overage spend limit for a Launch Assurance workspace.
+ * POST /api/billing/spend-limit — set the overage spend limit on the CALLER's
+ * account subscription (account-owned billing).
  *
- * Only Launch Assurance plan workspaces can set a spend limit. The spend limit controls
- * how much overage (at $0.15/min) can be consumed beyond the included minutes.
+ * Only accounts on the Launch Assurance plan can set a spend limit. The limit
+ * controls how much overage (at $0.15/min) the account may consume beyond its
+ * included minutes, across every workspace it scans in.
  *
  * All money is in integer cents (Decimal-safe, never Float).
  */
@@ -44,15 +48,13 @@ async function post(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.billing.manage)
+    const accountId = session.userId
 
-    // Verify the workspace is on Launch Assurance plan
-    const billingAccount = await prisma.billingAccount.findUnique({
-      where: { workspaceId },
-      select: { currentPlan: true },
-    })
+    // The spend limit lives on the account's governing subscription row.
+    const billingAccount = await resolveAccountBilling(accountId)
 
-    if (!billingAccount || billingAccount.currentPlan !== "LAUNCH_ASSURANCE") {
+    if (!billingAccount || billingAccount.effectivePlan !== "LAUNCH_ASSURANCE") {
       return apiError(
         "PLAN_NOT_ELIGIBLE",
         "Spend limits are only available on the Launch Assurance plan.",
@@ -60,23 +62,25 @@ async function post(request: Request) {
       )
     }
 
-    await prisma.billingAccount.update({
-      where: { workspaceId },
-      data: { spendLimitCents: cents },
-    })
+    await withAccountRLS(accountId, (tx) =>
+      tx.billingAccount.update({
+        where: { id: billingAccount.id },
+        data: { spendLimitCents: cents },
+      })
+    )
 
-    // Audit log
+    // Audit log — attributed to the workspace the action was taken from.
     await prisma.auditLog.create({
       data: {
         workspaceId,
         action: "billing.spend_limit_updated",
         resourceType: "billing_account",
-        resourceId: workspaceId,
-        metadata: { spendLimitCents: cents },
+        resourceId: billingAccount.id,
+        metadata: { spendLimitCents: cents, accountId },
       },
     })
 
-    logger.info("Spend limit updated", { workspaceId, cents })
+    logger.info("Spend limit updated", { accountId, workspaceId, cents })
 
     return apiSuccess({ cents }, 200)
   } catch (error) {

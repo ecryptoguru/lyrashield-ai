@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const transactionMock = vi.hoisted(() => vi.fn())
+const withAccountRLSMock = vi.hoisted(() => vi.fn())
 const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
 const usageCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "usage_1" }))
 const usageFindUniqueMock = vi.hoisted(() => vi.fn().mockResolvedValue(null))
 
 vi.mock("@lyrashield/db", () => ({
-  prisma: { $transaction: transactionMock },
-  withWorkspaceRLS: (_workspaceId: string, callback: unknown, options: unknown) =>
-    transactionMock(callback, options),
+  withAccountRLS: withAccountRLSMock,
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -17,16 +15,41 @@ vi.mock("@lyrashield/pricing", () => ({ STANDARD_OVERAGE_PER_MINUTE_USD: 0.15 })
 
 import { debitOverage } from "./overage"
 
+const input = {
+  accountId: "acct_1",
+  workspaceId: "ws_1",
+  scanId: "scan_1",
+  phase: "engine_overage",
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   const tx = {
     $executeRaw: executeRawMock,
     billingAccount: {
-      findUnique: vi.fn().mockResolvedValue({
-        currentPlan: "LAUNCH_ASSURANCE",
-        spendLimitCents: 100,
-        currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
-      }),
+      // resolveAccountBilling: account-owned governing-row lookup.
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "ba_1",
+          accountId: "acct_1",
+          workspaceId: "ws_1",
+          purchaseWorkspaceId: "ws_1",
+          provider: "polar",
+          externalId: "sub_1",
+          status: "active",
+          currentPlan: "LAUNCH_ASSURANCE",
+          interval: "monthly",
+          spendLimitCents: 100,
+          currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
+          currentPeriodEnd: null,
+          canceledAt: null,
+          trialEndsAt: null,
+          graceUsedMs: 0,
+          graceCycleStart: null,
+          deletedAt: null,
+          updatedAt: new Date(),
+        },
+      ]),
     },
     usageRecord: {
       findUnique: usageFindUniqueMock,
@@ -34,7 +57,8 @@ beforeEach(() => {
       create: usageCreateMock,
     },
   }
-  transactionMock.mockImplementation((callback, options) => {
+  withAccountRLSMock.mockImplementation((accountId, callback, options) => {
+    expect(accountId).toBe("acct_1")
     expect(options).toEqual({ isolationLevel: "Serializable" })
     return callback(tx)
   })
@@ -42,11 +66,12 @@ beforeEach(() => {
 
 describe("debitOverage", () => {
   it("serializes the debit and returns a partial debit at the spend limit", async () => {
-    const result = await debitOverage("ws_1", 3, "scan_1", "engine_overage")
+    const result = await debitOverage({ ...input, minutes: 3 })
 
     expect(executeRawMock).toHaveBeenCalledOnce()
     expect(usageCreateMock).toHaveBeenCalledWith({
       data: expect.objectContaining({
+        accountId: "acct_1",
         quantity: 1,
         idempotencyKey: "ws_1:scan_1:engine_overage:overage",
       }),
@@ -55,19 +80,19 @@ describe("debitOverage", () => {
   })
 
   it("retries a serialization conflict", async () => {
-    transactionMock.mockRejectedValueOnce({ code: "P2034" })
+    withAccountRLSMock.mockRejectedValueOnce({ code: "P2034" })
 
-    await expect(debitOverage("ws_1", 1, "scan_1", "engine_overage")).resolves.toMatchObject({
+    await expect(debitOverage({ ...input, minutes: 1 })).resolves.toMatchObject({
       debited: true,
       minutes: 1,
     })
-    expect(transactionMock).toHaveBeenCalledTimes(2)
+    expect(withAccountRLSMock).toHaveBeenCalledTimes(2)
   })
 
   it("restores a completed debit on an idempotent replay", async () => {
     usageFindUniqueMock.mockResolvedValueOnce({ id: "usage_1", quantity: 3 })
 
-    await expect(debitOverage("ws_1", 3, "scan_1", "engine_overage")).resolves.toEqual({
+    await expect(debitOverage({ ...input, minutes: 3 })).resolves.toEqual({
       debited: true,
       minutes: 3,
       estimatedCostCents: 45,

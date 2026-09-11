@@ -134,7 +134,11 @@ describe("scan finalization lock", () => {
     })
 
     expect(persist).not.toHaveBeenCalled()
-    expect(mockPrisma.$executeRaw).toHaveBeenCalledOnce()
+    expect(
+      mockPrisma.$executeRaw.mock.calls.filter(([sql]) =>
+        String(sql).includes("app.current_workspace_id")
+      )
+    ).toHaveLength(1)
   })
 
   it("makes a later cancellation observe terminal finalization", async () => {
@@ -155,7 +159,11 @@ describe("scan finalization lock", () => {
     )
 
     expect(persist).toHaveBeenCalledOnce()
-    expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(2)
+    expect(
+      mockPrisma.$executeRaw.mock.calls.filter(([sql]) =>
+        String(sql).includes("app.current_workspace_id")
+      )
+    ).toHaveLength(2)
   })
 })
 

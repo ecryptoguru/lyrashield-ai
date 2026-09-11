@@ -1212,7 +1212,12 @@ model Integration {
 
 model UsageRecord {
   id             String    @id @default(cuid())
-  workspaceId    String
+  // Consumption/grant attribution workspace. NULL survives workspace deletion
+  // — the ledger belongs to the account.
+  workspaceId    String?
+  // Owning account (User.id) whose balance this record draws on. NULL on
+  // legacy rows written before account-owned billing was backfilled.
+  accountId      String?
   kind           String
   quantity       Int
   metadata       Json?
@@ -1221,10 +1226,12 @@ model UsageRecord {
   createdAt      DateTime  @default(now())
   cycleStart     DateTime?
 
-  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace      Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   referralReward ReferralAttribution? @relation("ReferralReward")
 
   @@index([workspaceId])
+  @@index([accountId])
+  @@index([accountId, cycleStart])
   @@index([kind])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, cycleStart])
@@ -1555,16 +1562,23 @@ model Schedule {
 }
 
 model BillingAccount {
-  id          String        @id @default(cuid())
-  workspaceId String        @unique
-  provider    String        @default("polar")
-  externalId  String?
-  status      String        @default("free")
-  currentPlan WorkspacePlan @default(FREE)
-  trialEndsAt DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id String @id @default(cuid())
+  // Account-owned subscription. `accountId` is the owning user (the payer);
+  // `workspaceId` is purchase attribution only — NULL when the attribution
+  // workspace already carries another account's billing row, or when the
+  // workspace was deleted (SetNull). `purchaseWorkspaceId` preserves the
+  // original purchase context for provenance even when attribution is NULL.
+  workspaceId          String? @unique
+  purchaseWorkspaceId  String?
+  accountId            String?
+  provider             String  @default("polar")
+  externalId           String?
+  status               String  @default("free")
+  currentPlan          WorkspacePlan @default(FREE)
+  trialEndsAt          DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   interval           String?
   currentPeriodStart DateTime?
@@ -1572,10 +1586,18 @@ model BillingAccount {
   canceledAt         DateTime?
   region             String?
   spendLimitCents    Int?
+  // Mid-scan grace budget — per account + allowance cycle (moved off
+  // Workspace so a member's subscription is never shared with a workspace).
+  graceUsedMs     Int       @default(0)
+  graceCycleStart DateTime?
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
+  @@unique([provider, externalId])
   @@index([externalId])
+  @@index([workspaceId])
+  @@index([accountId])
+  @@index([status, currentPeriodEnd])
 }
 
 model Invitation {
@@ -1926,7 +1948,11 @@ model ControlEvidenceVersion {
 
 model MinutePack {
   id               String   @id @default(cuid())
-  workspaceId      String
+  // Purchase-attribution workspace. NULL survives workspace deletion — the
+  // pack belongs to the account.
+  workspaceId      String?
+  // Owning account (User.id). NULL on legacy rows pending backfill.
+  accountId        String?
   provider         String
   externalId       String
   minutes          Int
@@ -1936,9 +1962,10 @@ model MinutePack {
   deletedAt        DateTime?
   createdAt        DateTime @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@unique([workspaceId, externalId])
+  @@index([accountId])
   @@index([workspaceId, expiresAt])
   @@index([workspaceId, expiresAt, remainingMinutes])
 }

@@ -1,6 +1,12 @@
 import type { Job } from "bullmq"
 import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
-import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
+import {
+  prisma,
+  runWithWorkspaceContext,
+  runWithAccountContext,
+  getSystemPrisma,
+  type ScopedTransaction,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import {
@@ -12,6 +18,7 @@ import {
   hasUnsettledScanIntent,
   enterGrace,
   debitOverage,
+  resolveAccountBilling,
 } from "@lyrashield/billing"
 
 import {
@@ -670,6 +677,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         policyId: true,
         determinismMode: true,
         startedAt: true,
+        createdById: true,
       },
     })
   } catch (err) {
@@ -1223,30 +1231,31 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         if (billableWork && billingOutcome !== "failed") {
           let finalizationAttempted = false
           try {
-            const billingAccount = await prisma.billingAccount.findUnique({
-              where: { workspaceId },
-              select: { currentPeriodStart: true },
-            })
-            const settleOverage = async (
-              minutes: number,
-              tx?: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
-            ) => {
-              // Check if overage is available (Launch Assurance plan with spend limit)
-              const acct = await (tx ?? prisma).billingAccount.findUnique({
-                where: { workspaceId },
-                select: { currentPlan: true, spendLimitCents: true },
-              })
+            // The sponsoring account pays — the persisted createdById is the
+            // trusted identity, not the workspace the scan ran in.
+            const sponsorAccountId = scanRecord.createdById
+            const settleOverage = async (minutes: number, tx?: ScopedTransaction) => {
+              // Overage is available to Launch Assurance accounts with a
+              // limit — read inside the settlement tx when one is bound so
+              // the decision cannot act on a stale row.
+              const sponsorBilling = tx
+                ? await resolveAccountBilling(sponsorAccountId, tx)
+                : await runWithAccountContext(sponsorAccountId, () =>
+                    resolveAccountBilling(sponsorAccountId)
+                  )
               const overageAvailable =
-                acct?.currentPlan === "LAUNCH_ASSURANCE" && (acct.spendLimitCents ?? 0) > 0
+                sponsorBilling?.effectivePlan === "LAUNCH_ASSURANCE" &&
+                (sponsorBilling.spendLimitCents ?? 0) > 0
 
               if (overageAvailable) {
-                const overage = await debitOverage(
+                const overage = await debitOverage({
+                  accountId: sponsorAccountId,
                   workspaceId,
                   minutes,
                   scanId,
-                  "engine_overage",
-                  tx
-                )
+                  phase: "engine_overage",
+                  transaction: tx,
+                })
                 if (!overage.debited || overage.minutes !== minutes) {
                   agentMinuteTerminalError = {
                     status: "STOPPED_BUDGET" as ScanStatus,
@@ -1255,8 +1264,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                   }
                 }
               } else {
-                // Enter grace period (15min cap)
-                const graceResult = await enterGrace(workspaceId, engineWallClockMs, tx)
+                // Enter grace period (15min cap) — the account's grace budget.
+                const graceResult = await enterGrace(sponsorAccountId, engineWallClockMs, tx)
                 if (!graceResult.shouldContinue) {
                   // Preserve provider usage, deterministic receipts, and findings before
                   // sealing the terminal entitlement outcome below.
@@ -1273,7 +1282,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             const metering = await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
               mode,
               phase: "engine_run",
-              cycleStart: billingAccount?.currentPeriodStart ?? undefined,
               outcome: billingOutcome,
               ...(finishEvidence
                 ? {
@@ -1639,15 +1647,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         env.LYRASHIELD_AI_TRIAGE_ENABLED === "1"
       const workspacePlan =
         triageFeatureEnabled && triageInput
-          ? await prisma.workspace
-              .findFirst({
-                where: { id: workspaceId, deletedAt: null },
-                select: { plan: true },
-              })
+          ? await runWithAccountContext(scanRecord.createdById, () =>
+              resolveAccountBilling(scanRecord.createdById)
+            )
+              .then((b) => (b ? { plan: b.effectivePlan } : null))
               .catch(() => null)
           : null
       const triageEligibility = eligibleForEngineTriage({
         enabled: triageFeatureEnabled,
+        // Entitlement follows the sponsoring account, not the workspace row.
         workspacePlan: workspacePlan?.plan ?? "FREE",
         mode,
         billedCostUsd,

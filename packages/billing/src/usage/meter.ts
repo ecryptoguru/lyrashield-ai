@@ -1,8 +1,12 @@
 /**
- * Agent-minute metering.
+ * Agent-minute metering — account-owned.
  *
- * Records wall-clock agent minutes consumed during a scan. Idempotent via
- * UsageRecord.idempotencyKey = `{workspaceId}:{scanId}:{phase}`.
+ * Records wall-clock agent minutes consumed during a scan against the
+ * sponsoring account (the persisted `Scan.createdById` — browser user, API-key
+ * creator, or OAuth connection owner), never "the workspace". The scan's
+ * workspaceId remains on the UsageRecord as attribution only.
+ *
+ * Idempotent via UsageRecord.idempotencyKey = `{workspaceId}:{scanId}:{phase}`.
  *
  * Per D1 constraint: agent-minutes are measured as WALL-CLOCK duration,
  * NOT "active-loop" or "thinking time". The caller passes the elapsed
@@ -11,17 +15,22 @@
  * Deep/Custom scans consume minutes at 3× the standard rate (DEEP_SCAN_MULTIPLIER).
  */
 
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { bindAccountRLSContext, withWorkspaceRLS, type ScopedTransaction } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { DEEP_SCAN_MULTIPLIER } from "@lyrashield/pricing"
 import type { ScanMode } from "@lyrashield/types"
+import { resolveAccountBilling } from "../account"
+import { resolveBalanceCycleStart } from "./balance"
 
 export interface RecordAgentMinutesOptions {
   /** Scan mode — Deep/Custom applies a 3× multiplier. */
   mode?: ScanMode
   /** Phase label for the idempotency key (e.g. "tick_0", "final"). */
   phase?: string
-  /** Cycle start for this billing period. */
+  /**
+   * Allowance-cycle start for this settlement. When omitted it is resolved
+   * from the sponsor's current billing state inside the transaction.
+   */
   cycleStart?: Date
   /**
    * Terminal outcome of the scan. Founder-confirmed billing rules (2026-08-29):
@@ -39,7 +48,7 @@ export interface RecordAgentMinutesOptions {
   outcome?: "completed" | "partial" | "failed" | "cancelled"
   /** Resolve uncovered minutes before this transaction commits. Throw to void
    * the entire settlement, including pack and overage writes. Never open a
-   * second transaction for the same workspace from this callback. */
+   * second transaction for the same account from this callback. */
   settleOverage?: (tx: MeterTransaction, minutes: number) => Promise<void>
   /** Finish bounded, idempotent result persistence before monetary commit.
    * A failure rolls back all provisional usage. No provider work belongs here. */
@@ -55,10 +64,12 @@ export interface RecordAgentMinutesResult {
   idempotencyKey: string
   /** Incremental minutes not covered by the monthly pool or minute packs. */
   overageMinutes: number
+  /** The sponsoring account this settlement drew on. */
+  accountId: string
 }
 
 const MAX_TRANSACTION_ATTEMPTS = 3
-type MeterTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+type MeterTransaction = ScopedTransaction
 
 /** Read-only recovery check. Never settles or replays interrupted paid work. */
 export async function hasUnsettledScanIntent(
@@ -69,6 +80,7 @@ export async function hasUnsettledScanIntent(
     const scan = await tx.scan.findFirst({
       where: { id: scanId, workspaceId },
       select: {
+        createdById: true,
         events: { where: { stage: "billing_settlement_intent" }, select: { metadata: true } },
       },
     })
@@ -81,6 +93,8 @@ export async function hasUnsettledScanIntent(
       ),
     ]
     if (!keys.length) return false
+    if (!scan?.createdById) return true
+    await bindAccountRLSContext(tx, scan.createdById)
     const receipts = await tx.usageRecord.count({
       where: { workspaceId, kind: "agent_minutes", idempotencyKey: { in: keys } },
     })
@@ -104,12 +118,25 @@ function recordedOverageMinutes(metadata: unknown): number {
 }
 
 /**
+ * Resolve the sponsoring account for a scan. The persisted createdById is the
+ * trusted identity bound at admission — job payloads are untrusted.
+ */
+async function resolveScanSponsor(tx: MeterTransaction, workspaceId: string, scanId: string) {
+  const scan = await tx.scan.findFirst({
+    where: { id: scanId, workspaceId },
+    select: { createdById: true },
+  })
+  if (!scan) throw new Error("settlement_scan_not_found")
+  return scan.createdById
+}
+
+/**
  * Record agent minutes consumed during a scan phase.
  *
  * The caller passes wall-clock milliseconds. This function:
  * 1. Converts ms → integer minutes (ceiling, minimum 1 if ms > 0)
  * 2. Applies the Deep/Custom 3× multiplier
- * 3. Inserts a UsageRecord with an idempotency key
+ * 3. Inserts a UsageRecord keyed to the scan's sponsoring account
  * 4. Returns whether a new record was created
  *
  * If the same idempotency key already exists, the call is a no-op (idempotent).
@@ -127,11 +154,11 @@ export async function recordAgentMinutes(
   // write any agent_minutes UsageRecord regardless of how much work completed.
   if (opts.outcome === "failed") {
     logger.info("Skipping agent-minute billing for failed scan", { workspaceId, scanId })
-    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
+    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0, accountId: "" }
   }
 
   if (ms <= 0) {
-    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
+    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0, accountId: "" }
   }
 
   // A-L06: Validate input bounds — reject oversized ms values.
@@ -139,7 +166,7 @@ export async function recordAgentMinutes(
   // larger values indicate a bug or abuse attempt.
   const MAX_TICK_MS = 60 * 60 * 1000 // 1 hour
   if (!Number.isFinite(ms) || ms > MAX_TICK_MS) {
-    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
+    return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0, accountId: "" }
   }
 
   // Wall-clock ms → integer minutes.
@@ -158,6 +185,12 @@ export async function recordAgentMinutes(
   const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
   const minutes = isDeep ? rawMinutes * DEEP_SCAN_MULTIPLIER : rawMinutes
 
+  // Resolve the sponsor once (outside the retry loop) under the scan's
+  // workspace RLS — the persisted createdById is the trusted identity.
+  const sponsorAccountId = await withWorkspaceRLS(workspaceId, (tx) =>
+    resolveScanSponsor(tx, workspaceId, scanId)
+  )
+
   // Independent durable intent precedes terminal persistence. UsageRecord is
   // the atomic settlement receipt; missing receipts remain queryable after death.
   if (opts.beforeCommit) {
@@ -169,7 +202,12 @@ export async function recordAgentMinutes(
           scanId,
           stage: "billing_settlement_intent",
           message: "Settlement intent; missing usage receipt requires terminal accounting review",
-          metadata: { idempotencyKey, workspaceId, automaticReplayAllowed: false },
+          metadata: {
+            idempotencyKey,
+            workspaceId,
+            accountId: sponsorAccountId,
+            automaticReplayAllowed: false,
+          },
         },
       })
     })
@@ -181,10 +219,12 @@ export async function recordAgentMinutes(
       return await withWorkspaceRLS(
         workspaceId,
         async (tx) => {
-          // Serialize all usage-record and pack-balance mutations for one
-          // workspace. Serializable transactions can still abort after waiting
-          // for this lock, so P2034 is retried below.
+          // Dual advisory locks, fixed order (workspace then account): the
+          // previous image serializes on the workspace lock alone, so a
+          // rolled-back binary cannot race this settlement; the account lock
+          // serializes same-account settlements across workspaces.
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`account:${sponsorAccountId}`}, 0))`
 
           const existing = await tx.usageRecord.findUnique({
             where: { idempotencyKey },
@@ -198,10 +238,12 @@ export async function recordAgentMinutes(
               minutes: 0,
               idempotencyKey,
               overageMinutes: recordedOverageMinutes(existing.metadata),
+              accountId: sponsorAccountId,
             }
           }
 
           const overageMinutes = await recordMinutesAndDebitIncrementalSpillover(tx, {
+            accountId: sponsorAccountId,
             workspaceId,
             scanId,
             minutes,
@@ -216,9 +258,19 @@ export async function recordAgentMinutes(
           finalizationStarted = Boolean(opts.beforeCommit)
           await opts.beforeCommit?.()
 
-          return { created: true, minutes, idempotencyKey, overageMinutes }
+          return {
+            created: true,
+            minutes,
+            idempotencyKey,
+            overageMinutes,
+            accountId: sponsorAccountId,
+          }
         },
-        { isolationLevel: "Serializable", ...(opts.beforeCommit ? { timeout: 30_000 } : {}) }
+        {
+          isolationLevel: "Serializable",
+          accountId: sponsorAccountId,
+          ...(opts.beforeCommit ? { timeout: 30_000 } : {}),
+        }
       )
     } catch (error) {
       // Once terminal evidence is durable, never reassess quota or rerun its
@@ -246,7 +298,13 @@ export async function recordAgentMinutes(
         (error as { code: string }).code === "P2002"
       ) {
         logger.debug("Idempotent replay of recordAgentMinutes", { idempotencyKey })
-        return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0 }
+        return {
+          created: false,
+          minutes: 0,
+          idempotencyKey,
+          overageMinutes: 0,
+          accountId: sponsorAccountId,
+        }
       }
       throw error
     }
@@ -258,13 +316,16 @@ export async function recordAgentMinutes(
 /**
  * Record usage and decrement its incremental pack spillover oldest-first.
  *
- * The transaction and advisory lock are owned by recordAgentMinutes. Computing
- * both pre- and post-record spillover prevents each tick from re-debiting the
- * cumulative spillover already reflected in MinutePack.remainingMinutes.
+ * The transaction and advisory locks are owned by recordAgentMinutes. All
+ * ledger reads are scoped to the sponsor's accountId (the account's pool,
+ * packs, and cycle), never to the scan's workspace. Computing both pre- and
+ * post-record spillover prevents each tick from re-debiting the cumulative
+ * spillover already reflected in MinutePack.remainingMinutes.
  */
 async function recordMinutesAndDebitIncrementalSpillover(
   tx: MeterTransaction,
   input: {
+    accountId: string
     workspaceId: string
     scanId: string
     minutes: number
@@ -276,23 +337,26 @@ async function recordMinutesAndDebitIncrementalSpillover(
     multiplier: number
   }
 ): Promise<number> {
-  const billingAccount = await tx.billingAccount.findUnique({
-    where: { workspaceId: input.workspaceId },
-    select: { currentPeriodStart: true },
-  })
-  const trial = !billingAccount?.currentPeriodStart
-    ? await tx.workspace.findUnique({
-        where: { id: input.workspaceId },
-        select: { trialStartedAt: true },
-      })
-    : null
-  const cycleStart = billingAccount?.currentPeriodStart ?? trial?.trialStartedAt
+  const billing = await resolveAccountBilling(input.accountId, tx)
+  // The trial anchor lives on User, and trial accounts still carry a
+  // provider="trial" marker row — never gate this read on `billing` being
+  // absent, or trial consumption misses its pool and reports as overage.
+  const trialStartedAt = (
+    await tx.user.findUnique({
+      where: { id: input.accountId },
+      select: { trialStartedAt: true },
+    })
+  )?.trialStartedAt
+
+  const cycleStart =
+    input.cycleStart ??
+    resolveBalanceCycleStart({ billing, trialStartedAt: trialStartedAt ?? null })
 
   const [grantRecords, priorConsumeRecords] = cycleStart
     ? await Promise.all([
         tx.usageRecord.findMany({
           where: {
-            workspaceId: input.workspaceId,
+            accountId: input.accountId,
             kind: { in: ["pool_grant", "trial_grant"] },
             deletedAt: null,
             cycleStart: { gte: cycleStart },
@@ -301,7 +365,7 @@ async function recordMinutesAndDebitIncrementalSpillover(
         }),
         tx.usageRecord.findMany({
           where: {
-            workspaceId: input.workspaceId,
+            accountId: input.accountId,
             kind: "agent_minutes",
             deletedAt: null,
             cycleStart: { gte: cycleStart },
@@ -321,7 +385,7 @@ async function recordMinutesAndDebitIncrementalSpillover(
   if (toDecrement > 0) {
     const packs = await tx.minutePack.findMany({
       where: {
-        workspaceId: input.workspaceId,
+        accountId: input.accountId,
         deletedAt: null,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         remainingMinutes: { gt: 0 },
@@ -336,7 +400,7 @@ async function recordMinutesAndDebitIncrementalSpillover(
       const result = await tx.minutePack.updateMany({
         where: {
           id: pack.id,
-          workspaceId: input.workspaceId,
+          accountId: input.accountId,
           deletedAt: null,
           remainingMinutes: { gte: decrementAmount },
         },
@@ -352,12 +416,14 @@ async function recordMinutesAndDebitIncrementalSpillover(
   await tx.usageRecord.create({
     data: {
       workspaceId: input.workspaceId,
+      accountId: input.accountId,
       kind: "agent_minutes",
       quantity: input.minutes,
       idempotencyKey: input.idempotencyKey,
-      cycleStart: input.cycleStart ?? cycleStart ?? null,
+      cycleStart: cycleStart ?? null,
       metadata: {
         scanId: input.scanId,
+        accountId: input.accountId,
         mode: input.mode ?? null,
         wallClockMs: input.wallClockMs,
         rawMinutes: input.rawMinutes,

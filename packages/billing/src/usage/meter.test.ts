@@ -19,6 +19,7 @@ import { recordAgentMinutes } from "./meter"
 interface UsageRecordState {
   id: string
   workspaceId: string
+  accountId: string | null
   kind: string
   quantity: number
   idempotencyKey: string
@@ -30,27 +31,34 @@ interface UsageRecordState {
 interface PackState {
   id: string
   workspaceId: string
+  accountId: string | null
   remainingMinutes: number
   purchasedAt: Date
   expiresAt: Date | null
   deletedAt: Date | null
 }
 
+const SPONSOR = "acct_1"
 const cycleStart = new Date("2026-08-01T00:00:00.000Z")
 let usageRecords: UsageRecordState[]
 let packs: PackState[]
 let updateManyMock: ReturnType<typeof vi.fn>
 
-function configureDatabase(poolMinutes: number, packMinutes: number[] = []): void {
+function configureDatabase(
+  poolMinutes: number,
+  packMinutes: number[] = [],
+  opts?: { trial?: { startedAt: Date } }
+): void {
   usageRecords = poolMinutes
     ? [
         {
           id: "grant_1",
           workspaceId: "ws_1",
-          kind: "pool_grant",
+          accountId: SPONSOR,
+          kind: opts?.trial ? "trial_grant" : "pool_grant",
           quantity: poolMinutes,
           idempotencyKey: "grant",
-          cycleStart,
+          cycleStart: opts?.trial?.startedAt ?? cycleStart,
           deletedAt: null,
         },
       ]
@@ -58,6 +66,7 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
   packs = packMinutes.map((remainingMinutes, index) => ({
     id: `pack_${index + 1}`,
     workspaceId: "ws_1",
+    accountId: SPONSOR,
     remainingMinutes,
     purchasedAt: new Date(`2026-07-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
     expiresAt: null,
@@ -68,7 +77,7 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
     const pack = packs.find(
       (candidate) =>
         candidate.id === where.id &&
-        candidate.workspaceId === where.workspaceId &&
+        candidate.accountId === where.accountId &&
         candidate.deletedAt === null &&
         candidate.remainingMinutes >= where.remainingMinutes.gte
     )
@@ -78,11 +87,68 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
   })
 
   const tx = {
-    scan: { findFirst: vi.fn().mockResolvedValue({ id: "finished" }) },
+    scan: { findFirst: vi.fn().mockResolvedValue({ id: "finished", createdById: SPONSOR }) },
     scanEvent: { create: intentCreateMock },
     $executeRaw: executeRawMock,
+    user: {
+      findUnique: vi.fn().mockResolvedValue({ trialStartedAt: opts?.trial?.startedAt ?? null }),
+    },
     billingAccount: {
       findUnique: vi.fn().mockResolvedValue({ currentPeriodStart: cycleStart }),
+      // resolveAccountBilling: account-owned lookup → governing row. Trial
+      // accounts still carry a provider="trial" marker row with no period —
+      // the trial anchor lives on User.trialStartedAt.
+      findMany: vi.fn(async ({ where }: { where: { accountId?: string | null } }) =>
+        where?.accountId === SPONSOR
+          ? [
+              opts?.trial
+                ? {
+                    id: "ba_trial",
+                    accountId: SPONSOR,
+                    workspaceId: "ws_1",
+                    purchaseWorkspaceId: "ws_1",
+                    provider: "trial",
+                    externalId: null,
+                    status: "trialing",
+                    currentPlan: "FREE",
+                    interval: null,
+                    currentPeriodStart: null,
+                    currentPeriodEnd: null,
+                    canceledAt: null,
+                    trialEndsAt: new Date(
+                      opts.trial.startedAt.getTime() + 14 * 24 * 60 * 60 * 1000
+                    ),
+                    spendLimitCents: null,
+                    graceUsedMs: 0,
+                    graceCycleStart: null,
+                    deletedAt: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                  }
+                : {
+                    id: "ba_1",
+                    accountId: SPONSOR,
+                    workspaceId: "ws_1",
+                    purchaseWorkspaceId: "ws_1",
+                    provider: "polar",
+                    externalId: "sub_1",
+                    status: "active",
+                    currentPlan: "PRO",
+                    interval: "monthly",
+                    currentPeriodStart: cycleStart,
+                    currentPeriodEnd: null,
+                    canceledAt: null,
+                    trialEndsAt: null,
+                    spendLimitCents: null,
+                    graceUsedMs: 0,
+                    graceCycleStart: null,
+                    deletedAt: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                  },
+            ]
+          : []
+      ),
     },
     usageRecord: {
       findUnique: vi.fn(async ({ where }) =>
@@ -93,7 +159,7 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
         return usageRecords
           .filter(
             (record) =>
-              record.workspaceId === where.workspaceId &&
+              (where.accountId === undefined || record.accountId === where.accountId) &&
               kinds.includes(record.kind) &&
               record.deletedAt === null &&
               record.cycleStart !== null &&
@@ -105,6 +171,7 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
         usageRecords.push({
           id: `usage_${usageRecords.length + 1}`,
           workspaceId: data.workspaceId,
+          accountId: data.accountId ?? null,
           kind: data.kind,
           quantity: data.quantity,
           idempotencyKey: data.idempotencyKey,
@@ -116,9 +183,14 @@ function configureDatabase(poolMinutes: number, packMinutes: number[] = []): voi
       }),
     },
     minutePack: {
-      findMany: vi.fn(async () =>
+      findMany: vi.fn(async ({ where }: { where: { accountId?: string | null } }) =>
         packs
-          .filter((pack) => pack.deletedAt === null && pack.remainingMinutes > 0)
+          .filter(
+            (pack) =>
+              pack.deletedAt === null &&
+              pack.remainingMinutes > 0 &&
+              (where?.accountId === undefined || pack.accountId === where.accountId)
+          )
           .sort((left, right) => left.purchasedAt.getTime() - right.purchasedAt.getTime())
           .map(({ id, remainingMinutes }) => ({ id, remainingMinutes }))
       ),
@@ -154,7 +226,8 @@ describe("recordAgentMinutes pack debits", () => {
     ).rejects.toThrow("intent insert unavailable")
     expect(finalize).not.toHaveBeenCalled()
     expect({ usageRecords, packs }).toEqual(before)
-    expect(transactionMock).toHaveBeenCalledOnce()
+    // Sponsor-resolution transaction plus the durable-intent transaction.
+    expect(transactionMock).toHaveBeenCalledTimes(2)
     expect(executeRawMock).not.toHaveBeenCalled()
   })
   it("does not reassess quota after terminal finalization and an uncertain serialization commit", async () => {
@@ -170,7 +243,9 @@ describe("recordAgentMinutes pack debits", () => {
       recordAgentMinutes("ws_1", "finished", 60_000, { beforeCommit: finish })
     ).rejects.toMatchObject({ code: "P2034" })
     expect(finish).toHaveBeenCalledOnce()
-    expect(transactionMock).toHaveBeenCalledTimes(2)
+    // Sponsor resolution, durable intent, and the settlement that hit the
+    // uncertain commit — never re-run after finalization began.
+    expect(transactionMock).toHaveBeenCalledTimes(3)
   })
   it.each(["completed", "partial", "cancelled", "failed"] as const)(
     "meters %s according to terminal policy",
@@ -244,7 +319,8 @@ describe("recordAgentMinutes pack debits", () => {
 
     expect(results.every((result) => result.created)).toBe(true)
     expect(packs[0]?.remainingMinutes).toBe(17)
-    expect(executeRawMock).toHaveBeenCalledTimes(2)
+    // Each settlement takes the workspace then the account advisory lock.
+    expect(executeRawMock).toHaveBeenCalledTimes(4)
   })
 
   it("treats a concurrent idempotent replay as a no-op", async () => {
@@ -280,7 +356,10 @@ describe("recordAgentMinutes pack debits", () => {
 
   it("retries a serializable transaction conflict", async () => {
     configureDatabase(0, [20])
-    transactionMock.mockRejectedValueOnce({ code: "P2034" })
+    const base = transactionMock.getMockImplementation()!
+    transactionMock
+      .mockImplementationOnce((callback, options) => base(callback, options))
+      .mockRejectedValueOnce({ code: "P2034" })
 
     const result = await recordAgentMinutes("ws_1", "scan_1", 3 * 60_000, {
       phase: "tick_1",
@@ -288,7 +367,8 @@ describe("recordAgentMinutes pack debits", () => {
     })
 
     expect(result.created).toBe(true)
-    expect(transactionMock).toHaveBeenCalledTimes(2)
+    // Sponsor resolution + failed settlement + retried settlement.
+    expect(transactionMock).toHaveBeenCalledTimes(3)
     expect(packs[0]?.remainingMinutes).toBe(17)
   })
 })
@@ -343,5 +423,23 @@ describe("recordAgentMinutes billing-outcome rules (founder-confirmed 2026-08-29
 
     expect(result).toMatchObject({ created: false, minutes: 0, overageMinutes: 0 })
     expect(transactionMock).not.toHaveBeenCalled()
+  })
+
+  it("charges trial minutes against the trial pool, not overage", async () => {
+    const trialStart = new Date("2026-08-01T00:00:00.000Z")
+    // Trial accounts always carry a provider="trial" billing row — the
+    // spillover resolver must still read User.trialStartedAt for the cycle.
+    configureDatabase(100, [], { trial: { startedAt: trialStart } })
+    const settleOverage = vi.fn()
+
+    const result = await recordAgentMinutes("ws_1", "trial_scan", 10 * 60_000, {
+      outcome: "completed",
+      settleOverage,
+    })
+
+    expect(result.overageMinutes).toBe(0)
+    expect(settleOverage).not.toHaveBeenCalled()
+    const record = usageRecords.find((r) => r.kind === "agent_minutes")
+    expect(record?.cycleStart?.getTime()).toBe(trialStart.getTime())
   })
 })

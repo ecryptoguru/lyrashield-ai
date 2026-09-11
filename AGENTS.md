@@ -74,6 +74,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Preserve user changes and avoid unrelated refactors or formatting churn.
 - Inspect current code/schema/callers before editing; documentation never beats executable truth.
 - Scope every workspace query by `workspaceId`; validate trust-boundary inputs with Zod.
+- Billing ownership is account-level: subscriptions, allowances, usage, packs, grace, and overage belong to `BillingAccount.accountId`/`UsageRecord.accountId`/`MinutePack.accountId`; `workspaceId` on those rows is attribution only. Sponsor identity comes from trusted persisted state (`Scan.createdById`, `session.userId`), never client-supplied payer IDs, and fails closed. Entitlement decisions use the sponsor account's `effectivePlan`; `workspace.plan` is a display mirror only. Bind account context with `withAccountRLS`/`withWorkspaceRLS(..., { accountId })` for account-owned ledger access.
 - Use `@lyrashield/logger`; audit sensitive mutations through the extended Prisma client.
 - Use shared UI, API helpers, queue helpers, security helpers, and domain services.
 - Add focused regression coverage for changed behavior, especially security, money, tenancy, evidence, and lifecycle paths.

@@ -1,5 +1,7 @@
 import { getFixProposal, prisma } from "@lyrashield/db"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
+import { resolveAccountBilling } from "@lyrashield/billing"
+import type { WorkspacePlan } from "@lyrashield/types"
 import type { FixPrRequest } from "./fix-pr"
 
 export class FixPrContextError extends Error {
@@ -81,7 +83,7 @@ export async function resolveFixPrRequest(
     diff: artifact.content.toString("utf8"),
     anchorFile,
     implicatedFiles,
-    plan: workspace.plan,
+    plan: ((await resolveAccountBilling(requestedById))?.effectivePlan ?? "FREE") as WorkspacePlan,
     installationId,
     repoOwner: target.repoOwner,
     repoName: target.repoName,

@@ -17,6 +17,9 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: { fix: { createPr: "fix:create_pr", approve: "fix:approve" } },
 }))
+vi.mock("@lyrashield/billing", () => ({
+  resolveAccountBilling: vi.fn().mockResolvedValue({ effectivePlan: "PRO" }),
+}))
 vi.mock("@lyrashield/db", () => ({ getFixProposal, prisma }))
 vi.mock("@lyrashield/evidence-storage", () => ({ readEncryptedArtifact }))
 vi.mock("@lyrashield/logger", () => ({
@@ -170,7 +173,8 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
       expect(req.authorization).toEqual(authorization)
       if (authorization)
         expect(requirePermission).toHaveBeenCalledWith("workspace-1", "fix:approve")
-      expect(req.plan).toBe("LAUNCH_ASSURANCE")
+      // The caller owns PRO; the workspace mirror must not upgrade the patch scope.
+      expect(req.plan).toBe("PRO")
       expect(req.anchorFile).toBe("src/a.ts")
       expect(req.baseCommit).toBe("abc123")
       expect(req.installationId).toBe(42)

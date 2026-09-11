@@ -89,6 +89,7 @@ describe.sequential("Upstash rate-limit failure cooldown", () => {
   it("uses a shared NX expiry lock for one production checkout creation", async () => {
     mocks.checkoutSet.mockResolvedValueOnce("OK").mockResolvedValueOnce(null)
     const input = {
+      accountId: "account-1",
       workspaceId: "workspace-1",
       provider: "polar" as const,
       kind: "subscription" as const,
@@ -99,7 +100,7 @@ describe.sequential("Upstash rate-limit failure cooldown", () => {
     await expect(claimBillingCheckoutCreation(input)).resolves.toBe("duplicate")
     expect(mocks.checkoutSet).toHaveBeenNthCalledWith(
       1,
-      "billing-checkout-lock:workspace-1:subscription",
+      "billing-checkout-lock:account-1:subscription",
       "1",
       { nx: true, ex: 90 }
     )
@@ -113,12 +114,14 @@ describe.sequential("Upstash rate-limit failure cooldown", () => {
     })
     const outcomes = await Promise.all([
       claimBillingCheckoutCreation({
+        accountId: "account-1",
         workspaceId: "free-1",
         provider: "polar",
         kind: "subscription",
         catalogKey: "starter_monthly",
       }),
       claimBillingCheckoutCreation({
+        accountId: "account-1",
         workspaceId: "free-1",
         provider: "razorpay",
         kind: "subscription",
@@ -128,6 +131,7 @@ describe.sequential("Upstash rate-limit failure cooldown", () => {
     expect(outcomes).toEqual(["claimed", "duplicate"])
     await expect(
       claimBillingCheckoutCreation({
+        accountId: "account-1",
         workspaceId: "free-1",
         provider: "polar",
         kind: "pack",

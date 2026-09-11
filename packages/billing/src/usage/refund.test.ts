@@ -7,6 +7,9 @@ const usageCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "usage_
 const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
 
 vi.mock("@lyrashield/db", () => ({
+  getSystemPrisma: () => ({
+    minutePack: { findUnique: vi.fn().mockResolvedValue({ accountId: "buyer" }) },
+  }),
   prisma: { auditLog: { create: auditCreateMock } },
   withWorkspaceRLS: withWorkspaceRLSMock,
 }))

@@ -2,17 +2,30 @@ import { NextResponse } from "next/server"
 import { env } from "@lyrashield/config"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { randomUUID } from "node:crypto"
-import { setRequestId } from "@lyrashield/logger"
+import { setRequestIdResolver } from "@lyrashield/logger"
 
 /**
  * Request id for log correlation, scoped with AsyncLocalStorage so concurrent
  * requests never observe each other's id (Node.js runtime only — API route
  * handlers run in Node, not the edge middleware). `withApiRequest` runs the
  * handler under a fresh id (honouring an upstream `x-request-id` when present)
- * and stamps it into the logger so every line — including Prisma slow-query
- * warnings — carries it.
+ * and the logger's resolver reads it back from the async context, so every
+ * line — including Prisma slow-query warnings — carries the caller's id even
+ * while another request is in flight.
  */
 const apiRequestStorage = new AsyncLocalStorage<{ requestId: string }>()
+
+// The logger is runtime-agnostic; bind its stamp to this app's async context
+// once, at module scope. Where no request is in flight the resolver returns
+// undefined and the logger falls back to the legacy module variable (worker
+// and edge callers still use setRequestId directly). Many unit tests mock
+// @lyrashield/logger with a subset of exports; accessing the missing export
+// throws under vitest's proxy, so bind best-effort.
+try {
+  setRequestIdResolver(() => apiRequestStorage.getStore()?.requestId)
+} catch {
+  /* subset logger mocks do not expose setRequestIdResolver */
+}
 
 export function getApiRequestId(): string | undefined {
   return apiRequestStorage.getStore()?.requestId
@@ -24,14 +37,7 @@ export function withApiRequest<Req extends Request, Args extends unknown[], Resu
   return async (request, ...args) => {
     const upstreamId = request.headers.get("x-request-id")?.slice(0, 128)
     const requestId = upstreamId && /^[\w-]+$/.test(upstreamId) ? upstreamId : randomUUID()
-    return apiRequestStorage.run({ requestId }, async () => {
-      setRequestId(requestId)
-      try {
-        return await handler(request, ...args)
-      } finally {
-        setRequestId(undefined)
-      }
-    })
+    return apiRequestStorage.run({ requestId }, () => handler(request, ...args))
   }
 }
 

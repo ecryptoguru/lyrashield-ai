@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
-import { __test, logger } from "./index"
+import { AsyncLocalStorage } from "node:async_hooks"
+import { __test, activeRequestId, logger, setRequestId, setRequestIdResolver } from "./index"
 
 const { redact, safeStringify, isSensitiveKey } = __test
 
@@ -64,6 +65,58 @@ describe("logger — redaction", () => {
     const err = out.err as Record<string, unknown>
     expect(err.name).toBe("Error")
     expect(err.message).toBe("boom")
+  })
+})
+
+describe("logger — request correlation", () => {
+  it("stamps the scoped id for interleaved requests, never a neighbor's", async () => {
+    // F5 regression: request A pauses mid-flight while request B resolves —
+    // A's resumed logs must still carry request-A, not the module global B set.
+    const storage = new AsyncLocalStorage<{ requestId: string }>()
+    setRequestIdResolver(() => storage.getStore()?.requestId)
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => undefined)
+
+    try {
+      const seen: string[] = []
+      const run = (requestId: string, marker: string, before: () => Promise<void>) =>
+        storage.run({ requestId }, async () => {
+          await before()
+          logger.info(marker)
+          seen.push(JSON.parse(stdout.mock.lastCall![0] as string).requestId)
+        })
+
+      const aStarted = Promise.withResolvers<void>()
+      const bDone = Promise.withResolvers<void>()
+      const a = run("request-A", "line from A", async () => {
+        aStarted.resolve()
+        await bDone.promise
+      })
+      const b = run("request-B", "line from B", async () => {
+        await aStarted.promise
+      })
+      await b
+      bDone.resolve()
+      await a
+
+      expect(seen).toEqual(["request-B", "request-A"])
+      expect(activeRequestId()).toBeUndefined()
+    } finally {
+      stdout.mockRestore()
+      setRequestIdResolver(undefined)
+      setRequestId(undefined)
+    }
+  })
+
+  it("keeps the legacy module variable when no resolver scope is active", () => {
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    try {
+      setRequestId("worker-job-1")
+      logger.info("job line")
+      expect(JSON.parse(stdout.mock.lastCall![0] as string).requestId).toBe("worker-job-1")
+    } finally {
+      stdout.mockRestore()
+      setRequestId(undefined)
+    }
   })
 })
 

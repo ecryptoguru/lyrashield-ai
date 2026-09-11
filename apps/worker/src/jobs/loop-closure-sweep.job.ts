@@ -53,8 +53,13 @@ export async function processLoopClosureSweep(
         closure.workspaceId,
         closure.branchName,
         closure.prNumber,
-        async (mode) => {
-          const entitlement = await assertScanAllowed(closure.workspaceId, mode)
+        async (mode, sponsorAccountId, tx) => {
+          const entitlement = await assertScanAllowed(
+            closure.workspaceId,
+            mode,
+            sponsorAccountId,
+            tx
+          )
           if (!entitlement.allowed) throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
           await assertScanWorkerAvailable()
         },

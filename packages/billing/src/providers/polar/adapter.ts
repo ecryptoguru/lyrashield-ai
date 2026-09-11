@@ -32,14 +32,19 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
   const data = event.data
   const metadata = (data.metadata ?? {}) as Record<string, string>
   const workspaceId = metadata.workspaceId ?? null
+  const accountId = metadata.accountId ?? null
 
   try {
     switch (event.type) {
       case "order.paid": {
-        // One-time purchase (minute pack)
-        if (!workspaceId) {
-          logger.warn("Polar order.paid without workspaceId metadata", { eventId: data.id })
-          return { handled: false, action: "order.paid.no_workspace", workspaceId: null }
+        // One-time purchase (minute pack) — credited to the buying account.
+        if (!workspaceId || !accountId) {
+          logger.warn("Polar order.paid without workspace/account metadata", {
+            eventId: data.id,
+            hasWorkspace: Boolean(workspaceId),
+            hasAccount: Boolean(accountId),
+          })
+          return { handled: false, action: "order.paid.no_identity", workspaceId }
         }
 
         const catalog = resolvePolarCatalogEvent(event.type, data)
@@ -50,13 +55,14 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         const pack = MINUTE_PACK_MAP[catalog.packId]
         const externalId = String(data.id ?? "")
 
-        await creditTopUp(
+        await creditTopUp({
+          accountId,
           workspaceId,
-          "polar",
-          pack.minutes,
-          new Date(Date.now() + pack.validityDays * 24 * 60 * 60 * 1000),
-          externalId
-        )
+          provider: "polar",
+          minutes: pack.minutes,
+          expiresAt: new Date(Date.now() + pack.validityDays * 24 * 60 * 60 * 1000),
+          externalId,
+        })
 
         return { handled: true, action: "order.paid.credited", workspaceId }
       }
@@ -70,11 +76,13 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
       case "subscription.canceled":
       case "subscription.revoked":
       case "subscription.uncanceled": {
-        if (!workspaceId) {
-          logger.warn("Polar subscription event without workspaceId metadata", {
+        // The durable identity is (provider, externalId) — workspace/account
+        // metadata is best-effort attribution stamped at checkout.
+        if (!workspaceId && !accountId) {
+          logger.warn("Polar subscription event without workspace/account metadata", {
             type: event.type,
           })
-          return { handled: false, action: "subscription.no_workspace", workspaceId: null }
+          return { handled: false, action: "subscription.no_identity", workspaceId: null }
         }
 
         const catalog = resolvePolarCatalogEvent(event.type, data)
@@ -90,6 +98,7 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
 
         await syncSubscription({
           workspaceId,
+          accountId,
           provider: "polar",
           externalId: String(data.id ?? ""),
           plan: catalog.plan,
@@ -104,11 +113,13 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
       }
 
       case "customer.state_changed": {
-        // Customer state changes (e.g. blocked) — sync subscription state
-        if (!workspaceId) {
+        // Customer state changes (e.g. blocked) — the payload carries the
+        // customer object, so identity comes from customer-level metadata
+        // (stamped at checkout) or the workspace attribution on the row.
+        if (!workspaceId && !accountId) {
           return {
             handled: false,
-            action: "customer.state_changed.no_workspace",
+            action: "customer.state_changed.no_identity",
             workspaceId: null,
           }
         }
@@ -116,8 +127,12 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         const state = (data.state ?? "active") as string
         if (state === "blocked" || state === "deleted") {
           // Downgrade to FREE directly — blocked/deleted customers should
-          // not retain any paid plan entitlements.
-          await downgradeToFree(workspaceId, `customer.${state}`)
+          // not retain any paid plan entitlements. Account ownership wins
+          // over workspace attribution.
+          await downgradeToFree(
+            accountId ? { accountId } : { workspaceId: workspaceId as string },
+            `customer.${state}`
+          )
         }
 
         return { handled: true, action: `customer.state_changed.${state}`, workspaceId }

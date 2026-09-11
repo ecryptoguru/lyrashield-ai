@@ -4,7 +4,11 @@ import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { CreateScanSchema, resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
-import { evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
+import {
+  evaluateScanEntitlement,
+  isTrialAvailable,
+  resolveAccountBilling,
+} from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { authErrorResponse } from "../../../../lib/api-auth"
@@ -87,11 +91,11 @@ export async function GET(request: Request) {
     // token; that is the same meter POST uses, so a preflight does not let a
     // caller evade it — POST re-checks).
     if (target.type === "WEB_APP" || target.type === "API") {
-      const workspace = await prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { plan: true },
-      })
-      if (!workspace || workspace.plan === "FREE") {
+      // The sponsor's effective plan decides — workspace.plan is a display
+      // field under account-owned billing.
+      const sponsorBilling = await resolveAccountBilling(session.userId)
+      const sponsorPlan = sponsorBilling?.effectivePlan ?? "FREE"
+      if (sponsorPlan === "FREE") {
         // Read-only peek: repeated preflight calls must not consume the
         // caller's hourly free-URL budget. The POST path consumes the token.
         const freeUrlLimit = await peekFreeUrlScanRateLimit(clientIpFromRequest(request))
@@ -107,7 +111,7 @@ export async function GET(request: Request) {
           })
         }
       }
-      if (workspace && workspace.plan !== "FREE") {
+      if (sponsorPlan !== "FREE") {
         const domain = target.url ? normalizeDomainForProof(target.url) : null
         const proof = domain
           ? await prisma.targetDomainVerification.findFirst({
@@ -125,7 +129,7 @@ export async function GET(request: Request) {
             allowed: false,
             code: "DOMAIN_VERIFICATION_REQUIRED",
             message: "Verify control of this domain once before starting a paid remote review.",
-            plan: workspace.plan,
+            plan: sponsorPlan,
             isTrial: false,
             remainingMinutes: 0,
           })
@@ -184,8 +188,12 @@ export async function GET(request: Request) {
 
     // Read-only entitlement evaluation: no trial/billing mutation on GET.
     // canonicalMode is a resolved profile mode at this point — every
-    // unsupported combination returned above.
-    const entitlement = await evaluateScanEntitlement(workspaceId, canonicalMode, {
+    // unsupported combination returned above. The sponsor is the caller's
+    // account (subscriptions are account-owned).
+    const entitlement = await evaluateScanEntitlement({
+      workspaceId,
+      mode: canonicalMode,
+      sponsorAccountId: session.userId,
       mutateOnTrialExpiry: false,
     })
     const trialAvailable =

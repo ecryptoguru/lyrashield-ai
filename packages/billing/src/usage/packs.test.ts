@@ -13,6 +13,13 @@ vi.mock("@lyrashield/pricing", () => ({ PACK_VALIDITY_DAYS: 180 }))
 
 import { creditTopUp } from "./packs"
 
+const input = {
+  accountId: "acct_1",
+  workspaceId: "ws_1",
+  provider: "polar" as const,
+  minutes: 100,
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   const tx = {
@@ -23,16 +30,21 @@ beforeEach(() => {
       update: vi.fn(),
     },
   }
-  withWorkspaceRLSMock.mockImplementation((workspaceId, callback) => {
+  withWorkspaceRLSMock.mockImplementation((workspaceId, callback, options) => {
     expect(workspaceId).toBe("ws_1")
+    expect(options).toEqual(expect.objectContaining({ accountId: "acct_1" }))
     return callback(tx)
   })
 })
 
 describe("creditTopUp", () => {
-  it("creates a pack inside a workspace-RLS transaction", async () => {
+  it("creates an account-owned pack inside a workspace-RLS transaction", async () => {
     await expect(
-      creditTopUp("ws_1", "polar", 100, new Date("2027-01-01T00:00:00.000Z"), "ord_1")
+      creditTopUp({
+        ...input,
+        expiresAt: new Date("2027-01-01T00:00:00.000Z"),
+        externalId: "ord_1",
+      })
     ).resolves.toMatchObject({ created: true, packId: "pack_1", minutes: 100 })
 
     expect(executeRawMock).toHaveBeenCalledOnce()
@@ -43,6 +55,7 @@ describe("creditTopUp", () => {
     expect(createMock).toHaveBeenCalledWith({
       data: expect.objectContaining({
         workspaceId: "ws_1",
+        accountId: "acct_1",
         provider: "polar",
         externalId: "ord_1",
         minutes: 100,
@@ -54,7 +67,9 @@ describe("creditTopUp", () => {
   it("returns the existing entitlement on a replay without creating another pack", async () => {
     findUniqueMock.mockResolvedValueOnce({ id: "pack_1", minutes: 100, deletedAt: null })
 
-    await expect(creditTopUp("ws_1", "polar", 100, null, "ord_1")).resolves.toMatchObject({
+    await expect(
+      creditTopUp({ ...input, expiresAt: null, externalId: "ord_1" })
+    ).resolves.toMatchObject({
       created: false,
       packId: "pack_1",
       minutes: 100,

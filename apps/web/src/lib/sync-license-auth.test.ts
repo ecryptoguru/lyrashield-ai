@@ -3,8 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   findByKeyHash: vi.fn(),
-  findWorkspace: vi.fn(),
-  warn: vi.fn(),
+  resolveAccountBilling: vi.fn(),
 }))
 
 vi.mock("@lyrashield/config", () => ({
@@ -13,13 +12,16 @@ vi.mock("@lyrashield/config", () => ({
 vi.mock("@lyrashield/db", () => ({
   findLicenseForSyncById: mocks.findById,
   findLicenseForSyncByKeyHash: mocks.findByKeyHash,
-  prisma: { workspace: { findUnique: mocks.findWorkspace } },
 }))
-vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { warn: mocks.warn } }))
+vi.mock("@lyrashield/billing", () => ({
+  resolveAccountBilling: mocks.resolveAccountBilling,
+}))
+vi.mock("@lyrashield/logger", async () => (await import("../__tests__/mocks")).loggerModule())
 vi.mock("./licenses/license-service", () => ({ hashLicenseKey: () => "key_hash" }))
 
 import { markLegacySyncResponse, resolveSyncCredential } from "./sync-license-auth"
 import { createSyncSessionToken } from "./sync-session"
+import { loggerSpies } from "../__tests__/mocks"
 
 const session = { userId: "user_1", sessionId: "apikey:key_1" }
 
@@ -66,7 +68,7 @@ describe("sync license authorization", () => {
     await expect(
       resolveSyncCredential({ workspaceId: "workspace_1", session, licenseKey: "legacy-key" })
     ).resolves.toMatchObject({ ok: true, legacyLicenseKey: true })
-    expect(mocks.warn).toHaveBeenCalledOnce()
+    expect(loggerSpies.warn).toHaveBeenCalledOnce()
 
     const response = markLegacySyncResponse(new Response(), true)
     expect(response.headers.get("Deprecation")).toBe("true")
@@ -81,7 +83,8 @@ describe("sync license authorization", () => {
       sku: "individual_launch",
       revoked: false,
     }
-    mocks.findWorkspace.mockResolvedValue({ plan: "FREE" })
+    // Cloud sync follows the account's effective plan, not the workspace row.
+    mocks.resolveAccountBilling.mockResolvedValue({ effectivePlan: "FREE" })
     mocks.findByKeyHash.mockResolvedValue({ license })
     await expect(
       resolveSyncCredential({ workspaceId: "workspace_1", session, licenseKey: "legacy-key" })

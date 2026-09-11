@@ -61,7 +61,7 @@ export default async function AffiliateAdminPage() {
   ])
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8">
       <PageHeader
         title="Affiliate Admin"
         description="Review applications, affiliates, and payouts. Changes remain disabled until one-time authorization and atomic audit controls are connected."
@@ -74,9 +74,12 @@ export default async function AffiliateAdminPage() {
             <p className="text-sm text-muted-foreground">No pending applications.</p>
           ) : (
             pending.map((aff) => (
-              <div key={aff.id} className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <div className="font-medium">{aff.user.name ?? aff.user.email}</div>
+              <div
+                key={aff.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium break-words">{aff.user.name ?? aff.user.email}</div>
                   <div className="text-sm text-muted-foreground">
                     Applied {new Date(aff.createdAt).toLocaleDateString()}
                   </div>
@@ -90,7 +93,7 @@ export default async function AffiliateAdminPage() {
 
       <section className="mt-8">
         <h2 className="mb-4 text-lg font-semibold">Approved Affiliates ({approved.length})</h2>
-        <div className="overflow-x-auto">
+        <div className="min-w-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left">
@@ -151,9 +154,12 @@ export default async function AffiliateAdminPage() {
             <p className="text-sm text-muted-foreground">No pending payouts.</p>
           ) : (
             payouts.map((p) => (
-              <div key={p.id} className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <div className="font-medium">
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium break-words">
                     {p.affiliate.user.name ?? p.affiliate.user.email}
                   </div>
                   <div className="text-sm text-muted-foreground">
@@ -177,9 +183,12 @@ export default async function AffiliateAdminPage() {
           <h2 className="mb-4 text-lg font-semibold">Suspended Affiliates ({suspended.length})</h2>
           <div className="space-y-3">
             {suspended.map((aff) => (
-              <div key={aff.id} className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <div className="font-medium">{aff.user.name ?? aff.user.email}</div>
+              <div
+                key={aff.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium break-words">{aff.user.name ?? aff.user.email}</div>
                 </div>
                 <AffiliateAdminActions affiliateId={aff.id} showReactivate />
               </div>

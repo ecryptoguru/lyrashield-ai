@@ -38,10 +38,7 @@ vi.mock("@lyrashield/auth", () => ({
   },
 }))
 
-vi.mock("@lyrashield/logger", () => ({
-  setRequestId: vi.fn(),
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
-}))
+vi.mock("@lyrashield/logger", async () => (await import("@/__tests__/mocks")).loggerModule())
 
 vi.mock("../../../lib/rate-limit", () => ({
   checkScanCreateRateLimit: vi
@@ -62,6 +59,13 @@ vi.mock("../../../lib/queue", () => ({
 vi.mock("@lyrashield/billing", () => ({
   assertScanAllowed: vi.fn().mockResolvedValue({ allowed: true }),
   assertTargetAllowed: vi.fn().mockResolvedValue({ allowed: true }),
+  // The sponsor's account billing is the plan source now; the tests' existing
+  // `workspace.findUnique → { plan }` fixtures stand in for it.
+  resolveAccountBilling: vi.fn(async () => {
+    const ws = await prisma.workspace.findUnique({ where: { id: "ws" }, select: { plan: true } })
+    const plan = (ws as { plan?: string } | null)?.plan ?? "FREE"
+    return { effectivePlan: plan, currentPlan: plan }
+  }),
 }))
 
 import { POST, GET } from "./route"

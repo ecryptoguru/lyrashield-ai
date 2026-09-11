@@ -95,6 +95,13 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "LoopClosure",
 ])
 
+// Account-owned ledger models: subscriptions and usage belong to the account
+// (User.id), not the workspace. `workspaceId` on these models is purchase or
+// consumption attribution only. An explicit `accountId` in `where` therefore
+// opts the query out of workspaceId auto-injection — the PostgreSQL account
+// policy (app.current_account_id) is the real boundary.
+export const ACCOUNT_OWNED_MODELS = new Set<string>(["BillingAccount", "UsageRecord", "MinutePack"])
+
 export const READ_OPS = new Set<string>([
   "findMany",
   "findUnique",
@@ -116,6 +123,8 @@ export const WRITE_SCOPE_OPS = new Set<string>(["updateMany", "deleteMany"])
 
 type WorkspaceContext = {
   workspaceId: string | null
+  /** Bound account (User.id) for account-owned billing reads/writes. */
+  accountId: string | null
   databaseRlsBound: boolean
 }
 
@@ -152,13 +161,28 @@ function preserveContextForThenable<T>(value: T): T {
  * This is the safe primitive (wrapping) — prefer it in workers/jobs.
  */
 export function runWithWorkspaceContext<T>(workspaceId: string | null, fn: () => T): T {
-  return workspaceStore.run({ workspaceId, databaseRlsBound: false }, () =>
+  return workspaceStore.run({ workspaceId, accountId: null, databaseRlsBound: false }, () =>
     preserveContextForThenable(fn())
   )
 }
 
-export function runWithDatabaseRLSContext<T>(workspaceId: string, fn: () => T): T {
-  return workspaceStore.run({ workspaceId, databaseRlsBound: true }, () =>
+export function runWithDatabaseRLSContext<T>(
+  workspaceId: string | null,
+  fn: () => T,
+  accountId: string | null = null
+): T {
+  return workspaceStore.run({ workspaceId, accountId, databaseRlsBound: true }, () =>
+    preserveContextForThenable(fn())
+  )
+}
+
+/**
+ * Bind only an account context for `fn` (no workspace). Account-owned billing
+ * reads run against the account RLS policy; workspace-scoped models without
+ * an account policy fail closed.
+ */
+export function runWithAccountContext<T>(accountId: string, fn: () => T): T {
+  return workspaceStore.run({ workspaceId: null, accountId, databaseRlsBound: false }, () =>
     preserveContextForThenable(fn())
   )
 }
@@ -176,11 +200,29 @@ export function runWithDatabaseRLSContext<T>(workspaceId: string, fn: () => T): 
  * `withWorkspaceRLS()` so all statements retain one scoped connection.
  */
 export function setWorkspaceContext(workspaceId: string | null): void {
-  workspaceStore.enterWith({ workspaceId, databaseRlsBound: false })
+  workspaceStore.enterWith({ workspaceId, accountId: null, databaseRlsBound: false })
+}
+
+/**
+ * Bind the account context for the remainder of the current async execution.
+ * Preserves any workspace context already bound (a request can act in a
+ * workspace while reading its own account's billing state).
+ */
+export function setAccountContext(accountId: string | null): void {
+  const current = workspaceStore.getStore()
+  workspaceStore.enterWith({
+    workspaceId: current?.workspaceId ?? null,
+    accountId,
+    databaseRlsBound: current?.databaseRlsBound ?? false,
+  })
 }
 
 export function getWorkspaceContext(): string | null {
   return workspaceStore.getStore()?.workspaceId ?? null
+}
+
+export function getAccountContext(): string | null {
+  return workspaceStore.getStore()?.accountId ?? null
 }
 
 export function isDatabaseRLSContextBound(): boolean {
@@ -199,6 +241,22 @@ export function getExplicitWorkspaceId(args: Record<string, unknown>): string | 
 
   const data = args.data as Record<string, unknown> | undefined
   if (typeof data?.workspaceId === "string" && data.workspaceId) return data.workspaceId
+
+  return null
+}
+
+/**
+ * Recover the accountId present in an account-owned model operation. Like
+ * `getExplicitWorkspaceId` this is not an authorization decision: the account
+ * RLS policy only permits rows whose accountId equals the bound context, so a
+ * self-declared account filter can never widen what the query may see.
+ */
+export function getExplicitAccountId(args: Record<string, unknown>): string | null {
+  const where = args.where as Record<string, unknown> | undefined
+  if (typeof where?.accountId === "string" && where.accountId) return where.accountId
+
+  const data = args.data as Record<string, unknown> | undefined
+  if (typeof data?.accountId === "string" && data.accountId) return data.accountId
 
   return null
 }
@@ -231,7 +289,16 @@ export function applyQueryGuards(
     additions.deletedAt = null
   }
 
-  if (WORKSPACE_SCOPED_MODELS.has(model) && workspaceId && !("workspaceId" in where)) {
+  // An explicit accountId on an account-owned model is an account-scoped
+  // query: the account RLS policy bounds it, so do not pin it to the current
+  // workspace (the account's ledger spans workspaces).
+  const accountScoped = ACCOUNT_OWNED_MODELS.has(model) && "accountId" in where
+  if (
+    WORKSPACE_SCOPED_MODELS.has(model) &&
+    workspaceId &&
+    !("workspaceId" in where) &&
+    !accountScoped
+  ) {
     additions.workspaceId = workspaceId
   }
 

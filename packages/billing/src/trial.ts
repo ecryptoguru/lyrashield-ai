@@ -1,14 +1,18 @@
 /**
- * Trial lifecycle management.
+ * Trial lifecycle management — account-owned.
  *
- * Trials give workspaces 100 agent-minutes (one-time) and up to 3 targets
- * for 14 days. When the trial expires, the workspace enters a locked state
- * with an upgrade CTA — data is preserved, scans are blocked.
+ * A trial is a once-per-account claim: 100 agent-minutes and up to 3 targets
+ * for 14 days. The workspace where the trial is started keeps
+ * `trialStartedAt` as the trial's display/lock state, but the minutes belong
+ * to the claiming account — joining another workspace does not grant a second
+ * trial and the trial pool follows the account.
  */
 
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS, type ScopedTransaction } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
+import { resolveAccountBilling } from "./account"
+import { getUsageBalance } from "./usage/balance"
 
 /** Trial duration in days. */
 export const TRIAL_DURATION_DAYS = 14
@@ -19,7 +23,10 @@ export const TRIAL_AGENT_MINUTES = 100
 /** Trial target cap. */
 export const TRIAL_TARGET_CAP = 3
 
-type TrialTransaction = Parameters<Parameters<typeof withWorkspaceRLS>[1]>[0]
+/** Provider label for account-owned trial marker rows (not a real provider). */
+export const TRIAL_PROVIDER = "trial"
+
+type TrialTransaction = ScopedTransaction
 
 async function hasUsedTrial(
   userId: string,
@@ -27,29 +34,28 @@ async function hasUsedTrial(
 ): Promise<boolean> {
   const user = await db.user.findUnique({ where: { id: userId }, select: { trialStartedAt: true } })
   if (!user || user.trialStartedAt) return true
-  // Older application revisions may still grant trials during migration rollout.
-  return Boolean(
-    await db.workspace.findFirst({
-      where: { trialStartedAt: { not: null }, members: { some: { userId } } },
-      select: { id: true },
-    })
-  )
+  return false
 }
 
 /** Read-only advisory eligibility. The start transaction repeats all guards. */
 export async function isTrialAvailable(workspaceId: string, userId: string): Promise<boolean> {
-  const [workspace, alreadyUsed] = await Promise.all([
-    prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { plan: true, trialStartedAt: true },
-    }),
+  const [workspace, alreadyUsed, paid] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { id: true } }),
     hasUsedTrial(userId, prisma),
+    prisma.billingAccount.findFirst({
+      where: {
+        accountId: userId,
+        deletedAt: null,
+        currentPlan: { not: "FREE" },
+        status: { in: ["active", "past_due", "canceled"] },
+      },
+    }),
   ])
-  return Boolean(workspace?.plan === "FREE" && !workspace.trialStartedAt && !alreadyUsed)
+  return Boolean(workspace && !alreadyUsed && !paid)
 }
 
 export interface TrialState {
-  /** Whether the workspace is on an active trial. */
+  /** Whether the account is on an active trial. */
   isActive: boolean
   /** Whether the trial has expired. */
   isExpired: boolean
@@ -68,10 +74,11 @@ export interface TrialState {
 }
 
 /**
- * Start a trial for a workspace.
+ * Start a trial on a workspace for an account.
  *
- * Sets trialStartedAt on the Workspace and grants 100 one-time agent-minutes.
- * Idempotent: if a trial has already started, this is a no-op.
+ * Sets trialStartedAt on the Workspace (trial attribution) and grants 100
+ * one-time agent-minutes to the ACCOUNT. Idempotent: if the account already
+ * claimed a trial (anywhere), this is a no-op.
  * A caller creating a workspace may supply its existing scoped transaction so
  * workspace creation, the lifetime user claim, and the grant commit together.
  */
@@ -84,22 +91,21 @@ export async function startTrial(
   const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
 
   const run = async (tx: TrialTransaction) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`trial:${userId}`}, 0))`
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing:${userId}`}, 0))`
     const workspace = await tx.workspace.findUnique({
       where: { id: workspaceId },
       select: { plan: true, trialStartedAt: true },
     })
     if (!workspace) throw new Error("Workspace not found")
-    if (workspace.plan !== "FREE") throw new Error("TRIAL_PAID_PLAN")
-    if (workspace.trialStartedAt) {
-      return {
-        started: false,
-        alreadyUsed: false,
-        trialEndsAt: new Date(
-          workspace.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
-        ),
-      }
-    }
+    const paid = await tx.billingAccount.findFirst({
+      where: {
+        accountId: userId,
+        deletedAt: null,
+        currentPlan: { not: "FREE" },
+        status: { in: ["active", "past_due", "canceled"] },
+      },
+    })
+    if (paid) throw new Error("TRIAL_PAID_PLAN")
 
     const alreadyUsed = await hasUsedTrial(userId, tx)
     // Also persist a legacy claim so later membership removal cannot restore eligibility.
@@ -110,44 +116,118 @@ export async function startTrial(
     if (alreadyUsed || claimed.count !== 1)
       return { started: false, alreadyUsed: true, trialEndsAt: null }
 
-    const updated = await tx.workspace.updateMany({
-      where: { id: workspaceId, plan: "FREE", trialStartedAt: null },
-      data: { trialStartedAt: now, deepAllowed: false },
+    // Trial marker row — one per account. The workspaceId is attribution: if
+    // this workspace already carries another account's billing row, the trial
+    // row is account-only (workspaceId NULL, purchaseWorkspaceId set).
+    const existingTrial = await tx.billingAccount.findFirst({
+      where: { accountId: userId, provider: TRIAL_PROVIDER, deletedAt: null },
+      select: { id: true },
     })
-    // A concurrent paid upgrade wins; throwing rolls back the user claim too.
-    if (updated.count !== 1) throw new Error("TRIAL_PAID_PLAN")
-    await tx.billingAccount.upsert({
-      where: { workspaceId },
-      create: { workspaceId, status: "trialing", currentPlan: "FREE", trialEndsAt },
-      update: { status: "trialing", currentPlan: "FREE", trialEndsAt },
-    })
+    if (!existingTrial) {
+      await tx.billingAccount.create({
+        data: {
+          workspaceId: null,
+          purchaseWorkspaceId: workspaceId,
+          accountId: userId,
+          provider: TRIAL_PROVIDER,
+          status: "trialing",
+          currentPlan: "FREE",
+          trialEndsAt,
+        },
+      })
+    } else {
+      await tx.billingAccount.update({
+        where: { id: existingTrial.id },
+        data: { status: "trialing", currentPlan: "FREE", trialEndsAt },
+      })
+    }
+
     await tx.usageRecord.create({
       data: {
         workspaceId,
+        accountId: userId,
         kind: "trial_grant",
         quantity: TRIAL_AGENT_MINUTES,
-        idempotencyKey: `${workspaceId}:TRIAL`,
+        idempotencyKey: `${userId}:TRIAL`,
         cycleStart: now,
-        metadata: { plan: "TRIAL", source: "trial", agentMinutes: TRIAL_AGENT_MINUTES },
+        metadata: {
+          plan: "TRIAL",
+          source: "trial",
+          accountId: userId,
+          agentMinutes: TRIAL_AGENT_MINUTES,
+        },
       },
     })
     return { started: true, alreadyUsed: false, trialEndsAt }
   }
-  const result = transaction ? await run(transaction) : await withWorkspaceRLS(workspaceId, run)
+  const result = transaction
+    ? await run(transaction)
+    : await withWorkspaceRLS(workspaceId, run, { accountId: userId })
 
   if (result.started) {
-    logger.info("Trial started", { workspaceId, trialEndsAt: result.trialEndsAt?.toISOString() })
+    logger.info("Trial started", {
+      workspaceId,
+      accountId: userId,
+      trialEndsAt: result.trialEndsAt?.toISOString(),
+    })
   }
 
   return result
 }
 
 /**
- * Get the current trial state for a workspace.
+ * Account-level trial state — the claiming account's trial window and
+ * remaining trial minutes, regardless of which workspace it scans in.
+ */
+export async function getAccountTrialState(accountId: string): Promise<TrialState> {
+  const user = await prisma.user.findUnique({
+    where: { id: accountId },
+    select: { trialStartedAt: true },
+  })
+
+  if (!user?.trialStartedAt) {
+    return {
+      isActive: false,
+      isExpired: false,
+      startedAt: null,
+      endsAt: null,
+      daysLeft: 0,
+      minutesLeft: 0,
+      targetsUsed: 0,
+      targetCap: TRIAL_TARGET_CAP,
+    }
+  }
+
+  const now = new Date()
+  const endsAt = new Date(user.trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
+  const isExpired = now > endsAt
+  const daysLeft = Math.max(
+    0,
+    Math.ceil((endsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+  )
+
+  const balance = await getUsageBalance(accountId).catch(() => null)
+
+  const billing = await resolveAccountBilling(accountId)
+  const trialPlan = CLOUD_PLAN_MAP.TRIAL
+  return {
+    isActive: !isExpired && (billing?.currentPlan ?? "FREE") === "FREE",
+    isExpired,
+    startedAt: user.trialStartedAt,
+    endsAt,
+    daysLeft,
+    minutesLeft: balance?.poolRemaining ?? 0,
+    targetsUsed: 0,
+    targetCap: trialPlan.targetCaps,
+  }
+}
+
+/**
+ * Get the current trial state for a workspace (attribution view).
  *
- * `prefetchedWorkspace` lets a caller that already read the Workspace row
- * pass it in — the billing page reads plan and trialStartedAt for its own
- * rendering, and duplicate reads were the Deep Review v16 2.1 finding.
+ * The workspace's trialStartedAt drives its trial UX; minutes left come from
+ * the claiming account's trial pool (the trial BillingAccount row's
+ * accountId), falling back to workspace-attributed records for legacy data.
  */
 export async function getTrialState(
   workspaceId: string,
@@ -184,23 +264,41 @@ export async function getTrialState(
     Math.ceil((endsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
   )
 
-  // Get remaining minutes. Aggregated in the database over the
-  // (workspaceId, kind) index — never an unbounded row fetch. The trial plan
-  // reference is kept for the target cap below.
+  // Trial minutes belong to the claiming account.
+  const trialRow = await prisma.billingAccount.findFirst({
+    where: { workspaceId, provider: TRIAL_PROVIDER, deletedAt: null },
+    select: { accountId: true },
+  })
+  const claimerId = trialRow?.accountId ?? null
+
   const trialPlan = CLOUD_PLAN_MAP.TRIAL
-  const [granted, consumed] = await Promise.all([
-    prisma.usageRecord.aggregate({
-      where: { workspaceId, kind: "trial_grant", deletedAt: null },
-      _sum: { quantity: true },
-    }),
-    prisma.usageRecord.aggregate({
-      where: { workspaceId, kind: "agent_minutes", deletedAt: null },
-      _sum: { quantity: true },
-    }),
-  ])
-  const grantedMinutes = granted._sum.quantity ?? 0
-  const consumedMinutes = consumed._sum.quantity ?? 0
-  const minutesLeft = Math.max(0, grantedMinutes - consumedMinutes)
+  const grantWhere = claimerId
+    ? { accountId: claimerId, kind: "trial_grant", deletedAt: null }
+    : {
+        workspaceId,
+        kind: "trial_grant" as const,
+        deletedAt: null,
+        accountId: null as string | null,
+      }
+  const grantRecords = await prisma.usageRecord.findMany({
+    where: grantWhere,
+    select: { quantity: true },
+  })
+  const consumeWhere = claimerId
+    ? { accountId: claimerId, kind: "agent_minutes" as const, deletedAt: null }
+    : {
+        workspaceId,
+        kind: "agent_minutes" as const,
+        deletedAt: null,
+        accountId: null as string | null,
+      }
+  const consumeRecords = await prisma.usageRecord.findMany({
+    where: consumeWhere,
+    select: { quantity: true },
+  })
+  const granted = grantRecords.reduce((s, r) => s + r.quantity, 0)
+  const consumed = consumeRecords.reduce((s, r) => s + r.quantity, 0)
+  const minutesLeft = Math.max(0, granted - consumed)
 
   // Get target count
   const targetsUsed = await prisma.target.count({
@@ -220,46 +318,53 @@ export async function getTrialState(
 }
 
 /**
- * Block a workspace when its trial has expired.
+ * Block an account when its trial has expired.
  *
- * Sets billingAccount.status to "trial_expired". Data is preserved;
- * scans are blocked by assertScanAllowed.
+ * Sets the account's trial BillingAccount status to "trial_expired". Data is
+ * preserved; scans are blocked by assertScanAllowed for that sponsor.
  */
-export async function blockOnExpiry(workspaceId: string): Promise<{ blocked: boolean }> {
-  const trialState = await getTrialState(workspaceId)
+export async function blockOnExpiry(
+  accountId: string,
+  workspaceId?: string
+): Promise<{ blocked: boolean }> {
+  const trialState = await getAccountTrialState(accountId)
 
   if (!trialState.isExpired || !trialState.startedAt) {
     return { blocked: false }
   }
 
-  const billingAccount = await prisma.billingAccount.findUnique({
-    where: { workspaceId },
-    select: { id: true, status: true },
+  const billingAccount = await prisma.billingAccount.findFirst({
+    where: { accountId, provider: TRIAL_PROVIDER, deletedAt: null },
+    select: { id: true, status: true, workspaceId: true, purchaseWorkspaceId: true },
   })
 
-  if (billingAccount?.status === "trial_expired") {
+  if (!billingAccount || billingAccount.status === "trial_expired") {
     return { blocked: false }
   }
 
   await prisma.billingAccount.update({
-    where: { workspaceId },
+    where: { id: billingAccount.id },
     data: { status: "trial_expired" },
   })
 
-  // A-L03: Audit log trial expiry block
-  await prisma.auditLog
-    .create({
-      data: {
-        workspaceId,
-        action: "billing.trial_expired",
-        resourceType: "workspace",
-        resourceId: workspaceId,
-        metadata: { trialStartedAt: trialState.startedAt },
-      },
-    })
-    .catch(() => {})
+  // A-L03: Audit log trial expiry block — AuditLog.workspaceId is a required
+  // FK; use the trial row's attribution or the caller's context workspace.
+  const auditWorkspaceId =
+    billingAccount.workspaceId ?? workspaceId ?? billingAccount.purchaseWorkspaceId
+  if (auditWorkspaceId)
+    await prisma.auditLog
+      .create({
+        data: {
+          workspaceId: auditWorkspaceId,
+          action: "billing.trial_expired",
+          resourceType: "billing_account",
+          resourceId: billingAccount.id,
+          metadata: { trialStartedAt: trialState.startedAt, accountId },
+        },
+      })
+      .catch(() => {})
 
-  logger.info("Trial expired — workspace locked", { workspaceId })
+  logger.info("Trial expired — account blocked from scanning", { accountId })
 
   return { blocked: true }
 }

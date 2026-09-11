@@ -11,7 +11,7 @@ use tokio::process::{Child, Command};
 static CHILDREN: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<Child>>>>> = OnceLock::new();
 
 pub fn validate_max_budget_usd(value: f64) -> Result<f64, String> {
-    if !value.is_finite() || value < 0.01 || value > 100.0 {
+    if !value.is_finite() || !(0.01..=100.0).contains(&value) {
         return Err("BYOK scan budget must be a finite amount between $0.01 and $100.00".into());
     }
     Ok(value)
