@@ -172,7 +172,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "b9e46f7c",
+        "commit": "3f89d729",
         "note": "secret-free dependency install; secrets scoped to the steps that consume them"
       }
     },
@@ -193,7 +193,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "b9e46f7c",
+        "commit": "3f89d729",
         "note": "wrangler pinned to lockfile version; no runtime-fetched unpinned tooling"
       }
     },
@@ -214,7 +214,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "b9e46f7c",
+        "commit": "3f89d729",
         "note": "mutable docker image tags pinned by digest (postgres 17-alpine, redis 7-alpine)"
       }
     },
@@ -236,7 +236,7 @@
       "note": "Independently reported by both Wave E (VULN-E-003) and Wave H; single canonical finding.",
       "remediation": {
         "status": "fixed",
-        "commit": "b9e46f7c",
+        "commit": "3f89d729",
         "note": "production backup workflow no longer exposes secrets at workflow level"
       }
     },
@@ -257,7 +257,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "b9e46f7c",
+        "commit": "3f89d729",
         "note": "production BETTER_AUTH_URL must be https: (loopback dev/test excepted); secure cookies fail closed"
       }
     },
@@ -278,7 +278,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "b24cb478",
+        "commit": "b5b89389",
         "note": "StoredLicense carries HMAC-SHA256 integrity keyed by keychain-held license key; tampered/missing tag clears the grace anchor"
       }
     },
@@ -299,7 +299,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "b24cb478",
+        "commit": "b5b89389",
         "note": "bounded engine-output reader: 64KiB line / 32MiB stream / 50k events; budget trip kills the engine via kill-signal channel"
       }
     },
@@ -320,7 +320,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "b24cb478",
+        "commit": "b5b89389",
         "note": "4MiB chunked response cap + content-length pre-check; untrusted bodies never reach error strings"
       }
     },
@@ -341,7 +341,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "b24cb478",
+        "commit": "b5b89389",
         "note": "mask_key is UTF-8 char-boundary safe; credential validation requires ASCII keys"
       }
     },
@@ -363,7 +363,7 @@
       "v16Overlap": false,
       "remediation": {
         "status": "fixed",
-        "commit": "7a6a1da3",
+        "commit": "574c5e3c",
         "note": "postbuild worker-entry guard 301s http:->https: for every request incl. static assets; middleware mirrors for SSR/API"
       }
     },
@@ -513,8 +513,8 @@
       "issue": "api_key/x-api-key/private_key/jwt/bearer/passphrase/dsn/sessionid don't match substring markers — latent, no leak site found.",
       "remediation": {
         "status": "fixed",
-        "commit": "b9e46f7c",
-        "note": "Promoted from VERIFY-I-002; fix + regression coverage in b9e46f7c."
+        "commit": "3f89d729",
+        "note": "Promoted from VERIFY-I-002; fix + regression coverage in 3f89d729."
       }
     },
     {
@@ -528,8 +528,8 @@
       "issue": "Dead config.",
       "remediation": {
         "status": "fixed",
-        "commit": "b9e46f7c",
-        "note": "Promoted from VERIFY-I-005; fix + regression coverage in b9e46f7c."
+        "commit": "3f89d729",
+        "note": "Promoted from VERIFY-I-005; fix + regression coverage in 3f89d729."
       }
     }
   ],
@@ -542,7 +542,7 @@
       "note": "If the configured header reaches the origin un-stripped, per-IP buckets are spoofable and the in-memory fallback Map grows unboundedly. Deployment-dependent; confirm origin only accepts Cloudflare-mTLS traffic.",
       "disposition": {
         "status": "external-gate",
-        "note": "In-repo bound added: in-memory store capped at 50k keys with shared overflow bucket (dad985d5). Residual: whether x-forwarded-for reaches the origin un-stripped is deployment-dependent — evidence gate: confirm origin ingress accepts only Cloudflare/AFD-mTLS traffic.",
+        "note": "In-repo bound added: in-memory store capped at 50k keys with shared overflow bucket (82f257a7). Residual: whether x-forwarded-for reaches the origin un-stripped is deployment-dependent — evidence gate: confirm origin ingress accepts only Cloudflare/AFD-mTLS traffic.",
         "owner": "platform-ops",
         "reviewDate": "2026-10-11"
       }
@@ -555,7 +555,7 @@
       "note": "If Better Auth's update-session accepts client writes, the device fallback trusts session.session.activeWorkspaceId as the OAuth workspace claim. Downstream membership checks still gate data access — no tenancy bypass identified.",
       "disposition": {
         "status": "closed-fixed",
-        "note": "better-auth update-session now validates activeWorkspaceId/pendingAgentConnectionId in a before-hook (dad985d5)."
+        "note": "better-auth update-session now validates activeWorkspaceId/pendingAgentConnectionId in a before-hook (82f257a7)."
       }
     },
     {
@@ -603,7 +603,7 @@
       "note": "verifyApiKey rejects only revoked/expired keys; creator removal from the workspace does not deactivate its keys. Possibly intended for service credentials; combined with VULN-A-001 a stale key reads the creator's remaining workspaces.",
       "disposition": {
         "status": "closed-fixed",
-        "note": "verifyApiKey now requires createdById to hold an ACTIVE workspaceMember row in the key's workspace (dad985d5)."
+        "note": "verifyApiKey now requires createdById to hold an ACTIVE workspaceMember row in the key's workspace (82f257a7)."
       }
     },
     {
@@ -714,7 +714,7 @@
       "note": "If credentials.json lacks apiUrl, a stored OAuth bearer could be sent to a LYRASHIELD_API_URL-controlled host. No shipping write path confirmed; env-var control implies local control.",
       "disposition": {
         "status": "closed-fixed",
-        "note": "Legacy credentials without apiUrl bind to the default origin; env URL to another origin yields originMismatch with no transmission (dad985d5)."
+        "note": "Legacy credentials without apiUrl bind to the default origin; env URL to another origin yields originMismatch with no transmission (82f257a7)."
       }
     },
     {
@@ -755,7 +755,7 @@
       "note": "Whether installed safety follows -r/index directives inside the requirements file (redirecting its own resolution) depends on upstream parser behavior.",
       "disposition": {
         "status": "closed-fixed",
-        "note": "safety check now runs on a sanitized requirements copy with -r/index directives stripped (b9e46f7c)."
+        "note": "safety check now runs on a sanitized requirements copy with -r/index directives stripped (3f89d729)."
       }
     },
     {
@@ -775,7 +775,7 @@
       "note": "install.ts allowlists vendor binaries to {claude,amp} but passes agent.vendorCli.args unchanged; trust boundary is the published @lyrashield/agent-registry package. Confirm marketplace artifacts are generated from this repo's registry without hand-editing.",
       "disposition": {
         "status": "closed-fixed",
-        "note": "vendorCli argv is exact-match allowlisted per command (dad985d5)."
+        "note": "vendorCli argv is exact-match allowlisted per command (82f257a7)."
       }
     },
     {
@@ -883,7 +883,7 @@
       "note": "api_key/x-api-key/private_key/jwt/bearer/passphrase/dsn/sessionid don't match substring markers — latent, no leak site found.",
       "disposition": {
         "status": "promoted",
-        "note": "VULN-I-002 fixed in b9e46f7c."
+        "note": "VULN-I-002 fixed in 3f89d729."
       }
     },
     {
@@ -892,7 +892,7 @@
       "title": "Error.message strings not secret-scanned before logs",
       "disposition": {
         "status": "closed-fixed",
-        "note": "Error message/stack values are processed by the scrubber (b9e46f7c)."
+        "note": "Error message/stack values are processed by the scrubber (3f89d729)."
       }
     },
     {
@@ -902,7 +902,7 @@
       "note": "Worker doesn't import the affected guards — confirm no other consumer.",
       "disposition": {
         "status": "closed-fixed",
-        "note": "NODE_ENV default hardened for non-Next runtimes (b9e46f7c)."
+        "note": "NODE_ENV default hardened for non-Next runtimes (3f89d729)."
       }
     },
     {
@@ -912,7 +912,7 @@
       "note": "Dead config.",
       "disposition": {
         "status": "promoted",
-        "note": "VULN-I-004 fixed in b9e46f7c."
+        "note": "VULN-I-004 fixed in 3f89d729."
       }
     }
   ],
@@ -941,10 +941,10 @@
       "6963b559",
       "8667896b",
       "e46eaef4",
-      "b9e46f7c",
-      "b24cb478",
-      "7a6a1da3",
-      "dad985d5"
+      "3f89d729",
+      "b5b89389",
+      "574c5e3c",
+      "82f257a7"
     ],
     "note": "All 15 confirmed findings + 11 promoted NV items fixed with regression coverage. Remaining NV items closed with evidence, accepted with owner+review date, or assigned to external evidence gates (deployment/provider config not visible in repo)."
   }
