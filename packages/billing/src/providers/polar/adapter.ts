@@ -96,7 +96,10 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         const periodStart = currentPeriodStart ? new Date(currentPeriodStart as string) : undefined
         const periodEnd = currentPeriodEnd ? new Date(currentPeriodEnd as string) : undefined
         const canceledAt = canceledAtValue ? new Date(canceledAtValue as string) : undefined
-        const eventOccurredAt = modifiedAtValue ? new Date(modifiedAtValue as string) : undefined
+        const eventOccurredAt = new Date(String(modifiedAtValue ?? ""))
+        if (Number.isNaN(eventOccurredAt.getTime())) {
+          throw new Error("polar_subscription_event_time_invalid")
+        }
 
         await syncSubscription({
           workspaceId,
