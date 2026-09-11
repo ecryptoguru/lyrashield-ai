@@ -423,8 +423,8 @@
       "issue": "Upsert overwrites status/period unconditionally; an out-of-order signed event can regress currentPeriodStart and re-widen the balance window. Bounded by prior-cycle leftover minutes; no tenant-controlled reordering found.",
       "remediation": {
         "status": "fixed",
-        "commit": "8667896b",
-        "note": "Promoted from VERIFY-C-001; fix + regression coverage in 8667896b."
+        "commit": "8667896b,421b4d71",
+        "note": "Monotonic row guard landed in 8667896b; 421b4d71 requires Polar modified_at so same-period stale events cannot bypass the provider clock."
       }
     },
     {
@@ -636,7 +636,7 @@
       "note": "Upsert overwrites status/period unconditionally; an out-of-order signed event can regress currentPeriodStart and re-widen the balance window. Bounded by prior-cycle leftover minutes; no tenant-controlled reordering found.",
       "disposition": {
         "status": "promoted",
-        "note": "VULN-C-002 fixed in 8667896b."
+        "note": "VULN-C-002 fixed in 8667896b and completed for Polar's required event clock in 421b4d71."
       }
     },
     {
