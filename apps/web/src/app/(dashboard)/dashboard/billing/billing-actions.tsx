@@ -10,6 +10,7 @@ import { parsePlanIntent } from "@/lib/plan-intent"
 interface BillingActionsProps {
   plan: string
   isLaunchAssurance: boolean
+  isComplimentary: boolean
   workspaceId: string
   purchasesAvailable: boolean
   trialAvailable: boolean
@@ -24,6 +25,7 @@ const PLANS = [
 
 export function BillingActions({
   plan,
+  isComplimentary,
   workspaceId,
   purchasesAvailable,
   trialAvailable,
@@ -112,7 +114,9 @@ export function BillingActions({
         <p role="status" className="text-sm">
           Selected plan: {PLANS.find(([id]) => id === intent)?.[1]}.{" "}
           {plan !== "FREE"
-            ? "Use Manage Subscription to review your existing subscription."
+            ? isComplimentary
+              ? "Your complimentary access is already active."
+              : "Use Manage Subscription to review your existing subscription."
             : purchasesAvailable
               ? "Choose a billing interval below when ready."
               : "You can choose a billing interval when new purchases become available."}{" "}
@@ -147,7 +151,7 @@ export function BillingActions({
           ))}
         </div>
       )}
-      {plan !== "FREE" && (
+      {plan !== "FREE" && !isComplimentary && (
         <a
           href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
           className={buttonVariants({ variant: "outline", size: "sm" })}

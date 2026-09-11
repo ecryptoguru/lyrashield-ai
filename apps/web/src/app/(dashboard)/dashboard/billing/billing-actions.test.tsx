@@ -8,6 +8,7 @@ const props = {
   plan: "FREE",
   workspaceId: "ws",
   isLaunchAssurance: false,
+  isComplimentary: false,
   purchasesAvailable: true,
   trialAvailable: true,
 }
@@ -51,6 +52,12 @@ describe("BillingActions", () => {
     )
     expect(html).toContain("Manage Subscription")
     expect(html).not.toContain("Start free trial")
+  })
+  it("does not offer a provider portal for complimentary access", () => {
+    const html = renderToString(
+      <BillingActions {...props} plan="LAUNCH_ASSURANCE" isComplimentary />
+    )
+    expect(html).not.toContain("Manage Subscription")
   })
   it("keeps a validated selection informational and hides used trials", () => {
     const html = renderToString(

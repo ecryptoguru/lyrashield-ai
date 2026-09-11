@@ -23,7 +23,7 @@ Repository ownership:
 
 Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not rename `@lyrashield/*` or `LYRASHIELD_*` without founder approval.
 
-## Current verified state — 2026-09-09
+## Current verified state — 2026-09-11
 
 - Open beta with open registration at `https://app.lyrashieldai.com/sign-up`; never call it pre-launch or a waitlist.
 - Marketing, passive Lite Scanner, authenticated app origin, Cloudflare bindings, TLS, sitemap/robots/`llms.txt`, security headers, and open-registration CTAs are live.
@@ -44,6 +44,8 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Dashboard is one adaptive authenticated surface: a state-derived next action, posture with exact evidence scope, compact metrics, recent activity, and progressive disclosure for technical depth. `GET /api/scans/eligibility` provides an advisory read-only preflight; `POST /api/scans` remains the authoritative gate. No mode switch changes permissions or scan behavior.
 - Platform administration is implemented as a hidden, noindex, cross-workspace read console for overview, users, workspaces, scans, audit, and affiliates. Access requires an allowlisted, verified `PLATFORM_OPERATOR` browser session with recent TOTP; bearer credentials and workspace roles never grant access.
 - Production configuration accepts exactly `ecryptoguru@gmail.com,ankit@lyrashieldai.com` as platform administrators. Preflight `32925726620` and apply `32925979621` passed; both accounts are unique, verified, TOTP-enrolled `PLATFORM_OPERATOR`s. Fresh independent Google-plus-TOTP sessions opened every bounded admin destination for both users. Unauthenticated, bearer-only, and workspace-header-only admin requests returned `401` with private/no-store caching.
+- Account-owned billing merged in PR #657 (`71aa4db3`) and deployed through production release `34552773295` to app revision `lyrashield-app--0000343` at 100% traffic. The coordinated cutover mapped every retained legacy billing/usage row, deleted the 12 non-admin test accounts, retained exactly the two platform administrators, and granted each an account-only, no-charge 6,000-minute Launch Assurance allowance. Historical minute amounts were preserved. PR #658 (`3b289a43`) extended the bounded account-deletion transaction for the largest test workspace. Runtime-role readback confirmed account isolation and zero unmapped billing, usage, or pack rows.
+- Repository secrets `AZURE_DEPLOY_CLIENT_ID`, `AZURE_DEPLOY_TENANT_ID`, and `AZURE_DEPLOY_SUBSCRIPTION_ID` and the Azure federated credential are operational. Production release `34552773295` logged successful Azure CLI OIDC login, closing the former v16 provisioning action.
 - Production evidence-storage round-trip and missing-KEK fail-closed probes passed. Key Vault managed-identity license signing, denied-identity failure, Desktop fingerprint parity, and missing-secret failure passed; this is secret retrieval, not non-exportable remote signing.
 - Both administrators acknowledged the Azure test notification. Exact zero-request provider evidence cleared the historical terminal-cost alert under receipt `f952706e6ced8105f8d12f530186939f33b0074b6ff17f4eb17a04afd81eeb84` without changing money columns.
 - The controlled orphan drill moved synthetic scan `cmta574d50004fef1nbydufai` to `FAILED/QUEUE_ORPHANED` without engine execution or replay, retained verification/cleanup audits, restored the exact worker digest, reconciled both queues to zero, and resumed admission.
