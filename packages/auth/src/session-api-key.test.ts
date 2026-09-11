@@ -174,7 +174,11 @@ describe("browser-only boundary (assertBrowserSession)", () => {
   } as unknown as AuthSession
   const oauthSession = {
     userId: "user-1",
-    oauth: { userId: "user-1", workspaceId: "ws-1", scopes: ["lyrashield.read", "lyrashield.write"] },
+    oauth: {
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+    },
   } as unknown as AuthSession
 
   it("passes for a browser session", () => {

@@ -12,7 +12,9 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: (name: string) => cookiesGet(name) })),
 }))
 vi.mock("@lyrashield/db", () => ({
-  prisma: { workspaceMember: { findMany: (...args: unknown[]) => workspaceMemberFindMany(...args) } },
+  prisma: {
+    workspaceMember: { findMany: (...args: unknown[]) => workspaceMemberFindMany(...args) },
+  },
   listFindings: vi.fn(),
 }))
 vi.mock("@lyrashield/auth/server", () => ({ getSession: vi.fn() }))

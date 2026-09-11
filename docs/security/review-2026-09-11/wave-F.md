@@ -52,12 +52,14 @@ T2 (attacker controlling a synced server response or scan target), T4 (compromis
 - v16Overlap: false
 
 ## Needs Verification
+
 - Release signing/notarization: base conf has signingIdentity/certificateThumbprint null; release conf adds hardenedRuntime only. Confirm CI injects signing identity. (Updater signature is client-enforced regardless.)
 - Release conf merge: tauri.release.conf.json lacks plugins.updater — confirm `--config` merge keeps pinned pubkey/endpoints in release artifacts.
 - cargo audit: could not execute here. Cargo.lock matches the allowed-warning set only: chacha20 0.10.1 (yanked), glib/gio/glib-sys via webkit2gtk/wry/tao/soup3 (RUSTSEC-2024-0429, Linux only), proc-macro-error(-attr), unic-char-property/unic-common. VariantStrIter has zero occurrences in app code — unsoundness reachable only via upstream wry/webkit internals on Linux. Live `cargo audit` still required to certify nothing else. (Note: parent review ran cargo audit — 8 allowed warnings, matching this set.)
 - api.rs 403/404-as-offline: verified /api/licenses/verify returns 200+revoked:true for revoked/unknown — 403/404 arise only from edge layers (WAF/route removal), bounded by grace expiry. Confirm the trade-off is deliberate.
 
 ## Verified safe (high-confidence)
+
 - License verify: bundled prod key only (distinct from committed test vector); no dev/lenient bypass; strict field validation pre-signature; canonical-JSON golden parity; re-serialization sound because serde parsing is strict.
 - Fail-closed ops: signature + machine binding before spawn/install; revoked/invalid → license cleared; legacy license migrates to forced re-activation; perpetual-fallback correctly separates operation from update eligibility.
 - Storage: atomic tmp+rename, 0600 on Unix; license key/sync key/Azure creds in OS keychain only; only masked metadata crosses IPC; zero secret logging; engine output redacted before parse/persist/emit.
@@ -71,6 +73,7 @@ T2 (attacker controlling a synced server response or scan target), T4 (compromis
 - No `unsafe` blocks anywhere in the crate.
 
 ## Hygiene notes (below finding threshold)
+
 - shell:allow-open unscoped (only used with hardcoded https URL today) — consider scoping to https:.
 - tauri-plugin-store registered but unpermissioned/unused — dead surface.
 - `pub mod golden_vectors` not cfg(test)-gated — test vector + pubkey compiled into release (dead code, no trust-path impact).

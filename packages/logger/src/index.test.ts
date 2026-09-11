@@ -82,10 +82,7 @@ describe("logger — redaction", () => {
   it.each([
     ["lsk_4f8ab12cd9ef0011", "a workspace API key"],
     ["Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc123.def456", "a bearer token"],
-    [
-      "postgresql://user:s3cret-pw@db.example.com:5432/prod",
-      "a credentialed DSN",
-    ],
+    ["postgresql://user:s3cret-pw@db.example.com:5432/prod", "a credentialed DSN"],
     // Built at runtime — a literal sk_live_* trips push protection even
     // with an obviously fake tail.
     [`sk${"_"}live_${"0".repeat(24)}`, "a provider live key"],

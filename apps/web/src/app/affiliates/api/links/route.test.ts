@@ -41,15 +41,18 @@ describe("affiliate link creation", () => {
   it.each([
     { apiKey: { keyId: "k-1", workspaceId: "ws-1", scopes: ["read", "write"], prefix: "lsk_x" } },
     { oauth: { userId: "user-1", workspaceId: "ws-1", scopes: ["lyrashield.write"] } },
-  ])("rejects workspace-bound credentials — link management is browser-only", async (credential) => {
-    getCachedSessionMock.mockResolvedValue({ userId: "user-1", ...credential })
+  ])(
+    "rejects workspace-bound credentials — link management is browser-only",
+    async (credential) => {
+      getCachedSessionMock.mockResolvedValue({ userId: "user-1", ...credential })
 
-    const response = await POST(request({ affiliateId: "aff-1", campaign: "launch" }))
+      const response = await POST(request({ affiliateId: "aff-1", campaign: "launch" }))
 
-    expect(response.status).toBe(403)
-    expect(affiliate.findUnique).not.toHaveBeenCalled()
-    expect(affiliateLink.create).not.toHaveBeenCalled()
-  })
+      expect(response.status).toBe(403)
+      expect(affiliate.findUnique).not.toHaveBeenCalled()
+      expect(affiliateLink.create).not.toHaveBeenCalled()
+    }
+  )
 
   it("creates a link for the owning browser session", async () => {
     const response = await POST(request({ affiliateId: "aff-1", campaign: "launch" }))

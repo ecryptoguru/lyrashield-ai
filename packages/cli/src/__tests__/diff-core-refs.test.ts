@@ -26,8 +26,8 @@ describe("resolveDiffRange — git option injection guard", () => {
   it("rejects a ref that rev-parse cannot resolve to a commit", async () => {
     // Not option-shaped, but not a real revision either — resolution must
     // fail rather than let the raw value through to git diff/show argv.
-    await expect(
-      resolveDiffRange(false, "definitely-not-a-real-ref-xyz", "HEAD")
-    ).rejects.toThrow(/Cannot resolve git ref/)
+    await expect(resolveDiffRange(false, "definitely-not-a-real-ref-xyz", "HEAD")).rejects.toThrow(
+      /Cannot resolve git ref/
+    )
   })
 })

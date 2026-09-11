@@ -59,7 +59,10 @@ async function patch(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: { code: "FORBIDDEN", message: "You do not have permission to perform this action" },
+          error: {
+            code: "FORBIDDEN",
+            message: "You do not have permission to perform this action",
+          },
         },
         { status: 403 }
       )

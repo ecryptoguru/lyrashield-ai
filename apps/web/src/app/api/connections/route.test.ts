@@ -469,6 +469,8 @@ describe("POST /api/connections", () => {
     )
 
     expect(res.status).toBe(201)
-    expect(vi.mocked(createAgentConnection).mock.calls[0]![0].expiresAt).toEqual(new Date(expiresAt))
+    expect(vi.mocked(createAgentConnection).mock.calls[0]![0].expiresAt).toEqual(
+      new Date(expiresAt)
+    )
   })
 })

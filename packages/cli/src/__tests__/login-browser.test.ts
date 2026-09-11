@@ -55,9 +55,7 @@ describe("login --key removal (VULN-E-002)", () => {
       const exitCode = await handleLogin(args, output)
 
       expect(exitCode).toBe(2)
-      expect(output.error).toHaveBeenCalledWith(
-        expect.stringContaining("exposes your API key")
-      )
+      expect(output.error).toHaveBeenCalledWith(expect.stringContaining("exposes your API key"))
       // Never reaches stdin/prompt/credential storage.
       expect(output.log).not.toHaveBeenCalled()
     }

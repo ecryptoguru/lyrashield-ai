@@ -465,14 +465,15 @@ export async function createOrUpdateFile(
   const res = await githubFetch(
     `${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`,
     {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
-    body: JSON.stringify({
-      message,
-      content: encodedContent,
-      branch,
-    }),
-  })
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
+      body: JSON.stringify({
+        message,
+        content: encodedContent,
+        branch,
+      }),
+    }
+  )
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Failed to update file: ${res.status} ${body}`)

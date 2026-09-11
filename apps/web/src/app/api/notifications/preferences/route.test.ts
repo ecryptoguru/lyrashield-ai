@@ -48,9 +48,7 @@ describe("PATCH /api/notifications/preferences", () => {
     const response = await PATCH(patchRequest({ emailDigest: false }))
 
     expect(response.status).toBe(200)
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ update: { emailDigest: false } })
-    )
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { emailDigest: false } }))
   })
 })
 

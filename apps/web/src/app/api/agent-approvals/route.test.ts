@@ -78,9 +78,7 @@ describe("POST /api/agent-approvals", () => {
   })
 
   it("rejects a never-expiring far-future expiry", async () => {
-    const response = await POST(
-      request({ ...VALID_BODY, expiresAt: "9999-01-01T00:00:00.000Z" })
-    )
+    const response = await POST(request({ ...VALID_BODY, expiresAt: "9999-01-01T00:00:00.000Z" }))
 
     expect(response.status).toBe(400)
     expect(createApproval).not.toHaveBeenCalled()

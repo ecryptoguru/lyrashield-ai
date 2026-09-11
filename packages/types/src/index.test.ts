@@ -407,22 +407,19 @@ describe("CreateRepoTargetSchema", () => {
     // leading "-"; the persisted-target validators must agree (VERIFY-D-002).
     "-x",
     "--hard-reset",
-  ])(
-    "rejects invalid Git ref %s",
-    (branch) => {
-      expect(
-        CreateRepoTargetSchema.safeParse({
-          workspaceId: "ws-1",
-          type: "REPO",
-          name: "My Repo",
-          repoOwner: "ecryptoguru",
-          repoName: "lyrashield-ai",
-          branch,
-        }).success
-      ).toBe(false)
-      expect(PatchRepoRefSchema.safeParse({ workspaceId: "ws-1", branch }).success).toBe(false)
-    }
-  )
+  ])("rejects invalid Git ref %s", (branch) => {
+    expect(
+      CreateRepoTargetSchema.safeParse({
+        workspaceId: "ws-1",
+        type: "REPO",
+        name: "My Repo",
+        repoOwner: "ecryptoguru",
+        repoName: "lyrashield-ai",
+        branch,
+      }).success
+    ).toBe(false)
+    expect(PatchRepoRefSchema.safeParse({ workspaceId: "ws-1", branch }).success).toBe(false)
+  })
 })
 
 describe("CreateUrlTargetSchema", () => {

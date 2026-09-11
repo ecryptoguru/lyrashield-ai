@@ -36,9 +36,7 @@ export const getCachedWorkspaceContext = cache(async (userId: string) => {
       },
       orderBy: { createdAt: "asc" },
     })
-  ).filter(
-    (membership) => boundWorkspaceId === null || membership.workspaceId === boundWorkspaceId
-  )
+  ).filter((membership) => boundWorkspaceId === null || membership.workspaceId === boundWorkspaceId)
   const workspaceId = selectActiveWorkspaceId(
     memberships,
     cookieStore.get("activeWorkspaceId")?.value

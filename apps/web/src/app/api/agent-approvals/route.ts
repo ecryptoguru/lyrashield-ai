@@ -79,7 +79,11 @@ async function post(request: Request) {
     let expiresAt = new Date(now + DEFAULT_APPROVAL_TTL_MS)
     if (typed.expiresAt !== undefined) {
       const requested = new Date(typed.expiresAt).getTime()
-      if (!Number.isFinite(requested) || requested <= now || requested > now + MAX_APPROVAL_TTL_MS) {
+      if (
+        !Number.isFinite(requested) ||
+        requested <= now ||
+        requested > now + MAX_APPROVAL_TTL_MS
+      ) {
         return apiError(
           "VALIDATION_ERROR",
           "expiresAt must be a future timestamp no more than 24 hours out",
