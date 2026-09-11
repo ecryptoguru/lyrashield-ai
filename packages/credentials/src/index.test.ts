@@ -119,7 +119,11 @@ describe("resolveCredentials", () => {
   it("keeps a stored bearer file-backed when only the API URL is overridden", async () => {
     process.env.LYRASHIELD_API_URL = "https://override.example.test"
     readFile.mockResolvedValueOnce(
-      JSON.stringify({ oauthAccessToken: "file-oauth-token", installId: "i" })
+      JSON.stringify({
+        oauthAccessToken: "file-oauth-token",
+        apiUrl: "https://override.example.test",
+        installId: "i",
+      })
     )
 
     const resolved = await resolveCredentials()
@@ -130,6 +134,36 @@ describe("resolveCredentials", () => {
       credentialKind: "oauth",
       source: "file",
     })
+  })
+
+  it("VERIFY-E-001: a legacy file without apiUrl cannot follow an env URL to a different origin", async () => {
+    // Creds minted before apiUrl was recorded belong to the default origin;
+    // pointing LYRASHIELD_API_URL elsewhere must not carry the bearer there.
+    process.env.LYRASHIELD_API_URL = "https://override.example.test"
+    readFile.mockResolvedValueOnce(
+      JSON.stringify({ oauthAccessToken: "file-oauth-token", installId: "i" })
+    )
+
+    const resolved = await resolveCredentials()
+
+    expect(resolved).toMatchObject({
+      apiKey: undefined,
+      apiUrl: "https://override.example.test",
+      credentialKind: "none",
+      source: "none",
+      originMismatch: true,
+    })
+  })
+
+  it("a legacy file without apiUrl still transmits when env URL is the default origin", async () => {
+    process.env.LYRASHIELD_API_URL = DEFAULT_API_URL
+    readFile.mockResolvedValueOnce(
+      JSON.stringify({ oauthAccessToken: "file-oauth-token", installId: "i" })
+    )
+
+    const resolved = await resolveCredentials()
+    expect(resolved.apiKey).toBe("file-oauth-token")
+    expect(resolved.source).toBe("file")
   })
 
   it("accepts an OAuth bearer as the interactive credential fallback", async () => {

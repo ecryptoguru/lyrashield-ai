@@ -35,6 +35,22 @@ export interface InstallAgentOptions {
 // local config must not be able to invoke arbitrary binaries.
 const VENDOR_COMMAND_ALLOWLIST = new Set(["claude", "amp"])
 
+// VERIFY-E-007: the registry's vendorCli.args were trusted verbatim. Registry
+// content ships inside this package, but the package is also the trust root —
+// a poisoned argv (e.g. a flag granting the vendor CLI new privileges) would
+// reach execFile untouched. Bind argv to exact allowlisted templates so a
+// registry change alone can never widen what runs.
+const VENDOR_CLI_ARGV_ALLOWLIST: Record<string, readonly (readonly string[])[]> = {
+  claude: [["mcp", "add"]],
+  amp: [["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.8"]],
+}
+
+function vendorArgvAllowed(command: string, args: readonly string[]): boolean {
+  return (VENDOR_CLI_ARGV_ALLOWLIST[command] ?? []).some(
+    (tpl) => tpl.length === args.length && tpl.every((arg, i) => arg === args[i])
+  )
+}
+
 export interface InstallAgentResult {
   agent: string
   displayName: string
@@ -164,6 +180,14 @@ async function runVendorCli(
   }
 
   const args = [...agent.vendorCli.args]
+  if (!vendorArgvAllowed(command, args)) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      message: `Vendor CLI arguments are not allowlisted for ${command}: ${args.join(" ")}`,
+    }
+  }
   if (opts.dryRun) {
     return {
       agent: agent.id,

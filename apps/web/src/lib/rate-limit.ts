@@ -52,6 +52,12 @@ const SCAN_ELIGIBILITY_MAX = 30
 
 // Bound the in-memory store so a long-running instance (dev / self-hosted
 // without Upstash) can't grow unboundedly with one entry per distinct IP.
+// VERIFY-A-001/A-005: a spoofed-IP flood creates one key per synthetic
+// address — the window sweep alone is not a bound. Past the cap, new
+// distinct keys fold into a shared overflow bucket: floods rate-limit
+// themselves instead of growing the map.
+const STORE_MAX_KEYS = 50_000
+const OVERFLOW_KEY = "__store_overflow__"
 let lastSweep = 0
 function sweepExpired(now: number) {
   if (now - lastSweep < WINDOW_MS) return
@@ -68,9 +74,21 @@ function checkInMemory(
 ): { limited: boolean; remaining: number; retryAfter: number } {
   const now = Date.now()
   sweepExpired(now)
-  const entry = store.get(key)
+  let entry = store.get(key)
 
   if (!entry || entry.resetAt < now) {
+    if (key !== OVERFLOW_KEY && store.size >= STORE_MAX_KEYS) {
+      entry = store.get(OVERFLOW_KEY)
+      if (!entry || entry.resetAt < now) {
+        entry = { count: 0, resetAt: now + windowMs }
+        store.set(OVERFLOW_KEY, entry)
+      }
+      entry.count++
+      if (entry.count > max) {
+        return { limited: true, remaining: 0, retryAfter: Math.ceil((entry.resetAt - now) / 1000) }
+      }
+      return { limited: false, remaining: max - entry.count, retryAfter: 0 }
+    }
     store.set(key, { count: 1, resetAt: now + windowMs })
     return { limited: false, remaining: max - 1, retryAfter: 0 }
   }

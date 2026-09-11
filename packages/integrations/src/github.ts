@@ -459,7 +459,12 @@ export async function createOrUpdateFile(
 ): Promise<void> {
   const token = await getInstallationToken(installationId)
   const encodedContent = Buffer.from(content).toString("base64")
-  const res = await githubFetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${path}`, {
+  // VERIFY-D-001: encode the path exactly as getFileContent does — WHATWG URL
+  // normalization would otherwise collapse "x/../" on the write and the two
+  // sides could disagree about which path was read vs written.
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`,
+    {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
     body: JSON.stringify({

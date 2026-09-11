@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto"
 import { prisma } from "./client"
+import { withWorkspaceRLS } from "./rls"
 import type { ApiKey } from "./generated/prisma"
 
 /**
@@ -203,6 +204,17 @@ export async function verifyApiKey(rawKey: string): Promise<VerifiedApiKey | nul
   if (key.deletedAt) return null
   if (key.revokedAt) return null
   if (key.expiresAt && key.expiresAt.getTime() <= Date.now()) return null
+
+  // VERIFY-A-006: the key acts on behalf of its creator — a member removed
+  // from the workspace must lose the keys they minted, not keep a standing
+  // credential. Check membership under the resolved workspace context.
+  const member = await withWorkspaceRLS(key.workspaceId, (tx) =>
+    tx.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: key.workspaceId, userId: key.createdById } },
+      select: { status: true },
+    })
+  )
+  if (member?.status !== "active") return null
 
   // Best-effort usage tracking; throttled to once per minute per key to avoid
   // a write per request. Uses the SECURITY DEFINER touch function for the same
