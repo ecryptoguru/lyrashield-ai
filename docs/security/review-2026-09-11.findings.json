@@ -1,0 +1,493 @@
+{
+  "review": "lyrashield-ai full security review",
+  "baseline": "3b289a43c601aca7b45b92d06cdc0af386fc958d",
+  "reviewedTree": "d6fc3384 + working tree (4 post-baseline commits, none touching reported locations)",
+  "date": "2026-09-11",
+  "status": "complete",
+  "scope": "monorepo only; engine reviewed at TypeScript boundary contract; sibling repos out of scope",
+  "threatActors": {
+    "T1": "external unauthenticated attacker",
+    "T2": "authenticated/tenant attacker (incl. holder of a workspace-bound credential)",
+    "T3": "malicious scan-target repository/content",
+    "T4": "supply-chain/maintainer attacker"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 3,
+    "medium": 12,
+    "low": 0,
+    "totalFindings": 15,
+    "needsVerification": 34,
+    "hardeningNotes": 3
+  },
+  "findings": [
+    {
+      "id": "VULN-A-001",
+      "domain": "authz",
+      "severity": "high",
+      "confidence": "high",
+      "threatActor": "T2",
+      "title": "Workspace-bound API keys/OAuth tokens read other workspaces on routes and dashboard pages that check membership only",
+      "location": { "file": "apps/web/src/app/api/targets/route.ts", "line": "273-344" },
+      "alsoAt": [
+        "apps/web/src/app/api/projects/route.ts:81-136",
+        "apps/web/src/app/api/team/route.ts:328-397",
+        "apps/web/src/lib/cache.ts:15-41",
+        "apps/web/src/lib/workspace-selection.ts:3-13",
+        "GET /api/v1/targets and /api/v1/projects re-exports",
+        "all app/(dashboard)/** pages"
+      ],
+      "issue": "getSession() falls back to getBearerSession() populating session.apiKey.workspaceId / session.oauth.workspaceId, but these routes check only workspaceMember for session.userId — the binding check in requireWorkspaceAccess (session.ts:317-322) is never invoked. Dashboard resolves active workspace from the unsigned client-settable activeWorkspaceId cookie filtered by user memberships only.",
+      "impact": "A credential bound to workspace A whose backing user is also a member of workspace B reads B's targets, projects, full member roster + pending invitation emails, and all dashboard pages for B. RLS does not mitigate — the Prisma extension binds RLS context from the query's own attacker-chosen workspaceId.",
+      "evidence": "targets/route.ts:286-294 membership probe then findMany({workspaceId}); cache.ts:28-31 selectActiveWorkspaceId(memberships, cookieStore.get('activeWorkspaceId')); correct pattern at workspaces/route.ts:28-39,129-131.",
+      "fix": "Route all workspace-scoped reads through requireWorkspaceAccess(workspaceId); clamp getCachedWorkspaceContext to the credential's bound workspace when session.apiKey/session.oauth present.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-A-002",
+      "domain": "authz",
+      "severity": "high",
+      "confidence": "high",
+      "threatActor": "T2",
+      "title": "OAuth bearer sessions bypass credential-type rejection and write-scope enforcement — read/delegated tokens mint durable lsk_ write keys and publish public scorecards",
+      "location": { "file": "apps/web/src/app/api/api-keys/route.ts", "line": "56-67" },
+      "alsoAt": [
+        "apps/web/src/app/api/api-keys/[id]/route.ts:18-23",
+        "apps/web/src/app/api/targets/[id]/scorecard/route.ts:16-20",
+        "apps/web/src/app/api/scorecards/[id]/route.ts:16-19",
+        "apps/web/src/app/api/workspaces/active/route.ts:25-29",
+        "apps/web/src/app/affiliates/api/payouts/method/route.ts:34-73",
+        "apps/web/src/app/affiliates/api/payouts/request/route.ts:13-44"
+      ],
+      "issue": "requireWorkspaceAccess enforces workspace binding + role only; scope split and delegated-operation grants live exclusively in requirePermission (session.ts:356-380). Callers hand-rolling the credential-type check test only session.apiKey and forget session.oauth; withCookieMutation skips the same-origin gate for Bearer requests by design.",
+      "impact": "An OAuth token with only lyrashield.read (or a delegated agentConnection constrained by allowedOperations/allowedTargetIds) whose subject is ADMIN mints a durable lsk_ key with scopes ['read','write'] — privilege escalation plus a persistent credential surviving connection revocation. Read-scoped tokens can also publish public unauthenticated scorecards and act on the creator's affiliate payout method/requests.",
+      "evidence": "api-keys/route.ts:57-59 rejects session.apiKey only, then createApiKey({workspaceId, scopes, createdById}) returns rawKey once; connection-auth.ts:7 shows the correct both-types rejection.",
+      "fix": "Reject session.oauth alongside session.apiKey on api-keys and affiliate mutation routes; use requirePermission (mutating permission) or extend scope checks to session.oauth for scorecard publish/revoke.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-C-001",
+      "domain": "money",
+      "severity": "high",
+      "confidence": "high",
+      "threatActor": "T2",
+      "title": "Affiliate 12-month commission cap is unreachable dead code — every renewal mints a full commission for the life of the subscription",
+      "location": { "file": "packages/affiliate/src/commission/engine.ts", "line": "275-313" },
+      "alsoAt": [
+        "packages/affiliate/src/webhook-dispatch.ts:185-187",
+        "packages/billing/src/domain-events.ts:408-411",
+        "apps/web/src/app/billing/checkout/route.ts:129-136"
+      ],
+      "issue": "AffiliateSubscription (firstPaidAt/capEndsAt) is created only inside else-if(isFirstPayment); the flag is read from event metadata but no production code stamps it (checkout metadata lacks it; grep shows writers only in tests). findUnique on providerSubscriptionId always misses → capEndsAt stays null → the capMonths expiry branch is unreachable.",
+      "impact": "Contractual cap (capMonths default 12, public affiliate page copy) unenforced: LAUNCH_ASSURANCE annual ($4,188) mints ~$1,047 commission every year forever; monthly plans mint on every renewal up to 100-year total_count. Commissions accrue as payable liability; cash realization currently gated by admin-disabled payout path. Side effects: activeReferrals never increments, Conversion.subscriptionId null, clawback decrement unreachable.",
+      "evidence": "engine.ts:289 else-if(isFirstPayment); domain-events.ts:408 Boolean(facts.metaBag?.isFirstPayment); checkout metadata shape has no isFirstPayment; repo grep: writers only in *.test.ts/e2e.",
+      "fix": "Upsert AffiliateSubscription on providerSubscriptionId with capEndsAt = firstSeen + capMonths (first observed paid event is the first payment); apply expiry branch on subsequent events; backfill from earliest Conversion.occurredAt.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-E-001",
+      "domain": "agent-surface",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T4",
+      "title": "Git option injection via unvalidated --base/--head arguments in CLI diff commands",
+      "location": { "file": "packages/cli/src/diff-core.ts", "line": "89,109,141,175" },
+      "issue": "User-supplied base/head placed into git diff argv with no --end-of-options and no ref validation; a leading '--' arg is parsed as a git option. (The '--' at :109/:141 protects only the file arg.)",
+      "impact": "lyrashield gate --base=--output=<path> redirects diff output to arbitrary files — destroys ~/.lyrashield/credentials.json, shell rc, SSH files; attacker-authored commit filenames partially control content. Secondary: head interpolated into git show object spec.",
+      "evidence": "diff-core.ts:89 argv [..., base, head]; resolveDiffRange :74-85 passthrough; repo's own workflow uses rev-parse --verify --end-of-options (lyrashield-scan.yml:79,83) — pattern known, not applied in CLI.",
+      "fix": "Resolve refs via git rev-parse --verify --end-of-options \"${ref}^{commit}\" and pass only 40-char SHAs; or reject args starting with '-'.",
+      "v16Overlap": false,
+      "note": "Replacement wave E overturned the original wave's verified-safe claim on this path — re-verified in source during consolidation."
+    },
+    {
+      "id": "VULN-E-002",
+      "domain": "agent-surface",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T4",
+      "title": "lyrashield login --key places the API key in process argv",
+      "location": { "file": "packages/cli/src/commands/login.ts", "line": "53-57,62,73" },
+      "issue": "-k/--key flag embeds the long-lived lsk_ key in argv (world-readable via /proc/ps on multi-user hosts) and shell history; CI logs command lines.",
+      "impact": "Durable credential exposure outside the 0600 credential store until revoked.",
+      "evidence": "login.ts:53-56 flag def; :62 direct assignment; safe stdin/hidden-prompt alternatives exist in the same function.",
+      "fix": "Remove --key/-k or deprecate toward stdin/hidden prompt; document never-use-in-CI; optionally scrub process.argv after read.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-H-001",
+      "domain": "ci-cd",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T4",
+      "title": "Production secrets present in env while pnpm install executes dependency build scripts",
+      "location": { "file": ".github/workflows/deploy-azure.yml", "line": "547-556" },
+      "issue": "onlyBuiltDependencies/allowBuilds permit install-time code execution; production DATABASE_URL (and in production-backup.yml all backup creds via workflow-level env) share that env although no install step needs them.",
+      "impact": "One malicious release of a build-allowed dep exfiltrates prod direct-DB URL / backup passphrase + R2 keys.",
+      "fix": "Split pnpm install into a secret-free step; bind secrets at step scope only; never workflow-level env for secrets.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-H-002",
+      "domain": "ci-cd",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T4",
+      "title": "Deploy/backup tooling fetched unpinned at run time while holding production credentials",
+      "location": { "file": ".github/workflows/ci.yml", "line": "620-629" },
+      "issue": "wranglerVersion '4' installs latest wrangler 4.x with CLOUDFLARE_API_TOKEN; production-backup.yml:78-82 runs mutable postgres:17-alpine with prod DB URL.",
+      "impact": "Compromised wrangler/postgres release → prod Cloudflare token / prod DB URL exfiltration.",
+      "fix": "Pin wranglerVersion exactly or via lockfile devDependency; pin postgres/redis images by sha256 digest.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-H-003",
+      "domain": "supply-chain",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T4",
+      "title": "minimumReleaseAge: 7 is seven minutes, not days",
+      "location": { "file": "pnpm-workspace.yaml", "line": "76" },
+      "issue": "pnpm interprets the bare number as minutes; intended 7-day cooldown is 10080.",
+      "impact": "Publish-age supply-chain gate effectively absent; a malicious fresh version lands within minutes.",
+      "fix": "minimumReleaseAge: 10080 (or intended duration in minutes).",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-H-004",
+      "domain": "ci-cd",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T4",
+      "title": "Shipped scan workflow runs unpinned pip install safety / npx pnpm in consumers' CI",
+      "location": { "file": ".github/workflows/lyrashield-scan.yml", "line": "156,172-178" },
+      "issue": "Unpinned PyPI/npm installs execute latest published artifacts; workflow is workflow_call-consumable and runs in customer CI with a job token holding security-events: write among other scopes.",
+      "impact": "Compromised safety/pnpm release → arbitrary code exec in every adopting repo's scan job; can force vuln_found=0 / poison SARIF — the gate reports clean.",
+      "fix": "Pin pnpm via corepack prepare pnpm@X.Y.Z or SHA-pinned pnpm/setup; pip install safety==<ver> --require-hashes from a committed requirements lock; or vendor the audit step into a pinned image.",
+      "v16Overlap": false,
+      "note": "Independently reported by both Wave E (VULN-E-003) and Wave H; single canonical finding."
+    },
+    {
+      "id": "VULN-I-001",
+      "domain": "cross-cutting",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T1",
+      "title": "secureCookies fails open on non-HTTPS BETTER_AUTH_URL",
+      "location": { "file": "packages/auth/src/auth.ts", "line": "27" },
+      "issue": "useSecureCookies/session Secure flag derived from BETTER_AUTH_URL scheme; env.ts:26 accepts any URL — no production https: refine. Config-dependent precondition, not attacker input.",
+      "impact": "Prod config typo silently ships session cookies without Secure → MITM session theft window.",
+      "fix": "Schema refine requiring https: for BETTER_AUTH_URL when NODE_ENV=production (or non-loopback host).",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-F-001",
+      "domain": "desktop",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T1",
+      "title": "Unsigned last_server_verified_at enables perpetual offline grace — license revocation bypass",
+      "location": { "file": "apps/desktop/src-tauri/src/license/mod.rs", "line": "405-426" },
+      "issue": "7-day offline grace anchors on plaintext timestamp in user-writable license.json; ed25519 covers only payload fields; rewriting the timestamp + blocking the API keeps a revoked license operational forever.",
+      "impact": "Server revocation never lands; revoked/refunded license keeps scanning/syncing indefinitely.",
+      "fix": "Server-signed revalidation receipt inside signed blob, or HMAC StoredLicense with keychain-held key; or cap accumulated offline time.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-F-002",
+      "domain": "desktop",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T2",
+      "title": "Engine stdout/stderr ingested with no line-length/rate/total cap — memory + disk exhaustion",
+      "location": { "file": "apps/desktop/src-tauri/src/scan/runner.rs", "line": "437-504" },
+      "issue": "BufReader::lines() buffers unbounded lines; every line persisted to scan_events and emitted over IPC; no caps.",
+      "impact": "Hostile scan-target output → OOM/disk fill/IPC flood during a legitimate scan.",
+      "fix": "Truncate lines >64KiB, byte-budgeted reads, cap/batch persisted events, bound total stream bytes then kill child.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-F-003",
+      "domain": "desktop",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T2",
+      "title": "ApiClient reads unbounded response bodies; error paths echo body to UI",
+      "location": { "file": "apps/desktop/src-tauri/src/api.rs", "line": "post/get/put/activate/verify" },
+      "issue": "resp.text() buffers whole body; 30s timeout bounds duration not size; non-2xx bodies echoed into SyncResult::Error.message.",
+      "impact": "Memory exhaustion/crash on a single malicious response (requires server compromise or MITM-class position).",
+      "fix": "Hard byte cap (~1-5 MiB); never embed raw body in error strings.",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-F-004",
+      "domain": "desktop",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T1",
+      "title": "mask_key byte-slices UTF-8 — panics on multibyte API keys",
+      "location": { "file": "apps/desktop/src-tauri/src/byok/mod.rs", "line": "75-82" },
+      "issue": "&key[..4]/&key[len-4..] panic mid-char; validation accepts non-ASCII keys and stores untrimmed.",
+      "impact": "Persistent IPC failure/crash loop on BYOK status reads; recoverable only via clear_azure_config.",
+      "fix": "Require api_key.is_ascii(); boundary-safe masking via chars().take(4).",
+      "v16Overlap": false
+    },
+    {
+      "id": "VULN-P-001",
+      "domain": "production-probe",
+      "severity": "medium",
+      "confidence": "high",
+      "threatActor": "T1",
+      "title": "Marketing site serves full content over plaintext HTTP — no HTTPS redirect",
+      "location": { "file": "apps/marketing/src/middleware.ts", "line": "52-55" },
+      "issue": "http://lyrashieldai.com/, /pricing, http://www.lyrashieldai.com/ all return HTTP/1.1 200 with content; middleware strips upgrade-insecure-requests for http: — code anticipates HTTP rather than redirecting. Cloudflare zone 'Always Use HTTPS' not in effect.",
+      "impact": "MITM can modify served marketing content (defacement, link injection) on the plaintext path; HSTS preload mitigates preload-aware browsers only.",
+      "evidence": "Live probe 2026-09-11: curl http://lyrashieldai.com/ → 200 text/html (no Location). http://app.lyrashieldai.com/ correctly 301s.",
+      "fix": "Enable Always Use HTTPS at the Cloudflare zone, or 301 on url.protocol==='http:' in the worker/middleware.",
+      "v16Overlap": false
+    }
+  ],
+  "needsVerification": [
+    {
+      "id": "VERIFY-A-001",
+      "domain": "authz",
+      "title": "getClientIP trusted-header trust",
+      "location": "apps/web/src/proxy.ts / TRUSTED_PROXY_IP_HEADER",
+      "note": "If the configured header reaches the origin un-stripped, per-IP buckets are spoofable and the in-memory fallback Map grows unboundedly. Deployment-dependent; confirm origin only accepts Cloudflare-mTLS traffic."
+    },
+    {
+      "id": "VERIFY-A-002",
+      "domain": "authz",
+      "title": "session.activeWorkspaceId / pendingAgentConnectionId are input:true session fields",
+      "location": "packages/auth/src/oauth.ts:144-158",
+      "note": "If Better Auth's update-session accepts client writes, the device fallback trusts session.session.activeWorkspaceId as the OAuth workspace claim. Downstream membership checks still gate data access — no tenancy bypass identified."
+    },
+    {
+      "id": "VERIFY-A-003",
+      "domain": "money",
+      "title": "Affiliate requestPayout disbursement gate",
+      "location": "packages/affiliate payout request path",
+      "note": "A workspace credential triggering payouts/request to a previously verified method may execute real money movement; whether operator approval intervenes before disbursement needs provider-path tracing."
+    },
+    {
+      "id": "VERIFY-A-004",
+      "domain": "authz",
+      "title": "User-scope mutations via workspace-bound credentials",
+      "location": "PATCH /api/onboarding, notifications/preferences, referrals/claim",
+      "note": "Bearer credentials mutate the creator's user-level state. Ownership checks hold; whether workspace-bound creds should act on user-scope state is a design question."
+    },
+    {
+      "id": "VERIFY-A-005",
+      "domain": "rate-limit",
+      "title": "In-memory rate-limit fallback is per-instance under Upstash outage",
+      "location": "apps/web/src/lib/rate-limit.ts:99-109,214-220",
+      "note": "Workspace-keyed budgets multiply by replica count in degraded mode; loudly logged. Confirm production alerting covers sustained Upstash absence. (Also reported by Wave E NV.)"
+    },
+    {
+      "id": "VERIFY-A-006",
+      "domain": "authz",
+      "title": "API-key validity after creator membership removal",
+      "location": "packages/db/src/api-key-service.ts:176-221, session.ts:90-99",
+      "note": "verifyApiKey rejects only revoked/expired keys; creator removal from the workspace does not deactivate its keys. Possibly intended for service credentials; combined with VULN-A-001 a stale key reads the creator's remaining workspaces."
+    },
+    {
+      "id": "VERIFY-B-001",
+      "domain": "tenancy",
+      "title": "account-deletion actor-attribution query runs without workspace context → deterministic [] under strict RLS",
+      "location": "packages/db/src/account-deletion.ts:145,250",
+      "note": "Orphan-actor workspaces skipped by anonymization loop; only callers are tests + an operator drill that can't trigger it; web route fails closed. Confirm whether any production/support path calls deleteUserAccount."
+    },
+    {
+      "id": "VERIFY-B-002",
+      "domain": "tenancy",
+      "title": "License-family WITH CHECK permits workspaceId IS NULL writes under any context",
+      "location": "migrations/20260818000005_b_l08_license_rls_null_fix",
+      "note": "No plain-client write path exists on main — latent. Confirm tripwire also blocks writes."
+    },
+    {
+      "id": "VERIFY-C-001",
+      "domain": "money",
+      "title": "Stale signed-event regression of subscription state",
+      "location": "packages/billing/src/sync.ts:171-178",
+      "note": "Upsert overwrites status/period unconditionally; an out-of-order signed event can regress currentPeriodStart and re-widen the balance window. Bounded by prior-cycle leftover minutes; no tenant-controlled reordering found."
+    },
+    {
+      "id": "VERIFY-C-002",
+      "domain": "money",
+      "title": "Mid-cycle plan change grants a second full pool without revoking the first",
+      "location": "packages/billing/src/grants.ts:33-39",
+      "note": "Grant key {accountId}:{cycleStartIso}:{plan} — a plan-change event at the same cycleStart mints a second pool while the first remains counted. Self-serve plan change appears unreachable today (Polar portal passes subscription id as customerId; Razorpay has no self-serve plan change)."
+    },
+    {
+      "id": "VERIFY-C-003",
+      "domain": "money",
+      "title": "MinutePack.workspaceId onDelete:SetNull vs workspace-keyed credit/refund lookups",
+      "location": "packages/billing/src/refund.ts:41-44,57-61; schema.prisma:1965",
+      "note": "After workspace hard-delete the lookup can never match → refunded minutes stay spendable; symmetric late-payment path fails FK → paid-never-credited. No user-reachable hard-delete exists; latent for ops/support flows."
+    },
+    {
+      "id": "VERIFY-D-002",
+      "domain": "worker-boundary",
+      "title": "isValidGitRef accepts leading '-' branch names",
+      "location": "packages/types/src/index.ts:148",
+      "note": "Reaches engine as --repository-branch argv value; deterministic-retest rejects '-' independently — validators inconsistent. Concrete harm needs engine parser misbehavior (sibling repo)."
+    },
+    {
+      "id": "VERIFY-D-003",
+      "domain": "worker-boundary",
+      "title": "Engine argv lacks '--' end-of-options separator",
+      "location": "apps/worker/src/engine/command-builder.ts",
+      "note": "All values persisted/schema-validated; option-injection needs engine parser misbehavior in sibling repo."
+    },
+    {
+      "id": "VERIFY-D-004",
+      "domain": "worker-boundary",
+      "title": "Sandbox isolation flags live in sibling engine repo",
+      "location": "ops/worker/run-worker.sh + engine internals",
+      "note": "Worker-side controls strong (cap-drop ALL, no-new-privileges, mem/PID limits); actual docker run flags for analysis sandboxes are engine-internal — needs engine-repo review."
+    },
+    {
+      "id": "VERIFY-D-005",
+      "domain": "worker-boundary",
+      "title": "Engine-reported usage is the sole billing meter",
+      "location": "apps/worker/src/engine/output-parser.ts",
+      "note": "Bounded + reconciled worker-side; whether hostile repo content can inflate usage receipts is engine-side."
+    },
+    {
+      "id": "VERIFY-E-001",
+      "domain": "agent-surface",
+      "title": "Legacy credential files without apiUrl",
+      "note": "If credentials.json lacks apiUrl, a stored OAuth bearer could be sent to a LYRASHIELD_API_URL-controlled host. No shipping write path confirmed; env-var control implies local control."
+    },
+    {
+      "id": "VERIFY-E-002",
+      "domain": "agent-surface",
+      "title": "Unbounded expiresAt on POST /api/agent-approvals",
+      "note": "Client-supplied expiry accepted without server-side maximum (remote-MCP path uses fixed 15-min TTL). Execution still needs human approval + input-hash match; policy intent unclear."
+    },
+    {
+      "id": "VERIFY-E-003",
+      "domain": "agent-surface",
+      "title": "Client-chosen expiresAt on POST /api/connections",
+      "note": "Consent state binds client/scopes/user but not expiry — far-future delegated grants possible. Self-directed; confirm intended maximum grant lifetime."
+    },
+    {
+      "id": "VERIFY-E-004",
+      "domain": "agent-surface",
+      "title": "Stale READY verdicts still exit 0 in gate --verdict",
+      "location": "packages/cli/src/commands/gate.ts:248-271",
+      "note": "READY+applicable exits 0 even when staleness.current===false; caller chooses --commit so an old READY could be replayed against a newer tree. Advisory self-gating; product intent unverified."
+    },
+    {
+      "id": "VERIFY-E-005",
+      "domain": "agent-surface",
+      "title": "safety check --file requirements.txt on PR-controlled input",
+      "note": "Whether installed safety follows -r/index directives inside the requirements file (redirecting its own resolution) depends on upstream parser behavior."
+    },
+    {
+      "id": "VERIFY-E-006",
+      "domain": "agent-surface",
+      "title": "Latent registry containment assumptions",
+      "note": "resolveWithinProject / uninstallAgentPlugin are safe only because registry paths are statically fixed; no independent containment check if registry entries become attacker-influenced."
+    },
+    {
+      "id": "VERIFY-E-007",
+      "domain": "agent-surface",
+      "title": "Registry-shipped vendorCli.args trusted verbatim",
+      "note": "install.ts allowlists vendor binaries to {claude,amp} but passes agent.vendorCli.args unchanged; trust boundary is the published @lyrashield/agent-registry package. Confirm marketplace artifacts are generated from this repo's registry without hand-editing."
+    },
+    {
+      "id": "VERIFY-E-008",
+      "domain": "agent-surface",
+      "title": "stdio installs pin @lyrashield/mcp@0.2.8 but rely on tag→integrity resolution",
+      "note": "npm resolves integrity from live registry metadata; a compromised publish account could re-serve a malicious 0.2.8. Standard npm trust model; hash-pinning or vendoring would remove it."
+    },
+    {
+      "id": "VERIFY-G-001",
+      "domain": "marketing",
+      "title": "set:html={disclaimer} on compare pages",
+      "location": "apps/marketing/src/pages/compare/[slug].astro:64",
+      "note": "Author-controlled frontmatter via reviewed commits only; becomes stored XSS if frontmatter ever authored outside reviewed commits."
+    },
+    {
+      "id": "VERIFY-G-002",
+      "domain": "marketing",
+      "title": "www→apex redirect lives outside repo (Cloudflare config)",
+      "location": "apps/marketing/wrangler.jsonc routes",
+      "note": "RESOLVED by live probe: www→apex 301 confirmed active."
+    },
+    {
+      "id": "VERIFY-H-001",
+      "domain": "ci-cd",
+      "title": "Environment required-reviewer config invisible in code",
+      "location": "azure-production / desktop-release / cloudflare-production environments",
+      "note": "If unset, green main merge ships to prod with no human gate — check repo settings."
+    },
+    {
+      "id": "VERIFY-H-002",
+      "domain": "ci-cd",
+      "title": "Scanner Container App holds GitHub App private key + BullMQ/Upstash secrets",
+      "location": "deploy-azure.yml:831-872,1054-1106",
+      "note": "Verify whether public scanner origin needs them; trim if not."
+    },
+    {
+      "id": "VERIFY-H-003",
+      "domain": "ci-cd",
+      "title": "lyrashield-engine repo visibility assumption",
+      "location": "deploy-azure.yml:105",
+      "note": "GITHUB_TOKEN can't read private cross-repo; passing deploys imply public — confirm intent."
+    },
+    {
+      "id": "VERIFY-H-004",
+      "domain": "ci-cd",
+      "title": "ADMISSION_CONFIG_TOKEN last long-lived PAT",
+      "location": "configure-cloud-billing-admission.yml:60",
+      "note": "Confirm fine-grained scope + expiry."
+    },
+    {
+      "id": "VERIFY-I-001",
+      "domain": "cross-cutting",
+      "title": "better-auth TOTP secret/backupCodes at-rest encryption",
+      "note": "node_modules uninspectable; confirm plugin storage."
+    },
+    {
+      "id": "VERIFY-I-002",
+      "domain": "cross-cutting",
+      "title": "Logger redaction marker gap",
+      "note": "api_key/x-api-key/private_key/jwt/bearer/passphrase/dsn/sessionid don't match substring markers — latent, no leak site found."
+    },
+    {
+      "id": "VERIFY-I-003",
+      "domain": "cross-cutting",
+      "title": "Error.message strings not secret-scanned before logs"
+    },
+    {
+      "id": "VERIFY-I-004",
+      "domain": "cross-cutting",
+      "title": "NODE_ENV default development degrades prod guards in non-Next runtimes",
+      "note": "Worker doesn't import the affected guards — confirm no other consumer."
+    },
+    {
+      "id": "VERIFY-I-005",
+      "domain": "cross-cutting",
+      "title": "LYRASHIELD_MCP_ALLOW_* envs declared but never consumed",
+      "note": "Dead config."
+    }
+  ],
+  "hardeningNotes": [
+    {
+      "id": "HARDEN-C-001",
+      "title": "Derive WebhookEvent externalId from signed body, not unsigned X-Razorpay-Event-ID header",
+      "detail": "Verified non-exploitable for money: all tracks resource-idempotent on signed-body fields (payment.id, provider:orderId, subscription.id, refundId). Residual: duplicate WebhookEvent bookkeeping rows from forged-header replays."
+    },
+    {
+      "id": "HARDEN-D-001",
+      "title": "Reject '..'/'.'/control chars in fix diff normalizePath; encodeURIComponent the write path",
+      "detail": "Verified fail-closed today: encoded getFileContent read precedes every write and GitHub 404s literal '..' (live-tested). Fix guards against future paths that skip the read."
+    },
+    {
+      "id": "HARDEN-E-001",
+      "title": "Hash-pin @lyrashield/mcp installs and registry vendorCli.args at the distribution boundary",
+      "detail": "npm tag→integrity and registry-arg trust are standard for the ecosystem; noted because T4 is in scope. Tracked as VERIFY-E-007/E-008."
+    }
+  ]
+}
