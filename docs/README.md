@@ -5,35 +5,33 @@ Use this index to find the owning document and avoid duplicating current truth.
 ## Current sources of truth
 
 - [`../PRD.md`](../PRD.md) — product scope, release status, backlog, and founder decisions.
-- [`../Phase2.md`](../Phase2.md) — dated future-roadmap planning overlay followed by the verbatim Phase 2 archive; `PRD.md` remains current product truth.
 - [`../codebase.md`](../codebase.md) — architecture, runtime contracts, code map, and compact implementation ledger.
 - [`../AGENTS.md`](../AGENTS.md) — immediate engineering handoff, execution queue, rules, and landmines.
-- [`../product.md`](../product.md) — positioning and commercial decisions.
-- [`../userguide.md`](../userguide.md) — end-user workflows and limitations.
-- [`../monetization.md`](../monetization.md) — approved pricing, unit economics, and affiliate terms.
 
-## How-to guides and runbooks
+## Papers (public + investor safe)
 
-- [`license-key-compromise-runbook.md`](license-key-compromise-runbook.md) — signing-key incident response.
+- [`litepaper.md`](./litepaper.md) — executive overview of the product, modes, coverage, and business model.
+- [`whitepaper.md`](./whitepaper.md) — authoritative public description: problem, product, evidence model, assurance features, commercial model, claims boundary, roadmap.
+- [`yellowpaper.md`](./yellowpaper.md) — technical specification: architecture, scan pipeline, coverage contracts, evidence integrity, tenancy, distribution contracts.
 
-The former `deployment/` and `ops/` runbooks were removed on 2026-09-09 as superseded; Git history is the recovery path, and current operational truth lives in `AGENTS.md`, `PRD.md`, and `codebase.md`.
+## Operational documents
 
-## Reference and assurance records
+- [`user-guide.md`](./user-guide.md) — end-user workflows, options, permissions, and limitations.
+- [`api-stability.md`](./api-stability.md) — public `/api/v1` compatibility and deprecation policy.
+- [`license-key-compromise-runbook.md`](./license-key-compromise-runbook.md) — signing-key incident response.
 
-- [`api-stability.md`](api-stability.md) — public API compatibility policy.
-- [`lite-scanner.md`](lite-scanner.md) and [`vibe-security-50.md`](vibe-security-50.md) — bounded scanner/coverage contracts.
-- [`webmcp-assurance.md`](webmcp-assurance.md) — WebMCP tool-surface controls, the shared deterministic analyzer, and the Security Lab/CLI/Action surfaces.
-- [`claims-readiness.md`](claims-readiness.md), [`ai-assurance-framework-mapping.md`](ai-assurance-framework-mapping.md), and [`ai-safety-test-pack.md`](ai-safety-test-pack.md) — claims and AI-assurance boundaries.
-- [`release-checklists/`](release-checklists/) and [`security/`](security/) — retained evidence checklists and customer templates.
+## Retained directories
 
-## Retained source artifacts
+- [`security/`](./security/) — committed security-review evidence and the threat-model template.
+- [`release-checklists/`](./release-checklists/) — retained evidence checklists.
+- [`plans/`](./plans/) — live implementation briefs awaiting dispatch only; a plan is never current implementation truth. Executed plans are removed once absorbed or obsolete; git history is the recovery path.
+- [`editorial/`](./editorial/) — claim maps, briefs, research, and image manifests consumed by marketing validators.
+- [`marketplace/`](./marketplace/) — marketplace export source, licenses, validator, and reviewer artifacts.
 
-- [`plans/2026-09-09-product-simplification-coding-handoff.md`](plans/2026-09-09-product-simplification-coding-handoff.md) — implementation handoff for all three UX/automation simplification waves and the selected all-member operational-access policy; task completion requires separate source, CI, deployment and runtime evidence.
+## Superseded material
 
-- [`plans/`](plans/) — approved or historically load-bearing design records. A plan is not current implementation truth.
-- [`editorial/`](editorial/) — claim maps, briefs, research, and image manifests consumed by marketing validators. These are publishing inputs, not disposable notes.
-- [`marketplace/`](marketplace/) — marketplace export source, licenses, validator, and reviewer artifacts. The validator runs against a generated export (which adds `manifest.json` and root plugin files), not this source directory; use `pnpm --filter @lyrashield/agent-plugin test` here.
+- `Phase2.md`, `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, and the executed simplification/billing/launch-review plans were consolidated into the three papers above on 2026-09-12. Their verbatim content — including the Phase 2 archive and internal unit economics — is recoverable from git history; `PRD.md` and `codebase.md` remain current truth.
 
 ## Retention rule
 
-Delete a document only when it is superseded, unreferenced by code/CI/build tooling, and carries no operational, legal, security, evidence, or publication value. Mark retained historical material with provenance and direct readers to the current owner. Do not keep orphaned screenshots or generated build output in `docs/`; Git history is the recovery path.
+Delete a document only when it is superseded, unreferenced by code/CI/build tooling, and carries no operational, legal, security, evidence, or publication value. Mark retained historical material with provenance and direct readers to the current owner. Do not keep orphaned screenshots or generated build output in `docs/`; git history is the recovery path.

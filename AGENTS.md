@@ -168,12 +168,11 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 ## Documentation ownership
 
 - [PRD.md](./PRD.md): strategy, scope, release status, backlog, founder decisions.
-- [Phase2.md](./Phase2.md): dated future-roadmap planning overlay followed by the verbatim original archive; do not treat historical status as current.
 - [codebase.md](./codebase.md): architecture, code map, runtime contracts, compact history.
 - [AGENTS.md](./AGENTS.md): current handoff, queue, rules, landmines.
-- [product.md](./product.md): positioning and commercial decisions.
-- [userguide.md](./userguide.md): user workflows and limitations.
-- [monetization.md](./monetization.md): pricing and affiliate economics.
+- [docs/whitepaper.md](./docs/whitepaper.md): consolidated product, commercial, claims, and Phase 2 roadmap reference.
+- [docs/yellowpaper.md](./docs/yellowpaper.md): technical specification and contract registry.
+- [docs/user-guide.md](./docs/user-guide.md): user workflows and limitations.
 - Deployment and operational runbooks were removed on 2026-09-09; Git history is the recovery path.
 - [docs/README.md](./docs/README.md): document ownership and retention map.
 
