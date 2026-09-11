@@ -9,14 +9,12 @@ const identityFindMock = vi.hoisted(() =>
   vi.fn().mockResolvedValue({ accountId: "buyer", workspaceId: "ws_1" })
 )
 const packFindMock = vi.hoisted(() =>
-  vi
-    .fn()
-    .mockResolvedValue({
-      id: "pack_1",
-      remainingMinutes: 40,
-      accountId: "buyer",
-      workspaceId: "ws_1",
-    })
+  vi.fn().mockResolvedValue({
+    id: "pack_1",
+    remainingMinutes: 40,
+    accountId: "buyer",
+    workspaceId: "ws_1",
+  })
 )
 
 vi.mock("@lyrashield/db", () => ({
