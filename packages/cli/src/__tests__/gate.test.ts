@@ -166,6 +166,32 @@ describe("handleGate --verdict (WP5 launch-gate verdict)", () => {
     expect(output.log).toHaveBeenCalledWith(expect.stringContaining("READY"))
   })
 
+  it("exits 2 (not 0) when a READY verdict is stale (VERIFY-E-004)", async () => {
+    mockGetEffectiveCredentials.mockResolvedValue({ apiKey: "k", workspaceId: "ws-1" } as never)
+    const request = mockClientWithVerdict("READY", {
+      historical: {
+        state: "READY",
+        blockingReasons: [],
+        // The gate judged an older revision — the verdict must not pass this
+        // pipeline run even though state === "READY" and applicable.
+        staleness: { current: false, reason: "target changed since verdict" },
+        standardVersion: "lyrashield-gate/2.0.0",
+      },
+    })
+    const { createClient } = await import("../client.js")
+    vi.mocked(createClient).mockResolvedValue({ request } as never)
+
+    const output = makeOutput()
+    const exitCode = await handleGate(
+      ["--verdict", "--target", "t-1", "--commit", "a".repeat(40)],
+      output
+    )
+
+    expect(exitCode).toBe(2)
+    // The stale annotation stays visible so the operator knows to re-run.
+    expect(output.log).toHaveBeenCalledWith(expect.stringContaining("stale"))
+  })
+
   it("exits 1 when the gate verdict is NOT_READY", async () => {
     mockGetEffectiveCredentials.mockResolvedValue({ apiKey: "k", workspaceId: "ws-1" } as never)
     const request = mockClientWithVerdict("NOT_READY", {

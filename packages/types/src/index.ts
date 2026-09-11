@@ -148,6 +148,10 @@ export type CreateProjectInput = z.infer<typeof CreateProjectSchema>
 function isValidGitRef(value: string): boolean {
   if (
     value === "@" ||
+    // Leading "-" is an option-looking token to any downstream argv consumer
+    // (and an invalid ref to git itself); the deterministic retest already
+    // rejects it — keep the validators consistent. (VERIFY-D-002)
+    value.startsWith("-") ||
     value.startsWith("/") ||
     value.endsWith("/") ||
     value.includes("//") ||

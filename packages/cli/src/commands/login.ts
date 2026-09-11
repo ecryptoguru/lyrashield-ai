@@ -50,27 +50,35 @@ async function openBrowser(url: string): Promise<void> {
 }
 
 export async function handleLogin(args: string[], output: Output): Promise<number> {
+  // VULN-E-002: the --key/-k flag is removed. Argv is world-readable
+  // (/proc/*/cmdline, ps) and persisted by shell history and CI logs — a
+  // long-lived credential must never travel through it. The value is not
+  // even parsed: detect the flag shape and steer to stdin/hidden prompt.
+  if (args.some((arg) => arg === "--key" || arg === "-k" || arg.startsWith("--key="))) {
+    output.error(
+      "The --key flag was removed: it exposes your API key in process lists and shell history. Pipe the key to stdin instead (e.g. 'echo $KEY | lyrashield login')."
+    )
+    return 2
+  }
+
   const parsed = minimist(args, {
-    string: ["key", "url", "workspace"],
+    string: ["url", "workspace"],
     boolean: ["oauth"],
-    alias: { k: "key" },
     default: { url: getEnvApiUrl() ?? DEFAULT_API_URL },
   })
 
   if (parsed.oauth) return loginWithOAuth(parsed.url, output, openBrowser)
 
-  let key = parsed.key
-  if (!key) {
-    if (!process.stdin.isTTY) {
-      key = await readStdin()
-    } else {
-      key = await promptHidden("Paste API key (input hidden): ")
-    }
+  let key: string | undefined
+  if (!process.stdin.isTTY) {
+    key = await readStdin()
+  } else {
+    key = await promptHidden("Paste API key (input hidden): ")
   }
 
   key = key?.trim()
   if (!key) {
-    output.error("API key required. Pipe it to stdin or use --key.")
+    output.error("API key required. Pipe it to stdin (e.g. 'echo $KEY | lyrashield login').")
     return 2
   }
 

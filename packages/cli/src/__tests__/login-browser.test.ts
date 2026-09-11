@@ -40,3 +40,26 @@ describe("OAuth browser launch", () => {
     }
   )
 })
+
+describe("login --key removal (VULN-E-002)", () => {
+  it.each([["--key", "lsk_x"], ["-k", "lsk_x"], ["--key=lsk_x"]])(
+    "rejects %s without ever reading the credential value",
+    async (...args) => {
+      const output = {
+        error: vi.fn(),
+        log: vi.fn(),
+        notice: vi.fn(),
+        warn: vi.fn(),
+      } as unknown as Output
+
+      const exitCode = await handleLogin(args, output)
+
+      expect(exitCode).toBe(2)
+      expect(output.error).toHaveBeenCalledWith(
+        expect.stringContaining("exposes your API key")
+      )
+      // Never reaches stdin/prompt/credential storage.
+      expect(output.log).not.toHaveBeenCalled()
+    }
+  )
+})

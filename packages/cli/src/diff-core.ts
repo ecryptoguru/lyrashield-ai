@@ -71,17 +71,52 @@ export function rankSeverity(s: string): number {
   }
 }
 
-export function resolveDiffRange(
+const GIT_OBJECT_ID = /^[0-9a-f]{40}$/
+
+/**
+ * Resolve a caller-supplied ref to a 40-char commit SHA before it can reach
+ * a git argv position. `rev-parse --verify --end-of-options` makes
+ * option-looking input ("--output=…") a failed resolution instead of a git
+ * option — every downstream `git diff`/`git show` then runs on verified
+ * object ids only (VULN-E-001). The staged sentinel "--cached" is internal
+ * and never reaches this function.
+ */
+async function resolveCommitRef(ref: string): Promise<string> {
+  if (ref.startsWith("-")) {
+    throw new Error(`Invalid git ref: ${JSON.stringify(ref)}`)
+  }
+  return new Promise((resolve, reject) => {
+    execFile(
+      "git",
+      ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`],
+      { cwd: process.cwd() },
+      (err, stdout) => {
+        if (err) {
+          return reject(new Error(`Cannot resolve git ref ${JSON.stringify(ref)} to a commit`))
+        }
+        const sha = stdout.trim()
+        if (!GIT_OBJECT_ID.test(sha)) {
+          return reject(new Error(`Cannot resolve git ref ${JSON.stringify(ref)} to a commit`))
+        }
+        resolve(sha)
+      }
+    )
+  })
+}
+
+export async function resolveDiffRange(
   staged: boolean,
   base?: string,
   head?: string
-): { base: string; head: string } {
+): Promise<{ base: string; head: string }> {
   if (staged) {
-    return { base: "HEAD", head: "--cached" }
+    return { base: await resolveCommitRef("HEAD"), head: "--cached" }
   }
-  const b = base ?? "HEAD~1"
-  const h = head ?? "HEAD"
-  return { base: b, head: h }
+  const [resolvedBase, resolvedHead] = await Promise.all([
+    resolveCommitRef(base ?? "HEAD~1"),
+    resolveCommitRef(head ?? "HEAD"),
+  ])
+  return { base: resolvedBase, head: resolvedHead }
 }
 
 export async function getChangedFiles(base: string, head: string): Promise<string[]> {

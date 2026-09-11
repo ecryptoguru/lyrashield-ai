@@ -52,7 +52,11 @@ function normalizeProjectRoot(root?: string): string {
 
 function resolveWithinProject(projectRoot: string, relativeFile: string): string {
   const target = path.resolve(projectRoot, relativeFile)
-  if (!target.startsWith(projectRoot)) {
+  // Separator-bound containment: a bare startsWith treats "/x/app2/f" as
+  // inside "/x/app". Compare via path.relative so a ".." escape or a
+  // sibling-prefix path can never reach a write. (VERIFY-E-006)
+  const rel = path.relative(projectRoot, target)
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
     throw new Error(`Refusing to write rule file outside project root: ${relativeFile}`)
   }
   return target

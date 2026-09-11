@@ -396,7 +396,18 @@ describe("CreateRepoTargetSchema", () => {
     ).toBe(false)
   })
 
-  it.each(["feature bad", "feature..bad", ".hidden", "release.lock", "topic~1", "topic@{1}"])(
+  it.each([
+    "feature bad",
+    "feature..bad",
+    ".hidden",
+    "release.lock",
+    "topic~1",
+    "topic@{1}",
+    // Option-shaped refs — the deterministic retest already rejects a
+    // leading "-"; the persisted-target validators must agree (VERIFY-D-002).
+    "-x",
+    "--hard-reset",
+  ])(
     "rejects invalid Git ref %s",
     (branch) => {
       expect(

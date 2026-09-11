@@ -78,6 +78,35 @@ function resolvePluginLocation(
   return path.join(opts?.cwd ?? process.cwd(), expanded)
 }
 
+/**
+ * Independent containment for registry-driven plugin destinations. Registry
+ * paths are statically fixed today, but a future attacker-influenced entry
+ * would otherwise give `cp -r`/`rm -r` an arbitrary root (VERIFY-E-006).
+ * The destination must resolve strictly inside the intended scope root —
+ * homedir for global locations, the project cwd otherwise — and at least two
+ * segments deep, so an entry can never name `~`, `/`, `~/.config`, or the
+ * project root itself.
+ */
+function assertContainedPluginDest(
+  dest: string,
+  loc: ConfigLocation,
+  opts?: { scope?: string; cwd?: string }
+): string {
+  const root =
+    loc.scope === "global" ? path.resolve(homedir()) : path.resolve(opts?.cwd ?? process.cwd())
+  const resolved = path.resolve(dest)
+  const rel = path.relative(root, resolved)
+  if (
+    rel === "" ||
+    rel.startsWith("..") ||
+    path.isAbsolute(rel) ||
+    rel.split(path.sep).length < 2
+  ) {
+    throw new Error(`Refusing plugin path outside its scope root: ${dest}`)
+  }
+  return resolved
+}
+
 export async function installAgentPlugin(
   opts: InstallAgentPluginOptions
 ): Promise<InstallAgentResult> {
@@ -128,7 +157,19 @@ export async function installAgentPlugin(
       message: "No plugin location matched the current scope.",
     }
   }
-  const dest = resolvePluginLocation(loc, { scope: opts.scope, cwd: opts.cwd })
+  const rawDest = resolvePluginLocation(loc, { scope: opts.scope, cwd: opts.cwd })
+  let dest: string
+  try {
+    dest = assertContainedPluginDest(rawDest, loc, opts)
+  } catch (error) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      path: rawDest,
+      message: (error as Error).message,
+    }
+  }
   const source = getPluginDir()
 
   // Containment: refuse if the resolved destination escapes the expected
@@ -271,7 +312,21 @@ export async function uninstallAgentPlugin(
     }
   }
 
-  const dest = resolvePluginLocation(loc, { scope: opts.scope, cwd: opts.cwd })
+  const rawDest = resolvePluginLocation(loc, { scope: opts.scope, cwd: opts.cwd })
+  let dest: string
+  try {
+    // rm -r on a registry-resolved path: containment is verified
+    // independently of the registry content itself.
+    dest = assertContainedPluginDest(rawDest, loc, opts)
+  } catch (error) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      path: rawDest,
+      message: (error as Error).message,
+    }
+  }
 
   try {
     await stat(dest)
