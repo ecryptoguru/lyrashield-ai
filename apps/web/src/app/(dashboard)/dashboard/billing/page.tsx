@@ -161,9 +161,9 @@ export default async function BillingPage({
           </CardContent>
         </Card>
 
-        {/* Trial Status — also rendered for an EXPIRED trial: the expiry
-            notice below must stay reachable, not hide with `isTrial`. */}
-        {(isTrial || trialState.isExpired) && (
+        {/* Keep an expired-trial upgrade prompt on FREE accounts, but never
+            contradict an active paid or complimentary plan. */}
+        {(isTrial || (trialState.isExpired && plan === "FREE")) && (
           <Card>
             <CardHeader>
               <CardTitle>Trial Status</CardTitle>
