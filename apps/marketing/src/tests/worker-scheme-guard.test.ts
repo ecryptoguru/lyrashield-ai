@@ -28,9 +28,9 @@ function buildGuardFetch() {
     .replace(/export default/, "module.exports =")
 
   // Evaluate the module source in a CommonJS-shaped sandbox.
-  const module = { exports: {} as { fetch: (r: Request) => Promise<Response> } }
-  new Function("module", "exports", wrapper)(module, module.exports)
-  return module.exports.fetch
+  const sandbox = { exports: {} as { fetch: (r: Request) => Promise<Response> } }
+  new Function("module", "exports", wrapper)(sandbox, sandbox.exports)
+  return sandbox.exports.fetch
 }
 
 describe("worker scheme guard (VULN-P-001)", () => {
