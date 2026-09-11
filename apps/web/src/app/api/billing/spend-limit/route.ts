@@ -54,10 +54,14 @@ async function post(request: Request) {
     // The spend limit lives on the account's governing subscription row.
     const billingAccount = await resolveAccountBilling(accountId)
 
-    if (!billingAccount || billingAccount.effectivePlan !== "LAUNCH_ASSURANCE") {
+    if (
+      !billingAccount ||
+      billingAccount.effectivePlan !== "LAUNCH_ASSURANCE" ||
+      billingAccount.provider === "complimentary"
+    ) {
       return apiError(
         "PLAN_NOT_ELIGIBLE",
-        "Spend limits are only available on the Launch Assurance plan.",
+        "Spend limits are only available on paid Launch Assurance subscriptions.",
         403
       )
     }

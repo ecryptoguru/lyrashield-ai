@@ -90,6 +90,7 @@ export default async function BillingPage({
     CLOUD_PLAN_MAP[(trialState.isActive ? "TRIAL" : plan) as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
   const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
+  const isComplimentary = billingAccount?.provider === "complimentary"
 
   return (
     <div>
@@ -140,6 +141,7 @@ export default async function BillingPage({
                 <BillingActions
                   plan={plan}
                   isLaunchAssurance={isLaunchAssurance}
+                  isComplimentary={isComplimentary}
                   workspaceId={workspaceId}
                   purchasesAvailable={purchasesAvailable}
                   trialAvailable={trialAvailable}
@@ -307,7 +309,7 @@ export default async function BillingPage({
         </Card>
 
         {/* Launch Assurance Spend Limit */}
-        {isLaunchAssurance && canManageBilling && (
+        {isLaunchAssurance && !isComplimentary && canManageBilling && (
           <Card>
             <CardHeader>
               <CardTitle>Overage Spend Limit</CardTitle>
@@ -329,7 +331,7 @@ export default async function BillingPage({
             the destination (Polar portal, or the Razorpay billing-support
             path). Gating the card on provider === "polar" left Razorpay
             subscribers with no manage path at all. */}
-        {canManageBilling && plan !== "FREE" && billingAccount && (
+        {canManageBilling && plan !== "FREE" && billingAccount && !isComplimentary && (
           <Card>
             <CardHeader>
               <CardTitle>Manage Subscription</CardTitle>
