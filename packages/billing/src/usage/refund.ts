@@ -33,13 +33,21 @@ export interface ReverseRefundResult {
 export async function reverseRefund(
   workspaceId: string,
   resourceExternalId: string,
-  refundExternalId = resourceExternalId
+  refundExternalId = resourceExternalId,
+  provider?: string
 ): Promise<ReverseRefundResult> {
   const idempotencyKey = `${workspaceId}:${refundExternalId}`
   // Called only after verified provider refund classification. Resolve the
   // stored owner through the bounded resource identity, never caller metadata.
-  const identity = await getSystemPrisma().minutePack.findUnique({
-    where: { workspaceId_externalId: { workspaceId, externalId: resourceExternalId } },
+  // externalId+provider survives workspaceId SET NULL (workspace hard-delete
+  // detaches attribution but the pack — and its refund obligation — stays
+  // account-owned); the {workspaceId, externalId} key could never match again.
+  const identity = await getSystemPrisma().minutePack.findFirst({
+    where: {
+      externalId: resourceExternalId,
+      ...(provider ? { provider } : {}),
+      deletedAt: null,
+    },
     select: { accountId: true },
   })
   let result: ReverseRefundResult
@@ -54,21 +62,27 @@ export async function reverseRefund(
         })
         if (existing) return { created: false, reversed: "none" as const, minutesReversed: 0 }
 
-        const pack = await tx.minutePack.findUnique({
-          where: { workspaceId_externalId: { workspaceId, externalId: resourceExternalId } },
-          select: { id: true, remainingMinutes: true, accountId: true },
+        const pack = await tx.minutePack.findFirst({
+          where: {
+            externalId: resourceExternalId,
+            ...(provider ? { provider } : {}),
+            deletedAt: null,
+          },
+          select: { id: true, remainingMinutes: true, accountId: true, workspaceId: true },
         })
         if (!pack) throw new Error("refund_entitlement_not_resolved")
 
         const minutesReversed = pack.remainingMinutes
         const updated = await tx.minutePack.updateMany({
-          where: { id: pack.id, workspaceId, remainingMinutes: pack.remainingMinutes },
+          where: { id: pack.id, remainingMinutes: pack.remainingMinutes },
           data: { remainingMinutes: 0 },
         })
         if (updated.count !== 1) throw new Error("refund_entitlement_balance_changed")
         await tx.usageRecord.create({
           data: {
-            workspaceId,
+            // pack.workspaceId is NULL after a workspace hard-delete — the
+            // ledger row stays valid under the bound account context.
+            workspaceId: pack.workspaceId,
             accountId: pack.accountId,
             kind: "refund_reversal",
             quantity: minutesReversed,

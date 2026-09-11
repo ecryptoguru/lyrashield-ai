@@ -92,9 +92,13 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         const currentPeriodStart = data.current_period_start ?? data.currentPeriodStart
         const currentPeriodEnd = data.current_period_end ?? data.currentPeriodEnd
         const canceledAtValue = data.canceled_at ?? data.canceledAt
+        const modifiedAtValue = data.modified_at ?? data.modifiedAt
         const periodStart = currentPeriodStart ? new Date(currentPeriodStart as string) : undefined
         const periodEnd = currentPeriodEnd ? new Date(currentPeriodEnd as string) : undefined
         const canceledAt = canceledAtValue ? new Date(canceledAtValue as string) : undefined
+        const eventOccurredAt = modifiedAtValue
+          ? new Date(modifiedAtValue as string)
+          : undefined
 
         await syncSubscription({
           workspaceId,
@@ -107,6 +111,7 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           canceledAt,
+          eventOccurredAt,
         })
 
         return { handled: true, action: `subscription.${status}`, workspaceId }
@@ -159,7 +164,8 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
         await reverseRefund(
           evidence.workspaceId,
           evidence.orderId,
-          evidence.refundId ?? evidence.orderId
+          evidence.refundId ?? evidence.orderId,
+          "polar"
         )
         return {
           handled: true,

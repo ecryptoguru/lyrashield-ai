@@ -4,9 +4,9 @@
  * Idempotent via Conversion.idempotencyKey = externalId.
  *
  * Flow:
- *  1. Resolve AffiliateSubscription or pending attribution
- *  2. First payment → create AffiliateSubscription { firstPaidAt, capEndsAt: now+12mo }
- *  3. now > capEndsAt → EXPIRED amount=0
+ *  1. Resolve or create AffiliateSubscription on the first observed paid
+ *     event for a providerSubscriptionId { firstPaidAt, capEndsAt: now+capMonths }
+ *  2. now > capEndsAt → EXPIRED amount=0
  *  4. rate = activeReferrals >= 10 ? 3000 : 2500
  *  5. base = net pre-tax after discounts
  *  6. Annual Cloud plans: commission at 25% of annual amount as paid
@@ -65,7 +65,8 @@ export interface OrderPaidPayload {
   clickId?: string | null
   /** SubID for campaign tracking. */
   subid?: string | null
-  /** Whether this is a first payment (vs renewal). */
+  /** Informational only — the commission cap window starts from the first
+   * observed paid event for the subscription, not from this hint. */
   isFirstPayment?: boolean
   /** C-M09: IP hash for fraud signal detection. */
   ipHash?: string
@@ -108,7 +109,6 @@ export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidR
     cookieToken,
     affiliateId: directAffiliateId,
     subid,
-    isFirstPayment = false,
   } = payload
 
   // Provider-scoped idempotency key prevents cross-provider collisions (C2)
@@ -272,43 +272,61 @@ export async function onOrderPaid(payload: OrderPaidPayload): Promise<OrderPaidR
     // Fall back to defaults
   }
 
-  // Resolve or create AffiliateSubscription
+  // Resolve or create AffiliateSubscription. The first observed paid event
+  // IS the first payment — no producer stamps isFirstPayment, so gating the
+  // create on it left the cap window unrecorded and every renewal minted a
+  // full commission forever (C-001). The unique providerSubscriptionId makes
+  // the create race-safe.
   let subscriptionId: string | null = null
   let capEndsAt: Date | null = null
   let isExpired = false
 
   if (providerSubscriptionId) {
-    const existingSub = await prisma.affiliateSubscription.findUnique({
+    let sub = await prisma.affiliateSubscription.findUnique({
       where: { providerSubscriptionId },
     })
 
-    if (existingSub) {
-      subscriptionId = existingSub.id
-      capEndsAt = existingSub.capEndsAt
-      isExpired = existingSub.capEndsAt < new Date()
-    } else if (isFirstPayment) {
-      // Create new subscription record
+    if (!sub) {
       const now = new Date()
       // C5: Use calendar month arithmetic instead of 30-day months
-      capEndsAt = new Date(now.getFullYear(), now.getMonth() + capMonths, now.getDate())
-      const sub = await prisma.affiliateSubscription.create({
-        data: {
-          providerSubscriptionId,
-          provider,
-          customerId,
-          affiliateId,
-          firstPaidAt: now,
-          capEndsAt,
-          isActive: true,
-        },
-      })
-      subscriptionId = sub.id
+      const capEnd = new Date(now.getFullYear(), now.getMonth() + capMonths, now.getDate())
+      try {
+        sub = await prisma.affiliateSubscription.create({
+          data: {
+            providerSubscriptionId,
+            provider,
+            customerId,
+            affiliateId,
+            firstPaidAt: now,
+            capEndsAt: capEnd,
+            isActive: true,
+          },
+        })
+        await prisma.affiliate.update({
+          where: { id: affiliateId },
+          data: { activeReferrals: { increment: 1 } },
+        })
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: string }).code === "P2002"
+        ) {
+          // A concurrent first event won the create — load its row.
+          sub = await prisma.affiliateSubscription.findUnique({
+            where: { providerSubscriptionId },
+          })
+        } else {
+          throw error
+        }
+      }
+    }
 
-      // Update activeReferrals count
-      await prisma.affiliate.update({
-        where: { id: affiliateId },
-        data: { activeReferrals: { increment: 1 } },
-      })
+    if (sub) {
+      subscriptionId = sub.id
+      capEndsAt = sub.capEndsAt
+      isExpired = sub.capEndsAt < new Date()
     }
   }
 

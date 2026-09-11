@@ -156,6 +156,10 @@ export async function processRazorpayEvent(
         const canceledAt = subscription.ended_at
           ? new Date(subscription.ended_at * 1000)
           : undefined
+        // event.created_at is required and replay-window-validated at the
+        // webhook boundary — the provider's event clock for ordering.
+        const eventOccurredAt =
+          typeof event.created_at === "number" ? new Date(event.created_at * 1000) : undefined
 
         await syncSubscription({
           workspaceId,
@@ -168,6 +172,7 @@ export async function processRazorpayEvent(
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           canceledAt,
+          eventOccurredAt,
         })
 
         return { handled: true, action: `subscription.${status}`, workspaceId }
@@ -196,7 +201,7 @@ export async function processRazorpayEvent(
         if (!evidence.workspaceId || !evidence.paymentId || !evidence.refundId) {
           return { handled: false, action: "refund.created.no_identity", workspaceId: null }
         }
-        await reverseRefund(evidence.workspaceId, evidence.paymentId, evidence.refundId)
+        await reverseRefund(evidence.workspaceId, evidence.paymentId, evidence.refundId, "razorpay")
         return {
           handled: true,
           action: "refund.created.reversed",

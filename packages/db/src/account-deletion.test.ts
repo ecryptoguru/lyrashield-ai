@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
+import { getSystemPrisma } from "./system-client"
 import { verifyAuditChain } from "./audit-hash"
 import {
   deleteUserAccount,
@@ -780,7 +781,9 @@ describe("account deletion", () => {
         issuedAt: new Date(),
       },
     })
-    const licenseWithoutWorkspace = await prisma.license.create({
+    // NULL-workspace licenses are only writable through the privileged system
+    // client — the tightened license WITH CHECK denies them to the scoped role.
+    const licenseWithoutWorkspace = await getSystemPrisma().license.create({
       data: {
         workspaceId: null,
         ownerEmail: `${licenseUserId}@example.com`,

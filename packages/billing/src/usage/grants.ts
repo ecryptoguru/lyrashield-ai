@@ -22,6 +22,15 @@ import { logger } from "@lyrashield/logger"
 
 export type GrantSource = "subscription" | "annual_monthly" | "trial" | "manual" | "replenishment"
 
+/**
+ * Sources that represent THE subscription's cycle pool. A mid-cycle plan
+ * change arrives as one of these for the same cycleStart under a different
+ * plan: the replaced plan's grant must retire so the cycle never carries
+ * two pools (VERIFY-C-002). "manual"/"trial" grants are operator and trial
+ * intent — never retired by a subscription event.
+ */
+const SUBSCRIPTION_POOL_SOURCES = ["subscription", "annual_monthly", "replenishment"]
+
 export interface GrantMonthlyPoolResult {
   created: boolean
   minutes: number
@@ -86,6 +95,35 @@ export async function grantMonthlyPool(
     // the replenishment job. The previous image took no lock; the unique key
     // remains the race arbiter for old binaries.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`pool:${params.accountId}`}, 0))`
+
+    // Mid-cycle plan change at the same cycleStart: the grant key includes
+    // the plan, so the replaced plan's grant would otherwise keep counting
+    // (`cycleStart >=` window) alongside this new pool. Retire the replaced
+    // pool — consumption rows stay counted, so the account keeps its spend
+    // history and ends with exactly one governing pool for the cycle.
+    if (SUBSCRIPTION_POOL_SOURCES.includes(params.source)) {
+      const retired = await tx.usageRecord.updateMany({
+        where: {
+          accountId: params.accountId,
+          kind: "pool_grant",
+          deletedAt: null,
+          cycleStart: params.cycleStart,
+          idempotencyKey: { notIn: [idempotencyKey, ...(legacyKey ? [legacyKey] : [])] },
+          OR: SUBSCRIPTION_POOL_SOURCES.map((source) => ({
+            metadata: { path: ["source"], equals: source },
+          })),
+        },
+        data: { deletedAt: new Date() },
+      })
+      if (retired.count > 0) {
+        logger.info("Retired replaced pool grants on plan change", {
+          accountId: params.accountId,
+          cycleStart: params.cycleStart.toISOString(),
+          newPlan: params.plan,
+          retiredGrants: retired.count,
+        })
+      }
+    }
 
     // Legacy rows are workspace-attributed with accountId NULL — visible only
     // through the workspace policy, which is why the workspace context must

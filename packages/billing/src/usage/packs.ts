@@ -93,9 +93,33 @@ export async function creditTopUp(input: CreditTopUpInput): Promise<CreditTopUpR
         return { created: true, minutes, packId: existing.id, expiresAt: expiry }
       }
 
+      // Workspace hard-delete sets pack.workspaceId NULL (onDelete: SetNull):
+      // the compound key can never match again, so a replayed payment would
+      // silently double-credit. The account+provider+externalId probe is the
+      // dedupe that survives attribution loss.
+      const orphaned = await tx.minutePack.findFirst({
+        where: { accountId, provider, externalId },
+        select: { id: true, minutes: true },
+      })
+      if (orphaned) {
+        logger.debug("Idempotent replay of creditTopUp (detached workspace)", {
+          accountId,
+          externalId,
+        })
+        return { created: false, minutes: orphaned.minutes, packId: orphaned.id, expiresAt: expiry }
+      }
+
+      // The attribution workspace may no longer exist; writing it would fail
+      // the FK and leave a paid order uncredited. Fall back to NULL
+      // attribution — the pack stays account-owned under the account policy.
+      const attributionExists = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { id: true },
+      })
+
       const pack = await tx.minutePack.create({
         data: {
-          workspaceId,
+          workspaceId: attributionExists ? workspaceId : null,
           accountId,
           provider,
           externalId,

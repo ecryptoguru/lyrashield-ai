@@ -1584,6 +1584,10 @@ model BillingAccount {
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
   canceledAt         DateTime?
+  // Monotonic provider-event clock: the occurred-at of the newest applied
+  // subscription event. Out-of-order signed deliveries older than this (or
+  // regressing currentPeriodStart) are skipped instead of overwriting state.
+  lastEventAt        DateTime?
   region             String?
   spendLimitCents    Int?
   // Mid-scan grace budget — per account + allowance cycle (moved off
