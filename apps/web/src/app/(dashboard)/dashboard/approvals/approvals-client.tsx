@@ -235,7 +235,7 @@ export function ApprovalsClient({
                     <p className="text-xs font-medium tracking-wide uppercase">
                       {operationLabel(approval.actionName)}
                     </p>
-                    <p className="mt-1 break-words font-medium">
+                    <p className="mt-1 wrap-break-word font-medium">
                       {approvalSummary(approval.actionName, approval.input)}
                     </p>
                     <details className="mt-3 min-w-0 max-w-full rounded border p-3">

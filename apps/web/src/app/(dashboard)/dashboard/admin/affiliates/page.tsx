@@ -80,7 +80,7 @@ export default async function AffiliateAdminPage() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
               >
                 <div className="min-w-0">
-                  <div className="font-medium break-words">
+                  <div className="font-medium wrap-break-word">
                     <EmailText value={aff.user.name ?? aff.user.email} />
                   </div>
                   <div className="text-sm text-muted-foreground">
@@ -164,7 +164,7 @@ export default async function AffiliateAdminPage() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
               >
                 <div className="min-w-0">
-                  <div className="font-medium break-words">
+                  <div className="font-medium wrap-break-word">
                     <EmailText value={p.affiliate.user.name ?? p.affiliate.user.email} />
                   </div>
                   <div className="text-sm text-muted-foreground">
@@ -193,7 +193,7 @@ export default async function AffiliateAdminPage() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
               >
                 <div className="min-w-0">
-                  <div className="font-medium break-words">
+                  <div className="font-medium wrap-break-word">
                     <EmailText value={aff.user.name ?? aff.user.email} />
                   </div>
                 </div>

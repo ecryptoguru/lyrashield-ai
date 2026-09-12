@@ -18,19 +18,21 @@ Use this index to find the owning document and avoid duplicating current truth.
 
 - [`user-guide.md`](./user-guide.md) — end-user workflows, options, permissions, and limitations.
 - [`api-stability.md`](./api-stability.md) — public `/api/v1` compatibility and deprecation policy.
+- [`claims-policy.md`](./claims-policy.md) — public claims boundary, owner, review cadence, and open evidence obligations.
 - [`license-key-compromise-runbook.md`](./license-key-compromise-runbook.md) — signing-key incident response.
+- [`payout-operations.md`](./payout-operations.md) — approved affiliate payout model and unresolved provider, bank, and tax gates.
+- [`security-risk-register.md`](./security-risk-register.md) — active accepted security risks, owners, review dates, and required follow-up.
+- [`threat-model-template.md`](./threat-model-template.md) — customer-declared AI system threat-model worksheet.
 
 ## Retained directories
 
-- [`security/`](./security/) — committed security-review evidence and the threat-model template.
-- [`release-checklists/`](./release-checklists/) — retained evidence checklists.
 - [`plans/`](./plans/) — live implementation briefs awaiting dispatch only; a plan is never current implementation truth. Executed plans are removed once absorbed or obsolete; git history is the recovery path.
 - [`editorial/`](./editorial/) — claim maps, briefs, research, and image manifests consumed by marketing validators.
 - [`marketplace/`](./marketplace/) — marketplace export source, licenses, validator, and reviewer artifacts.
 
 ## Superseded material
 
-- `Phase2.md`, `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, and the executed simplification/billing/launch-review plans were consolidated into the three papers above on 2026-09-12. Their verbatim content — including the Phase 2 archive and internal unit economics — is recoverable from git history; `PRD.md` and `codebase.md` remain current truth.
+- `Phase2.md`, `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, the superseded AI-assurance release checklist, and the executed simplification/billing/launch-review plans were consolidated or retired on 2026-09-12. The completed 2026-09-11 security-review files are retained in Git at `ae7cabc5`; their four continuing accepted risks remain current in [`security-risk-register.md`](./security-risk-register.md). Verbatim historical content, including the Phase 2 archive and internal unit economics, is recoverable from Git history; `PRD.md` and `codebase.md` remain current truth.
 
 ## Retention rule
 

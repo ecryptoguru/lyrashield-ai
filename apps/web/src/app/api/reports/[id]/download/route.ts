@@ -33,12 +33,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const reportRecord = await prisma.report.findFirst({
       where: { id, workspaceId, deletedAt: null },
-      select: { contentJson: true, scanId: true },
+      select: { contentJson: true, scanId: true, title: true, type: true },
     })
 
     let html: string
-    if (report.type === "launch_readiness") {
-      if (!isLaunchReportShareablePayload(reportRecord?.contentJson)) {
+    if (reportRecord?.type === "launch_readiness") {
+      if (!isLaunchReportShareablePayload(reportRecord.contentJson)) {
         return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
       }
       html = generateLaunchReportHTML(reportRecord.contentJson)
@@ -53,8 +53,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       logger.warn("Report has no snapshot; regenerating from source scan (legacy report)", {
         reportId: id,
       })
-      const reportData = await gatherReportData(workspaceId, reportRecord.scanId)
-      html = generateReportHTML(reportData)
+      html = generateReportHTML(await gatherReportData(workspaceId, reportRecord.scanId))
     } else {
       return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
     }
@@ -68,10 +67,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         logger.warn("Failed to update report download status", { reportId: id, error: String(err) })
       })
 
+    const filename = `${reportRecord?.title.replace(/[^\w -]+/g, "").trim() || `report-${id}`}.html`
+    const disposition = searchParams.get("download") === "1" ? "attachment" : "inline"
+
     return new Response(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `inline; filename="${report.type === "launch_readiness" ? "launch-readiness-report" : "report"}-${id}.html"`,
+        "Content-Disposition": `${disposition}; filename="${filename}"`,
       },
     })
   } catch (error) {

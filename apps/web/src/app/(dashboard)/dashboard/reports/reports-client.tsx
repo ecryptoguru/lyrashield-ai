@@ -584,6 +584,7 @@ export function ReportsClient({
                         href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}
                         target="_blank"
                         rel="noopener noreferrer"
+                        aria-label={`View ${report.title} in a new tab`}
                         className="underline-offset-4 hover:underline"
                       >
                         {report.title}
@@ -616,8 +617,8 @@ export function ReportsClient({
                 </div>
                 <div className="flex items-center gap-2">
                   <a
-                    href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}
-                    download={`${report.title.replace(/[^\w\- ]+/g, "").trim() || "report"}.html`}
+                    href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}&download=1`}
+                    download
                     aria-label={`Download ${report.title}`}
                     className={buttonVariants({ size: "sm", variant: "ghost" })}
                   >
