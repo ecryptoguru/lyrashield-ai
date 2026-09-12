@@ -95,7 +95,9 @@ export async function GET(request: Request) {
       // The sponsor's effective plan decides — workspace.plan is a display
       // field under account-owned billing.
       const sponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
-      const sponsorBilling = sponsor?.agencyActive ? null : await resolveAccountBilling(session.userId)
+      const sponsorBilling = sponsor?.agencyActive
+        ? null
+        : await resolveAccountBilling(session.userId)
       const sponsorPlan = sponsor?.agencyActive
         ? "LAUNCH_ASSURANCE"
         : (sponsorBilling?.effectivePlan ?? "FREE")
