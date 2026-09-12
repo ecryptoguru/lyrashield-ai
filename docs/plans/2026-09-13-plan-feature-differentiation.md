@@ -66,11 +66,12 @@ away from accounts that already use these surfaces, which was not the
 approved intent. Connecting an agent has no separate plan entitlement;
 scans launched through it still consume the plan's agent-minutes.
 
-### Move 2 — repository WebMCP findings stated on Pro
+### Move 2 — repository WebMCP findings stated as shared
 
 Code truth (Section 2): scanner-level WebMCP findings already surface on
-repository scans at every tier. Pro adds Deep/Custom scans, so its card says
-`Deep scans with repository MCP and WebMCP surface review`. The
+repository scans at every tier. The pricing page now lists these findings
+under shared capabilities, rather than on Pro's card. Pro adds Deep/Custom
+scan modes. The
 `ai_app_security` scanner does not run without a repository checkout; URL and
 API scans cannot claim this source-level review. Coverage receipts,
 versioned verdicts, launch reports and shareable scorecards remain available
@@ -95,6 +96,9 @@ needs an explicit founder call; this PR does not add that filter.
   scorecard capabilities. Access still depends on role and scan admission.
 - Starter `Evidence Vault access` becomes `Workspace evidence records`,
   matching the actual workspace and target scope.
+- A side-by-side comparison shows the enforced differences: monthly minutes,
+  target caps, scan modes and Launch Assurance overage. Shared tools remain
+  below the comparison, and duplicate capacity lines are removed from cards.
 
 ## 4. Flag map after this PR
 

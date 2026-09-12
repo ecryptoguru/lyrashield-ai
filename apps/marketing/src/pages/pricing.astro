@@ -38,10 +38,10 @@ const pricingFaqs = [
 ]
 
 const tierIntents: Record<string, string> = {
-  STARTER: "For solo builders running occasional reviews on personal projects.",
-  PRO: "For small teams shipping regularly who need deeper review coverage.",
+  STARTER: "For solo builders reviewing up to five targets with standard scans.",
+  PRO: "For teams that need Deep / Custom scans across up to 15 targets.",
   LAUNCH_ASSURANCE:
-    "For larger release programs that need more targets, minutes and capped overage.",
+    "For high-volume release programs that need up to 50 targets and capped overage.",
   ENTERPRISE: "For organisations that need custom limits and a contact-led rollout.",
 }
 
@@ -215,14 +215,6 @@ const appUrl =
                   /yr
                 </span>
               </div>
-              <p class="mt-2 text-sm text-text-muted">
-                {plan.agentMinutes.toLocaleString()} agent-minutes / month
-              </p>
-              {plan.deepAllowed && (
-                <p class="mt-1 text-sm font-medium text-accent">
-                  Deep / Custom scans enabled
-                </p>
-              )}
               <ul class="mt-4 space-y-2">
                 {plan.features.map((feature) => (
                   <li class="flex items-start gap-2 text-sm text-text-muted">
@@ -248,6 +240,61 @@ const appUrl =
             </div>
           ))
         }
+      </div>
+
+      <!-- Enforced plan differences -->
+      <div class="mt-10">
+        <h2 class="text-2xl font-bold text-text">What changes between plans</h2>
+        <p class="mt-2 text-sm text-text-muted">
+          Every plan includes the assurance tools below. Choose by review depth, monthly capacity and target count.
+        </p>
+        <p class="mt-3 text-xs text-text-muted sm:hidden">Swipe sideways to compare all three plans.</p>
+        <div class="mt-5 overflow-x-auto rounded-lg border border-border">
+          <table class="w-full min-w-[38rem] border-collapse text-left text-sm">
+            <caption class="sr-only">Comparison of Starter, Pro and Launch Assurance plan limits</caption>
+            <thead class="bg-bg-raised text-text">
+              <tr>
+                <th scope="col" class="sticky left-0 bg-bg-raised px-4 py-3 font-semibold">Plan difference</th>
+                {cloudPlans.map((plan) => (
+                  <th scope="col" class="px-4 py-3 font-semibold">{plan.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody class="text-text-muted">
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Included agent-minutes / month</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">{plan.agentMinutes.toLocaleString()}</td>
+                ))}
+              </tr>
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Protected targets</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">Up to {plan.targetCaps}</td>
+                ))}
+              </tr>
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Scan modes</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">
+                    Safe, Quick, Standard{plan.deepAllowed ? ", Deep, Custom" : ""}
+                  </td>
+                ))}
+              </tr>
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Overage after minutes and packs</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">
+                    {plan.id === "LAUNCH_ASSURANCE" ? "$0.15/min with a spend limit" : "Not available"}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-3 text-xs text-text-muted">
+          Deep and Custom scans use agent-minutes at 3× the standard rate. Prepaid minute packs are available on every plan.
+        </p>
       </div>
 
       <!-- Shared capabilities and CI setup -->

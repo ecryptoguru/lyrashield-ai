@@ -59,12 +59,6 @@ describe("pricing page", () => {
     expect(CLOUD_PLAN_MAP.TRIAL.features).not.toContain(SURFACES_LINE)
   })
 
-  it("scopes Pro's agent-surface review to repository scans", () => {
-    expect(CLOUD_PLAN_MAP.PRO.features).toContain(
-      "Deep scans with repository MCP and WebMCP surface review"
-    )
-  })
-
   it("differentiates Launch Assurance by its enforced limits and overage", () => {
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(
       "Overage at $0.15/min with a user-set spend limit"

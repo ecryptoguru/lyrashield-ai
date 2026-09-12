@@ -2,9 +2,9 @@
  * Cloud plan definitions for LyraShield AI.
  *
  * Plans are ordered by tier: TRIAL < STARTER < PRO < LAUNCH_ASSURANCE < ENTERPRISE.
- * The three self-serve lines (STARTER, PRO, LAUNCH_ASSURANCE) form two product
- * lines: SCAN (Starter, Pro) and LAUNCH ASSURANCE (the premium evidence/verdict
- * line). ENTERPRISE is contact-led (no self-serve checkout).
+ * The self-serve plans differ by included minutes, target caps, scan modes,
+ * and capped overage. Evidence and verdict features are shared across plans.
+ * ENTERPRISE is contact-led (no self-serve checkout).
  *
  * All prices are in USD and INR. Monthly and annual prices are listed
  * separately so the billing layer can compute prorations and upgrades
@@ -96,7 +96,6 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       "850 agent-minutes / month",
       "Up to 15 targets",
       "Deep / Custom scans enabled",
-      "Deep scans with repository MCP and WebMCP surface review",
       "CLI, GitHub Action and MCP server access",
       "Priority email support",
     ],
