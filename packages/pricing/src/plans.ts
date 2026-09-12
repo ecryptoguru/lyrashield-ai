@@ -96,6 +96,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       "850 agent-minutes / month",
       "Up to 15 targets",
       "Deep / Custom scans enabled",
+      "Deep scans plus agent-surface review for apps that expose MCP or WebMCP tools.",
       "CLI, GitHub Action and MCP server access",
       "Integrations (GitHub, Slack, Jira)",
       "Priority email support",
