@@ -2,6 +2,7 @@
 title: Secure a Devin CLI Built App Before Launch
 description: A release review checklist for Devin CLI apps covering data exposure, MCP config, secrets, dependencies, and independent launch evidence before you ship.
 pubDate: "2026-08-07"
+updatedDate: 2026-09-12
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -32,9 +33,9 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 
 ## 1. Review what data entered Devin CLI
 
-Devin CLI runs in the terminal and can read files, run commands, and call connected tools. List the repositories, files, prompts, terminal output, database samples, and logs that developers exposed to it. Classify each item using the same rules that govern other development services. The [Cognition documentation](https://cognition.ai) covers agent capabilities and data flow for the Devin product family. Confirm the current settings before relying on any default.
+Devin CLI runs in the terminal and can read files, run commands, and call connected tools. List the repositories, files, prompts, terminal output, database samples, and logs that developers exposed to it. Classify each item using the same rules that govern other development services. The [Devin CLI MCP configuration documentation](https://docs.devin.ai/cli/extensibility/mcp/configuration) documents server registration, authentication, and tool naming for the CLI. Confirm the current settings before relying on any default.
 
-That is a data handling review, not an application security result. Do not pipe production secrets, customer records, private keys, or unrestricted database exports into a terminal merely because the agent runs locally. Keep live secrets outside the working tree. Use placeholders and synthetic fixtures for examples. If a credential may have entered any unapproved path, rotate it and check use logs. The [OWASP guide to sensitive data exposure](https://owasp.org/www-community/Improper_Error_Handling) applies to any data that crosses a trust boundary, including a local terminal session.
+That is a data handling review, not an application security result. Do not pipe production secrets, customer records, private keys, or unrestricted database exports into a terminal merely because the agent runs locally. Keep live secrets outside the working tree. Use placeholders and synthetic fixtures for examples. If a credential may have entered any unapproved path, rotate it and check use logs. The [OWASP secrets management guidance](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html) applies to any data that crosses a trust boundary, including a local terminal session.
 
 ## 2. Protect the gitignored MCP config and tool namespace
 
@@ -50,7 +51,7 @@ Keep live secrets outside the working tree using environment variables or a secr
 
 ## 4. Verify the resolved dependencies
 
-Devin CLI may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm security best practices](https://nodejs.org/learn) cover lockfile integrity for Node projects.
+Devin CLI may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm package-lock documentation](https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json) describes the resolved dependency tree for Node projects.
 
 Review install scripts because a postinstall hook can run arbitrary code at install time. Inspect transitive changes because a new direct dependency can pull in dozens of unseen packages. Pin references to exact versions or hashes where practical. A dependency that passes an advisory check today can drift when a maintainer publishes a new version, so record the resolved versions and recheck before each release. If the agent added a package you do not recognize, read its documentation and source listing before trusting it with network or file access, because a popular name does not guarantee a safe implementation.
 
@@ -64,4 +65,8 @@ Run negative cases, not just the happy path. A test that confirms a feature work
 
 Devin CLI accelerates implementation as a Cognition command line agent. LyraShield AI provides release assurance for AI built apps through a loop of target, review, evidence, fix, retest, and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when, and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
-As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request, which keeps the check fast enough to run on every push. [Create an account](https://lyrashieldai.com) to start a release review, or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Codex security workflow](/blog/codex-security-workflow) covers a related command line agent if your team uses multiple tools.
+LyraShield AI is in open beta with open registration. Its runner-local GitHub Action provides an advisory diff gate and SARIF output; it does not create hosted scan or retest evidence. A recorded scan keeps detected findings separate from independently verified results. Approval-gated fix proposals still require review, and missing verification must remain visible in the release decision.
+
+Use the [Devin CLI integration guide](/docs/integrations/devin-cli) for the current setup, then read the [Devin CLI MCP workflow](/blog/devin-cli-mcp-security-workflow). Keep configuration instructions in that maintained guide rather than copying credentials between articles. Record the client version, enabled tools, selected workspace, and observed connection result. A successful tool listing demonstrates connectivity, not permission to scan every target or execute every write.
+
+[Create an account](https://app.lyrashieldai.com/sign-up) to start a release review, or use the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Codex security workflow](/blog/codex-security-workflow) covers a related terminal agent if your team uses multiple clients.

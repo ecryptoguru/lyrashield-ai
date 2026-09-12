@@ -1,8 +1,8 @@
 ---
-title: "Human Review and Threat Modeling for Vibe Coding"
-description: "Run a lightweight threat-model review for an AI-built app by mapping real data flows, assigning owners, and turning decisions into testable release checks."
+title: "Vibe Coding Threat Model: Template and Review Checklist"
+description: "Build a threat model for your AI-built app with a worked example, reusable risk table, named owners, and release checks tied to evidence."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-09-12
 author: lyrashield-team
 tags:
   - vibe-coding-security
@@ -24,8 +24,6 @@ faq:
 
 **Direct answer:** Draw the app's users, data stores, external services, trust boundaries, and privileged actions. Ask what can go wrong at each boundary, choose an owner and response for each material threat, then turn the response into a test or release gate. Human review means accountable reasoning and recorded evidence, not an approval click.
 
-An app built through short prompts can become useful before anyone can explain how a request reaches the database or which service can act in production. That speed leaves a practical problem: reviewers see files and screens, but not the system's trust assumptions.
-
 A lightweight threat model makes those assumptions discussable. It does not require a large compliance template. Start with the running system, its deployment configuration, and its real permissions. The inventory should fit the [complete vibe coding security model](/blog/vibe-coding-security-guide), while staying specific enough that one person can own each decision.
 
 ## Prepare facts before the session
@@ -35,8 +33,6 @@ Collect a short, current inventory. Include entry points, authentication, user r
 Bring one ordinary user journey and one privileged journey. For a document application, the ordinary journey might be "member opens a document." The privileged journey might be "owner exports all workspace records." If an agent can call tools, include the content it reads and the actions those tools permit.
 
 Record uncertainty instead of filling gaps with guesses. "Worker network policy unknown" is a useful review item. A polished but invented architecture diagram is not.
-
-Choose a facilitator to keep the model moving, a note owner to preserve decisions, and an accountable risk owner. On a two-person team, one person can fill more than one role, but the acceptance decision still needs a named human.
 
 ## Draw the smallest useful data-flow model
 
@@ -77,6 +73,22 @@ This is a reasoning aid, not an exploit recipe. Use synthetic tenants and a disp
 
 [OWASP's Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html) describes a repeatable process that models the system, identifies threats, selects responses, and reviews the result. A checklist can support that process, but the team still has to decide which threats matter for this architecture.
 
+## Copy this threat-model review template
+
+Use one row per concrete failure path. Replace the example values with facts from your app; blank evidence means the control has not been demonstrated.
+
+| Field | Example for a workspace export |
+| --- | --- |
+| Flow and boundary | Browser to export API to worker to private storage |
+| Asset and actor | Workspace documents; signed-in non-member |
+| Threat | Changing a workspace ID exposes another tenant's export |
+| Control | Server checks current membership before queueing and download |
+| Negative test | Synthetic Account B requests Account A's export |
+| Evidence | Test result, commit, environment, and redacted audit reference |
+| Owner and decision | Named reviewer; block release until denial is demonstrated |
+
+Review the download as well as job creation. A protected export API can still produce a publicly readable file. The [secure report-sharing guide](/blog/share-security-report-safely) covers the resulting access boundary.
+
 ## Rank consequences without fake precision
 
 Not every idea deserves a release block. Estimate impact and plausibility using a small scale the team understands, then record why. Avoid calculated scores whose inputs are guesses. A production deletion path and a cosmetic preference leak should not compete on an unexplained decimal.
@@ -92,8 +104,6 @@ Keep deferred threats in a visible register with an owner and review date. "Acce
 Each material threat needs one of four clear decisions: reduce it, avoid the risky design, transfer a defined responsibility, or accept the residual risk. Translate reduction into a change someone can implement and a check someone else can inspect.
 
 For authorization, evidence might be a cross-tenant integration test using two synthetic accounts. For recovery, it might be a successful isolated restore with integrity checks. For an agent tool, it might be a denied out-of-scope call and a log entry that excludes sensitive arguments. For a provider webhook, it might be signature validation plus replay rejection.
-
-Name the control owner and the evidence reviewer. "Engineering" is often too broad. If no one can say who must act when a gate fails, the response is incomplete.
 
 Do not let the same generated explanation count as design, implementation, and verification. The assistant can help enumerate paths or draft tests. A human still decides the system contract, reviews the actual change, and accepts the remaining risk. [NIST SSDF 1.1](https://csrc.nist.gov/pubs/sp/800/218/final) includes risk modeling during design and review across development, which supports treating the model as working engineering material.
 

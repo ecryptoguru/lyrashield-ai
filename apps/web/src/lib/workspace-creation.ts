@@ -17,10 +17,8 @@ export interface CreatedWorkspace {
 /**
  * Create a workspace with its owner membership, default policy, and trial.
  *
- * Shared by POST /api/workspaces and first-run onboarding (W2-01): the
- * onboarding flow must reuse the same workspace-creation service so a default
- * workspace is created exactly once with the same policy and trial semantics
- * as an explicit creation.
+ * Used by POST /api/workspaces so every explicit creation receives the same
+ * default policy and trial semantics.
  */
 export async function createWorkspaceWithTrial(input: {
   userId: string
@@ -97,51 +95,4 @@ export async function createWorkspaceWithTrial(input: {
     trialAlreadyUsed: trial.alreadyUsed,
     trialEndsAt: trial.trialEndsAt?.toISOString() ?? null,
   }
-}
-
-/**
- * Reuse an authorized active workspace for first-run onboarding, or create a
- * default one exactly once (W2-01).
- *
- * Concurrent tabs and retries converge through the workspace slug's unique
- * constraint: the losing creation re-reads memberships instead of creating a
- * second workspace or trial.
- */
-export async function ensureOnboardingWorkspace(
-  userId: string,
-  displayName: string | null | undefined
-): Promise<string> {
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId, status: "active", workspace: { deletedAt: null } },
-    orderBy: { createdAt: "asc" },
-    select: { workspaceId: true },
-  })
-  if (memberships.length > 0) return memberships[0]!.workspaceId
-
-  const name = displayName?.trim() ? `${displayName.trim()}'s workspace` : "My workspace"
-  try {
-    const workspace = await createWorkspaceWithTrial({ userId, name, mode: "VIBE" })
-    return workspace.id
-  } catch (error) {
-    // A concurrent tab created the default workspace first: adopt it rather
-    // than duplicating the workspace or trial.
-    if (isPrismaUniqueError(error)) {
-      const adopted = await prisma.workspaceMember.findFirst({
-        where: { userId, status: "active", workspace: { deletedAt: null } },
-        orderBy: { createdAt: "asc" },
-        select: { workspaceId: true },
-      })
-      if (adopted) return adopted.workspaceId
-    }
-    throw error
-  }
-}
-
-function isPrismaUniqueError(error: unknown): error is { code: string } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code: unknown }).code === "P2002"
-  )
 }

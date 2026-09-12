@@ -1,7 +1,7 @@
 import { cache } from "react"
 import { revalidateTag, unstable_cache } from "next/cache"
 import { cookies } from "next/headers"
-import { listFindings, prisma } from "@lyrashield/db"
+import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
@@ -62,22 +62,10 @@ export const getCachedWorkspaces = cache(async (userId: string) => {
   return workspaces
 })
 
-export const getCachedProjects = cache(async (workspaceId: string) => {
-  return prisma.project.findMany({
-    where: { workspaceId },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  })
-})
-
 export const getCachedOnboardingState = cache(async (userId: string) => {
   return prisma.onboardingState.findUnique({
     where: { userId },
   })
-})
-
-export const getCachedFindings = cache(async (workspaceId: string) => {
-  return listFindings({ workspaceId })
 })
 
 export const getCachedPendingApprovals = cache(
