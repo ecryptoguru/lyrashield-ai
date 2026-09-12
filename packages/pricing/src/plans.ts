@@ -46,7 +46,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
   {
     id: "TRIAL",
     name: "Trial",
-    agentMinutes: 100,
+    agentMinutes: 60,
     targetCaps: 3,
     deepAllowed: false,
     selfServe: false,
@@ -55,7 +55,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       inr: { monthly: 0, annual: 0 },
     },
     features: [
-      "100 agent-minutes (one-time)",
+      "60 agent-minutes (one-time)",
       "Up to 3 targets",
       "Safe / Quick / Standard scans",
       "Community support",

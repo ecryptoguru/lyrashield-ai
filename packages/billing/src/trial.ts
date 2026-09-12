@@ -1,8 +1,8 @@
 /**
  * Trial lifecycle management — account-owned.
  *
- * A trial is a once-per-account claim: 100 agent-minutes and up to 3 targets
- * for 14 days. The workspace where the trial is started keeps
+ * A trial is a once-per-account claim: 60 agent-minutes and up to 3 targets
+ * for 7 days. The workspace where the trial is started keeps
  * `trialStartedAt` as the trial's display/lock state, but the minutes belong
  * to the claiming account — joining another workspace does not grant a second
  * trial and the trial pool follows the account.
@@ -15,10 +15,10 @@ import { resolveAccountBilling } from "./account"
 import { getUsageBalance } from "./usage/balance"
 
 /** Trial duration in days. */
-export const TRIAL_DURATION_DAYS = 14
+export const TRIAL_DURATION_DAYS = 7
 
 /** Trial agent-minutes (one-time grant). */
-export const TRIAL_AGENT_MINUTES = 100
+export const TRIAL_AGENT_MINUTES = 60
 
 /** Trial target cap. */
 export const TRIAL_TARGET_CAP = 3
@@ -76,7 +76,7 @@ export interface TrialState {
 /**
  * Start a trial on a workspace for an account.
  *
- * Sets trialStartedAt on the Workspace (trial attribution) and grants 100
+ * Sets trialStartedAt on the Workspace (trial attribution) and grants 60
  * one-time agent-minutes to the ACCOUNT. Idempotent: if the account already
  * claimed a trial (anywhere), this is a no-op.
  * A caller creating a workspace may supply its existing scoped transaction so

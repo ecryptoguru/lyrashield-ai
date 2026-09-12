@@ -92,7 +92,7 @@ export function BillingActions({
             Start your free trial
           </h3>
           <p className="text-sm text-muted-foreground">
-            100 one-time agent-minutes for 14 days. Deep and Custom scans are not included. No
+            60 one-time agent-minutes for 7 days. Deep and Custom scans are not included. No
             purchase required.
           </p>
           <button

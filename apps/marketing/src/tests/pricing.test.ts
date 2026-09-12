@@ -16,6 +16,12 @@ describe("pricing page", () => {
   })
 
   it("matches the canonical repriced catalog (WP1, founder-confirmed 2026-08-29; allowances repacked 2026-09-13)", () => {
+    // TRIAL — reduced 2026-09-13: 7 days, 60 one-time minutes
+    expect(CLOUD_PLAN_MAP.TRIAL.agentMinutes).toBe(60)
+    expect(CLOUD_PLAN_MAP.TRIAL.targetCaps).toBe(3)
+    expect(CLOUD_PLAN_MAP.TRIAL.deepAllowed).toBe(false)
+    expect(CLOUD_PLAN_MAP.TRIAL.price.usd).toEqual({ monthly: 0, annual: 0 })
+
     // SCAN line
     expect(CLOUD_PLAN_MAP.STARTER.price.usd).toEqual({ monthly: 29, annual: 295 })
     expect(CLOUD_PLAN_MAP.STARTER.agentMinutes).toBe(210)

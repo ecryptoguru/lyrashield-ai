@@ -116,7 +116,7 @@ function configureDatabase(
                     currentPeriodEnd: null,
                     canceledAt: null,
                     trialEndsAt: new Date(
-                      opts.trial.startedAt.getTime() + 14 * 24 * 60 * 60 * 1000
+                      opts.trial.startedAt.getTime() + 7 * 24 * 60 * 60 * 1000
                     ),
                     spendLimitCents: null,
                     graceUsedMs: 0,
@@ -429,7 +429,7 @@ describe("recordAgentMinutes billing-outcome rules (founder-confirmed 2026-08-29
     const trialStart = new Date("2026-08-01T00:00:00.000Z")
     // Trial accounts always carry a provider="trial" billing row — the
     // spillover resolver must still read User.trialStartedAt for the cycle.
-    configureDatabase(100, [], { trial: { startedAt: trialStart } })
+    configureDatabase(60, [], { trial: { startedAt: trialStart } })
     const settleOverage = vi.fn()
 
     const result = await recordAgentMinutes("ws_1", "trial_scan", 10 * 60_000, {

@@ -12,7 +12,7 @@ const { tx, withWorkspaceRLSMock } = vi.hoisted(() => ({
 }))
 vi.mock("@lyrashield/db", () => ({ prisma: tx, withWorkspaceRLS: withWorkspaceRLSMock }))
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn() } }))
-import { startTrial, isTrialAvailable } from "./trial"
+import { startTrial, isTrialAvailable, TRIAL_AGENT_MINUTES, TRIAL_DURATION_DAYS } from "./trial"
 
 beforeEach(() => {
   vi.resetAllMocks()
@@ -29,6 +29,10 @@ beforeEach(() => {
 })
 
 describe("startTrial", () => {
+  it("exposes the founder-confirmed trial terms (7 days, 60 one-time minutes)", () => {
+    expect(TRIAL_DURATION_DAYS).toBe(7)
+    expect(TRIAL_AGENT_MINUTES).toBe(60)
+  })
   it("does not infer trial ownership from a coworker's legacy workspace trial", async () => {
     tx.workspace.findFirst.mockResolvedValue({ id: "legacy" })
     expect(await isTrialAvailable("ws", "user")).toBe(true)
@@ -52,7 +56,7 @@ describe("startTrial", () => {
       }),
     })
     expect(tx.usageRecord.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ quantity: 100, kind: "trial_grant", accountId: "user" }),
+      data: expect.objectContaining({ quantity: 60, kind: "trial_grant", accountId: "user" }),
     })
   })
   it("reuses the creator transaction instead of committing a second transaction", async () => {

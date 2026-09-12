@@ -18,7 +18,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/pricing", () => ({
   CLOUD_PLAN_MAP: {
     FREE: { id: "FREE", deepAllowed: false, agentMinutes: 0, targetCaps: 3 },
-    TRIAL: { id: "TRIAL", deepAllowed: false, agentMinutes: 100, targetCaps: 3 },
+    TRIAL: { id: "TRIAL", deepAllowed: false, agentMinutes: 60, targetCaps: 3 },
     STARTER: { id: "STARTER", deepAllowed: false, agentMinutes: 210, targetCaps: 5 },
     PRO: { id: "PRO", deepAllowed: true, agentMinutes: 850, targetCaps: 15 },
     LAUNCH_ASSURANCE: {

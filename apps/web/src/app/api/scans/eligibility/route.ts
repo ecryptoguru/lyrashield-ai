@@ -220,7 +220,7 @@ export async function GET(request: Request) {
       message: entitlement.allowed
         ? null
         : trialAvailable
-          ? "Start your 14-day trial to receive 100 agent-minutes."
+          ? "Start your 7-day trial to receive 60 agent-minutes."
           : (entitlement.message ?? "Scan not allowed"),
       plan: entitlement.plan,
       isTrial: entitlement.isTrial,
