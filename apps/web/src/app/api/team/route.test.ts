@@ -2,15 +2,31 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const sendNotification = vi.fn()
 const checkInvitationCreateRateLimit = vi.fn()
+const { otherAgencyWorkspace } = vi.hoisted(() => ({ otherAgencyWorkspace: vi.fn() }))
 
-vi.mock("@lyrashield/db", () => ({
-  prisma: {
-    workspaceMember: { findFirst: vi.fn(), findMany: vi.fn() },
-    invitation: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
+vi.mock("@lyrashield/db", () => {
+  const prisma = {
+    workspaceMember: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    invitation: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), count: vi.fn() },
     auditLog: { create: vi.fn() },
     user: { findMany: vi.fn() },
-    workspace: { findUnique: vi.fn() },
-  },
+    workspace: { findUnique: vi.fn(), update: vi.fn() },
+    $executeRaw: vi.fn(),
+  }
+  return {
+    prisma,
+    withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: typeof prisma) => unknown) =>
+      fn(prisma)
+    ),
+    lockWorkspaceMembership: vi.fn(),
+    getSystemPrisma: () => ({
+      workspace: { findFirst: otherAgencyWorkspace },
+    }),
+  }
+})
+
+vi.mock("@lyrashield/billing", () => ({
+  resolveAccountBilling: vi.fn().mockResolvedValue({ effectivePlan: "LAUNCH_ASSURANCE" }),
 }))
 const requireWorkspaceAccess = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
@@ -36,6 +52,7 @@ vi.mock("../../../lib/rate-limit", () => ({
 }))
 
 import { prisma } from "@lyrashield/db"
+import { resolveAccountBilling } from "@lyrashield/billing"
 import { GET, POST } from "./route"
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
@@ -50,13 +67,21 @@ function inviteRequest() {
 describe("POST /api/team", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockPrisma.workspaceMember.findFirst.mockResolvedValue(null)
+    mockPrisma.workspaceMember.findFirst.mockImplementation(async ({ where }) =>
+      where.role === "OWNER" ? { id: "owner-1" } : null
+    )
+    mockPrisma.workspaceMember.count.mockResolvedValue(1)
     mockPrisma.invitation.findFirst.mockResolvedValue(null)
+    mockPrisma.invitation.count.mockResolvedValue(0)
     mockPrisma.invitation.create.mockImplementation(async ({ data }) => ({
       id: "invitation-1",
       ...data,
     }))
-    mockPrisma.workspace.findUnique.mockResolvedValue({ name: "Acme Security" })
+    mockPrisma.workspace.findUnique.mockResolvedValue({
+      name: "Acme Security",
+      agencySponsorAccountId: null,
+    })
+    otherAgencyWorkspace.mockResolvedValue(null)
     checkInvitationCreateRateLimit.mockResolvedValue({
       limited: false,
       remaining: 9,
@@ -129,6 +154,34 @@ describe("POST /api/team", () => {
     expect(checkInvitationCreateRateLimit).toHaveBeenCalledWith("ws-1")
     expect(mockPrisma.invitation.create).not.toHaveBeenCalled()
     expect(sendNotification).not.toHaveBeenCalled()
+  })
+
+  it("keeps Starter and Pro workspaces single-member", async () => {
+    for (const plan of ["STARTER", "PRO"]) {
+      vi.mocked(resolveAccountBilling).mockResolvedValueOnce({ effectivePlan: plan } as never)
+      const response = await POST(inviteRequest())
+      expect(response.status).toBe(403)
+      expect((await response.json()).error.code).toBe("AGENCY_PLAN_REQUIRED")
+    }
+    expect(mockPrisma.invitation.create).not.toHaveBeenCalled()
+    expect(sendNotification).not.toHaveBeenCalled()
+  })
+
+  it("reserves all five Agency seats across active members and pending invites", async () => {
+    mockPrisma.workspaceMember.count.mockResolvedValue(4)
+    mockPrisma.invitation.count.mockResolvedValue(1)
+    const response = await POST(inviteRequest())
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe("TEAM_SEAT_LIMIT")
+    expect(mockPrisma.invitation.create).not.toHaveBeenCalled()
+  })
+
+  it("allows the buyer to sponsor only one Agency workspace", async () => {
+    otherAgencyWorkspace.mockResolvedValue({ id: "other-ws" })
+    const response = await POST(inviteRequest())
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe("AGENCY_TEAM_EXISTS")
+    expect(mockPrisma.invitation.create).not.toHaveBeenCalled()
   })
 })
 

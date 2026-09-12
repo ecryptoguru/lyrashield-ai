@@ -32,6 +32,8 @@ export interface CloudPlan {
   agentMinutes: number
   /** Maximum protected targets; 0 represents a custom Enterprise limit. */
   targetCaps: number
+  /** Active workspace members; 0 represents a custom Enterprise limit. */
+  memberSeats: number
   /** Whether Deep/Custom scans are allowed on this plan. */
   deepAllowed: boolean
   /** Whether this plan has a self-serve checkout flow. */
@@ -48,6 +50,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     name: "Trial",
     agentMinutes: 60,
     targetCaps: 3,
+    memberSeats: 1,
     deepAllowed: false,
     selfServe: false,
     price: {
@@ -66,6 +69,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     name: "Starter",
     agentMinutes: 210,
     targetCaps: 5,
+    memberSeats: 1,
     deepAllowed: false,
     selfServe: true,
     price: {
@@ -75,6 +79,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     features: [
       "210 agent-minutes / month",
       "Up to 5 targets",
+      "1 workspace member",
       "Safe / Quick / Standard scans",
       "CLI, GitHub Action and MCP server access",
       "Email support",
@@ -86,6 +91,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     name: "Pro",
     agentMinutes: 850,
     targetCaps: 15,
+    memberSeats: 1,
     deepAllowed: true,
     selfServe: true,
     price: {
@@ -95,6 +101,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     features: [
       "850 agent-minutes / month",
       "Up to 15 targets",
+      "1 workspace member",
       "Deep / Custom scans enabled",
       "CLI, GitHub Action and MCP server access",
       "Priority email support",
@@ -102,9 +109,10 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
   },
   {
     id: "LAUNCH_ASSURANCE",
-    name: "Launch Assurance",
+    name: "Agency",
     agentMinutes: 4500,
     targetCaps: 50,
+    memberSeats: 5,
     deepAllowed: true,
     selfServe: true,
     price: {
@@ -114,6 +122,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     features: [
       "4,500 agent-minutes / month",
       "Up to 50 targets",
+      "Up to 5 workspace members sharing one minute pool",
       "Deep / Custom scans enabled",
       "Overage at $0.15/min with a user-set spend limit",
       "CLI, GitHub Action and MCP server access",
@@ -125,6 +134,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     name: "Enterprise",
     agentMinutes: 0,
     targetCaps: 0,
+    memberSeats: 0,
     deepAllowed: true,
     selfServe: false,
     price: {
@@ -135,7 +145,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       "Custom agent-minute pool",
       "Custom target limits",
       "Deep / Custom scans enabled",
-      "Everything in Launch Assurance",
+      "Everything in Agency",
       "Custom integrations",
       "SSO / SAML — on request",
       "Multi-workspace management — on request",

@@ -19,6 +19,11 @@ vi.mock("@lyrashield/auth", () => ({
 vi.mock("@lyrashield/billing", () => ({
   evaluateScanEntitlement: vi.fn(),
   isTrialAvailable: vi.fn(),
+  resolveWorkspaceScanSponsor: vi.fn(async (_workspaceId: string, actorId: string) => ({
+    accountId: actorId,
+    agency: false,
+    agencyActive: false,
+  })),
   // Sponsor account billing is the plan source now; the tests' existing
   // `workspace.findUnique → { plan }` fixtures stand in for it.
   resolveAccountBilling: vi.fn(async () => {

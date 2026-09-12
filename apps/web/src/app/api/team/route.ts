@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
-import { prisma, withWorkspaceRLS, lockWorkspaceMembership } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS, lockWorkspaceMembership, getSystemPrisma } from "@lyrashield/db"
 import { requirePermission, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { PERMISSIONS, canGrantRole, hasPermission } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -10,6 +10,8 @@ import { z } from "zod"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
 import { checkInvitationCreateRateLimit } from "../../../lib/rate-limit"
+import { resolveAccountBilling } from "@lyrashield/billing"
+import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
 
 const InviteMemberSchema = z.object({
   workspaceId: z.string().min(1),
@@ -69,6 +71,18 @@ async function changeMember(
     if (!member) return apiError("NOT_FOUND", "Member not found", 404)
     if (!canGrantRole(actor.role, member.role) || (role && !canGrantRole(actor.role, role))) {
       return apiError("FORBIDDEN", "You cannot manage a role equal to or higher than your own", 403)
+    }
+    if (member.role === "OWNER" && role !== "OWNER") {
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { agencySponsorAccountId: true },
+      })
+      if (workspace?.agencySponsorAccountId === member.userId)
+        return apiError(
+          "AGENCY_SPONSOR",
+          "The Agency buyer cannot leave or lose ownership while this workspace uses their minutes",
+          409
+        )
     }
     if (member.role === "OWNER" && role !== "OWNER") {
       const owners = await tx.workspaceMember.count({
@@ -232,42 +246,101 @@ async function post(request: Request) {
       )
     }
 
-    const [existingMember, existingInvitation, workspaceRow] = await Promise.all([
-      prisma.workspaceMember.findFirst({
-        where: { workspaceId, invitedEmail: email, status: "active" },
-      }),
-      prisma.invitation.findFirst({
-        where: { workspaceId, email, status: "pending" },
-      }),
-      prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { name: true },
-      }),
-    ])
-
-    if (existingMember || existingInvitation) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: "ALREADY_INVITED", message: "This email has already been invited" },
-        },
-        { status: 409 }
-      )
-    }
-
-    const token = crypto.randomUUID()
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-
-    const invitation = await prisma.invitation.create({
-      data: {
-        workspaceId,
-        email,
-        role,
-        token,
-        invitedById: session.userId,
-        expiresAt,
-      },
+    const currentWorkspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { agencySponsorAccountId: true },
     })
+    if (!currentWorkspace) return apiError("WORKSPACE_NOT_FOUND", "Workspace not found", 404)
+    const sponsorAccountId = currentWorkspace.agencySponsorAccountId ?? session.userId
+    const reserved = await withWorkspaceRLS(
+      workspaceId,
+      async (tx) => {
+        await lockWorkspaceMembership(tx, workspaceId)
+        const workspaceRow = await tx.workspace.findUnique({
+          where: { id: workspaceId },
+          select: { name: true, agencySponsorAccountId: true },
+        })
+        if (
+          !workspaceRow ||
+          workspaceRow.agencySponsorAccountId !== currentWorkspace.agencySponsorAccountId
+        ) {
+          return apiError("TEAM_STATE_CHANGED", "Team settings changed. Please retry.", 409)
+        }
+        const owner = await tx.workspaceMember.findFirst({
+          where: { workspaceId, userId: sponsorAccountId, status: "active", role: "OWNER" },
+          select: { id: true },
+        })
+        const billing = owner ? await resolveAccountBilling(sponsorAccountId, tx) : null
+        if (billing?.effectivePlan !== "LAUNCH_ASSURANCE") {
+          return apiError(
+            "AGENCY_PLAN_REQUIRED",
+            "An active Agency subscription is required to invite team members.",
+            403
+          )
+        }
+        if (!workspaceRow.agencySponsorAccountId) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`agency-sponsor:${sponsorAccountId}`}, 0))`
+          const otherTeam = await getSystemPrisma().workspace.findFirst({
+            where: {
+              agencySponsorAccountId: sponsorAccountId,
+              deletedAt: null,
+              id: { not: workspaceId },
+            },
+            select: { id: true },
+          })
+          if (otherTeam)
+            return apiError(
+              "AGENCY_TEAM_EXISTS",
+              "This Agency subscription already sponsors another workspace.",
+              409
+            )
+        }
+
+        const [existingMember, existingInvitation, activeCount, pendingCount] = await Promise.all([
+          tx.workspaceMember.findFirst({
+            where: { workspaceId, invitedEmail: email, status: "active" },
+          }),
+          tx.invitation.findFirst({
+            where: { workspaceId, email, status: "pending", expiresAt: { gt: new Date() } },
+          }),
+          tx.workspaceMember.count({ where: { workspaceId, status: "active" } }),
+          tx.invitation.count({
+            where: { workspaceId, status: "pending", expiresAt: { gt: new Date() } },
+          }),
+        ])
+        if (existingMember || existingInvitation) {
+          return apiError("ALREADY_INVITED", "This email has already been invited", 409)
+        }
+        if (activeCount + pendingCount >= CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.memberSeats) {
+          return apiError(
+            "TEAM_SEAT_LIMIT",
+            "Agency includes up to five members, including the owner. Revoke an invitation or remove a member to free a seat.",
+            409
+          )
+        }
+        if (!workspaceRow.agencySponsorAccountId) {
+          await tx.workspace.update({
+            where: { id: workspaceId },
+            data: { agencySponsorAccountId: sponsorAccountId },
+          })
+        }
+        const token = crypto.randomUUID()
+        const invitation = await tx.invitation.create({
+          data: {
+            workspaceId,
+            email,
+            role,
+            token,
+            invitedById: session.userId,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          },
+        })
+        return { invitation, token, workspaceName: workspaceRow.name }
+      },
+      { accountId: sponsorAccountId }
+    )
+    if (reserved instanceof Response) return reserved
+    const { invitation, token, workspaceName } = reserved
 
     await prisma.auditLog.create({
       data: {
@@ -289,7 +362,7 @@ async function post(request: Request) {
     const acceptUrl = inviteAcceptUrl(token)
     const emailSent = await sendInvitationEmail({
       email,
-      workspaceName: workspaceRow?.name ?? null,
+      workspaceName,
       role,
       acceptUrl,
     })
@@ -343,7 +416,7 @@ export async function GET(request: Request) {
         orderBy: { createdAt: "asc" },
       }),
       prisma.invitation.findMany({
-        where: { workspaceId, status: "pending" },
+        where: { workspaceId, status: "pending", expiresAt: { gt: new Date() } },
         orderBy: { createdAt: "desc" },
       }),
     ])

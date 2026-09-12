@@ -8,6 +8,7 @@ import {
   getGraceState,
   isTrialAvailable,
   resolveAccountBilling,
+  resolveWorkspaceScanSponsor,
   CLOUD_PLAN_MAP,
 } from "@lyrashield/billing"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
@@ -78,6 +79,7 @@ export default async function BillingPage({
     resolveAccountBilling(session.userId),
     canManageBilling ? isTrialAvailable(workspaceId, session.userId) : Promise.resolve(false),
   ])
+  const teamSponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
 
   const [balance, trialState, graceState] = await Promise.all([
     getUsageBalance(session.userId, { billing: billingAccount }),
@@ -101,6 +103,12 @@ export default async function BillingPage({
       />
 
       <div className="space-y-6">
+        {teamSponsor?.agency && teamSponsor.accountId !== session.userId && (
+          <p role="status" className="rounded-md border p-4 text-sm text-muted-foreground">
+            This page shows your personal billing. Scans in this Agency workspace draw from the
+            buyer&apos;s shared minute pool.
+          </p>
+        )}
         <BillingReturnNotice
           checkout={returns.checkout}
           topup={returns.topup}

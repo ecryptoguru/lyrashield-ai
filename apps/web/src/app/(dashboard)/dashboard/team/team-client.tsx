@@ -80,6 +80,8 @@ export function TeamClient({
   initialData,
   actorRole = "VIEWER",
   canManage = false,
+  canInvitePlan = false,
+  seatLimit = 1,
   canRemove = false,
   canUpdateRole = false,
 }: {
@@ -87,6 +89,8 @@ export function TeamClient({
   initialData?: { members: Member[]; invitations: Invitation[] }
   actorRole?: MemberRole
   canManage?: boolean
+  canInvitePlan?: boolean
+  seatLimit?: number
   canRemove?: boolean
   canUpdateRole?: boolean
 }) {
@@ -100,6 +104,7 @@ export function TeamClient({
   const [error, setError] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const seatsUsed = members.length + invitations.length
   const roles: MemberRole[] = [
     "OWNER",
     "ADMIN",
@@ -184,9 +189,13 @@ export function TeamClient({
     <div>
       <PageHeader
         title="Team Members"
-        description="Every active member can run scans, manage findings, create reports, and open fix PRs. Roles control administrative access."
+        description={
+          canInvitePlan
+            ? "Agency members share the buyer's minute pool. Roles control workspace access."
+            : "Starter and Pro include one workspace member. Upgrade to Agency for a five-member team."
+        }
         action={
-          canManage ? (
+          canManage && canInvitePlan && seatsUsed < seatLimit ? (
             <Button onClick={() => setShowInvite(!showInvite)}>
               <UserPlus className="h-4 w-4" aria-hidden="true" />
               Invite Member
@@ -194,6 +203,10 @@ export function TeamClient({
           ) : undefined
         }
       />
+      <p className="text-muted-foreground mb-4 text-sm">
+        {seatsUsed} of {seatLimit} workspace {seatLimit === 1 ? "seat" : "seats"} in use, including
+        pending invitations.
+      </p>
       {error && !showInvite && (
         <p role="alert" className="text-destructive mb-4 text-sm">
           {error}

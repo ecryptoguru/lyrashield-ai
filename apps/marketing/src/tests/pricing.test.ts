@@ -59,7 +59,7 @@ describe("pricing page", () => {
     expect(CLOUD_PLAN_MAP.TRIAL.features).not.toContain(SURFACES_LINE)
   })
 
-  it("differentiates Launch Assurance by its enforced limits and overage", () => {
+  it("differentiates Agency by its enforced limits and overage", () => {
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(
       "Overage at $0.15/min with a user-set spend limit"
     )
@@ -73,22 +73,12 @@ describe("pricing page", () => {
     expect(CLOUD_PLAN_MAP.STARTER.features).not.toContain("Evidence Vault access")
   })
 
-  it("discloses Local purchase availability instead of an unconditional buy CTA", () => {
-    // The page must ask the app for the visitor's provider-scoped availability
-    // before showing the buy link — never claim availability it has not
-    // confirmed.
-    expect(pricingPage).toContain("/api/billing/local-availability")
-    expect(pricingPage).toContain('data-local-availability="checking"')
-    expect(pricingPage).toContain('data-local-availability="available"')
-    expect(pricingPage).toContain('data-local-availability="unavailable"')
-    expect(pricingPage).toContain('data-local-availability="unknown"')
-    expect(pricingPage).toContain("Local licenses are not available for purchase yet.")
-    expect(pricingPage).toContain("Local purchase availability could not be confirmed.")
-    expect(pricingPage).toContain("create an account and run the Cloud trial")
-    // All non-default states start hidden — the default render is the
-    // "checking" state, not a buy CTA.
-    expect(pricingPage).toContain('data-local-availability="available" class="mt-6 hidden"')
-    // Prices are unchanged and still rendered for both currencies.
+  it("shows Local as a blurred, non-purchasable future launch", () => {
+    expect(pricingPage).toContain("Local is launching later")
+    expect(pricingPage).toContain('aria-hidden="true" inert')
+    expect(pricingPage).toContain("blur-sm")
+    expect(pricingPage).not.toContain("/api/billing/local-availability")
+    expect(pricingPage).not.toContain("/buy/local")
     expect(pricingPage).toContain("formatUSD(localLaunch.priceUsd)")
     expect(pricingPage).toContain("formatINR(localLaunch.priceInr!)")
   })

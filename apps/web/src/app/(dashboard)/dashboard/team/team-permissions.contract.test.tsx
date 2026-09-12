@@ -43,10 +43,17 @@ const baseProps = {
 }
 
 describe("team permission projection (W1-08)", () => {
-  it("discloses Option 3: every active member has operational access", () => {
+  it("keeps solo plans single-seat and offers an Agency team", () => {
     const html = renderToStaticMarkup(<TeamClient {...baseProps} />)
-    expect(html).toContain("Every active member can run scans")
-    expect(html).toContain("Roles control administrative access")
+    expect(html).toContain("Starter and Pro include one workspace member")
+    expect(html).toContain("1 of 1 workspace seat")
+    expect(html).not.toContain("Invite Member")
+    const agencyHtml = renderToStaticMarkup(
+      <TeamClient {...baseProps} canInvitePlan seatLimit={5} />
+    )
+    expect(agencyHtml).toContain("Agency members share the buyer")
+    expect(agencyHtml).toContain("1 of 5 workspace seats")
+    expect(agencyHtml).toContain("Invite Member")
     // The invite form is collapsed until canManage triggers it; its role
     // labels are part of the source contract.
     const source = readFileSync(join(__dirname, "team-client.tsx"), "utf8")

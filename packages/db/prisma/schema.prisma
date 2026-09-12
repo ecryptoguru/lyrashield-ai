@@ -539,6 +539,8 @@ model Workspace {
   graceCycleStart    DateTime?
   deepAllowed        Boolean   @default(false)
   trialStartedAt     DateTime?
+  // The Agency buyer whose account pool sponsors this workspace's team scans.
+  agencySponsorAccountId String?
 
   members              WorkspaceMember[]
   projects             Project[]
@@ -578,6 +580,8 @@ model Workspace {
   agentConnections     AgentConnection[]
   agentOperations      AgentOperation[]
   loopClosures         LoopClosure[]
+
+  @@index([agencySponsorAccountId])
 }
 
 model WorkspaceMember {
@@ -830,6 +834,8 @@ model Scan {
   finalizationStartedAt DateTime?
   sarifUri             String?
   createdById          String
+  // Immutable billing identity for this scan; NULL on legacy scans means createdById.
+  sponsorAccountId     String?
   deletedAt            DateTime?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
@@ -853,6 +859,7 @@ model Scan {
   @@index([workspaceId])
   @@index([projectId])
   @@index([targetId])
+  @@index([sponsorAccountId])
   @@index([status])
   @@index([createdAt])
   @@index([workspaceId, createdAt])

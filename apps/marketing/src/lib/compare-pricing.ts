@@ -9,4 +9,4 @@ const price = (planId: "STARTER" | "PRO" | "LAUNCH_ASSURANCE" | "ENTERPRISE") =>
 const trial = getPlan("TRIAL")
 if (!trial) throw new Error("Missing TRIAL plan in pricing catalog")
 
-export const COMPARISON_PRICING_LADDER = `Trial: ${trial.agentMinutes} one-time agent-minutes; Starter ${price("STARTER")}/month; Pro ${price("PRO")}/month; Launch Assurance ${price("LAUNCH_ASSURANCE")}/month; Enterprise from ${price("ENTERPRISE")}/month`
+export const COMPARISON_PRICING_LADDER = `Trial: ${trial.agentMinutes} one-time agent-minutes; Starter ${price("STARTER")}/month; Pro ${price("PRO")}/month; Agency ${price("LAUNCH_ASSURANCE")}/month; Enterprise from ${price("ENTERPRISE")}/month`

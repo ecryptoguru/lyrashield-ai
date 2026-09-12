@@ -13,7 +13,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/pricing", origin).toString()
 const title = "Pricing — Cloud & Local Plans | LyraShield AI"
 const description =
-  "Cloud plans from $29 a month with a free trial of 60 agent-minutes and no card. Prepaid minute packs, annual billing and local one-time licences."
+  "Cloud plans from $29 a month with a limited free trial of 60 agent-minutes and no card. Prepaid minute packs and annual billing are available; Local launches later."
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
@@ -25,11 +25,15 @@ const pricingFaqs = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes. Every new workspace starts with a 7-day free trial of 60 one-time agent-minutes and up to 3 targets, with no credit card required.",
+    a: "Yes. New accounts can claim one 7-day limited trial with 60 agent-minutes and up to 3 targets, with no credit card required. Agency is purchase-only.",
   },
   {
     q: "What happens if I run out of agent-minutes?",
-    a: "You can add a prepaid minute pack at any time. Packs are valid for 6 months and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Launch Assurance.",
+    a: "You can add a prepaid minute pack at any time. Packs are valid for 6 months and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Agency.",
+  },
+  {
+    q: "Can I trial Agency?",
+    a: "The free trial is a separate limited tier with 60 agent-minutes and three targets. Agency team seats and its 4,500-minute pool require a paid Agency subscription.",
   },
   {
     q: "Do prices include tax?",
@@ -39,9 +43,9 @@ const pricingFaqs = [
 
 const tierIntents: Record<string, string> = {
   STARTER: "For solo builders reviewing up to five targets with standard scans.",
-  PRO: "For teams that need Deep / Custom scans across up to 15 targets.",
+  PRO: "For solo builders who need Deep / Custom scans across up to 15 targets.",
   LAUNCH_ASSURANCE:
-    "For high-volume release programs that need up to 50 targets and capped overage.",
+    "For agencies reviewing up to 50 targets with one five-member team sharing the buyer's minute pool.",
   ENTERPRISE: "For organisations that need custom limits and a contact-led rollout.",
 }
 
@@ -106,7 +110,7 @@ const appUrl =
         Pricing
       </h1>
       <p class="mt-4 text-lg text-text-muted">
-        Cloud subscriptions and local licenses. Start with a free trial — no credit card required.
+        Cloud subscriptions and local licenses. Try the limited Trial tier free; Agency requires a paid subscription.
       </p>
     </div>
 
@@ -235,7 +239,7 @@ const appUrl =
                 href={`${appUrl}/sign-up?plan=${plan.id}`}
                 class="mt-6 block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg hover:bg-accent/90 transition-colors"
               >
-                Start with {plan.name}
+                {plan.id === "LAUNCH_ASSURANCE" ? "Choose Agency" : `Start with ${plan.name}`}
               </a>
             </div>
           ))
@@ -246,12 +250,12 @@ const appUrl =
       <div class="mt-10">
         <h2 class="text-2xl font-bold text-text">What changes between plans</h2>
         <p class="mt-2 text-sm text-text-muted">
-          Every plan includes the assurance tools below. Choose by review depth, monthly capacity and target count.
+          Every paid plan includes the assurance tools below. Choose by review depth, monthly capacity, targets and team size.
         </p>
         <p class="mt-3 text-xs text-text-muted sm:hidden">Swipe sideways to compare all three plans.</p>
         <div class="mt-5 overflow-x-auto rounded-lg border border-border">
           <table class="w-full min-w-[38rem] border-collapse text-left text-sm">
-            <caption class="sr-only">Comparison of Starter, Pro and Launch Assurance plan limits</caption>
+            <caption class="sr-only">Comparison of Starter, Pro and Agency plan limits</caption>
             <thead class="bg-bg-raised text-text">
               <tr>
                 <th scope="col" class="sticky left-0 bg-bg-raised px-4 py-3 font-semibold">Plan difference</th>
@@ -271,6 +275,12 @@ const appUrl =
                 <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Protected targets</th>
                 {cloudPlans.map((plan) => (
                   <td class="px-4 py-3">Up to {plan.targetCaps}</td>
+                ))}
+              </tr>
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Workspace members</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">Up to {plan.memberSeats}{plan.id === "LAUNCH_ASSURANCE" ? " · shared minute pool" : ""}</td>
                 ))}
               </tr>
               <tr class="border-t border-border">
@@ -391,87 +401,19 @@ const appUrl =
     </div>
 
     <!-- Local Pricing -->
-    <div id="local-pricing" class="mt-12 hidden" data-app-url={appUrl}>
-      <div class="mx-auto max-w-xl">
-        <div
-          class="rounded-xl border border-accent/40 bg-bg-raised p-6 shadow-sm"
-        >
-          <p
-            class="text-xs font-semibold uppercase tracking-wider text-accent"
-          >
-            Launch offer
-          </p>
-          <h3 class="mt-2 text-xl font-semibold text-text">
-            {localLaunch.name}
-          </h3>
-          <p class="mt-3 text-3xl font-bold text-text">
-            {formatUSD(localLaunch.priceUsd)}
-            <span class="text-base font-normal text-text-muted"> globally</span>
-          </p>
-          <p class="mt-1 text-lg font-semibold text-text">
-            {formatINR(localLaunch.priceInr!)}{" "}
-            <span class="text-sm font-normal text-text-muted"
-              >India, GST included</span
-            >
-          </p>
-          <p class="mt-3 text-sm text-text-muted">{localLaunch.description}</p>
-          <!--
-            Purchase availability is per-provider and request-scoped — the app
-            answers /api/billing/local-availability for the visitor's resolved
-            provider. The default state is the honest "unconfirmed" one so a
-            buy CTA is never shown before availability is established.
-          -->
-          <div data-local-availability="checking" class="mt-6" role="status" aria-live="polite">
-            <p class="text-sm text-text-muted">Checking Local purchase availability…</p>
-          </div>
-          <div data-local-availability="available" class="mt-6 hidden">
-            <a
-              href={`${appUrl}/buy/local`}
-              class="block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg transition-colors hover:bg-accent/90"
-            >
-              Buy Local license
-            </a>
-          </div>
-          <div data-local-availability="unavailable" class="mt-6 hidden">
-            <p class="text-sm font-medium text-text">
-              Local licenses are not available for purchase yet.
-            </p>
-            <p class="mt-1 text-sm text-text-muted">
-              You can still create an account and run the Cloud trial.
-            </p>
-            <a
-              href={`${appUrl}/sign-up`}
-              class="mt-4 block w-full rounded-lg border border-accent px-4 py-2.5 text-center text-sm font-semibold text-accent transition-colors hover:bg-accent-dim/40"
-            >
-              Create an account
-            </a>
-          </div>
-          <div data-local-availability="unknown" class="mt-6 hidden">
-            <p class="text-sm font-medium text-text">
-              Local purchase availability could not be confirmed.
-            </p>
-            <a
-              href={`${appUrl}/buy/local`}
-              class="mt-4 block w-full rounded-lg border border-border px-4 py-2.5 text-center text-sm font-semibold text-text transition-colors hover:bg-bg"
-            >
-              Check availability
-            </a>
-          </div>
+    <div id="local-pricing" class="mt-12 hidden">
+      <div class="relative mx-auto max-w-xl overflow-hidden rounded-xl border border-border bg-bg-raised">
+        <div aria-hidden="true" inert class="pointer-events-none select-none space-y-5 p-6 blur-sm opacity-50">
+          <p class="text-xs font-semibold uppercase tracking-wider text-accent">Local license</p>
+          <h3 class="text-xl font-semibold text-text">{localLaunch.name}</h3>
+          <p class="text-3xl font-bold text-text">{formatUSD(localLaunch.priceUsd)}</p>
+          <p class="text-lg font-semibold text-text">{formatINR(localLaunch.priceInr!)}</p>
+          <p class="text-sm text-text-muted">{localLaunch.description}</p>
         </div>
-      </div>
-
-      <!-- Local notes -->
-      <div class="mt-8 space-y-3">
-        <div class="rounded-lg bg-bg-raised p-4">
-          <h3 class="font-medium text-text">Local License Details</h3>
-          <ul class="mt-2 space-y-1 text-sm text-text-muted">
-            <li>• 3-machine activation limit per seat</li>
-            <li>• Perpetual use with 1 year of updates</li>
-            <li>
-              • Local licenses are non-refundable except where law or payment errors require
-              otherwise
-            </li>
-          </ul>
+        <div class="absolute inset-0 flex flex-col items-center justify-center bg-bg/75 px-6 text-center">
+          <span class="rounded-full border border-accent/40 bg-bg-raised px-3 py-1 text-xs font-semibold uppercase tracking-wider text-accent">Launching later</span>
+          <h2 class="mt-4 text-2xl font-bold text-text">Local is launching later</h2>
+          <p class="mt-2 max-w-sm text-sm text-text-muted">Cloud plans are available now. Local license details and purchasing will open at launch.</p>
         </div>
       </div>
     </div>
@@ -489,7 +431,7 @@ const appUrl =
       </p>
       <p class="mt-3 text-sm text-text-muted">
         Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for
-        Launch Assurance plans with a spend limit configured. Minute packs are valid for 6 months
+        Agency plans with a spend limit configured. Minute packs are valid for 6 months
         from purchase.
       </p>
     </div>
@@ -639,35 +581,5 @@ const appUrl =
       updatePrices(currentCurrency, currentInterval)
     })
 
-    // Local purchase availability — one request-scoped check against the app,
-    // resolved for the same provider checkout would use. The CTA is only shown
-    // after a confirmed "available"; any failure keeps the honest states.
-    const localSection = document.getElementById("local-pricing")
-    const availabilityBlocks = localSection?.querySelectorAll("[data-local-availability]")
-    const appOrigin = localSection?.getAttribute("data-app-url") ?? ""
-
-    type LocalAvailability = "checking" | "available" | "unavailable" | "unknown"
-    function showAvailability(state: LocalAvailability) {
-      availabilityBlocks?.forEach((block) => {
-        block.classList.toggle(
-          "hidden",
-          block.getAttribute("data-local-availability") !== state
-        )
-      })
-    }
-
-    if (appOrigin && availabilityBlocks?.length) {
-      fetch(`${appOrigin}/api/billing/local-availability`, { credentials: "omit" })
-        .then((response) => {
-          if (!response.ok) throw new Error("availability_unconfirmed")
-          return response.json() as Promise<{ available?: unknown }>
-        })
-        .then((body) => {
-          showAvailability(body.available === true ? "available" : "unavailable")
-        })
-        .catch(() => showAvailability("unknown"))
-    } else {
-      showAvailability("unknown")
-    }
   </script>
 </Base>

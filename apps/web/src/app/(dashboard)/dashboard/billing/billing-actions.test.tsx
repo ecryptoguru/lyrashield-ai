@@ -41,7 +41,7 @@ describe("BillingActions", () => {
   })
   it("offers every paid plan and interval with accessible labels", () => {
     const html = renderToString(<BillingActions {...props} />)
-    for (const label of ["Starter", "Pro", "Launch Assurance"]) {
+    for (const label of ["Starter", "Pro", "Agency"]) {
       for (const interval of ["monthly", "annual"])
         expect(html).toContain(`Choose ${label}, ${interval} billing`)
     }

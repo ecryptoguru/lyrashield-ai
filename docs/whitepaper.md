@@ -178,17 +178,17 @@ Two product lines, one meter (protected targets + agent-minutes), two gateways (
 | Starter |        $29 |   $295 |          210 |       5 | No         |
 | Pro     |        $99 |   $950 |          850 |      15 | Yes        |
 
-**Line 2 — Launch Assurance** (prove it to a third party):
+**Line 2 — Agency** (prove it to a third party):
 
-| Plan             |     Monthly | Annual | Agent-min/mo | Targets | Self-serve |
-| ---------------- | ----------: | -----: | -----------: | ------: | ---------- |
-| Launch Assurance |        $499 | $4,188 |        4,500 |      50 | Yes        |
-| Enterprise       | from $1,500 |      — |       custom |  custom | No         |
+| Plan       |     Monthly | Annual | Agent-min/mo | Targets | Self-serve |
+| ---------- | ----------: | -----: | -----------: | ------: | ---------- |
+| Agency     |        $499 | $4,188 |        4,500 |      50 | Yes        |
+| Enterprise | from $1,500 |      — |       custom |  custom | No         |
 
 - Deep scans meter at 3×; failed scans are never billed; cancelled scans bill elapsed time only.
-- Overage (Launch Assurance only): $0.15/agent-minute behind a user-set spend limit. Minute packs: 100/$15, 250/$35, 500/$65, valid 180 days.
+- Overage (Agency only): $0.15/agent-minute behind a user-set spend limit. Minute packs: 100/$15, 250/$35, 500/$65, valid 180 days.
 - A mid-scan balance of zero grants at most 15 minutes of non-bankable grace; a scan starting at zero is rejected.
-- Subscriptions, allowances, usage, packs, and overage are owned by the **account**, not the workspace — a subscription follows the person; workspace membership never shares another member's allowance.
+- Subscriptions, allowances, usage, packs, and overage are owned by the **account**, not the workspace. One Agency workspace per buyer allows up to five members to draw from the persisted buyer's 4,500 monthly minutes; scans outside that workspace use the scanner's own account. The internal `LAUNCH_ASSURANCE` plan ID remains stable.
 - Non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.
 
 ### 8.2 Local/Desktop licenses

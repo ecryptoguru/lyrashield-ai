@@ -7,6 +7,7 @@ import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
+import { resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
 
 export const metadata: Metadata = {
   title: "Team",
@@ -36,7 +37,7 @@ export default async function TeamPage() {
       orderBy: { createdAt: "asc" },
     }),
     prisma.invitation.findMany({
-      where: { workspaceId, status: "pending" },
+      where: { workspaceId, status: "pending", expiresAt: { gt: new Date() } },
       orderBy: { createdAt: "desc" },
     }),
   ])
@@ -72,6 +73,13 @@ export default async function TeamPage() {
   }
 
   const membership = members.find((member) => member.userId === session.userId)
+  const sponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
+  const ownerBilling =
+    membership?.role === "OWNER" && sponsor && !sponsor.agency
+      ? await resolveAccountBilling(session.userId)
+      : null
+  const agencyActive =
+    sponsor?.agencyActive === true || ownerBilling?.effectivePlan === "LAUNCH_ASSURANCE"
   return (
     <TeamClient
       key={workspaceId}
@@ -79,6 +87,8 @@ export default async function TeamPage() {
       initialData={initialData}
       actorRole={membership?.role ?? "VIEWER"}
       canManage={!!membership && hasPermission(membership.role, PERMISSIONS.member.invite)}
+      canInvitePlan={agencyActive}
+      seatLimit={agencyActive ? 5 : 1}
       canRemove={!!membership && hasPermission(membership.role, PERMISSIONS.member.remove)}
       canUpdateRole={!!membership && hasPermission(membership.role, PERMISSIONS.member.updateRole)}
     />

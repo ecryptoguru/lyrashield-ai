@@ -228,25 +228,25 @@ Two product lines (WP1 repricing, founder-confirmed 2026-08-29, in code at `pack
 | Starter |        $29 |   $295 |         210 |       5 | No   |
 | Pro     |        $99 |   $950 |         850 |      15 | Yes  |
 
-**Line 2 — Launch Assurance** (prove it to a third party):
+**Line 2 — Agency** (prove it to a third party):
 
-| Plan             |     Monthly |             Annual | Minutes | Targets | Self-serve |
-| ---------------- | ----------: | -----------------: | ------: | ------: | ---------- |
-| Launch Assurance |        $499 | $4,188 (= $349/mo) |   4,500 |      50 | Yes        |
-| Enterprise       | from $1,500 |                  — |  custom |  custom | No         |
+| Plan       |     Monthly |             Annual | Minutes | Targets | Self-serve |
+| ---------- | ----------: | -----------------: | ------: | ------: | ---------- |
+| Agency     |        $499 | $4,188 (= $349/mo) |   4,500 |      50 | Yes        |
+| Enterprise | from $1,500 |                  — |  custom |  custom | No         |
 
-- Team ($299) was removed and merged into Launch Assurance. The `TEAM` enum value is retained in the schema for existing rows; the plan is not sold.
+- Team ($299) was removed and merged into Agency. The `TEAM` enum value is retained in the schema for existing rows; the plan is not sold. The former `LAUNCH_ASSURANCE` plan ID remains stable for billing compatibility.
 - Annual discount ladder is deliberately 15 / 20 / 30 across the two lines.
-- Overage: $0.15/min, Launch Assurance only, with a user-set spend limit. Deep/Custom consume minutes at 3×.
+- Overage: $0.15/min, Agency only, with a user-set spend limit. Deep/Custom consume minutes at 3×.
 - GitHub repo connection, RBAC, shared reports, retests, Evidence Vault, versioned verdicts, launch reports, and scorecards are permission-gated, not plan-gated. The GitHub Action is account-less; CLI and MCP connections are available across plans subject to permissions and scan admission.
-- Repository MCP/WebMCP scanner findings are available on every plan. Pro adds Deep/Custom scans; Launch Assurance adds higher limits and capped overage. These are the enforced plan differences in this differentiation pass.
+- Repository MCP/WebMCP scanner findings are available on every plan. Starter and Pro allow one workspace member; Pro adds Deep/Custom scans. Agency sponsors one team workspace with up to five members including the buyer, sharing the buyer's 4,500 monthly minutes, plus higher limits and capped overage.
 - Failed scans are never billed; cancelled scans bill elapsed time only (no 1-minute floor).
 
 Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity.
 
 Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 minutes of non-bankable mid-scan grace; a scan starting at zero is rejected.
 
-Subscriptions, allowances, usage balances, packs, grace, and overage belong to the **account** (the user), not the workspace: one subscription follows the person across workspaces, workspace membership never shares another member's allowance or billing history, and the account starting a scan (or its explicitly recorded sponsor for scheduled/delegated work) is the payer. Annual plans receive a fresh monthly allowance each month of the term. Workspaces remain the resource/tenancy boundary and mirror plan state for display only.
+Subscriptions, allowances, usage balances, packs, grace, and overage belong to the **account** (the user), not the workspace: one subscription follows the person across workspaces. In an Agency-sponsored workspace, up to five members draw from the persisted buyer's minute pool; other workspaces use each scanner's own account. The sponsor is recorded on each scan before execution. Annual plans receive a fresh monthly allowance each month of the term. Workspaces remain the resource/tenancy boundary and mirror plan state for display only.
 
 Cloud subscriptions, Local licenses, and minute packs are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error. Provider-confirmed reversals still revoke entitlements and claw back related commissions.
 

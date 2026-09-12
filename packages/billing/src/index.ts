@@ -29,6 +29,7 @@ export {
 
 // Account-owned subscription resolution
 export { resolveAccountBilling, listAccountBilling, type ResolvedAccountBilling } from "./account"
+export { resolveWorkspaceScanSponsor } from "./agency-sponsor"
 
 // Allowance cycles (F1: monthly pool per cycle, incl. annual subscriptions)
 export {

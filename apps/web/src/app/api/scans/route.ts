@@ -25,7 +25,7 @@ import { normalizeDomainForProof } from "@lyrashield/security"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { assertScanAllowed, resolveAccountBilling } from "@lyrashield/billing"
+import { assertScanAllowed, resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
@@ -126,8 +126,11 @@ async function post(request: Request) {
     // The gate follows the SPONSOR's effective plan — workspace.plan is a
     // display field under account-owned billing and must never decide this.
     if (target.type === "WEB_APP" || target.type === "API") {
-      const sponsorBilling = await resolveAccountBilling(session.userId)
-      const sponsorPlan = sponsorBilling?.effectivePlan ?? "FREE"
+      const sponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
+      const sponsorBilling = sponsor?.agencyActive ? null : await resolveAccountBilling(session.userId)
+      const sponsorPlan = sponsor?.agencyActive
+        ? "LAUNCH_ASSURANCE"
+        : (sponsorBilling?.effectivePlan ?? "FREE")
       if (sponsorPlan === "FREE") {
         // Free tier skips domain verification, so a free account could
         // otherwise drive server-side reviews of arbitrary third-party

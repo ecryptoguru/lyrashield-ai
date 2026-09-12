@@ -85,7 +85,10 @@ export class AccountDeletionAffiliateError extends Error {
 export async function getAccountDeletionPlan(userId: string): Promise<AccountDeletionPlan> {
   const ownerMemberships = await prisma.workspaceMember.findMany({
     where: { userId, role: "OWNER", status: "active" },
-    select: { workspaceId: true, workspace: { select: { name: true } } },
+    select: {
+      workspaceId: true,
+      workspace: { select: { name: true, agencySponsorAccountId: true } },
+    },
   })
   const ownedWorkspaceIds = ownerMemberships.map((membership) => membership.workspaceId)
 
@@ -120,17 +123,15 @@ export async function getAccountDeletionPlan(userId: string): Promise<AccountDel
       (member) => member.workspaceId === workspaceId && member.userId !== userId
     )
     const otherOwners = otherActiveMembers.filter((member) => member.role === "OWNER")
-    const otherNonOwners = otherActiveMembers.filter((member) => member.role !== "OWNER")
-
-    if (otherOwners.length > 0) continue
+    if (otherOwners.length > 0 && membership.workspace.agencySponsorAccountId !== userId) continue
 
     const workspace = { id: workspaceId, name: membership.workspace.name }
-    if (otherNonOwners.length === 0) {
+    if (otherActiveMembers.length === 0) {
       deletable.push(workspace)
     } else {
       blocked.push({
         ...workspace,
-        members: otherNonOwners.map((member) => {
+        members: otherActiveMembers.map((member) => {
           const user = userById.get(member.userId)
           return { id: member.userId, name: user?.name ?? null, email: user?.email ?? "" }
         }),
@@ -187,7 +188,8 @@ export async function getAccountDeletionPlan(userId: string): Promise<AccountDel
  * anonymizing attribution in any workspace the user co-owned or contributed to.
  *
  * Confirmation rules:
- *  - Workspaces with another active owner are retained; no special confirmation.
+ *  - Workspaces with another active owner are retained unless this user sponsors
+ *    the Agency team; the sponsor must first stop sharing their allowance.
  *  - Sole-owner workspaces with other active members block deletion.
  *  - Sole-owner/sole-member workspaces are physically deleted — including their
  *    audit history, deliberately purged to allow the hard delete — and require
@@ -281,8 +283,10 @@ export async function deleteUserAccount(
         await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
         // Erasure must also visit soft-deleted workspaces. Bypass only the
         // lifecycle read filter; the workspace RLS context and row lock remain.
-        const [workspace] = await tx.$queryRaw<AccountDeletionWorkspace[]>`
-        SELECT id, name FROM "Workspace" WHERE id = ${workspaceId}`
+        const [workspace] = await tx.$queryRaw<
+          Array<AccountDeletionWorkspace & { agencySponsorAccountId: string | null }>
+        >`
+        SELECT id, name, "agencySponsorAccountId" FROM "Workspace" WHERE id = ${workspaceId}`
         if (!workspace) continue
         const active = await tx.workspaceMember.findMany({
           where: { workspaceId, status: "active" },
@@ -290,7 +294,11 @@ export async function deleteUserAccount(
         })
         const owner = active.some((member) => member.userId === userId && member.role === "OWNER")
         const others = active.filter((member) => member.userId !== userId)
-        if (!owner || others.some((member) => member.role === "OWNER")) {
+        if (
+          !owner ||
+          (others.some((member) => member.role === "OWNER") &&
+            workspace.agencySponsorAccountId !== userId)
+        ) {
           lockedPlan.retained.push(workspace)
         } else if (others.length === 0) {
           lockedPlan.deletable.push(workspace)
