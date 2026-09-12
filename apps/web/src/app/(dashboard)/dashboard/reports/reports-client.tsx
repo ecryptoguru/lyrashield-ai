@@ -21,6 +21,8 @@ import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import { LocalTime } from "@/components/local-time"
+import { formatDateTime } from "@/lib/date-format"
+import { gateReasonSentence } from "@/lib/launch-readiness"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
@@ -35,6 +37,21 @@ interface ReportItem {
   revokedAt: string | null
   createdAt: string
   scanId: string | null
+  provenance?: LaunchReportProvenance | null
+}
+
+interface LaunchReportProvenance {
+  gateVerdictId: string
+  verdictChecksum: string
+  assessmentVersion: number | null
+  assessedIdentity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
+  assessedAt: string
+  issuedAt: string
+  applicabilityCheckedAt: string
+  applicability: "applicable" | "not_applicable" | "unknown"
+  reasonCodes: string[]
+  historicalState: string
+  effectiveState: string | null
 }
 
 const reportItemSchema = z
@@ -86,6 +103,107 @@ const REPORT_TYPE_LABEL: Record<string, string> = {
   executive: "Executive",
   developer: "Developer",
   compliance: "Assurance",
+  launch_readiness: "Launch Readiness",
+}
+
+const LAUNCH_HISTORICAL_VERDICT_LABEL: Record<string, string> = {
+  READY: "Ready to launch",
+  NOT_READY: "Not ready",
+  INSUFFICIENT_EVIDENCE: "Not enough evidence",
+}
+
+const LAUNCH_APPLICABILITY_LABEL: Record<LaunchReportProvenance["applicability"], string> = {
+  applicable: "Applicable",
+  not_applicable: "Not applicable",
+  unknown: "Could not be established",
+}
+
+/**
+ * Private issue-time provenance for a launch_readiness report. This surface is
+ * authenticated-only; the shared public page never receives these fields.
+ */
+function LaunchReportProvenanceBlock({ provenance }: { provenance: LaunchReportProvenance | null }) {
+  const [copiedIdentity, setCopiedIdentity] = useState(false)
+  if (!provenance) {
+    return (
+      <p className="text-muted-foreground mt-2 text-xs">
+        Release identity unavailable for this report.
+      </p>
+    )
+  }
+  const identity = provenance.assessedIdentity
+  const identityLabel = identity
+    ? identity.kind === "COMMIT"
+      ? `commit ${identity.value}`
+      : `artifact ${identity.value}`
+    : null
+  return (
+    <dl className="text-muted-foreground mt-2 space-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <dt className="font-medium">Assessed release:</dt>
+        <dd>
+          {identityLabel ? (
+            <span className="inline-flex max-w-full items-center gap-1.5">
+              <code className="break-all">{identityLabel}</code>
+              <button
+                type="button"
+                aria-label="Copy assessed release identity"
+                className="text-foreground/70 hover:text-foreground inline-flex items-center"
+                onClick={() => {
+                  if (!identity) return
+                  void writeClipboard(identity.value)
+                    .then(() => setCopiedIdentity(true))
+                    .catch(() => {})
+                }}
+              >
+                {copiedIdentity ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
+            </span>
+          ) : (
+            "Not recorded in the retained assessment."
+          )}
+        </dd>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <div>
+          <dt className="sr-only">Historical verdict</dt>
+          <dd>
+            Historical verdict:{" "}
+            {LAUNCH_HISTORICAL_VERDICT_LABEL[provenance.historicalState] ??
+              provenance.historicalState}
+            {provenance.effectiveState && provenance.effectiveState !== provenance.historicalState
+              ? ` · effective at issue: ${
+                  LAUNCH_HISTORICAL_VERDICT_LABEL[provenance.effectiveState] ??
+                  provenance.effectiveState
+                }`
+              : ""}
+          </dd>
+        </div>
+        <div>
+          <dt className="sr-only">Applicability when issued</dt>
+          <dd>
+            Applicability when issued: {LAUNCH_APPLICABILITY_LABEL[provenance.applicability]}
+          </dd>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <dd>Assessed {formatDateTime(provenance.assessedAt)} UTC</dd>
+        <dd>Issued {formatDateTime(provenance.issuedAt)} UTC</dd>
+        <dd>Applicability checked {formatDateTime(provenance.applicabilityCheckedAt)} UTC</dd>
+      </div>
+      {provenance.reasonCodes.length > 0 && (
+        <dd>
+          {provenance.reasonCodes
+            .map((code) => gateReasonSentence({ code, message: "" }))
+            .join(" ")}
+        </dd>
+      )}
+    </dl>
+  )
 }
 
 export function ReportsClient({
@@ -490,6 +608,9 @@ export function ReportsClient({
                       </>
                     )}
                   </p>
+                  {report.type === "launch_readiness" && (
+                    <LaunchReportProvenanceBlock provenance={report.provenance ?? null} />
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <a

@@ -1,5 +1,10 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
-import { getShareableReport, generateShareToken, revokeShareToken } from "@lyrashield/db"
+import {
+  getShareableReport,
+  generateShareToken,
+  revokeShareToken,
+  getLaunchReportDetail,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -30,7 +35,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("REPORT_NOT_FOUND", "Report not found", 404)
     }
 
-    return apiSuccess(report)
+    // Private issue-time provenance rides along only on this authenticated
+    // route — the shared-token reader calls getShareableReport directly and
+    // never sees it.
+    const launchReport =
+      report.type === "launch_readiness" ? await getLaunchReportDetail(id, workspaceId) : null
+
+    return apiSuccess(launchReport ? { ...report, launchReport } : report)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

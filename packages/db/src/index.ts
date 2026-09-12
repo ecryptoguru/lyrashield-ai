@@ -214,9 +214,11 @@ export {
 } from "./retest-service"
 export {
   evaluateGateForTarget,
+  evaluateVerdictApplicability,
   getCurrentGateVerdict,
   getCurrentGateVerdicts,
   getLatestGateVerdict,
+  parseAssessmentSnapshot,
   handleFixPrMergedAndReevaluate,
   type GateEvaluationResult,
   type GateApplicabilityOptions,
@@ -250,9 +252,17 @@ export {
 } from "./launch-report-signing"
 export {
   generateLaunchReport,
+  getLaunchReportDetail,
   getSharedLaunchReport,
   type LaunchReportResult,
 } from "./launch-report-service"
+export {
+  buildLaunchReportProvenance,
+  parseLaunchReportProvenance,
+  APPLICABILITY_EVALUATION_FAILED,
+  LAUNCH_REPORT_PROVENANCE_VERSION,
+  type LaunchReportProvenance,
+} from "./launch-report-provenance"
 export { gatherReportData, generateReportHTML, type ReportData } from "./report-generator"
 export {
   createNotification,
