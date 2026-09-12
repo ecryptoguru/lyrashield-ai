@@ -97,7 +97,7 @@ const jsonLd: unknown[] = [
   <div class="callout">
     <strong>Project vs. global:</strong> Place <code>.cursor/mcp.json</code> inside your project
     root to share config with the team (each developer runs <code>npx lyrashield login --oauth</code>
-    locally). Place it at <code>~/.cursor/mcp.json</code> for
+    {" "}locally). Place it at <code>~/.cursor/mcp.json</code> for
     a personal global setup.
   </div>
 
@@ -126,7 +126,7 @@ const jsonLd: unknown[] = [
   <pre><code>npx lyrashield install cursor</code></pre>
   <div class="callout">
     <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
-    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
+    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the{" "}
     <code>LYRASHIELD_API_KEY</code> environment variable). No key needs to be inlined in{" "}
     <code>.cursor/mcp.json</code> or any other file you might commit.
   </div>
@@ -140,8 +140,8 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace OAuth login. The
-    <code>@lyrashield/mcp</code> package is published on npm, so
+    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace OAuth login. The{" "}
+    <code>@lyrashield/mcp</code> package is published on npm, so{" "}
     <code>npx -y @lyrashield/mcp@0.2.8</code> resolves directly.
   </div>
 </DocsLayout>

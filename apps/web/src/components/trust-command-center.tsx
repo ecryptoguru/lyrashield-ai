@@ -146,10 +146,10 @@ export function TrustCommandCenter({
               checks.
             </p>
             <Link
-              href="/dashboard/settings"
+              href="/dashboard/scans?tab=monitoring"
               className="text-muted-foreground decoration-border hover:text-foreground text-xs underline underline-offset-4"
             >
-              Review and customise controls.
+              Manage recurring checks.
             </Link>
           </CardContent>
         </Card>

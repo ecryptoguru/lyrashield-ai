@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { buttonVariants } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
+import { EmailText } from "@/components/email-text"
 import { getPlatformAdminAudit, parseAdminCursor } from "@/lib/platform-admin-lists"
 
 export const dynamic = "force-dynamic"
@@ -55,13 +56,12 @@ export default async function PlatformAdminAuditPage({
                   {entry.resourceId ? ` · ${entry.resourceId}` : ""}
                 </td>
                 <td className="max-w-72 px-4 py-3">
-                  <span
+                  <EmailText
+                    value={entry.actorEmail}
                     className="block truncate"
                     aria-label={entry.actorEmail}
                     title={entry.actorEmail}
-                  >
-                    {entry.actorEmail}
-                  </span>
+                  />
                 </td>
                 <td className="px-4 py-3">
                   <time dateTime={entry.createdAt.toISOString()}>

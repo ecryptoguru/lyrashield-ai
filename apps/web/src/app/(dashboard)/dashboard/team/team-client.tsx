@@ -8,8 +8,9 @@ import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { canGrantRole } from "@lyrashield/auth"
 import type { MemberRole } from "@lyrashield/db"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { formatDate } from "@/lib/date-format"
+import { LocalTime } from "@/components/local-time"
 import { PageHeader } from "@/components/page-header"
+import { EmailText } from "@/components/email-text"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
 interface Member {
@@ -294,7 +295,9 @@ export function TeamClient({
             {members.map((m) => (
               <tr key={m.id} className="border-b last:border-0">
                 <td className="px-4 py-3 font-medium">{m.name}</td>
-                <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">{m.email}</td>
+                <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
+                  <EmailText value={m.email} />
+                </td>
                 <td className="px-4 py-3">
                   <Badge
                     variant={m.role === "OWNER" ? "default" : m.role === "ADMIN" ? "info" : "muted"}
@@ -303,7 +306,7 @@ export function TeamClient({
                   </Badge>
                 </td>
                 <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
-                  {formatDate(m.createdAt)}
+                  <LocalTime value={m.createdAt} />
                 </td>
                 {(canRemove || canUpdateRole) && (
                   <td className="px-4 py-3">
@@ -392,14 +395,16 @@ export function TeamClient({
             <tbody>
               {invitations.map((inv) => (
                 <tr key={inv.id} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-medium">{inv.email}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <EmailText value={inv.email} />
+                  </td>
                   <td className="px-4 py-3">
                     <Badge variant="muted">{inv.role}</Badge>
                   </td>
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" aria-hidden="true" />
-                      {formatDate(inv.expiresAt)}
+                      <LocalTime value={inv.expiresAt} />
                     </span>
                   </td>
                   {canManage && (

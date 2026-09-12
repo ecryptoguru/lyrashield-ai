@@ -254,6 +254,7 @@ export {
   type LaunchReportResult,
 } from "./launch-report-service"
 export { gatherReportData, generateReportHTML, type ReportData } from "./report-generator"
+export { generateLaunchReportHTML } from "./launch-report-html"
 export {
   createNotification,
   getNotification,

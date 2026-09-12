@@ -84,7 +84,7 @@ describe("badgeVariants", () => {
   it("applies success variant classes", () => {
     const cls = badgeVariants({ variant: "success" })
     expect(cls).toContain("bg-emerald-500/10")
-    expect(cls).toContain("text-emerald-600")
+    expect(cls).toContain("text-emerald-800")
   })
 
   it("applies danger variant classes", () => {
@@ -96,13 +96,13 @@ describe("badgeVariants", () => {
   it("applies warning variant classes", () => {
     const cls = badgeVariants({ variant: "warning" })
     expect(cls).toContain("bg-amber-500/10")
-    expect(cls).toContain("text-amber-600")
+    expect(cls).toContain("text-amber-800")
   })
 
   it("applies info variant classes", () => {
     const cls = badgeVariants({ variant: "info" })
     expect(cls).toContain("bg-sky-500/10")
-    expect(cls).toContain("text-sky-600")
+    expect(cls).toContain("text-sky-800")
   })
 
   it("applies muted variant classes", () => {

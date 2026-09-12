@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { EmailText } from "@/components/email-text"
 import { useRouter } from "next/navigation"
 import { Search, ShieldX, CheckCircle2, AlertTriangle } from "lucide-react"
 
@@ -158,7 +159,9 @@ export function LicensesClient({
                     <td className="max-w-[120px] truncate px-4 py-3 font-mono text-xs">
                       {license.id}
                     </td>
-                    <td className="px-4 py-3">{license.ownerEmail}</td>
+                    <td className="px-4 py-3">
+                      <EmailText value={license.ownerEmail} />
+                    </td>
                     <td className="px-4 py-3">
                       <code className="bg-muted rounded px-1.5 py-0.5 text-xs">{license.sku}</code>
                     </td>

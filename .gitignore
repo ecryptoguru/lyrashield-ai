@@ -107,4 +107,5 @@ ciwait.py
 verify-*.mts
 *-stubs-loader.mjs
 
+# Dogfood/browser QA output (screenshots, auth state)
 dogfood-output/
