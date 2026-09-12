@@ -43,4 +43,24 @@ describe("pricing page", () => {
     expect("TEAM" in CLOUD_PLAN_MAP).toBe(false)
     expect("AGENCY" in CLOUD_PLAN_MAP).toBe(false)
   })
+
+  it("discloses Local purchase availability instead of an unconditional buy CTA", () => {
+    // The page must ask the app for the visitor's provider-scoped availability
+    // before showing the buy link — never claim availability it has not
+    // confirmed.
+    expect(pricingPage).toContain("/api/billing/local-availability")
+    expect(pricingPage).toContain('data-local-availability="checking"')
+    expect(pricingPage).toContain('data-local-availability="available"')
+    expect(pricingPage).toContain('data-local-availability="unavailable"')
+    expect(pricingPage).toContain('data-local-availability="unknown"')
+    expect(pricingPage).toContain("Local licenses are not available for purchase yet.")
+    expect(pricingPage).toContain("Local purchase availability could not be confirmed.")
+    expect(pricingPage).toContain("create an account and run the Cloud trial")
+    // All non-default states start hidden — the default render is the
+    // "checking" state, not a buy CTA.
+    expect(pricingPage).toContain('data-local-availability="available" class="mt-6 hidden"')
+    // Prices are unchanged and still rendered for both currencies.
+    expect(pricingPage).toContain("formatUSD(localLaunch.priceUsd)")
+    expect(pricingPage).toContain("formatINR(localLaunch.priceInr!)")
+  })
 })

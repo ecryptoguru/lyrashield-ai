@@ -67,7 +67,10 @@ export type CanonicalLaunchReadinessReport = Omit<LaunchReadinessReport, "score"
 export interface GateReadinessTarget {
   targetId: string
   targetName: string
+  /** Effective state after applicability rules — what the gate would enforce. */
   state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
+  /** The immutable verdict state before applicability rules (absent/null: no verdict). */
+  historicalState?: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE" | null
   applicable: boolean
   blockingFindings: number
   reasons: { code: string; message: string }[]
@@ -76,8 +79,18 @@ export interface GateReadinessTarget {
    * when the caller enforces none). Absent when there is no assessment to
    * describe. Rendered so a verdict reads "ready for commit abc1234" rather
    * than an unexplained all-clear.
+   *
+   * NOTE: this is the gate's evaluatedIdentity — when a release check is
+   * requested and it mismatches, the gate returns the REQUESTED value here.
+   * Always read `assessedIdentity` for "which release was actually assessed".
    */
   identity?: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
+  /**
+   * The identity retained in the assessment snapshot itself — the only
+   * trustworthy answer to "which release does this assessment describe".
+   * Independent of any requested identity.
+   */
+  assessedIdentity?: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
 }
 
 export interface FindingReadinessAggregate {
@@ -295,6 +308,8 @@ export function gateReasonSentence(reason: { code: string; message: string }): s
       return "Findings or verification evidence changed after the last assessment. Run a new scan to confirm the verdict still holds."
     case "NO_GATE_VERDICT":
       return "No completed scan verdict exists for this target yet. Run a scan first."
+    case "APPLICABILITY_EVALUATION_FAILED":
+      return "The issue-time applicability check could not be completed. Generate a fresh report to re-check."
     default:
       return reason.message
   }
@@ -320,6 +335,114 @@ export function describeGateIdentity(
     return `Ready for commit ${short}`
   }
   return `Ready for artifact ${target.identity.value.slice(0, 19)}`
+}
+
+/**
+ * Target-specific release check — input contract shared by the page, the API
+ * route, and the client form. A release reference is a full 40-hex commit SHA
+ * or a `sha256:`-prefixed 64-hex artifact digest; the two are mutually
+ * exclusive and nothing shorter or tag-shaped is resolved.
+ */
+export const RELEASE_COMMIT_PATTERN = /^[a-f0-9]{40}$/i
+export const RELEASE_ARTIFACT_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/i
+
+export interface ReleaseIdentityInput {
+  kind: "COMMIT" | "ARTIFACT_DIGEST"
+  value: string
+}
+
+/**
+ * Canonicalize a user-supplied release reference. Trims permitted whitespace
+ * and lowercases hex (the gate compares case-insensitively); anything that is
+ * not an exact supported identifier returns null rather than being
+ * interpreted. Branch names, tags, and abbreviated prefixes are never
+ * resolved to a release.
+ */
+export function parseReleaseReference(raw: string | null | undefined): ReleaseIdentityInput | null {
+  const value = raw?.trim() ?? ""
+  if (RELEASE_COMMIT_PATTERN.test(value)) return { kind: "COMMIT", value: value.toLowerCase() }
+  if (RELEASE_ARTIFACT_DIGEST_PATTERN.test(value)) {
+    return { kind: "ARTIFACT_DIGEST", value: value.toLowerCase() }
+  }
+  return null
+}
+
+export function resolveReleaseCheckTargetId(
+  requestedTargetId: string,
+  checkRequested: boolean,
+  authorizedTargetIds: string[]
+): string {
+  return (
+    requestedTargetId ||
+    (checkRequested && authorizedTargetIds.length === 1 ? authorizedTargetIds[0]! : "")
+  )
+}
+
+export type ReleaseCheckMatch = "match" | "mismatch" | "cannot_confirm"
+
+export interface ReleaseCheckResult {
+  /** The target the check ran against (null when the id resolves to nothing). */
+  targetId: string
+  targetName: string | null
+  requested: ReleaseIdentityInput | null
+  /** The release the retained assessment actually covers. */
+  assessed: ReleaseIdentityInput | null
+  match: ReleaseCheckMatch
+  /** Immutable historical verdict for the bound assessment (null: none exists). */
+  historicalState: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE" | null
+  /** Effective state after applicability rules against the requested identity. */
+  state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
+  applicable: boolean
+  blockingFindings: number
+  reasons: { code: string; message: string }[]
+}
+
+/**
+ * Project the release check for one target. Identity comparison is kept
+ * deliberately separate from applicability: a matching release can still be
+ * NOT_READY or expired, and a mismatch fails closed to INSUFFICIENT_EVIDENCE
+ * through the existing gate rules — never through the label alone.
+ */
+export function describeReleaseCheck(
+  target:
+    | Pick<
+        GateReadinessTarget,
+        | "targetId"
+        | "targetName"
+        | "state"
+        | "historicalState"
+        | "applicable"
+        | "blockingFindings"
+        | "reasons"
+        | "assessedIdentity"
+      >
+    | null
+    | undefined,
+  requested: ReleaseIdentityInput | null
+): ReleaseCheckResult {
+  const assessed = target?.assessedIdentity ?? null
+  let match: ReleaseCheckMatch
+  if (!requested) {
+    match = "cannot_confirm"
+  } else if (!assessed || assessed.kind !== requested.kind) {
+    // No retained binding (or a binding for a different identity kind): the
+    // assessment cannot speak for this release reference.
+    match = "cannot_confirm"
+  } else {
+    match = assessed.value.toLowerCase() === requested.value.toLowerCase() ? "match" : "mismatch"
+  }
+  return {
+    targetId: target?.targetId ?? "",
+    targetName: target?.targetName ?? null,
+    requested,
+    assessed,
+    match,
+    historicalState: target?.historicalState ?? null,
+    state: target?.state ?? "INSUFFICIENT_EVIDENCE",
+    applicable: target?.applicable ?? false,
+    blockingFindings: target?.blockingFindings ?? 0,
+    reasons: target?.reasons ?? [{ code: "NO_GATE_VERDICT", message: "No assessment exists." }],
+  }
 }
 
 export function projectGateReadinessReport(

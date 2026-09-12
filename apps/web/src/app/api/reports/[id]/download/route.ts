@@ -3,6 +3,7 @@ import {
   generateLaunchReportHTML,
   generateReportHTML,
   gatherReportData,
+  isLaunchReportShareablePayload,
   prisma,
   type ReportData,
 } from "@lyrashield/db"
@@ -36,7 +37,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     })
 
     let html: string
-    if (reportRecord?.contentJson && reportRecord.type === "launch_readiness") {
+    if (reportRecord?.type === "launch_readiness") {
+      if (!isLaunchReportShareablePayload(reportRecord.contentJson)) {
+        return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
+      }
       html = generateLaunchReportHTML(reportRecord.contentJson)
     } else if (reportRecord?.contentJson) {
       // Preferred path: serve the immutable snapshot captured at report creation.

@@ -234,6 +234,27 @@ describe("getShareableReport", () => {
     expect(mockPrisma.$transaction).toHaveBeenCalled()
     expect(mockPrisma.$executeRaw).toHaveBeenCalled()
   })
+
+  it("uses the safe launch-readiness title for launch reports", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      scanId: null,
+      title: "LyraShield Launch Readiness Report",
+      type: "launch_readiness",
+      status: "generated",
+      format: "html",
+      shareTokenHash: "hash",
+      shareExpiresAt: null,
+      revokedAt: null,
+      createdAt: new Date(),
+      contentJson: null,
+    })
+
+    const report = await getShareableReport("report-1", "ws-1")
+
+    expect(report?.title).toBe("LyraShield Launch Readiness Report")
+  })
 })
 
 describe("getReportByShareToken", () => {

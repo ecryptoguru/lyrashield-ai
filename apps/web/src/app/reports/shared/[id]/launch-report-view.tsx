@@ -32,6 +32,9 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
   const Icon = tone.Icon
   const verifyUrl = `/reports/verify`
   const historical = payload.stale
+  // A stale report's historical verdict must not render as a live pass/fail:
+  // the green/amber verdict badge is muted so the banner owns the meaning.
+  const badgeVariant = historical ? "muted" : tone.variant
   const dispositionCounts = payload.dispositionCounts ?? { acceptedRisk: 0, falsePositive: 0 }
 
   return (
@@ -64,7 +67,9 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
         <div className="flex items-center gap-3">
           <Icon className="h-6 w-6" aria-hidden />
           <div>
-            <Badge variant={tone.variant}>{payload.verdictLabel}</Badge>
+            <Badge variant={badgeVariant}>
+              {historical ? `Historical: ${payload.verdictLabel}` : payload.verdictLabel}
+            </Badge>
             <p className="mt-1 text-xs text-muted-foreground">
               Historical verdict against the {payload.standardVersion} readiness standard
             </p>

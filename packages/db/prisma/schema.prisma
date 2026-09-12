@@ -1496,6 +1496,12 @@ model Report {
   shareTokenHash String?   @unique
   shareExpiresAt DateTime?
   revokedAt      DateTime?
+  // Private issue-time provenance for launch_readiness reports: which
+  // GateVerdict the report binds, the assessed release identity, and the
+  // applicability outcome evaluated at issue. Never serialized into the
+  // signed public payload, downloads, or shared renderers — authenticated
+  // readers only.
+  provenanceJson Json?
   createdById    String
   deletedAt      DateTime?
   createdAt      DateTime  @default(now())
