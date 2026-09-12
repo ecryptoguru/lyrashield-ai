@@ -157,7 +157,7 @@ npx lyrashield init</code></pre>
   </p>
   <div class="callout">
     <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>,
-    the local MCP server reads the selected workspace credential from
+    the local MCP server reads the selected workspace credential from{" "}
     <code>~/.lyrashield/credentials.json</code>. API keys remain a CI and non-OAuth-client fallback;
     do not commit either credential.
   </div>
@@ -214,10 +214,10 @@ npx lyrashield init</code></pre>
 
   <h2>Remote MCP endpoint</h2>
   <p>
-    Cloud editors that cannot run local processes connect to the remote Streamable-HTTP endpoint at
+    Cloud editors that cannot run local processes connect to the remote Streamable-HTTP endpoint at{" "}
     <code>https://app.lyrashieldai.com/api/mcp</code>. Marketplace clients discover the OAuth
     authorization server automatically, select exactly one workspace, and start with read access.
-    The
+    The{" "}
     <a href="/docs/integrations/remote-mcp">Remote MCP</a> guide covers Lovable, Bolt.new, Replit,
     and v0. The <a href="/docs/integrations/github-action">GitHub Action</a> is the recommended
     complement for automated PR checks.

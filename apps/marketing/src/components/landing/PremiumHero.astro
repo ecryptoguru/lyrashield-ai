@@ -241,7 +241,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 
   .premium-hero__lite-link {
-    display: inline-flex;
+    display: flex;
+    width: fit-content;
     margin-top: 0.55rem;
     color: var(--hero-cyan);
     font-size: 0.85rem;
@@ -257,7 +258,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 
   .premium-hero__agent-link {
-    display: inline-flex;
+    display: flex;
+    width: fit-content;
     margin-top: 0.85rem;
     color: var(--hero-cyan);
     font-size: 0.85rem;
@@ -371,12 +373,20 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       padding: 0.7rem 1.05rem;
     }
 
-    .premium-hero__agent-link {
+    .premium-hero__trial-note {
       order: 5;
     }
 
-    .premium-hero__boundary {
+    .premium-hero__lite-link {
       order: 6;
+    }
+
+    .premium-hero__agent-link {
+      order: 7;
+    }
+
+    .premium-hero__boundary {
+      order: 8;
     }
   }
 
