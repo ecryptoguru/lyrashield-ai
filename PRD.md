@@ -201,7 +201,7 @@ Repository jobs are admitted only while a live worker heartbeat exists. Queue/da
 
 ### Launch gate and assurance reporting
 
-- The Launch Gate is a named, versioned readiness standard (`lyrashield-gate/1.0.0`): a pure function over stored evidence producing READY / NOT_READY / INSUFFICIENT_EVIDENCE verdicts, persisted append-only per target (`GateVerdict`, RLS-protected). Coverage requirements derive from the scan registry; uncovered target types can never earn READY.
+- The Launch Gate is a named, versioned readiness standard (`lyrashield-gate/2.0.0`): a pure function over stored evidence producing READY / NOT_READY / INSUFFICIENT_EVIDENCE verdicts, persisted append-only per target (`GateVerdict`, RLS-protected). Coverage requirements derive from the scan registry; uncovered target types can never earn READY.
 - The verdict is refreshed after every terminal scan state, after a merged fix PR, and on demand via `POST /api/gate/[targetId]`.
 - The Launch Readiness Report renders the verdict as a shareable, verifiable artifact: frozen allowlisted payload (`buildLaunchReportPayload`), ed25519 signature over the checksum (server-owned key), 30-day share tokens, and a public verify endpoint. MEDIUM/LOW findings are disclosed as not gate-evaluated rather than counted as zero.
 - The AI-Built Failure Taxonomy (`ai-built-failure-taxonomy/1.0.0`) is the named, public, citable catalog of how AI-built apps characteristically fail, with every class traced to live controls; exposed read-only at `/api/taxonomy/ai-built-failures`.
@@ -238,9 +238,8 @@ Two product lines (WP1 repricing, founder-confirmed 2026-08-29, in code at `pack
 - Team ($299) was removed and merged into Launch Assurance. The `TEAM` enum value is retained in the schema for existing rows; the plan is not sold.
 - Annual discount ladder is deliberately 15 / 20 / 30 across the two lines.
 - Overage: $0.15/min, Launch Assurance only, with a user-set spend limit. Deep/Custom consume minutes at 3×.
-- Integrations (GitHub, Slack, Jira) moved down to Pro. RBAC and shared reports stay at Launch Assurance and above.
-- Agent-native surfaces (CLI, GitHub Action, MCP server connection, GitHub repo connection) are available on every paid tier — they are free externally, so gating them was a false premium (2026-09-13 differentiation pass).
-- WebMCP scanner-level findings are stated on Pro; Launch Assurance keeps the assurance-grade layer (coverage receipts bound into the versioned verdict, signed report, shareable scorecard, enforced CI verdict gate).
+- GitHub repo connection, RBAC, shared reports, retests, Evidence Vault, versioned verdicts, launch reports, and scorecards are permission-gated, not plan-gated. The GitHub Action is account-less; CLI and MCP connections are available across plans subject to permissions and scan admission.
+- Repository MCP/WebMCP scanner findings are available on every plan. Pro adds Deep/Custom scans; Launch Assurance adds higher limits and capped overage. These are the enforced plan differences in this differentiation pass.
 - Failed scans are never billed; cancelled scans bill elapsed time only (no 1-minute floor).
 
 Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity.

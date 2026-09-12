@@ -41,7 +41,7 @@ const tierIntents: Record<string, string> = {
   STARTER: "For solo builders running occasional reviews on personal projects.",
   PRO: "For small teams shipping regularly who need deeper review coverage.",
   LAUNCH_ASSURANCE:
-    "For anyone who has to hand a release record to a client, an investor or a reviewer.",
+    "For larger release programs that need more targets, minutes and capped overage.",
   ENTERPRISE: "For organisations that need custom limits and a contact-led rollout.",
 }
 
@@ -250,12 +250,17 @@ const appUrl =
         }
       </div>
 
-      <!-- Free Action + agent-surface note -->
+      <!-- Shared capabilities and CI setup -->
       <div class="mt-8 rounded-lg border border-border bg-bg-raised p-4">
-        <p class="text-sm text-text-muted">
-          The GitHub Action runs scan-level SARIF in any repo, free — no LyraShield account or API key required.
-          The CLI and MCP server connect to your account on every paid plan.
-          The enforced launch-gate verdict in CI — merges blocked until the versioned verdict passes, with coverage receipts — is the Launch Assurance tier's gate.
+        <h3 class="font-semibold text-text">Included across plans</h3>
+        <p class="mt-2 text-sm text-text-muted">
+          The free GitHub Action runs scan-level SARIF in GitHub repositories without a LyraShield account or API key.
+        </p>
+        <p class="mt-2 text-sm text-text-muted">
+          Eligible workspace members on every plan can connect the CLI and MCP server, review repository MCP and WebMCP findings, use the Evidence Vault and retests, and access versioned launch verdicts, launch reports and shareable scorecards. Scans follow each plan's minutes, target limits and modes.
+        </p>
+        <p class="mt-2 text-sm text-text-muted">
+          To block merges on a verdict, run the CLI verdict command in CI and require its check in your repository settings.
         </p>
       </div>
 

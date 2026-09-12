@@ -63,25 +63,19 @@ catalog now says so instead of implying a premium. Starter's feature list
 gains `CLI, GitHub Action and MCP server access`. No enforcement code is
 added or removed — adding a Starter gate would have risked taking access
 away from accounts that already use these surfaces, which was not the
-approved intent. No cost impact: the CLI and Action are free externally and
-MCP/connections carry no marginal platform cost.
+approved intent. Connecting an agent has no separate plan entitlement;
+scans launched through it still consume the plan's agent-minutes.
 
-### Move 2 — WebMCP scanner findings stated on Pro; assurance receipts stay Launch Assurance
+### Move 2 — repository WebMCP findings stated on Pro
 
-Code truth (Section 2): scanner-level WebMCP findings already surface at
-every tier, so no entitlement change was needed to make them available on
-Pro — the change is the catalog line on Pro
-(`Deep scans plus agent-surface review for apps that expose MCP or WebMCP tools.`)
-and the explicit Launch Assurance distinction. Launch Assurance keeps the
-assurance-grade layer: WebMCP coverage receipts bound into the versioned
-verdict (`packages/gate/src/coverage-matrix.ts` requires `ai_app_security`
-for REPO/WEB_APP/API targets), the signed report's WebMCP assurance section
-(`packages/db/src/report-generator.ts`), the shareable scorecard and the
-launch gate. Nothing moved down from Launch Assurance.
-
-Copy constraint honoured: Pro's line says scanner-level detection; it makes
-no exclusivity or "only we" claim. The compare pages continue to describe
-MCP integration as a capability table row, not a uniqueness claim.
+Code truth (Section 2): scanner-level WebMCP findings already surface on
+repository scans at every tier. Pro adds Deep/Custom scans, so its card says
+`Deep scans with repository MCP and WebMCP surface review`. The
+`ai_app_security` scanner does not run without a repository checkout; URL and
+API scans cannot claim this source-level review. Coverage receipts,
+versioned verdicts, launch reports and shareable scorecards remain available
+across plans to members with the relevant permissions. The compare pages
+continue to describe MCP integration as a capability, not a unique claim.
 
 **Open founder decision (not actioned here):** whether Starter/Trial should
 STOP seeing scanner-level WebMCP findings (a Pro+ entitlement filter on the
@@ -90,19 +84,17 @@ needs an explicit founder call; this PR does not add that filter.
 
 ### Move 3 — /pricing copy fixes
 
-- Launch Assurance `CI gating (SARIF)` becomes `Enforced launch-gate verdict
-in CI — merges blocked until the versioned verdict passes, with coverage
-receipts.` Verified against behavior: `lyrashield gate --verdict
---commit <sha>` exits 0/1/2 with staleness failing closed, so wiring it as
-  a required status check blocks merges until the versioned verdict
-  (`lyrashield-gate/1.0.0`) passes; coverage receipts are bound into the
-  verdict by the gate's coverage matrix. The free GitHub Action is clarified
-  on the page: scan-level SARIF in any repo, free.
-- Starter `Evidence Vault access` becomes `Personal evidence records`,
-  matching the lighter scope a solo Starter user actually gets (the Vault is
-  role-gated workspace evidence; Starter workspaces are typically
-  single-member, so the records are personal). Launch Assurance keeps
-  `Retained, encrypted evidence for client-grade review`.
+- Launch Assurance's card now states its enforced limits and capped overage.
+  The former `CI gating (SARIF)` line implied a plan-exclusive feature that
+  code does not enforce. `lyrashield gate --verdict --commit <sha>` works with
+  permission on every plan and exits 0/1/2 against
+  `lyrashield-gate/2.0.0`; blocking merges requires customers to configure
+  that CI job as a required check in their repository settings.
+- The page names the free, account-less GitHub Action and the shared CLI,
+  MCP, repository findings, Evidence Vault, retest, verdict, report and
+  scorecard capabilities. Access still depends on role and scan admission.
+- Starter `Evidence Vault access` becomes `Workspace evidence records`,
+  matching the actual workspace and target scope.
 
 ## 4. Flag map after this PR
 
@@ -111,10 +103,11 @@ after; the frozen repack values are untouched). What changed is the catalog
 feature lists (`packages/pricing/src/plans.ts`) and the /pricing page copy
 that renders them, so the stated tier differentiation now matches the code:
 
-| Feature statement                   | Trial | Starter                   | Pro                     | Launch Assurance                                          |
-| ----------------------------------- | ----- | ------------------------- | ----------------------- | --------------------------------------------------------- |
-| CLI / GitHub Action / MCP stated    | —     | Yes (new line)            | Yes (new line)          | Yes (new line)                                            |
-| WebMCP scanner findings stated      | —     | —                         | Yes (new line)          | Yes (WebMCP Assurance line retained)                      |
-| WebMCP coverage receipts in verdict | —     | —                         | —                       | Yes (unchanged)                                           |
-| Evidence wording                    | —     | Personal evidence records | Evidence Vault + Retest | Retained, encrypted evidence for client-grade review      |
-| CI gating wording                   | —     | —                         | —                       | Enforced launch-gate verdict in CI with coverage receipts |
+| Capability or limit                            | Trial     | Starter   | Pro       | Launch Assurance | Enforcement                                                                 |
+| ---------------------------------------------- | --------- | --------- | --------- | ---------------- | --------------------------------------------------------------------------- |
+| CLI, GitHub Action and MCP                     | Available | Available | Available | Available        | Account-less Action; credentials, membership and scopes for connected tools |
+| Repository MCP/WebMCP findings                 | Available | Available | Available | Available        | Repository checkout and scan admission                                      |
+| Evidence Vault, retests and shared reports     | Available | Available | Available | Available        | Workspace permissions and scan admission                                    |
+| Versioned verdict, launch report and scorecard | Available | Available | Available | Available        | Workspace permissions and evidence state                                    |
+| Deep/Custom scans                              | No        | No        | Yes       | Yes              | Sponsor's effective plan                                                    |
+| Overage with spend limit                       | No        | No        | No        | Yes              | Sponsor's effective plan and spend limit                                    |
