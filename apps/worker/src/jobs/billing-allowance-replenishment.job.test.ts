@@ -49,7 +49,7 @@ beforeEach(() => {
     where.id.in.map((id) => ({ id }))
   )
   memberFindFirst.mockResolvedValue({ workspaceId: "ws_1" })
-  grantMonthlyPoolMock.mockResolvedValue({ created: true, minutes: 1200 })
+  grantMonthlyPoolMock.mockResolvedValue({ created: true, minutes: 850 })
 })
 
 describe("replenishAllowanceCycles", () => {
@@ -127,7 +127,7 @@ describe("replenishAllowanceCycles", () => {
     billingFindMany.mockResolvedValue([row(), row({ id: "ba_2", accountId: "acct_2" })])
     grantMonthlyPoolMock
       .mockRejectedValueOnce(new Error("db blip"))
-      .mockResolvedValueOnce({ created: true, minutes: 1200 })
+      .mockResolvedValueOnce({ created: true, minutes: 850 })
 
     const result = await replenishAllowanceCycles()
 
@@ -136,7 +136,7 @@ describe("replenishAllowanceCycles", () => {
 
   it("counts idempotent replays as evaluated, not granted", async () => {
     billingFindMany.mockResolvedValue([row()])
-    grantMonthlyPoolMock.mockResolvedValue({ created: false, minutes: 1200 })
+    grantMonthlyPoolMock.mockResolvedValue({ created: false, minutes: 850 })
 
     const result = await replenishAllowanceCycles()
 
