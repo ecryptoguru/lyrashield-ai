@@ -193,7 +193,7 @@ describe("GET /api/scans/eligibility", () => {
     expect((await response.json()).data).toMatchObject({
       allowed: false,
       code: "TRIAL_AVAILABLE",
-      message: "Start your 14-day trial to receive 100 agent-minutes.",
+      message: "Start your 7-day trial to receive 60 agent-minutes.",
     })
     expect(isTrialAvailable).toHaveBeenCalledWith("ws-1", "user-1")
     vi.mocked(isTrialAvailable).mockResolvedValue(false)

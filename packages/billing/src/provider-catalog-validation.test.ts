@@ -48,8 +48,8 @@ describe("provider catalog entitlement validation", () => {
       resolvePolarCatalogEvent("order.paid", {
         product_id: "polar-pack-500",
         currency: "USD",
-        subtotal_amount: 5000,
-        total_amount: 5000,
+        subtotal_amount: 6500,
+        total_amount: 6500,
         metadata: { packId: "pack_500" },
       })
     ).toEqual({ kind: "pack", packId: "pack_500" })

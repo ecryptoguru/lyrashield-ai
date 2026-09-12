@@ -12,7 +12,7 @@ import { CLOUD_PLAN_MAP, STANDARD_OVERAGE_PER_MINUTE_USD } from "@lyrashield/pri
 import type { ScanMode } from "@lyrashield/types"
 import { resolveAccountBilling, type ResolvedAccountBilling } from "./account"
 import { getUsageBalance, getUsageBalanceForTx, resolveBalanceCycleStart } from "./usage/balance"
-import { getAccountTrialState, blockOnExpiry, type TrialState } from "./trial"
+import { getAccountTrialState, blockOnExpiry, TRIAL_DURATION_DAYS, type TrialState } from "./trial"
 import { getGraceState as getGraceStateFromGrace } from "./grace"
 
 export type ScanModeAllowed = "SAFE" | "QUICK" | "STANDARD" | "DEEP" | "CUSTOM"
@@ -88,7 +88,7 @@ async function accountTrialStateFrom(
 ): Promise<TrialState> {
   const now = new Date()
   const endsAt = trialStartedAt
-    ? new Date(trialStartedAt.getTime() + 14 * 24 * 60 * 60 * 1000)
+    ? new Date(trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
     : null
   const isExpired = Boolean(endsAt && now > endsAt)
   if (!trialStartedAt) {

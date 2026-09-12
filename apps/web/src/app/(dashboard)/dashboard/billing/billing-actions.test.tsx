@@ -35,7 +35,7 @@ describe("BillingActions", () => {
   it("offers a trial while paid purchase admission is off", () => {
     const html = renderToString(<BillingActions {...props} purchasesAvailable={false} />)
     expect(html).toContain("Start free trial")
-    expect(html).toContain("100 one-time agent-minutes for 14 days")
+    expect(html).toContain("60 one-time agent-minutes for 7 days")
     expect(html).toContain("Deep and Custom scans are not included")
     expect(html).not.toContain("Choose a plan")
   })

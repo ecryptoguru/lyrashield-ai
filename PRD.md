@@ -222,17 +222,17 @@ Two product lines (WP1 repricing, founder-confirmed 2026-08-29, in code at `pack
 
 **Line 1 — Scan** (find what's wrong):
 
-| Plan    |     Monthly | Annual |      Minutes | Targets | Deep |
-| ------- | ----------: | -----: | -----------: | ------: | ---- |
-| Trial   | $0, 14 days |      — | 100 one-time |       3 | No   |
-| Starter |         $29 |   $295 |          300 |       5 | No   |
-| Pro     |         $99 |   $950 |        1,200 |      15 | Yes  |
+| Plan    |    Monthly | Annual |     Minutes | Targets | Deep |
+| ------- | ---------: | -----: | ----------: | ------: | ---- |
+| Trial   | $0, 7 days |      — | 60 one-time |       3 | No   |
+| Starter |        $29 |   $295 |         210 |       5 | No   |
+| Pro     |        $99 |   $950 |         850 |      15 | Yes  |
 
 **Line 2 — Launch Assurance** (prove it to a third party):
 
 | Plan             |     Monthly |             Annual | Minutes | Targets | Self-serve |
 | ---------------- | ----------: | -----------------: | ------: | ------: | ---------- |
-| Launch Assurance |        $499 | $4,188 (= $349/mo) |   6,000 |      50 | Yes        |
+| Launch Assurance |        $499 | $4,188 (= $349/mo) |   4,500 |      50 | Yes        |
 | Enterprise       | from $1,500 |                  — |  custom |  custom | No         |
 
 - Team ($299) was removed and merged into Launch Assurance. The `TEAM` enum value is retained in the schema for existing rows; the plan is not sold.
@@ -241,7 +241,7 @@ Two product lines (WP1 repricing, founder-confirmed 2026-08-29, in code at `pack
 - Integrations (GitHub, Slack, Jira) moved down to Pro. RBAC and shared reports stay at Launch Assurance and above.
 - Failed scans are never billed; cancelled scans bill elapsed time only (no 1-minute floor).
 
-Minute packs: 100/$15, 250/$30, 500/$50; 180-day validity.
+Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity.
 
 Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 minutes of non-bankable mid-scan grace; a scan starting at zero is rejected.
 

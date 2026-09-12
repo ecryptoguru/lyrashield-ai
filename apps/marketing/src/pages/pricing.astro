@@ -13,7 +13,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/pricing", origin).toString()
 const title = "Pricing — Cloud & Local Plans | LyraShield AI"
 const description =
-  "Cloud plans from $29 a month with a free trial of 100 agent-minutes and no card. Prepaid minute packs, annual billing and local one-time licences."
+  "Cloud plans from $29 a month with a free trial of 60 agent-minutes and no card. Prepaid minute packs, annual billing and local one-time licences."
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
@@ -25,7 +25,7 @@ const pricingFaqs = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes. Every new workspace starts with a 14-day free trial of 100 one-time agent-minutes and up to 3 targets, with no credit card required.",
+    a: "Yes. Every new workspace starts with a 7-day free trial of 60 one-time agent-minutes and up to 3 targets, with no credit card required.",
   },
   {
     q: "What happens if I run out of agent-minutes?",
@@ -311,7 +311,7 @@ const appUrl =
           Not sure yet? Start with a free trial.
         </h2>
         <p class="mt-2 text-sm text-text-muted">
-          100 agent-minutes, up to 3 targets, 14 days. No credit card required.
+          60 agent-minutes, up to 3 targets, 7 days. No credit card required.
         </p>
         <a
           href={`${appUrl}/sign-up`}
@@ -324,7 +324,7 @@ const appUrl =
       <!-- Free trial -->
       <div class="mt-12 rounded-lg bg-accent-dim/30 p-4 text-center">
         <p class="text-sm text-text-muted">
-          Start with a 14-day free trial — no credit card required.
+          Start with a 7-day free trial — no credit card required.
         </p>
       </div>
     </div>
