@@ -1,7 +1,9 @@
 # LyraShield AI — Release Legibility Coding-Agent Handoff
 
-Date: September 12, 2026  
-Status: implementation brief for founder review; no implementation, merge, deployment, or public-disclosure approval is implied by creating this document.  
+Date: September 12, 2026
+
+Status: implementation brief for founder review; no implementation, merge, deployment, or public-disclosure approval is implied by creating this document.
+
 Audience: coding agent implementing focused product changes in `lyrashield-ai`.
 
 ## 1. Objective and outcome
