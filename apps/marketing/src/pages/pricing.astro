@@ -330,7 +330,7 @@ const appUrl =
     </div>
 
     <!-- Local Pricing -->
-    <div id="local-pricing" class="mt-12 hidden">
+    <div id="local-pricing" class="mt-12 hidden" data-app-url={appUrl}>
       <div class="mx-auto max-w-xl">
         <div
           class="rounded-xl border border-accent/40 bg-bg-raised p-6 shadow-sm"
@@ -354,12 +354,48 @@ const appUrl =
             >
           </p>
           <p class="mt-3 text-sm text-text-muted">{localLaunch.description}</p>
-          <a
-            href={`${appUrl}/buy/local`}
-            class="mt-6 block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg transition-colors hover:bg-accent/90"
-          >
-            Buy Local license
-          </a>
+          <!--
+            Purchase availability is per-provider and request-scoped — the app
+            answers /api/billing/local-availability for the visitor's resolved
+            provider. The default state is the honest "unconfirmed" one so a
+            buy CTA is never shown before availability is established.
+          -->
+          <div data-local-availability="checking" class="mt-6" role="status" aria-live="polite">
+            <p class="text-sm text-text-muted">Checking Local purchase availability…</p>
+          </div>
+          <div data-local-availability="available" class="mt-6 hidden">
+            <a
+              href={`${appUrl}/buy/local`}
+              class="block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg transition-colors hover:bg-accent/90"
+            >
+              Buy Local license
+            </a>
+          </div>
+          <div data-local-availability="unavailable" class="mt-6 hidden">
+            <p class="text-sm font-medium text-text">
+              Local licenses are not available for purchase yet.
+            </p>
+            <p class="mt-1 text-sm text-text-muted">
+              You can still create an account and run the Cloud trial.
+            </p>
+            <a
+              href={`${appUrl}/sign-up`}
+              class="mt-4 block w-full rounded-lg border border-accent px-4 py-2.5 text-center text-sm font-semibold text-accent transition-colors hover:bg-accent-dim/40"
+            >
+              Create an account
+            </a>
+          </div>
+          <div data-local-availability="unknown" class="mt-6 hidden">
+            <p class="text-sm font-medium text-text">
+              Local purchase availability could not be confirmed.
+            </p>
+            <a
+              href={`${appUrl}/buy/local`}
+              class="mt-4 block w-full rounded-lg border border-border px-4 py-2.5 text-center text-sm font-semibold text-text transition-colors hover:bg-bg"
+            >
+              Check availability
+            </a>
+          </div>
         </div>
       </div>
 
@@ -541,5 +577,36 @@ const appUrl =
       currentInterval = "annual"
       updatePrices(currentCurrency, currentInterval)
     })
+
+    // Local purchase availability — one request-scoped check against the app,
+    // resolved for the same provider checkout would use. The CTA is only shown
+    // after a confirmed "available"; any failure keeps the honest states.
+    const localSection = document.getElementById("local-pricing")
+    const availabilityBlocks = localSection?.querySelectorAll("[data-local-availability]")
+    const appOrigin = localSection?.getAttribute("data-app-url") ?? ""
+
+    type LocalAvailability = "checking" | "available" | "unavailable" | "unknown"
+    function showAvailability(state: LocalAvailability) {
+      availabilityBlocks?.forEach((block) => {
+        block.classList.toggle(
+          "hidden",
+          block.getAttribute("data-local-availability") !== state
+        )
+      })
+    }
+
+    if (appOrigin && availabilityBlocks?.length) {
+      fetch(`${appOrigin}/api/billing/local-availability`, { credentials: "omit" })
+        .then((response) => {
+          if (!response.ok) throw new Error("availability_unconfirmed")
+          return response.json() as Promise<{ available?: unknown }>
+        })
+        .then((body) => {
+          showAvailability(body.available === true ? "available" : "unavailable")
+        })
+        .catch(() => showAvailability("unknown"))
+    } else {
+      showAvailability("unknown")
+    }
   </script>
 </Base>
