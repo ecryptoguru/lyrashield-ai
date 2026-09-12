@@ -32,6 +32,5 @@ Copy `apps/web/.env.example` to `apps/web/.env` and set at least `NEXT_PUBLIC_AP
 
 ## See also
 
-- `docs/deployment/LOCAL_SETUP.md`
 - `packages/cli/README.md`
-- `userguide.md`
+- `../../docs/user-guide.md`
