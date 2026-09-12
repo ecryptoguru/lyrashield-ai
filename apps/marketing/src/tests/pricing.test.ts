@@ -50,23 +50,48 @@ describe("pricing page", () => {
     expect("AGENCY" in CLOUD_PLAN_MAP).toBe(false)
   })
 
-  it("discloses Local purchase availability instead of an unconditional buy CTA", () => {
-    // The page must ask the app for the visitor's provider-scoped availability
-    // before showing the buy link — never claim availability it has not
-    // confirmed.
-    expect(pricingPage).toContain("/api/billing/local-availability")
-    expect(pricingPage).toContain('data-local-availability="checking"')
-    expect(pricingPage).toContain('data-local-availability="available"')
-    expect(pricingPage).toContain('data-local-availability="unavailable"')
-    expect(pricingPage).toContain('data-local-availability="unknown"')
-    expect(pricingPage).toContain("Local licenses are not available for purchase yet.")
-    expect(pricingPage).toContain("Local purchase availability could not be confirmed.")
-    expect(pricingPage).toContain("create an account and run the Cloud trial")
-    // All non-default states start hidden — the default render is the
-    // "checking" state, not a buy CTA.
-    expect(pricingPage).toContain('data-local-availability="available" class="mt-6 hidden"')
-    // Prices are unchanged and still rendered for both currencies.
+  it("states agent-native surfaces on each self-serve paid card", () => {
+    // Trial availability is covered by the shared-capabilities note below.
+    const SURFACES_LINE = "CLI, GitHub Action and MCP server access"
+    expect(CLOUD_PLAN_MAP.STARTER.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.PRO.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.TRIAL.features).not.toContain(SURFACES_LINE)
+  })
+
+  it("differentiates Agency by its enforced limits and overage", () => {
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(
+      "Overage at $0.15/min with a user-set spend limit"
+    )
+    expect(CLOUD_PLAN_MAP.PRO.features.join(" ")).not.toContain("Overage")
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features.join(" ")).not.toContain("merges blocked")
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features.join(" ")).not.toContain("WebMCP Assurance")
+  })
+
+  it("uses workspace-scoped evidence wording on Starter", () => {
+    expect(CLOUD_PLAN_MAP.STARTER.features).toContain("Workspace evidence records")
+    expect(CLOUD_PLAN_MAP.STARTER.features).not.toContain("Evidence Vault access")
+  })
+
+  it("shows Local as a blurred, non-purchasable future launch", () => {
+    expect(pricingPage).toContain("Local is launching later")
+    expect(pricingPage).toContain('aria-hidden="true" inert')
+    expect(pricingPage).toContain("blur-sm")
+    expect(pricingPage).not.toContain("/api/billing/local-availability")
+    expect(pricingPage).not.toContain("/buy/local")
     expect(pricingPage).toContain("formatUSD(localLaunch.priceUsd)")
     expect(pricingPage).toContain("formatINR(localLaunch.priceInr!)")
+  })
+
+  it("states shared capabilities and the required CI setup without a plan-exclusive gate claim", () => {
+    expect(pricingPage).toContain("Included across plans")
+    expect(pricingPage).toContain("The free GitHub Action runs scan-level SARIF")
+    expect(pricingPage).toContain("without a LyraShield account or API key")
+    expect(pricingPage).toContain("Eligible workspace members on every plan")
+    expect(pricingPage).toContain(
+      "versioned launch verdicts, launch reports and shareable scorecards"
+    )
+    expect(pricingPage).toContain("require its check in your repository settings")
+    expect(pricingPage).not.toContain("Launch Assurance tier's gate")
   })
 })

@@ -47,7 +47,7 @@ let updateManyMock: ReturnType<typeof vi.fn>
 function configureDatabase(
   poolMinutes: number,
   packMinutes: number[] = [],
-  opts?: { trial?: { startedAt: Date } }
+  opts?: { trial?: { startedAt: Date }; scanActor?: string; scanSponsor?: string }
 ): void {
   usageRecords = poolMinutes
     ? [
@@ -87,7 +87,13 @@ function configureDatabase(
   })
 
   const tx = {
-    scan: { findFirst: vi.fn().mockResolvedValue({ id: "finished", createdById: SPONSOR }) },
+    scan: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "finished",
+        createdById: opts?.scanActor ?? SPONSOR,
+        sponsorAccountId: opts?.scanSponsor ?? null,
+      }),
+    },
     scanEvent: { create: intentCreateMock },
     $executeRaw: executeRawMock,
     user: {
@@ -214,6 +220,12 @@ beforeEach(() => {
 })
 
 describe("recordAgentMinutes pack debits", () => {
+  it("charges the persisted Agency buyer while retaining the teammate as scan actor", async () => {
+    configureDatabase(100, [], { scanActor: "teammate", scanSponsor: SPONSOR })
+    await recordAgentMinutes("ws_1", "finished", 60_000)
+    expect(usageRecords.find((record) => record.kind === "agent_minutes")?.accountId).toBe(SPONSOR)
+  })
+
   it("fails before finalization or debit when durable intent insertion fails once", async () => {
     configureDatabase(100, [10])
     const before = structuredClone({ usageRecords, packs })

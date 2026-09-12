@@ -211,6 +211,25 @@ describe("account deletion", () => {
     ])
   })
 
+  it("blocks deleting an Agency buyer while other members use their allowance", async () => {
+    await prisma.workspace.update({
+      where: { id: retainWorkspaceId },
+      data: { agencySponsorAccountId: userId },
+    })
+    try {
+      const plan = await getAccountDeletionPlan(userId)
+      expect(plan.blocked).toContainEqual(expect.objectContaining({ id: retainWorkspaceId }))
+      await expect(deleteUserAccount(userId, "DELETE")).rejects.toBeInstanceOf(
+        AccountDeletionBlockedError
+      )
+    } finally {
+      await prisma.workspace.update({
+        where: { id: retainWorkspaceId },
+        data: { agencySponsorAccountId: null },
+      })
+    }
+  })
+
   it("blocks sole owners until another member is promoted", async () => {
     await expect(deleteUserAccount(userId, "DELETE")).rejects.toBeInstanceOf(
       AccountDeletionBlockedError

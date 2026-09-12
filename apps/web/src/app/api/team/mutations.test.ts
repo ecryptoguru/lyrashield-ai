@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   count: vi.fn(),
   update: vi.fn(),
   revoke: vi.fn(),
+  workspace: vi.fn(),
 }))
 vi.mock("@lyrashield/db", () => ({
   lockWorkspaceMembership: async (tx: { $queryRaw: () => Promise<unknown> }) => tx.$queryRaw(),
@@ -15,6 +16,7 @@ vi.mock("@lyrashield/db", () => ({
   withWorkspaceRLS: async (_id: string, fn: (tx: unknown) => unknown) =>
     fn({
       $queryRaw: mocks.lock,
+      workspace: { findUnique: mocks.workspace },
       workspaceMember: { findFirst: mocks.find, count: mocks.count, updateMany: mocks.update },
     }),
 }))
@@ -64,6 +66,7 @@ describe("team mutations", () => {
     mocks.count.mockResolvedValue(2)
     mocks.update.mockResolvedValue({ count: 1 })
     mocks.revoke.mockResolvedValue({ count: 1 })
+    mocks.workspace.mockResolvedValue({ agencySponsorAccountId: null })
   })
   it.each([
     ["role", change, PERMISSIONS.member.updateRole],
@@ -104,6 +107,15 @@ describe("team mutations", () => {
       .mockResolvedValueOnce({ role: "OWNER" })
       .mockResolvedValueOnce({ role: "OWNER" })
     mocks.count.mockResolvedValue(1)
+    expect((await run()).status).toBe(409)
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+  it.each([change, remove])("protects the Agency buyer's ownership", async (run) => {
+    mocks.find
+      .mockReset()
+      .mockResolvedValueOnce({ role: "OWNER", userId: "actor-1" })
+      .mockResolvedValueOnce({ role: "OWNER", userId: "target-1" })
+    mocks.workspace.mockResolvedValue({ agencySponsorAccountId: "target-1" })
     expect((await run()).status).toBe(409)
     expect(mocks.update).not.toHaveBeenCalled()
   })

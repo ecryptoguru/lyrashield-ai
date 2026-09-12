@@ -8,6 +8,7 @@ import {
   evaluateScanEntitlement,
   isTrialAvailable,
   resolveAccountBilling,
+  resolveWorkspaceScanSponsor,
 } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
@@ -93,8 +94,13 @@ export async function GET(request: Request) {
     if (target.type === "WEB_APP" || target.type === "API") {
       // The sponsor's effective plan decides — workspace.plan is a display
       // field under account-owned billing.
-      const sponsorBilling = await resolveAccountBilling(session.userId)
-      const sponsorPlan = sponsorBilling?.effectivePlan ?? "FREE"
+      const sponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
+      const sponsorBilling = sponsor?.agencyActive
+        ? null
+        : await resolveAccountBilling(session.userId)
+      const sponsorPlan = sponsor?.agencyActive
+        ? "LAUNCH_ASSURANCE"
+        : (sponsorBilling?.effectivePlan ?? "FREE")
       if (sponsorPlan === "FREE") {
         // Read-only peek: repeated preflight calls must not consume the
         // caller's hourly free-URL budget. The POST path consumes the token.

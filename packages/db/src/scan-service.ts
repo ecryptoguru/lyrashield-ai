@@ -130,6 +130,12 @@ export async function createScan(
       throw new Error("Target already has an active scan")
     }
 
+    const workspace = await tx.workspace.findUnique({
+      where: { id: params.workspaceId },
+      select: { agencySponsorAccountId: true },
+    })
+    if (!workspace) throw new Error("Workspace not found")
+
     const scan = await tx.scan.create({
       data: {
         workspaceId: params.workspaceId,
@@ -141,6 +147,7 @@ export async function createScan(
         triggerType: params.triggerType ?? "manual",
         determinismMode,
         createdById: params.createdById,
+        sponsorAccountId: workspace.agencySponsorAccountId ?? params.createdById,
       },
     })
     await tx.scanEvent.create({

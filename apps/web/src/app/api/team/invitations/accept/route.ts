@@ -5,6 +5,8 @@ import { assertBrowserSession, getSession } from "@lyrashield/auth/server"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
+import { resolveAccountBilling } from "@lyrashield/billing"
+import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
 
 const AcceptSchema = z.object({
   token: z.string().min(1).max(128),
@@ -55,8 +57,8 @@ export async function GET(request: Request) {
 /**
  * Redeem an invitation for the signed-in user. The invitation token reaches
  * the user out-of-band (email/manual link); the accept is authorized by the
- * match between the invitation's email and the signed-in account's email, so
- * a leaked link cannot add an arbitrary account to a workspace.
+ * match between the invitation's email and the signed-in account's verified,
+ * current database email, so a copied link cannot add an arbitrary account.
  */
 async function post(request: Request) {
   let body: unknown
@@ -78,13 +80,12 @@ async function post(request: Request) {
     // Joining a workspace is account-owned browser activity — a workspace-bound
     // credential must not convert an invitation into membership.
     assertBrowserSession(session)
-    const userEmail = (session.userEmail ?? "").toLowerCase()
-
     const invitation = await getSystemPrisma().invitation.findUnique({
       where: { token: parsed.data.token },
       select: {
         id: true,
         workspaceId: true,
+        invitedById: true,
         email: true,
         role: true,
         status: true,
@@ -106,16 +107,65 @@ async function post(request: Request) {
         410
       )
     }
-    if (invitation.email.toLowerCase() !== userEmail) {
-      return apiError(
-        "INVITATION_EMAIL_MISMATCH",
-        `This invitation was sent to ${invitation.email}. Sign in with that address to accept it.`,
-        403
-      )
-    }
-
     const joined = await getSystemPrisma().$transaction(async (tx) => {
       await lockWorkspaceMembership(tx, invitation.workspaceId)
+      // Invitation links can be shared by the inviter. Recheck the persisted
+      // Better Auth user after locking, so a stale session or an unverified
+      // email address cannot turn a copied link into workspace access.
+      const user = await tx.user.findUnique({
+        where: { id: session.userId },
+        select: { email: true, emailVerified: true },
+      })
+      if (!user?.emailVerified) throw new Error("INVITATION_EMAIL_UNVERIFIED")
+      if (user.email.toLowerCase() !== invitation.email.toLowerCase())
+        throw new Error("INVITATION_EMAIL_MISMATCH")
+      const existingMember = await tx.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: { workspaceId: invitation.workspaceId, userId: session.userId },
+        },
+        select: { status: true },
+      })
+      if (existingMember?.status !== "active") {
+        const workspace = await tx.workspace.findUnique({
+          where: { id: invitation.workspaceId },
+          select: { agencySponsorAccountId: true },
+        })
+        const sponsorAccountId = workspace?.agencySponsorAccountId ?? invitation.invitedById
+        const owner = await tx.workspaceMember.findFirst({
+          where: {
+            workspaceId: invitation.workspaceId,
+            userId: sponsorAccountId,
+            status: "active",
+            role: "OWNER",
+          },
+          select: { id: true },
+        })
+        const billing = owner ? await resolveAccountBilling(sponsorAccountId, tx) : null
+        if (billing?.effectivePlan !== "LAUNCH_ASSURANCE") {
+          throw new Error("AGENCY_PLAN_REQUIRED")
+        }
+        const activeCount = await tx.workspaceMember.count({
+          where: { workspaceId: invitation.workspaceId, status: "active" },
+        })
+        if (activeCount >= CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.memberSeats)
+          throw new Error("TEAM_SEAT_LIMIT")
+        if (!workspace?.agencySponsorAccountId) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`agency-sponsor:${sponsorAccountId}`}, 0))`
+          const otherTeam = await getSystemPrisma().workspace.findFirst({
+            where: {
+              agencySponsorAccountId: sponsorAccountId,
+              deletedAt: null,
+              id: { not: invitation.workspaceId },
+            },
+            select: { id: true },
+          })
+          if (otherTeam) throw new Error("AGENCY_TEAM_EXISTS")
+          await tx.workspace.update({
+            where: { id: invitation.workspaceId },
+            data: { agencySponsorAccountId: sponsorAccountId },
+          })
+        }
+      }
       const consumed = await tx.invitation.updateMany({
         where: {
           id: invitation.id,
@@ -139,15 +189,9 @@ async function post(request: Request) {
         throw new Error("INVITATION_CONSUME_CONFLICT")
       }
 
-      const activeMember = await tx.workspaceMember.findUnique({
-        where: {
-          workspaceId_userId: { workspaceId: invitation.workspaceId, userId: session.userId },
-        },
-        select: { status: true },
-      })
       // An old invitation must never demote an existing owner or change an
       // active member's permissions. Role changes belong to the team route.
-      if (activeMember?.status === "active") return false
+      if (existingMember?.status === "active") return false
       await tx.workspaceMember.upsert({
         where: {
           workspaceId_userId: {
@@ -193,6 +237,37 @@ async function post(request: Request) {
       alreadyMember: !joined,
     })
   } catch (error) {
+    if (error instanceof Error && error.message === "INVITATION_EMAIL_UNVERIFIED") {
+      return apiError(
+        "INVITATION_EMAIL_UNVERIFIED",
+        "Verify your email address before accepting this invitation.",
+        403
+      )
+    }
+    if (error instanceof Error && error.message === "INVITATION_EMAIL_MISMATCH") {
+      return apiError(
+        "INVITATION_EMAIL_MISMATCH",
+        "Sign in with the email address that received this invitation.",
+        403
+      )
+    }
+    if (error instanceof Error && error.message === "AGENCY_PLAN_REQUIRED") {
+      return apiError(
+        "AGENCY_PLAN_REQUIRED",
+        "The Agency buyer needs an active subscription before this invitation can be accepted.",
+        403
+      )
+    }
+    if (error instanceof Error && error.message === "TEAM_SEAT_LIMIT") {
+      return apiError("TEAM_SEAT_LIMIT", "This Agency workspace already has five members.", 409)
+    }
+    if (error instanceof Error && error.message === "AGENCY_TEAM_EXISTS") {
+      return apiError(
+        "AGENCY_TEAM_EXISTS",
+        "This Agency subscription already sponsors another workspace.",
+        409
+      )
+    }
     if (error instanceof Error && error.message === "INVITATION_CONSUME_CONFLICT") {
       return apiError("INVITATION_NOT_FOUND", "This invitation is no longer valid", 409)
     }

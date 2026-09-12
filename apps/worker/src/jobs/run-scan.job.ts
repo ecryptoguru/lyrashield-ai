@@ -678,6 +678,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         determinismMode: true,
         startedAt: true,
         createdById: true,
+        sponsorAccountId: true,
       },
     })
   } catch (err) {
@@ -1231,9 +1232,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         if (billableWork && billingOutcome !== "failed") {
           let finalizationAttempted = false
           try {
-            // The sponsoring account pays — the persisted createdById is the
-            // trusted identity, not the workspace the scan ran in.
-            const sponsorAccountId = scanRecord.createdById
+            // The persisted sponsor is bound when the scan is created; older
+            // scans retain their original creator-owned billing identity.
+            const sponsorAccountId = scanRecord.sponsorAccountId ?? scanRecord.createdById
             const settleOverage = async (minutes: number, tx?: ScopedTransaction) => {
               // Overage is available to Launch Assurance accounts with a
               // limit — read inside the settlement tx when one is bound so
@@ -1647,8 +1648,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         env.LYRASHIELD_AI_TRIAGE_ENABLED === "1"
       const workspacePlan =
         triageFeatureEnabled && triageInput
-          ? await runWithAccountContext(scanRecord.createdById, () =>
-              resolveAccountBilling(scanRecord.createdById)
+          ? await runWithAccountContext(scanRecord.sponsorAccountId ?? scanRecord.createdById, () =>
+              resolveAccountBilling(scanRecord.sponsorAccountId ?? scanRecord.createdById)
             )
               .then((b) => (b ? { plan: b.effectivePlan } : null))
               .catch(() => null)

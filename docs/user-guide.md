@@ -393,7 +393,7 @@ Personal notifications are visible only to their intended user; workspace-wide n
 
 ## 19. Team and roles
 
-Open **More → Team** to view active members and pending invitations. Users with invitation permission can invite an email address and assign a role below their own privilege level. Owners may assign any role; non-owners cannot create a peer or higher-privilege role.
+Open **More → Team** to view active members and pending invitations. Users with invitation permission can invite an email address and assign a role below their own privilege level. Owners may assign any role; non-owners cannot create a peer or higher-privilege role. Invitees must sign in with the invited address and verify that email before accepting.
 
 Every active member has operational read/write access: projects and targets, scans, findings and dispositions, fix proposals and fix PRs, retests, reports, schedules, notifications, and AI-assurance workflows. Permitted agent actions run automatically after connection. This includes members with the legacy Viewer, Auditor, and External Pentester role names; those names no longer imply read-only operational access.
 
@@ -436,11 +436,11 @@ LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Standard and Quick
 - **Annual billing:** 15–30% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
 - **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days.
-- **Overage:** $0.15/min — Launch Assurance opt-in with a configurable spend limit.
+- **Overage:** $0.15/min — Agency opt-in with a configurable spend limit.
 - **Deep/Custom scans:** 3× agent-minute multiplier, PRO+ only.
 - **Grace period:** 15 min free grace if minutes run out mid-scan.
 - **Refunds:** Cloud subscriptions are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.
-- **Billing page:** manage subscription, buy minute packs, view usage, and set a spend limit (Launch Assurance).
+- **Billing page:** manage your own subscription, buy minute packs, view usage, and set a spend limit (Agency). In an Agency workspace, up to five members share the buyer's 4,500 monthly minutes for scans in that workspace.
 
 ### 20.6 Affiliate program
 

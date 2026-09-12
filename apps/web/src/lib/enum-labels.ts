@@ -84,7 +84,7 @@ export const WORKSPACE_PLAN_LABELS: Record<string, string> = {
   TEAM: "Team",
   AGENCY: "Agency",
   BUSINESS: "Business",
-  LAUNCH_ASSURANCE: "Launch Assurance",
+  LAUNCH_ASSURANCE: "Agency",
   ENTERPRISE: "Enterprise",
 }
 

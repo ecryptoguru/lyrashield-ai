@@ -20,7 +20,7 @@ interface BillingActionsProps {
 const PLANS = [
   ["STARTER", "Starter"],
   ["PRO", "Pro"],
-  ["LAUNCH_ASSURANCE", "Launch Assurance"],
+  ["LAUNCH_ASSURANCE", "Agency"],
 ] as const
 
 export function BillingActions({
