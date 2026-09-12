@@ -424,18 +424,18 @@ Other integration types exist in the internal schema and roadmap, but the curren
 
 These are the configured commercial terms. Live checkout and charging remain disabled until the founder activates the production providers.
 
-LyraShield Cloud offers a 14-day free trial: 100 agent-minutes, Standard and Quick scans only (no Deep), and no card required. When the trial ends, pick a paid plan or let it lapse.
+LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Standard and Quick scans only (no Deep), and no card required. When the trial ends, pick a paid plan or let it lapse.
 
 | Plan             | Price       | Minutes/mo | Targets | Deep | Notes                                      |
 | ---------------- | ----------- | ---------: | ------: | ---- | ------------------------------------------ |
-| STARTER          | $29/mo      |        300 |       5 | No   | Standard + Quick                           |
-| PRO              | $99/mo      |      1,200 |      15 | Yes  | Deep enabled                               |
-| LAUNCH ASSURANCE | $499/mo     |      6,000 |      50 | Yes  | Deep + opt-in overage + spend limit + RBAC |
+| STARTER          | $29/mo      |        210 |       5 | No   | Standard + Quick                           |
+| PRO              | $99/mo      |        850 |      15 | Yes  | Deep enabled                               |
+| LAUNCH ASSURANCE | $499/mo     |      4,500 |      50 | Yes  | Deep + opt-in overage + spend limit + RBAC |
 | ENTERPRISE       | Contact-led |     custom |  custom | Yes  | Custom terms                               |
 
 - **Annual billing:** 15–30% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
-- **Minute packs:** 100/$15, 250/$30, 500/$50 — valid 180 days.
+- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days.
 - **Overage:** $0.15/min — Launch Assurance opt-in with a configurable spend limit.
 - **Deep/Custom scans:** 3× agent-minute multiplier, PRO+ only.
 - **Grace period:** 15 min free grace if minutes run out mid-scan.

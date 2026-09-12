@@ -63,7 +63,7 @@ Confidence is triage metadata, never proof. Engine-only absence is always inconc
 
 ## 6. Business model at a glance
 
-- **Cloud** — two product lines. _Scan_ (find what's wrong): free 14-day trial, Starter, Pro. _Launch Assurance_ (prove it to a third party): Launch Assurance tier, contact-led Enterprise. Metered in agent-minutes; failed scans are never billed.
+- **Cloud** — two product lines. _Scan_ (find what's wrong): free 7-day trial, Starter, Pro. _Launch Assurance_ (prove it to a third party): Launch Assurance tier, contact-led Enterprise. Metered in agent-minutes; failed scans are never billed.
 - **Local/Desktop** — one-time one-year licenses (Individual, Team perpetual, Team subscription) plus a Cloud Sync add-on. No lifetime deals.
 - **Affiliates** — application-gated program: 25% recurring for 12 months on Cloud monthly plans, 20% one-time on Local licenses.
 - **Free surface** — Lite Check, browser-local tools, the GitHub Action, and technical content are the acquisition engine; there is no permanent free product tier.

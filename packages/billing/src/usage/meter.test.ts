@@ -115,9 +115,7 @@ function configureDatabase(
                     currentPeriodStart: null,
                     currentPeriodEnd: null,
                     canceledAt: null,
-                    trialEndsAt: new Date(
-                      opts.trial.startedAt.getTime() + 7 * 24 * 60 * 60 * 1000
-                    ),
+                    trialEndsAt: new Date(opts.trial.startedAt.getTime() + 7 * 24 * 60 * 60 * 1000),
                     spendLimitCents: null,
                     graceUsedMs: 0,
                     graceCycleStart: null,

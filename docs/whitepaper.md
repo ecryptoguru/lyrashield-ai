@@ -172,21 +172,21 @@ Two product lines, one meter (protected targets + agent-minutes), two gateways (
 
 **Line 1 — Scan** (find what's wrong):
 
-| Plan    |     Monthly | Annual | Agent-min/mo | Targets | Deep scans |
-| ------- | ----------: | -----: | -----------: | ------: | ---------- |
-| Trial   | $0, 14 days |      — | 100 one-time |       3 | No         |
-| Starter |         $29 |   $295 |          300 |       5 | No         |
-| Pro     |         $99 |   $950 |        1,200 |      15 | Yes        |
+| Plan    |    Monthly | Annual | Agent-min/mo | Targets | Deep scans |
+| ------- | ---------: | -----: | -----------: | ------: | ---------- |
+| Trial   | $0, 7 days |      — |  60 one-time |       3 | No         |
+| Starter |        $29 |   $295 |          210 |       5 | No         |
+| Pro     |        $99 |   $950 |          850 |      15 | Yes        |
 
 **Line 2 — Launch Assurance** (prove it to a third party):
 
 | Plan             |     Monthly | Annual | Agent-min/mo | Targets | Self-serve |
 | ---------------- | ----------: | -----: | -----------: | ------: | ---------- |
-| Launch Assurance |        $499 | $4,188 |        6,000 |      50 | Yes        |
+| Launch Assurance |        $499 | $4,188 |        4,500 |      50 | Yes        |
 | Enterprise       | from $1,500 |      — |       custom |  custom | No         |
 
 - Deep scans meter at 3×; failed scans are never billed; cancelled scans bill elapsed time only.
-- Overage (Launch Assurance only): $0.15/agent-minute behind a user-set spend limit. Minute packs: 100/$15, 250/$30, 500/$50, valid 180 days.
+- Overage (Launch Assurance only): $0.15/agent-minute behind a user-set spend limit. Minute packs: 100/$15, 250/$35, 500/$65, valid 180 days.
 - A mid-scan balance of zero grants at most 15 minutes of non-bankable grace; a scan starting at zero is rejected.
 - Subscriptions, allowances, usage, packs, and overage are owned by the **account**, not the workspace — a subscription follows the person; workspace membership never shares another member's allowance.
 - Non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error.
