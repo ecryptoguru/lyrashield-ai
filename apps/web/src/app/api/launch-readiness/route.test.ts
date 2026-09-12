@@ -81,6 +81,57 @@ describe("GET /api/launch-readiness — release check contract", () => {
     })
   })
 
+  it("normalizes an uppercase commit before evaluating applicability", async () => {
+    const uppercaseCommit = "A".repeat(40)
+
+    const response = await GET(
+      request(`workspaceId=ws-1&targetId=target-1&commit=${uppercaseCommit}`)
+    )
+
+    expect(response.status).toBe(200)
+    expect(mocks.getGateReadinessTargets).toHaveBeenCalledWith("ws-1", "target-1", {
+      expectedCommit: COMMIT_A,
+      expectedArtifactDigest: undefined,
+    })
+    const body = await response.json()
+    expect(body.data.releaseCheck).toMatchObject({
+      match: "match",
+      requested: { kind: "COMMIT", value: COMMIT_A },
+      applicable: true,
+    })
+    expect(body.data.releaseCheck.reasons).not.toContainEqual(
+      expect.objectContaining({ code: "IDENTITY_MISMATCH" })
+    )
+  })
+
+  it("auto-selects one authorized target before applying the release identity", async () => {
+    const response = await GET(request(`workspaceId=ws-1&commit=${COMMIT_A}`))
+
+    expect(response.status).toBe(200)
+    expect(mocks.getGateReadinessTargets).toHaveBeenNthCalledWith(1, "ws-1")
+    expect(mocks.getGateReadinessTargets).toHaveBeenNthCalledWith(2, "ws-1", "target-1", {
+      expectedCommit: COMMIT_A,
+      expectedArtifactDigest: undefined,
+    })
+    const body = await response.json()
+    expect(body.data.releaseCheck).toMatchObject({ match: "match", targetId: "target-1" })
+  })
+
+  it("does not apply one release identity across multiple targets while target selection is pending", async () => {
+    mocks.getGateReadinessTargets.mockResolvedValue([
+      READY_TARGET,
+      { ...READY_TARGET, targetId: "target-2", targetName: "Worker" },
+    ])
+
+    const response = await GET(request(`workspaceId=ws-1&commit=${COMMIT_A}`))
+
+    expect(response.status).toBe(200)
+    expect(mocks.getGateReadinessTargets).toHaveBeenCalledTimes(1)
+    expect(mocks.getGateReadinessTargets).toHaveBeenCalledWith("ws-1")
+    const body = await response.json()
+    expect(body.data.releaseCheck).toBeNull()
+  })
+
   it("fails closed with 400 on simultaneous commit and artifactDigest", async () => {
     const response = await GET(
       request(`workspaceId=ws-1&targetId=target-1&commit=${COMMIT_A}&artifactDigest=${DIGEST}`)
@@ -121,6 +172,35 @@ describe("GET /api/launch-readiness — release check contract", () => {
       expectedArtifactDigest: DIGEST,
     })
     expect(body.data.releaseCheck.match).toBe("match")
+  })
+
+  it("normalizes an uppercase artifact digest before evaluating applicability", async () => {
+    const uppercaseDigest = `sha256:${"C".repeat(64)}`
+    const digestTarget = {
+      ...READY_TARGET,
+      assessedIdentity: { kind: "ARTIFACT_DIGEST" as const, value: DIGEST },
+      identity: { kind: "ARTIFACT_DIGEST" as const, value: DIGEST },
+    }
+    mocks.getGateReadinessTargets.mockResolvedValue([digestTarget])
+
+    const response = await GET(
+      request(`workspaceId=ws-1&targetId=target-1&artifactDigest=${uppercaseDigest}`)
+    )
+
+    expect(response.status).toBe(200)
+    expect(mocks.getGateReadinessTargets).toHaveBeenCalledWith("ws-1", "target-1", {
+      expectedCommit: undefined,
+      expectedArtifactDigest: DIGEST,
+    })
+    const body = await response.json()
+    expect(body.data.releaseCheck).toMatchObject({
+      match: "match",
+      requested: { kind: "ARTIFACT_DIGEST", value: DIGEST },
+      applicable: true,
+    })
+    expect(body.data.releaseCheck.reasons).not.toContainEqual(
+      expect.objectContaining({ code: "IDENTITY_MISMATCH" })
+    )
   })
 
   it("reports cannot-confirm for a targetId outside the workspace without leaking existence", async () => {

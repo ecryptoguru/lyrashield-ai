@@ -5,6 +5,7 @@ import { LaunchReadinessClient } from "./launch-readiness-client"
 import {
   describeReleaseCheck,
   parseReleaseReference,
+  resolveReleaseCheckTargetId,
   type ReleaseIdentityInput,
 } from "@/lib/launch-readiness"
 import { withWorkspaceRLS } from "@lyrashield/db"
@@ -72,8 +73,11 @@ export default async function LaunchReadinessPage({
   // A release reference without a target auto-selects only when there is
   // exactly one authorized target — otherwise the user must choose rather
   // than have the identity applied across every target.
-  const resolvedTargetId =
-    rawTargetId || (checkRequested && allTargets.length === 1 ? allTargets[0]!.targetId : "")
+  const resolvedTargetId = resolveReleaseCheckTargetId(
+    rawTargetId,
+    checkRequested,
+    allTargets.map((target) => target.targetId)
+  )
   const checkNeedsTarget = checkRequested && !checkError && !resolvedTargetId
   const effectiveTargetId = checkError ? "" : resolvedTargetId
   const identityOptions = checkError
@@ -96,8 +100,8 @@ export default async function LaunchReadinessPage({
         _count: { _all: true },
       })
     ),
-    effectiveTargetId || identityOptions
-      ? getGateReadinessTargets(workspaceId, effectiveTargetId || undefined, identityOptions)
+    effectiveTargetId
+      ? getGateReadinessTargets(workspaceId, effectiveTargetId, identityOptions)
       : Promise.resolve(allTargets),
   ])
 
@@ -126,6 +130,7 @@ export default async function LaunchReadinessPage({
         targetName: target.targetName,
       }))}
       initialTargetId={effectiveTargetId}
+      initialReleaseRef={requestedIdentity?.value ?? (rawCommit || rawDigest)}
       initialReleaseCheck={releaseCheck}
       initialCheckError={checkError}
       checkNeedsTarget={checkNeedsTarget}

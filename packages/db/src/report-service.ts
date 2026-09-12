@@ -383,7 +383,10 @@ export async function getShareableReport(
 
   return {
     id: report.id,
-    title: "LyraShield Security Assurance Report",
+    title:
+      report.type === "launch_readiness"
+        ? "LyraShield Launch Readiness Report"
+        : "LyraShield Security Assurance Report",
     type: report.type,
     status: report.status,
     format: report.format,
@@ -471,9 +474,7 @@ export async function listReports(
     return {
       ...rest,
       provenance:
-        report.type === "launch_readiness"
-          ? parseLaunchReportProvenance(provenanceJson)
-          : null,
+        report.type === "launch_readiness" ? parseLaunchReportProvenance(provenanceJson) : null,
     }
   })
   const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null

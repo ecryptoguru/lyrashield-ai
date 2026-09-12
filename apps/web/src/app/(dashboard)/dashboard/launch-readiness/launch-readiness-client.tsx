@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useLaunchReadinessWebMcp } from "./launch-readiness-webmcp"
@@ -172,6 +172,7 @@ export function LaunchReadinessClient({
   initialReport,
   targets,
   initialTargetId,
+  initialReleaseRef,
   initialReleaseCheck,
   initialCheckError,
   checkNeedsTarget,
@@ -180,6 +181,7 @@ export function LaunchReadinessClient({
   initialReport: LaunchReadinessReport
   targets: { targetId: string; targetName: string }[]
   initialTargetId: string
+  initialReleaseRef: string
   initialReleaseCheck: ReleaseCheckResult | null
   initialCheckError: string | null
   checkNeedsTarget: boolean
@@ -190,18 +192,26 @@ export function LaunchReadinessClient({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedTargetId, setSelectedTargetId] = useState(initialTargetId)
-  const [releaseRef, setReleaseRef] = useState("")
+  const [releaseRef, setReleaseRef] = useState(initialReleaseRef)
   const [formError, setFormError] = useState<string | null>(initialCheckError)
+  const [draftDirty, setDraftDirty] = useState(false)
+  const draftVersion = useRef(0)
 
   useLaunchReadinessWebMcp({ workspaceId, onReport: setReport })
 
   const loadReport = useCallback(
-    (signal?: AbortSignal, options?: { silent?: boolean }) => {
+    (signal?: AbortSignal, options?: { silent?: boolean; refreshCheck?: boolean }) => {
       const silent = options?.silent === true
+      const refreshCheck = options?.refreshCheck === true || !draftDirty
       if (!silent) setLoading(true)
       // Carry the URL's check state so a refresh re-runs the same check rather
       // than silently dropping back to the informational view.
       const params = new URLSearchParams(window.location.search)
+      const refreshVersion = draftVersion.current
+      const checkRequested = params.has("commit") || params.has("artifactDigest")
+      if (checkRequested && !params.has("targetId") && initialTargetId) {
+        params.set("targetId", initialTargetId)
+      }
       params.set("workspaceId", workspaceId)
       apiGet<LaunchReadinessReport & { releaseCheck?: ReleaseCheckResult | null }>(
         `/api/launch-readiness?${params.toString()}`,
@@ -209,7 +219,10 @@ export function LaunchReadinessClient({
       )
         .then((data) => {
           setReport(data)
-          setReleaseCheck(data.releaseCheck ?? null)
+          if (refreshCheck && refreshVersion === draftVersion.current) {
+            setReleaseCheck(data.releaseCheck ?? null)
+            setFormError(null)
+          }
           setError(null)
         })
         .catch(() => {
@@ -218,13 +231,18 @@ export function LaunchReadinessClient({
           if (!silent) {
             setError("Failed to load launch readiness report. Please try again.")
             setReleaseCheck(null)
+          } else if (checkRequested && refreshCheck && refreshVersion === draftVersion.current) {
+            setReleaseCheck(null)
+            setFormError(
+              "Could not refresh release applicability. Current applicability is unavailable; try again."
+            )
           }
         })
         .finally(() => {
           if (!silent) setLoading(false)
         })
     },
-    [workspaceId]
+    [draftDirty, initialTargetId, workspaceId]
   )
 
   // This page does not poll (readiness only moves when a scan finishes), so it
@@ -279,21 +297,55 @@ export function LaunchReadinessClient({
       setFormError("Choose the target this release belongs to.")
       return
     }
+    draftVersion.current += 1
+    setReleaseCheck(null)
+    setDraftDirty(true)
     const params = new URLSearchParams()
     if (selectedTargetId) params.set("targetId", selectedTargetId)
     if (parsed?.kind === "COMMIT") params.set("commit", parsed.value)
     if (parsed?.kind === "ARTIFACT_DIGEST") params.set("artifactDigest", parsed.value)
     const query = params.toString()
-    router.push(`/dashboard/launch-readiness${query ? `?${query}` : ""}`)
+    const destination = `/dashboard/launch-readiness${query ? `?${query}` : ""}`
+    if (`${window.location.pathname}${window.location.search}` === destination) {
+      setDraftDirty(false)
+      loadReport(undefined, { refreshCheck: true })
+      return
+    }
+    router.push(destination)
   }
 
   function clearCheck() {
+    draftVersion.current += 1
     setReleaseRef("")
+    setReleaseCheck(null)
     setFormError(null)
-    router.push("/dashboard/launch-readiness")
+    const destination = "/dashboard/launch-readiness"
+    if (`${window.location.pathname}${window.location.search}` === destination) {
+      setDraftDirty(false)
+      loadReport(undefined, { refreshCheck: true })
+      return
+    }
+    setDraftDirty(true)
+    router.push(destination)
   }
 
-  const checkActive = Boolean(releaseCheck?.requested) || Boolean(initialCheckError)
+  const checkActive = Boolean(releaseRef) || Boolean(releaseCheck?.requested) || Boolean(formError)
+
+  function changeTarget(value: string) {
+    draftVersion.current += 1
+    setSelectedTargetId(value)
+    setReleaseCheck(null)
+    setFormError(null)
+    setDraftDirty(true)
+  }
+
+  function changeReleaseRef(value: string) {
+    draftVersion.current += 1
+    setReleaseRef(value)
+    setReleaseCheck(null)
+    setFormError(null)
+    setDraftDirty(true)
+  }
 
   return (
     <div className="space-y-6">
@@ -316,7 +368,7 @@ export function LaunchReadinessClient({
             <select
               id="release-check-target"
               value={selectedTargetId}
-              onChange={(event) => setSelectedTargetId(event.target.value)}
+              onChange={(event) => changeTarget(event.target.value)}
               className="border-border bg-background text-foreground rounded-md border px-3 py-2 text-sm sm:w-56"
             >
               <option value="">Select a target</option>
@@ -330,7 +382,7 @@ export function LaunchReadinessClient({
               id="release-check-reference"
               type="text"
               value={releaseRef}
-              onChange={(event) => setReleaseRef(event.target.value)}
+              onChange={(event) => changeReleaseRef(event.target.value)}
               placeholder="Commit SHA or sha256: artifact digest"
               spellCheck={false}
               autoComplete="off"
@@ -341,7 +393,13 @@ export function LaunchReadinessClient({
                 Check release
               </Button>
               {checkActive && (
-                <Button type="button" variant="outline" size="sm" className="h-9" onClick={clearCheck}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  onClick={clearCheck}
+                >
                   Clear
                 </Button>
               )}
@@ -359,7 +417,7 @@ export function LaunchReadinessClient({
             assessment covers; it does not check a specific release.
           </p>
         )}
-        {checkNeedsTarget && (
+        {checkNeedsTarget && !selectedTargetId && (
           <p className="text-muted-foreground mt-3 text-sm" role="status">
             Choose the target this release belongs to, then check again.
           </p>

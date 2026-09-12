@@ -64,7 +64,8 @@ export async function getGateReadinessTargets(
     // The assessed identity is read from the verdict's own snapshot — never
     // from evaluatedIdentity, which echoes the caller's requested identity on
     // mismatch and cannot answer "which release was assessed".
-    const assessedIdentity = parseAssessmentSnapshot(historical.assessmentSnapshot)?.identity ?? null
+    const assessedIdentity =
+      parseAssessmentSnapshot(historical.assessmentSnapshot)?.identity ?? null
     return {
       targetId: target.id,
       targetName: target.name,

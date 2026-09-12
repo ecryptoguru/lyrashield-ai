@@ -1,7 +1,9 @@
 import {
   getShareableReport,
+  generateLaunchReportHTML,
   generateReportHTML,
   gatherReportData,
+  isLaunchReportShareablePayload,
   prisma,
   type ReportData,
 } from "@lyrashield/db"
@@ -34,10 +36,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       select: { contentJson: true, scanId: true },
     })
 
-    let reportData: ReportData
-    if (reportRecord?.contentJson) {
+    let html: string
+    if (report.type === "launch_readiness") {
+      if (!isLaunchReportShareablePayload(reportRecord?.contentJson)) {
+        return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
+      }
+      html = generateLaunchReportHTML(reportRecord.contentJson)
+    } else if (reportRecord?.contentJson) {
       // Preferred path: serve the immutable snapshot captured at report creation.
-      reportData = reportRecord.contentJson as unknown as ReportData
+      html = generateReportHTML(reportRecord.contentJson as unknown as ReportData)
     } else if (reportRecord?.scanId) {
       // Legacy fallback: reports created before the snapshot migration have no
       // contentJson. Regenerate live from the source scan so old reports remain
@@ -46,12 +53,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       logger.warn("Report has no snapshot; regenerating from source scan (legacy report)", {
         reportId: id,
       })
-      reportData = await gatherReportData(workspaceId, reportRecord.scanId)
+      const reportData = await gatherReportData(workspaceId, reportRecord.scanId)
+      html = generateReportHTML(reportData)
     } else {
       return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
     }
-
-    const html = generateReportHTML(reportData)
 
     await prisma.report
       .update({
@@ -65,7 +71,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return new Response(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `inline; filename="report-${id}.html"`,
+        "Content-Disposition": `inline; filename="${report.type === "launch_readiness" ? "launch-readiness-report" : "report"}-${id}.html"`,
       },
     })
   } catch (error) {

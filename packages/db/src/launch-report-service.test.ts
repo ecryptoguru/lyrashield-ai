@@ -125,7 +125,11 @@ async function issue(now = new Date(EVALUATED_AT.getTime() + 60_000)) {
   const createArgs = mocks.reportCreate.mock.calls[0]?.[0] as {
     data: { contentJson: Record<string, unknown>; provenanceJson: Record<string, unknown> }
   }
-  return { result, payload: createArgs?.data.contentJson, provenance: createArgs?.data.provenanceJson }
+  return {
+    result,
+    payload: createArgs?.data.contentJson,
+    provenance: createArgs?.data.provenanceJson,
+  }
 }
 
 describe("generateLaunchReport — issue-time applicability and private binding", () => {
@@ -340,7 +344,11 @@ describe("getLaunchReportDetail — authenticated private reader", () => {
   })
 
   it("returns null for non-launch reports and missing rows", async () => {
-    mocks.reportFindFirst.mockResolvedValue({ type: "developer", contentJson: {}, provenanceJson: null })
+    mocks.reportFindFirst.mockResolvedValue({
+      type: "developer",
+      contentJson: {},
+      provenanceJson: null,
+    })
     await expect(getLaunchReportDetail("report-1", "workspace-1")).resolves.toBeNull()
     mocks.reportFindFirst.mockResolvedValue(null)
     await expect(getLaunchReportDetail("report-1", "workspace-1")).resolves.toBeNull()
@@ -368,7 +376,10 @@ describe("getSharedLaunchReport — public frozen payload", () => {
   })
 
   it("rejects a token resolved for a different report", async () => {
-    mocks.getReportByShareToken.mockResolvedValue({ id: "report-other", workspaceId: "workspace-1" })
+    mocks.getReportByShareToken.mockResolvedValue({
+      id: "report-other",
+      workspaceId: "workspace-1",
+    })
     await expect(getSharedLaunchReport("report-1", "a".repeat(64))).resolves.toBeNull()
     expect(mocks.reportFindFirst).not.toHaveBeenCalled()
   })

@@ -6,6 +6,7 @@ import {
   gateReasonSentence,
   parseReleaseReference,
   projectGateReadinessReport,
+  resolveReleaseCheckTargetId,
 } from "./launch-readiness"
 
 const makeFinding = (
@@ -22,6 +23,20 @@ const makeFinding = (
   confidence: "medium",
   title: "Test finding",
   summary: "Test summary",
+})
+
+describe("resolveReleaseCheckTargetId", () => {
+  it("requires target selection when one release reference could apply to several targets", () => {
+    expect(resolveReleaseCheckTargetId("", true, ["target-1", "target-2"])).toBe("")
+  })
+
+  it("auto-selects the only authorized target for a release check", () => {
+    expect(resolveReleaseCheckTargetId("", true, ["target-1"])).toBe("target-1")
+  })
+
+  it("preserves an explicitly selected target", () => {
+    expect(resolveReleaseCheckTargetId("target-2", true, ["target-1", "target-2"])).toBe("target-2")
+  })
 })
 
 describe("projectGateReadinessReport", () => {
@@ -428,9 +443,7 @@ describe("describeReleaseCheck", () => {
       ...target,
       applicable: false,
       state: "INSUFFICIENT_EVIDENCE" as const,
-      reasons: [
-        { code: "ASSESSMENT_EXPIRED", message: "Assessment is older than 24 hours." },
-      ],
+      reasons: [{ code: "ASSESSMENT_EXPIRED", message: "Assessment is older than 24 hours." }],
     }
     const check = describeReleaseCheck(expired, { kind: "COMMIT", value: "b".repeat(40) })
     expect(check.match).toBe("match")

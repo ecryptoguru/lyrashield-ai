@@ -9,6 +9,7 @@ import {
   projectGateReadinessReport,
   RELEASE_ARTIFACT_DIGEST_PATTERN,
   RELEASE_COMMIT_PATTERN,
+  resolveReleaseCheckTargetId,
   type ReleaseIdentityInput,
 } from "@/lib/launch-readiness"
 import { getGateReadinessTargets } from "@/lib/launch-readiness-server"
@@ -18,8 +19,16 @@ const ReadinessQuerySchema = z
   .object({
     workspaceId: z.string().min(1),
     targetId: z.string().min(1).optional(),
-    commit: z.string().regex(RELEASE_COMMIT_PATTERN).optional(),
-    artifactDigest: z.string().regex(RELEASE_ARTIFACT_DIGEST_PATTERN).optional(),
+    commit: z
+      .string()
+      .regex(RELEASE_COMMIT_PATTERN)
+      .transform((value) => value.toLowerCase())
+      .optional(),
+    artifactDigest: z
+      .string()
+      .regex(RELEASE_ARTIFACT_DIGEST_PATTERN)
+      .transform((value) => value.toLowerCase())
+      .optional(),
   })
   .refine((value) => !(value.commit && value.artifactDigest), {
     message: "commit and artifactDigest are mutually exclusive",
@@ -48,23 +57,49 @@ export async function GET(request: Request) {
 
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
 
-    const [groups, targets] = await Promise.all([
-      withWorkspaceRLS(workspaceId, (tx) =>
-        tx.finding.groupBy({
-          by: ["severity", "status", "verified"],
-          where: {
-            workspaceId,
-            deletedAt: null,
-            ...(targetId ? { targetId } : {}),
-          },
-          _count: { _all: true },
-        })
-      ),
-      getGateReadinessTargets(workspaceId, targetId, {
-        expectedCommit: commit,
-        expectedArtifactDigest: artifactDigest,
-      }),
-    ])
+    const requestedIdentity: ReleaseIdentityInput | null = commit
+      ? { kind: "COMMIT", value: commit }
+      : artifactDigest
+        ? { kind: "ARTIFACT_DIGEST", value: artifactDigest }
+        : null
+    const identityOptions = {
+      expectedCommit: commit,
+      expectedArtifactDigest: artifactDigest,
+    }
+
+    // A release identity without a target may be auto-scoped only when the
+    // workspace has one authorized target. Read the target list without an
+    // expected identity first so one reference is never evaluated across
+    // several unrelated targets.
+    let effectiveTargetId = targetId
+    let targets
+    if (!targetId && requestedIdentity) {
+      const allTargets = await getGateReadinessTargets(workspaceId)
+      effectiveTargetId = resolveReleaseCheckTargetId(
+        "",
+        true,
+        allTargets.map((target) => target.targetId)
+      )
+      if (effectiveTargetId) {
+        targets = await getGateReadinessTargets(workspaceId, effectiveTargetId, identityOptions)
+      } else {
+        targets = allTargets
+      }
+    } else {
+      targets = await getGateReadinessTargets(workspaceId, targetId, identityOptions)
+    }
+
+    const groups = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.finding.groupBy({
+        by: ["severity", "status", "verified"],
+        where: {
+          workspaceId,
+          deletedAt: null,
+          ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
+        },
+        _count: { _all: true },
+      })
+    )
 
     const report = projectGateReadinessReport(
       groups.map((group) => ({ ...group, count: group._count._all })),
@@ -76,14 +111,9 @@ export async function GET(request: Request) {
     // match) from "this target is ready" (verdict + applicability). A targetId
     // that resolves to nothing in this workspace returns a cannot-confirm
     // result — existence and identity stay scoped by RLS.
-    const requestedIdentity: ReleaseIdentityInput | null = commit
-      ? { kind: "COMMIT", value: commit }
-      : artifactDigest
-        ? { kind: "ARTIFACT_DIGEST", value: artifactDigest }
-        : null
-    const releaseCheck = targetId
+    const releaseCheck = effectiveTargetId
       ? describeReleaseCheck(
-          targets.find((target) => target.targetId === targetId) ?? null,
+          targets.find((target) => target.targetId === effectiveTargetId) ?? null,
           requestedIdentity
         )
       : null

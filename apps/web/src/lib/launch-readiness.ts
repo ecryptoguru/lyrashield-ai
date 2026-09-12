@@ -367,6 +367,17 @@ export function parseReleaseReference(raw: string | null | undefined): ReleaseId
   return null
 }
 
+export function resolveReleaseCheckTargetId(
+  requestedTargetId: string,
+  checkRequested: boolean,
+  authorizedTargetIds: string[]
+): string {
+  return (
+    requestedTargetId ||
+    (checkRequested && authorizedTargetIds.length === 1 ? authorizedTargetIds[0]! : "")
+  )
+}
+
 export type ReleaseCheckMatch = "match" | "mismatch" | "cannot_confirm"
 
 export interface ReleaseCheckResult {

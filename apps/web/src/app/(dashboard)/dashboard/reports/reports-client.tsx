@@ -122,7 +122,11 @@ const LAUNCH_APPLICABILITY_LABEL: Record<LaunchReportProvenance["applicability"]
  * Private issue-time provenance for a launch_readiness report. This surface is
  * authenticated-only; the shared public page never receives these fields.
  */
-function LaunchReportProvenanceBlock({ provenance }: { provenance: LaunchReportProvenance | null }) {
+function LaunchReportProvenanceBlock({
+  provenance,
+}: {
+  provenance: LaunchReportProvenance | null
+}) {
   const [copiedIdentity, setCopiedIdentity] = useState(false)
   if (!provenance) {
     return (
@@ -185,9 +189,7 @@ function LaunchReportProvenanceBlock({ provenance }: { provenance: LaunchReportP
         </div>
         <div>
           <dt className="sr-only">Applicability when issued</dt>
-          <dd>
-            Applicability when issued: {LAUNCH_APPLICABILITY_LABEL[provenance.applicability]}
-          </dd>
+          <dd>Applicability when issued: {LAUNCH_APPLICABILITY_LABEL[provenance.applicability]}</dd>
         </div>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1">

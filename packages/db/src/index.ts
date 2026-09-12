@@ -245,6 +245,7 @@ export {
   type LaunchReportSource,
   type LaunchReportVerdictLabel,
 } from "./launch-report-payload"
+export { generateLaunchReportHTML, isLaunchReportShareablePayload } from "./launch-report-html"
 export {
   signLaunchReportChecksum,
   verifyLaunchReportSignature,
