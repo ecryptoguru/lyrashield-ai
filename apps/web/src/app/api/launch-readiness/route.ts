@@ -4,7 +4,13 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
 import { logger } from "@lyrashield/logger"
-import { projectGateReadinessReport } from "@/lib/launch-readiness"
+import {
+  describeReleaseCheck,
+  projectGateReadinessReport,
+  RELEASE_ARTIFACT_DIGEST_PATTERN,
+  RELEASE_COMMIT_PATTERN,
+  type ReleaseIdentityInput,
+} from "@/lib/launch-readiness"
 import { getGateReadinessTargets } from "@/lib/launch-readiness-server"
 import { z } from "zod"
 
@@ -12,14 +18,8 @@ const ReadinessQuerySchema = z
   .object({
     workspaceId: z.string().min(1),
     targetId: z.string().min(1).optional(),
-    commit: z
-      .string()
-      .regex(/^[a-f0-9]{40}$/i)
-      .optional(),
-    artifactDigest: z
-      .string()
-      .regex(/^sha256:[a-f0-9]{64}$/i)
-      .optional(),
+    commit: z.string().regex(RELEASE_COMMIT_PATTERN).optional(),
+    artifactDigest: z.string().regex(RELEASE_ARTIFACT_DIGEST_PATTERN).optional(),
   })
   .refine((value) => !(value.commit && value.artifactDigest), {
     message: "commit and artifactDigest are mutually exclusive",
@@ -28,11 +28,18 @@ const ReadinessQuerySchema = z
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
+    // Repeated query values are ambiguous — an identity check must name exactly
+    // one release, so duplicates are rejected rather than first-wins.
+    for (const param of ["workspaceId", "targetId", "commit", "artifactDigest"]) {
+      if (searchParams.getAll(param).length > 1) {
+        return apiError("INVALID_PARAM", `${param} may only be supplied once`, 400)
+      }
+    }
     const parsed = ReadinessQuerySchema.safeParse({
       workspaceId: searchParams.get("workspaceId"),
       targetId: searchParams.get("targetId") ?? undefined,
-      commit: searchParams.get("commit") ?? undefined,
-      artifactDigest: searchParams.get("artifactDigest") ?? undefined,
+      commit: searchParams.get("commit")?.trim() ?? undefined,
+      artifactDigest: searchParams.get("artifactDigest")?.trim() ?? undefined,
     })
     if (!parsed.success) {
       return apiError("INVALID_PARAM", parsed.error.issues[0]?.message ?? "Invalid input", 400)
@@ -64,7 +71,24 @@ export async function GET(request: Request) {
       targets
     )
 
-    const response = apiSuccess(report)
+    // The release check is reported separately from the projected report so a
+    // caller can distinguish "the assessment covers this release" (identity
+    // match) from "this target is ready" (verdict + applicability). A targetId
+    // that resolves to nothing in this workspace returns a cannot-confirm
+    // result — existence and identity stay scoped by RLS.
+    const requestedIdentity: ReleaseIdentityInput | null = commit
+      ? { kind: "COMMIT", value: commit }
+      : artifactDigest
+        ? { kind: "ARTIFACT_DIGEST", value: artifactDigest }
+        : null
+    const releaseCheck = targetId
+      ? describeReleaseCheck(
+          targets.find((target) => target.targetId === targetId) ?? null,
+          requestedIdentity
+        )
+      : null
+
+    const response = apiSuccess({ ...report, releaseCheck })
     response.headers.set("Cache-Control", "no-store")
     return response
   } catch (error) {

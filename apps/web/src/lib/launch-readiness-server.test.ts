@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({ getCurrentGateVerdicts: vi.fn(), findMany: vi.fn() }))
 vi.mock("@lyrashield/db", () => ({
   getCurrentGateVerdicts: mocks.getCurrentGateVerdicts,
+  // Minimal shape mirror: the real parser validates and returns null for
+  // anything that is not a supported snapshot; tests pass plain objects.
+  parseAssessmentSnapshot: (value: unknown) =>
+    value && typeof value === "object" ? (value as { identity?: unknown }) : null,
   withWorkspaceRLS: (_workspaceId: string, run: (tx: unknown) => unknown) =>
     run({ target: { findMany: mocks.findMany } }),
 }))
@@ -105,5 +109,56 @@ describe("getGateReadinessTargets", () => {
     const result = await getGateReadinessTargets("workspace-1")
 
     expect(result[0]).toMatchObject({ identity })
+  })
+
+  it("reads the assessed identity from the verdict's own snapshot, not the requested one", async () => {
+    mocks.findMany.mockResolvedValue([{ id: "target-1", name: "API" }])
+    const assessed = { kind: "COMMIT" as const, value: "b".repeat(40) }
+    const requested = { kind: "COMMIT" as const, value: "f".repeat(40) }
+    mocks.getCurrentGateVerdicts.mockResolvedValue(
+      new Map([
+        [
+          "target-1",
+          {
+            state: "INSUFFICIENT_EVIDENCE",
+            applicability: {
+              applicable: false,
+              reasons: [{ code: "IDENTITY_MISMATCH", message: "Different release." }],
+              // On mismatch the gate echoes the REQUESTED identity here —
+              // the assessed answer must come from the snapshot instead.
+              evaluatedIdentity: requested,
+            },
+            historical: {
+              state: "READY",
+              blockingReasons: [],
+              assessmentSnapshot: { version: 2, identity: assessed },
+            },
+          },
+        ],
+      ])
+    )
+
+    const result = await getGateReadinessTargets("workspace-1", "target-1", {
+      expectedCommit: requested.value,
+    })
+
+    expect(result[0]).toMatchObject({
+      identity: requested,
+      assessedIdentity: assessed,
+      historicalState: "READY",
+    })
+  })
+
+  it("reports null assessed identity and historical state when no verdict exists", async () => {
+    mocks.findMany.mockResolvedValue([{ id: "target-1", name: "API" }])
+    mocks.getCurrentGateVerdicts.mockResolvedValue(new Map())
+
+    const result = await getGateReadinessTargets("workspace-1")
+
+    expect(result[0]).toMatchObject({
+      assessedIdentity: null,
+      historicalState: null,
+      state: "INSUFFICIENT_EVIDENCE",
+    })
   })
 })
