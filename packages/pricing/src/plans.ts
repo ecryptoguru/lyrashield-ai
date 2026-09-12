@@ -64,7 +64,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
   {
     id: "STARTER",
     name: "Starter",
-    agentMinutes: 300,
+    agentMinutes: 210,
     targetCaps: 5,
     deepAllowed: false,
     selfServe: true,
@@ -73,7 +73,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       inr: { monthly: 2900, annual: 29500 },
     },
     features: [
-      "300 agent-minutes / month",
+      "210 agent-minutes / month",
       "Up to 5 targets",
       "Safe / Quick / Standard scans",
       "Email support",
@@ -83,7 +83,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
   {
     id: "PRO",
     name: "Pro",
-    agentMinutes: 1200,
+    agentMinutes: 850,
     targetCaps: 15,
     deepAllowed: true,
     selfServe: true,
@@ -92,7 +92,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       inr: { monthly: 9900, annual: 95000 },
     },
     features: [
-      "1,200 agent-minutes / month",
+      "850 agent-minutes / month",
       "Up to 15 targets",
       "Deep / Custom scans enabled",
       "Integrations (GitHub, Slack, Jira)",
@@ -104,7 +104,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
   {
     id: "LAUNCH_ASSURANCE",
     name: "Launch Assurance",
-    agentMinutes: 6000,
+    agentMinutes: 4500,
     targetCaps: 50,
     deepAllowed: true,
     selfServe: true,
@@ -114,7 +114,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     },
     features: [
       "Continuous launch gate with a versioned verdict",
-      "6,000 agent-minutes / month",
+      "4,500 agent-minutes / month",
       "Up to 50 targets",
       "Deep / Custom scans enabled",
       "Verified evidence + coverage receipts",

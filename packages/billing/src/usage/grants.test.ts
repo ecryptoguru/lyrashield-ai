@@ -18,7 +18,7 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 vi.mock("@lyrashield/pricing", () => ({
-  CLOUD_PLAN_MAP: { PRO: { agentMinutes: 1_200, deepAllowed: true } },
+  CLOUD_PLAN_MAP: { PRO: { agentMinutes: 850, deepAllowed: true } },
 }))
 
 import { grantMonthlyPool, legacyMonthlyPoolGrantKey, monthlyPoolGrantKey } from "./grants"
@@ -54,7 +54,7 @@ describe("grantMonthlyPool — replay-safe per allowance cycle", () => {
 
     expect(result).toMatchObject({
       created: true,
-      minutes: 1200,
+      minutes: 850,
       idempotencyKey: monthlyPoolGrantKey("acct_1", cycleStart, "PRO"),
     })
     expect(findFirstMock).toHaveBeenCalledWith({
@@ -74,7 +74,7 @@ describe("grantMonthlyPool — replay-safe per allowance cycle", () => {
         accountId: "acct_1",
         workspaceId: "ws_1",
         kind: "pool_grant",
-        quantity: 1200,
+        quantity: 850,
         cycleStart,
       }),
     })
@@ -168,7 +168,7 @@ describe("grantMonthlyPool — mid-cycle plan change (VERIFY-C-002)", () => {
 it("grants an account without a workspace", async () => {
   await grantMonthlyPool({ ...params, workspaceId: null })
   expect(createMock).toHaveBeenCalledWith({
-    data: expect.objectContaining({ accountId: "acct_1", workspaceId: null, quantity: 1200 }),
+    data: expect.objectContaining({ accountId: "acct_1", workspaceId: null, quantity: 850 }),
   })
   expect(withWorkspaceRLSMock).not.toHaveBeenCalled()
 })

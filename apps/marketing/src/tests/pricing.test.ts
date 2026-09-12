@@ -15,21 +15,21 @@ describe("pricing page", () => {
     expect(pricingPage).toContain('setAttribute("aria-pressed"')
   })
 
-  it("matches the canonical repriced catalog (WP1, founder-confirmed 2026-08-29)", () => {
+  it("matches the canonical repriced catalog (WP1, founder-confirmed 2026-08-29; allowances repacked 2026-09-13)", () => {
     // SCAN line
     expect(CLOUD_PLAN_MAP.STARTER.price.usd).toEqual({ monthly: 29, annual: 295 })
-    expect(CLOUD_PLAN_MAP.STARTER.agentMinutes).toBe(300)
+    expect(CLOUD_PLAN_MAP.STARTER.agentMinutes).toBe(210)
     expect(CLOUD_PLAN_MAP.STARTER.targetCaps).toBe(5)
     expect(CLOUD_PLAN_MAP.STARTER.deepAllowed).toBe(false)
     expect(CLOUD_PLAN_MAP.PRO.price.usd).toEqual({ monthly: 99, annual: 950 })
-    expect(CLOUD_PLAN_MAP.PRO.agentMinutes).toBe(1200)
+    expect(CLOUD_PLAN_MAP.PRO.agentMinutes).toBe(850)
     expect(CLOUD_PLAN_MAP.PRO.targetCaps).toBe(15)
     expect(CLOUD_PLAN_MAP.PRO.deepAllowed).toBe(true)
 
     // LAUNCH ASSURANCE line — self-serve premium tier
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.price.usd).toEqual({ monthly: 499, annual: 4188 })
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.price.inr).toEqual({ monthly: 49_900, annual: 418_800 })
-    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.agentMinutes).toBe(6000)
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.agentMinutes).toBe(4500)
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.targetCaps).toBe(50)
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.selfServe).toBe(true)
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.deepAllowed).toBe(true)
