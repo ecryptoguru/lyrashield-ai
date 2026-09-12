@@ -160,15 +160,6 @@ function contentLastmod() {
   setIfAbsent("/", "src/pages/index.astro", "src/components/landing/")
   // Blog hub: index template plus the content collection it renders.
   setIfAbsent("/blog", "src/pages/blog/[...page].astro", "src/content/blog/")
-  // Blog pagination pages are generated from the same sources, so their
-  // freshness equals the collection's, not a per-URL commit.
-  const blogDate = map.get("/blog")
-  if (blogDate) {
-    for (let n = 2; n <= 40; n++) {
-      const key = `/blog/${n}`
-      if (!map.has(key)) map.set(key, blogDate)
-    }
-  }
   // Tag archive routes: template plus collection plus category registry.
   for (const tag of [
     "access-control",
@@ -324,6 +315,8 @@ export default defineConfig({
           pathname !== "/terms" &&
           pathname !== "/terms-of-sale" &&
           pathname !== "/docs" &&
+          // Pagination remains crawlable, but declares noindex and canonical /blog.
+          !/^\/blog\/[1-9]\d*\/?$/.test(pathname) &&
           (Boolean(configuredScannerUrl) || pathname !== "/scan")
         )
       },

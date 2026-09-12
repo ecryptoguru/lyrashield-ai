@@ -1,8 +1,8 @@
 ---
-title: "Secure Vercel Deployments and Preview URLs"
-description: "Treat every Vercel preview as a live environment, then control deployment access, variables, data, bypass secrets, callbacks, and retirement."
+title: "Vercel Security: Preview Protection and Environment Variables"
+description: "Secure Vercel previews, keep private environment variables out of browser bundles, and test deployment protection without weakening app authorization."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-09-12
 author: lyrashield-team
 tags:
   - web-security
@@ -76,7 +76,11 @@ Use Preview or branch-specific Vercel variables for the selected resources. Give
 
 Vercel documents that environment-variable changes affect new deployments, not old ones. After rotating a preview secret or correcting a database URL, redeploy the affected commit and test the new deployment. An older accessible deployment can still contain its previous build-time values or runtime configuration.
 
-Sensitive variables also need access review inside the Vercel team. Do not print them during builds, return them from diagnostics, expose them through framework client prefixes, or pull them onto unmanaged devices. If a value entered a client bundle or public log, remove and rotate it rather than only changing the project setting.
+### Public environment-variable prefixes expose browser values
+
+A framework's public prefix marks values intended for client code. A provider secret must stay in server-only code and must not use that prefix. Removing the prefix alone is insufficient if a route, build script, or log still returns the value. Review the framework's variable rules and the generated JavaScript, not only the Vercel dashboard.
+
+If a credential reached a browser bundle, rotate it, update server-only configuration, and redeploy. Variable changes do not repair older builds; retire or restrict affected deployments too. Use the [frontend API key guide](/blog/api-keys-frontend-ai-apps) for containment. Never place a live secret in a screenshot or test report to prove exposure.
 
 The [public-by-default deployment guide](/blog/public-by-default-ai-apps) covers the provider-neutral data boundary.
 

@@ -1,3 +1,5 @@
+import { MODE_LABELS, SEVERITY_LABELS } from "./labels"
+
 export const SCAN_GOAL_LABELS: Record<string, string> = {
   CHECK_PR: "Check PR",
   TEST_APP: "Code review",
@@ -10,13 +12,7 @@ export const SCAN_GOAL_LABELS: Record<string, string> = {
   SECURITY_REVIEW: "Security review",
 }
 
-export const SCAN_MODE_LABELS: Record<string, string> = {
-  SAFE: "Safe",
-  QUICK: "Quick",
-  STANDARD: "Standard",
-  DEEP: "Deep",
-  CUSTOM: "Custom",
-}
+export const SCAN_MODE_LABELS: Readonly<Record<string, string>> = MODE_LABELS
 
 export const SCAN_TRIGGER_LABELS: Record<string, string> = {
   manual: "Manual",
@@ -25,13 +21,7 @@ export const SCAN_TRIGGER_LABELS: Record<string, string> = {
   webhook: "Webhook",
 }
 
-export const FINDING_SEVERITY_LABELS: Record<string, string> = {
-  CRITICAL: "Critical",
-  HIGH: "High",
-  MEDIUM: "Medium",
-  LOW: "Low",
-  INFO: "Info",
-}
+export const FINDING_SEVERITY_LABELS: Readonly<Record<string, string>> = SEVERITY_LABELS
 
 export const FINDING_STATUS_LABELS: Record<string, string> = {
   OPEN: "Open",

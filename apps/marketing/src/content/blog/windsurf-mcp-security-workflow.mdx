@@ -1,7 +1,8 @@
 ---
 title: Windsurf MCP Security Workflow for AI Editors
-description: Connect LyraShield MCP to Windsurf to verify AI generated code for injection auth flaws secrets and vulnerable packages every commit
+description: Review a legacy Windsurf MCP workflow, use the current Devin setup guide, and keep tool access, scan evidence, and retests scoped to your app.
 pubDate: "2026-07-30"
+updatedDate: 2026-09-12
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -11,63 +12,45 @@ faq:
     a: It exposes scan targets findings with evidence states and fix guidance via MCP tools so the agent can request a security check inline without leaving the IDE.
   - q: Does this replace the GitHub Action gate?
     a: No. IDE checks give fast feedback while the GitHub Action provides a diff aware merge gate with SARIF output for team review.
-  - q: What API key does remote MCP use?
-    a: A Bearer key starting with lsk_ issued from LyraShield. Set it as LYRASHIELD_API_KEY for remote https://app.lyrashieldai.com/api/mcp.
-  - q: Where does Windsurf read MCP config from?
-    a: Windsurf reads MCP servers from the project or user mcp_config.json under mcpServers. Project scope shares the server definition with the team, user scope keeps it local. Add the LyraShield entry with the pinned npx command and keep the lsk_ key in an env reference, never as a literal string in the committed file.
+  - q: How do I authenticate the current Devin integration?
+    a: Use the remote HTTP endpoint with OAuth in Devin MCP Marketplace. Browser authorization binds the connection to the selected workspace and granted scope.
+  - q: Should I copy the old Windsurf JSON into Devin?
+    a: No. The current supported Devin integration uses its MCP Marketplace UI. Legacy Windsurf paths and environment-variable syntax are not a Devin configuration contract.
 ---
 
-Fastest path: run `npx lyrashield init` to detect Windsurf and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference. Windsurf uses a config-file install, with no Agent Plugin.
+For an app developed in Windsurf, review the application's authorization, secrets, dependencies, and release evidence independently of the editor. For current LyraShield AI onboarding, use the Devin MCP Marketplace guide: connect the remote server with OAuth, verify tool discovery, and grant only the workflows and targets you intend to use.
 
-Windsurf users can secure AI built apps by configuring LyraShield MCP in Windsurf config via stdio using npx -y @lyrashield/mcp@0.2.8 or via remote URL with Bearer lsk\_ key, then verifying the server and scanning inline for OWASP risks and supply chain issues.
+**Correction, September 12, 2026:** This URL retains the legacy Windsurf workflow for existing readers. The supported client registry now routes that integration to [Devin](/docs/integrations/devin). Earlier instructions presented the old JSON path, environment placeholder, and installer behavior as current. They are not a supported Devin setup. Existing heading links remain stable.
 
-Windsurf Cascade edits multiple files per turn, which can spread [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks such as injection via helpers and leaked secrets. This guide applies [vibe coding security guide](/blog/vibe-coding-security-guide) to Windsurf, adding verification via MCP. LyraShield AI is agent native AppSec at [LyraShield site](https://lyrashieldai.com), built around Target to Scan to Evidence State to Fix Proposal to Retest to Report. See [Windsurf integration guide](/docs/integrations/windsurf) and [Windsurf security workflow](/blog/windsurf-security-workflow). Transport follows [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions).
+The [vibe coding security guide](/blog/vibe-coding-security-guide) explains the application controls this workflow reviews. An editor connection alone cannot establish [OWASP Top 10](https://owasp.org/www-project-top-ten/) coverage. Tool discovery, an authorized scan, independent verification, and a retest are separate observations. The [Model Context Protocol overview](https://modelcontextprotocol.io/docs/getting-started/intro) describes the transport; it does not give an agent permission to act on a repository.
 
 ## 1. Prerequisites and api key setup
 
-Create LyraShield API key starting with lsk\_ and store as LYRASHIELD_API_KEY. Never commit key to source control or chat logs. For local work, export it in shell profile. For teams, keep it in secret manager and add to GitHub repository secrets for CI parity. Naming consistency between shell, IDE config and CI reduces misconfig.
+Use [the current Devin setup guide](/docs/integrations/devin) and [Devin's official MCP documentation](https://docs.devin.ai/work-with-devin/mcp). The hosted integration uses OAuth. Complete the browser flow, select the intended workspace, and review the requested access. Do not paste a bearer key into a conversation or replace a failed OAuth flow with a broadly privileged credential.
 
-You need Node 24 or newer for the LyraShield package, a current Windsurf release, and a testable target such as http://localhost:3000 or a repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.8 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
+Check the target before requesting a scan. A public URL, a repository, and a localhost address have different access requirements and coverage. A hosted service cannot infer how to reach your laptop from a localhost URL. Use a supported target you own or are authorized to assess, and retain the target identity with the result.
 
-Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals are proposals requiring review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. See [Windsurf integration guide](/docs/integrations/windsurf).
+Record the client version and chosen transport. Local stdio describes communication between the client and MCP process; it does not promise that subsequent tool operations stay offline. Check the documented data flow before exposing source code, secrets, or customer records to any tool.
 
 ## 2. Configure MCP server in windsurf config file
 
-windsurf reads MCP from ~/.codeium/windsurf/mcp_config.json. Top level key is mcpServers plus serverUrl. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp@0.2.8 for stdio.
+This heading is retained for old inbound links. For current Devin setup, open **Settings → MCP Marketplace → Add Your Own**, choose **HTTP**, enter `https://app.lyrashieldai.com/api/mcp`, and select **OAuth**. Save the server and use **Test listing tools**. Devin's UI is the supported configuration surface; do not create the historical Windsurf JSON file to configure it.
 
-```json
-{
-  "mcpServers": {
-    "lyrashield": {
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.8"],
-      "env": {
-        "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
-      }
-    },
-    "lyrashield-remote": {
-      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer ${env:LYRASHIELD_API_KEY}"
-      }
-    }
-  }
-}
-```
+If you still use a legacy Windsurf installation, check that exact version's vendor documentation before editing its configuration. Do not assume that a project-local file, an environment placeholder from another editor, or an old installer identifier works. Prefer the maintained integration guide over a copied configuration fragment. Preserve existing server entries and keep credentials out of version control.
 
-Placeholder `${env:LYRASHIELD_API_KEY}` is resolved securely without writing secret to disk. Remote validates Bearer lsk\_ at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp). Do not commit real values, commit placeholder only and document setup in [Windsurf integration guide](/docs/integrations/windsurf) onboarding. For multiple projects, keep personal keys in global config and team policy in project file. See [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions) for parity.
+The connection should grant only the required workspace and workflows. Read-only discovery can work while a mutation remains outside the grant. A denied write is a permission result, not a reason to disable approval checks. Reconnect with the intended scope only after the user decides that scope is appropriate.
 
 ## 3. Verify the connection inside windsurf
 
-Restart windsurf after saving config and open MCP servers view to confirm lyrashield shows connected with tools. In chat ask to list MCP tools to see scan tool. This confirms handshake completed.
+For the supported Devin connection, first inspect **Test listing tools**. Then start a session and ask it to list the available LyraShield tools. A connection test establishes authentication and discovery at that moment. It does not prove that a scan ran, that a finding is valid, or that a write is authorized.
 
-If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp@0.2.8 manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
+If authentication fails, inspect the connection state and use the browser sign-in flow again. If the server times out, check the endpoint and permitted network path. Keep diagnostics redacted. Do not run a stdio server as an ordinary shell command and expect it to print a successful handshake without an MCP client sending protocol messages.
 
-Verification prevents silent failure where agent assumes scan succeeded but server was unreachable. That leaves [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks undetected and breaks verification loop. Allow egress to [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) if org blocks external.
+Start with a read-only operation and confirm the expected workspace. Before starting billable work, check target ownership, scan profile, eligibility, and budget in the application. Keep each attempt's returned scan identifier so a timeout does not lead to an accidental duplicate request. The [integration troubleshooting guide](/docs/integrations/troubleshooting) covers connection failures separately from scan failures.
 
 ## 4. Run a security check inline while you code
 
-With MCP connected, prompt agent to scan current target before committing. Example prompt is scan target http://localhost:3000 for injection and secrets using LyraShield and return findings with evidence states only with file paths and CWE.
+With MCP connected, prompt agent to scan current target before committing. Name the authorized target, supported scan profile, and expected evidence in the prompt. Ask for the returned scan identifier and terminal result; do not accept a prose claim that a scan ran.
 
 Agent calls MCP tool and returns file, line, evidence snippet or reproduction notes, and remediation pointers that reference [OWASP Top 10](https://owasp.org/www-project-top-ten/). For injection it shows untrusted input flowing into query without validation. For secrets it shows detected key pattern in source. For supply chain it maps lock entries against [OSV database](https://osv.dev/).
 
@@ -109,9 +92,9 @@ The runner-local Action needs no LyraShield API key. It emits and uploads SARIF 
 
 ## 6. Add agent rules for continuous guardrails
 
-windsurf supports project rules that agent reads each task, baking security into definition of done without relying on memory. Add rule forcing LyraShield scan before marking feature complete, covering user input, auth, file upload, secrets or external fetch, and include retest.
+Keep a reviewed security checklist in the repository. Ask the active client to read it before making changes to user input, authorization, uploads, secrets, or external requests. Instructions guide the agent; they do not enforce permissions or prove a scan ran.
 
-Location varies by editor. Cursor uses .cursor/rules/security.mdc, Claude Code uses CLAUDE.md, Windsurf uses .windsurf/rules/security.md, VS Code uses .github/copilot-instructions.md. Choose the location that travels with the repo so new clones get the same expectation.
+Use the active client's documented instruction location. The [agent rules guide](/docs/integrations/agent-rules) distinguishes client formats. A historical Windsurf rules path is not a Devin configuration path.
 
 ```markdown
 # Security guardrail
@@ -125,7 +108,7 @@ For any task involving user input, auth, file upload or secrets:
 5. Retest via LyraShield after fix
 ```
 
-Test rule by scaffolding endpoint accepting query param and confirming scan triggers without reminder. If agent skips, make rule more directive and place file where agent reads on startup. Keep rule short and committed. Pair with [Windsurf security workflow](/blog/windsurf-security-workflow) and [CWE Top 25](https://cwe.mitre.org/top25/) for taxonomy.
+Test the checklist on a disposable change and inspect the actual tool result. If the agent skips a check, keep the result incomplete; a stronger prompt is not an enforced release gate. Keep the checklist short and committed. Pair with [Windsurf security workflow](/blog/windsurf-security-workflow) and [CWE Top 25](https://cwe.mitre.org/top25/) for taxonomy.
 
 ## Why pair windsurf with LyraShield
 
@@ -137,4 +120,4 @@ Local feedback plus CI gate creates defense in depth matching how AI apps evolve
 
 Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution, and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers and supply chain in one pass.
 
-When ready to centralize results across windsurf sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://lyrashieldai.com) for early access to team policies. LyraShield is designed to grow with your windsurf workflow, bringing findings with evidence states, proposals requiring review, and retest evidence into existing loop without claiming hands off merges.
+When ready to centralize results across windsurf sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) in the open beta. LyraShield is designed to grow with your windsurf workflow, bringing findings with evidence states, proposals requiring review, and retest evidence into existing loop without claiming hands off merges.

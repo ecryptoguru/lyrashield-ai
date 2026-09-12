@@ -1,8 +1,8 @@
 ---
-title: "Secure Firebase Rules and Storage"
-description: "Design Firebase security as separate identity, authorization, app-attestation, and abuse-resistance layers, then test Firestore and Storage rules locally."
+title: "Firebase Security Rules: Firestore, Storage, and Admin SDK"
+description: "Test Firebase Firestore and Storage rules with two accounts. Review Admin SDK bypasses, upload limits, and App Check before deployment."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-09-12
 author: lyrashield-team
 tags:
   - access-control
@@ -40,7 +40,9 @@ Build a short map for Firestore, Realtime Database, Cloud Storage, callable func
 | App Check                            | Does the request carry valid app attestation?           | Is this user allowed to edit this record? |
 | API restrictions, quotas, monitoring | Which APIs can a key call, and how much traffic occurs? | Row or object authorization               |
 
-Server SDKs commonly use IAM and may bypass client Security Rules. Any Cloud Function or trusted server using administrative credentials must repeat business authorization before acting for a user.
+[Firestore server client libraries bypass Security Rules](https://firebase.google.com/docs/firestore/security/rules-conditions) and use IAM. A passing client Rules test therefore says nothing about an Admin SDK route. Authenticate the caller and authorize the specific document before making an administrative query.
+
+Keep two test paths: call Firestore as Account B through the client SDK, then call your server endpoint as B with Account A's document ID. Both must deny access. For Cloud Storage, test the actual object path and operation under its own rules; a Firestore denial does not establish that an uploaded file is private.
 
 ## The risky pattern: any signed-in user may read any record
 

@@ -1,8 +1,8 @@
 ---
-title: "Secure Supabase Auth, RLS, and Service Keys"
-description: "Secure the Supabase access chain from API grants and row-level security through user JWTs, server-only privileged keys, views, and functions."
+title: "Supabase Security: RLS, Service Keys, and OAuth Tokens"
+description: "Review Supabase RLS, service-role bypasses, and OAuth token storage. Test signed-out and cross-account access before releasing your app."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-09-12
 author: lyrashield-team
 tags:
   - access-control
@@ -108,6 +108,14 @@ Supabase now documents four key types during its migration:
 A publishable or anon key identifies the project and is expected to be recoverable from a browser. Calling it "hidden" creates false confidence. Protect data with RLS and least-privilege grants.
 
 A secret or service role key is different. Never place it in frontend source, a public environment variable, a mobile binary, a URL, or a browser request. Use a separate server client that does not inherit an end-user session accidentally. Before a privileged query, authenticate the caller and authorize the resource in server code.
+
+## Store third-party OAuth tokens outside browser-readable rows
+
+[Supabase's provider-token guidance](https://supabase.com/docs/guides/auth/social-login#provider-tokens) distinguishes provider credentials from a Supabase session: Auth does not store those tokens in your database or refresh them for you. If your backend needs continuing provider access, send the tokens only to a trusted server you control.
+
+Keep connection metadata separate from credential storage. A user-visible row can contain the provider, connection status, and owner; token ciphertext belongs in a private schema or secret store with no browser read grant. Bind ownership to the verified session, restrict the backend role, and keep encryption keys separate. RLS alone does not constrain a service-role client.
+
+Test that Account B cannot invoke Account A's connection and that even Account A's normal API response contains no token. Review refresh, revocation, logs, and backups separately. This is a design checklist, not a complete credential-storage implementation.
 
 ## Treat JWT claims as cached authorization input
 

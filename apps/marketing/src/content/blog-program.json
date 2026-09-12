@@ -501,7 +501,7 @@
   },
   {
     "index": 51,
-    "title": "Human Review and Threat Modeling for Vibe Coding",
+    "title": "Vibe Coding Threat Model: Template and Review Checklist",
     "slug": "human-review-threat-model-vibe-coding",
     "query": "vibe coding threat model - guide",
     "cluster": "Verification",
@@ -601,7 +601,7 @@
   },
   {
     "index": 61,
-    "title": "Secure Supabase Auth, RLS, and Service Keys",
+    "title": "Supabase Security: RLS, Service Keys, and OAuth Tokens",
     "slug": "supabase-security-guide",
     "query": "supabase security checklist - guide",
     "cluster": "Stack",
@@ -611,7 +611,7 @@
   },
   {
     "index": 62,
-    "title": "Secure Firebase Rules and Storage",
+    "title": "Firebase Security Rules: Firestore, Storage, and Admin SDK",
     "slug": "firebase-security-guide",
     "query": "firebase security rules checklist - guide",
     "cluster": "Stack",
@@ -661,7 +661,7 @@
   },
   {
     "index": 67,
-    "title": "Secure Vercel Deployments and Preview URLs",
+    "title": "Vercel Security: Preview Protection and Environment Variables",
     "slug": "vercel-deployment-security",
     "query": "vercel security checklist - guide",
     "cluster": "Stack",

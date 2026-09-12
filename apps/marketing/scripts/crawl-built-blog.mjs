@@ -92,6 +92,10 @@ export function extractRssLinks(xml) {
 export function inspectHtml(html, pageUrl) {
   const title = stripTags(pairedTagContents(html, "title")[0] ?? "")
   const metaTags = openingTags(html, "meta")
+  const noindex = metaTags.map(attributes).some((attrs) =>
+    ["robots", "googlebot"].includes(attrs.get("name")?.toLowerCase()) &&
+    /(?:^|[\s,])(noindex|none)(?:$|[\s,])/i.test(attrs.get("content") ?? "")
+  )
   const description = metaTags
     .map(attributes)
     .find((attrs) => attrs.get("name")?.toLowerCase() === "description")
@@ -183,6 +187,7 @@ export function inspectHtml(html, pageUrl) {
   return {
     title,
     description: description ?? "",
+    noindex,
     canonical,
     canonicalCount: canonicalTags.length,
     h1Count,
@@ -205,6 +210,7 @@ export function validatePageFacts(url, facts, { requireImage = false } = {}) {
   const errors = []
   if (!facts.title) errors.push(`${safeUrl}: missing title`)
   if (!facts.description) errors.push(`${safeUrl}: missing meta description`)
+  if (facts.noindex) errors.push(`${safeUrl}: sitemap page declares noindex`)
   if (facts.canonicalCount !== 1 || !facts.canonical) {
     errors.push(`${safeUrl}: expected exactly one canonical link`)
   }

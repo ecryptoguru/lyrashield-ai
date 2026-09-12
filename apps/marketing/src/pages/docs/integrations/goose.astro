@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/goose", origin).toString()
 const title = "LyraShield MCP for Goose — Setup Guide"
 const description =
   "Connect LyraShield to Goose (Block). Configure MCP servers as extensions in ~/.config/goose/config.yaml using YAML format with stdio or streamable_http transport."
-const updatedDate = "2026-09-09"
+const updatedDate = "2026-09-12"
 
 const jsonLd: unknown[] = [
   {
@@ -121,4 +121,10 @@ const jsonLd: unknown[] = [
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
     <code>npx -y @lyrashield/mcp@0.2.8</code> resolves directly.
   </div>
+  <h2>Review the app before release</h2>
+  <p>
+    After confirming the connection, use the <a href="/blog/goose-app-security-checklist">Goose app security checklist</a>
+    to review secrets, permissions, dependencies, and application tests. The <a href="/blog/goose-mcp-security-workflow">Goose MCP workflow</a>
+    explains how scan results and retests fit that review. Connection success alone is not release evidence.
+  </p>
 </DocsLayout>
