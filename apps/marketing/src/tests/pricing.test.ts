@@ -50,6 +50,47 @@ describe("pricing page", () => {
     expect("AGENCY" in CLOUD_PLAN_MAP).toBe(false)
   })
 
+  it("states agent-native surfaces on every paid tier (2026-09-13 differentiation)", () => {
+    // The surfaces are reachable by every workspace in code (RBAC, not plan
+    // gates) and free externally; the catalog must say so on all paid tiers.
+    const SURFACES_LINE = "CLI, GitHub Action and MCP server access"
+    expect(CLOUD_PLAN_MAP.STARTER.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.PRO.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.TRIAL.features).not.toContain(SURFACES_LINE)
+  })
+
+  it("states WebMCP scanner-level findings on Pro while Launch Assurance keeps the assurance layer", () => {
+    // Pro: scanner-level detection wording only — no exclusivity claim.
+    expect(CLOUD_PLAN_MAP.PRO.features).toContain(
+      "Deep scans plus agent-surface review for apps that expose MCP or WebMCP tools."
+    )
+    // Launch Assurance retains the assurance-grade WebMCP line.
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain("WebMCP Assurance (agent surfaces)")
+    // Starter carries no WebMCP capability claim.
+    expect(CLOUD_PLAN_MAP.STARTER.features.some((f) => f.includes("WebMCP"))).toBe(false)
+  })
+
+  it("describes the Launch Assurance CI gate as the enforced versioned verdict with coverage receipts", () => {
+    // Factual grounding: `lyrashield gate --verdict` exits 0/1/2 with staleness
+    // failing closed, so a required status check blocks merges until the
+    // versioned verdict passes; coverage receipts are bound into the verdict.
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(
+      "Enforced launch-gate verdict in CI — merges blocked until the versioned verdict passes, with coverage receipts"
+    )
+    // The old scan-level wording is gone from the LA card.
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).not.toContain("CI gating (SARIF)")
+    // The retained-evidence line names the client-grade scope.
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(
+      "Retained, encrypted evidence for client-grade review"
+    )
+  })
+
+  it("uses the personal-records evidence wording on Starter, not Evidence Vault access", () => {
+    expect(CLOUD_PLAN_MAP.STARTER.features).toContain("Personal evidence records")
+    expect(CLOUD_PLAN_MAP.STARTER.features).not.toContain("Evidence Vault access")
+  })
+
   it("discloses Local purchase availability instead of an unconditional buy CTA", () => {
     // The page must ask the app for the visitor's provider-scoped availability
     // before showing the buy link — never claim availability it has not
@@ -68,5 +109,16 @@ describe("pricing page", () => {
     // Prices are unchanged and still rendered for both currencies.
     expect(pricingPage).toContain("formatUSD(localLaunch.priceUsd)")
     expect(pricingPage).toContain("formatINR(localLaunch.priceInr!)")
+  })
+
+  it("clarifies the free GitHub Action against the Launch Assurance verdict gate", () => {
+    // The free Action is scan-level SARIF in any repo, free — distinct from
+    // the LA tier's enforced versioned-verdict gate.
+    expect(pricingPage).toContain("The GitHub Action runs scan-level SARIF in any repo, free")
+    expect(pricingPage).toContain("no LyraShield account or API key required")
+    expect(pricingPage).toContain("enforced launch-gate verdict in CI")
+    expect(pricingPage).toContain(
+      "The CLI and MCP server connect to your account on every paid plan"
+    )
   })
 })

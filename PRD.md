@@ -239,6 +239,8 @@ Two product lines (WP1 repricing, founder-confirmed 2026-08-29, in code at `pack
 - Annual discount ladder is deliberately 15 / 20 / 30 across the two lines.
 - Overage: $0.15/min, Launch Assurance only, with a user-set spend limit. Deep/Custom consume minutes at 3×.
 - Integrations (GitHub, Slack, Jira) moved down to Pro. RBAC and shared reports stay at Launch Assurance and above.
+- Agent-native surfaces (CLI, GitHub Action, MCP server connection, GitHub repo connection) are available on every paid tier — they are free externally, so gating them was a false premium (2026-09-13 differentiation pass).
+- WebMCP scanner-level findings are stated on Pro; Launch Assurance keeps the assurance-grade layer (coverage receipts bound into the versioned verdict, signed report, shareable scorecard, enforced CI verdict gate).
 - Failed scans are never billed; cancelled scans bill elapsed time only (no 1-minute floor).
 
 Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity.
