@@ -19,6 +19,7 @@ import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TARGET_PLURAL, TARGET_SINGULAR, RUN_PLURAL, ISSUE_PLURAL } from "@/lib/terminology"
 import { getTargetTypeLabel } from "@/lib/enum-labels"
+import { humanizeToken } from "@/lib/labels"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
 interface Target {
@@ -652,7 +653,9 @@ export function TargetsClient({
                     )}
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
-                    <Badge variant={t.status === "active" ? "success" : "muted"}>{t.status}</Badge>
+                    <Badge variant={t.status === "active" ? "success" : "muted"}>
+                      {humanizeToken(t.status)}
+                    </Badge>
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
                     <Link
@@ -668,7 +671,7 @@ export function TargetsClient({
                       unreachable on small screens. Announce counts + status
                       without affecting the visual layout. */}
                   <td className="sr-only">
-                    <span className="sr-only">{`${t.status}, ${t.scanCount} ${RUN_PLURAL.toLowerCase()}, ${t.findingCount} ${ISSUE_PLURAL.toLowerCase()}`}</span>
+                    <span className="sr-only">{`${humanizeToken(t.status)}, ${t.scanCount} ${RUN_PLURAL.toLowerCase()}, ${t.findingCount} ${ISSUE_PLURAL.toLowerCase()}`}</span>
                   </td>
                 </tr>
               ))}
