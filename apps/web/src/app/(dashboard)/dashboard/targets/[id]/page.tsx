@@ -8,6 +8,8 @@ import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { ScorecardControls } from "./scorecard-controls"
 import { RepositoryRefEditor } from "./repository-ref-editor"
 import { DomainVerificationCard } from "./domain-verification-card"
+import { DeleteTargetCard } from "./delete-target-card"
+import { assertTargetAllowed } from "@lyrashield/billing"
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { getTargetDomainStatuses } from "@/lib/target-domain-status"
 import { LocalTime } from "@/components/local-time"
@@ -101,9 +103,13 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
 
   const membership = target.workspace.members[0]!
   const canUpdateTarget = hasPermission(membership.role, PERMISSIONS.target.update)
+  const canDeleteTarget = hasPermission(membership.role, PERMISSIONS.target.delete)
   const latestScore = target.scoreSnapshots[0]
   const scoreExpired = latestScore ? latestScore.expiresAt <= new Date() : false
-  const domainStatuses = await getTargetDomainStatuses(workspaceId, [target])
+  const [domainStatuses, targetEntitlement] = await Promise.all([
+    getTargetDomainStatuses(workspaceId, [target]),
+    assertTargetAllowed(workspaceId, session.userId),
+  ])
 
   return (
     <div>
@@ -266,6 +272,14 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           initialStatus={domainStatuses.get(target.id) ?? "Not verified"}
         />
       )}
+
+      <DeleteTargetCard
+        targetId={target.id}
+        workspaceId={target.workspaceId}
+        targetName={target.name}
+        targetCap={targetEntitlement.targetCap}
+        canDelete={canDeleteTarget}
+      />
 
       <div
         className="overflow-x-auto rounded-xl border shadow-sm"

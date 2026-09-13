@@ -320,6 +320,7 @@ describe("schedule-service", () => {
           where: {
             enabled: true,
             deletedAt: null,
+            target: { deletedAt: null },
             OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }],
           },
           take: 50,

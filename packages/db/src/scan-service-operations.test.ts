@@ -240,6 +240,7 @@ describe("createScan", () => {
   it("rejects a second active scan while holding the target lock", async () => {
     const tx = {
       $executeRaw: vi.fn().mockResolvedValue(undefined),
+      target: { findFirst: vi.fn().mockResolvedValue({ id: "target-1" }) },
       scan: {
         count: vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(1),
         create: vi.fn(),
@@ -262,6 +263,7 @@ describe("createScan", () => {
   it("enforces the workspace scan cap inside the creation transaction", async () => {
     const tx = {
       $executeRaw: vi.fn().mockResolvedValue(undefined),
+      target: { findFirst: vi.fn().mockResolvedValue({ id: "target-1" }) },
       scan: {
         count: vi.fn().mockResolvedValue(3),
         create: vi.fn(),
