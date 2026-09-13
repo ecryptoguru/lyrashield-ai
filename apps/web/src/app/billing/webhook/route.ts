@@ -59,6 +59,7 @@ export const dynamic = "force-dynamic"
  * >60s processing runs, replace with a lease column (commit-3 territory).
  */
 const REPROCESS_MIN_AGE_MS = 60_000
+const MAX_WEBHOOK_BYTES = 5 * 1024 * 1024
 
 /** Response class map for validation-phase failures. */
 function authErrorResponse(error: unknown): NextResponse | null {
@@ -102,7 +103,6 @@ function deriveIdentity(parts: (string | number)[]): string {
 }
 
 export async function POST(request: Request) {
-  const body = await request.text()
   const headers: Record<string, string | string[] | undefined> = {}
   request.headers.forEach((value, key) => {
     headers[key] = value
@@ -122,6 +122,41 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   }
+
+  if (Number(request.headers.get("content-length")) > MAX_WEBHOOK_BYTES) {
+    return NextResponse.json(
+      { success: false, error: { code: "WEBHOOK_TOO_LARGE" } },
+      { status: 413 }
+    )
+  }
+  // Content-Length is optional and untrusted; count bytes before buffering the signed payload.
+  const reader = request.body?.getReader()
+  if (!reader) {
+    return NextResponse.json(
+      { success: false, error: { code: "WEBHOOK_MALFORMED_PAYLOAD" } },
+      { status: 400 }
+    )
+  }
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > MAX_WEBHOOK_BYTES) {
+        await reader.cancel()
+        return NextResponse.json(
+          { success: false, error: { code: "WEBHOOK_TOO_LARGE" } },
+          { status: 413 }
+        )
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const body = Buffer.concat(chunks).toString("utf8")
 
   let provider: "polar" | "razorpay"
   let externalId: string

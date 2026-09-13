@@ -16,6 +16,14 @@ vi.mock("@lyrashield/config", () => ({
 import { validateRazorpayWebhook } from "./webhooks"
 
 describe("validateRazorpayWebhook", () => {
+  it("rejects a signed body without an event object", () => {
+    const payload = "null"
+    const signature = createHmac("sha256", secrets.current).update(payload).digest("hex")
+    expect(() => validateRazorpayWebhook(payload, signature)).toThrow(
+      "Razorpay webhook has invalid event shape"
+    )
+  })
+
   const body = () =>
     JSON.stringify({
       event: "payment.captured",
