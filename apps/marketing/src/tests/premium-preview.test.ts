@@ -25,7 +25,9 @@ const astroConfig = readFileSync(new URL("../../astro.config.mjs", import.meta.u
 describe("premium assurance-world homepage", () => {
   it("promotes the assurance world to the canonical homepage", () => {
     expect(astroConfig).not.toContain('pathname !== "/premium-preview"')
-    expect(astroConfig).toContain('inlineStylesheets: "always"')
+    // "auto" was measured against "always" — 88,227 B vs 199,641 B index.html —
+    // and the external stylesheet is separately cacheable. Keep this pinned.
+    expect(astroConfig).toContain('inlineStylesheets: "auto"')
     expect(homepage).toContain("<HomeLiteScan />")
     expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
     expect(homepage.indexOf("<EvidenceWorld")).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
