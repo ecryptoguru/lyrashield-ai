@@ -435,16 +435,15 @@ const envSchema = z
     }
   )
   .refine(
-    // The grant token authenticates the sandbox to the relay; an http:// relay
-    // URL would transmit it in cleartext. Dev/test keep http:// for local relays.
+    // The grant is a bearer credential. Cleartext is safe only on literal loopback.
     (val) =>
-      val.NODE_ENV !== "production" ||
       !val.LYRASHIELD_TARGET_RELAY_URL ||
-      val.LYRASHIELD_TARGET_RELAY_URL.startsWith("https:"),
+      val.LYRASHIELD_TARGET_RELAY_URL.startsWith("https://") ||
+      /^http:\/\/(?:127\.0\.0\.1|\[::1\])(?::\d+)?\/?$/.test(val.LYRASHIELD_TARGET_RELAY_URL),
     {
       path: ["LYRASHIELD_TARGET_RELAY_URL"],
       message:
-        "LYRASHIELD_TARGET_RELAY_URL must use https:// in production — relay grants are bearer credentials",
+        "LYRASHIELD_TARGET_RELAY_URL requires HTTPS outside loopback — relay grants are bearer credentials",
     }
   )
   .refine(
