@@ -58,9 +58,11 @@ const DESTRUCTIVE_METHODS = ["PUT", "PATCH", "DELETE"]
 
 export interface MintRelayGrantInput {
   scanId: string
+  /** Review depth — selects the relay rate/byte/request cap profile. */
+  mode: "STANDARD" | "DEEP"
   /** DNS-verified apex domain (authorizes it + subdomains). */
   verifiedDomain: string
-  /** Target URL host when it differs from the verified apex (defensive). */
+  /** Target URL; its host is scoped only when inside the verified apex. */
   targetUrl: string
   apiSpecUrl?: string | null
   /** Hosts extracted from the spec's servers[] (spec-declared base URLs are in scope). */
@@ -77,8 +79,7 @@ export function mintScanRelayGrant(
   input: MintRelayGrantInput,
   config: RelayRuntimeConfig
 ): { grant: string; scope: RelayGrantScope } {
-  const profile = input.engineBudgetMs > 20 * 60 * 1000 ? "DEEP" : "STANDARD"
-  const limits = RELAY_LIMITS[profile]
+  const limits = RELAY_LIMITS[input.mode]
 
   const hosts = new Set<string>()
   const addHost = (raw: string | null | undefined) => {
@@ -86,17 +87,29 @@ export function mintScanRelayGrant(
     if (normalized) hosts.add(normalized)
   }
   addHost(input.verifiedDomain)
+  const apex = normalizeRelayHost(input.verifiedDomain)
+  // DNS verification proves control of the apex only — a target URL or spec
+  // that references an unrelated domain must not enlarge the relay's scope.
+  const withinApex = (host: string | null) =>
+    host !== null && apex !== null && (host === apex || host.endsWith(`.${apex}`))
   try {
-    addHost(new URL(input.targetUrl).hostname)
+    const targetHost = normalizeRelayHost(new URL(input.targetUrl).hostname)
+    if (withinApex(targetHost)) hosts.add(targetHost as string)
   } catch {
     /* target URL validity is checked upstream */
   }
   try {
-    if (input.apiSpecUrl) addHost(new URL(input.apiSpecUrl).hostname)
+    if (input.apiSpecUrl) {
+      const specHost = normalizeRelayHost(new URL(input.apiSpecUrl).hostname)
+      if (withinApex(specHost)) hosts.add(specHost as string)
+    }
   } catch {
     /* spec URL validity is checked upstream */
   }
-  for (const host of input.specServerHosts ?? []) addHost(host)
+  for (const host of input.specServerHosts ?? []) {
+    const normalized = normalizeRelayHost(host)
+    if (withinApex(normalized)) hosts.add(normalized as string)
+  }
 
   let scopedHosts = [...hosts]
   const allowlist = (input.allowedDomains ?? [])
@@ -126,9 +139,7 @@ export function mintScanRelayGrant(
 }
 
 /** Extract in-scope server hosts from an OpenAPI document (JSON or YAML). */
-export async function resolveSpecServerHosts(
-  apiSpecUrl: string
-): Promise<string[]> {
+export async function resolveSpecServerHosts(apiSpecUrl: string): Promise<string[]> {
   const fetchFn =
     env.LYRASHIELD_EGRESS_PROXY_URL && env.LYRASHIELD_EGRESS_PROXY_SECRET
       ? createEgressProxyFetchFn({
@@ -209,10 +220,7 @@ export async function fetchRelayAudit(
 }
 
 /** Revoke the grant immediately — call on every terminal scan state. */
-export async function revokeRelayGrant(
-  scanId: string,
-  config: RelayRuntimeConfig
-): Promise<void> {
+export async function revokeRelayGrant(scanId: string, config: RelayRuntimeConfig): Promise<void> {
   try {
     await fetch(`${config.url}/v1/revoke/${encodeURIComponent(scanId)}`, {
       method: "POST",

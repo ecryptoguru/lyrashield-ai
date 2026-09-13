@@ -65,28 +65,67 @@ interface SarifResultItem {
 interface SarifDoc {
   version?: string
   runs?: Array<{
-    tool?: { driver?: { name?: string; version?: string; rules?: Array<{ id?: string; properties?: Record<string, unknown> }> } }
+    tool?: {
+      driver?: {
+        name?: string
+        version?: string
+        rules?: Array<{ id?: string; properties?: Record<string, unknown> }>
+      }
+    }
     results?: SarifResultItem[]
   }>
 }
 
-function cweFromResult(result: SarifResultItem, ruleProps: Record<string, unknown> | undefined): string | null {
+function cweFromResult(
+  result: SarifResultItem,
+  ruleProps: Record<string, unknown> | undefined
+): string | null {
   const candidates = [
     result.properties?.cwe,
     result.properties?.["cwe.id"],
     ruleProps?.cwe,
     ruleProps?.["cwe.id"],
-    Array.isArray(ruleProps?.tags) ? (ruleProps.tags as unknown[]).find((t) => typeof t === "string" && /CWE-\d+/i.test(t)) : undefined,
+    Array.isArray(ruleProps?.tags)
+      ? (ruleProps.tags as unknown[]).find((t) => typeof t === "string" && /CWE-\d+/i.test(t))
+      : undefined,
   ]
   for (const candidate of candidates) {
     if (typeof candidate === "string") {
       const m = /CWE-?\d+/i.exec(candidate)
       if (m) return `CWE-${m[0].replace(/CWE-?/i, "")}`
+      // Some tools emit the bare numeric form (properties.cwe: "798").
+      if (/^\d+$/.test(candidate.trim())) return `CWE-${candidate.trim()}`
     }
     if (typeof candidate === "number") return `CWE-${candidate}`
     if (Array.isArray(candidate) && candidate.length > 0) {
       const m = /CWE-?\d+/i.exec(String(candidate[0]))
       if (m) return `CWE-${m[0].replace(/CWE-?/i, "")}`
+    }
+  }
+  return null
+}
+
+/** Extract an OWASP Top-10/LLM category tag ("A01", "API3", "LLM07") from
+ *  rule/result properties and tags that tools like Semgrep/OWASP emit. */
+function owaspFromResult(
+  result: SarifResultItem,
+  ruleProps: Record<string, unknown> | undefined
+): string | null {
+  const pools = [result.properties, ruleProps]
+  for (const pool of pools) {
+    if (!pool) continue
+    const values: unknown[] = [
+      pool.owasp,
+      pool["owasp.category"],
+      ...(Array.isArray(pool.tags) ? (pool.tags as unknown[]) : []),
+    ]
+    for (const value of values) {
+      if (typeof value !== "string") continue
+      // eslint-disable-next-line security/detect-unsafe-regex -- bounded alternation over fixed category ids; no catastrophic backtracking
+      const m = /\b(?:OWASP[\s_-]*)?(A(?:0[1-9]|10)|API(?:[1-9]|10)|LLM(?:0[1-9]|10))\b/i.exec(
+        value
+      )
+      if (m?.[1]) return m[1].toUpperCase()
     }
   }
   return null
@@ -127,7 +166,8 @@ export function parseSarifReport(
         rejected++
         continue
       }
-      const ruleId = result.ruleId ?? (result.ruleIndex != null ? rules[result.ruleIndex]?.id : undefined)
+      const ruleId =
+        result.ruleId ?? (result.ruleIndex != null ? rules[result.ruleIndex]?.id : undefined)
       const ruleProps = ruleId ? rules.find((r) => r.id === ruleId)?.properties : undefined
       const message = result.message?.text ?? result.message?.markdown
       if (!message && !ruleId) {
@@ -156,7 +196,7 @@ export function parseSarifReport(
         summary: (message ?? "").slice(0, 2000),
         severity,
         cwe,
-        owaspCategory: null,
+        owaspCategory: owaspFromResult(result, ruleProps),
         sarifRuleId: ruleId ?? null,
         file,
         startLine,

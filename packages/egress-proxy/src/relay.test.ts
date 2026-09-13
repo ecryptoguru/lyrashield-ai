@@ -55,7 +55,10 @@ function rawForward(
       resolve({ status: Number(raw.split(" ")[1]), raw })
     })
     socket.on("error", reject)
-    socket.setTimeout(8000, () => { socket.destroy(); reject(new Error("timeout")) })
+    socket.setTimeout(8000, () => {
+      socket.destroy()
+      reject(new Error("timeout"))
+    })
   })
 }
 
@@ -96,7 +99,10 @@ function tunnelRequest(
     })
     socket.on("close", () => resolve({ established, tunneled }))
     socket.on("error", reject)
-    socket.setTimeout(8000, () => { socket.destroy(); reject(new Error("timeout")) })
+    socket.setTimeout(8000, () => {
+      socket.destroy()
+      reject(new Error("timeout"))
+    })
   })
 }
 
@@ -110,6 +116,13 @@ describe("scoped relay", () => {
       if (req.url === "/echo") {
         res.writeHead(200, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ ok: true, auth: req.headers["x-test-auth"] ?? null }))
+      } else if (req.url === "/big") {
+        // Declared length beyond the relay's response cap.
+        res.writeHead(200, {
+          "Content-Type": "text/plain",
+          "Content-Length": String(11 * 1024 * 1024),
+        })
+        res.end("x".repeat(1024))
       } else {
         res.writeHead(404)
         res.end()
@@ -159,7 +172,11 @@ describe("scoped relay", () => {
   })
 
   it("rejects forward requests with no grant", async () => {
-    const res = await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, undefined)
+    const res = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo`,
+      undefined
+    )
     expect(res.status).toBe(403)
     expect(res.raw).toContain("malformed")
   })
@@ -173,14 +190,23 @@ describe("scoped relay", () => {
 
   it("rejects methods outside the grant", async () => {
     const token = grant(scopeFor(UPSTREAM_HOST))
-    const res = await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, token, "DELETE")
+    const res = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo`,
+      token,
+      "DELETE"
+    )
     expect(res.status).toBe(403)
     expect(res.raw).toContain("method_not_allowed")
   })
 
   it("rejects blocked paths", async () => {
     const token = grant(scopeFor(UPSTREAM_HOST))
-    const res = await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/admin/x`, token)
+    const res = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/admin/x`,
+      token
+    )
     expect(res.status).toBe(403)
     expect(res.raw).toContain("path_blocked")
   })
@@ -197,13 +223,21 @@ describe("scoped relay", () => {
 
   it("rejects revoked grants immediately", async () => {
     const token = grant(scopeFor(UPSTREAM_HOST, { scanId: "scan_revoke_me" }))
-    const before = await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, token)
+    const before = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo`,
+      token
+    )
     expect(before.status).toBe(200)
     await fetch(`http://127.0.0.1:${proxy.port}/v1/revoke/scan_revoke_me`, {
       method: "POST",
       headers: { Authorization: `Bearer ${ADMIN}` },
     })
-    const after = await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, token)
+    const after = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo`,
+      token
+    )
     expect(after.status).toBe(403)
     expect(after.raw).toContain("revoked")
   })
@@ -213,6 +247,34 @@ describe("scoped relay", () => {
     expect(res.status).toBe(401)
     const revoke = await fetch(`http://127.0.0.1:${proxy.port}/v1/revoke/x`, { method: "POST" })
     expect(revoke.status).toBe(401)
+  })
+
+  it("denies https absolute-form — TLS belongs on CONNECT", async () => {
+    const token = grant(scopeFor(UPSTREAM_HOST, { scanId: "scan_httpsform" }))
+    const res = await rawForward(proxy.port, `https://${UPSTREAM_HOST}/echo`, token)
+    expect(res.status).toBe(403)
+    expect(res.raw).toContain("https_requires_connect")
+  })
+
+  it("denies upstream bodies that declare more bytes than the caps", async () => {
+    const token = grant(scopeFor(UPSTREAM_HOST, { scanId: "scan_big" }))
+    const res = await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/big`, token)
+    expect(res.status).toBe(403)
+    expect(res.raw).toContain("byte_cap")
+  })
+
+  it("keeps the audit trail after revocation + sweep", async () => {
+    const token = grant(scopeFor(UPSTREAM_HOST, { scanId: "scan_retain" }))
+    await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, token)
+    await fetch(`http://127.0.0.1:${proxy.port}/v1/revoke/scan_retain`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${ADMIN}` },
+    })
+    proxy.relay?._sweep()
+    const audit = await fetch(`http://127.0.0.1:${proxy.port}/v1/audit/scan_retain`, {
+      headers: { Authorization: `Bearer ${ADMIN}` },
+    }).then((r) => r.json() as Promise<{ entries: { type?: string; path?: string }[] }>)
+    expect(audit.entries.some((e) => e.type === "request" && e.path === "/echo")).toBe(true)
   })
 
   it("tunnels CONNECT to a scoped host and audits it", async () => {
@@ -227,7 +289,11 @@ describe("scoped relay", () => {
   })
 
   it("rejects CONNECT to out-of-scope hosts and non-web ports", async () => {
-    const outOfScope = await tunnelRequest(proxy.port, "evil.example.com:443", grant(scopeFor(UPSTREAM_HOST)))
+    const outOfScope = await tunnelRequest(
+      proxy.port,
+      "evil.example.com:443",
+      grant(scopeFor(UPSTREAM_HOST))
+    )
     expect(outOfScope.established).toBe(false)
     const badPort = await tunnelRequest(
       proxy.port,

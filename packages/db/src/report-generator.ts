@@ -8,11 +8,7 @@ import {
 import { getAiSecurityScoreSnapshot } from "./ai-security-score-service"
 import { getAiSystemProfile } from "./ai-system-profile-service"
 import { getThreatModel } from "./threat-model-service"
-import {
-  VIBE_SECURITY_CONTROLS,
-  defaultStandards,
-  renderStandards,
-} from "@lyrashield/security"
+import { VIBE_SECURITY_CONTROLS, defaultStandards, renderStandards } from "@lyrashield/security"
 import {
   WEBMCP_CONTROLS,
   WEBMCP_CONTROL_IDS,
@@ -1038,7 +1034,9 @@ export function generateReportHTML(data: ReportData): string {
         </p>
         ${standardsViews
           .map(
-            (view) => `<h3 style="font-size:13px;font-weight:650;margin:14px 0 6px;">${escapeHtml(view.name)} <span style="color:#6b7280;font-weight:400;">${escapeHtml(view.version)}</span>${view.badge ? ` <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;">${escapeHtml(view.badge)}</span>` : ""}</h3>
+            (
+              view
+            ) => `<h3 style="font-size:13px;font-weight:650;margin:14px 0 6px;">${escapeHtml(view.name)} <span style="color:#6b7280;font-weight:400;">${escapeHtml(view.version)}</span>${view.badge ? ` <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;">${escapeHtml(view.badge)}</span>` : ""}</h3>
             <p style="font-size:12px;color:#6b7280;margin-bottom:6px;">${view.evaluated} evaluated · ${view.requiresAttestation} require attestation · ${view.notEvaluated} not evaluated${view.violationSignals > 0 ? ` · <strong style="color:#b91c1c;">${view.violationSignals} violation signal${view.violationSignals === 1 ? "" : "s"}</strong>` : ""}</p>
             <table>
               ${view.categories
@@ -1050,11 +1048,13 @@ export function generateReportHTML(data: ReportData): string {
                       cat.state === "evaluated"
                         ? cat.violationSignals > 0
                           ? "background:#fee2e2;color:#b91c1c;"
-                          : "background:#dcfce7;color:#166534;"
+                          : cat.limited
+                            ? "background:#ccfbf1;color:#0f766e;"
+                            : "background:#dcfce7;color:#166534;"
                         : cat.state === "requires-attestation"
                           ? "background:#fef3c7;color:#92400e;"
                           : "background:#f3f4f6;color:#6b7280;"
-                    }">${cat.state === "evaluated" ? (cat.violationSignals > 0 ? `evaluated · ${cat.violationSignals} signal${cat.violationSignals === 1 ? "" : "s"}` : "evaluated") : cat.state === "requires-attestation" ? "requires attestation" : "not evaluated"}</span></td>
+                    }">${cat.state === "evaluated" ? (cat.violationSignals > 0 ? `evaluated · ${cat.violationSignals} signal${cat.violationSignals === 1 ? "" : "s"}` : cat.limited ? "evaluated · partial" : "evaluated") : cat.state === "requires-attestation" ? "requires attestation" : "not evaluated"}</span></td>
                   </tr>`
                 )
                 .join("")}

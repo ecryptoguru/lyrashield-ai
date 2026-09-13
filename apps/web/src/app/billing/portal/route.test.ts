@@ -37,7 +37,7 @@ vi.mock("@lyrashield/billing", () => ({
     },
   ]),
 }))
-vi.mock("@lyrashield/logger", async () => (await import("@/__tests__/mocks")).loggerModule())
+vi.mock("@lyrashield/logger", async () => (await import("../../../__tests__/mocks")).loggerModule())
 
 const { GET } = await import("./route")
 

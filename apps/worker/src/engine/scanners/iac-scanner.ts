@@ -48,7 +48,8 @@ const MAX_TOTAL_FINDINGS = 5_000
 type IacFileKind = "dockerfile" | "compose" | "kubernetes" | "terraform"
 
 const K8S_API_VERSION = /^apiVersion:\s*\S+/m
-const K8S_KIND = /^kind:\s*(Deployment|Pod|DaemonSet|StatefulSet|Job|CronJob|Service|Role|ClusterRole|RoleBinding|ClusterRoleBinding|NetworkPolicy|Ingress|Secret|ConfigMap|ServiceAccount)\b/m
+const K8S_KIND =
+  /^kind:\s*(Deployment|Pod|DaemonSet|StatefulSet|Job|CronJob|Service|Role|ClusterRole|RoleBinding|ClusterRoleBinding|NetworkPolicy|Ingress|Secret|ConfigMap|ServiceAccount)\b/m
 const COMPOSE_SERVICES = /^services:\s*$/m
 
 function classify(path: string, content: string): IacFileKind | null {
@@ -172,7 +173,8 @@ const IAC_RULES: IacRule[] = [
     id: "iac-dockerfile-secret-env",
     name: "Secret material in Dockerfile ENV/ARG",
     kinds: ["dockerfile"],
-    pattern: /^(?:ENV|ARG)\s+\S*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|ACCESS_KEY)\S*\s*=\s*\S+/im,
+    pattern:
+      /^(?:ENV|ARG)\s+\S*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|ACCESS_KEY)\S*\s*=\s*\S+/im,
     severity: "high",
     cwe: "CWE-798",
     description:
@@ -258,8 +260,7 @@ const IAC_RULES: IacRule[] = [
     pattern: /(?:^|["'\s])pid\s*:\s*["']?host/im,
     severity: "medium",
     cwe: "CWE-668",
-    description:
-      "A service shares the host PID namespace and can see and signal host processes.",
+    description: "A service shares the host PID namespace and can see and signal host processes.",
     impact: "Enables process inspection and host DoS from inside the container.",
     remediation: "Remove pid: host unless a documented observability agent requires it.",
     controlIds: [44],
@@ -277,7 +278,8 @@ const IAC_RULES: IacRule[] = [
     cwe: "CWE-798",
     description:
       "A compose environment entry hard-codes a credential value. Anyone with repository read access owns the secret.",
-    impact: "Committed credentials leak through every clone, CI log, and image derived from the file.",
+    impact:
+      "Committed credentials leak through every clone, CI log, and image derived from the file.",
     remediation: "Reference a secret manager or ${VAR} interpolation; rotate the committed value.",
     controlIds: [3],
   },
@@ -292,7 +294,8 @@ const IAC_RULES: IacRule[] = [
     description:
       "A pod mounts a host filesystem path. Containers can read or overwrite host files including other tenants' secrets.",
     impact: "Host filesystem exposure inside the pod boundary.",
-    remediation: "Use PVCs/configMaps/secrets; gate hostPath behind a Pod Security admission policy.",
+    remediation:
+      "Use PVCs/configMaps/secrets; gate hostPath behind a Pod Security admission policy.",
     controlIds: [44],
   },
   {
@@ -423,7 +426,8 @@ const IAC_RULES: IacRule[] = [
     id: "iac-tf-inline-secret",
     name: "Hard-coded credential in Terraform",
     kinds: ["terraform"],
-    pattern: /(?:password|secret|token|api[_-]?key|private[_-]?key|access[_-]?key)["']?[^=\n]*=\s*"[^"$\s][^"$]{6,}"/i,
+    pattern:
+      /(?:password|secret|token|api[_-]?key|private[_-]?key|access[_-]?key)["']?[^=\n]*=\s*"[^"$\s][^"$]{6,}"/i,
     suppressIf: /var\.|data\.|local\.|each\.|module\.|random_|sensitive/i,
     severity: "high",
     cwe: "CWE-798",
@@ -439,13 +443,16 @@ const IAC_RULES: IacRule[] = [
     pattern: /default\s*=\s*"[^"$\s][^"$]{6,}"/i,
     fileContext:
       /variable\s+"[^"]*(?:password|secret|token|api[_-]?key|private[_-]?key|access[_-]?key)[^"]*"\s*\{/i,
-    suppressIf: /var\.|data\.|local\.|each\.|module\.|random_|sensitive/i,
+    // A single-line `variable "x" { default = "…" }` is already reported by
+    // iac-tf-inline-secret — suppress this rule there to avoid double findings.
+    suppressIf: /variable\s+"|var\.|data\.|local\.|each\.|module\.|random_|sensitive/i,
     severity: "high",
     cwe: "CWE-798",
     description:
       "A variable whose name marks it as a credential carries a hard-coded default literal in a separate attribute — the value is committed to version control and state.",
     impact: "Credential defaults land in git history and tfstate in plaintext.",
-    remediation: "Remove the default; mark the variable sensitive and source it from a secret manager.",
+    remediation:
+      "Remove the default; mark the variable sensitive and source it from a secret manager.",
     controlIds: [3],
   },
 ]
@@ -607,7 +614,12 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
           poc_description: `Review line ${lineNum} of ${relPath}: ${match[0].slice(0, 120)}.`,
           ...(rule.controlIds ? { control_ids: rule.controlIds } : {}),
           code_locations: [
-            { file: relPath, start_line: lineNum, label: rule.name, snippet: line.trim().slice(0, 200) },
+            {
+              file: relPath,
+              start_line: lineNum,
+              label: rule.name,
+              snippet: line.trim().slice(0, 200),
+            },
           ],
         })
       }

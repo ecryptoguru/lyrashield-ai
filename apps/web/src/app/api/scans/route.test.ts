@@ -38,7 +38,7 @@ vi.mock("@lyrashield/auth", () => ({
   },
 }))
 
-vi.mock("@lyrashield/logger", async () => (await import("@/__tests__/mocks")).loggerModule())
+vi.mock("@lyrashield/logger", async () => (await import("../../../__tests__/mocks")).loggerModule())
 
 vi.mock("../../../lib/rate-limit", () => ({
   checkScanCreateRateLimit: vi

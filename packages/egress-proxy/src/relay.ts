@@ -60,6 +60,8 @@ export interface RelayAuditEntry {
   path?: string
   status?: number
   bytes?: number
+  /** Response body cut short by the byte caps — the client received a prefix only. */
+  truncated?: boolean
   durationMs?: number
   denyReason?: string
 }
@@ -85,6 +87,8 @@ export interface RelayHandler {
   getAudit(scanId: string): RelayAuditEntry[] | null
   /** Test/diagnostic: number of live scan states. */
   stateCount(): number
+  /** Test hook: run the expiry/revocation sweep synchronously. */
+  _sweep(): void
 }
 
 function extractGrantToken(headers: IncomingMessage["headers"]): string | undefined {
@@ -102,7 +106,7 @@ function extractGrantToken(headers: IncomingMessage["headers"]): string | undefi
       const decoded = Buffer.from(value.slice(6).trim(), "base64").toString("utf8")
       const [user, ...rest] = decoded.split(":")
       const pass = rest.join(":")
-      if (user.startsWith("lrg1.")) return user
+      if (user?.startsWith("lrg1.")) return user
       if (pass.startsWith("lrg1.")) return pass
     } catch {
       /* fall through */
@@ -127,18 +131,11 @@ async function resolveScopedHost(
   if (isIP(normalized) !== 0) {
     return isBlockedIp(normalized) ? { ok: false } : { ok: true, addresses: [normalized] }
   }
-  let v4: string[] = []
-  let v6: string[] = []
-  try {
-    ;[v4, v6] = await Promise.all([dns.resolve4(normalized), dns.resolve6(normalized)])
-  } catch {
-    try {
-      if (v4.length === 0) v4 = await dns.resolve4(normalized)
-    } catch {
-      /* v6-only host */
-    }
-  }
-  const addresses = [...v4, ...v6]
+  const [v4, v6] = await Promise.allSettled([dns.resolve4(normalized), dns.resolve6(normalized)])
+  const addresses = [
+    ...(v4.status === "fulfilled" ? v4.value : []),
+    ...(v6.status === "fulfilled" ? v6.value : []),
+  ]
   if (addresses.length === 0) return { ok: false }
   for (const addr of addresses) {
     if (isBlockedIp(addr)) return { ok: false }
@@ -158,6 +155,11 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
   const allowedPorts = deps?.allowedConnectPorts ?? ALLOWED_CONNECT_PORTS
   const states = new Map<string, ScanRelayState>()
   const revoked = new Set<string>()
+  // Grants are revoked/expired before the worker fetches the audit — swept
+  // states must keep their trail for a bounded window or the evidence is lost.
+  const closedAudits = new Map<string, { entries: RelayAuditEntry[]; expiresAt: number }>()
+  const CLOSED_AUDIT_TTL_MS = 30 * 60 * 1000
+  const MAX_CLOSED_AUDITS = 200
 
   // Denied requests with no valid grant have no scan context; keep a bounded
   // shared bucket so abuse attempts remain auditable.
@@ -233,7 +235,14 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     method?: string,
     path?: string
   ) => {
-    record(state, scanId, { ts: Date.now(), type: "denied", denyReason: reason, host, method, path })
+    record(state, scanId, {
+      ts: Date.now(),
+      type: "denied",
+      denyReason: reason,
+      host,
+      method,
+      path,
+    })
     res.writeHead(403, { "Content-Type": "application/json" })
     res.end(JSON.stringify({ ok: false, reason }))
   }
@@ -250,9 +259,10 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     let url: URL
     try {
       const raw = req.url ?? ""
-      url = raw.startsWith("http://") || raw.startsWith("https://")
-        ? new URL(raw)
-        : new URL(`http://${req.headers.host ?? ""}${raw}`)
+      url =
+        raw.startsWith("http://") || raw.startsWith("https://")
+          ? new URL(raw)
+          : new URL(`http://${req.headers.host ?? ""}${raw}`)
     } catch {
       denyForward(res, state, scope.scanId, "malformed")
       return
@@ -262,7 +272,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     const method = (req.method ?? "GET").toUpperCase()
 
     if (url.protocol === "https:") {
-      denyForward(res, state, scope.scanId, "malformed", host, method, path)
+      denyForward(res, state, scope.scanId, "https_requires_connect", host, method, path)
       return
     }
     if (!relayHostAllowed(scope, host)) {
@@ -277,7 +287,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
       denyForward(res, state, scope.scanId, "path_blocked", host, method, path)
       return
     }
-    const pathPrefix = `/${(url.pathname.split("/")[1] ?? "")}`
+    const pathPrefix = `/${url.pathname.split("/")[1] ?? ""}`
     const limit = checkLimits(state, pathPrefix)
     if (limit) {
       denyForward(res, state, scope.scanId, limit.deny, host, method, path)
@@ -312,7 +322,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
       headers[key] = Array.isArray(value) ? value.join(", ") : value
     }
     for (const [key, value] of Object.entries(scope.injectHeaders ?? {})) {
-      headers[key] = value
+      headers[key.toLowerCase()] = value
     }
 
     const dispatcher = new Agent({ connect: { lookup: pinnedLookup(resolved.addresses) } })
@@ -326,13 +336,24 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         headersTimeout: 10_000,
         bodyTimeout: FORWARD_TIMEOUT_MS,
       })
+      // A declared body that can never fit the caps is denied outright —
+      // silently truncating would hand the client an indistinguishable prefix.
+      const declaredLength = Number(upstream.headers["content-length"] ?? 0)
+      if (declaredLength > MAX_RELAY_RESPONSE_BODY || declaredLength > scope.maxBytes) {
+        upstream.body.destroy()
+        denyForward(res, state, scope.scanId, "byte_cap", host, method, path)
+        return
+      }
       // content-length is always stripped: truncation would otherwise send a
       // declared length that does not match the body we actually deliver.
-      res.writeHead(upstream.statusCode, Object.fromEntries(
-        Object.entries(upstream.headers).filter(
-          ([k, v]) => v !== undefined && !HOP_BY_HOP_HEADERS.has(k) && k !== "content-length"
-        )
-      ) as never)
+      res.writeHead(
+        upstream.statusCode,
+        Object.fromEntries(
+          Object.entries(upstream.headers).filter(
+            ([k, v]) => v !== undefined && !HOP_BY_HOP_HEADERS.has(k) && k !== "content-length"
+          )
+        ) as never
+      )
       let bytes = 0
       let truncated = false
       for await (const chunk of upstream.body) {
@@ -353,6 +374,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         path,
         status: upstream.statusCode,
         bytes,
+        truncated: truncated || undefined,
         durationMs: Date.now() - started,
       })
       if (state.bytesTotal >= scope.maxBytes) revoked.add(scope.scanId)
@@ -365,8 +387,13 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
       if (!res.headersSent) res.writeHead(502, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ ok: false, reason: "upstream_failed" }))
       record(state, scope.scanId, {
-        ts: started, type: "request", method, host, path,
-        durationMs: Date.now() - started, denyReason: "upstream_failed",
+        ts: started,
+        type: "request",
+        method,
+        host,
+        path,
+        durationMs: Date.now() - started,
+        denyReason: "upstream_failed",
       })
     } finally {
       void dispatcher.destroy()
@@ -377,7 +404,11 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     const started = Date.now()
     const fail = (code: number, reason: string, state: ScanRelayState | null, host = "") => {
       record(state, state?.scope.scanId ?? "unscoped", {
-        ts: Date.now(), type: "denied", denyReason: reason, host, port: 443,
+        ts: Date.now(),
+        type: "denied",
+        denyReason: reason,
+        host,
+        port: 443,
       })
       clientSocket.write(`HTTP/1.1 ${code} ${reason}\r\n\r\n`, () => clientSocket.destroy())
     }
@@ -406,9 +437,11 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
       const upstream = net.connect({ host: resolved.addresses[0], port })
       let settled = false
       let bytes = 0
+      const capReached = () =>
+        bytes > MAX_RELAY_RESPONSE_BODY || state.bytesTotal + bytes > scope.maxBytes
       const onData = (chunk: Buffer) => {
         bytes += chunk.byteLength
-        if (bytes > MAX_RELAY_RESPONSE_BODY || state.bytesTotal + bytes > scope.maxBytes) {
+        if (capReached()) {
           upstream.destroy()
           clientSocket.destroy()
         }
@@ -417,6 +450,9 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         settled = true
         clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n")
         if (head?.byteLength) upstream.write(head)
+        // Byte caps bound the tunnel in BOTH directions — outbound data can
+        // otherwise evade the per-scan budget entirely.
+        clientSocket.on("data", onData)
         upstream.on("data", onData)
         upstream.pipe(clientSocket).pipe(upstream)
       })
@@ -430,7 +466,11 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
       })
       const done = () => {
         record(state, scope.scanId, {
-          ts: started, type: "tunnel", host, port, bytes,
+          ts: started,
+          type: "tunnel",
+          host,
+          port,
+          bytes,
           durationMs: Date.now() - started,
         })
       }
@@ -442,15 +482,29 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
   }
 
   // Sweep dead scan states so grants can't outlive their scan in memory.
-  const sweeper = setInterval(() => {
+  // The audit trail outlives the state: the worker fetches it after terminal
+  // transitions, which happen after revocation or expiry.
+  const sweep = () => {
     const now = Date.now()
     for (const [scanId, state] of states) {
       if (state.scope.exp <= now || revoked.has(scanId)) {
         states.delete(scanId)
         revoked.delete(scanId)
+        if (state.audit.length > 0) {
+          closedAudits.set(scanId, { entries: state.audit, expiresAt: now + CLOSED_AUDIT_TTL_MS })
+        }
       }
     }
-  }, 60_000)
+    for (const [scanId, closed] of closedAudits) {
+      if (closed.expiresAt <= now) closedAudits.delete(scanId)
+    }
+    while (closedAudits.size > MAX_CLOSED_AUDITS) {
+      const oldest = closedAudits.keys().next().value
+      if (oldest === undefined) break
+      closedAudits.delete(oldest)
+    }
+  }
+  const sweeper = setInterval(sweep, 60_000)
   sweeper.unref()
 
   return {
@@ -459,14 +513,17 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     revoke(scanId: string) {
       revoked.add(scanId)
       const state = states.get(scanId)
-      if (state) record(state, scanId, { ts: Date.now(), type: "denied", denyReason: "revoked", host: "" })
+      if (state)
+        record(state, scanId, { ts: Date.now(), type: "denied", denyReason: "revoked", host: "" })
     },
     getAudit(scanId: string) {
       if (scanId === "unscoped") return unscopedAudit
-      return states.get(scanId)?.audit ?? null
+      return states.get(scanId)?.audit ?? closedAudits.get(scanId)?.entries ?? null
     },
     stateCount() {
       return states.size
     },
+    /** Test hook: run the expiry/revocation sweep synchronously. */
+    _sweep: sweep,
   }
 }

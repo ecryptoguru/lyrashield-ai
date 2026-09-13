@@ -1035,13 +1035,19 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const deterministicRetest =
         target.type === "REPO" && scanRecord.determinismMode === "targeted_scanner"
       const isUrlTarget = target.type === "WEB_APP" || target.type === "API"
-      const scanProfile = isUrlTarget
-        ? resolveScanProfile({ targetType: target.type, mode })
-        : null
+      const scanProfile = isUrlTarget ? resolveScanProfile({ targetType: target.type, mode }) : null
       // Engine-backed URL scans (STANDARD/DEEP) share the repository engine
       // path; SAFE stays deterministic-only.
       const urlEngineBacked = isUrlTarget && scanProfile?.usesAi === true
       const engineBacked = target.type === "REPO" || urlEngineBacked
+
+      // The emphasis receipt documents user intent for EVERY tier — including
+      // deterministic-only scans where it steers nothing but is still recorded.
+      if (job.data.focus) {
+        await addScanEvent(scanId, "scan_scope", "info", "Requested emphasis recorded", {
+          emphasis: job.data.focus,
+        })
+      }
 
       if (deterministicRetest) {
         if (target.repoProvider !== "github") {
@@ -1184,6 +1190,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             const minted = mintScanRelayGrant(
               {
                 scanId,
+                mode: scanProfile?.canonicalMode === "DEEP" ? "DEEP" : "STANDARD",
                 verifiedDomain,
                 targetUrl: target.url,
                 apiSpecUrl: target.apiSpecUrl,
@@ -1202,22 +1209,22 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               maxRequests: minted.scope.maxRequests,
             })
           } catch (grantErr) {
-            await addScanEvent(scanId, "engine_skipped", "error", "Relay grant could not be minted", {
-              targetType: target.type,
-              error: grantErr instanceof Error ? grantErr.message : String(grantErr),
-            })
+            await addScanEvent(
+              scanId,
+              "engine_skipped",
+              "error",
+              "Relay grant could not be minted",
+              {
+                targetType: target.type,
+                error: grantErr instanceof Error ? grantErr.message : String(grantErr),
+              }
+            )
             return {
               status: "failed",
               errorCategory: "RELAY_SCOPE_UNAVAILABLE",
               errorMessage: "Could not establish relay scope for this verified target.",
             }
           }
-        }
-
-        if (job.data.focus) {
-          await addScanEvent(scanId, "scan_scope", "info", "Requested emphasis recorded", {
-            emphasis: job.data.focus,
-          })
         }
 
         // Once the external engine begins, an automatic BullMQ replay could
@@ -1355,9 +1362,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       const runRecord = engineResult.output.runRecord
       const routingCoverageIssue =
-        engineBacked && engineProfile
-          ? engineRoutingCoverageIssue(engineProfile, runRecord)
-          : null
+        engineBacked && engineProfile ? engineRoutingCoverageIssue(engineProfile, runRecord) : null
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const cancelled = engineResult.cancelled === true
       const engineWorkObserved =
@@ -1676,11 +1681,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorMessage: string
       } | null = agentMinuteTerminalError
 
-      if (
-        !engineTerminalError &&
-        engineBacked &&
-        exitInterpretation.status === "FAILED"
-      ) {
+      if (!engineTerminalError && engineBacked && exitInterpretation.status === "FAILED") {
         const stoppedForBudget = exitInterpretation.category === "BUDGET_EXCEEDED"
         engineTerminalError = {
           status: (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,

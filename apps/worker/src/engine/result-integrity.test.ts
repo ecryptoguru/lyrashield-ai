@@ -110,16 +110,18 @@ function mockRepoRetestState(
   vi.mocked(prisma.finding.findMany).mockResolvedValue(
     (overrides.retestFindingIds ?? []).map((id) => ({ id })) as never
   )
-  vi.mocked(prisma.scanResultManifest.findUnique).mockImplementation(async ({ where }) => {
-    if (where.scanId === "scan-1") return baselineManifest as never
-    if (where.scanId === "scan-2") return retestManifest as never
+  vi.mocked(prisma.scanResultManifest.findUnique).mockImplementation((async (args: unknown) => {
+    const scanId = (args as { where?: { scanId?: unknown } } | undefined)?.where?.scanId
+    if (scanId === "scan-1") return baselineManifest
+    if (scanId === "scan-2") return retestManifest
     return null
-  })
-  vi.mocked(prisma.scanCoverageReceipt.findMany).mockImplementation(async ({ where }) => {
-    if (where.scanId === "scan-1") return baselineReceipts as never
-    if (where.scanId === "scan-2") return retestReceipts as never
+  }) as never)
+  vi.mocked(prisma.scanCoverageReceipt.findMany).mockImplementation((async (args: unknown) => {
+    const scanId = (args as { where?: { scanId?: unknown } } | undefined)?.where?.scanId
+    if (scanId === "scan-1") return baselineReceipts
+    if (scanId === "scan-2") return retestReceipts
     return []
-  })
+  }) as never)
 }
 
 describe("result integrity", () => {

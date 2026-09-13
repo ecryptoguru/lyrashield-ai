@@ -91,6 +91,7 @@ interface ScanData {
         title: string
         state: "evaluated" | "requires-attestation" | "not-evaluated"
         violationSignals: number
+        limited?: boolean
       }>
     }>
   }
@@ -641,8 +642,9 @@ export function ScanDetailClient({
             typeof relayScopeEvent?.metadata === "object" &&
             relayScopeEvent.metadata &&
             Array.isArray((relayScopeEvent.metadata as Record<string, unknown>).hosts)
-              ? ((relayScopeEvent.metadata as Record<string, unknown>).hosts as unknown[])
-                  .filter((h): h is string => typeof h === "string")
+              ? ((relayScopeEvent.metadata as Record<string, unknown>).hosts as unknown[]).filter(
+                  (h): h is string => typeof h === "string"
+                )
               : [],
         }
       : null
@@ -1164,32 +1166,34 @@ export function ScanDetailClient({
                             {view.name}{" "}
                             <span className="text-muted-foreground text-xs">{view.version}</span>
                           </span>
-                          {view.badge && (
-                            <Badge variant="warning">{view.badge}</Badge>
-                          )}
+                          {view.badge && <Badge variant="warning">{view.badge}</Badge>}
                         </div>
                         <p className="text-muted-foreground mt-1 text-xs">
                           {view.evaluated} evaluated · {view.requiresAttestation} require
                           attestation · {view.notEvaluated} not evaluated
                           {view.violationSignals > 0 &&
                             ` · ${view.violationSignals} violation signal${view.violationSignals === 1 ? "" : "s"}`}
+                          {view.categories.some((c) => c.limited) && " · † partial coverage"}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1">
                           {view.categories.map((cat) => (
                             <span
                               key={cat.id}
-                              title={`${cat.id} — ${cat.title}`}
+                              title={`${cat.id} — ${cat.title}${cat.limited ? " (partial coverage)" : ""}`}
                               className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
                                 cat.state === "evaluated"
                                   ? cat.violationSignals > 0
                                     ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
-                                    : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                                    : cat.limited
+                                      ? "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200"
+                                      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
                                   : cat.state === "requires-attestation"
                                     ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
                                     : "bg-muted text-muted-foreground"
                               }`}
                             >
                               {cat.id}
+                              {cat.limited ? "†" : ""}
                             </span>
                           ))}
                         </div>

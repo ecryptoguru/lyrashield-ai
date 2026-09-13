@@ -36,6 +36,7 @@ export interface RelayGrantScope {
 
 export type RelayDenyReason =
   | "malformed"
+  | "https_requires_connect"
   | "bad_signature"
   | "expired"
   | "host_out_of_scope"

@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url"
 import { z } from "zod"
 import { logger } from "@lyrashield/logger"
 import { redactUrlForLogs, safeFetchOnce, type SafeFetchOutcome } from "@lyrashield/security"
-import { createRelayHandler, type RelayDeps } from "./relay"
+import { createRelayHandler, type RelayDeps, type RelayHandler } from "./relay"
 
 const FetchRequestSchema = z
   .object({
@@ -19,6 +19,8 @@ export interface ProxyServer {
   port: number
   ready: Promise<void>
   close(): Promise<void>
+  /** Test/diagnostic access to the relay handler (undefined when disabled). */
+  relay?: RelayHandler
 }
 
 export interface ProxyOptions {
@@ -216,7 +218,11 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       }
       if (reqUrl.startsWith("/v1/revoke/")) {
         if (request.method !== "POST") {
-          sendJson(response, 405, { ok: false, reason: "request_failed", detail: "Method not allowed" })
+          sendJson(response, 405, {
+            ok: false,
+            reason: "request_failed",
+            detail: "Method not allowed",
+          })
           return
         }
         relay.revoke(scanId)
@@ -224,7 +230,11 @@ export function startProxy(options: ProxyOptions): ProxyServer {
         return
       }
       if (request.method !== "GET") {
-        sendJson(response, 405, { ok: false, reason: "request_failed", detail: "Method not allowed" })
+        sendJson(response, 405, {
+          ok: false,
+          reason: "request_failed",
+          detail: "Method not allowed",
+        })
         return
       }
       sendJson(response, 200, { ok: true, entries: relay.getAudit(scanId) ?? [] })
@@ -302,6 +312,7 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       return (server.address() as { port: number } | null)?.port ?? port
     },
     ready,
+    relay: relay ?? undefined,
     close() {
       return new Promise<void>((resolve, reject) =>
         server.close((err) => (err ? reject(err) : resolve()))

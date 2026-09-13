@@ -199,8 +199,9 @@ function evaluateControl09(tool: WebMcpToolSurface): WebMcpEvidenceState {
 // schema. Literal credential values only — an empty input parameter the caller
 // fills is not a leak (see the control's falsePositiveNotes). Two assignment
 // forms are covered: quoted values ("key": "sk-...") and unquoted ones
-// (DATABASE_URL=postgres://user:pw@host/db, api_key=AKIA...), since tool
-// descriptions frequently embed connection strings and env-style examples.
+// (env-style assignments such as api_key=AKIA... or a database URL carrying
+// inline user:pass credentials), since tool descriptions frequently embed
+// connection strings and env-style examples.
 const EMBEDDED_SECRET_QUOTED =
   /-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}|\bsk-[A-Za-z0-9]{20,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?:api[_-]?key|api[_-]?secret|password|secret|token|credential)\s*[:=]\s*["'][^"'\s]{8,}["']/i
 const EMBEDDED_SECRET_UNQUOTED =

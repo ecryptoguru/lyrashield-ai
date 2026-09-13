@@ -10,6 +10,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { scanIac } from "./iac-scanner"
+import type { ScannerDiscovery } from "../scanner-coverage"
 
 const TEST_DIR = join(tmpdir(), "lyrashield-iac-test-" + Date.now())
 
@@ -148,7 +149,7 @@ describe("scanIac", () => {
       "Dockerfile": "FROM node:20\nUSER app\n",
       "config/settings.yaml": "feature_flag: true\n",
     })
-    const discovery: Record<string, unknown> = {}
+    const discovery: ScannerDiscovery = {}
     await scanIac({ repoPath: dir, workspaceDir: dir, discovery })
     const receipt = discovery.iac as {
       filesScanned: number

@@ -10,6 +10,7 @@ const CONFIG = {
 
 const baseInput = {
   scanId: "scan-1",
+  mode: "STANDARD" as const,
   verifiedDomain: "example.com",
   targetUrl: "https://app.example.com/login",
   engineBudgetMs: 12 * 60 * 1000,
@@ -17,9 +18,7 @@ const baseInput = {
 
 describe("resolveRelayRuntimeConfig", () => {
   it("returns null when any component is missing", () => {
-    expect(
-      resolveRelayRuntimeConfig({ LYRASHIELD_TARGET_RELAY_URL: "http://r" })
-    ).toBeNull()
+    expect(resolveRelayRuntimeConfig({ LYRASHIELD_TARGET_RELAY_URL: "http://r" })).toBeNull()
     expect(resolveRelayRuntimeConfig({})).toBeNull()
   })
 
@@ -58,10 +57,7 @@ describe("mintScanRelayGrant", () => {
     const safe = mintScanRelayGrant(baseInput, CONFIG)
     expect(safe.scope.methods).toEqual(["GET", "HEAD", "OPTIONS", "POST"])
 
-    const destructive = mintScanRelayGrant(
-      { ...baseInput, destructiveTestsAllowed: true },
-      CONFIG
-    )
+    const destructive = mintScanRelayGrant({ ...baseInput, destructiveTestsAllowed: true }, CONFIG)
     expect(destructive.scope.methods).toEqual([
       "GET",
       "HEAD",
@@ -104,10 +100,24 @@ describe("mintScanRelayGrant", () => {
     const standard = mintScanRelayGrant(baseInput, CONFIG)
     expect(standard.scope.maxRequests).toBe(800)
     const deep = mintScanRelayGrant(
-      { ...baseInput, engineBudgetMs: 40 * 60 * 1000 },
+      { ...baseInput, mode: "DEEP" as const, engineBudgetMs: 40 * 60 * 1000 },
       CONFIG
     )
     expect(deep.scope.maxRequests).toBe(2_500)
     expect(deep.scope.ratePerMinute).toBe(240)
+  })
+
+  it("never scopes hosts outside the verified apex — spec servers included", () => {
+    const { scope } = mintScanRelayGrant(
+      {
+        ...baseInput,
+        targetUrl: "https://unrelated-host.net/app",
+        apiSpecUrl: "https://api.third-party.io/openapi.json",
+        specServerHosts: ["api.third-party.io", "api.example.com"],
+      },
+      CONFIG
+    )
+    // Verified apex keeps its subdomain scope; out-of-apex references are dropped.
+    expect(scope.hosts.sort()).toEqual(["api.example.com", "example.com"])
   })
 })
