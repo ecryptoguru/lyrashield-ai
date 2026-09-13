@@ -22,7 +22,12 @@ function chain(workspaceId: string) {
     hash: "",
   } satisfies AuditLogChainFields & { prevHash: null; hash: string }
   first.hash = computeAuditHash(first, null)
-  const second = { ...first, id: `${workspaceId}-2`, prevHash: first.hash }
+  const second = {
+    ...first,
+    id: `${workspaceId}-2`,
+    metadata: structuredClone(first.metadata),
+    prevHash: first.hash,
+  }
   second.hash = computeAuditHash(second, first.hash)
   return [first, second]
 }
@@ -58,7 +63,14 @@ describe("restored audit export verification", () => {
   it("still rejects tampered entries in a later workspace", () => {
     const entries = [...chain("ws-1"), ...chain("ws-2")]
     entries[3]!.metadata.nested.value = "tampered"
-    expect(verify(entries).stderr).toContain("Restored audit chain verification failed")
+    expect(verify(entries).stderr).toContain("workspace 2, entry 2, content hash mismatch")
+  })
+
+  it("identifies a misordered chain without exposing audit identifiers", () => {
+    const entries = chain("ws-1")
+    const result = verify([entries[1], entries[0]])
+    expect(result.stderr).toContain("workspace 1, entry 1, predecessor mismatch")
+    expect(result.stderr).not.toContain("ws-1-1")
   })
 
   it("still rejects missing predecessors and cross-workspace links", () => {
