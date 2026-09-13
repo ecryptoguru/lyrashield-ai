@@ -301,7 +301,7 @@ export default defineConfig({
   trailingSlash: "never",
 
   build: {
-    inlineStylesheets: "always",
+    inlineStylesheets: "auto",
   },
   adapter: cloudflare({
     imageService: "passthrough",

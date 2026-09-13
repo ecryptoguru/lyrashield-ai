@@ -28,7 +28,7 @@ export const GET: APIRoute = async (context) => {
     pubDate: post.data.pubDate,
   }))
 
-  return rss({
+  const response = await rss({
     title: "LyraShield AI Blog",
     description:
       "LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes.",
@@ -37,4 +37,7 @@ export const GET: APIRoute = async (context) => {
     customData: `<language>en-us</language><atom:link href="${feedUrl}" rel="self" type="application/rss+xml" />`,
     xmlns: { atom: "http://www.w3.org/2005/Atom" },
   })
+  // Same caching as agents.md — the feed only changes on deploys.
+  response.headers.set("Cache-Control", "public, max-age=3600")
+  return response
 }
