@@ -144,6 +144,51 @@ const ALLOWLIST: Record<string, string> = {
     "scan/finding/scoreSnapshot reads with explicit workspaceId args (extension-wrapped)",
   "packages/db/src/retest-service.ts":
     "finding/scan/retest reads with explicit workspaceId args (extension-wrapped)",
+  // v17 2.4 tripwire root extension: apps/web/src/app/api. Every route below
+  // resolves the caller through requireWorkspaceAccess/requirePermission —
+  // which bind the request's workspace context via setWorkspaceContext — or
+  // carries an explicit workspaceId in the query args, so the extension wraps
+  // each read in a SET LOCAL transaction before Postgres evaluates it.
+  "apps/web/src/app/api/ai-assurance/evidence/route.ts":
+    "target/controlEvidence reads under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/ai-assurance/evidence/not-applicable/route.ts":
+    "target/controlEvidence reads under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/ai-assurance/evidence/[id]/artifacts/route.ts":
+    "controlEvidence read under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/ai-assurance/evidence/[id]/review/route.ts":
+    "controlEvidence read under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/ai-assurance/evidence/[id]/revise/route.ts":
+    "controlEvidence read under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/connections/route.ts":
+    "target count under requireWorkspaceAccess-bound context (extension-wrapped)",
+  "apps/web/src/app/api/findings/[id]/retests/route.ts":
+    "scan/target/findingCandidate/retest reads under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/integrations/github/install/route.ts":
+    "integration read under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/integrations/github/repos/route.ts":
+    "integration read under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/live-ai-safety/route.ts":
+    "liveAiSafetySettings/liveAiSafetyPlan reads under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/onboarding/route.ts":
+    "target read carries explicit workspaceId in where (extension-wrapped via getExplicitWorkspaceId)",
+  "apps/web/src/app/api/projects/route.ts":
+    "project read under requireWorkspaceAccess-bound context (extension-wrapped)",
+  "apps/web/src/app/api/reports/route.ts":
+    "scan reads under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/reports/[id]/download/route.ts":
+    "report read under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/scans/route.ts":
+    "target/targetDomainVerification/policy/scan reads under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/scans/eligibility/route.ts":
+    "target/targetDomainVerification reads under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/schedules/route.ts":
+    "target/schedule reads under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/schedules/[id]/route.ts":
+    "target read under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/target-domain-verifications/route.ts":
+    "targetDomainVerification read under requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/api/targets/route.ts":
+    "project/integration/target reads under requireWorkspaceAccess/requirePermission-bound context (extension-wrapped)",
 }
 
 const READ_OPS = ["findMany", "findFirst", "findUnique", "count", "aggregate", "groupBy"]
@@ -156,6 +201,7 @@ const ROOTS = [
   __dirname, // packages/db/src
   join(__dirname, "..", "..", "billing", "src"),
   join(__dirname, "..", "..", "..", "apps", "worker", "src"),
+  join(__dirname, "..", "..", "..", "apps", "web", "src", "app", "api"),
 ] as const
 
 // The generated Prisma client is thousands of files and matches every
