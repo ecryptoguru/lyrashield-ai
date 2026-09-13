@@ -3,15 +3,18 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@lyrashield/ui"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 
 export function ConnectionActions({
   id,
   workspaceId,
   status,
+  clientName,
 }: {
   id: string
   workspaceId: string
   status: string
+  clientName?: string | null
 }) {
   const router = useRouter()
   const [pending, setPending] = useState(false)
@@ -44,14 +47,14 @@ export function ConnectionActions({
           </Button>
         )}
         {status !== "REVOKED" && (
-          <Button
-            size="sm"
-            variant="outline"
+          <InlineConfirm
+            triggerLabel={pending ? "Updating…" : "Disconnect"}
+            triggerVariant="outline"
+            confirmLabel="Disconnect"
             disabled={pending}
-            onClick={() => void update("revoke")}
-          >
-            {pending ? "Updating…" : "Disconnect"}
-          </Button>
+            message={`Disconnect ${clientName ?? "this client"}? The coding agent must reconnect before it can act in this workspace again.`}
+            onConfirm={() => void update("revoke")}
+          />
         )}
       </div>
       {(status === "REVOKED" || status === "EXPIRED") && (

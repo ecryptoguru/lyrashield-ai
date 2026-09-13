@@ -111,6 +111,7 @@ export default async function ConnectionsPage() {
                           id={connection.id}
                           workspaceId={workspaceId}
                           status={health.status}
+                          clientName={connection.clientName ?? connection.clientType}
                         />
                       )}
                     </CardContent>
