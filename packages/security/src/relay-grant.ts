@@ -24,19 +24,17 @@ export interface RelayGrantScope {
   /** Grant expiry, epoch ms. */
   exp: number
   maxRequests: number
-  /** Total relayed body+CONNECT bytes budget. */
+  /** Total relayed request and response body bytes budget. */
   maxBytes: number
   /** Sustained request rate cap per scan. */
   ratePerMinute: number
   /** Cap on requests to a single path prefix per minute (anti junk-submission). */
   perPathPerMinute: number
-  /** Headers the relay injects server-side — credentials never enter the sandbox. */
-  injectHeaders?: Record<string, string>
 }
 
 export type RelayDenyReason =
   | "malformed"
-  | "https_requires_connect"
+  | "connect_not_supported"
   | "bad_signature"
   | "expired"
   | "host_out_of_scope"
@@ -48,6 +46,8 @@ export type RelayDenyReason =
   | "rate_limited"
 
 const GRANT_PREFIX = "lrg1."
+export const MAX_RELAY_GRANT_TTL_MS = 24 * 60 * 60 * 1000
+const MAX_GRANT_LENGTH = 16_384
 
 function canonicalJson(scope: RelayGrantScope): string {
   const ordered: RelayGrantScope = {
@@ -61,9 +61,6 @@ function canonicalJson(scope: RelayGrantScope): string {
     maxBytes: scope.maxBytes,
     ratePerMinute: scope.ratePerMinute,
     perPathPerMinute: scope.perPathPerMinute,
-    ...(scope.injectHeaders
-      ? { injectHeaders: Object.fromEntries(Object.entries(scope.injectHeaders).sort()) }
-      : {}),
   }
   return JSON.stringify(ordered)
 }
@@ -82,7 +79,8 @@ export function verifyRelayGrant(
   token: string | undefined,
   secret: string
 ): { ok: true; scope: RelayGrantScope } | { ok: false; reason: RelayDenyReason } {
-  if (!token || !token.startsWith(GRANT_PREFIX)) return { ok: false, reason: "malformed" }
+  if (!token || token.length > MAX_GRANT_LENGTH || !token.startsWith(GRANT_PREFIX))
+    return { ok: false, reason: "malformed" }
   const body = token.slice(GRANT_PREFIX.length)
   const dot = body.lastIndexOf(".")
   if (dot <= 0) return { ok: false, reason: "malformed" }
@@ -102,13 +100,45 @@ export function verifyRelayGrant(
   } catch {
     return { ok: false, reason: "malformed" }
   }
+  // A valid HMAC authenticates bytes, not their types or policy bounds.
   if (
+    !scope ||
+    typeof scope !== "object" ||
+    Array.isArray(scope) ||
     scope.v !== 1 ||
     typeof scope.scanId !== "string" ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(scope.scanId) ||
     !Array.isArray(scope.hosts) ||
+    scope.hosts.length === 0 ||
+    scope.hosts.length > 100 ||
+    !scope.hosts.every(
+      (host) => typeof host === "string" && host.length <= 253 && normalizeRelayHost(host) !== null
+    ) ||
     !Array.isArray(scope.methods) ||
-    typeof scope.exp !== "number" ||
-    !Array.isArray(scope.blockedPaths)
+    scope.methods.length === 0 ||
+    !scope.methods.every(
+      (method) =>
+        typeof method === "string" && /^(GET|HEAD|OPTIONS|POST|PUT|PATCH|DELETE)$/.test(method)
+    ) ||
+    !Array.isArray(scope.blockedPaths) ||
+    scope.blockedPaths.length > 100 ||
+    !scope.blockedPaths.every(
+      (path) => typeof path === "string" && path.startsWith("/") && path.length <= 2048
+    ) ||
+    ![
+      scope.exp,
+      scope.maxRequests,
+      scope.maxBytes,
+      scope.ratePerMinute,
+      scope.perPathPerMinute,
+    ].every((value) => Number.isSafeInteger(value) && value > 0) ||
+    scope.exp > Date.now() + MAX_RELAY_GRANT_TTL_MS ||
+    scope.maxRequests > 100_000 ||
+    scope.maxBytes > 1024 * 1024 * 1024 ||
+    scope.ratePerMinute > 10_000 ||
+    scope.perPathPerMinute > 10_000 ||
+    // Signed grants are readable by their bearer. Never put credentials in them.
+    "injectHeaders" in scope
   ) {
     return { ok: false, reason: "malformed" }
   }
@@ -145,6 +175,29 @@ export function relayMethodAllowed(scope: RelayGrantScope, method: string): bool
   return scope.methods.includes(method.toUpperCase())
 }
 
+/** Decode and normalize router paths; ambiguous encodings fail closed. */
+export function normalizeRelayPath(value: string): string | null {
+  try {
+    let decoded = value.split("?")[0] ?? ""
+    for (let i = 0; i < 5; i++) {
+      const next = decodeURIComponent(decoded)
+      if (next === decoded)
+        return new URL(
+          `http://relay.invalid${decoded.replaceAll("\\", "/").replace(/\/{2,}/g, "/")}`
+        ).pathname
+      decoded = next
+    }
+  } catch {
+    /* malformed encoding */
+  }
+  return null
+}
+
 export function relayPathAllowed(scope: RelayGrantScope, path: string): boolean {
-  return !scope.blockedPaths.some((blocked) => path.startsWith(blocked))
+  const normalized = normalizeRelayPath(path)
+  if (normalized === null) return false
+  return !scope.blockedPaths.some((blocked) => {
+    const prefix = normalizeRelayPath(blocked)
+    return prefix === null || normalized.startsWith(prefix)
+  })
 }

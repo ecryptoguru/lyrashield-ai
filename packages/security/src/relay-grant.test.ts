@@ -1,4 +1,5 @@
 // security-scan-skip-file: test fixtures use attacker-shaped values intentionally
+import { createHmac, randomBytes } from "node:crypto"
 import { describe, expect, it } from "vitest"
 import {
   mintRelayGrant,
@@ -10,7 +11,7 @@ import {
   type RelayGrantScope,
 } from "./relay-grant"
 
-const SECRET = "test-signing-secret-0123456789abcdef"
+const SECRET = randomBytes(32).toString("hex")
 
 const baseScope: RelayGrantScope = {
   v: 1,
@@ -59,7 +60,43 @@ describe("relay grant", () => {
   it("rejects malformed tokens", () => {
     expect(verifyRelayGrant(undefined, SECRET)).toEqual({ ok: false, reason: "malformed" })
     expect(verifyRelayGrant("nope", SECRET)).toEqual({ ok: false, reason: "malformed" })
-    expect(verifyRelayGrant("lrg1.notjson.sig", SECRET)).toEqual({ ok: false, reason: "bad_signature" })
+    expect(verifyRelayGrant("lrg1.notjson.sig", SECRET)).toEqual({
+      ok: false,
+      reason: "bad_signature",
+    })
+  })
+
+  it.each([
+    null,
+    [],
+    { ...baseScope, hosts: [null] },
+    { ...baseScope, methods: [4] },
+    { ...baseScope, blockedPaths: [null] },
+    { ...baseScope, maxBytes: null },
+    { ...baseScope, maxRequests: -1 },
+    { ...baseScope, ratePerMinute: 1.5 },
+    { ...baseScope, perPathPerMinute: "100" },
+    { ...baseScope, exp: Date.now() + 48 * 60 * 60 * 1000 },
+    { ...baseScope, injectHeaders: { authorization: "secret" } },
+  ])("rejects malformed authenticated scope %j", (scope) => {
+    const payload = Buffer.from(JSON.stringify(scope)).toString("base64url")
+    const signature = createHmac("sha256", SECRET).update(payload).digest("base64url")
+    expect(verifyRelayGrant(`lrg1.${payload}.${signature}`, SECRET)).toEqual({
+      ok: false,
+      reason: "malformed",
+    })
+  })
+
+  it.each([
+    "//admin",
+    "///admin",
+    "/%61dmin",
+    "/%2561dmin",
+    "/x/../admin",
+    "/admin%2fusers",
+    "/%zz",
+  ])("denies encoded or ambiguous blocked path %s", (path) => {
+    expect(relayPathAllowed(baseScope, path)).toBe(false)
   })
 
   it("enforces host scope with subdomain inheritance", () => {

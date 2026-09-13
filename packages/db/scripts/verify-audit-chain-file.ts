@@ -15,8 +15,21 @@ const entries = parsed.map((entry) => {
   return { ...record, createdAt: new Date(String(record.createdAt)) }
 })
 
-if (!verifyAuditChain(entries as Parameters<typeof verifyAuditChain>[0])) {
-  throw new Error("Restored audit chain verification failed")
+// The restore export contains all workspaces, each with an independent chain.
+// Preserve the export's chronological order within each workspace.
+const workspaceChains = new Map<string, Parameters<typeof verifyAuditChain>[0]>()
+for (const entry of entries as Parameters<typeof verifyAuditChain>[0]) {
+  if (typeof entry.workspaceId !== "string" || !entry.workspaceId) {
+    throw new Error("Audit export contains an invalid workspace ID")
+  }
+  const chain = workspaceChains.get(entry.workspaceId) ?? []
+  chain.push(entry)
+  workspaceChains.set(entry.workspaceId, chain)
+}
+for (const chain of workspaceChains.values()) {
+  if (!verifyAuditChain(chain)) {
+    throw new Error("Restored audit chain verification failed")
+  }
 }
 
 console.log(`Verified ${entries.length} restored audit log entries`)

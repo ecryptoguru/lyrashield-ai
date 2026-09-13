@@ -632,6 +632,59 @@ describe("report-generator", () => {
       expect(html).toContain("non-mutating review did not authenticate")
     })
 
+    it("shows attestation obligations even for evaluated standards categories", () => {
+      const html = generateReportHTML({
+        title: "Standards Report",
+        type: "developer",
+        workspaceName: "Test Workspace",
+        scanInfo: {
+          scanId: "scan-1",
+          status: "COMPLETED",
+          summary: null,
+          targetName: "Test Repo",
+          targetType: "REPO",
+          targetUrl: null,
+          startedAt: null,
+          endedAt: null,
+          manifestChecksum: "checksum",
+          coverage: { completed: 1, limited: 0, notApplicable: 0 },
+          standards: [
+            {
+              standardId: "test",
+              name: "Organization controls",
+              version: "1.0",
+              evaluated: 1,
+              requiresAttestation: 1,
+              notEvaluated: 0,
+              violationSignals: 0,
+              categories: [
+                {
+                  id: "ORG-1",
+                  title: "Control with evidence",
+                  state: "evaluated",
+                  violationSignals: 0,
+                  limited: false,
+                  attestable: true,
+                },
+              ],
+            },
+          ],
+        },
+        findings: [],
+        findingsBySeverity: {},
+        totalFindings: 0,
+        verifiedCount: 0,
+        fixedCount: 0,
+        retestSummary: { passed: 0, failed: 0, pending: 0 },
+        findingsTruncated: false,
+        generatedAt: new Date("2026-09-13"),
+      })
+      expect(html).toContain("1 require attestation (including evaluated controls)")
+      expect(html).toContain(
+        '>evaluated</span> <span style="color:#92400e;">attestation required</span>'
+      )
+    })
+
     it("renders versioned WebMCP coverage and checksum without raw source", () => {
       const html = generateReportHTML({
         title: "WebMCP Report",

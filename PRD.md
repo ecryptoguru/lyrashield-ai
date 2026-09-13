@@ -122,9 +122,9 @@ The passive Lite Scanner is separate from the BullMQ/engine repository pipeline.
 ### Target routing
 
 - `REPO`: external controlled engine plus deterministic repository scanners.
-- `WEB_APP`: deterministic URL scanner with profile-bound discovery and probes.
-- `API`: deterministic OpenAPI scanner; Standard/Deep require a validated public HTTPS spec URL.
-- Cloud, container, and IaC targets remain roadmap work.
+- `WEB_APP`: Safe/Quick use deterministic URL checks; Standard and Deep/Custom select engine-backed profiles plus deterministic discovery and probes.
+- `API`: deterministic OpenAPI checks; Standard and Deep/Custom also select the engine and require a validated public HTTPS spec URL. Engine-backed URL/API tiers require domain verification and a scan-scoped relay grant.
+- Cloud, container, and standalone IaC targets remain roadmap work. Repository scans include bounded SAST and IaC scanner families.
 
 ### Model routing and budgets
 
@@ -144,7 +144,11 @@ Rules:
 - `LYRASHIELD_LLM` is a validated fallback, not a routing bypass.
 - Deep/Custom are deterministic two-tier profiles, not a Luna-to-Terra cascade.
 - Actual model, standard/long-context tokens, cache reads/writes, requests, and reconciled cost stay in the private ledger. Dashboard users see minutes, not provider spend.
-- URL/API scans use no repository AI engine and have zero AI budget.
+- URL/API Safe/Quick have zero AI budget. Standard selects Luna with a $3.20 provider cap; Deep/Custom select Terra-root/Luna-specialist routing with a $5 cap. These are source profile contracts, not completed live scan acceptance. The remote relay rejects opaque CONNECT tunnels; a sandbox-local TLS adapter converts HTTPS client traffic into inspectable requests using the installed sandbox CA. Composed local curl and Chromium navigation/fetch acceptance passed allowed requests and denied path/method/redirect requests without TLS bypass, including rejection of an invalid upstream certificate. Exact-image production deployment and a paid URL engine scan remain unverified.
+
+### Standards evidence mapping
+
+`standards-registry/1.1.0` renders mapped evidence, not verified compliance. Default views use the actual OWASP Top 10 2021 categories, API Top 10 2023, LLM Top 10 2025, CWE Top 25 2024, and a clearly labeled subset of ASVS 5.0.0 L1 requirements. Five unverified hidden mappings (ATLAS, CIS, AISVS, ISO 27001, and SLSA) are excluded until their identifiers, editions, and observable scope are reviewed. A scanner completion can credit only a supported mapped category; a finding is counted once per category even when both CWE and OWASP tags match. Bounded or unreadable scanner inputs cannot produce complete coverage.
 
 ### Evidence states
 

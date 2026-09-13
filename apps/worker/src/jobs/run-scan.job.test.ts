@@ -39,6 +39,7 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     auditLog: { create: vi.fn().mockResolvedValue({}) },
+    workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
     target: {
       findFirst: vi.fn(),
     },
@@ -70,6 +71,7 @@ vi.mock("@lyrashield/db", () => ({
   completeScanWithScore: vi.fn().mockResolvedValue({}),
   createAiSecurityScoreSnapshot: vi.fn().mockResolvedValue({}),
   qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),
+  evaluateGateForTarget: vi.fn().mockResolvedValue(undefined),
   addScanEvent: vi.fn().mockResolvedValue(undefined),
   withScanFinalizationClaim: vi.fn(
     async (_scanId: string, _workspaceId: string, finalize: () => Promise<unknown>) => ({
@@ -78,6 +80,7 @@ vi.mock("@lyrashield/db", () => ({
     })
   ),
   runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
+  runWithAccountContext: <T>(_accountId: string | null, fn: () => T): T => fn(),
 }))
 
 vi.mock("@lyrashield/logger", () => ({
@@ -89,6 +92,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("@lyrashield/billing", () => ({
+  evaluateScanEntitlement: vi.fn().mockResolvedValue({ allowed: true, accountId: "user-1" }),
   hasUnsettledScanIntent: vi.fn().mockResolvedValue(false),
   recordAgentMinutes: vi
     .fn()
@@ -183,11 +187,12 @@ vi.mock("../engine/relay-client", async (importOriginal) => {
       .mockResolvedValue([
         { ts: 1, type: "request", host: "example.com", method: "GET", path: "/", status: 200 },
       ]),
+    registerRelayGrant: vi.fn().mockResolvedValue(undefined),
     revokeRelayGrant: vi.fn().mockResolvedValue(undefined),
     resolveSpecServerHosts: vi.fn().mockResolvedValue([]),
   }
 })
-import { fetchRelayAudit, revokeRelayGrant } from "../engine/relay-client"
+import { fetchRelayAudit, registerRelayGrant, revokeRelayGrant } from "../engine/relay-client"
 
 vi.mock("../engine/finding-persister", () => ({
   persistFindings: vi.fn().mockResolvedValue([]),
@@ -246,7 +251,11 @@ import {
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
-import { completeRetestsForScan, persistResultManifest } from "../engine/result-integrity"
+import {
+  failTerminalRetestsForScan,
+  completeRetestsForScan,
+  persistResultManifest,
+} from "../engine/result-integrity"
 import { resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import {
@@ -255,6 +264,7 @@ import {
 } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
 import {
+  evaluateScanEntitlement,
   debitOverage,
   enterGrace,
   recordAgentMinutes,
@@ -270,6 +280,7 @@ import {
   completeScanWithScore,
   qualifyReferralForWorkspace,
   updateScanStatus,
+  evaluateGateForTarget,
   addScanEvent,
   withScanFinalizationClaim,
   prisma,
@@ -294,6 +305,8 @@ function mockStoredScanAuthority(
     mode: string
     policyId: string | null
     determinismMode: string
+    sponsorAccountId: string | null
+    triggerType: string
   }> = {}
 ) {
   systemScanFindUnique.mockResolvedValue({
@@ -592,7 +605,6 @@ describe("engineRoutingCoverageIssue", () => {
 })
 
 describe("processScanJob", () => {
-
   describe("engine-backed URL scans through the scoped relay", () => {
     const standardUrlJob = {
       ...mockJob,
@@ -632,6 +644,27 @@ describe("processScanJob", () => {
       delete process.env.LYRASHIELD_EGRESS_PROXY_SECRET
     })
 
+    it("keeps deterministic URL reviews non-billable without requiring a paid balance", async () => {
+      mockStoredScanAuthority({ mode: "SAFE" })
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      const result = await processScanJob(mockJob)
+      expect(result.status).toBe("completed")
+      expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+    })
+
+    it("does not execute or meter the engine when relay admission fails", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+      vi.mocked(registerRelayGrant).mockRejectedValueOnce(new Error("RELAY_REGISTRATION_FAILED"))
+      await processScanJob(standardUrlJob)
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+    })
+
     it("runs the engine with a signed relay grant and revokes it afterward", async () => {
       vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
       vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
@@ -654,6 +687,14 @@ describe("processScanJob", () => {
         expect.any(Number),
         expect.any(Function),
         expect.any(Function)
+      )
+      expect(registerRelayGrant).toHaveBeenCalledWith(
+        "scan-1",
+        expect.stringMatching(/^lrg1\./),
+        expect.objectContaining({ url: "http://relay.test" })
+      )
+      expect(vi.mocked(registerRelayGrant).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(runEngine).mock.invocationCallOrder[0]!
       )
       expect(recordAgentMinutes).toHaveBeenCalled()
       expect(fetchRelayAudit).toHaveBeenCalledWith(
@@ -720,9 +761,81 @@ describe("processScanJob", () => {
     expect(resolveScannerPhaseTimeoutMs(30 * 60 * 1000, 0)).toBe(10 * 60 * 1000)
   })
 
+  it.each(["manual", "schedule", "retest"])(
+    "rechecks the persisted creator's entitlement for %s work before provider execution",
+    async (triggerType) => {
+      mockStoredScanAuthority({ triggerType, sponsorAccountId: "buyer-1" })
+      vi.mocked(evaluateScanEntitlement).mockResolvedValueOnce({
+        allowed: false,
+        code: "AGENCY_SUBSCRIPTION_REQUIRED",
+        message: "Agency subscription expired",
+        accountId: "buyer-1",
+      } as never)
+      const result = await processScanJob(mockJob)
+      expect(result).toMatchObject({
+        status: "failed",
+        errorCategory: "AGENCY_SUBSCRIPTION_REQUIRED",
+      })
+      expect(updateScanStatus).toHaveBeenCalledWith(
+        "scan-1",
+        "FAILED",
+        expect.objectContaining({ errorCategory: "AGENCY_SUBSCRIPTION_REQUIRED" })
+      )
+      expect(evaluateScanEntitlement).toHaveBeenCalledWith({
+        workspaceId: "ws-1",
+        mode: "SAFE",
+        sponsorAccountId: "user-1",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(evaluateGateForTarget).toHaveBeenCalledWith("ws-1", "target-1")
+      expect(failTerminalRetestsForScan).toHaveBeenCalledOnce()
+      expect(cleanupEngineWorkspace).toHaveBeenCalledWith(expect.any(String), "scan-1")
+    }
+  )
+
+  it.each([null, { role: "UNKNOWN" }])(
+    "denies removed creators or invalid roles before paid work: %j",
+    async (creator) => {
+      vi.mocked(prisma.workspaceMember.findFirst).mockResolvedValueOnce(creator as never)
+      expect(await processScanJob(mockJob)).toMatchObject({
+        status: "failed",
+        errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+    }
+  )
+
+  it("preserves current operational access for active Viewer members", async () => {
+    vi.mocked(prisma.workspaceMember.findFirst).mockResolvedValueOnce({ role: "VIEWER" } as never)
+    expect(await processScanJob(mockJob)).toMatchObject({ status: "completed" })
+    expect(evaluateScanEntitlement).toHaveBeenCalledOnce()
+    expect(runEngine).toHaveBeenCalledOnce()
+  })
+
+  it("does not replace a queued scan's immutable billing sponsor", async () => {
+    mockStoredScanAuthority({ sponsorAccountId: "original-buyer" })
+    vi.mocked(evaluateScanEntitlement).mockResolvedValueOnce({
+      allowed: true,
+      accountId: "replacement-buyer",
+    } as never)
+    expect(await processScanJob(mockJob)).toMatchObject({
+      status: "failed",
+      errorCategory: "SCAN_SPONSOR_CHANGED",
+    })
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockStoredScanAuthority()
+    vi.mocked(prisma.workspaceMember.findFirst).mockResolvedValue({ role: "OWNER" } as never)
+    vi.mocked(evaluateScanEntitlement).mockResolvedValue({
+      allowed: true,
+      accountId: "user-1",
+    } as never)
     // Restore default mock implementations after clearAllMocks
     vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
     vi.mocked(runEngine).mockImplementation(
@@ -1265,12 +1378,12 @@ describe("processScanJob", () => {
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "policy-1", workspaceId: "ws-1", deletedAt: null },
       select: {
-              maxBudgetUsd: true,
-              maxDurationMinutes: true,
-              blockedPaths: true,
-              allowedDomains: true,
-              destructiveTestsAllowed: true,
-            },
+        maxBudgetUsd: true,
+        maxDurationMinutes: true,
+        blockedPaths: true,
+        allowedDomains: true,
+        destructiveTestsAllowed: true,
+      },
     })
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 1.2 }),
@@ -1305,12 +1418,12 @@ describe("processScanJob", () => {
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "policy-deep", workspaceId: "ws-1", deletedAt: null },
       select: {
-              maxBudgetUsd: true,
-              maxDurationMinutes: true,
-              blockedPaths: true,
-              allowedDomains: true,
-              destructiveTestsAllowed: true,
-            },
+        maxBudgetUsd: true,
+        maxDurationMinutes: true,
+        blockedPaths: true,
+        allowedDomains: true,
+        destructiveTestsAllowed: true,
+      },
     })
     // DEEP caps at 45 min; the policy asked for 75, so the engine timeout is the
     // REMAINING wall-clock budget — a number bounded by (never exceeding) 45 min.

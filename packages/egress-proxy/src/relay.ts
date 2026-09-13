@@ -1,6 +1,5 @@
 // security-scan-skip-file: scoped forward proxy; detection-style patterns are intentional
 import type { IncomingMessage, ServerResponse } from "node:http"
-import net from "node:net"
 import type { Duplex } from "node:stream"
 import { isIP, type LookupFunction } from "node:net"
 import dns from "node:dns/promises"
@@ -8,7 +7,9 @@ import { Agent, request as undiciRequest } from "undici"
 import { logger } from "@lyrashield/logger"
 import {
   isBlockedIp,
+  MAX_RELAY_GRANT_TTL_MS,
   normalizeRelayHost,
+  normalizeRelayPath,
   redactUrlForLogs,
   relayHostAllowed,
   relayMethodAllowed,
@@ -26,17 +27,15 @@ import {
  * per-path rate limits, byte caps, revocation — and records a bounded,
  * body-free audit trail per scan.
  *
- * Two traffic forms:
- *  - CONNECT host:port  → opaque TLS tunnel to a scoped host on 443/80 only
- *  - absolute-form HTTP → fully audited forward (method/path/status/bytes)
+ * Absolute-form HTTP and HTTPS requests are inspected before forwarding.
+ * Opaque CONNECT tunnels cannot enforce method/path scope and are denied.
  */
 
 const MAX_AUDIT_ENTRIES_PER_SCAN = 5_000
 const MAX_RELAY_REQUEST_BODY = 2 * 1024 * 1024
 const MAX_RELAY_RESPONSE_BODY = 10 * 1024 * 1024
 const FORWARD_TIMEOUT_MS = 30_000
-const TUNNEL_IDLE_TIMEOUT_MS = 120_000
-const ALLOWED_CONNECT_PORTS = new Set([80, 443])
+const ALLOWED_FORWARD_PORTS = new Set([80, 443])
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -73,6 +72,8 @@ interface RateWindow {
 
 interface ScanRelayState {
   scope: RelayGrantScope
+  grant: string
+  active: Set<AbortController>
   requestCount: number
   bytesTotal: number
   rate: RateWindow
@@ -81,6 +82,8 @@ interface ScanRelayState {
 }
 
 export interface RelayHandler {
+  /** Admin-only admission; bearer requests never create or reset scan state. */
+  register(scanId: string, grant: string | undefined): { ok: true } | { ok: false; reason: string }
   handleForward(req: IncomingMessage, res: ServerResponse): Promise<void>
   handleConnect(req: IncomingMessage, clientSocket: Duplex, head: Buffer): void
   revoke(scanId: string): void
@@ -147,14 +150,16 @@ export interface RelayDeps {
   /** Test-only host resolver — production resolves scoped hosts with DNS + range checks. */
   resolveHost?: (host: string) => Promise<{ ok: true; addresses: string[] } | { ok: false }>
   /** Test-only port allowlist override — production is 80/443 only. */
-  allowedConnectPorts?: Set<number>
+  allowedForwardPorts?: Set<number>
+  /** Test-only trust root for a local HTTPS fixture. */
+  ca?: string
 }
 
 export function createRelayHandler(signingSecret: string, deps?: RelayDeps): RelayHandler {
   const resolveHost = deps?.resolveHost ?? resolveScopedHost
-  const allowedPorts = deps?.allowedConnectPorts ?? ALLOWED_CONNECT_PORTS
+  const allowedPorts = deps?.allowedForwardPorts ?? ALLOWED_FORWARD_PORTS
   const states = new Map<string, ScanRelayState>()
-  const revoked = new Set<string>()
+  const revoked = new Map<string, number>()
   // Grants are revoked/expired before the worker fetches the audit — swept
   // states must keep their trail for a bounded window or the evidence is lost.
   const closedAudits = new Map<string, { entries: RelayAuditEntry[]; expiresAt: number }>()
@@ -168,7 +173,6 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
   const record = (state: ScanRelayState | null, scanId: string, entry: RelayAuditEntry) => {
     const target = state ? state.audit : unscopedAudit
     if (target.length < MAX_AUDIT_ENTRIES_PER_SCAN) target.push(entry)
-    if (state && entry.bytes) state.bytesTotal += entry.bytes
   }
 
   /** Grant validity + revocation + expiry + caps. Returns state or writes denial. */
@@ -176,27 +180,16 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     req: IncomingMessage,
     scanIdHint: string | null
   ): { state: ScanRelayState; scope: RelayGrantScope } | { deny: string } => {
-    const verified = verifyRelayGrant(extractGrantToken(req.headers), signingSecret)
+    const grant = extractGrantToken(req.headers)
+    const verified = verifyRelayGrant(grant, signingSecret)
     if (!verified.ok) return { deny: verified.reason }
     const { scope } = verified
     if (scanIdHint && scope.scanId !== scanIdHint) return { deny: "bad_signature" }
     if (revoked.has(scope.scanId)) return { deny: "revoked" }
 
-    let state = states.get(scope.scanId)
-    if (!state) {
-      state = {
-        scope,
-        requestCount: 0,
-        bytesTotal: 0,
-        rate: { windowStart: Date.now(), count: 0 },
-        perPath: new Map(),
-        audit: [],
-      }
-      states.set(scope.scanId, state)
-    } else if (state.scope.exp !== scope.exp || state.scope.hosts.join() !== scope.hosts.join()) {
-      // Re-minted grant for the same scan (e.g. extension): adopt the newer scope.
-      state.scope = scope
-    }
+    const state = states.get(scope.scanId)
+    if (!state) return { deny: "unregistered_grant" }
+    if (state.grant !== grant) return { deny: "scope_changed" }
     return { state, scope }
   }
 
@@ -255,230 +248,208 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
       return
     }
     const { state, scope } = auth
-
-    let url: URL
+    const controller = new AbortController()
+    state.active.add(controller)
+    const deadline = setTimeout(
+      () => controller.abort(),
+      Math.min(FORWARD_TIMEOUT_MS, scope.exp - Date.now())
+    )
+    const abortClient = () => {
+      req.destroy()
+      res.destroy()
+    }
+    controller.signal.addEventListener("abort", abortClient, { once: true })
+    const clientClosed = () => {
+      if (!res.writableFinished) controller.abort()
+    }
+    res.once("close", clientClosed)
     try {
-      const raw = req.url ?? ""
-      url =
-        raw.startsWith("http://") || raw.startsWith("https://")
-          ? new URL(raw)
-          : new URL(`http://${req.headers.host ?? ""}${raw}`)
-    } catch {
-      denyForward(res, state, scope.scanId, "malformed")
-      return
-    }
-    const host = url.hostname
-    const path = url.pathname + url.search
-    const method = (req.method ?? "GET").toUpperCase()
+      let url: URL
+      try {
+        const raw = req.url ?? ""
+        url =
+          raw.startsWith("http://") || raw.startsWith("https://")
+            ? new URL(raw)
+            : new URL(`http://${req.headers.host ?? ""}${raw}`)
+      } catch {
+        denyForward(res, state, scope.scanId, "malformed")
+        return
+      }
+      const host = url.hostname
+      const path = url.pathname + url.search
+      const method = (req.method ?? "GET").toUpperCase()
 
-    if (url.protocol === "https:") {
-      denyForward(res, state, scope.scanId, "https_requires_connect", host, method, path)
-      return
-    }
-    if (!relayHostAllowed(scope, host)) {
-      denyForward(res, state, scope.scanId, "host_out_of_scope", host, method, path)
-      return
-    }
-    if (!relayMethodAllowed(scope, method)) {
-      denyForward(res, state, scope.scanId, "method_not_allowed", host, method, path)
-      return
-    }
-    if (!relayPathAllowed(scope, path)) {
-      denyForward(res, state, scope.scanId, "path_blocked", host, method, path)
-      return
-    }
-    const pathPrefix = `/${url.pathname.split("/")[1] ?? ""}`
-    const limit = checkLimits(state, pathPrefix)
-    if (limit) {
-      denyForward(res, state, scope.scanId, limit.deny, host, method, path)
-      return
-    }
+      if (
+        !allowedPorts.has(Number(url.port || (url.protocol === "https:" ? 443 : 80))) ||
+        url.username ||
+        url.password
+      ) {
+        denyForward(res, state, scope.scanId, "port_not_allowed", host, method, path)
+        return
+      }
+      if (!relayHostAllowed(scope, host)) {
+        denyForward(res, state, scope.scanId, "host_out_of_scope", host, method, path)
+        return
+      }
+      if (!relayMethodAllowed(scope, method)) {
+        denyForward(res, state, scope.scanId, "method_not_allowed", host, method, path)
+        return
+      }
+      if (!relayPathAllowed(scope, path)) {
+        denyForward(res, state, scope.scanId, "path_blocked", host, method, path)
+        return
+      }
+      const pathPrefix = `/${normalizeRelayPath(url.pathname)!.split("/")[1] ?? ""}`
+      const limit = checkLimits(state, pathPrefix)
+      if (limit) {
+        denyForward(res, state, scope.scanId, limit.deny, host, method, path)
+        return
+      }
 
-    const resolved = await resolveHost(host)
-    if (!resolved.ok) {
-      denyForward(res, state, scope.scanId, "host_out_of_scope", host, method, path)
-      return
-    }
+      const resolved = await resolveHost(host)
+      controller.signal.throwIfAborted()
+      if (!resolved.ok) {
+        denyForward(res, state, scope.scanId, "host_out_of_scope", host, method, path)
+        return
+      }
 
-    let body: Buffer | undefined
-    if (method !== "GET" && method !== "HEAD") {
-      const chunks: Buffer[] = []
-      let size = 0
-      for await (const chunk of req) {
-        size += (chunk as Buffer).byteLength
-        if (size > MAX_RELAY_REQUEST_BODY) {
+      let body: Buffer | undefined
+      if (method !== "GET" && method !== "HEAD") {
+        const chunks: Buffer[] = []
+        let size = 0
+        for await (const chunk of req) {
+          size += (chunk as Buffer).byteLength
+          if (
+            size > MAX_RELAY_REQUEST_BODY ||
+            state.bytesTotal + (chunk as Buffer).byteLength > scope.maxBytes
+          ) {
+            denyForward(res, state, scope.scanId, "byte_cap", host, method, path)
+            return
+          }
+          state.bytesTotal += (chunk as Buffer).byteLength
+          chunks.push(chunk as Buffer)
+        }
+        body = Buffer.concat(chunks)
+      }
+
+      const connectionHeaders = new Set(
+        (req.headers.connection ?? "")
+          .toLowerCase()
+          .split(",")
+          .map((header) => header.trim())
+      )
+      const headers: Record<string, string> = {}
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (HOP_BY_HOP_HEADERS.has(key) || connectionHeaders.has(key) || value === undefined)
+          continue
+        headers[key] = Array.isArray(value) ? value.join(", ") : value
+      }
+
+      let bytes = 0
+      const dispatcher = new Agent({
+        connect: { lookup: pinnedLookup(resolved.addresses), ...(deps?.ca ? { ca: deps.ca } : {}) },
+      })
+      try {
+        const upstream = await undiciRequest(url.toString(), {
+          method: method as "GET",
+          headers,
+          body,
+          dispatcher,
+          signal: controller.signal,
+          headersTimeout: 10_000,
+          bodyTimeout: FORWARD_TIMEOUT_MS,
+        })
+        // A declared body that can never fit the caps is denied outright —
+        // silently truncating would hand the client an indistinguishable prefix.
+        const declaredLength = Number(upstream.headers["content-length"] ?? 0)
+        if (
+          declaredLength > MAX_RELAY_RESPONSE_BODY ||
+          declaredLength > scope.maxBytes - state.bytesTotal
+        ) {
+          upstream.body.destroy()
           denyForward(res, state, scope.scanId, "byte_cap", host, method, path)
           return
         }
-        chunks.push(chunk as Buffer)
-      }
-      body = Buffer.concat(chunks)
-      state.bytesTotal += size
-    }
-
-    const headers: Record<string, string> = {}
-    for (const [key, value] of Object.entries(req.headers)) {
-      if (HOP_BY_HOP_HEADERS.has(key) || value === undefined) continue
-      headers[key] = Array.isArray(value) ? value.join(", ") : value
-    }
-    for (const [key, value] of Object.entries(scope.injectHeaders ?? {})) {
-      headers[key.toLowerCase()] = value
-    }
-
-    const dispatcher = new Agent({ connect: { lookup: pinnedLookup(resolved.addresses) } })
-    try {
-      const upstream = await undiciRequest(url.toString(), {
-        method: method as "GET",
-        headers,
-        body,
-        dispatcher,
-        signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
-        headersTimeout: 10_000,
-        bodyTimeout: FORWARD_TIMEOUT_MS,
-      })
-      // A declared body that can never fit the caps is denied outright —
-      // silently truncating would hand the client an indistinguishable prefix.
-      const declaredLength = Number(upstream.headers["content-length"] ?? 0)
-      if (declaredLength > MAX_RELAY_RESPONSE_BODY || declaredLength > scope.maxBytes) {
-        upstream.body.destroy()
-        denyForward(res, state, scope.scanId, "byte_cap", host, method, path)
-        return
-      }
-      // content-length is always stripped: truncation would otherwise send a
-      // declared length that does not match the body we actually deliver.
-      res.writeHead(
-        upstream.statusCode,
-        Object.fromEntries(
-          Object.entries(upstream.headers).filter(
-            ([k, v]) => v !== undefined && !HOP_BY_HOP_HEADERS.has(k) && k !== "content-length"
-          )
-        ) as never
-      )
-      let bytes = 0
-      let truncated = false
-      for await (const chunk of upstream.body) {
-        bytes += (chunk as Buffer).byteLength
-        if (bytes > MAX_RELAY_RESPONSE_BODY || state.bytesTotal + bytes > scope.maxBytes) {
-          truncated = true
-          break
+        // content-length is always stripped: truncation would otherwise send a
+        // declared length that does not match the body we actually deliver.
+        res.writeHead(
+          upstream.statusCode,
+          Object.fromEntries(
+            Object.entries(upstream.headers).filter(
+              ([k, v]) => v !== undefined && !HOP_BY_HOP_HEADERS.has(k) && k !== "content-length"
+            )
+          ) as never
+        )
+        let truncated = false
+        for await (const chunk of upstream.body) {
+          const size = (chunk as Buffer).byteLength
+          if (bytes + size > MAX_RELAY_RESPONSE_BODY || state.bytesTotal + size > scope.maxBytes) {
+            truncated = true
+            break
+          }
+          bytes += size
+          state.bytesTotal += size
+          res.write(chunk)
         }
-        res.write(chunk)
+        if (truncated) {
+          upstream.body.destroy()
+          res.destroy()
+        } else res.end()
+        record(state, scope.scanId, {
+          ts: started,
+          type: "request",
+          method,
+          host,
+          path,
+          status: upstream.statusCode,
+          bytes,
+          truncated: truncated || undefined,
+          durationMs: Date.now() - started,
+        })
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err)
+        logger.warn("Relay forward failed", {
+          url: redactUrlForLogs(url.toString()),
+          error: detail,
+        })
+        if (!res.headersSent) {
+          res.writeHead(502, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ ok: false, reason: "upstream_failed" }))
+        } else res.destroy()
+        record(state, scope.scanId, {
+          ts: started,
+          type: "request",
+          method,
+          host,
+          path,
+          durationMs: Date.now() - started,
+          bytes,
+          truncated: bytes > 0 || undefined,
+          denyReason: controller.signal.aborted ? "aborted" : "upstream_failed",
+        })
+      } finally {
+        void dispatcher.destroy()
       }
-      res.end()
-      if (truncated) upstream.body.destroy()
-      record(state, scope.scanId, {
-        ts: started,
-        type: "request",
-        method,
-        host,
-        path,
-        status: upstream.statusCode,
-        bytes,
-        truncated: truncated || undefined,
-        durationMs: Date.now() - started,
-      })
-      if (state.bytesTotal >= scope.maxBytes) revoked.add(scope.scanId)
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err)
-      logger.warn("Relay forward failed", {
-        url: redactUrlForLogs(url.toString()),
-        error: detail,
-      })
-      if (!res.headersSent) res.writeHead(502, { "Content-Type": "application/json" })
-      res.end(JSON.stringify({ ok: false, reason: "upstream_failed" }))
-      record(state, scope.scanId, {
-        ts: started,
-        type: "request",
-        method,
-        host,
-        path,
-        durationMs: Date.now() - started,
-        denyReason: "upstream_failed",
-      })
     } finally {
-      void dispatcher.destroy()
+      clearTimeout(deadline)
+      state.active.delete(controller)
+      controller.signal.removeEventListener("abort", abortClient)
+      res.removeListener("close", clientClosed)
     }
   }
 
-  function handleConnect(req: IncomingMessage, clientSocket: Duplex, head: Buffer): void {
-    const started = Date.now()
-    const fail = (code: number, reason: string, state: ScanRelayState | null, host = "") => {
-      record(state, state?.scope.scanId ?? "unscoped", {
-        ts: Date.now(),
-        type: "denied",
-        denyReason: reason,
-        host,
-        port: 443,
-      })
-      clientSocket.write(`HTTP/1.1 ${code} ${reason}\r\n\r\n`, () => clientSocket.destroy())
-    }
-
+  function handleConnect(req: IncomingMessage, clientSocket: Duplex, _head: Buffer): void {
     const auth = authorize(req, null)
-    if ("deny" in auth) return fail(403, auth.deny, null)
-    const { state, scope } = auth
-
-    const authority = req.url ?? ""
-    const sep = authority.lastIndexOf(":")
-    const host = sep > 0 ? authority.slice(0, sep) : authority
-    const port = sep > 0 ? Number(authority.slice(sep + 1)) : 0
-
-    if (!allowedPorts.has(port) || !Number.isInteger(port)) {
-      return fail(403, "method_not_allowed", state, host)
-    }
-    if (!relayHostAllowed(scope, host)) {
-      return fail(403, "host_out_of_scope", state, host)
-    }
-    const limit = checkLimits(state, null)
-    if (limit) return fail(403, limit.deny, state, host)
-
-    void resolveHost(host).then((resolved) => {
-      if (!resolved.ok) return fail(403, "host_out_of_scope", state, host)
-
-      const upstream = net.connect({ host: resolved.addresses[0], port })
-      let settled = false
-      let bytes = 0
-      const capReached = () =>
-        bytes > MAX_RELAY_RESPONSE_BODY || state.bytesTotal + bytes > scope.maxBytes
-      const onData = (chunk: Buffer) => {
-        bytes += chunk.byteLength
-        if (capReached()) {
-          upstream.destroy()
-          clientSocket.destroy()
-        }
-      }
-      upstream.once("connect", () => {
-        settled = true
-        clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n")
-        if (head?.byteLength) upstream.write(head)
-        // Byte caps bound the tunnel in BOTH directions — outbound data can
-        // otherwise evade the per-scan budget entirely.
-        clientSocket.on("data", onData)
-        upstream.on("data", onData)
-        upstream.pipe(clientSocket).pipe(upstream)
-      })
-      upstream.once("error", () => {
-        if (!settled) fail(502, "upstream_failed", state, host)
-        else clientSocket.destroy()
-      })
-      upstream.setTimeout(TUNNEL_IDLE_TIMEOUT_MS, () => {
-        upstream.destroy()
-        clientSocket.destroy()
-      })
-      const done = () => {
-        record(state, scope.scanId, {
-          ts: started,
-          type: "tunnel",
-          host,
-          port,
-          bytes,
-          durationMs: Date.now() - started,
-        })
-      }
-      clientSocket.once("close", done)
-      upstream.once("close", () => {
-        clientSocket.destroy()
-      })
+    const state = "deny" in auth ? null : auth.state
+    const reason = "deny" in auth ? auth.deny : "connect_not_supported"
+    record(state, state?.scope.scanId ?? "unscoped", {
+      ts: Date.now(),
+      type: "denied",
+      host: req.url ?? "",
+      method: "CONNECT",
+      denyReason: reason,
     })
+    clientSocket.end(`HTTP/1.1 403 ${reason}\r\nConnection: close\r\n\r\n`)
   }
 
   // Sweep dead scan states so grants can't outlive their scan in memory.
@@ -489,11 +460,14 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     for (const [scanId, state] of states) {
       if (state.scope.exp <= now || revoked.has(scanId)) {
         states.delete(scanId)
-        revoked.delete(scanId)
-        if (state.audit.length > 0) {
-          closedAudits.set(scanId, { entries: state.audit, expiresAt: now + CLOSED_AUDIT_TTL_MS })
-        }
+        for (const controller of state.active) controller.abort()
+        // Keep the shared array even if an aborted in-flight request has not
+        // appended its terminal audit entry yet.
+        closedAudits.set(scanId, { entries: state.audit, expiresAt: now + CLOSED_AUDIT_TTL_MS })
       }
+    }
+    for (const [scanId, expiry] of revoked) {
+      if (expiry <= now) revoked.delete(scanId)
     }
     for (const [scanId, closed] of closedAudits) {
       if (closed.expiresAt <= now) closedAudits.delete(scanId)
@@ -508,11 +482,34 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
   sweeper.unref()
 
   return {
+    register(scanId, grant) {
+      const verified = verifyRelayGrant(grant, signingSecret)
+      if (!verified.ok) return verified
+      const { scope } = verified
+      if (scope.scanId !== scanId) return { ok: false, reason: "scope_mismatch" }
+      if (revoked.has(scanId)) return { ok: false, reason: "revoked" }
+      const existing = states.get(scanId)
+      if (existing)
+        return existing.grant === grant ? { ok: true } : { ok: false, reason: "scope_changed" }
+      if (closedAudits.has(scanId)) return { ok: false, reason: "closed_scan" }
+      states.set(scanId, {
+        scope,
+        grant: grant!,
+        active: new Set(),
+        requestCount: 0,
+        bytesTotal: 0,
+        rate: { windowStart: Date.now(), count: 0 },
+        perPath: new Map(),
+        audit: [],
+      })
+      return { ok: true }
+    },
     handleForward,
     handleConnect,
     revoke(scanId: string) {
-      revoked.add(scanId)
+      revoked.set(scanId, Date.now() + MAX_RELAY_GRANT_TTL_MS)
       const state = states.get(scanId)
+      if (state) for (const controller of state.active) controller.abort()
       if (state)
         record(state, scanId, { ts: Date.now(), type: "denied", denyReason: "revoked", host: "" })
     },

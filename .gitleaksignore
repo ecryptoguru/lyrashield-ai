@@ -19,3 +19,6 @@ e02853f094dd61f5732b539b81143e6cc49f647d:codebase.md:generic-api-key:290
 # Additional reviewed synthetic security-test fixtures; exact findings only.
 804457fef8a4a6caf4f84afb7063ce8153a280e1:packages/eval-ai-safety/src/owasp/test-cases.ts:generic-api-key:217
 9dfb13b20ccb5197d51b4e3ed73215c656d716f3:packages/evidence-storage/src/index.test.ts:generic-api-key:16
+
+# Historical relay unit-test signing value; current fixture uses randomBytes.
+1387dc86e2804ae72d232dfc626b221172014064:packages/security/src/relay-grant.test.ts:generic-api-key:13

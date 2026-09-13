@@ -1,9 +1,15 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { writeFile, mkdir } from "fs/promises"
+import * as fsPromises from "fs/promises"
 import { join } from "path"
 import { tmpdir } from "os"
 import { rmSync } from "fs"
+
+vi.mock("fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fs/promises")>()
+  return { ...actual, readFile: vi.fn(actual.readFile) }
+})
 
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -33,12 +39,13 @@ describe("scanIac", () => {
     cleanupRepo()
   })
   afterEach(() => {
+    vi.restoreAllMocks()
     cleanupRepo()
   })
 
   it("flags Dockerfile risks and leaves pinned builds alone", async () => {
     const dir = await setupRepo({
-      "Dockerfile": [
+      Dockerfile: [
         "FROM node",
         "RUN curl https://get.example.sh | sh",
         "ENV DATABASE_PASSWORD=hunter2",
@@ -144,9 +151,60 @@ describe("scanIac", () => {
     expect(findings.filter((f) => f.id.includes("safe.tf"))).toEqual([])
   })
 
+  it("requires the existing resource contexts for RBAC and Terraform exposure rules", async () => {
+    const dir = await setupRepo({
+      "deploy/config.yaml": "apiVersion: v1\nkind: ConfigMap\ndata:\n  wildcard: '*'",
+      "infra/values.tf": 'locals {\n  cidr_blocks = ["0.0.0.0/0"]\n  Principal = "*"\n}',
+    })
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+    expect(
+      findings.filter((finding) =>
+        ["iac-k8s-wildcard-rbac", "iac-tf-open-ingress", "iac-tf-public-bucket-policy"].some(
+          (prefix) => finding.id.startsWith(prefix)
+        )
+      )
+    ).toEqual([])
+  })
+
+  it("does not treat sensitive=true as removal of a committed Terraform secret", async () => {
+    const dir = await setupRepo({
+      "main.tf": 'variable "password" { default = "correct-horse-staple" sensitive = true }',
+    })
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+    expect(findings.some((finding) => finding.id.startsWith("iac-tf-inline-secret"))).toBe(true)
+  })
+
+  it("binds secret defaults to their own Terraform variable block", async () => {
+    const dir = await setupRepo({
+      "main.tf": [
+        'variable "password" {',
+        '  description = "Braces in docs: } {"',
+        '  default = "correct-horse-staple"',
+        "  validation {",
+        "    condition = true",
+        '    error_message = "Invalid password"',
+        "  }",
+        "}",
+        'variable "region" {',
+        '  default = "us-east-1"',
+        "}",
+        '// variable "api_token" {',
+        'variable "instance_name" {',
+        '  default = "production-web"',
+        "}",
+      ].join("\n"),
+    })
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+    const defaults = findings.filter((finding) =>
+      finding.id.startsWith("iac-tf-variable-secret-default")
+    )
+    expect(defaults).toHaveLength(1)
+    expect(defaults[0]?.code_locations?.[0]?.start_line).toBe(3)
+  })
+
   it("emits a discovery receipt and skips non-IaC yaml", async () => {
     const dir = await setupRepo({
-      "Dockerfile": "FROM node:20\nUSER app\n",
+      Dockerfile: "FROM node:20\nUSER app\n",
       "config/settings.yaml": "feature_flag: true\n",
     })
     const discovery: ScannerDiscovery = {}
@@ -166,5 +224,61 @@ describe("scanIac", () => {
     })
     const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
     expect(findings).toEqual([])
+  })
+
+  it("records incomplete coverage when repository discovery fails", async () => {
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    await scanIac({ repoPath: TEST_DIR, workspaceDir: TEST_DIR, coverageIssues, discovery })
+    expect(discovery.iac?.filesScanned).toBe(0)
+    expect(discovery.iac?.skippedByReason.unreadable).toBe(1)
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "iac", status: "partial" })
+    )
+  })
+
+  it("records incomplete coverage when an eligible file cannot be read", async () => {
+    const dir = await setupRepo({ "app.tf": 'password = "correct-horse-staple"' })
+    vi.mocked(fsPromises.readFile).mockRejectedValueOnce(new Error("read failed"))
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    await scanIac({ repoPath: dir, workspaceDir: dir, coverageIssues, discovery })
+    expect(discovery.iac?.filesScanned).toBe(0)
+    expect(discovery.iac?.skippedByReason.unreadable).toBe(1)
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "iac", status: "partial" })
+    )
+  })
+
+  it("marks per-file finding caps as bounded coverage", async () => {
+    const dir = await setupRepo({
+      "app.tf": Array(101).fill('password = "correct-horse-staple"').join("\n"),
+    })
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir, coverageIssues, discovery })
+    expect(findings).toHaveLength(100)
+    expect(discovery.iac?.skippedByReason.findingLimit).toBe(1)
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "iac", status: "bounded", subject: "app.tf" })
+    )
+  })
+
+  it("counts only inspected files after reaching the total finding cap", async () => {
+    const content = Array(101).fill('password = "correct-horse-staple"').join("\n")
+    const files = Object.fromEntries(
+      Array.from({ length: 51 }, (_, index) => [
+        `app-${String(index).padStart(2, "0")}.tf`,
+        content,
+      ])
+    )
+    const dir = await setupRepo(files)
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir, coverageIssues, discovery })
+    expect(findings).toHaveLength(5000)
+    expect(discovery.iac?.filesScanned).toBe(50)
+    expect(discovery.iac?.bytesScanned).toBe(50 * Buffer.byteLength(content))
+    expect(discovery.iac?.skippedByReason.findingLimit).toBe(51)
   })
 })

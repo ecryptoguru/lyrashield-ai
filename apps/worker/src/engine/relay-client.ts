@@ -219,6 +219,25 @@ export async function fetchRelayAudit(
   }
 }
 
+/** Admit this exact grant once, before execution. Never retry after relay restart. */
+export async function registerRelayGrant(
+  scanId: string,
+  grant: string,
+  config: RelayRuntimeConfig
+): Promise<void> {
+  const response = await fetch(`${config.url}/v1/register/${encodeURIComponent(scanId)}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.adminSecret}`, "x-lyra-relay-grant": grant },
+    signal: AbortSignal.timeout(10_000),
+    redirect: "error",
+  })
+  if (!response.ok) throw new Error("RELAY_REGISTRATION_FAILED")
+  const body: unknown = await response.json()
+  if (!body || typeof body !== "object" || !("ok" in body) || body.ok !== true) {
+    throw new Error("RELAY_REGISTRATION_FAILED")
+  }
+}
+
 /** Revoke the grant immediately — call on every terminal scan state. */
 export async function revokeRelayGrant(scanId: string, config: RelayRuntimeConfig): Promise<void> {
   try {

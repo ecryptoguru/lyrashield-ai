@@ -123,6 +123,10 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 - `LYRASHIELD_API_URL` — optional; defaults to `https://app.lyrashieldai.com`
 - `NO_COLOR=1` — optional; disables colored terminal output
 
+### Importing SARIF
+
+`lyrashield scan --target <targetId> --sarif <report.sarif>` validates the file before submitting a scan and imports third-party detections. Imports never establish scanner coverage or independently verified findings. If import fails after submission, retry with `lyrashield scan --scan-id <existingScanId> --sarif <report.sarif>`; this does not create or charge for another scan.
+
 ### Retrying a scan safely
 
 Supply `--idempotency-key <request-id>` when a request may be retried across CLI invocations. Reuse the same key and inputs after a lost response. Changed inputs with the same key conflict; an uncertain failed operation is not automatically resubmitted. Without this flag, each invocation is a new request.

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { verifyRelayGrant } from "@lyrashield/security"
-import { mintScanRelayGrant, resolveRelayRuntimeConfig } from "./relay-client"
+import { mintScanRelayGrant, registerRelayGrant, resolveRelayRuntimeConfig } from "./relay-client"
 
 const CONFIG = {
   url: "http://relay.test",
@@ -120,4 +120,37 @@ describe("mintScanRelayGrant", () => {
     // Verified apex keeps its subdomain scope; out-of-apex references are dropped.
     expect(scope.hosts.sort()).toEqual(["api.example.com", "example.com"])
   })
+})
+
+describe("registerRelayGrant", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("registers the exact grant with admin authorization", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }))
+    vi.stubGlobal("fetch", fetchMock)
+    await registerRelayGrant("scan-1", "signed-grant", CONFIG)
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://relay.test/v1/register/scan-1",
+      expect.objectContaining({
+        method: "POST",
+        redirect: "error",
+        headers: {
+          Authorization: "Bearer test-admin-secret",
+          "x-lyra-relay-grant": "signed-grant",
+        },
+      })
+    )
+  })
+
+  it.each([Response.json({ ok: false }), Response.json({ ok: true }, { status: 403 })])(
+    "fails closed without automatic registration retry",
+    async (response) => {
+      const fetchMock = vi.fn().mockResolvedValue(response)
+      vi.stubGlobal("fetch", fetchMock)
+      await expect(registerRelayGrant("scan-1", "signed-grant", CONFIG)).rejects.toThrow(
+        "RELAY_REGISTRATION_FAILED"
+      )
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    }
+  )
 })

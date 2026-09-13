@@ -96,16 +96,16 @@ export function resolveScanProfile(input: { targetType: string; mode: string }):
       canonicalMode: urlProfile.mode as UrlScanMode,
       engineMode: engineBacked ? (deep ? "deep" : "standard") : null,
       maxBudgetUsd: engineBacked ? (deep ? 5 : 3.2) : 0,
-      maxDurationMinutes: engineBacked ? (deep ? 45 : 15) : Math.ceil(urlProfile.maxWallTimeMs / 60_000),
+      maxDurationMinutes: engineBacked
+        ? deep
+          ? 45
+          : 15
+        : Math.ceil(urlProfile.maxWallTimeMs / 60_000),
       scannerReserveMinutes: engineBacked ? (deep ? 5 : 3) : 0,
       maxEngineMinutes: engineBacked ? (deep ? 40 : 12) : 0,
       usesAi: engineBacked,
       modelClass: engineBacked ? (deep ? "TERRA" : "LUNA") : "NONE",
-      label: engineBacked
-        ? deep
-          ? "Deep Live Review"
-          : "Engine Review"
-        : urlProfile.label,
+      label: engineBacked ? (deep ? "Deep Live Review" : "Engine Review") : urlProfile.label,
       description: engineBacked
         ? `${urlProfile.description} Engine-driven review of the verified target; deterministic surface checks run alongside.`
         : urlProfile.description,

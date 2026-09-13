@@ -22,7 +22,15 @@ export const AI_BUILT_TAXONOMY_VERSION = "ai-built-failure-taxonomy/1.0.0" as co
 
 /** The detection surface that covers a class (which scanner family owns it). */
 export type DetectionSurface =
-  "engine" | "sca" | "secrets" | "sast" | "iac" | "agent_config" | "ai_app_security" | "url" | "webmcp"
+  | "engine"
+  | "sca"
+  | "secrets"
+  | "sast"
+  | "iac"
+  | "agent_config"
+  | "ai_app_security"
+  | "url"
+  | "webmcp"
 
 export interface AiBuiltFailureClass {
   /** Stable class id, e.g. "AIB-01". */

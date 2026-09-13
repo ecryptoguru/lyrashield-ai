@@ -377,10 +377,14 @@ export function buildUrlTargetInstruction(
 ): string {
   const FOCUS_HINTS: Record<string, string> = {
     auth: "Prioritize authentication and session surface: login/session flows, token handling, authorization boundaries, and account-recovery paths.",
-    payments: "Prioritize payment and billing surface: checkout, refund, subscription, idempotency, and amount-handling paths.",
-    llm_surface: "Prioritize LLM/agent surface: prompt surfaces, tool calls, model-controlled output rendering, and context-flow boundaries.",
-    file_handling: "Prioritize file handling: upload, download, parsing, storage, and path-traversal surface.",
-    data_exposure: "Prioritize data exposure: verbose errors, debug surfaces, leaked secrets in responses, and over-broad data returns.",
+    payments:
+      "Prioritize payment and billing surface: checkout, refund, subscription, idempotency, and amount-handling paths.",
+    llm_surface:
+      "Prioritize LLM/agent surface: prompt surfaces, tool calls, model-controlled output rendering, and context-flow boundaries.",
+    file_handling:
+      "Prioritize file handling: upload, download, parsing, storage, and path-traversal surface.",
+    data_exposure:
+      "Prioritize data exposure: verbose errors, debug surfaces, leaked secrets in responses, and over-broad data returns.",
   }
   const base = buildVibeSecurityInstruction(goal)
   const lines = [

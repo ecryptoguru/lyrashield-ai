@@ -10,10 +10,11 @@
  *  - Re-importing the same results is idempotent via dedupeKey.
  */
 import { computeDedupeKey } from "./finding-dedupe"
+import { z } from "zod"
 
 export const SARIF_IMPORT_VERSION = "sarif-import/1.0.0" as const
 
-const MAX_SARIF_BYTES = 5 * 1024 * 1024
+export const MAX_SARIF_BYTES = 5 * 1024 * 1024
 const MAX_RESULTS = 2_000
 
 export interface SarifParseResult {
@@ -48,33 +49,60 @@ const LEVEL_TO_SEVERITY: Record<SarifLevel, ImportedFindingRecord["severity"]> =
   none: "INFO",
 }
 
-interface SarifPhysicalLocation {
-  artifactLocation?: { uri?: string }
-  region?: { startLine?: number; endLine?: number }
-}
-
-interface SarifResultItem {
-  ruleId?: string
-  ruleIndex?: number
-  level?: SarifLevel
-  message?: { text?: string; markdown?: string }
-  locations?: Array<{ physicalLocation?: SarifPhysicalLocation }>
-  properties?: Record<string, unknown>
-}
-
-interface SarifDoc {
-  version?: string
-  runs?: Array<{
-    tool?: {
-      driver?: {
-        name?: string
-        version?: string
-        rules?: Array<{ id?: string; properties?: Record<string, unknown> }>
-      }
-    }
-    results?: SarifResultItem[]
-  }>
-}
+const PropertiesSchema = z.record(z.string(), z.unknown())
+const ResultSchema = z
+  .object({
+    ruleId: z.string().max(1024).optional(),
+    ruleIndex: z.number().int().nonnegative().optional(),
+    level: z.enum(["error", "warning", "note", "none"]).optional(),
+    message: z.object({ text: z.string().optional(), markdown: z.string().optional() }).optional(),
+    locations: z
+      .array(
+        z.object({
+          physicalLocation: z
+            .object({
+              artifactLocation: z.object({ uri: z.string().max(4096).optional() }).optional(),
+              region: z
+                .object({
+                  startLine: z.number().int().positive().optional(),
+                  endLine: z.number().int().positive().optional(),
+                })
+                .optional(),
+            })
+            .optional(),
+        })
+      )
+      .optional(),
+    properties: PropertiesSchema.optional(),
+  })
+  .passthrough()
+const DocumentSchema = z.object({
+  version: z.literal("2.1.0"),
+  runs: z.array(
+    z.object({
+      tool: z
+        .object({
+          driver: z
+            .object({
+              name: z.string().max(1024).optional(),
+              version: z.string().max(256).optional(),
+              rules: z
+                .array(
+                  z.object({
+                    id: z.string().max(1024).optional(),
+                    properties: PropertiesSchema.optional(),
+                  })
+                )
+                .optional(),
+            })
+            .optional(),
+        })
+        .optional(),
+      results: z.array(z.unknown()).optional(),
+    })
+  ),
+})
+type SarifResultItem = z.infer<typeof ResultSchema>
 
 function cweFromResult(
   result: SarifResultItem,
@@ -135,19 +163,20 @@ export function parseSarifReport(
   body: unknown,
   targetId: string
 ): SarifParseResult | { error: string } {
-  const raw = typeof body === "string" ? body : JSON.stringify(body)
-  if (Buffer.byteLength(raw) > MAX_SARIF_BYTES) {
-    return { error: "SARIF payload exceeds the 5 MiB limit" }
-  }
-  let doc: SarifDoc
+  let decoded: unknown
   try {
-    doc = (typeof body === "string" ? JSON.parse(body) : body) as SarifDoc
+    const raw = typeof body === "string" ? body : JSON.stringify(body)
+    if (typeof raw !== "string") return { error: "Body is not valid JSON" }
+    if (Buffer.byteLength(raw) > MAX_SARIF_BYTES) {
+      return { error: "SARIF payload exceeds the 5 MiB limit" }
+    }
+    decoded = JSON.parse(raw)
   } catch {
     return { error: "Body is not valid JSON" }
   }
-  if (!doc || doc.version !== "2.1.0" || !Array.isArray(doc.runs)) {
-    return { error: "Payload is not a SARIF 2.1.0 report" }
-  }
+  const validated = DocumentSchema.safeParse(decoded)
+  if (!validated.success) return { error: "Payload is not a valid SARIF 2.1.0 report" }
+  const doc = validated.data
 
   const findings: ImportedFindingRecord[] = []
   let rejected = 0
@@ -157,18 +186,27 @@ export function parseSarifReport(
 
   for (const run of doc.runs) {
     const driver = run.tool?.driver
-    toolName = toolName ?? driver?.name ?? null
-    toolVersion = toolVersion ?? driver?.version ?? null
+    const runToolName = driver?.name ?? null
+    const runToolVersion = driver?.version ?? null
+    toolName ??= runToolName
+    toolVersion ??= runToolVersion
     const rules = driver?.rules ?? []
-    for (const result of run.results ?? []) {
+    const rulesById = new Map(rules.map((rule) => [rule.id, rule]))
+    for (const input of run.results ?? []) {
       resultCount++
       if (findings.length >= MAX_RESULTS) {
         rejected++
         continue
       }
+      const validatedResult = ResultSchema.safeParse(input)
+      if (!validatedResult.success) {
+        rejected++
+        continue
+      }
+      const result = validatedResult.data
       const ruleId =
         result.ruleId ?? (result.ruleIndex != null ? rules[result.ruleIndex]?.id : undefined)
-      const ruleProps = ruleId ? rules.find((r) => r.id === ruleId)?.properties : undefined
+      const ruleProps = ruleId ? rulesById.get(ruleId)?.properties : undefined
       const message = result.message?.text ?? result.message?.markdown
       if (!message && !ruleId) {
         rejected++
@@ -200,11 +238,13 @@ export function parseSarifReport(
         sarifRuleId: ruleId ?? null,
         file,
         startLine,
-        toolName,
+        toolName: runToolName,
         payload: {
-          sarifResult: result,
-          toolName,
-          toolVersion,
+          // Keep original nested evidence (snippets, URI bases, message IDs).
+          // The parsed projection above validates only the fields we consume.
+          sarifResult: input,
+          toolName: runToolName,
+          toolVersion: runToolVersion,
           importVersion: SARIF_IMPORT_VERSION,
         },
       })

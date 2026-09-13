@@ -1,9 +1,15 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { writeFile, mkdir } from "fs/promises"
+import * as fsPromises from "fs/promises"
 import { join } from "path"
 import { tmpdir } from "os"
 import { rmSync } from "fs"
+
+vi.mock("fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fs/promises")>()
+  return { ...actual, readFile: vi.fn(actual.readFile) }
+})
 
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -38,6 +44,7 @@ describe("scanSast", () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     cleanupRepo()
   })
 
@@ -165,14 +172,19 @@ describe("scanSast", () => {
 
   it("bounds files by the mode's budget and reports the overflow", async () => {
     const files: Record<string, string> = {}
-    for (let i = 0; i < 210; i++) files[`f${String(i).padStart(4, "0")}.ts`] = `export const v${i} = ${i}`
+    for (let i = 0; i < 210; i++)
+      files[`f${String(i).padStart(4, "0")}.ts`] = `export const v${i} = ${i}`
     const dir = await setupRepo(files)
 
     const discovery: Record<string, unknown> = {}
     const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
     await scanSast({ repoPath: dir, workspaceDir: dir, mode: "QUICK", coverageIssues, discovery })
 
-    const receipt = discovery.sast as { filesScanned: number; skippedByReason: Record<string, number>; representativeSkippedPaths?: string[] }
+    const receipt = discovery.sast as {
+      filesScanned: number
+      skippedByReason: Record<string, number>
+      representativeSkippedPaths?: string[]
+    }
     expect(receipt.filesScanned).toBe(200)
     expect(receipt.skippedByReason.fileLimit).toBe(10)
     expect(receipt.representativeSkippedPaths).toContain("f0200.ts")
@@ -182,5 +194,67 @@ describe("scanSast", () => {
     const wide: Record<string, unknown> = {}
     await scanSast({ repoPath: dir, workspaceDir: dir, mode: "STANDARD", discovery: wide })
     expect((wide.sast as { filesScanned: number }).filesScanned).toBe(210)
+  })
+
+  it("records incomplete coverage when repository discovery fails", async () => {
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    await scanSast({ repoPath: TEST_DIR, workspaceDir: TEST_DIR, coverageIssues, discovery })
+    expect(discovery.sast?.filesScanned).toBe(0)
+    expect(discovery.sast?.skippedByReason.unreadable).toBe(1)
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "sast", status: "partial" })
+    )
+  })
+
+  it("records incomplete coverage when an eligible file cannot be read", async () => {
+    const dir = await setupRepo({
+      "app.ts": 'const passwordHash = createHash("md5").update(password)',
+    })
+    vi.mocked(fsPromises.readFile).mockRejectedValueOnce(new Error("read failed"))
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues, discovery })
+    expect(discovery.sast?.filesScanned).toBe(0)
+    expect(discovery.sast?.skippedByReason.unreadable).toBe(1)
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "sast", status: "partial" })
+    )
+  })
+
+  it("marks per-file finding caps as bounded coverage", async () => {
+    const dir = await setupRepo({
+      "app.ts": Array(101)
+        .fill('const passwordHash = createHash("md5").update(password)')
+        .join("\n"),
+    })
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    const findings = await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues, discovery })
+    expect(findings).toHaveLength(100)
+    expect(discovery.sast?.skippedByReason.findingLimit).toBe(1)
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "sast", status: "bounded", subject: "app.ts" })
+    )
+  })
+
+  it("counts only inspected files after reaching the total finding cap", async () => {
+    const content = Array(101)
+      .fill('const passwordHash = createHash("md5").update(password)')
+      .join("\n")
+    const files = Object.fromEntries(
+      Array.from({ length: 51 }, (_, index) => [
+        `app-${String(index).padStart(2, "0")}.ts`,
+        content,
+      ])
+    )
+    const dir = await setupRepo(files)
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    const findings = await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues, discovery })
+    expect(findings).toHaveLength(5000)
+    expect(discovery.sast?.filesScanned).toBe(50)
+    expect(discovery.sast?.bytesScanned).toBe(50 * Buffer.byteLength(content))
+    expect(discovery.sast?.skippedByReason.findingLimit).toBe(51)
   })
 })

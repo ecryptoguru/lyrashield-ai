@@ -107,8 +107,7 @@ export async function GET(request: Request) {
         })
       }
       urlEngineBacked =
-        resolved.profile !== null &&
-        resolveScanProfile({ targetType: target.type, mode }).usesAi
+        resolved.profile !== null && resolveScanProfile({ targetType: target.type, mode }).usesAi
     }
 
     // Mirror the POST-only gates that apply BEFORE entitlement evaluation, so
@@ -160,8 +159,7 @@ export async function GET(request: Request) {
           return eligibilityResponse({
             allowed: false,
             code: "DOMAIN_VERIFICATION_REQUIRED",
-            message:
-              "Verify control of this domain once to enable engine-backed reviews.",
+            message: "Verify control of this domain once to enable engine-backed reviews.",
             plan: sponsorPlan,
             isTrial: false,
             remainingMinutes: 0,

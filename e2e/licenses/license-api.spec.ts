@@ -78,11 +78,12 @@ test.afterAll(async () => {
   try {
     if (licenseId && testWorkspaceId) {
       const workspaceId = testWorkspaceId
+      const cleanupLicenseId = licenseId
       await withWorkspaceRLS(workspaceId, async (tx) => {
-        await tx.licenseActivation.deleteMany({ where: { licenseId } })
-        await tx.licenseRevocation.deleteMany({ where: { licenseId } })
-        await tx.licenseKey.deleteMany({ where: { licenseId } })
-        await tx.license.delete({ where: { id: licenseId } })
+        await tx.licenseActivation.deleteMany({ where: { licenseId: cleanupLicenseId } })
+        await tx.licenseRevocation.deleteMany({ where: { licenseId: cleanupLicenseId } })
+        await tx.licenseKey.deleteMany({ where: { licenseId: cleanupLicenseId } })
+        await tx.license.delete({ where: { id: cleanupLicenseId } })
       })
       // Clean up the test workspace (License rows already deleted above).
       await prisma.workspace.delete({ where: { id: workspaceId } })

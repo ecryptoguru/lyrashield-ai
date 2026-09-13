@@ -269,7 +269,7 @@ function isCommentOrBlank(line: string): boolean {
 async function walkDir(
   dir: string,
   files: string[],
-  state = { entries: 0, bounded: false, oversizedFiles: 0 },
+  state = { entries: 0, bounded: false, oversizedFiles: 0, unreadable: 0 },
   depth = 0,
   signal?: AbortSignal
 ): Promise<void> {
@@ -282,6 +282,7 @@ async function walkDir(
   try {
     entries = await readdir(dir)
   } catch {
+    state.unreadable++
     return
   }
 
@@ -296,6 +297,7 @@ async function walkDir(
     try {
       s = await lstat(fullPath)
     } catch {
+      state.unreadable++
       continue
     }
 
@@ -323,7 +325,7 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
   logger.info("Starting SAST scan", { repoPath })
 
   const discovered: string[] = []
-  const walkState = { entries: 0, bounded: false, oversizedFiles: 0 }
+  const walkState = { entries: 0, bounded: false, oversizedFiles: 0, unreadable: 0 }
   await walkDir(repoPath, discovered, walkState, 0, signal)
   if (walkState.bounded) {
     recordCoverageIssue(coverageIssues, {
@@ -358,17 +360,20 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
     fileLimit: skippedPaths.length,
     oversized: walkState.oversizedFiles,
     walkBounded: walkState.bounded ? 1 : 0,
-    unreadable: 0,
+    unreadable: walkState.unreadable,
+    findingLimit: 0,
     testFixture: 0,
   }
   let bytesScanned = 0
+  let filesScanned = 0
 
   const findings: EngineVulnerability[] = []
   const seenFindings = new Set<string>()
 
-  for (const filePath of files) {
+  for (const [fileIndex, filePath] of files.entries()) {
     throwIfAborted(signal)
     if (findings.length >= MAX_TOTAL_FINDINGS) {
+      skippedByReason.findingLimit += files.length - fileIndex
       recordCoverageIssue(coverageIssues, {
         scanner: "sast",
         status: "bounded",
@@ -390,15 +395,24 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
       continue
     }
     bytesScanned += Buffer.byteLength(content, "utf-8")
+    filesScanned++
 
     const lines = content.split("\n")
     let findingsInFile = 0
+    let findingLimitReached = false
 
     for (const [index, line] of lines.entries()) {
-      if (findingsInFile >= MAX_FINDINGS_PER_FILE) break
+      if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
+        findingLimitReached = true
+        break
+      }
       if (isCommentOrBlank(line)) continue
 
       for (const rule of SAST_RULES) {
+        if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
+          findingLimitReached = true
+          break
+        }
         throwIfAborted(signal)
         if (rule.fileVeto?.(content)) continue
 
@@ -462,11 +476,28 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
         })
       }
     }
+    if (findingLimitReached) {
+      skippedByReason.findingLimit++
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sast",
+        status: "bounded",
+        subject: relPath,
+        reason: "SAST finding limit reached; this file was not fully evaluated",
+      })
+    }
+  }
+
+  if (skippedByReason.unreadable > 0) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "sast",
+      status: "partial",
+      reason: `SAST could not read or inspect ${skippedByReason.unreadable} repository entries`,
+    })
   }
 
   if (discovery) {
     discovery.sast = {
-      filesScanned: files.length - skippedByReason.unreadable - skippedByReason.testFixture,
+      filesScanned,
       bytesScanned,
       skippedByReason,
       representativeSkippedPaths: skippedPaths
@@ -478,7 +509,7 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
   logger.info("SAST scan complete", {
     repoPath,
     findingCount: findings.length,
-    filesScanned: files.length,
+    filesScanned,
   })
   return findings
 }

@@ -3,6 +3,9 @@ import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 
 const password = "E2e-password-123!"
 
+// Casual timestamps and system theme must not depend on the host running Playwright.
+test.use({ locale: "en-US", timezoneId: "UTC", colorScheme: "light" })
+
 async function signUpAndEnterDashboard(page: Page, email: string, forwardedFor: string) {
   await page.setExtraHTTPHeaders({ "x-forwarded-for": forwardedFor })
   await page.goto("/sign-up")
@@ -63,7 +66,10 @@ async function expectDashboardReady(page: Page) {
 
 async function capture(page: Page, name: string) {
   await expectDashboardReady(page)
-  await expect(page).toHaveScreenshot(name, {
+  await page.mouse.move(0, 0)
+  await page.evaluate(() => window.scrollTo({ top: 0, left: 0 }))
+  // Collect every visual difference while keeping the test non-green for review.
+  await expect.soft(page).toHaveScreenshot(name, {
     fullPage: true,
     animations: "disabled",
     caret: "hide",
@@ -74,7 +80,8 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
   test.setTimeout(120_000)
   const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const projectSlug = testInfo.project.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()
-  const email = `visual-${projectSlug}-${runSuffix}@example.com`
+  // Each project owns one account and removes it in finally. Keep rendered identity stable.
+  const email = `visual-${projectSlug}@example.com`
   const workspaceName = `Visual QA ${testInfo.project.name}`
   const forwardedFor = `198.51.100.${(testInfo.workerIndex % 250) + 1}`
   let workspaceId: string | null = null
@@ -85,7 +92,13 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
     if (message.type() === "error") consoleErrors.push(message.text())
   })
   page.on("pageerror", (error) => pageErrors.push(`${page.url()}: ${error.message}`))
+  await page
+    .context()
+    .addCookies([{ name: "lyrashield-theme", value: "light", url: "http://127.0.0.1:3100" }])
   await page.addInitScript(() => {
+    if (!localStorage.getItem("lyrashield-theme")) {
+      localStorage.setItem("lyrashield-theme", "light")
+    }
     const metrics = { lcp: 0, cls: 0 }
     ;(window as typeof window & { __dashboardMetrics: typeof metrics }).__dashboardMetrics = metrics
     new PerformanceObserver((list) => {
@@ -128,6 +141,10 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
 
     const fixture = await withWorkspaceRLS(workspaceId, async (tx) => {
       await tx.workspace.update({ where: { id: workspaceId! }, data: { name: workspaceName } })
+      await tx.target.update({
+        where: { id: targetId, workspaceId: workspaceId! },
+        data: { createdAt: new Date("2026-08-31T09:00:00Z") },
+      })
       const scan = await tx.scan.create({
         data: {
           workspaceId: workspaceId!,
@@ -183,7 +200,7 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
           breakdown: { high: 1 },
           scanMode: "SAFE",
           computedAt: new Date("2026-08-31T10:03:12Z"),
-          expiresAt: new Date("2026-09-30T10:03:12Z"),
+          expiresAt: new Date("2100-01-01T00:00:00Z"),
         },
       })
       return { scanId: scan.id, findingId: finding.id }
@@ -210,20 +227,15 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
     expect(dashboardMetrics.lcp).toBeLessThan(2_500)
     expect(dashboardMetrics.cls).toBeLessThan(0.1)
 
-    await page.evaluate(() => {
-      localStorage.setItem("lyrashield-theme", "dark")
-      document.documentElement.classList.add("dark")
-      document.documentElement.dataset.theme = "dark"
-      document.documentElement.style.colorScheme = "dark"
-    })
+    await page.getByRole("button", { name: "Light theme. Change color theme", exact: true }).click()
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await capture(page, "dashboard-home-dark.png")
 
-    await page.evaluate(() => {
-      localStorage.setItem("lyrashield-theme", "light")
-      document.documentElement.classList.remove("dark")
-      document.documentElement.dataset.theme = "light"
-      document.documentElement.style.colorScheme = "light"
-    })
+    await page.getByRole("button", { name: "Dark theme. Change color theme", exact: true }).click()
+    await page
+      .getByRole("button", { name: "System theme. Change color theme", exact: true })
+      .click()
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
 
     for (const [path, screenshot] of [
       ["/dashboard/targets", "targets-list.png"],
@@ -234,6 +246,13 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
     ] as const) {
       await page.goto(path)
       await capture(page, screenshot)
+      if (screenshot === "run-detail.png") {
+        const standards = page.locator("summary").filter({ hasText: "Standards coverage" })
+        await expect(standards).toBeVisible()
+        await standards.click()
+        await expect(page.getByText("attestation required", { exact: false }).first()).toBeVisible()
+        await capture(page, "run-detail-standards.png")
+      }
       if (screenshot === "issue-detail.png") {
         const alternatives = page
           .locator("summary")
@@ -300,12 +319,25 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
     const user = await prisma.user.findUnique({ where: { email }, select: { id: true } })
     if (workspaceId) {
       const now = new Date()
-      await withWorkspaceRLS(workspaceId, async (tx) => {
-        await tx.finding.updateMany({ where: { workspaceId }, data: { deletedAt: now } })
-        await tx.scan.updateMany({ where: { workspaceId }, data: { deletedAt: now } })
-        await tx.target.updateMany({ where: { workspaceId }, data: { deletedAt: now } })
-        await tx.workspace.updateMany({ where: { id: workspaceId }, data: { deletedAt: now } })
-        await tx.workspaceMember.deleteMany({ where: { workspaceId } })
+      const cleanupWorkspaceId = workspaceId
+      await withWorkspaceRLS(cleanupWorkspaceId, async (tx) => {
+        await tx.finding.updateMany({
+          where: { workspaceId: cleanupWorkspaceId },
+          data: { deletedAt: now },
+        })
+        await tx.scan.updateMany({
+          where: { workspaceId: cleanupWorkspaceId },
+          data: { deletedAt: now },
+        })
+        await tx.target.updateMany({
+          where: { workspaceId: cleanupWorkspaceId },
+          data: { deletedAt: now },
+        })
+        await tx.workspace.updateMany({
+          where: { id: cleanupWorkspaceId },
+          data: { deletedAt: now },
+        })
+        await tx.workspaceMember.deleteMany({ where: { workspaceId: cleanupWorkspaceId } })
       })
     }
     if (user) {

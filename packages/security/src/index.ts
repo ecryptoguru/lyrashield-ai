@@ -28,12 +28,14 @@ export {
 export { createEgressProxyFetchFn, type EgressProxyFetchFnOptions } from "./egress-proxy-client"
 
 export {
+  MAX_RELAY_GRANT_TTL_MS,
   mintRelayGrant,
   verifyRelayGrant,
   relayHostAllowed,
   relayMethodAllowed,
   relayPathAllowed,
   normalizeRelayHost,
+  normalizeRelayPath,
   type RelayGrantScope,
   type RelayDenyReason,
 } from "./relay-grant"

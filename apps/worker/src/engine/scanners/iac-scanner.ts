@@ -79,7 +79,7 @@ function isIacCandidateName(name: string): boolean {
 async function walkDir(
   dir: string,
   files: string[],
-  state = { entries: 0, bounded: false, oversizedFiles: 0 },
+  state = { entries: 0, bounded: false, oversizedFiles: 0, unreadable: 0 },
   depth = 0,
   signal?: AbortSignal
 ): Promise<void> {
@@ -92,6 +92,7 @@ async function walkDir(
   try {
     entries = await readdir(dir)
   } catch {
+    state.unreadable++
     return
   }
 
@@ -106,6 +107,7 @@ async function walkDir(
     try {
       s = await lstat(fullPath)
     } catch {
+      state.unreadable++
       continue
     }
     if (s.isSymbolicLink()) continue
@@ -134,6 +136,31 @@ function isCommentOrBlank(line: string): boolean {
   )
 }
 
+/** Track containing variable blocks without treating quoted braces as HCL structure. */
+// ponytail: lexical block scope; use an HCL parser if expression or heredoc defaults are added.
+function terraformVariableContexts(content: string): Array<string | null> {
+  let variableName: string | null = null
+  let depth = 0
+  return content
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "))
+    .split("\n")
+    .map((line) => {
+      const code = line.replace(/"(?:\\.|[^"\\])*"|#[^\n]*|\/\/[^\n]*/g, (token) =>
+        token.startsWith('"') ? token : ""
+      )
+      const declaration = /^\s*variable\s+"([^"\n]+)"\s*\{/.exec(code)
+      if (depth === 0 && declaration) variableName = declaration[1] ?? null
+      const current = variableName
+      const structure = code.replace(/"(?:\\.|[^"\\])*"/g, "")
+      depth += (structure.match(/\{/g)?.length ?? 0) - (structure.match(/\}/g)?.length ?? 0)
+      if (depth <= 0) {
+        depth = 0
+        variableName = null
+      }
+      return current
+    })
+}
+
 interface IacRule {
   id: string
   name: string
@@ -147,8 +174,10 @@ interface IacRule {
   controlIds?: number[]
   /** Line-level escape hatch — the match is suppressed when the line also matches. */
   suppressIf?: RegExp
-  /** Require the matched file's whole content to also match (file-level context). */
+  /** Require a matching resource context somewhere in the file. */
   fileContext?: RegExp
+  /** Require the containing Terraform variable name to match. */
+  variableContext?: RegExp
 }
 
 const IAC_RULES: IacRule[] = [
@@ -428,7 +457,7 @@ const IAC_RULES: IacRule[] = [
     kinds: ["terraform"],
     pattern:
       /(?:password|secret|token|api[_-]?key|private[_-]?key|access[_-]?key)["']?[^=\n]*=\s*"[^"$\s][^"$]{6,}"/i,
-    suppressIf: /var\.|data\.|local\.|each\.|module\.|random_|sensitive/i,
+    suppressIf: /var\.|data\.|local\.|each\.|module\.|random_/i,
     severity: "high",
     cwe: "CWE-798",
     description: "A Terraform attribute hard-codes a credential literal.",
@@ -441,11 +470,10 @@ const IAC_RULES: IacRule[] = [
     name: "Default literal on a secret-named variable",
     kinds: ["terraform"],
     pattern: /default\s*=\s*"[^"$\s][^"$]{6,}"/i,
-    fileContext:
-      /variable\s+"[^"]*(?:password|secret|token|api[_-]?key|private[_-]?key|access[_-]?key)[^"]*"\s*\{/i,
+    variableContext: /password|secret|token|api[_-]?key|private[_-]?key|access[_-]?key/i,
     // A single-line `variable "x" { default = "…" }` is already reported by
     // iac-tf-inline-secret — suppress this rule there to avoid double findings.
-    suppressIf: /variable\s+"|var\.|data\.|local\.|each\.|module\.|random_|sensitive/i,
+    suppressIf: /variable\s+"|var\.|data\.|local\.|each\.|module\.|random_/i,
     severity: "high",
     cwe: "CWE-798",
     description:
@@ -466,7 +494,7 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
   logger.info("Starting IaC scan", { repoPath })
 
   const candidates: string[] = []
-  const walkState = { entries: 0, bounded: false, oversizedFiles: 0 }
+  const walkState = { entries: 0, bounded: false, oversizedFiles: 0, unreadable: 0 }
   await walkDir(repoPath, candidates, walkState, 0, signal)
   if (walkState.bounded) {
     recordCoverageIssue(coverageIssues, {
@@ -487,7 +515,8 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
   const skippedByReason = {
     oversized: walkState.oversizedFiles,
     walkBounded: walkState.bounded ? 1 : 0,
-    unreadable: 0,
+    unreadable: walkState.unreadable,
+    findingLimit: 0,
     notIacContent: 0,
     testFixture: 0,
   }
@@ -497,9 +526,10 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
   const findings: EngineVulnerability[] = []
   const seenFindings = new Set<string>()
 
-  for (const filePath of candidates.sort()) {
+  for (const [fileIndex, filePath] of candidates.sort().entries()) {
     throwIfAborted(signal)
     if (findings.length >= MAX_TOTAL_FINDINGS) {
+      skippedByReason.findingLimit += candidates.length - fileIndex
       recordCoverageIssue(coverageIssues, {
         scanner: "iac",
         status: "bounded",
@@ -528,6 +558,7 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
     filesScanned++
 
     let findingsInFile = 0
+    let findingLimitReached = false
 
     // File-level absence rules: a Dockerfile with no USER directive runs as
     // root by default; a workload with containers but no securityContext has
@@ -580,14 +611,24 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
     }
 
     const lines = content.split("\n")
+    const variableContexts = kind === "terraform" ? terraformVariableContexts(content) : []
     for (const [index, line] of lines.entries()) {
-      if (findingsInFile >= MAX_FINDINGS_PER_FILE) break
+      if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
+        findingLimitReached = true
+        break
+      }
       if (isCommentOrBlank(line)) continue
       for (const rule of IAC_RULES) {
+        if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
+          findingLimitReached = true
+          break
+        }
         throwIfAborted(signal)
         if (rule.id === K8S_MISSING_SECURITY_CONTEXT) continue
         if (!rule.kinds.includes(kind)) continue
         if (rule.fileContext && !rule.fileContext.test(content)) continue
+        if (rule.variableContext && !rule.variableContext.test(variableContexts[index] ?? ""))
+          continue
         // Match and suppress on the code portion only — a trailing comment
         // (or a corpus CASE marker) must neither trigger nor hide a violation.
         const codePart = line.split("#")[0] ?? line
@@ -624,6 +665,23 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
         })
       }
     }
+    if (findingLimitReached) {
+      skippedByReason.findingLimit++
+      recordCoverageIssue(coverageIssues, {
+        scanner: "iac",
+        status: "bounded",
+        subject: relPath,
+        reason: "IaC finding limit reached; this file was not fully evaluated",
+      })
+    }
+  }
+
+  if (skippedByReason.unreadable > 0) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "iac",
+      status: "partial",
+      reason: `IaC could not read or inspect ${skippedByReason.unreadable} repository entries`,
+    })
   }
 
   if (discovery) {

@@ -42,6 +42,7 @@ export interface StandardView {
   version: string
   badge?: string
   evaluated: number
+  /** Organizational obligations; may overlap evaluated or notEvaluated. */
   requiresAttestation: number
   notEvaluated: number
   violationSignals: number
@@ -65,27 +66,24 @@ function familyReceipts(receipts: ScanReceiptInput[]): Map<string, ScanReceiptIn
   return byScanner
 }
 
-function cweMatches(category: StandardCategory, findings: ScanFindingInput[]): number {
-  const hints = category.cweHints ?? []
-  if (hints.length === 0) return 0
-  return findings.filter((finding) => {
-    if (!finding.cwe) return false
-    const normalized = finding.cwe.replace(/^CWE-/i, "CWE-")
-    return hints.some((hint) => normalized === hint || normalized.endsWith(`-${hint}`))
-  }).length
-}
+function findingMatches(
+  category: StandardCategory,
+  finding: ScanFindingInput,
+  version: string
+): boolean {
+  const normalizedCwe = finding.cwe?.replace(/^CWE-/i, "CWE-")
+  if (normalizedCwe && (category.cweHints ?? []).includes(normalizedCwe)) return true
 
-function owaspMatches(category: StandardCategory, findings: ScanFindingInput[]): number {
-  // Engine findings carry owaspCategory like "A01:2025", "API1", or "LLM01".
-  // The match must stop at a category boundary — a bare startsWith would let
-  // an "API10" tag credit category "API1".
-  return findings.filter((finding) => {
-    const tag = finding.owaspCategory
-    if (!tag) return false
-    const id = category.id.toUpperCase()
-    const t = tag.toUpperCase()
-    return t === id || t.startsWith(`${id}:`) || t.startsWith(`${id} `) || t.startsWith(`${id}-`)
-  }).length
+  // A finding can carry both tags; count it once per category. Matching stops
+  // at a category boundary so API10 does not credit API1.
+  const tag = finding.owaspCategory?.toUpperCase()
+  if (!tag) return false
+  const taggedEdition = /^(?:A\d{2}|LLM\d{2}):(\d{4})(?:$|[- :])/.exec(tag)?.[1]
+  if (taggedEdition && taggedEdition !== version) return false
+  const id = category.id.toUpperCase()
+  return (
+    tag === id || tag.startsWith(`${id}:`) || tag.startsWith(`${id} `) || tag.startsWith(`${id}-`)
+  )
 }
 
 export function renderStandard(
@@ -96,7 +94,9 @@ export function renderStandard(
   const byScanner = familyReceipts(receipts)
 
   const categories: RenderedCategory[] = standard.categories.map((category) => {
-    const violations = cweMatches(category, findings) + owaspMatches(category, findings)
+    const violations = findings.filter((finding) =>
+      findingMatches(category, finding, standard.version)
+    ).length
 
     const evaluatorReceipts = (category.evaluators ?? []).flatMap(
       (family) => byScanner.get(family) ?? []
@@ -137,7 +137,7 @@ export function renderStandard(
     version: standard.version,
     badge: standard.badge,
     evaluated: categories.filter((c) => c.state === "evaluated").length,
-    requiresAttestation: categories.filter((c) => c.state === "requires-attestation").length,
+    requiresAttestation: categories.filter((c) => c.attestable).length,
     notEvaluated: categories.filter((c) => c.state === "not-evaluated").length,
     violationSignals: categories.reduce((sum, c) => sum + c.violationSignals, 0),
     categories,

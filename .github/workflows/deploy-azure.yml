@@ -1130,6 +1130,8 @@ jobs:
             --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --image "$IMAGE" \
+            --min-replicas 1 \
+            --max-replicas 1 \
             --output none
           CANDIDATE_REVISION=$(az containerapp show \
             --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
@@ -1144,6 +1146,18 @@ jobs:
             --output tsv)
           if [ -z "$CANDIDATE_REVISION" ] || [ -z "$CANDIDATE_FQDN" ]; then
             echo "::error::Azure did not return the egress-proxy candidate revision and FQDN. Production traffic was not changed."
+            exit 1
+          fi
+          # Relay budgets/revocation have one registered authority per process.
+          # A replacement process rejects old grants; replicas must not split admission.
+          RELAY_SCALE=$(az containerapp revision show \
+            --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$CANDIDATE_REVISION" \
+            --query '[properties.template.scale.minReplicas, properties.template.scale.maxReplicas]' \
+            --output tsv)
+          if [ "$(echo "$RELAY_SCALE" | xargs)" != "1 1" ]; then
+            echo "::error::Egress relay candidate must have exactly one replica. Production traffic was not changed."
             exit 1
           fi
           echo "revision=$CANDIDATE_REVISION" >> "$GITHUB_OUTPUT"

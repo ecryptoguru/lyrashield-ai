@@ -100,12 +100,12 @@ test.describe("Affiliate lifecycle", () => {
       })
       .not.toBeNull()
 
-    const user = await prisma.user.findUnique({ where: { email: affiliateEmail } })
-    const affiliate = await prisma.affiliate.findUnique({
-      where: { userId: user!.id },
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: affiliateEmail } })
+    const affiliate = await prisma.affiliate.findUniqueOrThrow({
+      where: { userId: user.id },
     })
 
-    expect(affiliate!.status).toBe("PENDING")
+    expect(affiliate.status).toBe("PENDING")
 
     // 3. Admin approve (directly in DB for E2E)
     const affiliatePromoCode = `E2E${suffix.slice(-6).toUpperCase()}`

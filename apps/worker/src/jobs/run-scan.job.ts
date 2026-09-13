@@ -1,4 +1,5 @@
 import type { Job } from "bullmq"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth/permissions"
 import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
 import {
   prisma,
@@ -15,6 +16,7 @@ import {
 } from "../engine/deterministic-retest"
 import {
   recordAgentMinutes,
+  evaluateScanEntitlement,
   hasUnsettledScanIntent,
   enterGrace,
   debitOverage,
@@ -33,6 +35,7 @@ import {
 import {
   fetchRelayAudit,
   mintScanRelayGrant,
+  registerRelayGrant,
   resolveRelayRuntimeConfig,
   resolveSpecServerHosts,
   revokeRelayGrant,
@@ -693,6 +696,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         startedAt: true,
         createdById: true,
         sponsorAccountId: true,
+        triggerType: true,
       },
     })
   } catch (err) {
@@ -1049,6 +1053,50 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
+      // All producers converge here, including schedules and retests. Recheck
+      // revocation and billing before provider work; never switch a queued
+      // scan to a different payer when workspace sponsorship changes.
+      const creator = await prisma.workspaceMember.findFirst({
+        where: { workspaceId, userId: scanRecord.createdById, status: "active" },
+        select: { role: true },
+      })
+      const executionPermission =
+        scanRecord.triggerType === "schedule"
+          ? PERMISSIONS.schedule.create
+          : scanRecord.triggerType === "retest"
+            ? PERMISSIONS.retest.create
+            : PERMISSIONS.scan.create
+      let admissionError: { errorCategory: string; errorMessage: string } | null = null
+      if (!creator || !hasPermission(creator.role, executionPermission)) {
+        admissionError = {
+          errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+          errorMessage: "The scan creator no longer has permission to run this review.",
+        }
+      } else if (engineBacked && !deterministicRetest) {
+        const entitlement = await runWithAccountContext(scanRecord.createdById, () =>
+          evaluateScanEntitlement({ workspaceId, mode, sponsorAccountId: scanRecord.createdById })
+        )
+        if (!entitlement.allowed) {
+          admissionError = {
+            errorCategory: entitlement.code ?? "SCAN_ENTITLEMENT_UNAVAILABLE",
+            errorMessage: entitlement.message ?? "The billing sponsor cannot run this review.",
+          }
+        } else if (
+          entitlement.accountId !== (scanRecord.sponsorAccountId ?? scanRecord.createdById)
+        ) {
+          admissionError = {
+            errorCategory: "SCAN_SPONSOR_CHANGED",
+            errorMessage:
+              "Workspace billing sponsorship changed. Start a new review with the current sponsor.",
+          }
+        }
+      }
+      if (admissionError) {
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, admissionError)
+        await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
+        return { status: "failed", ...admissionError }
+      }
+
       if (deterministicRetest) {
         if (target.repoProvider !== "github") {
           throw new Error("Deterministic repository retests require a GitHub source target")
@@ -1202,6 +1250,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               },
               relayConfig
             )
+            await registerRelayGrant(scanId, minted.grant, relayConfig)
             relayCtx = { url: relayConfig.url, grant: minted.grant }
             await addScanEvent(scanId, "relay_scope", "info", "Relay scope granted", {
               hosts: minted.scope.hosts,

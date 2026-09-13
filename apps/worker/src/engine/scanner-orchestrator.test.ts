@@ -109,6 +109,9 @@ vi.mock("./scanners/url-scanner", () => ({
   }),
 }))
 
+vi.mock("./scanners/sast-scanner", () => ({ scanSast: vi.fn().mockResolvedValue([]) }))
+vi.mock("./scanners/iac-scanner", () => ({ scanIac: vi.fn().mockResolvedValue([]) }))
+
 vi.mock("./scanners/agent-config-scanner", () => ({
   scanAgentConfig: vi.fn().mockResolvedValue([]),
 }))

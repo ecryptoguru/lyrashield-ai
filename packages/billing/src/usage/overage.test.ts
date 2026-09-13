@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const withAccountRLSMock = vi.hoisted(() => vi.fn())
 const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
@@ -64,7 +64,65 @@ beforeEach(() => {
   })
 })
 
+afterEach(() => vi.useRealTimers())
+
 describe("debitOverage", () => {
+  it("counts annual-plan overage in the current monthly cycle across scans", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-09-13T12:00:00Z"))
+    const receipts: Array<{
+      id: string
+      idempotencyKey: string
+      quantity: number
+      cycleStart: Date
+    }> = []
+    const tx = {
+      $executeRaw: executeRawMock,
+      billingAccount: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "annual-account",
+            accountId: "acct_1",
+            provider: "polar",
+            status: "active",
+            currentPlan: "LAUNCH_ASSURANCE",
+            interval: "annual",
+            spendLimitCents: 30,
+            currentPeriodStart: new Date("2026-08-01T00:00:00Z"),
+            currentPeriodEnd: new Date("2027-08-01T00:00:00Z"),
+            updatedAt: new Date(),
+          },
+        ]),
+      },
+      usageRecord: {
+        findUnique: vi.fn(
+          async ({ where }) =>
+            receipts.find((receipt) => receipt.idempotencyKey === where.idempotencyKey) ?? null
+        ),
+        findMany: vi.fn(async ({ where }) =>
+          receipts.filter((receipt) => receipt.cycleStart >= where.cycleStart.gte)
+        ),
+        create: vi.fn(async ({ data }) => {
+          const receipt = { id: `receipt-${receipts.length}`, ...data }
+          receipts.push(receipt)
+          return receipt
+        }),
+      },
+    }
+    withAccountRLSMock.mockImplementation((_accountId, callback) => callback(tx))
+    expect(await debitOverage({ ...input, minutes: 2 })).toMatchObject({
+      debited: true,
+      minutes: 2,
+    })
+    expect(await debitOverage({ ...input, scanId: "scan_2", minutes: 1 })).toMatchObject({
+      debited: false,
+      minutes: 0,
+      reason: "spend_limit_reached",
+    })
+    expect(receipts).toHaveLength(1)
+    expect(receipts[0]?.cycleStart).toEqual(new Date("2026-09-01T00:00:00Z"))
+  })
+
   it("serializes the debit and returns a partial debit at the spend limit", async () => {
     const result = await debitOverage({ ...input, minutes: 3 })
 

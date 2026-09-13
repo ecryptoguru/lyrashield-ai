@@ -205,8 +205,13 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       return
     }
 
-    // Relay administration: audit retrieval + grant revocation (admin secret).
-    if (relay && (reqUrl.startsWith("/v1/audit/") || reqUrl.startsWith("/v1/revoke/"))) {
+    // Relay administration: grant admission, audit retrieval and revocation.
+    if (
+      relay &&
+      (reqUrl.startsWith("/v1/audit/") ||
+        reqUrl.startsWith("/v1/revoke/") ||
+        reqUrl.startsWith("/v1/register/"))
+    ) {
       if (!isAuthorized(request.headers, token)) {
         sendJson(response, 401, { ok: false, reason: "request_failed", detail: "Unauthorized" })
         return
@@ -214,6 +219,16 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       const scanId = reqUrl.split("/")[3] ?? ""
       if (!/^[a-zA-Z0-9_-]{1,128}$/.test(scanId)) {
         sendJson(response, 400, { ok: false, reason: "invalid_response", detail: "bad scanId" })
+        return
+      }
+      if (reqUrl.startsWith("/v1/register/")) {
+        if (request.method !== "POST") {
+          sendJson(response, 405, { ok: false, reason: "method_not_allowed" })
+          return
+        }
+        const grant = request.headers["x-lyra-relay-grant"]
+        const result = relay.register(scanId, typeof grant === "string" ? grant : undefined)
+        sendJson(response, result.ok ? 200 : 403, result)
         return
       }
       if (reqUrl.startsWith("/v1/revoke/")) {

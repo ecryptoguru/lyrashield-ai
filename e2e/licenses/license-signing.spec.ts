@@ -10,8 +10,8 @@ import { signLicense, verifyLicense, canonicalJSON, type LicenseFile } from "@ly
  */
 
 const { publicKey, privateKey } = generateKeyPairSync("ed25519")
-const publicKeyPem = publicKey.export({ type: "spki", format: "pem" })
-const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" })
+const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString()
+const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString()
 
 const SIGNING_KEY_ID = "test-key-v1"
 
@@ -80,7 +80,7 @@ test.describe("License signing and verification", () => {
 
   test("verification with wrong public key fails", () => {
     const { publicKey: wrongKey } = generateKeyPairSync("ed25519")
-    const wrongPem = wrongKey.export({ type: "spki", format: "pem" })
+    const wrongPem = wrongKey.export({ type: "spki", format: "pem" }).toString()
 
     const payload = makePayload()
     const licenseFile = signLicense(payload, privateKeyPem, SIGNING_KEY_ID, "1.0.0")

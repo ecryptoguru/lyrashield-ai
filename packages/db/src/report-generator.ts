@@ -1029,15 +1029,16 @@ export function generateReportHTML(data: ReportData): string {
       ? `<div class="section"><h2>Standards Coverage</h2>
         <p style="color:#4b5563;font-size:13px;margin-bottom:12px;">
           Per-category evidence states computed from this scan's coverage receipts and findings.
-          "Evaluated" means a mapped scanner produced evidence; "attestation" marks controls no
-          scanner can observe; "not evaluated" means nothing ran that covers the category.
+          "Evaluated" means a mapped scanner produced evidence; "not evaluated" means nothing
+          ran that covers the category. Organizational attestation can still be required
+          when scanner evidence exists; it is not discharged by an evaluated state.
         </p>
         ${standardsViews
           .map(
             (
               view
             ) => `<h3 style="font-size:13px;font-weight:650;margin:14px 0 6px;">${escapeHtml(view.name)} <span style="color:#6b7280;font-weight:400;">${escapeHtml(view.version)}</span>${view.badge ? ` <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;">${escapeHtml(view.badge)}</span>` : ""}</h3>
-            <p style="font-size:12px;color:#6b7280;margin-bottom:6px;">${view.evaluated} evaluated · ${view.requiresAttestation} require attestation · ${view.notEvaluated} not evaluated${view.violationSignals > 0 ? ` · <strong style="color:#b91c1c;">${view.violationSignals} violation signal${view.violationSignals === 1 ? "" : "s"}</strong>` : ""}</p>
+            <p style="font-size:12px;color:#6b7280;margin-bottom:6px;">${view.evaluated} evaluated · ${view.requiresAttestation} require attestation (including evaluated controls) · ${view.notEvaluated} not evaluated${view.violationSignals > 0 ? ` · <strong style="color:#b91c1c;">${view.violationSignals} violation signal${view.violationSignals === 1 ? "" : "s"}</strong>` : ""}</p>
             <table>
               ${view.categories
                 .map(
@@ -1054,7 +1055,7 @@ export function generateReportHTML(data: ReportData): string {
                         : cat.state === "requires-attestation"
                           ? "background:#fef3c7;color:#92400e;"
                           : "background:#f3f4f6;color:#6b7280;"
-                    }">${cat.state === "evaluated" ? (cat.violationSignals > 0 ? `evaluated · ${cat.violationSignals} signal${cat.violationSignals === 1 ? "" : "s"}` : cat.limited ? "evaluated · partial" : "evaluated") : cat.state === "requires-attestation" ? "requires attestation" : "not evaluated"}</span></td>
+                    }">${cat.state === "evaluated" ? (cat.violationSignals > 0 ? `evaluated · ${cat.violationSignals} signal${cat.violationSignals === 1 ? "" : "s"}` : cat.limited ? "evaluated · partial" : "evaluated") : cat.state === "requires-attestation" ? "requires attestation" : "not evaluated"}</span>${cat.attestable && cat.state !== "requires-attestation" ? ' <span style="color:#92400e;">attestation required</span>' : ""}</td>
                   </tr>`
                 )
                 .join("")}

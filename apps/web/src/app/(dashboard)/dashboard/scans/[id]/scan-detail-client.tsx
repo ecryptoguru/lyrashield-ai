@@ -92,6 +92,7 @@ interface ScanData {
         state: "evaluated" | "requires-attestation" | "not-evaluated"
         violationSignals: number
         limited?: boolean
+        attestable?: boolean
       }>
     }>
   }
@@ -1170,7 +1171,8 @@ export function ScanDetailClient({
                         </div>
                         <p className="text-muted-foreground mt-1 text-xs">
                           {view.evaluated} evaluated · {view.requiresAttestation} require
-                          attestation · {view.notEvaluated} not evaluated
+                          attestation (including evaluated controls) · {view.notEvaluated} not
+                          evaluated
                           {view.violationSignals > 0 &&
                             ` · ${view.violationSignals} violation signal${view.violationSignals === 1 ? "" : "s"}`}
                           {view.categories.some((c) => c.limited) && " · † partial coverage"}
@@ -1194,6 +1196,7 @@ export function ScanDetailClient({
                             >
                               {cat.id}
                               {cat.limited ? "†" : ""}
+                              {cat.attestable ? " · attestation required" : ""}
                             </span>
                           ))}
                         </div>

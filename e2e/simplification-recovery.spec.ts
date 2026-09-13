@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 
+// Chromium's experimental execution API is not yet in webmcp-types.
+type ExecutableModelContext = WebMCP.ModelContext & {
+  executeTool?: (tool: WebMCP.RegisteredTool, input: string) => Promise<unknown>
+}
+
 test.use({
   launchOptions: {
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
@@ -132,19 +137,23 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
     expect(available, `Native WebMCP unavailable in ${browser.version()}`).toBe(true)
     await expect
       .poll(() =>
-        page.evaluate(async () => (await document.modelContext.getTools()).map((tool) => tool.name))
+        page.evaluate(async () =>
+          ((await document.modelContext?.getTools()) ?? []).map((tool) => tool.name)
+        )
       )
       .toContain("request_security_scan")
     const names = await page.evaluate(async () =>
-      (await document.modelContext.getTools()).map((tool) => tool.name)
+      ((await document.modelContext?.getTools()) ?? []).map((tool) => tool.name)
     )
     expect(names).toContain("prepare_security_scan")
     expect(names).toContain("request_security_scan")
     const prepared = await page.evaluate(async () => {
-      const tool = (await document.modelContext.getTools()).find(
+      const modelContext = document.modelContext as ExecutableModelContext | undefined
+      if (!modelContext?.executeTool) throw new Error("Native WebMCP execution unavailable")
+      const tool = (await modelContext.getTools()).find(
         (tool) => tool.name === "prepare_security_scan"
       )!
-      return document.modelContext.executeTool(tool, JSON.stringify({ targetName: "Native probe" }))
+      return modelContext.executeTool(tool, JSON.stringify({ targetName: "Native probe" }))
     })
     expect(JSON.stringify(prepared)).toContain("Native probe")
     expect(await prisma.scan.count({ where: { workspaceId } })).toBe(0)
@@ -175,10 +184,12 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
       data: { status: "inactive" },
     })
     const rejected = await page.evaluate(async () => {
-      const tool = (await document.modelContext.getTools()).find(
+      const modelContext = document.modelContext as ExecutableModelContext | undefined
+      if (!modelContext?.executeTool) throw new Error("Native WebMCP execution unavailable")
+      const tool = (await modelContext.getTools()).find(
         (tool) => tool.name === "request_security_scan"
       )!
-      return document.modelContext.executeTool(
+      return modelContext.executeTool(
         tool,
         JSON.stringify({ targetName: "Native probe", requestId: "permission-loss-test" })
       )
