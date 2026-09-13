@@ -81,6 +81,7 @@ export async function hasUnsettledScanIntent(
       where: { id: scanId, workspaceId },
       select: {
         createdById: true,
+        sponsorAccountId: true,
         events: { where: { stage: "billing_settlement_intent" }, select: { metadata: true } },
       },
     })
@@ -94,7 +95,7 @@ export async function hasUnsettledScanIntent(
     ]
     if (!keys.length) return false
     if (!scan?.createdById) return true
-    await bindAccountRLSContext(tx, scan.createdById)
+    await bindAccountRLSContext(tx, scan.sponsorAccountId ?? scan.createdById)
     const receipts = await tx.usageRecord.count({
       where: { workspaceId, kind: "agent_minutes", idempotencyKey: { in: keys } },
     })
@@ -124,10 +125,10 @@ function recordedOverageMinutes(metadata: unknown): number {
 async function resolveScanSponsor(tx: MeterTransaction, workspaceId: string, scanId: string) {
   const scan = await tx.scan.findFirst({
     where: { id: scanId, workspaceId },
-    select: { createdById: true },
+    select: { createdById: true, sponsorAccountId: true },
   })
   if (!scan) throw new Error("settlement_scan_not_found")
-  return scan.createdById
+  return scan.sponsorAccountId ?? scan.createdById
 }
 
 /**

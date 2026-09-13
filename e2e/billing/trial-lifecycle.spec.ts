@@ -3,9 +3,9 @@ import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 
 /**
  * Trial lifecycle through real fixtures:
- *  - a trial account that consumed its 100-minute pool is locked out of new
+ *  - a trial account that consumed its 60-minute pool is locked out of new
  *    scans and sees an upgrade CTA on the billing page;
- *  - a trial account past its 14-day window sees the expiry notice and is
+ *  - a trial account past its 7-day window sees the expiry notice and is
  *    refused at the authoritative POST gate with TRIAL_EXPIRED.
  *
  * Scan execution itself is not exercised here — minute consumption is written
@@ -61,7 +61,7 @@ test.describe("Trial lifecycle", () => {
       where: { id: userId },
       select: { trialStartedAt: true },
     })
-    // Consume the full 100-minute trial pool the way a metered scan does.
+    // Consume the full 60-minute trial pool the way a metered scan does.
     await withWorkspaceRLS(
       workspaceId,
       (tx) =>
@@ -70,7 +70,7 @@ test.describe("Trial lifecycle", () => {
             workspaceId,
             accountId: userId,
             kind: "agent_minutes",
-            quantity: 100,
+            quantity: 60,
             cycleStart: user.trialStartedAt ?? new Date(),
           },
         }),
@@ -108,10 +108,10 @@ test.describe("Trial lifecycle", () => {
     const email = `e2e-trial-expired-${suffix}@example.com`
     const { userId, workspaceId } = await signUpAndCreateWorkspace(page, email, "Trial Expired")
 
-    // Move the trial anchor past the 14-day window.
+    // Move the trial anchor past the 7-day window.
     await prisma.user.update({
       where: { id: userId },
-      data: { trialStartedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
+      data: { trialStartedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) },
     })
 
     const target = await withWorkspaceRLS(workspaceId, (tx) =>

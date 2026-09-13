@@ -7,6 +7,10 @@ import type { Report } from "./generated/prisma"
 import { gatherReportData, parseWebMcpAssurance } from "./report-generator"
 import { getSystemPrisma } from "./system-client"
 import { withWorkspaceRLS } from "./rls"
+import {
+  parseLaunchReportProvenance,
+  type LaunchReportProvenance,
+} from "./launch-report-provenance"
 
 export interface CreateReportParams {
   workspaceId: string
@@ -379,7 +383,10 @@ export async function getShareableReport(
 
   return {
     id: report.id,
-    title: "LyraShield Security Assurance Report",
+    title:
+      report.type === "launch_readiness"
+        ? "LyraShield Launch Readiness Report"
+        : "LyraShield Security Assurance Report",
     type: report.type,
     status: report.status,
     format: report.format,
@@ -411,6 +418,10 @@ const REPORT_LIST_SELECT = {
   shareExpiresAt: true,
   revokedAt: true,
   createdAt: true,
+  // Private issue-time provenance — small JSON, launch_readiness rows only.
+  // This list endpoint is authenticated-only; the shared/public readers never
+  // touch it.
+  provenanceJson: true,
 } as const
 
 export type ReportListItem = Pick<
@@ -425,7 +436,14 @@ export type ReportListItem = Pick<
   | "shareExpiresAt"
   | "revokedAt"
   | "createdAt"
->
+> & {
+  /**
+   * Parsed private provenance for launch_readiness reports (null for other
+   * types or when the stored record predates the binding / is unparseable).
+   * Authenticated consumers only.
+   */
+  provenance: LaunchReportProvenance | null
+}
 
 export async function listReports(
   workspaceId: string,
@@ -450,7 +468,15 @@ export async function listReports(
   )
 
   const hasMore = reports.length > lim
-  const items = hasMore ? reports.slice(0, lim) : reports
+  const rows = hasMore ? reports.slice(0, lim) : reports
+  const items: ReportListItem[] = rows.map((report) => {
+    const { provenanceJson, ...rest } = report
+    return {
+      ...rest,
+      provenance:
+        report.type === "launch_readiness" ? parseLaunchReportProvenance(provenanceJson) : null,
+    }
+  })
   const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
   return { items, nextCursor }

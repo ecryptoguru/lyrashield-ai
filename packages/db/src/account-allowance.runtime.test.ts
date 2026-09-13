@@ -63,7 +63,7 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("account allowance real P
         accountId,
         workspaceId: null,
         kind: "agent_minutes",
-        quantity: 6000,
+        quantity: 4500,
         cycleStart: august,
       },
     })
@@ -80,9 +80,9 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("account allowance real P
     )
     expect(results.filter((r) => r.created)).toHaveLength(1)
     expect(await getUsageBalance(accountId)).toMatchObject({
-      poolMinutes: 6000,
+      poolMinutes: 4500,
       poolConsumed: 0,
-      totalRemaining: 6000,
+      totalRemaining: 4500,
       cycleStart: september,
     })
     expect(await owner.usageRecord.count({ where: { accountId, kind: "agent_minutes" } })).toBe(1)

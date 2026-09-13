@@ -15,21 +15,27 @@ describe("pricing page", () => {
     expect(pricingPage).toContain('setAttribute("aria-pressed"')
   })
 
-  it("matches the canonical repriced catalog (WP1, founder-confirmed 2026-08-29)", () => {
+  it("matches the canonical repriced catalog (WP1, founder-confirmed 2026-08-29; allowances repacked 2026-09-13)", () => {
+    // TRIAL — reduced 2026-09-13: 7 days, 60 one-time minutes
+    expect(CLOUD_PLAN_MAP.TRIAL.agentMinutes).toBe(60)
+    expect(CLOUD_PLAN_MAP.TRIAL.targetCaps).toBe(3)
+    expect(CLOUD_PLAN_MAP.TRIAL.deepAllowed).toBe(false)
+    expect(CLOUD_PLAN_MAP.TRIAL.price.usd).toEqual({ monthly: 0, annual: 0 })
+
     // SCAN line
     expect(CLOUD_PLAN_MAP.STARTER.price.usd).toEqual({ monthly: 29, annual: 295 })
-    expect(CLOUD_PLAN_MAP.STARTER.agentMinutes).toBe(300)
+    expect(CLOUD_PLAN_MAP.STARTER.agentMinutes).toBe(210)
     expect(CLOUD_PLAN_MAP.STARTER.targetCaps).toBe(5)
     expect(CLOUD_PLAN_MAP.STARTER.deepAllowed).toBe(false)
     expect(CLOUD_PLAN_MAP.PRO.price.usd).toEqual({ monthly: 99, annual: 950 })
-    expect(CLOUD_PLAN_MAP.PRO.agentMinutes).toBe(1200)
+    expect(CLOUD_PLAN_MAP.PRO.agentMinutes).toBe(850)
     expect(CLOUD_PLAN_MAP.PRO.targetCaps).toBe(15)
     expect(CLOUD_PLAN_MAP.PRO.deepAllowed).toBe(true)
 
     // LAUNCH ASSURANCE line — self-serve premium tier
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.price.usd).toEqual({ monthly: 499, annual: 4188 })
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.price.inr).toEqual({ monthly: 49_900, annual: 418_800 })
-    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.agentMinutes).toBe(6000)
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.agentMinutes).toBe(4500)
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.targetCaps).toBe(50)
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.selfServe).toBe(true)
     expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.deepAllowed).toBe(true)
@@ -42,5 +48,50 @@ describe("pricing page", () => {
     // Team is removed from the catalog
     expect("TEAM" in CLOUD_PLAN_MAP).toBe(false)
     expect("AGENCY" in CLOUD_PLAN_MAP).toBe(false)
+  })
+
+  it("states agent-native surfaces on each self-serve paid card", () => {
+    // Trial availability is covered by the shared-capabilities note below.
+    const SURFACES_LINE = "CLI, GitHub Action and MCP server access"
+    expect(CLOUD_PLAN_MAP.STARTER.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.PRO.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(SURFACES_LINE)
+    expect(CLOUD_PLAN_MAP.TRIAL.features).not.toContain(SURFACES_LINE)
+  })
+
+  it("differentiates Agency by its enforced limits and overage", () => {
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features).toContain(
+      "Overage at $0.15/min with a user-set spend limit"
+    )
+    expect(CLOUD_PLAN_MAP.PRO.features.join(" ")).not.toContain("Overage")
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features.join(" ")).not.toContain("merges blocked")
+    expect(CLOUD_PLAN_MAP.LAUNCH_ASSURANCE.features.join(" ")).not.toContain("WebMCP Assurance")
+  })
+
+  it("uses workspace-scoped evidence wording on Starter", () => {
+    expect(CLOUD_PLAN_MAP.STARTER.features).toContain("Workspace evidence records")
+    expect(CLOUD_PLAN_MAP.STARTER.features).not.toContain("Evidence Vault access")
+  })
+
+  it("shows Local as a blurred, non-purchasable future launch", () => {
+    expect(pricingPage).toContain("Local is launching later")
+    expect(pricingPage).toContain('aria-hidden="true" inert')
+    expect(pricingPage).toContain("blur-sm")
+    expect(pricingPage).not.toContain("/api/billing/local-availability")
+    expect(pricingPage).not.toContain("/buy/local")
+    expect(pricingPage).toContain("formatUSD(localLaunch.priceUsd)")
+    expect(pricingPage).toContain("formatINR(localLaunch.priceInr!)")
+  })
+
+  it("states shared capabilities and the required CI setup without a plan-exclusive gate claim", () => {
+    expect(pricingPage).toContain("Included across plans")
+    expect(pricingPage).toContain("The free GitHub Action runs scan-level SARIF")
+    expect(pricingPage).toContain("without a LyraShield account or API key")
+    expect(pricingPage).toContain("Eligible workspace members on every plan")
+    expect(pricingPage).toContain(
+      "versioned launch verdicts, launch reports and shareable scorecards"
+    )
+    expect(pricingPage).toContain("require its check in your repository settings")
+    expect(pricingPage).not.toContain("Launch Assurance tier's gate")
   })
 })

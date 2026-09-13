@@ -8,8 +8,9 @@ import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { canGrantRole } from "@lyrashield/auth"
 import type { MemberRole } from "@lyrashield/db"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { formatDate } from "@/lib/date-format"
+import { LocalTime } from "@/components/local-time"
 import { PageHeader } from "@/components/page-header"
+import { EmailText } from "@/components/email-text"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
 interface Member {
@@ -79,6 +80,8 @@ export function TeamClient({
   initialData,
   actorRole = "VIEWER",
   canManage = false,
+  canInvitePlan = false,
+  seatLimit = 1,
   canRemove = false,
   canUpdateRole = false,
 }: {
@@ -86,6 +89,8 @@ export function TeamClient({
   initialData?: { members: Member[]; invitations: Invitation[] }
   actorRole?: MemberRole
   canManage?: boolean
+  canInvitePlan?: boolean
+  seatLimit?: number
   canRemove?: boolean
   canUpdateRole?: boolean
 }) {
@@ -99,6 +104,7 @@ export function TeamClient({
   const [error, setError] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const seatsUsed = members.length + invitations.length
   const roles: MemberRole[] = [
     "OWNER",
     "ADMIN",
@@ -183,9 +189,13 @@ export function TeamClient({
     <div>
       <PageHeader
         title="Team Members"
-        description="Every active member can run scans, manage findings, create reports, and open fix PRs. Roles control administrative access."
+        description={
+          canInvitePlan
+            ? "Agency members share the buyer's minute pool. Roles control workspace access."
+            : "Starter and Pro include one workspace member. Upgrade to Agency for a five-member team."
+        }
         action={
-          canManage ? (
+          canManage && canInvitePlan && seatsUsed < seatLimit ? (
             <Button onClick={() => setShowInvite(!showInvite)}>
               <UserPlus className="h-4 w-4" aria-hidden="true" />
               Invite Member
@@ -193,6 +203,10 @@ export function TeamClient({
           ) : undefined
         }
       />
+      <p className="text-muted-foreground mb-4 text-sm">
+        {seatsUsed} of {seatLimit} workspace {seatLimit === 1 ? "seat" : "seats"} in use, including
+        pending invitations.
+      </p>
       {error && !showInvite && (
         <p role="alert" className="text-destructive mb-4 text-sm">
           {error}
@@ -294,7 +308,9 @@ export function TeamClient({
             {members.map((m) => (
               <tr key={m.id} className="border-b last:border-0">
                 <td className="px-4 py-3 font-medium">{m.name}</td>
-                <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">{m.email}</td>
+                <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
+                  <EmailText value={m.email} />
+                </td>
                 <td className="px-4 py-3">
                   <Badge
                     variant={m.role === "OWNER" ? "default" : m.role === "ADMIN" ? "info" : "muted"}
@@ -303,7 +319,7 @@ export function TeamClient({
                   </Badge>
                 </td>
                 <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
-                  {formatDate(m.createdAt)}
+                  <LocalTime value={m.createdAt} />
                 </td>
                 {(canRemove || canUpdateRole) && (
                   <td className="px-4 py-3">
@@ -392,14 +408,16 @@ export function TeamClient({
             <tbody>
               {invitations.map((inv) => (
                 <tr key={inv.id} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-medium">{inv.email}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <EmailText value={inv.email} />
+                  </td>
                   <td className="px-4 py-3">
                     <Badge variant="muted">{inv.role}</Badge>
                   </td>
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" aria-hidden="true" />
-                      {formatDate(inv.expiresAt)}
+                      <LocalTime value={inv.expiresAt} />
                     </span>
                   </td>
                   {canManage && (

@@ -19,6 +19,11 @@ vi.mock("@lyrashield/auth", () => ({
 vi.mock("@lyrashield/billing", () => ({
   evaluateScanEntitlement: vi.fn(),
   isTrialAvailable: vi.fn(),
+  resolveWorkspaceScanSponsor: vi.fn(async (_workspaceId: string, actorId: string) => ({
+    accountId: actorId,
+    agency: false,
+    agencyActive: false,
+  })),
   // Sponsor account billing is the plan source now; the tests' existing
   // `workspace.findUnique → { plan }` fixtures stand in for it.
   resolveAccountBilling: vi.fn(async () => {
@@ -193,7 +198,7 @@ describe("GET /api/scans/eligibility", () => {
     expect((await response.json()).data).toMatchObject({
       allowed: false,
       code: "TRIAL_AVAILABLE",
-      message: "Start your 14-day trial to receive 100 agent-minutes.",
+      message: "Start your 7-day trial to receive 60 agent-minutes.",
     })
     expect(isTrialAvailable).toHaveBeenCalledWith("ws-1", "user-1")
     vi.mocked(isTrialAvailable).mockResolvedValue(false)

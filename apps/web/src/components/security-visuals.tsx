@@ -18,7 +18,7 @@ export function MetricCard({
 }: {
   label: string
   value: string | number
-  detail: string
+  detail: React.ReactNode
   icon: LucideIcon
 }) {
   return (

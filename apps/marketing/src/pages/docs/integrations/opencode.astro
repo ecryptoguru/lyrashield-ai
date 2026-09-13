@@ -49,7 +49,7 @@ const jsonLd: unknown[] = [
   <h1>OpenCode</h1>
   <p>
     OpenCode reads MCP servers from <code>opencode.json</code> in your project root. The root key
-    is <code>mcp</code> (not <code>mcpServers</code>). Local entries use a command array and
+    is <code>mcp</code> (not <code>mcpServers</code>). Local entries use a command array and{" "}
     <code>environment</code>; remote entries use <code>type: "remote"</code>.
   </p>
 
@@ -72,7 +72,7 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>Version binding:</strong> OpenCode's current documentation uses a top-level <code>mcp</code>
-    object and per-server <code>enabled</code> flag. Record the client version with runtime evidence
+    {" "}object and per-server <code>enabled</code> flag. Record the client version with runtime evidence
     and revalidate this schema after upgrades.
   </div>
 
@@ -99,8 +99,8 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Local stdio requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The
-    <code>@lyrashield/mcp</code> package is published on npm, so
+    <strong>Local stdio requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The{" "}
+    <code>@lyrashield/mcp</code> package is published on npm, so{" "}
     <code>npx -y @lyrashield/mcp@0.2.8</code> resolves directly.
   </div>
 </DocsLayout>

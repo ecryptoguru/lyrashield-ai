@@ -40,6 +40,17 @@ function response(body: string, contentType: string): Response {
 }
 
 describe("built blog crawler helpers", () => {
+  it.each([
+    '<meta name="robots" content="noindex, follow">',
+    '<meta name="googlebot" content="NOINDEX">',
+    '<meta name="robots" content="none">',
+  ])("rejects excluded pages in the sitemap: %s", (meta) => {
+    const html = articleHtml().replace("</head>", `${meta}</head>`)
+    expect(validatePageFacts(articleUrl, inspectHtml(html, articleUrl))).toContain(
+      `${articleUrl}: sitemap page declares noindex`
+    )
+  })
+
   it("parses sitemap locations and strips query data from reports", () => {
     expect(
       extractSitemapLocations(`<?xml version="1.0"?><urlset>

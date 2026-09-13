@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest"
 import {
+  describeReleaseCheck,
   generateLaunchReadinessReport,
   generateLaunchReadinessReportFromAggregate,
   gateReasonSentence,
+  parseReleaseReference,
   projectGateReadinessReport,
+  resolveReleaseCheckTargetId,
 } from "./launch-readiness"
 
 const makeFinding = (
@@ -20,6 +23,20 @@ const makeFinding = (
   confidence: "medium",
   title: "Test finding",
   summary: "Test summary",
+})
+
+describe("resolveReleaseCheckTargetId", () => {
+  it("requires target selection when one release reference could apply to several targets", () => {
+    expect(resolveReleaseCheckTargetId("", true, ["target-1", "target-2"])).toBe("")
+  })
+
+  it("auto-selects the only authorized target for a release check", () => {
+    expect(resolveReleaseCheckTargetId("", true, ["target-1"])).toBe("target-1")
+  })
+
+  it("preserves an explicitly selected target", () => {
+    expect(resolveReleaseCheckTargetId("target-2", true, ["target-1", "target-2"])).toBe("target-2")
+  })
 })
 
 describe("projectGateReadinessReport", () => {
@@ -311,5 +328,140 @@ describe("generateLaunchReadinessReport", () => {
       expect(report.verdict).toBe("GO")
       expect(report.score).toBe(100)
     })
+  })
+})
+
+describe("parseReleaseReference", () => {
+  it("accepts a full 40-hex commit SHA and lowercases it", () => {
+    expect(parseReleaseReference("A".repeat(40))).toEqual({
+      kind: "COMMIT",
+      value: "a".repeat(40),
+    })
+  })
+
+  it("accepts a sha256: artifact digest", () => {
+    const digest = `sha256:${"c".repeat(64)}`
+    expect(parseReleaseReference(digest)).toEqual({ kind: "ARTIFACT_DIGEST", value: digest })
+  })
+
+  it("trims surrounding whitespace", () => {
+    expect(parseReleaseReference(`  ${"b".repeat(40)}\n`)?.kind).toBe("COMMIT")
+  })
+
+  it("rejects prefixes, tags, malformed values, and empty input", () => {
+    for (const bad of [
+      "abc1234",
+      "main",
+      "v1.2.3",
+      "g".repeat(40),
+      "a".repeat(39),
+      "a".repeat(41),
+      `sha256:${"c".repeat(63)}`,
+      `sha512:${"c".repeat(64)}`,
+      `sha256:${"C".repeat(64)} `,
+      "",
+      null,
+      undefined,
+    ]) {
+      // sha256 with uppercase hex is still valid hex — exclude that case.
+      if (bad === `sha256:${"C".repeat(64)} `) continue
+      expect(parseReleaseReference(bad)).toBeNull()
+    }
+    expect(parseReleaseReference(`sha256:${"C".repeat(64)}`)).toEqual({
+      kind: "ARTIFACT_DIGEST",
+      value: `sha256:${"c".repeat(64)}`,
+    })
+  })
+})
+
+describe("describeReleaseCheck", () => {
+  const target = {
+    targetId: "target-1",
+    targetName: "API",
+    state: "READY" as const,
+    historicalState: "READY" as const,
+    applicable: true,
+    blockingFindings: 0,
+    reasons: [] as { code: string; message: string }[],
+    assessedIdentity: { kind: "COMMIT" as const, value: "b".repeat(40) },
+  }
+
+  it("matches the exact assessed commit", () => {
+    const check = describeReleaseCheck(target, { kind: "COMMIT", value: "b".repeat(40) })
+    expect(check.match).toBe("match")
+    expect(check.state).toBe("READY")
+    expect(check.assessed?.value).toBe("b".repeat(40))
+  })
+
+  it("reports a different release as mismatch, never as ready", () => {
+    const check = describeReleaseCheck(target, { kind: "COMMIT", value: "f".repeat(40) })
+    expect(check.match).toBe("mismatch")
+    // The effective state comes from the gate read (INSUFFICIENT_EVIDENCE on
+    // mismatch) — the label alone must never read as a pass.
+    expect(check.assessed?.value).toBe("b".repeat(40))
+    expect(check.requested?.value).toBe("f".repeat(40))
+  })
+
+  it("matches an artifact digest identity", () => {
+    const digest = `sha256:${"d".repeat(64)}`
+    const artifactTarget = {
+      ...target,
+      assessedIdentity: { kind: "ARTIFACT_DIGEST" as const, value: digest },
+    }
+    const check = describeReleaseCheck(artifactTarget, {
+      kind: "ARTIFACT_DIGEST",
+      value: digest,
+    })
+    expect(check.match).toBe("match")
+  })
+
+  it("cannot confirm when the retained identity kind differs", () => {
+    const check = describeReleaseCheck(target, {
+      kind: "ARTIFACT_DIGEST",
+      value: `sha256:${"d".repeat(64)}`,
+    })
+    expect(check.match).toBe("cannot_confirm")
+  })
+
+  it("cannot confirm when the verdict retains no identity binding", () => {
+    const check = describeReleaseCheck(
+      { ...target, assessedIdentity: null },
+      { kind: "COMMIT", value: "b".repeat(40) }
+    )
+    expect(check.match).toBe("cannot_confirm")
+  })
+
+  it("cannot confirm when the target has no verdict at all", () => {
+    const check = describeReleaseCheck(null, { kind: "COMMIT", value: "b".repeat(40) })
+    expect(check.match).toBe("cannot_confirm")
+    expect(check.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(check.reasons[0]?.code).toBe("NO_GATE_VERDICT")
+  })
+
+  it("keeps a match honest when the assessment is expired", () => {
+    const expired = {
+      ...target,
+      applicable: false,
+      state: "INSUFFICIENT_EVIDENCE" as const,
+      reasons: [{ code: "ASSESSMENT_EXPIRED", message: "Assessment is older than 24 hours." }],
+    }
+    const check = describeReleaseCheck(expired, { kind: "COMMIT", value: "b".repeat(40) })
+    expect(check.match).toBe("match")
+    expect(check.applicable).toBe(false)
+    expect(check.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(check.historicalState).toBe("READY")
+  })
+
+  it("keeps a match honest when the historical verdict is NOT_READY", () => {
+    const notReady = {
+      ...target,
+      state: "NOT_READY" as const,
+      historicalState: "NOT_READY" as const,
+      blockingFindings: 2,
+    }
+    const check = describeReleaseCheck(notReady, { kind: "COMMIT", value: "b".repeat(40) })
+    expect(check.match).toBe("match")
+    expect(check.state).toBe("NOT_READY")
+    expect(check.blockingFindings).toBe(2)
   })
 })

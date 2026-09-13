@@ -21,7 +21,8 @@ import {
   ScoreTrend,
   SeverityDonut,
 } from "@/components/security-visuals"
-import { formatDate, formatDateTime } from "@/lib/date-format"
+import { formatDate } from "@/lib/date-format"
+import { LocalTime } from "@/components/local-time"
 import { HOME_LABEL } from "@/lib/terminology"
 import {
   getCachedSession,
@@ -261,11 +262,15 @@ export default async function DashboardPage() {
                 : "—"
           }
           detail={
-            overview.activeScan
-              ? `${overview.activeScan.targetName ?? "Workspace"} scan in progress`
-              : latestRun
-                ? `Last run ${formatDateTime(latestRun.createdAt)}`
-                : "No scan activity yet"
+            overview.activeScan ? (
+              `${overview.activeScan.targetName ?? "Workspace"} scan in progress`
+            ) : latestRun ? (
+              <>
+                Last run <LocalTime withTime value={latestRun.createdAt} />
+              </>
+            ) : (
+              "No scan activity yet"
+            )
           }
           icon={Activity}
         />
@@ -303,7 +308,8 @@ export default async function DashboardPage() {
                       {run.targetName ?? "Workspace scan"}
                     </span>
                     <span className="text-muted-foreground block text-xs">
-                      {formatDateTime(run.createdAt)} · {run.findingCount} retained finding
+                      <LocalTime withTime value={run.createdAt} /> · {run.findingCount} retained
+                      finding
                       {run.findingCount === 1 ? "" : "s"} on record
                     </span>
                   </span>

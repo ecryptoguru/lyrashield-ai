@@ -16,7 +16,7 @@ LyraShield AI is live in **open beta with open registration** — anyone can cre
 - Marketing and methodology: [lyrashieldai.com](https://lyrashieldai.com)
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
 - Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com)
-- User guide: [userguide.md](userguide.md)
+- User guide: [docs/user-guide.md](docs/user-guide.md)
 - LyraShield Local/Desktop: the BYOK desktop implementation supports a one-time 1-year license with perpetual fallback and customer-supplied ChatGPT/OpenAI or Azure OpenAI credentials. Public production distribution remains a separate signing and release gate.
 
 The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease. The current Standard/Luna acceptance is complete; broader exposure still requires the evidence-storage, monitoring/capacity, failure-recovery, and separate authorized Deep/Terra gates in `PRD.md`.
@@ -170,10 +170,10 @@ See [PRD release status](PRD.md#9-release-status) for the current deployment and
 - [AGENTS.md](AGENTS.md) — current implementation state, execution queue, and non-negotiable rules for anyone (human or AI) working in this codebase.
 - [codebase.md](codebase.md) — the architecture and implementation map.
 - [PRD.md](PRD.md) — product strategy and the release-readiness backlog.
-- [Phase2.md](Phase2.md) — verbatim Phase 2 and future-roadmap archive from the original PRD.
+- [docs/litepaper.md](docs/litepaper.md) — executive overview.
+- [docs/whitepaper.md](docs/whitepaper.md) — product, evidence model, commercial model, claims boundary, roadmap.
+- [docs/yellowpaper.md](docs/yellowpaper.md) — technical specification.
 - [docs/README.md](docs/README.md) — documentation ownership, categories, and retention policy.
-- [product.md](product.md) — current positioning and founder decisions.
-- [monetization.md](monetization.md) — business and pricing plan (plans, minute packs, affiliate payouts).
 - The former desktop-release and license-signing runbooks were removed on 2026-09-09; git history is the recovery path.
 
 ## License

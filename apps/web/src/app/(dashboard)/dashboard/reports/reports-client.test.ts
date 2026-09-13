@@ -9,4 +9,15 @@ describe("report share state", () => {
     expect(source).toContain("setShareUrl(null)")
     expect(source).toContain("setCopied(null)")
   })
+
+  it("uses separate inline-view and attachment download URLs", () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const source = readFileSync(new URL("./reports-client.tsx", import.meta.url), "utf8")
+    expect(source).toContain(
+      "href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}"
+    )
+    expect(source).toContain(
+      "href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}&download=1`}"
+    )
+  })
 })

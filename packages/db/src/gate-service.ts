@@ -15,6 +15,7 @@ import {
   evaluateGateApplicability,
   requiredScannersForTarget,
   isTargetTypeCovered,
+  type GateApplicabilityResult,
   type GateAssessmentSnapshot,
   type GateEvidenceInput,
   type GateVerdictResult,
@@ -342,7 +343,7 @@ export async function getLatestGateVerdict(workspaceId: string, targetId: string
   })
 }
 
-function parseAssessmentSnapshot(value: unknown): GateAssessmentSnapshot | null {
+export function parseAssessmentSnapshot(value: unknown): GateAssessmentSnapshot | null {
   if (!value || typeof value !== "object") return null
   const snapshot = value as Partial<GateAssessmentSnapshot>
   if (
@@ -369,6 +370,93 @@ export interface GateApplicabilityOptions {
 }
 
 /**
+ * Evaluate one persisted verdict for applicability inside the caller's
+ * transaction. Shared by the single-target current read and launch-report
+ * issuance so both answer "is THIS verdict still usable" identically: the
+ * reads (policy, newer-attempt, evidence drift) run on `tx`, and the caller
+ * owns the observation point via `options.now`.
+ *
+ * The caller's transaction decides consistency: under the default isolation
+ * each statement sees its own committed snapshot; a stronger isolation level
+ * (e.g. RepeatableRead) makes the whole evaluation one observation.
+ */
+export async function evaluateVerdictApplicability(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  verdict: {
+    targetId: string
+    state: string
+    evaluatedAt: Date
+    assessmentSnapshot: unknown
+  },
+  options: GateApplicabilityOptions = {}
+): Promise<GateApplicabilityResult> {
+  const snapshot = parseAssessmentSnapshot(verdict.assessmentSnapshot)
+  const policy = snapshot
+    ? await tx.policy.findFirst({
+        where: { id: snapshot.policyId, workspaceId, deletedAt: null },
+        select: {
+          id: true,
+          workspaceId: true,
+          name: true,
+          description: true,
+          scanWindow: true,
+          blockedPaths: true,
+          allowedDomains: true,
+          rateLimit: true,
+          networkEgressPolicy: true,
+          destructiveTestsAllowed: true,
+          approvalRequired: true,
+          maxBudgetUsd: true,
+          maxDurationMinutes: true,
+          piiRedactionEnabled: true,
+          evidenceRetentionDays: true,
+        },
+      })
+    : null
+  const [newerAssessmentAttempt, findingChanged, verificationChanged] = snapshot
+    ? await Promise.all([
+        tx.scan.findFirst({
+          where: {
+            workspaceId,
+            targetId: verdict.targetId,
+            deletedAt: null,
+            id: { not: snapshot.scanId },
+            createdAt: { gt: new Date(snapshot.completedAtMs) },
+          },
+          select: { id: true },
+        }),
+        tx.finding.findFirst({
+          where: {
+            workspaceId,
+            targetId: verdict.targetId,
+            deletedAt: null,
+            updatedAt: { gt: verdict.evaluatedAt },
+          },
+          select: { id: true },
+        }),
+        tx.findingVerification.findFirst({
+          where: {
+            workspaceId,
+            createdAt: { gt: verdict.evaluatedAt },
+            finding: { targetId: verdict.targetId, deletedAt: null },
+          },
+          select: { id: true },
+        }),
+      ])
+    : [null, null, null]
+  return evaluateGateApplicability(verdict.state as GateVerdictResult["state"], {
+    snapshot,
+    expectedCommit: options.expectedCommit,
+    expectedArtifactDigest: options.expectedArtifactDigest,
+    policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
+    nowMs: (options.now ?? new Date()).getTime(),
+    newerAssessmentAttempt: Boolean(newerAssessmentAttempt),
+    evidenceChanged: Boolean(findingChanged || verificationChanged),
+  })
+}
+
+/**
  * Reads immutable verdict history and applies it to the release identity being
  * enforced. A failed current read is deliberately an error, never cached READY.
  */
@@ -384,72 +472,7 @@ export async function getCurrentGateVerdict(
     })
     if (!historical) return null
 
-    const snapshot = parseAssessmentSnapshot(historical.assessmentSnapshot)
-    const policy = snapshot
-      ? await tx.policy.findFirst({
-          where: { id: snapshot.policyId, workspaceId, deletedAt: null },
-          select: {
-            id: true,
-            workspaceId: true,
-            name: true,
-            description: true,
-            scanWindow: true,
-            blockedPaths: true,
-            allowedDomains: true,
-            rateLimit: true,
-            networkEgressPolicy: true,
-            destructiveTestsAllowed: true,
-            approvalRequired: true,
-            maxBudgetUsd: true,
-            maxDurationMinutes: true,
-            piiRedactionEnabled: true,
-            evidenceRetentionDays: true,
-          },
-        })
-      : null
-    const [newerAssessmentAttempt, findingChanged, verificationChanged] = snapshot
-      ? await Promise.all([
-          tx.scan.findFirst({
-            where: {
-              workspaceId,
-              targetId,
-              deletedAt: null,
-              id: { not: snapshot.scanId },
-              createdAt: { gt: new Date(snapshot.completedAtMs) },
-            },
-            select: { id: true },
-          }),
-          tx.finding.findFirst({
-            where: {
-              workspaceId,
-              targetId,
-              deletedAt: null,
-              updatedAt: { gt: historical.evaluatedAt },
-            },
-            select: { id: true },
-          }),
-          tx.findingVerification.findFirst({
-            where: {
-              workspaceId,
-              createdAt: { gt: historical.evaluatedAt },
-              finding: { targetId, deletedAt: null },
-            },
-            select: { id: true },
-          }),
-        ])
-      : [null, null, null]
-    const applicability = evaluateGateApplicability(
-      historical.state as GateVerdictResult["state"],
-      {
-        snapshot,
-        expectedCommit: options.expectedCommit,
-        expectedArtifactDigest: options.expectedArtifactDigest,
-        policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
-        nowMs: (options.now ?? new Date()).getTime(),
-        newerAssessmentAttempt: Boolean(newerAssessmentAttempt),
-        evidenceChanged: Boolean(findingChanged || verificationChanged),
-      }
-    )
+    const applicability = await evaluateVerdictApplicability(tx, workspaceId, historical, options)
 
     return {
       schemaVersion: "lyrashield-gate-response/2.0.0",

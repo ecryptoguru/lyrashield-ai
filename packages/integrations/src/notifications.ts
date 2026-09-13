@@ -221,11 +221,7 @@ function getSeverityColor(type: string): string {
 }
 
 function getSeverityColorDecimal(type: string): number {
-  if (type.includes("critical")) return 0xdc2626
-  if (type.includes("error") || type.includes("failed")) return 0xea580c
-  if (type.includes("warning")) return 0xca8a04
-  if (type.includes("success") || type.includes("completed")) return 0x16a34a
-  return 0x2563eb
+  return Number.parseInt(getSeverityColor(type).slice(1), 16)
 }
 
 function escapeHtml(text: string): string {

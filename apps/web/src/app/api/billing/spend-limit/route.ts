@@ -61,7 +61,7 @@ async function post(request: Request) {
     ) {
       return apiError(
         "PLAN_NOT_ELIGIBLE",
-        "Spend limits are only available on paid Launch Assurance subscriptions.",
+        "Spend limits are only available on paid Agency subscriptions.",
         403
       )
     }

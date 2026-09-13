@@ -83,7 +83,7 @@ describe("enum labels", () => {
     expect(getWorkspacePlanLabel("TRIAL")).toBe("Trial")
     expect(getWorkspacePlanLabel("STARTER")).toBe("Starter")
     expect(getWorkspacePlanLabel("PRO")).toBe("Pro")
-    expect(getWorkspacePlanLabel("LAUNCH_ASSURANCE")).toBe("Launch Assurance")
+    expect(getWorkspacePlanLabel("LAUNCH_ASSURANCE")).toBe("Agency")
     expect(getWorkspacePlanLabel("ENTERPRISE")).toBe("Enterprise")
   })
 })
@@ -95,7 +95,7 @@ describe("describeEnum", () => {
     expect(describeEnum("LAUNCH_REVIEW")).toBe("Release check")
     expect(describeEnum("STOPPED_BUDGET")).toBe("Stopped by budget")
     expect(describeEnum("STAGING")).toBe("Staging")
-    expect(describeEnum("LAUNCH_ASSURANCE")).toBe("Launch Assurance")
+    expect(describeEnum("LAUNCH_ASSURANCE")).toBe("Agency")
   })
 
   it("returns undefined for values no family knows", () => {

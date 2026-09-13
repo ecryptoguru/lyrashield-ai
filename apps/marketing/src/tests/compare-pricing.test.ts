@@ -11,7 +11,7 @@ describe("comparison pricing ladder", () => {
     const launch = getPlan("LAUNCH_ASSURANCE")
     const enterprise = getPlan("ENTERPRISE")
     expect(COMPARISON_PRICING_LADDER).toBe(
-      `Trial: ${trial?.agentMinutes} one-time agent-minutes; Starter $${starter?.price.usd.monthly}/month; Pro $${pro?.price.usd.monthly}/month; Launch Assurance $${launch?.price.usd.monthly}/month; Enterprise from $${enterprise?.price.usd.monthly.toLocaleString("en-US")}/month`
+      `Trial: ${trial?.agentMinutes} one-time agent-minutes; Starter $${starter?.price.usd.monthly}/month; Pro $${pro?.price.usd.monthly}/month; Agency $${launch?.price.usd.monthly}/month; Enterprise from $${enterprise?.price.usd.monthly.toLocaleString("en-US")}/month`
     )
   })
 })

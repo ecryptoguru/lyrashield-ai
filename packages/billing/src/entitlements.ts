@@ -7,13 +7,14 @@
  * billing row. `workspaceId` scopes the resource, not the payer.
  */
 
-import { prisma, type ScopedTransaction } from "@lyrashield/db"
+import { prisma, withAccountRLS, type ScopedTransaction } from "@lyrashield/db"
 import { CLOUD_PLAN_MAP, STANDARD_OVERAGE_PER_MINUTE_USD } from "@lyrashield/pricing"
 import type { ScanMode } from "@lyrashield/types"
 import { resolveAccountBilling, type ResolvedAccountBilling } from "./account"
 import { getUsageBalance, getUsageBalanceForTx, resolveBalanceCycleStart } from "./usage/balance"
-import { getAccountTrialState, blockOnExpiry, type TrialState } from "./trial"
+import { getAccountTrialState, blockOnExpiry, TRIAL_DURATION_DAYS, type TrialState } from "./trial"
 import { getGraceState as getGraceStateFromGrace } from "./grace"
+import { resolveWorkspaceScanSponsor } from "./agency-sponsor"
 
 export type ScanModeAllowed = "SAFE" | "QUICK" | "STANDARD" | "DEEP" | "CUSTOM"
 
@@ -60,7 +61,11 @@ interface SponsorContext {
   trial: TrialState
 }
 
-async function loadSponsorContext(sponsorAccountId: string, tx?: DbTx): Promise<SponsorContext> {
+async function loadSponsorContext(
+  sponsorAccountId: string,
+  tx?: DbTx,
+  actingAccountId = sponsorAccountId
+): Promise<SponsorContext> {
   if (tx) {
     const [billing, user] = await Promise.all([
       resolveAccountBilling(sponsorAccountId, tx),
@@ -74,11 +79,26 @@ async function loadSponsorContext(sponsorAccountId: string, tx?: DbTx): Promise<
       trial: await accountTrialStateFrom(sponsorAccountId, user?.trialStartedAt ?? null, tx),
     }
   }
-  const [billing, trial] = await Promise.all([
-    resolveAccountBilling(sponsorAccountId),
-    getAccountTrialState(sponsorAccountId),
-  ])
-  return { billing, trial }
+  if (sponsorAccountId === actingAccountId) {
+    const [billing, trial] = await Promise.all([
+      resolveAccountBilling(sponsorAccountId),
+      getAccountTrialState(sponsorAccountId),
+    ])
+    return { billing, trial }
+  }
+  return withAccountRLS(sponsorAccountId, async (accountTx) => {
+    const [billing, user] = await Promise.all([
+      resolveAccountBilling(sponsorAccountId, accountTx),
+      accountTx.user.findUnique({
+        where: { id: sponsorAccountId },
+        select: { trialStartedAt: true },
+      }),
+    ])
+    return {
+      billing,
+      trial: await accountTrialStateFrom(sponsorAccountId, user?.trialStartedAt ?? null, accountTx),
+    }
+  })
 }
 
 async function accountTrialStateFrom(
@@ -88,7 +108,7 @@ async function accountTrialStateFrom(
 ): Promise<TrialState> {
   const now = new Date()
   const endsAt = trialStartedAt
-    ? new Date(trialStartedAt.getTime() + 14 * 24 * 60 * 60 * 1000)
+    ? new Date(trialStartedAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
     : null
   const isExpired = Boolean(endsAt && now > endsAt)
   if (!trialStartedAt) {
@@ -133,9 +153,9 @@ async function accountTrialStateFrom(
 export async function evaluateScanEntitlement(
   input: ScanEntitlementInput
 ): Promise<EntitlementResult> {
-  const { workspaceId, mode, sponsorAccountId, tx } = input
+  const { workspaceId, mode, sponsorAccountId: actingAccountId, tx } = input
 
-  if (!sponsorAccountId) {
+  if (!actingAccountId) {
     return {
       allowed: false,
       code: "SPONSOR_REQUIRED",
@@ -147,16 +167,24 @@ export async function evaluateScanEntitlement(
     }
   }
 
-  const workspace = await (tx ?? prisma).workspace.findUnique({
-    where: { id: workspaceId },
-    select: { id: true },
-  })
-
-  if (!workspace) {
+  const sponsor = await resolveWorkspaceScanSponsor(workspaceId, actingAccountId, tx)
+  if (!sponsor) {
     return {
       allowed: false,
-      code: "WORKSPACE_NOT_FOUND",
-      message: "Workspace not found",
+      code: "SPONSOR_UNAVAILABLE",
+      message: "The workspace billing sponsor or membership is unavailable.",
+      isTrial: false,
+      plan: "FREE",
+      remainingMinutes: 0,
+      accountId: actingAccountId,
+    }
+  }
+  const sponsorAccountId = sponsor.accountId
+  if (sponsor.agency && !sponsor.agencyActive && actingAccountId !== sponsorAccountId) {
+    return {
+      allowed: false,
+      code: "AGENCY_SUBSCRIPTION_REQUIRED",
+      message: "The Agency buyer must have an active Agency subscription for team scans.",
       isTrial: false,
       plan: "FREE",
       remainingMinutes: 0,
@@ -164,7 +192,11 @@ export async function evaluateScanEntitlement(
     }
   }
 
-  const { billing, trial: trialState } = await loadSponsorContext(sponsorAccountId, tx)
+  const { billing, trial: trialState } = await loadSponsorContext(
+    sponsorAccountId,
+    tx,
+    actingAccountId
+  )
 
   // Entitlement uses the effective plan: a canceled/past_due row past its
   // paid term entitles as FREE immediately — no wait on the downgrade job.
@@ -173,7 +205,7 @@ export async function evaluateScanEntitlement(
   const isTrial = trialState.isActive
 
   // Trial expiry: block + (on the POST path) lazily record the status.
-  if (trialState.isExpired) {
+  if (trialState.isExpired && plan === "FREE") {
     if (input.mutateOnTrialExpiry) {
       await blockOnExpiry(sponsorAccountId, workspaceId).catch(() => {})
     }
@@ -194,8 +226,7 @@ export async function evaluateScanEntitlement(
     return {
       allowed: false,
       code: "DEEP_NOT_ALLOWED",
-      message:
-        "Deep is a Pro feature. Upgrade to Pro or Launch Assurance to run Deep/Custom scans.",
+      message: "Deep is a Pro feature. Upgrade to Pro or Agency to run Deep/Custom scans.",
       isTrial,
       plan,
       remainingMinutes: 0,
@@ -223,15 +254,19 @@ export async function evaluateScanEntitlement(
           billing,
           trialStartedAt: trialState.startedAt,
         }) ?? new Date(0)
-      const overageAggregate = await (tx ?? prisma).usageRecord.aggregate({
-        where: {
-          accountId: sponsorAccountId,
-          kind: "overage_minutes",
-          deletedAt: null,
-          cycleStart: { gte: cycleStart },
-        },
-        _sum: { quantity: true },
-      })
+      const overageQuery = (db: DbTx) =>
+        db.usageRecord.aggregate({
+          where: {
+            accountId: sponsorAccountId,
+            kind: "overage_minutes",
+            deletedAt: null,
+            cycleStart: { gte: cycleStart },
+          },
+          _sum: { quantity: true },
+        })
+      const overageAggregate = tx
+        ? await overageQuery(tx)
+        : await withAccountRLS(sponsorAccountId, overageQuery)
       const currentOverageMinutes = overageAggregate._sum.quantity ?? 0
       const overagePerMinuteCents = Math.round(STANDARD_OVERAGE_PER_MINUTE_USD * 100)
       const remainingBudgetCents =
@@ -314,24 +349,20 @@ export async function assertTargetAllowed(
   workspaceId: string,
   actingAccountId: string
 ): Promise<TargetAllowedResult> {
-  const [workspace, billing, trial] = await Promise.all([
-    prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { id: true },
-    }),
-    resolveAccountBilling(actingAccountId),
-    getAccountTrialState(actingAccountId),
-  ])
-
-  if (!workspace) {
+  const sponsor = await resolveWorkspaceScanSponsor(workspaceId, actingAccountId)
+  if (
+    !sponsor ||
+    (sponsor.agency && !sponsor.agencyActive && actingAccountId !== sponsor.accountId)
+  ) {
     return {
       allowed: false,
-      code: "WORKSPACE_NOT_FOUND",
-      message: "Workspace not found",
+      code: "SPONSOR_UNAVAILABLE",
+      message: "The workspace billing sponsor is unavailable.",
       targetsUsed: 0,
       targetCap: 0,
     }
   }
+  const { billing, trial } = await loadSponsorContext(sponsor.accountId, undefined, actingAccountId)
 
   const plan = billing?.effectivePlan ?? "FREE"
   const isTrial = trial.isActive

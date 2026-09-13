@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   rows: vi.fn(),
   upsert: vi.fn(),
   audit: vi.fn().mockResolvedValue({}),
-  grant: vi.fn().mockResolvedValue({ created: true, minutes: 6000 }),
+  grant: vi.fn().mockResolvedValue({ created: true, minutes: 4500 }),
 }))
 vi.mock("@lyrashield/db", () => ({
   getSystemPrisma: () => ({

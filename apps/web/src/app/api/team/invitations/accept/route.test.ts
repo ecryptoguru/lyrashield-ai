@@ -14,15 +14,24 @@ vi.mock("@lyrashield/logger", () => ({
 
 const systemPrismaMocks = {
   $transaction: vi.fn(),
+  $executeRaw: vi.fn(),
   invitation: {
     findUnique: vi.fn(),
     updateMany: vi.fn(),
   },
   workspaceMember: {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    count: vi.fn(),
     upsert: vi.fn(),
   },
+  workspace: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+  user: { findUnique: vi.fn() },
 }
+
+vi.mock("@lyrashield/billing", () => ({
+  resolveAccountBilling: vi.fn().mockResolvedValue({ effectivePlan: "LAUNCH_ASSURANCE" }),
+}))
 
 vi.mock("@lyrashield/db", () => ({
   lockWorkspaceMembership: vi.fn(),
@@ -34,6 +43,7 @@ vi.mock("@lyrashield/db", () => ({
 
 import { GET, POST } from "./route"
 import { getSession } from "@lyrashield/auth/server"
+import { resolveAccountBilling } from "@lyrashield/billing"
 
 const mockGetSession = vi.mocked(getSession)
 
@@ -41,6 +51,7 @@ function invitationRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "invite-1",
     workspaceId: "ws-1",
+    invitedById: "owner-1",
     email: "member@example.com",
     role: "MEMBER",
     status: "pending",
@@ -67,7 +78,17 @@ describe("POST /api/team/invitations/accept", () => {
     systemPrismaMocks.$transaction.mockImplementation((callback) => callback(systemPrismaMocks))
     systemPrismaMocks.invitation.updateMany.mockResolvedValue({ count: 1 } as never)
     systemPrismaMocks.workspaceMember.findUnique.mockResolvedValue(null as never)
+    systemPrismaMocks.workspaceMember.findFirst.mockResolvedValue({ id: "owner-1" } as never)
+    systemPrismaMocks.workspaceMember.count.mockResolvedValue(1 as never)
+    systemPrismaMocks.workspace.findUnique.mockResolvedValue({
+      agencySponsorAccountId: null,
+    } as never)
+    systemPrismaMocks.workspace.findFirst.mockResolvedValue(null as never)
     systemPrismaMocks.workspaceMember.upsert.mockResolvedValue({ id: "member-1" } as never)
+    systemPrismaMocks.user.findUnique.mockResolvedValue({
+      email: "member@example.com",
+      emailVerified: true,
+    } as never)
   })
 
   it("accepts a pending invitation for the matching account", async () => {
@@ -197,6 +218,45 @@ describe("POST /api/team/invitations/accept", () => {
     expect(systemPrismaMocks.invitation.updateMany).not.toHaveBeenCalled()
   })
 
+  it("rejects unverified email even when a copied invite link matches", async () => {
+    systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)
+    systemPrismaMocks.user.findUnique.mockResolvedValue({
+      email: "member@example.com",
+      emailVerified: false,
+    } as never)
+
+    const response = await POST(
+      new Request("http://localhost/api/team/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token: "tok-1" }),
+      })
+    )
+
+    expect(response.status).toBe(403)
+    expect((await response.json()).error.code).toBe("INVITATION_EMAIL_UNVERIFIED")
+    expect(systemPrismaMocks.invitation.updateMany).not.toHaveBeenCalled()
+    expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
+  })
+
+  it("uses the current database email instead of a stale session email", async () => {
+    systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)
+    systemPrismaMocks.user.findUnique.mockResolvedValue({
+      email: "changed@example.com",
+      emailVerified: true,
+    } as never)
+
+    const response = await POST(
+      new Request("http://localhost/api/team/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token: "tok-1" }),
+      })
+    )
+
+    expect(response.status).toBe(403)
+    expect((await response.json()).error.code).toBe("INVITATION_EMAIL_MISMATCH")
+    expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
+  })
+
   it("re-activates an existing membership instead of duplicating it", async () => {
     systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)
     systemPrismaMocks.workspaceMember.findUnique.mockResolvedValue({
@@ -235,6 +295,48 @@ describe("POST /api/team/invitations/accept", () => {
     )
 
     expect(response.status).toBe(409)
+    expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
+  })
+
+  it("rejects an old invitation after the Agency buyer downgrades", async () => {
+    systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)
+    vi.mocked(resolveAccountBilling).mockResolvedValueOnce({ effectivePlan: "PRO" } as never)
+    const response = await POST(
+      new Request("http://localhost/api/team/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token: "tok-1" }),
+      })
+    )
+    expect(response.status).toBe(403)
+    expect(systemPrismaMocks.invitation.updateMany).not.toHaveBeenCalled()
+    expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
+  })
+
+  it("rejects an old invitation when all five seats have become occupied", async () => {
+    systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)
+    systemPrismaMocks.workspaceMember.count.mockResolvedValue(5 as never)
+    const response = await POST(
+      new Request("http://localhost/api/team/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token: "tok-1" }),
+      })
+    )
+    expect(response.status).toBe(409)
+    expect(systemPrismaMocks.invitation.updateMany).not.toHaveBeenCalled()
+    expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
+  })
+
+  it("rejects an old invitation if the buyer already sponsors another Agency workspace", async () => {
+    systemPrismaMocks.invitation.findUnique.mockResolvedValue(invitationRow() as never)
+    systemPrismaMocks.workspace.findFirst.mockResolvedValue({ id: "other-ws" } as never)
+    const response = await POST(
+      new Request("http://localhost/api/team/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token: "tok-1" }),
+      })
+    )
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe("AGENCY_TEAM_EXISTS")
     expect(systemPrismaMocks.workspaceMember.upsert).not.toHaveBeenCalled()
   })
 })

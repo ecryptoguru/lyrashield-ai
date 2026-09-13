@@ -74,7 +74,7 @@ const jsonLd = [
               <span class="category-card__description">{category.description}</span>
               <span class="category-card__count">
                 <span class="category-card__count-number" data-countup={String(category.count)}>{category.count}</span>
-                {category.count === 1 ? "article" : "articles"}
+                {category.count === 1 ? "article" : "articles"}{" "}
                 <span class="category-card__arrow" aria-hidden="true">→</span>
               </span>
             </a>
@@ -112,7 +112,7 @@ const jsonLd = [
       <nav aria-label="Blog pagination" class="blog-index__pagination">
         {page.url.prev ? (
           <a href={page.url.prev} rel="prev">← Newer posts</a>
-        ) : <span aria-hidden="true" />}
+        ) : <span aria-hidden="true" />}{" "}
         <span>Page {page.currentPage} of {page.lastPage}</span>
         {page.url.next ? (
           <a href={page.url.next} rel="next">Older posts →</a>

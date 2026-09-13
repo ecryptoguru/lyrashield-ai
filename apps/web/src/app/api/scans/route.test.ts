@@ -59,6 +59,11 @@ vi.mock("../../../lib/queue", () => ({
 vi.mock("@lyrashield/billing", () => ({
   assertScanAllowed: vi.fn().mockResolvedValue({ allowed: true }),
   assertTargetAllowed: vi.fn().mockResolvedValue({ allowed: true }),
+  resolveWorkspaceScanSponsor: vi.fn(async (_workspaceId: string, actorId: string) => ({
+    accountId: actorId,
+    agency: false,
+    agencyActive: false,
+  })),
   // The sponsor's account billing is the plan source now; the tests' existing
   // `workspace.findUnique → { plan }` fixtures stand in for it.
   resolveAccountBilling: vi.fn(async () => {

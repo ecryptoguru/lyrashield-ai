@@ -13,7 +13,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/pricing", origin).toString()
 const title = "Pricing — Cloud & Local Plans | LyraShield AI"
 const description =
-  "Cloud plans from $29 a month with a free trial of 100 agent-minutes and no card. Prepaid minute packs, annual billing and local one-time licences."
+  "Cloud plans from $29 a month with a limited free trial of 60 agent-minutes and no card. Prepaid minute packs and annual billing are available; Local launches later."
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
@@ -25,11 +25,15 @@ const pricingFaqs = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes. Every new workspace starts with a 14-day free trial of 100 one-time agent-minutes and up to 3 targets, with no credit card required.",
+    a: "Yes. New accounts can claim one 7-day limited trial with 60 agent-minutes and up to 3 targets, with no credit card required. Agency is purchase-only.",
   },
   {
     q: "What happens if I run out of agent-minutes?",
-    a: "You can add a prepaid minute pack at any time. Packs are valid for 6 months and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Launch Assurance.",
+    a: "You can add a prepaid minute pack at any time. Packs are valid for 6 months and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Agency.",
+  },
+  {
+    q: "Can I trial Agency?",
+    a: "The free trial is a separate limited tier with 60 agent-minutes and three targets. Agency team seats and its 4,500-minute pool require a paid Agency subscription.",
   },
   {
     q: "Do prices include tax?",
@@ -38,10 +42,10 @@ const pricingFaqs = [
 ]
 
 const tierIntents: Record<string, string> = {
-  STARTER: "For solo builders running occasional reviews on personal projects.",
-  PRO: "For small teams shipping regularly who need deeper review coverage.",
+  STARTER: "For solo builders reviewing up to five targets with standard scans.",
+  PRO: "For solo builders who need Deep / Custom scans across up to 15 targets.",
   LAUNCH_ASSURANCE:
-    "For anyone who has to hand a release record to a client, an investor or a reviewer.",
+    "For agencies reviewing up to 50 targets with one five-member team sharing the buyer's minute pool.",
   ENTERPRISE: "For organisations that need custom limits and a contact-led rollout.",
 }
 
@@ -106,7 +110,7 @@ const appUrl =
         Pricing
       </h1>
       <p class="mt-4 text-lg text-text-muted">
-        Cloud subscriptions and local licenses. Start with a free trial — no credit card required.
+        Cloud subscriptions and local licenses. Try the limited Trial tier free; Agency requires a paid subscription.
       </p>
     </div>
 
@@ -215,14 +219,6 @@ const appUrl =
                   /yr
                 </span>
               </div>
-              <p class="mt-2 text-sm text-text-muted">
-                {plan.agentMinutes.toLocaleString()} agent-minutes / month
-              </p>
-              {plan.deepAllowed && (
-                <p class="mt-1 text-sm font-medium text-accent">
-                  Deep / Custom scans enabled
-                </p>
-              )}
               <ul class="mt-4 space-y-2">
                 {plan.features.map((feature) => (
                   <li class="flex items-start gap-2 text-sm text-text-muted">
@@ -243,11 +239,86 @@ const appUrl =
                 href={`${appUrl}/sign-up?plan=${plan.id}`}
                 class="mt-6 block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg hover:bg-accent/90 transition-colors"
               >
-                Start with {plan.name}
+                {plan.id === "LAUNCH_ASSURANCE" ? "Choose Agency" : `Start with ${plan.name}`}
               </a>
             </div>
           ))
         }
+      </div>
+
+      <!-- Enforced plan differences -->
+      <div class="mt-10">
+        <h2 class="text-2xl font-bold text-text">What changes between plans</h2>
+        <p class="mt-2 text-sm text-text-muted">
+          Every paid plan includes the assurance tools below. Choose by review depth, monthly capacity, targets and team size.
+        </p>
+        <p class="mt-3 text-xs text-text-muted sm:hidden">Swipe sideways to compare all three plans.</p>
+        <div class="mt-5 overflow-x-auto rounded-lg border border-border">
+          <table class="w-full min-w-[38rem] border-collapse text-left text-sm">
+            <caption class="sr-only">Comparison of Starter, Pro and Agency plan limits</caption>
+            <thead class="bg-bg-raised text-text">
+              <tr>
+                <th scope="col" class="sticky left-0 bg-bg-raised px-4 py-3 font-semibold">Plan difference</th>
+                {cloudPlans.map((plan) => (
+                  <th scope="col" class="px-4 py-3 font-semibold">{plan.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody class="text-text-muted">
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Included agent-minutes / month</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">{plan.agentMinutes.toLocaleString()}</td>
+                ))}
+              </tr>
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Protected targets</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">Up to {plan.targetCaps}</td>
+                ))}
+              </tr>
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Workspace members</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">Up to {plan.memberSeats}{plan.id === "LAUNCH_ASSURANCE" ? " · shared minute pool" : ""}</td>
+                ))}
+              </tr>
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Scan modes</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">
+                    Safe, Quick, Standard{plan.deepAllowed ? ", Deep, Custom" : ""}
+                  </td>
+                ))}
+              </tr>
+              <tr class="border-t border-border">
+                <th scope="row" class="sticky left-0 bg-bg px-4 py-3 font-medium text-text">Overage after minutes and packs</th>
+                {cloudPlans.map((plan) => (
+                  <td class="px-4 py-3">
+                    {plan.id === "LAUNCH_ASSURANCE" ? "$0.15/min with a spend limit" : "Not available"}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-3 text-xs text-text-muted">
+          Deep and Custom scans use agent-minutes at 3× the standard rate. Prepaid minute packs are available on every plan.
+        </p>
+      </div>
+
+      <!-- Shared capabilities and CI setup -->
+      <div class="mt-8 rounded-lg border border-border bg-bg-raised p-4">
+        <h3 class="font-semibold text-text">Included across plans</h3>
+        <p class="mt-2 text-sm text-text-muted">
+          The free GitHub Action runs scan-level SARIF in GitHub repositories without a LyraShield account or API key.
+        </p>
+        <p class="mt-2 text-sm text-text-muted">
+          Eligible workspace members on every plan can connect the CLI and MCP server, review repository MCP and WebMCP findings, use the Evidence Vault and retests, and access versioned launch verdicts, launch reports and shareable scorecards. Scans follow each plan's minutes, target limits and modes.
+        </p>
+        <p class="mt-2 text-sm text-text-muted">
+          To block merges on a verdict, run the CLI verdict command in CI and require its check in your repository settings.
+        </p>
       </div>
 
       <!-- Minute Packs Section -->
@@ -311,7 +382,7 @@ const appUrl =
           Not sure yet? Start with a free trial.
         </h2>
         <p class="mt-2 text-sm text-text-muted">
-          100 agent-minutes, up to 3 targets, 14 days. No credit card required.
+          60 agent-minutes, up to 3 targets, 7 days. No credit card required.
         </p>
         <a
           href={`${appUrl}/sign-up`}
@@ -324,57 +395,25 @@ const appUrl =
       <!-- Free trial -->
       <div class="mt-12 rounded-lg bg-accent-dim/30 p-4 text-center">
         <p class="text-sm text-text-muted">
-          Start with a 14-day free trial — no credit card required.
+          Start with a 7-day free trial — no credit card required.
         </p>
       </div>
     </div>
 
     <!-- Local Pricing -->
     <div id="local-pricing" class="mt-12 hidden">
-      <div class="mx-auto max-w-xl">
-        <div
-          class="rounded-xl border border-accent/40 bg-bg-raised p-6 shadow-sm"
-        >
-          <p
-            class="text-xs font-semibold uppercase tracking-wider text-accent"
-          >
-            Launch offer
-          </p>
-          <h3 class="mt-2 text-xl font-semibold text-text">
-            {localLaunch.name}
-          </h3>
-          <p class="mt-3 text-3xl font-bold text-text">
-            {formatUSD(localLaunch.priceUsd)}
-            <span class="text-base font-normal text-text-muted"> globally</span>
-          </p>
-          <p class="mt-1 text-lg font-semibold text-text">
-            {formatINR(localLaunch.priceInr!)}
-            <span class="text-sm font-normal text-text-muted"
-              >India, GST included</span
-            >
-          </p>
-          <p class="mt-3 text-sm text-text-muted">{localLaunch.description}</p>
-          <a
-            href={`${appUrl}/buy/local`}
-            class="mt-6 block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg transition-colors hover:bg-accent/90"
-          >
-            Buy Local license
-          </a>
+      <div class="relative mx-auto max-w-xl overflow-hidden rounded-xl border border-border bg-bg-raised">
+        <div aria-hidden="true" inert class="pointer-events-none select-none space-y-5 p-6 blur-sm opacity-50">
+          <p class="text-xs font-semibold uppercase tracking-wider text-accent">Local license</p>
+          <h3 class="text-xl font-semibold text-text">{localLaunch.name}</h3>
+          <p class="text-3xl font-bold text-text">{formatUSD(localLaunch.priceUsd)}</p>
+          <p class="text-lg font-semibold text-text">{formatINR(localLaunch.priceInr!)}</p>
+          <p class="text-sm text-text-muted">{localLaunch.description}</p>
         </div>
-      </div>
-
-      <!-- Local notes -->
-      <div class="mt-8 space-y-3">
-        <div class="rounded-lg bg-bg-raised p-4">
-          <h3 class="font-medium text-text">Local License Details</h3>
-          <ul class="mt-2 space-y-1 text-sm text-text-muted">
-            <li>• 3-machine activation limit per seat</li>
-            <li>• Perpetual use with 1 year of updates</li>
-            <li>
-              • Local licenses are non-refundable except where law or payment errors require
-              otherwise
-            </li>
-          </ul>
+        <div class="absolute inset-0 flex flex-col items-center justify-center bg-bg/75 px-6 text-center">
+          <span class="rounded-full border border-accent/40 bg-bg-raised px-3 py-1 text-xs font-semibold uppercase tracking-wider text-accent">Launching later</span>
+          <h2 class="mt-4 text-2xl font-bold text-text">Local is launching later</h2>
+          <p class="mt-2 max-w-sm text-sm text-text-muted">Cloud plans are available now. Local license details and purchasing will open at launch.</p>
         </div>
       </div>
     </div>
@@ -392,7 +431,7 @@ const appUrl =
       </p>
       <p class="mt-3 text-sm text-text-muted">
         Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for
-        Launch Assurance plans with a spend limit configured. Minute packs are valid for 6 months
+        Agency plans with a spend limit configured. Minute packs are valid for 6 months
         from purchase.
       </p>
     </div>
@@ -541,5 +580,6 @@ const appUrl =
       currentInterval = "annual"
       updatePrices(currentCurrency, currentInterval)
     })
+
   </script>
 </Base>

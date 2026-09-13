@@ -20,4 +20,4 @@ Security controls and safety checks for LyraShield scans, public surfaces, and a
 
 - `apps/marketing/src/pages/scan.astro`
 - `packages/types/src/index.ts`
-- `docs/vibe-security-50.md`
+- `docs/yellowpaper.md` (Vibe Security 50 coverage contract, §3.1)

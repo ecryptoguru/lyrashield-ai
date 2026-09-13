@@ -17,8 +17,8 @@ vi.mock("@lyrashield/pricing", () => ({
     Boolean((payload.metadata as Record<string, unknown> | undefined)?.packId),
   MINUTE_PACK_MAP: {
     pack_100: { id: "pack_100", minutes: 100, priceUsd: 15 },
-    pack_250: { id: "pack_250", minutes: 250, priceUsd: 30 },
-    pack_500: { id: "pack_500", minutes: 500, priceUsd: 50 },
+    pack_250: { id: "pack_250", minutes: 250, priceUsd: 35 },
+    pack_500: { id: "pack_500", minutes: 500, priceUsd: 65 },
   },
 }))
 

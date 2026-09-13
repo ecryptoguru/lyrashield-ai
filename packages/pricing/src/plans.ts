@@ -2,9 +2,9 @@
  * Cloud plan definitions for LyraShield AI.
  *
  * Plans are ordered by tier: TRIAL < STARTER < PRO < LAUNCH_ASSURANCE < ENTERPRISE.
- * The three self-serve lines (STARTER, PRO, LAUNCH_ASSURANCE) form two product
- * lines: SCAN (Starter, Pro) and LAUNCH ASSURANCE (the premium evidence/verdict
- * line). ENTERPRISE is contact-led (no self-serve checkout).
+ * The self-serve plans differ by included minutes, target caps, scan modes,
+ * and capped overage. Evidence and verdict features are shared across plans.
+ * ENTERPRISE is contact-led (no self-serve checkout).
  *
  * All prices are in USD and INR. Monthly and annual prices are listed
  * separately so the billing layer can compute prorations and upgrades
@@ -32,6 +32,8 @@ export interface CloudPlan {
   agentMinutes: number
   /** Maximum protected targets; 0 represents a custom Enterprise limit. */
   targetCaps: number
+  /** Active workspace members; 0 represents a custom Enterprise limit. */
+  memberSeats: number
   /** Whether Deep/Custom scans are allowed on this plan. */
   deepAllowed: boolean
   /** Whether this plan has a self-serve checkout flow. */
@@ -46,8 +48,9 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
   {
     id: "TRIAL",
     name: "Trial",
-    agentMinutes: 100,
+    agentMinutes: 60,
     targetCaps: 3,
+    memberSeats: 1,
     deepAllowed: false,
     selfServe: false,
     price: {
@@ -55,7 +58,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       inr: { monthly: 0, annual: 0 },
     },
     features: [
-      "100 agent-minutes (one-time)",
+      "60 agent-minutes (one-time)",
       "Up to 3 targets",
       "Safe / Quick / Standard scans",
       "Community support",
@@ -64,8 +67,9 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
   {
     id: "STARTER",
     name: "Starter",
-    agentMinutes: 300,
+    agentMinutes: 210,
     targetCaps: 5,
+    memberSeats: 1,
     deepAllowed: false,
     selfServe: true,
     price: {
@@ -73,18 +77,21 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       inr: { monthly: 2900, annual: 29500 },
     },
     features: [
-      "300 agent-minutes / month",
+      "210 agent-minutes / month",
       "Up to 5 targets",
+      "1 workspace member",
       "Safe / Quick / Standard scans",
+      "CLI, GitHub Action and MCP server access",
       "Email support",
-      "Evidence Vault access",
+      "Workspace evidence records",
     ],
   },
   {
     id: "PRO",
     name: "Pro",
-    agentMinutes: 1200,
+    agentMinutes: 850,
     targetCaps: 15,
+    memberSeats: 1,
     deepAllowed: true,
     selfServe: true,
     price: {
@@ -92,20 +99,20 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       inr: { monthly: 9900, annual: 95000 },
     },
     features: [
-      "1,200 agent-minutes / month",
+      "850 agent-minutes / month",
       "Up to 15 targets",
+      "1 workspace member",
       "Deep / Custom scans enabled",
-      "Integrations (GitHub, Slack, Jira)",
+      "CLI, GitHub Action and MCP server access",
       "Priority email support",
-      "Evidence Vault + Retest",
-      "Scheduled scans",
     ],
   },
   {
     id: "LAUNCH_ASSURANCE",
-    name: "Launch Assurance",
-    agentMinutes: 6000,
+    name: "Agency",
+    agentMinutes: 4500,
     targetCaps: 50,
+    memberSeats: 5,
     deepAllowed: true,
     selfServe: true,
     price: {
@@ -113,18 +120,12 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       inr: { monthly: 49900, annual: 418800 },
     },
     features: [
-      "Continuous launch gate with a versioned verdict",
-      "6,000 agent-minutes / month",
+      "4,500 agent-minutes / month",
       "Up to 50 targets",
+      "Up to 5 workspace members sharing one minute pool",
       "Deep / Custom scans enabled",
-      "Verified evidence + coverage receipts",
-      "WebMCP Assurance (agent surfaces)",
-      "CI gating (SARIF)",
-      "Shareable, revocable scorecard",
-      "Retained encrypted evidence",
-      "Integrations (GitHub, Slack, Jira)",
-      "Role-based access control",
-      "Shared reports",
+      "Overage at $0.15/min with a user-set spend limit",
+      "CLI, GitHub Action and MCP server access",
       "Priority support",
     ],
   },
@@ -133,6 +134,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     name: "Enterprise",
     agentMinutes: 0,
     targetCaps: 0,
+    memberSeats: 0,
     deepAllowed: true,
     selfServe: false,
     price: {
@@ -143,7 +145,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
       "Custom agent-minute pool",
       "Custom target limits",
       "Deep / Custom scans enabled",
-      "Everything in Launch Assurance",
+      "Everything in Agency",
       "Custom integrations",
       "SSO / SAML — on request",
       "Multi-workspace management — on request",

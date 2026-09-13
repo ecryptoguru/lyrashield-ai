@@ -2,7 +2,7 @@
 title: "Vibe Coding Security: The Complete Guide"
 description: "A six-layer guide to testing AI-built apps, preserving evidence, retesting fixes, and making an honest release decision."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-09-12
 author: lyrashield-team
 tags:
   - vibe-coding-security
@@ -37,7 +37,7 @@ Write down what is being released before choosing tools. Name the repository and
 
 The scope should also name the important assets and decisions. Customer records, payment instructions, password recovery, tenant administration, signing keys, build credentials, and destructive operations deserve more evidence than a static brochure page. [Secure by Design guidance from CISA and international partners](https://www.cisa.gov/sites/default/files/2023-10/Shifting-the-Balance-of-Cybersecurity-Risk-Principles-and-Approaches-for-Secure-by-Design-Software.pdf) puts responsibility for safer defaults on software producers. A builder should not make every customer discover the dangerous setting by trial and error.
 
-Use the six layers as a map, not as independent score boxes. A weakness often crosses several of them. For example, a browser-exposed service credential begins as a secret-handling failure, may bypass a database authorization policy, and can become a deployment and incident-response problem.
+Start with the [vibe coding threat-model template](/blog/human-review-threat-model-vibe-coding) to record owners, controls, and missing evidence. A leaked service credential can bypass database policies and require incident response. Review those boundaries together.
 
 ## Layer 1: authorization and data boundaries
 
@@ -49,7 +49,7 @@ For every sensitive operation, write a sentence that names the actor, action, an
 
 A safe local check uses two test accounts and synthetic data. Create one project for Alice and another for Bob. Exercise reads, updates, deletes, exports, and nested resources through the same server routes the app uses. Alice should receive a denied or not-found response for Bob's identifiers. Repeat with a changed workspace in the URL and request body. Do this only in an environment you own or have permission to test.
 
-Database controls need the same negative test. Row-level security can provide a strong boundary, but an always-true policy or elevated server key can bypass it. The browser-local [Supabase RLS Policy Checker](/tools/supabase-rls-checker) can flag focused SQL patterns in pasted policies. It cannot inspect deployed grants, roles, views, application authorization, or full SQL semantics. Follow it with two-account tests against the real policy path.
+Database controls need the same negative test. Row-level security can provide a strong boundary, but an always-true policy or elevated server key can bypass it. The browser-local [Supabase RLS Policy Checker](/tools/supabase-rls-checker) can flag focused SQL patterns in pasted policies. It cannot inspect deployed grants, roles, views, application authorization, or full SQL semantics. Follow it with two-account tests against the real policy path. Use the [Supabase security guide](/blog/supabase-security-guide) or [Firebase Rules guide](/blog/firebase-security-guide) for the corresponding database and server-client boundary.
 
 ## Layer 2: identity, secrets, and session handling
 
@@ -108,7 +108,7 @@ The [OWASP Software Supply Chain Failures category](https://owasp.org/Top10/2025
 
 Review CI permissions as production permissions. GitHub's [secure use reference for Actions](https://docs.github.com/en/actions/reference/security/secure-use) warns against checking out untrusted pull-request code in privileged workflows and recommends full-length commit SHAs. An untrusted fork should not receive a write token or deployment secret. Separate build, test, and deploy identities, and promote a reviewed artifact explicitly.
 
-Deployment defaults deserve tests of their own. Check that storage is private unless intentionally public, debug routes and source maps are absent, production error responses do not expose secrets, TLS is enforced, and backups exist outside the primary failure domain. Configuration drift can invalidate a clean repository review.
+Deployment defaults deserve tests of their own. Check that storage is private unless intentionally public, debug routes and source maps are absent, production error responses do not expose secrets, TLS is enforced, and backups exist outside the primary failure domain. Configuration drift can invalidate a clean repository review. The [Vercel deployment guide](/blog/vercel-deployment-security) covers preview protection and private environment variables.
 
 The UK's [NCSC secure development and deployment guidance](https://www.ncsc.gov.uk/collection/developers-collection) recommends version control, peer review, automated testing, protected repositories and build pipelines, ongoing testing, and a process for security flaws. It also says the principles do not guarantee a secure product. That warning is worth keeping beside every release gate.
 

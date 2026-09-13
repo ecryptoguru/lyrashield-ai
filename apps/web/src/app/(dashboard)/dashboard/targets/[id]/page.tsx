@@ -10,7 +10,7 @@ import { RepositoryRefEditor } from "./repository-ref-editor"
 import { DomainVerificationCard } from "./domain-verification-card"
 import { normalizeDomainForProof } from "@lyrashield/security"
 import { getTargetDomainStatuses } from "@/lib/target-domain-status"
-import { formatDate, formatDateTime } from "@/lib/date-format"
+import { LocalTime } from "@/components/local-time"
 import { modeLabel, humanizeToken } from "@/lib/labels"
 import { getTargetTypeLabel, getScanGoalLabel, getEnvironmentLabel } from "@/lib/enum-labels"
 import { getScanPresentation } from "@/lib/scan-presentation"
@@ -154,7 +154,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
           <div className="text-muted-foreground text-sm">Last Scan</div>
           <p className="mt-2 text-2xl font-bold tracking-tight">
-            {target.lastScanAt ? formatDate(target.lastScanAt) : "Never"}
+            {target.lastScanAt ? <LocalTime value={target.lastScanAt} /> : "Never"}
           </p>
         </Card>
       </div>
@@ -323,7 +323,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
                     </Badge>
                   </td>
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
-                    {formatDateTime(scan.createdAt)}
+                    <LocalTime withTime value={scan.createdAt} />
                   </td>
                   <td className="px-4 py-3">
                     <Link

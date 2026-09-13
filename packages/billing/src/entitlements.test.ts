@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+const { prismaAggregate } = vi.hoisted(() => ({ prismaAggregate: vi.fn() }))
 
 // Mock dependencies so entitlement checks only need prisma.workspace.findUnique.
 vi.mock("@lyrashield/db", () => ({
@@ -10,21 +11,28 @@ vi.mock("@lyrashield/db", () => ({
       count: vi.fn(),
     },
     usageRecord: {
-      aggregate: vi.fn(),
+      aggregate: prismaAggregate,
     },
   },
+  withAccountRLS: vi.fn(async (_accountId: string, fn: (tx: unknown) => unknown) =>
+    fn({
+      usageRecord: {
+        aggregate: prismaAggregate,
+      },
+    })
+  ),
 }))
 
 vi.mock("@lyrashield/pricing", () => ({
   CLOUD_PLAN_MAP: {
     FREE: { id: "FREE", deepAllowed: false, agentMinutes: 0, targetCaps: 3 },
-    TRIAL: { id: "TRIAL", deepAllowed: false, agentMinutes: 100, targetCaps: 3 },
-    STARTER: { id: "STARTER", deepAllowed: false, agentMinutes: 300, targetCaps: 5 },
-    PRO: { id: "PRO", deepAllowed: true, agentMinutes: 1200, targetCaps: 15 },
+    TRIAL: { id: "TRIAL", deepAllowed: false, agentMinutes: 60, targetCaps: 3 },
+    STARTER: { id: "STARTER", deepAllowed: false, agentMinutes: 210, targetCaps: 5 },
+    PRO: { id: "PRO", deepAllowed: true, agentMinutes: 850, targetCaps: 15 },
     LAUNCH_ASSURANCE: {
       id: "LAUNCH_ASSURANCE",
       deepAllowed: true,
-      agentMinutes: 6000,
+      agentMinutes: 4500,
       targetCaps: 50,
     },
     ENTERPRISE: { id: "ENTERPRISE", deepAllowed: true, agentMinutes: 0, targetCaps: 0 },
@@ -53,6 +61,14 @@ vi.mock("./grace", () => ({
   getGraceState: vi.fn().mockResolvedValue({ inGrace: false }),
 }))
 
+vi.mock("./agency-sponsor", () => ({
+  resolveWorkspaceScanSponsor: vi.fn(async (_workspaceId: string, actorId: string) => ({
+    accountId: actorId,
+    agency: false,
+    agencyActive: false,
+  })),
+}))
+
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
@@ -60,8 +76,9 @@ vi.mock("@lyrashield/logger", () => ({
 import { assertScanAllowed, assertTargetAllowed } from "./entitlements"
 import { prisma } from "@lyrashield/db"
 import { resolveAccountBilling } from "./account"
-import { getUsageBalance } from "./usage/balance"
+import { getUsageBalance, getUsageBalanceForTx } from "./usage/balance"
 import { getAccountTrialState } from "./trial"
+import { resolveWorkspaceScanSponsor } from "./agency-sponsor"
 
 function billing(plan: string, extra: Record<string, unknown> = {}) {
   return {
@@ -102,6 +119,26 @@ describe("entitlements — Deep scan gating on the sponsoring account (Deep = Pr
       targetCap: 3,
     })
     vi.mocked(getUsageBalance).mockResolvedValue({ totalRemaining: 600 } as never)
+  })
+
+  it("charges an Agency teammate's scan to the buyer's shared pool", async () => {
+    vi.mocked(resolveWorkspaceScanSponsor).mockResolvedValueOnce({
+      accountId: "buyer",
+      agency: true,
+      agencyActive: true,
+    })
+    vi.mocked(resolveAccountBilling).mockResolvedValue(
+      billing("LAUNCH_ASSURANCE", { accountId: "buyer" }) as never
+    )
+    vi.mocked(getUsageBalanceForTx).mockResolvedValue({ totalRemaining: 4200 } as never)
+    const tx = { user: { findUnique: vi.fn().mockResolvedValue({ trialStartedAt: null }) } }
+    const result = await assertScanAllowed("ws_1", "DEEP", "teammate", tx as never)
+    expect(result).toMatchObject({ allowed: true, accountId: "buyer", remainingMinutes: 4200 })
+    expect(resolveAccountBilling).toHaveBeenCalledWith("buyer", tx)
+    expect(getUsageBalanceForTx).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ accountId: "buyer" })
+    )
   })
 
   it("blocks DEEP on a STARTER account (deepAllowed=false)", async () => {
@@ -234,6 +271,22 @@ describe("entitlements — Deep scan gating on the sponsoring account (Deep = Pr
 
     expect(result.allowed).toBe(false)
     expect(result.code).toBe("TRIAL_EXPIRED")
+  })
+
+  it("does not block a paid Agency scan because an earlier trial expired", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("LAUNCH_ASSURANCE") as never)
+    vi.mocked(getAccountTrialState).mockResolvedValue({
+      isActive: false,
+      isExpired: true,
+      startedAt: new Date("2026-01-01"),
+      endsAt: new Date("2026-01-08"),
+      daysLeft: 0,
+      minutesLeft: 0,
+      targetsUsed: 0,
+      targetCap: 3,
+    })
+    const result = await assertScanAllowed("ws-paid", "STANDARD", "acct_1")
+    expect(result).toMatchObject({ allowed: true, plan: "LAUNCH_ASSURANCE" })
   })
 
   it("allows STANDARD when the account trial target cap is reached (targets are separate)", async () => {

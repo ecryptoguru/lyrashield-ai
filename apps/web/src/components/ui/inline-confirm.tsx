@@ -67,7 +67,7 @@ export function InlineConfirm({
       aria-label={message}
     >
       {/* Wrap the full context and controls rather than clipping confirmation. */}
-      <span className="text-muted-foreground min-w-0 break-words text-xs">{message}</span>
+      <span className="text-muted-foreground min-w-0 wrap-break-word text-xs">{message}</span>
       <Button
         ref={confirmRef}
         type="button"

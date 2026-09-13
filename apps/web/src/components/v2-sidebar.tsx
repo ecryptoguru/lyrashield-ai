@@ -9,6 +9,7 @@ import { LogOut } from "lucide-react"
 import { Button, cn } from "@lyrashield/ui"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 import { ThemeToggle } from "./theme-toggle"
+import { EmailText } from "./email-text"
 import { PRIMARY_NAV_ITEMS, resolveNav, type NavItem } from "@/lib/nav-items"
 import { apiPost } from "@/lib/api-client"
 import { Badge } from "@lyrashield/ui"
@@ -244,7 +245,10 @@ export function V2Sidebar({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{userName}</p>
-              <p className="text-muted-foreground truncate text-xs">{userEmail}</p>
+              <EmailText
+                value={userEmail}
+                className="text-muted-foreground block truncate text-xs"
+              />
             </div>
             <ThemeToggle className="shrink-0" />
           </div>
