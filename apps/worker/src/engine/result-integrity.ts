@@ -21,6 +21,8 @@ type ResultTarget = {
 type ResultManifestInput = {
   scanId: string
   target: ResultTarget
+  /** True when the scan's tier runs the engine (REPO always; URL STANDARD/DEEP). */
+  engineBacked?: boolean
   sourceCheckoutAvailable: boolean
   engineFindingCount: number
   coverageIssues: ScannerCoverageIssue[]
@@ -67,7 +69,7 @@ type ResultManifestInput = {
 type FindingInput = EngineVulnerability | NormalizedFinding
 
 const MANIFEST_VERSION = 7
-const SCANNER_CONTRACT_VERSION = "2026-09-13"
+const SCANNER_CONTRACT_VERSION = "2026-09-13a"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
 
@@ -193,6 +195,7 @@ function scannerStatus(
 
 export function buildCoverageReceipts(input: ResultManifestInput) {
   const repositoryTarget = input.target.type === "REPO"
+  const engineApplicable = repositoryTarget || input.engineBacked === true
   const engineStatus =
     input.sourceExecution?.kind === "deterministic_retest"
       ? {
@@ -200,7 +203,13 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
           reason: "Model analysis was intentionally outside this deterministic retest scope.",
           metadata: { outcome: "NOT_ASSESSED" },
         }
-      : scannerStatus("engine", repositoryTarget, input.coverageIssues)
+      : !engineApplicable
+        ? {
+            status: "NOT_APPLICABLE" as const,
+            reason: "Deterministic-only tier — the engine is part of STANDARD and DEEP reviews.",
+            metadata: { outcome: "NOT_ASSESSED" },
+          }
+        : scannerStatus("engine", true, input.coverageIssues)
   const urlStatus = scannerStatus("url", Boolean(input.target.url), input.coverageIssues)
   const familyReceipts: FamilyReceipt[] = [
     {

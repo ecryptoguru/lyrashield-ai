@@ -170,6 +170,46 @@ describe("result integrity", () => {
     })
   })
 
+  it("marks the engine NOT_APPLICABLE on deterministic-only URL tiers and evaluates it when engine-backed", () => {
+    const base = {
+      scanId: "scan-url",
+      target: { id: "t1", type: "WEB_APP", url: "https://example.com" },
+      sourceCheckoutAvailable: false,
+      engineFindingCount: 0,
+      coverageIssues: [],
+    }
+
+    const safe = buildCoverageReceipts({ ...base, scanId: "scan-url-safe" })
+    expect(safe.find((receipt) => receipt.scanner === "engine")).toMatchObject({
+      status: "NOT_APPLICABLE",
+      reason: expect.stringContaining("Deterministic-only tier"),
+      metadata: expect.objectContaining({ outcome: "NOT_ASSESSED" }),
+    })
+
+    const backed = buildCoverageReceipts({
+      ...base,
+      scanId: "scan-url-std",
+      engineBacked: true,
+      engineFindingCount: 1,
+    })
+    expect(backed.find((receipt) => receipt.scanner === "engine")).toMatchObject({
+      status: "COMPLETED",
+    })
+
+    const blocked = buildCoverageReceipts({
+      ...base,
+      scanId: "scan-url-blocked",
+      engineBacked: true,
+      coverageIssues: [
+        { scanner: "engine", status: "bounded", reason: "Relay denied out-of-scope host" },
+      ],
+    })
+    expect(blocked.find((receipt) => receipt.scanner === "engine")).toMatchObject({
+      status: "BLOCKED",
+      reason: "Relay denied out-of-scope host",
+    })
+  })
+
   it("records detected and no-finding control outcomes without claiming verification", () => {
     const receipts = buildCoverageReceipts({
       scanId: "scan-1",
@@ -442,7 +482,7 @@ describe("result integrity", () => {
         data: expect.objectContaining({
           manifest: expect.objectContaining({
             coverage: expect.any(Array),
-            scannerContractVersion: "2026-09-13",
+            scannerContractVersion: "2026-09-13a",
             engineExecution: expect.objectContaining({
               model: "azure_ai/gpt-5.6-luna",
               imageDigest: "sha256:abc",

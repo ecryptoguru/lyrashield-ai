@@ -30,12 +30,15 @@ export const SCANNER_FAMILIES = [
 export type ScannerFamily = (typeof SCANNER_FAMILIES)[number]
 
 /**
- * Required scanner classes per target type for lyrashield-gate/2.1.0.
+ * Required scanner classes per target type for lyrashield-gate/2.2.0.
  * A target counts as evaluated only when each required family reports
  * COMPLETED or NOT_APPLICABLE on the latest completed scan.
  *
  * - REPO: full static stack + the agentic engine.
- * - WEB_APP / API: URL/config + agent-surface families (no source checkout).
+ * - WEB_APP / API: URL/config + agent-surface families (no source checkout),
+ *   plus `engine` when the scan ran an engine-backed tier (STANDARD/DEEP).
+ *   SAFE-tier URL scans stay deterministic-only — the engine is honestly
+ *   absent and the gate does not pretend otherwise.
  * - CLOUD_ACCOUNT / CONTAINER / IAC: deferred — the gate returns
  *   INSUFFICIENT_EVIDENCE ("target type not yet covered by the gate standard").
  */
@@ -48,14 +51,25 @@ const REQUIRED_BY_TARGET: Record<GateTargetType, readonly ScannerFamily[]> = {
   IAC: [],
 }
 
+/** Modes whose URL profile is engine-backed (see packages/types scan-profile). */
+const ENGINE_BACKED_URL_MODES = new Set(["STANDARD", "DEEP"])
+
 /**
- * Required scanner classes for a target type. Returns an empty array for
- * target types the standard does not yet cover — the caller must treat empty
- * as "not covered" (INSUFFICIENT_EVIDENCE), not as "nothing required".
+ * Required scanner classes for a target type — mode-conditional where the
+ * scan's own tier changes what coverage it could produce. Returns an empty
+ * array for target types the standard does not yet cover — the caller must
+ * treat empty as "not covered" (INSUFFICIENT_EVIDENCE), not "nothing required".
  */
-export function requiredScannersForTarget(targetType: string): readonly string[] {
+export function requiredScannersForTarget(
+  targetType: string,
+  mode?: string | null
+): readonly string[] {
   const key = targetType as GateTargetType
-  return REQUIRED_BY_TARGET[key] ?? []
+  const base = REQUIRED_BY_TARGET[key] ?? []
+  if ((key === "WEB_APP" || key === "API") && mode && ENGINE_BACKED_URL_MODES.has(mode)) {
+    return ["engine", ...base]
+  }
+  return base
 }
 
 /** True when the gate standard covers this target type at all. */

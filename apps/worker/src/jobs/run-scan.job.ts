@@ -1559,6 +1559,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             branch: target.branch,
             url: target.url,
           },
+          engineBacked,
           sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
           engineFindingCount: 0,
           coverageIssues: [{ scanner: "engine", status: "bounded", reason: budgetMessage }],
@@ -1617,6 +1618,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             branch: target.branch,
             url: target.url,
           },
+          engineBacked,
           sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
           engineFindingCount: 0,
           coverageIssues: [{ scanner: "engine", status: "bounded", reason: timeoutMessage }],
@@ -2058,6 +2060,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               branch: target.branch,
               url: target.url,
             },
+            engineBacked,
             sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
             engineFindingCount: orchestratorResult.engineFindings.length,
             coverageIssues: [
