@@ -14,6 +14,7 @@ import {
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+import { LocalTime } from "@/components/local-time"
 import { BillingActions } from "./billing-actions"
 import { BuyPackButton } from "./buy-pack-button"
 import { UpgradeNowButton } from "./upgrade-now-button"
@@ -162,9 +163,15 @@ export default async function BillingPage({
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
                 <span>
-                  {billingAccount.canceledAt
-                    ? `Access until ${billingAccount.currentPeriodEnd.toLocaleDateString()}`
-                    : `Renews on ${billingAccount.currentPeriodEnd.toLocaleDateString()}`}
+                  {billingAccount.canceledAt ? (
+                    <>
+                      Access until <LocalTime value={billingAccount.currentPeriodEnd} />
+                    </>
+                  ) : (
+                    <>
+                      Renews on <LocalTime value={billingAccount.currentPeriodEnd} />
+                    </>
+                  )}
                 </span>
               </div>
             )}
@@ -304,8 +311,13 @@ export default async function BillingPage({
                     <div>
                       <p className="font-medium">{pack.remainingMinutes} minutes remaining</p>
                       <p className="text-xs text-muted-foreground">
-                        Purchased {pack.purchasedAt.toLocaleDateString()}
-                        {pack.expiresAt && ` · Expires ${pack.expiresAt.toLocaleDateString()}`}
+                        Purchased <LocalTime value={pack.purchasedAt} />
+                        {pack.expiresAt && (
+                          <>
+                            {" "}
+                            · Expires <LocalTime value={pack.expiresAt} />
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
