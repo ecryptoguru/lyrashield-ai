@@ -7,6 +7,8 @@ import {
   type ToolHandlerContext,
 } from "./tools"
 import { PromptInjectionGuard } from "./prompt-injection-guard"
+import { validateToolArgs } from "./args-validation"
+import { capToolResult } from "./result-cap"
 
 /**
  * Human-approval gate for mutating MCP tools. Returns whether the mutating call
@@ -170,6 +172,24 @@ export class McpServer {
       }
     }
 
+    // Validate the exact (sanitized) arguments against the tool's advertised
+    // inputSchema before any approval or execution. Structured errors name
+    // the offending fields so agents can correct the call.
+    const argErrors = validateToolArgs(safeArgs, tool.inputSchema as Record<string, unknown>)
+    if (argErrors.length > 0) {
+      logger.warn("MCP tool call failed argument validation", { tool: name, argErrors })
+      const error = {
+        error: "Invalid tool arguments",
+        tool: name,
+        details: argErrors,
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify(error) }],
+        isError: true,
+        structuredContent: error,
+      }
+    }
+
     // Human-approval gate for mutating tools, evaluated against the exact
     // (sanitized) args right before execution — no TOCTOU window. Read-only
     // tools skip this. Fail-closed: with no gate and no explicit opt-in, a
@@ -239,7 +259,7 @@ export class McpServer {
       }
       if (decision.result) {
         logger.info("MCP mutating tool returned pre-computed approved result", { tool: name })
-        return decision.result
+        return capToolResult(decision.result)
       }
       logger.info("MCP mutating tool approved", { tool: name })
     }
@@ -251,7 +271,7 @@ export class McpServer {
     })
 
     try {
-      return await tool.handler(safeArgs)
+      return capToolResult(await tool.handler(safeArgs))
     } catch (err) {
       logger.error("MCP tool call failed", {
         tool: name,

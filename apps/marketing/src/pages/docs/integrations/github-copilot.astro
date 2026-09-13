@@ -99,7 +99,9 @@ copilot plugin install lyrashield@lyrashield-ai</code></pre>
   <h2>Verify the connection</h2>
   <p>
     Start Copilot, complete LyraShield's hosted OAuth flow, and ask it to list LyraShield
-    workspaces. A mutation must stay denied until the exact input is approved out of band.
+    workspaces. Delegated mutations execute within the connection grant. Mutations authenticated
+    with an API key receive a connect_required response pointing at OAuth connect. Only legacy
+    nondelegated hosted credentials still use the exact-input approval path.
   </p>
 
   <div class="callout callout--warn">

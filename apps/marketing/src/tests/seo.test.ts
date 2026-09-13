@@ -124,12 +124,16 @@ describe("marketing SEO metadata", () => {
     expect(llms).not.toContain("const publicPaths = [")
   })
 
-  it("updates llms.txt freshness only through its manual content date", () => {
+  it("derives llms.txt freshness from content dates, never build time", () => {
     const llms = source("../pages/llms.txt.ts")
 
-    expect(llms).toContain('const LLMS_TXT_CONTENT_DATE = "2026-09-10"')
-    expect(llms).toContain("Bump this by hand only when a section's CONTENT changes")
-    expect(llms).not.toMatch(/LLMS_TXT_CONTENT_DATE\s*=\s*new Date/)
+    // The date tracks the newest dated content the file summarizes — blog,
+    // compare, docs frontmatter, tools registry — floored at the last
+    // copy-only change and never `new Date()` (which would claim the whole
+    // site changed on every deploy).
+    expect(llms).toContain("latestContentDate")
+    expect(llms).toContain("LLMS_TXT_DATE_FLOOR")
+    expect(llms).not.toMatch(/latestContentDate[\s\S]{0,400}new Date\(\)/)
   })
 
   it("keeps the 100-post blog surface crawlable, attributable, and draft-gated", () => {

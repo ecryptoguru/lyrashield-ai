@@ -183,8 +183,10 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
     Installing the plugin does not let an agent rewrite your code unattended. During remote OAuth,
     the user chooses one workspace and the requested workflows. Matching calls can then run without
     repeated LyraShield approval, while current role, target access, profile, budget, connection,
-    scope, expiry, and idempotency checks still apply. Legacy and out-of-grant requests fail closed
-    or use the <a href="/docs/approvals">exact-input approval fallback</a>. Fixes and pull requests
+    scope, expiry, and idempotency checks still apply. Mutating calls authenticated with an API key
+    receive a connect_required response pointing at OAuth connect and out-of-grant delegated calls
+    are denied. The <a href="/docs/approvals">exact-input approval path</a> remains only for legacy
+    nondelegated hosted credentials. Fixes and pull requests
     remain proposals requiring review before they land; LyraShield never merges them automatically.
   </p>
 

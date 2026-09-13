@@ -154,11 +154,21 @@ export default async function AffiliatePayoutsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left">
-                <th className="pb-2 pr-4">Date</th>
-                <th className="pb-2 pr-4">Amount</th>
-                <th className="pb-2 pr-4">Provider</th>
-                <th className="pb-2 pr-4">Status</th>
-                <th className="pb-2 pr-4">Paid At</th>
+                <th scope="col" className="pb-2 pr-4">
+                  Date
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Amount
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Provider
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Status
+                </th>
+                <th scope="col" className="pb-2 pr-4">
+                  Paid At
+                </th>
               </tr>
             </thead>
             <tbody>

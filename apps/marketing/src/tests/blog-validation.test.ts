@@ -740,7 +740,7 @@ ${filler}
     }
   })
 
-  it("checks HTTPS links once, falls back to a ranged GET, and redacts queries", async () => {
+  it("checks HTTPS links once, falls back to a plain GET, and redacts queries", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(null, { status: 405 }))
@@ -764,14 +764,12 @@ ${filler}
     )
 
     expect(fetchMock).toHaveBeenCalledTimes(4)
-    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
-      method: "GET",
-      headers: { Range: "bytes=0-0" },
-    })
-    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
-      method: "GET",
-      headers: { Range: "bytes=0-0" },
-    })
+    // Plain GET, never ranged — a CDN can serve 206 for a 404 body and mask
+    // the dead link (the owasp.org/APTS miss this suite now guards).
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "GET" })
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).toBeUndefined()
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({ method: "GET" })
+    expect(fetchMock.mock.calls[3]?.[1]?.headers).toBeUndefined()
     expect(errors).toContain(
       "one: external source must use HTTPS: http://insecure.example.org/source"
     )
@@ -782,7 +780,7 @@ ${filler}
     expect(errors.join("\n")).not.toContain("hidden")
   })
 
-  it("uses one ranged GET to disambiguate every unsuccessful HEAD response", async () => {
+  it("uses one plain GET to disambiguate every unsuccessful HEAD response", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
@@ -805,22 +803,10 @@ ${filler}
     )
 
     expect(fetchMock).toHaveBeenCalledTimes(8)
-    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
-      method: "GET",
-      headers: { Range: "bytes=0-0" },
-    })
-    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
-      method: "GET",
-      headers: { Range: "bytes=0-0" },
-    })
-    expect(fetchMock.mock.calls[5]?.[1]).toMatchObject({
-      method: "GET",
-      headers: { Range: "bytes=0-0" },
-    })
-    expect(fetchMock.mock.calls[7]?.[1]).toMatchObject({
-      method: "GET",
-      headers: { Range: "bytes=0-0" },
-    })
+    for (const index of [1, 3, 5, 7]) {
+      expect(fetchMock.mock.calls[index]?.[1]).toMatchObject({ method: "GET" })
+      expect(fetchMock.mock.calls[index]?.[1]?.headers).toBeUndefined()
+    }
     expect(errors).not.toContain(
       "head-404: external source returned 404: https://www.rfc-editor.org/source"
     )

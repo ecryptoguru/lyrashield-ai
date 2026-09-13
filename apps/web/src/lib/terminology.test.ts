@@ -48,6 +48,23 @@ describe("user-facing terminology", () => {
     expect(offenders, `retired nouns found in: ${offenders.join(", ")}`).toEqual([])
   })
 
+  // Deep Review v17 wave 3: "Issues from this run" and "the run completed"
+  // shipped as customer-facing JSX text — quoted-literal scans miss JSX text
+  // children. Cover both the noun-headed "Issues from" and run-as-noun
+  // phrases (the run, this run, run completed, run limit, run manifest) in
+  // dashboard source. Verb usage ("run a scan") and schedule timestamps
+  // ("Last run"/"Next run") are outside this ruling's scope.
+  it("keeps 'Issues from' and noun-shaped 'run' out of customer-facing JSX", () => {
+    const offenders = scanTsxText((text, filePath) => {
+      const relative = filePath.replaceAll("\\", "/")
+      if (relative.includes("/onboarding/")) return false
+      if (relative.includes("/app/api/")) return false
+      if (/Issues from/.test(text)) return true
+      return /\b(the|this|a|each|latest|sealed|protected)\s+run\b|\brun completed\b/.test(text)
+    })
+    expect(offenders, `retired run/issue phrasing found in: ${offenders.join(", ")}`).toEqual([])
+  })
+
   it("keeps the retired Product noun out of user-visible dashboard strings", () => {
     const offenders = scanWebSource((text, filePath) => {
       const relative = filePath.replaceAll("\\", "/")
@@ -84,6 +101,34 @@ function scanWebSource(match: (text: string, filePath: string) => boolean): stri
         const text = readFileSync(full, "utf8")
         const hit = collectStringLiterals(text).some((literal) => match(literal, full))
         if (hit) offenders.push(full)
+      }
+    }
+  }
+  for (const root of roots) walk(root)
+  return offenders
+}
+
+/**
+ * Like scanWebSource but hands the comment-stripped source itself to `match`
+ * — catches JSX text children, which are never quoted string literals.
+ */
+function scanTsxText(match: (text: string, filePath: string) => boolean): string[] {
+  const roots = [join(__dirname, "..", "app"), join(__dirname, "..", "components")]
+  const offenders: string[] = []
+  const walk = (dir: string) => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry)
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const stat = statSync(full)
+      if (stat.isDirectory()) {
+        walk(full)
+      } else if (/\.tsx$/.test(entry) && !/\.test\./.test(entry)) {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        const text = readFileSync(full, "utf8")
+          .replace(/\/\*[\s\S]*?\*\//g, " ")
+          .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ")
+        if (match(text, full)) offenders.push(full)
       }
     }
   }

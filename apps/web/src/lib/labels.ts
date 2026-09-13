@@ -134,3 +134,24 @@ export function findingStatusLabel(value: string | null | undefined): string {
   if (!value) return "Unknown"
   return FINDING_STATUS_LABELS[value as FindingStatus] ?? humanizeToken(value)
 }
+
+// MemberRole labels keyed on the schema enum (packages/auth permissions
+// consume the same set). Exhaustive on purpose: a new role must be named
+// here rather than leaking the raw token to the team page.
+const MEMBER_ROLE_LABELS: Record<string, string> = {
+  OWNER: "Owner",
+  ADMIN: "Admin",
+  MEMBER: "Member",
+  VIEWER: "Viewer",
+  SECURITY_ADMIN: "Security admin",
+  APPSEC_MANAGER: "AppSec manager",
+  DEVELOPER: "Developer",
+  AUDITOR: "Auditor",
+  BILLING_ADMIN: "Billing admin",
+  EXTERNAL_PENTESTER: "External pentester",
+}
+
+export function memberRoleLabel(value: string | null | undefined): string {
+  if (!value) return "Member"
+  return MEMBER_ROLE_LABELS[value] ?? humanizeToken(value)
+}

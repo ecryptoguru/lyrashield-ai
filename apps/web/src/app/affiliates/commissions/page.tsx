@@ -54,13 +54,27 @@ export default async function AffiliateCommissionsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left">
-              <th className="pb-2 pr-4">Earned At</th>
-              <th className="pb-2 pr-4">Release At</th>
-              <th className="pb-2 pr-4">Rate</th>
-              <th className="pb-2 pr-4">Amount</th>
-              <th className="pb-2 pr-4">Status</th>
-              <th className="pb-2 pr-4">Method</th>
-              <th className="pb-2 pr-4">Reversal</th>
+              <th scope="col" className="pb-2 pr-4">
+                Earned At
+              </th>
+              <th scope="col" className="pb-2 pr-4">
+                Release At
+              </th>
+              <th scope="col" className="pb-2 pr-4">
+                Rate
+              </th>
+              <th scope="col" className="pb-2 pr-4">
+                Amount
+              </th>
+              <th scope="col" className="pb-2 pr-4">
+                Status
+              </th>
+              <th scope="col" className="pb-2 pr-4">
+                Method
+              </th>
+              <th scope="col" className="pb-2 pr-4">
+                Reversal
+              </th>
             </tr>
           </thead>
           <tbody>

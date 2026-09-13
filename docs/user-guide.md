@@ -321,14 +321,14 @@ Eligible completed Standard or Deep scans can create a versioned LyraShield Scor
 
 Open **Overview** or the launch-readiness surface to see:
 
-- `NOT_EVALUATED` before a completed scan exists;
-- `GO`, `GO_WITH_CONDITIONS`, or `NO_GO` based on retained findings;
+- `INSUFFICIENT_EVIDENCE` when no completed scan or required coverage exists;
+- `READY` or `NOT_READY` based on retained findings;
 - current score when available;
 - blocking and verified finding counts;
 - severity distribution;
 - conditions and recommendations.
 
-“Ready to Launch” means no blocking findings were retained within completed scope. It does not certify untested systems or evidence-required controls.
+Launch readiness is triage, not a launch verdict. `READY` means no blocking findings were retained within completed scope; an inconclusive result renders as neutral and never green. It does not certify untested systems or evidence-required controls.
 
 ## 15. Public scorecards and referrals
 
@@ -426,12 +426,12 @@ These are the configured commercial terms. Live checkout and charging remain dis
 
 LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Standard and Quick scans only (no Deep), and no card required. When the trial ends, pick a paid plan or let it lapse.
 
-| Plan             | Price       | Minutes/mo | Targets | Deep | Notes                                      |
-| ---------------- | ----------- | ---------: | ------: | ---- | ------------------------------------------ |
-| STARTER          | $29/mo      |        210 |       5 | No   | Standard + Quick                           |
-| PRO              | $99/mo      |        850 |      15 | Yes  | Deep enabled                               |
-| LAUNCH ASSURANCE | $499/mo     |      4,500 |      50 | Yes  | Deep + opt-in overage + spend limit + RBAC |
-| ENTERPRISE       | Contact-led |     custom |  custom | Yes  | Custom terms                               |
+| Plan       | Price       | Minutes/mo | Targets | Deep | Notes                                      |
+| ---------- | ----------- | ---------: | ------: | ---- | ------------------------------------------ |
+| STARTER    | $29/mo      |        210 |       5 | No   | Standard + Quick                           |
+| PRO        | $99/mo      |        850 |      15 | Yes  | Deep enabled                               |
+| AGENCY     | $499/mo     |      4,500 |      50 | Yes  | Deep + opt-in overage + spend limit + RBAC |
+| ENTERPRISE | Contact-led |     custom |  custom | Yes  | Custom terms                               |
 
 - **Annual billing:** 15–30% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
@@ -538,7 +538,7 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 `uninstall <agent>` removes the LyraShield entry from the chosen agent's config or plugin directory.
 
-Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `findings`, `explain <findingId>`, `fix-plan <findingId>`, `verify <findingId>`, `report`, `readiness`, `targets`, and `rules add/remove/check <agent>` (writes or removes LyraShield's security policy in that agent's native rules format — `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others — inside a checksummed block so re-running never clobbers your own edits to the surrounding file). `check-diff` is the same fast, local, **advisory** heuristic as the MCP tool of the same purpose — not a full recorded scan. Every command supports `--json` for scripting, and `gate` exits non-zero when a finding at or above the configured severity is present, matching the GitHub Action's own gate semantics.
+Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `findings`, `explain <findingId>`, `fix-plan <findingId>`, `verify <findingId>`, `report`, `readiness`, `targets`, `targets remove <targetId>` (soft delete — history is retained and the plan cap slot is freed), and `rules add/remove/check <agent>` (writes or removes LyraShield's security policy in that agent's native rules format — `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others — inside a checksummed block so re-running never clobbers your own edits to the surrounding file). `check-diff` is the same fast, local, **advisory** heuristic as the MCP tool of the same purpose — not a full recorded scan. Every command supports `--json` for scripting, and `gate` exits non-zero when a finding at or above the configured severity is present, matching the GitHub Action's own gate semantics.
 
 **Project defaults** make scans one-command: `lyrashield project use` detects the current git repo, creates or reuses a repo target, and saves it as the default project. `lyrashield scan` then starts a scan without `--target`. Switch projects with `lyrashield project switch <targetId>`, list them with `lyrashield project list`, or clear with `lyrashield project clear`. To scan the current git repo instead of the saved default, pass `--auto`; to scan another repository, pass `--repo <owner/repo>`.
 
@@ -566,7 +566,7 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 - `lyrashield_get_findings` — list findings with optional target or severity filters;
 - `lyrashield_explain_finding` — full detail and plain-language explanation of a finding;
 - `lyrashield_generate_fix_plan` — assemble a remediation plan from a finding;
-- `lyrashield_get_launch_readiness` — retrieve the current scoped launch verdict;
+- `lyrashield_get_launch_readiness` — retrieve the current scoped launch-readiness gate result (`READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`);
 - `lyrashield_create_pr_security_recap` — generate a markdown security recap for a PR comment;
 - `lyrashield_check_diff` — fast **advisory** heuristic pre-filter on a diff (not a full recorded scan).
 

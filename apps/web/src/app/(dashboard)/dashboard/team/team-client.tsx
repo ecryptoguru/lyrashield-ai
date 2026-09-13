@@ -12,6 +12,7 @@ import { LocalTime } from "@/components/local-time"
 import { PageHeader } from "@/components/page-header"
 import { EmailText } from "@/components/email-text"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
+import { memberRoleLabel } from "@/lib/labels"
 
 interface Member {
   id: string
@@ -315,7 +316,7 @@ export function TeamClient({
                   <Badge
                     variant={m.role === "OWNER" ? "default" : m.role === "ADMIN" ? "info" : "muted"}
                   >
-                    {m.role}
+                    {memberRoleLabel(m.role)}
                   </Badge>
                 </td>
                 <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
@@ -345,7 +346,7 @@ export function TeamClient({
                               .filter((role) => canGrantRole(actorRole, role))
                               .map((role) => (
                                 <option key={role} value={role}>
-                                  {role}
+                                  {memberRoleLabel(role)}
                                 </option>
                               ))}
                           </Select>
@@ -412,7 +413,7 @@ export function TeamClient({
                     <EmailText value={inv.email} />
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant="muted">{inv.role}</Badge>
+                    <Badge variant="muted">{memberRoleLabel(inv.role)}</Badge>
                   </td>
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                     <span className="flex items-center gap-1">

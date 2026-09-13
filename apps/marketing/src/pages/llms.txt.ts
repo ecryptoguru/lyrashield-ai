@@ -1,5 +1,13 @@
 import type { APIRoute } from "astro"
 import { getCollection, getEntry } from "astro:content"
+// Docs pages carry `const updatedDate = "YYYY-MM-DD"` — the convention
+// astro.config.mjs's sitemap lastmod reads. Raw glob inlines the sources at
+// build time, so this still works inside the deployed worker (no node:fs).
+const docsSources = import.meta.glob("./docs/**/*.astro", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>
 import { tools } from "../lib/tools"
 // Relative filesystem import on purpose, not "@lyrashield/security" — see the
 // identical note in vibe-security-50.astro. The package index re-exports the
@@ -29,7 +37,37 @@ const evidenceControlCount = VIBE_SECURITY_CONTROLS.filter(
 // schedule to either believe the site changes constantly or to stop trusting
 // the field. See astro.config.mjs's sitemap lastmod comment for the same
 // principle applied to the sitemap.
-const LLMS_TXT_CONTENT_DATE = "2026-09-10"
+// Derived, not hardcoded: the newest dated content this file summarizes —
+// blog posts (updatedDate else pubDate), comparison pages, docs frontmatter,
+// and the tools registry. `new Date()` would print "today" per build and
+// teach crawlers the timestamp is meaningless; a floor keeps the date honest
+// even when a copy-only edit ships without touching a collection.
+const LLMS_TXT_DATE_FLOOR = "2026-09-10"
+
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+async function latestContentDate(): Promise<string> {
+  let latest = new Date(`${LLMS_TXT_DATE_FLOOR}T00:00:00Z`)
+  const bump = (d: Date | undefined) => {
+    if (d && !Number.isNaN(d.valueOf()) && d > latest) latest = d
+  }
+  for (const post of await getCollection("blog", (e) => !e.data.draft)) {
+    bump(post.data.updatedDate ?? post.data.pubDate)
+  }
+  for (const page of await getCollection("compare", (e) => !e.data.draft)) {
+    bump(page.data.updatedDate)
+  }
+  for (const tool of tools) bump(tool.updatedDate ? new Date(tool.updatedDate) : undefined)
+  for (const source of Object.values(docsSources)) {
+    const match = source.match(
+      /(?:const\s+updatedDate|dateModified)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/
+    )
+    if (match) bump(new Date(match[1]!))
+  }
+  return isoDay(latest)
+}
 
 const docsLinks = [
   { label: "REST API reference", path: "/docs/api" },
@@ -142,7 +180,7 @@ export const GET: APIRoute = async (context) => {
   const sections = [
     "# LyraShield AI — llms.txt",
     "",
-    `Last updated: ${LLMS_TXT_CONTENT_DATE}`,
+    `Last updated: ${await latestContentDate()}`,
     "",
     "LyraShield AI is a SaaS release-assurance platform for AI-built apps. The same review-and-evidence engine also ships as a published CLI, a GitHub Action, and an MCP server inside coding agents — it is one product across four surfaces, not four separate tools. It is in open beta with open registration; there is no waitlist.",
     "Pricing: Trial includes 60 one-time agent-minutes. Starter is $29/month, Pro is $99/month, Agency is $499/month, and Enterprise starts at $1,500/month. Regional INR pricing and annual options are published on /pricing.",
@@ -190,6 +228,10 @@ export const GET: APIRoute = async (context) => {
   ]
 
   return new Response(sections.join("\n"), {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      // Same caching as agents.md — the content only changes on deploys.
+      "Cache-Control": "public, max-age=3600",
+    },
   })
 }
