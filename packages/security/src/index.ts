@@ -201,3 +201,12 @@ export {
   type StandardCellState,
   type StandardView,
 } from "./standards/render"
+
+export { computeDedupeKey, type DedupeIdentity } from "./finding-dedupe"
+export {
+  parseSarifReport,
+  sarifToFindingRecords,
+  SARIF_IMPORT_VERSION,
+  type ImportedFindingRecord,
+  type SarifParseResult,
+} from "./sarif-import"

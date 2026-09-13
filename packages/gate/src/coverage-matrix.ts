@@ -26,6 +26,7 @@ export const SCANNER_FAMILIES = [
   "sast",
   "iac",
   "url",
+  "external_import",
 ] as const
 
 export type ScannerFamily = (typeof SCANNER_FAMILIES)[number]

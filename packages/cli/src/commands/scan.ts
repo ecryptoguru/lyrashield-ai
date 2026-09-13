@@ -1,4 +1,6 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import minimist from "minimist"
+import { readFile } from "fs/promises"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import type { Output } from "../output.js"
@@ -74,7 +76,7 @@ async function resolveTarget(
 
 export async function handleScan(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["target", "goal", "mode", "repo", "name", "idempotency-key"],
+    string: ["target", "goal", "mode", "repo", "name", "idempotency-key", "sarif"],
     boolean: ["watch", "auto"],
     default: { goal: "TEST_APP", mode: "STANDARD" },
     alias: { t: "target", g: "goal", m: "mode" },
@@ -133,6 +135,30 @@ export async function handleScan(args: string[], output: Output): Promise<number
   if (resolved.isNew && resolved.repository) {
     output.log(`Resolved project ${resolved.repository} → target ${resolved.targetId}`)
   }
+
+  // --sarif <file> pushes a third-party SARIF 2.1.0 report against the new
+  // scan: findings land tagged external_import and never count as coverage.
+  if (parsed.sarif) {
+    const sarifPath = parsed.sarif as string
+    let sarifBody: string
+    try {
+      sarifBody = await readFile(sarifPath, "utf-8")
+    } catch {
+      output.error(`Cannot read SARIF file: ${sarifPath}`)
+      return 2
+    }
+    const importRes = (await client.request(
+      "POST",
+      `/scans/${res.id}/artifacts/sarif?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { body: sarifBody, headers: { "Content-Type": "application/json" } }
+    )) as { imported: number; corroborated: number; rejected: number; toolName: string | null }
+    output.log(
+      `Imported ${importRes.imported} SARIF finding(s) from ${importRes.toolName ?? "external tool"}` +
+        (importRes.corroborated > 0 ? ` (${importRes.corroborated} corroborated)` : "") +
+        (importRes.rejected > 0 ? ` (${importRes.rejected} rejected)` : "")
+    )
+  }
+
   output.result(res)
 
   return 0

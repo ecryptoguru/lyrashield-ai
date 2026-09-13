@@ -296,6 +296,7 @@ const SCANNER_LABELS: Record<string, string> = {
   ml_supply_chain: "ML supply chain",
   sast: "Static analysis",
   iac: "Infrastructure config scan",
+  external_import: "Imported scan (third-party)",
 }
 
 const ELAPSED_TIME_INTERVAL_MS = 1_000

@@ -1,6 +1,5 @@
-import { createHash } from "crypto"
 import { logger } from "@lyrashield/logger"
-import { checkOutputSafety } from "@lyrashield/security"
+import { checkOutputSafety, computeDedupeKey } from "@lyrashield/security"
 import {
   checkRunRecordSchemaVersion,
   engineRunRecordSchema,
@@ -53,6 +52,7 @@ export interface EngineVulnerability {
     | "ml_supply_chain"
     | "sast"
     | "iac"
+    | "external_import"
   /** Every detector that independently produced the normalized finding. */
   corroboratingSources?: Array<
     | "engine"
@@ -64,6 +64,7 @@ export interface EngineVulnerability {
     | "ml_supply_chain"
     | "sast"
     | "iac"
+    | "external_import"
   >
 }
 
@@ -893,28 +894,29 @@ export function generateDedupeKey(vuln: EngineVulnerability, targetId: string): 
     dependency?.package_name &&
     (vuln.finding_class === "dependency_cve" || vuln.finding_class === "dependency_advisory")
   )
-  const identity = isDependencyFinding
-    ? [
-        "dependency",
-        vuln.cve ?? vuln.id,
-        dependency?.package_ecosystem ?? "",
-        dependency?.package_name ?? "",
-      ]
-    : [
-        vuln.finding_class ?? "dynamic",
-        vuln.cve ?? "",
-        vuln.cwe ?? "",
-        vuln.endpoint ?? "",
-        vuln.method ?? "",
-        location?.file ?? "",
-        location?.start_line ?? "",
-        location?.end_line ?? "",
-        vuln.title,
-      ]
-  const raw = ["v2", targetId, ...identity]
-    .map((value) => String(value).trim().toLowerCase())
-    .join("|")
-  return createHash("sha256").update(raw).digest("hex").slice(0, 32)
+  return computeDedupeKey(
+    isDependencyFinding
+      ? {
+          cve: vuln.cve,
+          id: vuln.id,
+          dependency: {
+            packageEcosystem: dependency?.package_ecosystem,
+            packageName: dependency?.package_name,
+          },
+        }
+      : {
+          findingClass: vuln.finding_class,
+          cve: vuln.cve,
+          cwe: vuln.cwe,
+          endpoint: vuln.endpoint,
+          method: vuln.method,
+          file: location?.file,
+          startLine: location?.start_line,
+          endLine: location?.end_line,
+          title: vuln.title,
+        },
+    targetId
+  )
 }
 
 export function buildFindingSummary(vuln: EngineVulnerability): string {
