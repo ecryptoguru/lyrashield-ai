@@ -18,6 +18,8 @@ A candidate is a user whose `trialStartedAt` is set while the account has neithe
    DATABASE_SYSTEM_URL=<system-url> pnpm --filter @lyrashield/db exec tsx scripts/backfill-clear-wrong-trial-claims.ts --apply=backfill-clear-wrong-trial-claims
    ```
 
+   A bare `--apply` flag also applies the backfill — the script resolves it to the same confirmation slug. The pinned `--apply=backfill-clear-wrong-trial-claims` spelling is preferred in runbooks and shell history so the intent stays explicit.
+
 3. The apply pass runs in one serializable transaction: each candidate's `trialStartedAt` is cleared and one chained `AuditLog` row (`trial.claim_cleared`, `resourceType: "user"`) is appended in the user's oldest owned workspace. A cleared user who owns no workspace is listed under `unaudited`.
 
 4. Re-run the dry pass — the candidate list should be empty. The script is idempotent.
