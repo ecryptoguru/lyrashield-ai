@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getApiRequestId } from "./api-auth"
 
 export function apiSuccess<T>(data: T, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
@@ -13,8 +14,25 @@ export function apiError(
   /** Structured extra data for the client to render actionable errors. */
   details?: unknown
 ) {
+  // Correlate client-visible errors with server logs: the same id rides the
+  // x-request-id response header (stamped by withApiRequest). The lookup is
+  // best-effort — tests that subset-mock ./api-auth do not break apiError.
+  let requestId: string | undefined
+  try {
+    requestId = getApiRequestId()
+  } catch {
+    /* subset logger/auth mocks */
+  }
   return NextResponse.json(
-    { success: false, error: { code, message, ...(details !== undefined ? { details } : {}) } },
+    {
+      success: false,
+      error: {
+        code,
+        message,
+        ...(requestId ? { requestId } : {}),
+        ...(details !== undefined ? { details } : {}),
+      },
+    },
     { status, headers }
   )
 }

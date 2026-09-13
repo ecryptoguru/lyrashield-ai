@@ -28,6 +28,12 @@ export interface ApprovalDecision {
   reason?: string
   /** Pre-computed tool result; if set and approved is true, the handler is skipped. */
   result?: McpToolResult
+  /**
+   * Structured denial payload (for example a `connect_required` response that
+   * directs the caller at OAuth connect). Surfaced to the client as
+   * structuredContent plus an identical text body.
+   */
+  structuredContent?: Record<string, unknown>
 }
 
 export type ApprovalGate = (
@@ -223,6 +229,18 @@ export class McpServer {
           tool: name,
           reason: decision.reason,
         })
+        if (decision.structuredContent) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(decision.structuredContent),
+              },
+            ],
+            isError: true,
+            structuredContent: decision.structuredContent,
+          }
+        }
         const error = {
           error: "Mutation was not authorized or could not be executed",
           tool: name,

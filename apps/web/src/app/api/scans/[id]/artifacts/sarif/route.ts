@@ -74,7 +74,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       workspaceId,
       async (tx) => {
         // Serialize imports for this target. Findings and candidates commit together.
-        await tx.$executeRaw`SELECT id FROM "Target" WHERE id = ${targetId} AND "workspaceId" = ${workspaceId} FOR UPDATE`
+        await tx.$executeRaw`SELECT id FROM "Target" WHERE id = ${targetId} AND "workspaceId" = ${workspaceId} AND "deletedAt" IS NULL FOR UPDATE`
         const priorCandidates = await tx.findingCandidate.findMany({
           where: {
             workspaceId,

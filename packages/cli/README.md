@@ -127,7 +127,7 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 
 ### Importing SARIF
 
-`lyrashield scan --target <targetId> --sarif <report.sarif>` validates the file before submitting a scan and imports third-party detections. Imports never establish scanner coverage or independently verified findings. If import fails after submission, retry with `lyrashield scan --scan-id <existingScanId> --sarif <report.sarif>`; this does not create or charge for another scan.
+`lyrashield scan --target <targetId> --sarif <report.sarif>` validates the file before submitting a scan and imports third-party detections through `POST /api/v1/scans/{id}/artifacts/sarif`. Imports never establish scanner coverage or independently verified findings. If import fails after submission, retry with `lyrashield scan --scan-id <existingScanId> --sarif <report.sarif>`; this does not create or charge for another scan.
 
 ### Retrying a scan safely
 

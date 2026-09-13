@@ -157,3 +157,42 @@ describe("targets verify-domain", () => {
     })
   })
 })
+
+describe("targets remove", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal("fetch", fetchMock)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("deletes a target with --yes and reports exit 0", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }))
+    expect(await handleTargets(["remove", "target-1", "--yes"], output)).toBe(0)
+    expectRequest(0, "DELETE", "/targets/target-1?workspaceId=ws-test")
+  })
+
+  it("honours an explicit --workspace flag", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }))
+    expect(await handleTargets(["remove", "target-1", "-y", "-w", "ws-other"], output)).toBe(0)
+    expectRequest(0, "DELETE", "/targets/target-1?workspaceId=ws-other")
+  })
+
+  it("aborts without --yes on a non-interactive shell", async () => {
+    const code = await handleTargets(["remove", "target-1"], output)
+    expect(code).toBe(1)
+    expect(output.error).toHaveBeenCalledWith(expect.stringContaining("--yes"))
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("exits non-zero with the API message on 409", async () => {
+    respond({ code: "TARGET_HAS_ACTIVE_SCAN", message: "Target has a queued or running scan" }, 409)
+    const code = await handleTargets(["remove", "target-1", "--yes"], output)
+    expect(code).toBe(1)
+    expect(output.error).toHaveBeenCalledWith(expect.stringContaining("queued or running scan"))
+  })
+
+  it("requires a target id", async () => {
+    expect(await handleTargets(["remove", "--yes"], output)).toBe(2)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

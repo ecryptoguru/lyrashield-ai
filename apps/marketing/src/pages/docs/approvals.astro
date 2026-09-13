@@ -3,10 +3,10 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/approvals", origin).toString()
-const title = "Agent Approvals"
+const title = "Agent Authorization"
 const description =
-  "Human out-of-band approval for mutating agent actions in LyraShield. PENDING approvals expire after 15 minutes."
-const updatedDate = "2026-07-31"
+  "How mutating agent actions are authorized in LyraShield: a connected OAuth client is the grant. Other credentials receive one structured connect_required response."
+const updatedDate = "2026-09-13"
 
 const jsonLd: unknown[] = [
   {
@@ -40,39 +40,44 @@ const jsonLd: unknown[] = [
   updatedDate={updatedDate}
   currentPath="/docs/approvals"
 >
-  <h1>Agent approvals</h1>
+  <h1>Agent authorization</h1>
   <p>
-    Mutating actions requested by a remote agent (scan, report, fix proposal, retest) are held in a{" "}
-    <strong>PENDING</strong> state until a human explicitly approves or denies them.
+    A connected OAuth client is the authorization. When a client connects to LyraShield over
+    OAuth, its grant carries the workspace, scopes, allowed operations, target scope, profiles
+    and expiry. Mutating calls that match the grant execute automatically with a caller-supplied{" "}
+    <code>idempotencyKey</code>; identical retries replay the stored result instead of running
+    twice.
   </p>
 
-  <h2>Lifecycle</h2>
-  <ol>
-    <li>The agent calls a mutating tool with its normal arguments.</li>
-    <li>
-      LyraShield returns a PENDING result with an <code>approvalId</code> and a URL such as{" "}
-      <code>https://app.lyrashieldai.com/agent-approvals/&lt;approvalId&gt;</code>.
-    </li>
-    <li>A human reviews the exact action and inputs, then approves or denies.</li>
-    <li>
-      The agent re-calls the same tool with the same arguments plus <code>approvalId</code>. The
-      server verifies the input hash, executes the tool once, and stores the result.
-    </li>
-    <li>
-      Replays with the same <code>approvalId</code> return the stored result without re-executing.
-    </li>
-  </ol>
-
-  <h2>Expiry</h2>
+  <h2>Callers without a connection</h2>
   <p>
-    PENDING approvals expire after 15 minutes. An expired approval must be re-requested; the
-    human-readable URL will show the expired state.
+    An API key or a legacy OAuth bearer calling a mutating tool on the hosted endpoint receives
+    one structured response and nothing else:
+  </p>
+  <pre><code>{`{
+  "code": "connect_required",
+  "message": "This action requires a connected LyraShield client. Connect over OAuth to authorize mutating tools inside a bounded grant.",
+  "connectUrl": "https://app.lyrashieldai.com/dashboard/connections",
+  "docsUrl": "https://lyrashieldai.com/docs/approvals"
+}`}</code></pre>
+  <p>
+    No approval is queued and nothing executes. Connect a client over OAuth, then re-run the
+    action inside the grant. Read-only credentials are denied on scope before this check.
   </p>
 
-  <h2>API</h2>
+  <h2>Retired PENDING flow</h2>
+  <p>
+    The earlier remote flow — a <code>PENDING</code> result with an <code>approvalId</code> that a
+    human approved in a review queue before the agent retried the same call — is retired on the
+    remote path. A call that carries a legacy <code>approvalId</code> now receives{" "}
+    <code>connect_required</code> like any other connectionless call.
+  </p>
+  <p>
+    Historical approval records stay readable for audit through the REST routes, which remain
+    available for workspace members:
+  </p>
   <ul>
     <li><code>GET /api/v1/agent-approvals?workspaceId=&lt;id&gt;</code> — list approvals</li>
-    <li><code>POST /api/v1/agent-approvals</code> — create an approval</li>
     <li>
       <code>POST /api/v1/agent-approvals/&lt;id&gt;/approve</code> — approve an action (requires{" "}
       <code>input</code> for hash verification)
@@ -80,10 +85,10 @@ const jsonLd: unknown[] = [
     <li><code>POST /api/v1/agent-approvals/&lt;id&gt;/deny</code> — deny an action</li>
   </ul>
 
-  <h2>Trusted CI opt-out</h2>
+  <h2>Local stdio server</h2>
   <p>
-    The environment variable <code>LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true</code> still bypasses
-    the approval gate for genuinely trusted automation. This is a blunt instrument; the approval
-    flow is the recommended default.
+    The local <code>@lyrashield/mcp</code> stdio server uses a workspace API key and calls the
+    REST API directly. Scope, role, target authorization and budget are enforced on each
+    request; no second LyraShield prompt applies there.
   </p>
 </DocsLayout>

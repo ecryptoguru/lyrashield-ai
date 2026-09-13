@@ -181,9 +181,9 @@ The remote endpoint runs the same guard and tools as stdio. Hosted responses are
 
 - **New delegated OAuth connection:** Connect is the authorization. Matching hosted mutations require `idempotencyKey`; reuse it only for identical retries.
 - **Connection outside its grant:** the call fails closed. Reconnect to authorize the required access.
-- **Write-scoped API key or local stdio:** the REST API enforces the credential's scope, current role, target authorization, and budget without a second LyraShield prompt.
+- **API key or legacy token on the hosted endpoint:** one structured `connect_required` response naming the OAuth connect path. Nothing is queued and nothing executes — connect a client first.
+- **Local stdio with an API key:** the REST API enforces the credential's scope, current role, target authorization, and budget without a second LyraShield prompt.
 - **Read-only credential:** mutations are denied.
-- **Legacy hosted nondelegated credential:** historical exact-input approval remains supported; reconnect for automatic workflows.
 
 Coding-agent hosts may impose their own tool permission dialogs. LyraShield cannot suppress those controls. API-key and local stdio calls do not claim the hosted OAuth operation ledger's replay guarantee. Pull requests never auto-merge.
 

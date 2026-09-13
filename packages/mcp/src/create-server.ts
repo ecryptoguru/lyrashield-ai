@@ -175,12 +175,10 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: engine.listTools({
-      includeApprovalId:
-        !options.allowMutations &&
-        options.approvalMode === "remote-oob" &&
-        !options.delegatedAuthorization &&
-        !!options.remoteApprovalGate &&
-        !!options.remoteApprovalContext,
+      // The remote endpoint no longer queues approvals: callers without a
+      // delegated connection get connect_required, so approvalId is never a
+      // usable argument there.
+      includeApprovalId: false,
       requireIdempotencyKey:
         !options.allowMutations &&
         options.approvalMode === "remote-oob" &&

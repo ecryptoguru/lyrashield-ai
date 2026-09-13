@@ -40,12 +40,21 @@ export function MetricCard({
   )
 }
 
-export function ScoreGauge({ score, grade }: { score: number | null; grade?: string | null }) {
+export function ScoreGauge({
+  score,
+  grade,
+  neutral = false,
+}: {
+  score: number | null
+  grade?: string | null
+  /** Muted ring regardless of score — for triage contexts that never issue a verdict colour. */
+  neutral?: boolean
+}) {
   const value = score ?? 0
   const circumference = 2 * Math.PI * 48
   const offset = circumference - (value / 100) * circumference
   const color =
-    score === null
+    score === null || neutral
       ? "var(--color-muted-foreground)"
       : score >= 80
         ? "var(--color-success)"

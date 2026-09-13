@@ -1,10 +1,18 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { NextResponse } from "next/server"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import {
+  prisma,
+  softDeleteTarget,
+  TargetHasActiveScanError,
+  TargetNotFoundError,
+  withWorkspaceRLS,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { PatchTargetSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
+import { z } from "zod"
+import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { checkScanUrlSafe } from "../../../../lib/ssrf"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError } from "../../../../lib/api-response"
@@ -157,3 +165,41 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
 }
 
 export const PATCH = withCookieMutation(patch)
+
+const WorkspaceSchema = z.string().min(1)
+
+async function deleteTarget(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const parsedWorkspace = WorkspaceSchema.safeParse(
+    new URL(request.url).searchParams.get("workspaceId")
+  )
+  if (!parsedWorkspace.success) {
+    return apiError("MISSING_PARAM", "workspaceId is required", 400)
+  }
+  const workspaceId = parsedWorkspace.data
+  const { id } = await params
+
+  try {
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.target.delete)
+    await softDeleteTarget(workspaceId, id, session.userId)
+    logger.info("Target soft-deleted", { targetId: id, workspaceId, actorUserId: session.userId })
+    revalidateDashboardAggregates(workspaceId)
+    return new NextResponse(null, { status: 204 })
+  } catch (error) {
+    if (error instanceof TargetNotFoundError) {
+      return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+    }
+    if (error instanceof TargetHasActiveScanError) {
+      return apiError(
+        "TARGET_HAS_ACTIVE_SCAN",
+        "This target has a queued or running scan. Wait for it to finish or cancel it before deleting.",
+        409
+      )
+    }
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
+    logger.error("Failed to delete target", { error: String(error) })
+    return apiError("INTERNAL_ERROR", "Failed to delete target", 500)
+  }
+}
+
+export const DELETE = withCookieMutation(deleteTarget)
