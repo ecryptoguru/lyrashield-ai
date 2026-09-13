@@ -32,7 +32,7 @@ import {
 } from "@/lib/cache"
 import { TrustCommandCenter } from "@/components/trust-command-center"
 import { deriveHomeDecision } from "@/lib/home-next-action"
-import { projectGateReadinessReport } from "@/lib/launch-readiness"
+import { describeGateIdentity, projectGateReadinessReport } from "@/lib/launch-readiness"
 import { getGateReadinessTargets } from "@/lib/launch-readiness-server"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -137,6 +137,14 @@ export default async function DashboardPage() {
         }
       : null
 
+  // The verdict badge names which release each READY target's assessment
+  // covers, so "Evaluated" never reads as an unscoped all-clear.
+  const assessedIdentityLabels = gateTargets
+    .map((target) =>
+      describeGateIdentity({ identity: target.assessedIdentity ?? null, state: target.state })
+    )
+    .filter((label): label is string => label !== null)
+
   // The trend plots only snapshots bound to scans with usable coverage — the
   // read model already excludes scores from runs that evaluated nothing. The
   // posture header demotes the score entirely while the canonical verdict is
@@ -195,7 +203,7 @@ export default async function DashboardPage() {
       {/* One contextual next action — same decision model as the header CTA. */}
       {decision.action && (
         <section
-          className="border-primary/30 bg-primary/[0.04] rounded-xl border p-5 sm:p-6"
+          className="border-primary/30 bg-primary/4 rounded-xl border p-5 sm:p-6"
           aria-labelledby="home-next-action"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -367,7 +375,11 @@ export default async function DashboardPage() {
                   : "muted"
               }
             >
-              {latestScore && readiness.state === "READY" ? "Evaluated" : "Not launch-ready"}
+              {latestScore && readiness.state === "READY"
+                ? assessedIdentityLabels.length > 0
+                  ? `Evaluated · ${assessedIdentityLabels.join(" · ")}`
+                  : "Evaluated"
+                : "Not launch-ready"}
             </Badge>
           </div>
           <div className="grid items-center gap-6 md:grid-cols-[auto_1fr]">

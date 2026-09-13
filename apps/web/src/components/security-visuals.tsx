@@ -23,10 +23,10 @@ export function MetricCard({
 }) {
   return (
     <Card className="relative overflow-hidden p-5">
-      <div className="via-primary/50 absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent" />
+      <div className="via-primary/50 absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent to-transparent" />
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-muted-foreground text-xs font-semibold tracking-[0.1em] uppercase">
+          <p className="text-muted-foreground text-xs font-semibold tracking-widest uppercase">
             {label}
           </p>
           <p className="metric-number mt-2 text-3xl font-bold">{value}</p>
@@ -40,12 +40,21 @@ export function MetricCard({
   )
 }
 
-export function ScoreGauge({ score, grade }: { score: number | null; grade?: string | null }) {
+export function ScoreGauge({
+  score,
+  grade,
+  neutral = false,
+}: {
+  score: number | null
+  grade?: string | null
+  /** Muted ring regardless of score — for triage contexts that never issue a verdict colour. */
+  neutral?: boolean
+}) {
   const value = score ?? 0
   const circumference = 2 * Math.PI * 48
   const offset = circumference - (value / 100) * circumference
   const color =
-    score === null
+    score === null || neutral
       ? "var(--color-muted-foreground)"
       : score >= 80
         ? "var(--color-success)"

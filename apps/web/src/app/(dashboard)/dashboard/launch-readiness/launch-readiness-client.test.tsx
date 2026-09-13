@@ -29,6 +29,74 @@ const REPORT: LaunchReadinessReport = {
   recommendations: [],
 }
 
+describe("LaunchReadinessClient triage relabel", () => {
+  const inconclusive: LaunchReadinessReport = {
+    ...REPORT,
+    state: "INSUFFICIENT_EVIDENCE",
+    verdict: "INCONCLUSIVE",
+    triageScore: 100,
+    summary: "No completed assessment evidence is available.",
+  }
+
+  it("renders a neutral (not green) gauge with zero scans", () => {
+    const html = renderToStaticMarkup(
+      <LaunchReadinessClient
+        workspaceId="ws-1"
+        initialReport={{ ...inconclusive, verdict: "NOT_EVALUATED", triageScore: null }}
+        targets={[]}
+        initialTargetId=""
+        initialReleaseRef=""
+        initialReleaseCheck={null}
+        initialCheckError={null}
+        checkNeedsTarget={false}
+      />
+    )
+
+    // The ring stroke must not use the success colour even when a score is
+    // absent, and the centre label reads Triage rather than Pending.
+    expect(html).not.toContain('stroke="var(--color-success)"')
+    expect(html).toContain("Triage")
+    expect(html).not.toContain("Pending")
+  })
+
+  it("keeps the ring neutral when a triage score exists under an inconclusive verdict", () => {
+    const html = renderToStaticMarkup(
+      <LaunchReadinessClient
+        workspaceId="ws-1"
+        initialReport={inconclusive}
+        targets={[{ targetId: "target-1", targetName: "API" }]}
+        initialTargetId="target-1"
+        initialReleaseRef=""
+        initialReleaseCheck={null}
+        initialCheckError={null}
+        checkNeedsTarget={false}
+      />
+    )
+
+    expect(html).not.toContain('stroke="var(--color-success)"')
+    expect(html).toContain("Triage only — not a readiness score")
+    expect(html).toContain("Triage counts open findings; it is not the launch verdict.")
+  })
+
+  it("still colours the ring for a conclusive verdict", () => {
+    const html = renderToStaticMarkup(
+      <LaunchReadinessClient
+        workspaceId="ws-1"
+        initialReport={REPORT}
+        targets={[{ targetId: "target-1", targetName: "API" }]}
+        initialTargetId="target-1"
+        initialReleaseRef=""
+        initialReleaseCheck={null}
+        initialCheckError={null}
+        checkNeedsTarget={false}
+      />
+    )
+
+    expect(html).toContain('stroke="var(--color-success)"')
+    expect(html).toContain("Triage only — not a readiness score")
+  })
+})
+
 describe("LaunchReadinessClient release draft", () => {
   beforeEach(() => vi.clearAllMocks())
 
