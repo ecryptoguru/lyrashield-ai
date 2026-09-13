@@ -129,7 +129,7 @@ describe("marketing SEO metadata", () => {
 
     // The date tracks the newest dated content the file summarizes — blog,
     // compare, docs frontmatter, tools registry — floored at the last
-    // copy-only change, and never `new Date()` (which would claim the whole
+    // copy-only change and never `new Date()` (which would claim the whole
     // site changed on every deploy).
     expect(llms).toContain("latestContentDate")
     expect(llms).toContain("LLMS_TXT_DATE_FLOOR")
