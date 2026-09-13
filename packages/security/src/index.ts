@@ -28,6 +28,17 @@ export {
 export { createEgressProxyFetchFn, type EgressProxyFetchFnOptions } from "./egress-proxy-client"
 
 export {
+  mintRelayGrant,
+  verifyRelayGrant,
+  relayHostAllowed,
+  relayMethodAllowed,
+  relayPathAllowed,
+  normalizeRelayHost,
+  type RelayGrantScope,
+  type RelayDenyReason,
+} from "./relay-grant"
+
+export {
   normalizeDomainForProof,
   domainProofTxtName,
   hasDomainProofToken,
