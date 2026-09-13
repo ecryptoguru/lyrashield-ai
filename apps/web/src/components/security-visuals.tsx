@@ -23,10 +23,10 @@ export function MetricCard({
 }) {
   return (
     <Card className="relative overflow-hidden p-5">
-      <div className="via-primary/50 absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent to-transparent" />
+      <div className="via-primary/50 absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent" />
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-muted-foreground text-xs font-semibold tracking-widest uppercase">
+          <p className="text-muted-foreground text-xs font-semibold tracking-[0.1em] uppercase">
             {label}
           </p>
           <p className="metric-number mt-2 text-3xl font-bold">{value}</p>

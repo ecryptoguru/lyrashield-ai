@@ -203,7 +203,7 @@ export default async function DashboardPage() {
       {/* One contextual next action — same decision model as the header CTA. */}
       {decision.action && (
         <section
-          className="border-primary/30 bg-primary/4 rounded-xl border p-5 sm:p-6"
+          className="border-primary/30 bg-primary/[0.04] rounded-xl border p-5 sm:p-6"
           aria-labelledby="home-next-action"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
