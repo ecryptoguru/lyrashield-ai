@@ -476,6 +476,9 @@ async function post(request: Request) {
         409
       )
     }
+    if (error instanceof Error && error.message === "Target not found in this workspace") {
+      return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+    }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     logger.error("Failed to create scan", { error: String(error) })

@@ -149,7 +149,7 @@ function callWithApprovalId(
 }
 
 describe("handleRemoteMcpRequest (remote-oob approval)", () => {
-  it("advertises optional approvalId only on remote mutating tools", async () => {
+  it("never advertises approvalId on remote tools — there is nothing to poll", async () => {
     const { gate } = makeFakeGate()
     const res = await handleRemoteMcpRequest(
       mcpRequest({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
@@ -172,11 +172,14 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
     }
     expect(tools.length).toBeGreaterThan(0)
     for (const tool of tools) {
+      expect(tool.inputSchema.properties).not.toHaveProperty("approvalId")
       if (tool.annotations.readOnlyHint) {
-        expect(tool.inputSchema.properties).not.toHaveProperty("approvalId")
+        expect(tool.inputSchema.properties).not.toHaveProperty("idempotencyKey")
       } else {
-        expect(tool.inputSchema.properties.approvalId).toMatchObject({ type: "string" })
-        expect(tool.inputSchema.required ?? []).not.toContain("approvalId")
+        // Mutating tools still carry an optional idempotencyKey hint; it is
+        // only REQUIRED for delegated (connection-bound) callers.
+        expect(tool.inputSchema.properties.idempotencyKey).toMatchObject({ type: "string" })
+        expect(tool.inputSchema.required ?? []).not.toContain("idempotencyKey")
       }
     }
   })

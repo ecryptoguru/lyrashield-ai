@@ -119,6 +119,12 @@ export async function createScan(
       throw new WorkspaceScanConcurrencyLimitError()
     }
 
+    const target = await tx.target.findFirst({
+      where: { id: params.targetId, workspaceId: params.workspaceId, deletedAt: null },
+      select: { id: true },
+    })
+    if (!target) throw new Error("Target not found in this workspace")
+
     const activeScans = await tx.scan.count({
       where: {
         targetId: params.targetId,

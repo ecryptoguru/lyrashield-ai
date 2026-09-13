@@ -220,6 +220,9 @@ export async function getDueSchedules(now: Date): Promise<ScheduleWithDetails[]>
     where: {
       enabled: true,
       deletedAt: null,
+      // The system client bypasses the extension's soft-delete guard, so the
+      // join must name it: a schedule whose target was deleted must not fire.
+      target: { deletedAt: null },
       OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }],
     },
     include: {

@@ -53,7 +53,10 @@ function validateUpload(filename: string, mediaType: string, byteLength: number)
 
 async function readBodyWithinLimit(request: Request): Promise<Buffer> {
   const declaredLength = request.headers.get("content-length")
-  if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAX_FILE_BYTES)) {
+  if (
+    declaredLength !== null &&
+    (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAX_FILE_BYTES)
+  ) {
     throw new Error("EVIDENCE_ARTIFACT_SIZE_EXCEEDED")
   }
   if (!request.body) throw new Error("EVIDENCE_ARTIFACT_REQUIRED")
@@ -93,7 +96,9 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       select: { id: true, workspaceId: true, targetId: true, controlId: true },
     })
     if (!evidence) {
-      return privateResponse(apiError("EVIDENCE_NOT_FOUND", "Evidence not found in this workspace", 404))
+      return privateResponse(
+        apiError("EVIDENCE_NOT_FOUND", "Evidence not found in this workspace", 404)
+      )
     }
 
     const filename = filenameFromRequest(request)
@@ -113,7 +118,9 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         content,
         contentType: mediaType,
       })
-      const manifestItems: ArtifactManifestItem[] = [{ id: artifactId, filename, mediaType, ...stored }]
+      const manifestItems: ArtifactManifestItem[] = [
+        { id: artifactId, filename, mediaType, ...stored },
+      ]
       const version: ControlEvidenceVersionSummary = await addControlEvidenceArtifacts({
         workspaceId,
         evidenceId,
@@ -137,7 +144,11 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     const code = error instanceof Error ? error.message : ""
     if (code.startsWith("EVIDENCE_ARTIFACT_")) {
       return privateResponse(
-        apiError(code, "Evidence artifacts must be allowed types with safe names within the upload limits", 400)
+        apiError(
+          code,
+          "Evidence artifacts must be allowed types with safe names within the upload limits",
+          400
+        )
       )
     }
     logger.error("Failed to add evidence artifacts", { error: String(error) })

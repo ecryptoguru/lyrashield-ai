@@ -1,18 +1,10 @@
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import {
-  claimApprovalExecution,
   claimOrGetAgentOperation,
   checkDelegatedOperationAuthorization,
   completeAgentOperation,
-  completeApprovalExecution,
-  createApproval,
   failAgentOperation,
-  failApprovalExecution,
-  findPendingApprovalByHash,
-  getApproval,
-  hashInput,
-  verifyInputHash,
   withWorkspaceRLS,
   TOOL_OPERATION_MAP,
 } from "@lyrashield/db"
@@ -20,7 +12,6 @@ import { McpServer, type McpToolResult, type RemoteApprovalGate } from "@lyrashi
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { z } from "zod"
-import { checkApprovalCreateRateLimit } from "../../../lib/rate-limit"
 
 const operationPermissions: Partial<Record<string, Permission>> = {
   "scan.create": PERMISSIONS.scan.create,
@@ -30,84 +21,35 @@ const operationPermissions: Partial<Record<string, Permission>> = {
   "fix_pr.create": PERMISSIONS.fix.createPr,
 }
 
-const APPROVAL_TTL_MINUTES = 15
 const approvalIdSchema = z.string().min(1).max(128).optional()
 const idempotencyKeySchema = z.string().min(1).max(128)
-
-function approvalUrl(approvalId: string): string {
-  const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
-  return `${base}/dashboard/approvals#approval-${encodeURIComponent(approvalId)}`
-}
-
-function pendingDecision(approvalId: string): {
-  approved: false
-  pending: true
-  approvalId: string
-  approvalUrl: string
-  reason: string
-} {
-  return {
-    approved: false,
-    pending: true,
-    approvalId,
-    approvalUrl: approvalUrl(approvalId),
-    reason:
-      "This action requires human approval. Poll with the same arguments and approvalId once approved.",
-  }
-}
 
 function denied(reason: string): { approved: false; reason: string } {
   return { approved: false, reason }
 }
 
-type StoredApproval = Awaited<ReturnType<typeof getApproval>>
-
-/** Replay a stored EXECUTED result without re-running the tool. */
-function storedResult(approval: NonNullable<StoredApproval>): {
-  approved: true
-  result: McpToolResult
+/**
+ * Single response for every remote caller without a delegated OAuth
+ * connection: connect over OAuth, then mutations run inside that grant. No
+ * approval is created, nothing is executed and there is nothing to poll.
+ */
+function connectRequired(): {
+  approved: false
+  reason: string
+  structuredContent: Record<string, unknown>
 } {
-  const stored = approval.result as
-    | {
-        content?: unknown[]
-        isError?: boolean
-        structuredContent?: unknown
-      }
-    | undefined
-  const content = Array.isArray(stored?.content)
-    ? (stored.content as { type: string; text: string }[])
-    : [{ type: "text", text: JSON.stringify(stored ?? approval.result) }]
-  let structured = z.record(z.string(), z.unknown()).safeParse(stored?.structuredContent)
-  // Older executions stored only the JSON text projection. Restore its
-  // structured counterpart without rerunning the already executed action.
-  if (!structured.success && content.length === 1 && content[0]?.type === "text") {
-    try {
-      const data: unknown = JSON.parse(content[0].text)
-      structured = z
-        .record(z.string(), z.unknown())
-        .safeParse(data && typeof data === "object" && !Array.isArray(data) ? data : { data })
-    } catch {
-      // Malformed historical results cannot authorize another execution.
-    }
-  }
-  if (!structured.success) {
-    const error = { error: "Stored approval result is unavailable; action will not be rerun." }
-    return {
-      approved: true,
-      result: {
-        content: [{ type: "text", text: JSON.stringify(error) }],
-        structuredContent: error,
-        isError: true,
-      },
-    }
-  }
+  const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
+  const message =
+    "This action requires a connected LyraShield client. Connect over OAuth to authorize mutating tools inside a bounded grant."
   return {
-    approved: true,
-    result: {
-      content,
-      isError: stored?.isError,
-      structuredContent: structured.data,
-    } as McpToolResult,
+    approved: false,
+    reason: message,
+    structuredContent: {
+      code: "connect_required",
+      message,
+      connectUrl: `${base}/dashboard/connections`,
+      docsUrl: "https://lyrashieldai.com/docs/approvals",
+    },
   }
 }
 
@@ -181,7 +123,7 @@ export interface RemoteApprovalGateOptions {
 
 export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): RemoteApprovalGate {
   const { apiKeyInfo, toolContext } = options
-  const { workspaceId, scopes, createdById } = apiKeyInfo
+  const { workspaceId, scopes } = apiKeyInfo
 
   return async (toolName, args) => {
     if (!scopes.includes("write") && !scopes.includes("lyrashield.write")) {
@@ -309,108 +251,6 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
       )
     }
 
-    if (!approvalIdArg) {
-      const rate = await checkApprovalCreateRateLimit(workspaceId)
-      if (rate.limited) {
-        return denied("Approval creation rate limit exceeded. Please wait before retrying.")
-      }
-
-      const inputHash = hashInput(toolName, toolArgs)
-      const existing = await findPendingApprovalByHash(workspaceId, toolName, inputHash)
-      if (existing) {
-        return pendingDecision(existing.id)
-      }
-
-      const approval = await createApproval({
-        workspaceId,
-        actionName: toolName,
-        input: toolArgs,
-        requestedById: createdById,
-        expiresAt: new Date(Date.now() + APPROVAL_TTL_MINUTES * 60 * 1000),
-      })
-
-      return pendingDecision(approval.id)
-    }
-
-    const approval = await getApproval(approvalIdArg, workspaceId)
-    if (!approval) {
-      // Includes approvals that exist but belong to another workspace: fail closed.
-      return denied(`Approval not found: ${approvalIdArg}`)
-    }
-
-    if (
-      approval.actionName !== toolName ||
-      !verifyInputHash(toolName, toolArgs, approval.inputHash)
-    ) {
-      return denied("Submitted input does not match the requested action")
-    }
-
-    if (approval.expiresAt && approval.expiresAt <= new Date()) {
-      return denied("Approval has expired. Request a new approval.")
-    }
-
-    if (approval.status === "EXECUTED") {
-      return storedResult(approval)
-    }
-
-    if (approval.status === "PENDING") {
-      return pendingDecision(approval.id)
-    }
-
-    if (approval.status !== "APPROVED") {
-      return denied(`Approval is ${approval.status.toLowerCase()}`)
-    }
-
-    // Claim the authorization BEFORE any side effect. Exactly one concurrent
-    // poller wins the claim; the hash and expiry are re-enforced inside the
-    // claim predicate so a raced request can never execute stale input.
-    const claimed = await claimApprovalExecution(approval.id, workspaceId, approval.inputHash)
-
-    if (!claimed) {
-      const latest = await getApproval(approval.id, workspaceId)
-      if (latest?.status === "EXECUTED" && latest.result != null) {
-        return storedResult(latest)
-      }
-      return pendingDecision(approval.id)
-    }
-
-    const executionServer = new McpServer({ toolContext, allowMutations: true })
-    let toolResult: McpToolResult
-    try {
-      toolResult = await executionServer.callTool(toolName, toolArgs)
-    } catch (error) {
-      logger.error("Approved MCP tool execution threw", {
-        approvalId: approval.id,
-        workspaceId,
-        actionName: toolName,
-        error: error instanceof Error ? error.message : String(error),
-      })
-      const errorResult = {
-        content: [{ type: "text", text: JSON.stringify({ error: "Tool execution failed" }) }],
-        isError: true,
-      }
-      const outcome = await failApprovalExecution(approval.id, workspaceId, errorResult)
-      return outcome === "RETRYABLE"
-        ? pendingDecision(approval.id)
-        : denied("Approval execution failed; request a new approval.")
-    }
-
-    const settled = await completeApprovalExecution(approval.id, workspaceId, {
-      content: toolResult.content,
-      isError: toolResult.isError,
-      structuredContent: toolResult.structuredContent,
-    })
-
-    if (!settled) {
-      // The claim was lost after the fact (should not happen — only the claim
-      // owner settles); fall back to whatever state is now stored.
-      const latest = await getApproval(approval.id, workspaceId)
-      if (latest?.status === "EXECUTED" && latest.result != null) {
-        return storedResult(latest)
-      }
-      return pendingDecision(approval.id)
-    }
-
-    return { approved: true, result: toolResult }
+    return connectRequired()
   }
 }

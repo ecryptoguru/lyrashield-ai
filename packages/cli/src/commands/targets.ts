@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline"
 import minimist from "minimist"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
@@ -29,11 +30,62 @@ function parseProof(value: unknown) {
   }
 }
 
+async function confirmTargetRemoval(targetId: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false
+  const rl = createInterface({ input: process.stdin, output: process.stderr })
+  try {
+    const answer = await new Promise<string>((resolve) =>
+      rl.question(`Delete target ${targetId}? Type the target id to confirm: `, resolve)
+    )
+    return answer.trim() === targetId
+  } finally {
+    rl.close()
+  }
+}
+
 export async function handleTargets(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["name", "type", "url", "repo"],
-    boolean: ["issue", "check"],
+    string: ["name", "type", "url", "repo", "workspace"],
+    boolean: ["issue", "check", "yes"],
+    alias: { w: "workspace", y: "yes" },
   })
+  if (parsed._[0] === "remove" || parsed._[0] === "delete") {
+    const targetId = parsed._[1]
+    if (typeof targetId !== "string" || !targetId.trim()) {
+      output.error("Usage: lyrashield targets remove <targetId> [--workspace <id>] [--yes]")
+      return 2
+    }
+    if (parsed.name || parsed.type || parsed.url || parsed.repo || parsed.issue || parsed.check) {
+      output.error("Target creation or verify-domain flags cannot be used with remove")
+      return 2
+    }
+    const creds = await getEffectiveCredentials()
+    const workspaceId = parsed.workspace || creds.workspaceId
+    if (!workspaceId) {
+      output.error(
+        "No workspace specified. Use --workspace <id> or set default workspace with: lyrashield use <id>"
+      )
+      return 2
+    }
+    if (!parsed.yes && !(await confirmTargetRemoval(targetId))) {
+      output.error("Aborted. Re-run with --yes to delete without the confirmation prompt.")
+      return 1
+    }
+    const client = await createClient()
+    try {
+      await client.request(
+        "DELETE",
+        `/targets/${encodeURIComponent(targetId)}?workspaceId=${encodeURIComponent(workspaceId)}`
+      )
+      output.log(
+        `✓ Target ${targetId} deleted. Scans, findings, verdicts and reports stay in the workspace.`
+      )
+      return 0
+    } catch (err) {
+      output.error(err instanceof Error ? err.message : String(err))
+      return 1
+    }
+  }
   if (parsed._[0] === "verify-domain") {
     if (parsed._.length !== 2 || typeof parsed._[1] !== "string" || !parsed._[1].trim())
       throw new Error("Usage: lyrashield targets verify-domain <targetId> [--issue|--check]")
