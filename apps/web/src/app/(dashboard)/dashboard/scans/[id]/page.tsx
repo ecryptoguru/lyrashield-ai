@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { getScanWithEvents, getScanResultManifestDetail, prisma } from "@lyrashield/db"
+import { defaultStandards, renderStandards } from "@lyrashield/security"
 import { redirect } from "next/navigation"
 import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
@@ -51,6 +52,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
       severity: true,
       status: true,
       cwe: true,
+      owaspCategory: true,
       cvssScore: true,
       summary: true,
       verified: true,
@@ -155,6 +157,11 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
             ? (receipt.metadata as Record<string, unknown>)
             : null,
       })),
+      standards: renderStandards(
+        defaultStandards(),
+        scan.coverageReceipts,
+        findings.map((f) => ({ cwe: f.cwe, owaspCategory: f.owaspCategory }))
+      ),
     },
     aiSecurity: scan.aiSecurityScoreSnapshot
       ? {
