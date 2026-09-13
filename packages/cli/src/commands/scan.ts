@@ -140,23 +140,31 @@ export async function handleScan(args: string[], output: Output): Promise<number
   // scan: findings land tagged external_import and never count as coverage.
   if (parsed.sarif) {
     const sarifPath = parsed.sarif as string
-    let sarifBody: string
+    let sarifJson: unknown
     try {
-      sarifBody = await readFile(sarifPath, "utf-8")
+      sarifJson = JSON.parse(await readFile(sarifPath, "utf-8"))
     } catch {
-      output.error(`Cannot read SARIF file: ${sarifPath}`)
+      output.error(`Cannot read valid JSON SARIF file: ${sarifPath}`)
       return 2
     }
-    const importRes = (await client.request(
-      "POST",
-      `/scans/${res.id}/artifacts/sarif?workspaceId=${encodeURIComponent(workspaceId)}`,
-      { body: sarifBody, headers: { "Content-Type": "application/json" } }
-    )) as { imported: number; corroborated: number; rejected: number; toolName: string | null }
-    output.log(
-      `Imported ${importRes.imported} SARIF finding(s) from ${importRes.toolName ?? "external tool"}` +
-        (importRes.corroborated > 0 ? ` (${importRes.corroborated} corroborated)` : "") +
-        (importRes.rejected > 0 ? ` (${importRes.rejected} rejected)` : "")
-    )
+    try {
+      const importRes = (await client.request(
+        "POST",
+        `/scans/${res.id}/artifacts/sarif?workspaceId=${encodeURIComponent(workspaceId)}`,
+        { body: sarifJson }
+      )) as { imported: number; corroborated: number; rejected: number; toolName: string | null }
+      output.log(
+        `Imported ${importRes.imported} SARIF finding(s) from ${importRes.toolName ?? "external tool"}` +
+          (importRes.corroborated > 0 ? ` (${importRes.corroborated} corroborated)` : "") +
+          (importRes.rejected > 0 ? ` (${importRes.rejected} rejected)` : "")
+      )
+    } catch (err) {
+      // The scan was already created — say so; the import can be retried.
+      output.error(
+        `SARIF import failed (${err instanceof Error ? err.message : "request error"}); scan ${res.id} was still created — re-push with: lyrashield scan --target <targetId> --sarif ${sarifPath}`
+      )
+      return 2
+    }
   }
 
   output.result(res)

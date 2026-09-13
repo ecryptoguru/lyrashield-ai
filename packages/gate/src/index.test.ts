@@ -53,6 +53,8 @@ describe("gate standard versioning", () => {
     expect(requiredScannersForTarget("WEB_APP", "STANDARD")).toContain("engine")
     expect(requiredScannersForTarget("WEB_APP", "DEEP")).toContain("engine")
     expect(requiredScannersForTarget("API", "STANDARD")).toContain("engine")
+    // CUSTOM normalizes to DEEP under url-scan/3.0.0 — same engine-backed depth.
+    expect(requiredScannersForTarget("WEB_APP", "CUSTOM")).toContain("engine")
     // Missing/legacy mode stays deterministic-only — honest absence.
     expect(requiredScannersForTarget("WEB_APP", null)).not.toContain("engine")
   })

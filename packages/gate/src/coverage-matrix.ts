@@ -46,15 +46,15 @@ export type ScannerFamily = (typeof SCANNER_FAMILIES)[number]
  */
 const REQUIRED_BY_TARGET: Record<GateTargetType, readonly ScannerFamily[]> = {
   REPO: [
-      "engine",
-      "sca",
-      "secrets",
-      "agent_config",
-      "ml_supply_chain",
-      "ai_app_security",
-      "sast",
-      "iac",
-    ],
+    "engine",
+    "sca",
+    "secrets",
+    "agent_config",
+    "ml_supply_chain",
+    "ai_app_security",
+    "sast",
+    "iac",
+  ],
   WEB_APP: ["url", "ai_app_security"],
   API: ["url", "ai_app_security"],
   CLOUD_ACCOUNT: [],
@@ -62,8 +62,10 @@ const REQUIRED_BY_TARGET: Record<GateTargetType, readonly ScannerFamily[]> = {
   IAC: [],
 }
 
-/** Modes whose URL profile is engine-backed (see packages/types scan-profile). */
-const ENGINE_BACKED_URL_MODES = new Set(["STANDARD", "DEEP"])
+/** Modes whose URL profile is engine-backed (see packages/types scan-profile).
+ *  CUSTOM is included defensively — url-scan/3.0.0 normalizes it to DEEP, so a
+ *  raw CUSTOM mode in an older row means the same engine-backed depth. */
+const ENGINE_BACKED_URL_MODES = new Set(["STANDARD", "DEEP", "CUSTOM"])
 
 /**
  * Required scanner classes for a target type — mode-conditional where the

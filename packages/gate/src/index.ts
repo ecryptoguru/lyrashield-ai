@@ -6,7 +6,7 @@
  * @lyrashield/score: the math is pure and versioned; the database layer owns
  * persistence and never the verdict logic.
  *
- * Standard: lyrashield-gate/2.2.0 — URL engine requirement is mode-conditional.
+ * Standard: lyrashield-gate/2.3.0 — URL engine requirement is mode-conditional.
  *
  * Verdict states:
  * - READY — every check passes against current evidence.

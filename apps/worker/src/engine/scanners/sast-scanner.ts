@@ -383,13 +383,13 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
       skippedByReason.unreadable++
       continue
     }
-    bytesScanned += Buffer.byteLength(content, "utf-8")
 
     const relPath = relative(workspaceDir, filePath)
     if (isTestFixturePath(relPath)) {
       skippedByReason.testFixture++
       continue
     }
+    bytesScanned += Buffer.byteLength(content, "utf-8")
 
     const lines = content.split("\n")
     let findingsInFile = 0
