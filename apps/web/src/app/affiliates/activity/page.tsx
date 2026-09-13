@@ -137,27 +137,53 @@ export default async function AffiliateActivityPage({
             <tr className="border-b text-left">
               {tab === "clicks" && (
                 <>
-                  <th className="pb-2 pr-4">Date</th>
-                  <th className="pb-2 pr-4">SubID</th>
-                  <th className="pb-2 pr-4">Landing URL</th>
-                  <th className="pb-2 pr-4">Referrer</th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Date
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    SubID
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Landing URL
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Referrer
+                  </th>
                 </>
               )}
               {tab === "signups" && (
                 <>
-                  <th className="pb-2 pr-4">Date</th>
-                  <th className="pb-2 pr-4">User (masked)</th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Date
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    User (masked)
+                  </th>
                 </>
               )}
               {tab === "conversions" && (
                 <>
-                  <th className="pb-2 pr-4">Date</th>
-                  <th className="pb-2 pr-4">Amount</th>
-                  <th className="pb-2 pr-4">Rate</th>
-                  <th className="pb-2 pr-4">Commission</th>
-                  <th className="pb-2 pr-4">Status</th>
-                  <th className="pb-2 pr-4">Method</th>
-                  <th className="pb-2 pr-4">SubID</th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Date
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Amount
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Rate
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Commission
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Status
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    Method
+                  </th>
+                  <th scope="col" className="pb-2 pr-4">
+                    SubID
+                  </th>
                 </>
               )}
             </tr>
