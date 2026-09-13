@@ -16,6 +16,8 @@ This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol
 - Every tool publishes an input schema, output schema, title, safety annotations, and structured content.
 - Tool calls currently publish `execution.taskSupport: "forbidden"`. A returned LyraShield scan ID is a durable product job that clients poll with `lyrashield_get_scan_status`; it is not an MCP protocol task.
 - Hosted responses use `Cache-Control: no-store` and vary on authorization and MCP protocol version. The server does not advertise unsupported MCP list-cache metadata.
+- Call arguments are validated against each tool's advertised `inputSchema` before execution; violations return a structured `Invalid tool arguments` error naming the offending fields.
+- Tool results are capped at 256 KiB serialized (`MCP_RESULT_MAX_BYTES`). Oversized text content and `structuredContent` are truncated with an explicit `[… truncated]` marker / `truncated: true` flag so a partial result is never mistaken for a complete one.
 - The hosted transport remains stateless and fail-closed. It does not advertise durable MCP Tasks because an in-memory task store would make serverless polling, cancellation, and replay unreliable.
 
 See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported draft gaps. Tool annotations are client hints only; the server always enforces prompt-injection checks and the connection's server-side authorization independently.

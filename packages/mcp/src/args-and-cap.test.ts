@@ -1,0 +1,86 @@
+import { describe, it, expect, vi } from "vitest"
+import { McpServer } from "./server"
+import { MCP_RESULT_MAX_BYTES, MCP_TRUNCATION_MARKER } from "./result-cap"
+import type { ToolHandlerContext } from "./tools"
+
+function makeCtx(fetchImpl?: (input: unknown) => Promise<unknown>): {
+  context: ToolHandlerContext
+  fetchSpy: ReturnType<typeof vi.fn>
+} {
+  const fetchSpy = vi.fn(
+    fetchImpl ??
+      (async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: new Headers(),
+        json: async () => ({ success: true, data: { id: "x" } }),
+      }))
+  )
+  const context: ToolHandlerContext = {
+    apiBaseUrl: "http://localhost:3000",
+    apiKey: "test",
+    fetchFn: fetchSpy as unknown as typeof fetch,
+  }
+  return { context, fetchSpy }
+}
+
+describe("MCP argument validation (v17)", () => {
+  it("returns a structured validation error and never calls the handler", async () => {
+    const { context, fetchSpy } = makeCtx()
+    const server = new McpServer({ toolContext: context, allowMutations: true })
+    // lyrashield_scan_target accepts workspaceId/targetId strings; a numeric
+    // targetId violates the advertised inputSchema.
+    const res = await server.callTool("lyrashield_scan_target", {
+      workspaceId: "w1",
+      targetId: 42,
+    })
+    expect(res.isError).toBe(true)
+    expect(res.content[0]!.text).toContain("Invalid tool arguments")
+    expect(res.content[0]!.text).toContain("targetId")
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("rejects a call missing a required argument", async () => {
+    const { context, fetchSpy } = makeCtx()
+    const server = new McpServer({ toolContext: context })
+    const res = await server.callTool("lyrashield_get_findings", {})
+    expect(res.isError).toBe(true)
+    expect(res.content[0]!.text).toContain("Invalid tool arguments")
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("still executes when arguments satisfy the schema", async () => {
+    const { context, fetchSpy } = makeCtx()
+    const server = new McpServer({ toolContext: context })
+    const res = await server.callTool("lyrashield_get_findings", {
+      workspaceId: "w1",
+    })
+    expect(res.isError).not.toBe(true)
+    expect(fetchSpy).toHaveBeenCalled()
+  })
+})
+
+describe("MCP result cap (v17)", () => {
+  it("truncates oversized structuredContent with an explicit marker", async () => {
+    const big = "x".repeat(MCP_RESULT_MAX_BYTES * 2)
+    const { context } = makeCtx(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+      json: async () => ({ success: true, data: { blob: big } }),
+    }))
+    const server = new McpServer({ toolContext: context })
+    const res = await server.callTool("lyrashield_get_findings", {
+      workspaceId: "w1",
+    })
+    const sc = res.structuredContent as Record<string, unknown> | undefined
+    expect(sc?.truncated).toBe(true)
+    expect(sc?.marker).toBe(MCP_TRUNCATION_MARKER)
+    expect(JSON.stringify(sc).length).toBeLessThanOrEqual(MCP_RESULT_MAX_BYTES + 1024)
+    expect(res.content[0]!.text.length).toBeLessThanOrEqual(
+      Buffer.byteLength(MCP_TRUNCATION_MARKER) + MCP_RESULT_MAX_BYTES
+    )
+  })
+})
