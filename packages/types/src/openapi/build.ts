@@ -240,6 +240,26 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           },
         },
       },
+      "/scans/{id}/artifacts/sarif": {
+        post: {
+          summary: "Import a SARIF report into a scan",
+          description:
+            "Imports third-party SARIF 2.1.0 detections into an existing scan. Imported findings are tagged external_import and never count as scanner coverage or independently verified findings. Requires a write-scoped API key or browser session; delegated OAuth connections are refused.",
+          parameters: [idPathParam, workspaceIdParam],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+          responses: {
+            200: successResponse(genericItem, "SARIF findings imported"),
+            413: {
+              description: "SARIF payload exceeds the 5 MiB limit",
+              content: { "application/json": { schema: errorEnvelope } },
+            },
+            ...commonErrors,
+          },
+        },
+      },
       "/findings": {
         get: {
           summary: "List findings",
