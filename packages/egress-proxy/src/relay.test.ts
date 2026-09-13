@@ -250,6 +250,21 @@ describe("scoped relay", () => {
     expect(audit.entries.some((e) => e.path === "/echo" && e.status === 200)).toBe(true)
   })
 
+  it("records audit paths without query strings", async () => {
+    const token = grant(scopeFor(UPSTREAM_HOST, { scanId: "scan_query_redact" }))
+    // Forwarded request whose query carries a credential-like parameter.
+    await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/login?token=abc`, token)
+    // Denied request: the query must not reach the audit trail either.
+    await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/admin/x?token=abc`, token)
+
+    const audit = await fetch(`http://127.0.0.1:${proxy.port}/v1/audit/scan_query_redact`, {
+      headers: { Authorization: `Bearer ${ADMIN}` },
+    }).then((r) => r.json() as Promise<{ entries: { path?: string }[] }>)
+    expect(audit.entries.some((e) => e.path === "/login")).toBe(true)
+    expect(audit.entries.some((e) => e.path === "/admin/x")).toBe(true)
+    expect(audit.entries.every((e) => !e.path || !e.path.includes("token"))).toBe(true)
+  })
+
   it("strips the grant before contacting the target", async () => {
     const res = await rawForward(
       proxy.port,

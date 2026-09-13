@@ -277,6 +277,9 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
       }
       const host = url.hostname
       const path = url.pathname + url.search
+      // Audit entries record the path only — query strings can carry tokens
+      // (e.g. /login?token=…), matching redactUrlForLogs semantics.
+      const auditPath = url.pathname
       const method = (req.method ?? "GET").toUpperCase()
 
       if (
@@ -284,32 +287,32 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         url.username ||
         url.password
       ) {
-        denyForward(res, state, scope.scanId, "port_not_allowed", host, method, path)
+        denyForward(res, state, scope.scanId, "port_not_allowed", host, method, auditPath)
         return
       }
       if (!relayHostAllowed(scope, host)) {
-        denyForward(res, state, scope.scanId, "host_out_of_scope", host, method, path)
+        denyForward(res, state, scope.scanId, "host_out_of_scope", host, method, auditPath)
         return
       }
       if (!relayMethodAllowed(scope, method)) {
-        denyForward(res, state, scope.scanId, "method_not_allowed", host, method, path)
+        denyForward(res, state, scope.scanId, "method_not_allowed", host, method, auditPath)
         return
       }
       if (!relayPathAllowed(scope, path)) {
-        denyForward(res, state, scope.scanId, "path_blocked", host, method, path)
+        denyForward(res, state, scope.scanId, "path_blocked", host, method, auditPath)
         return
       }
       const pathPrefix = `/${normalizeRelayPath(url.pathname)!.split("/")[1] ?? ""}`
       const limit = checkLimits(state, pathPrefix)
       if (limit) {
-        denyForward(res, state, scope.scanId, limit.deny, host, method, path)
+        denyForward(res, state, scope.scanId, limit.deny, host, method, auditPath)
         return
       }
 
       const resolved = await resolveHost(host)
       controller.signal.throwIfAborted()
       if (!resolved.ok) {
-        denyForward(res, state, scope.scanId, "host_out_of_scope", host, method, path)
+        denyForward(res, state, scope.scanId, "host_out_of_scope", host, method, auditPath)
         return
       }
 
@@ -323,7 +326,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
             size > MAX_RELAY_REQUEST_BODY ||
             state.bytesTotal + (chunk as Buffer).byteLength > scope.maxBytes
           ) {
-            denyForward(res, state, scope.scanId, "byte_cap", host, method, path)
+            denyForward(res, state, scope.scanId, "byte_cap", host, method, auditPath)
             return
           }
           state.bytesTotal += (chunk as Buffer).byteLength
@@ -367,7 +370,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
           declaredLength > scope.maxBytes - state.bytesTotal
         ) {
           upstream.body.destroy()
-          denyForward(res, state, scope.scanId, "byte_cap", host, method, path)
+          denyForward(res, state, scope.scanId, "byte_cap", host, method, auditPath)
           return
         }
         // content-length is always stripped: truncation would otherwise send a
@@ -400,7 +403,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
           type: "request",
           method,
           host,
-          path,
+          path: auditPath,
           status: upstream.statusCode,
           bytes,
           truncated: truncated || undefined,
@@ -421,7 +424,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
           type: "request",
           method,
           host,
-          path,
+          path: auditPath,
           durationMs: Date.now() - started,
           bytes,
           truncated: bytes > 0 || undefined,
