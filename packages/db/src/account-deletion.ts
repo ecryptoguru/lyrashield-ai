@@ -445,6 +445,12 @@ export async function deleteUserAccount(
             where: { workspaceId, createdById: userId },
             data: { createdById: DELETED_USER },
           })
+          // Scrub the immutable billing identity too: NULL on sponsorAccountId
+          // falls back to createdById (already the deleted-user sentinel).
+          await tx.scan.updateMany({
+            where: { workspaceId, sponsorAccountId: userId },
+            data: { sponsorAccountId: null },
+          })
           await tx.apiKey.updateMany({
             where: { workspaceId, createdById: userId },
             data: { createdById: DELETED_USER },

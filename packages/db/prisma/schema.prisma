@@ -885,6 +885,8 @@ model ScanEvent {
 
   @@index([scanId])
   @@index([stage])
+  // getScanWithEvents polls by scanId + deletedAt ordered on (createdAt, id).
+  @@index([scanId, deletedAt, createdAt, id])
 }
 
 model ApiKey {
@@ -1442,6 +1444,9 @@ model AuditLog {
   @@index([actorUserId])
   @@index([action])
   @@index([workspaceId, createdAt])
+  // target-domain-status resolves a workspace's verification audit trail by
+  // action + resource.
+  @@index([workspaceId, action, resourceType, resourceId])
 }
 
 model PlatformAdminElevation {

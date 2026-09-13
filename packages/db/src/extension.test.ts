@@ -230,10 +230,12 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     expect(SOFT_DELETE_MODELS.has("ScanEvent")).toBe(true)
   })
 
-  it("workspace-scoped set contains only auto-scopable models with workspaceId (34)", () => {
+  it("workspace-scoped set contains only auto-scopable models with workspaceId (35)", () => {
     // AgentConnection, AgentOperation, and LoopClosure are protected by their
-    // matching strict RLS migrations.
-    expect(WORKSPACE_SCOPED_MODELS.size).toBe(34)
+    // matching strict RLS migrations. SyncCursor has a required workspaceId;
+    // the license family and ArtifactDeletionTask are documented exclusions
+    // (see scoping.ts and scoping-schema-sync.test.ts).
+    expect(WORKSPACE_SCOPED_MODELS.size).toBe(35)
     for (const m of [
       "ScanEvent",
       "Evidence",
@@ -243,6 +245,10 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
       "Workspace",
       "WorkspaceMember",
       "OnboardingState",
+      "License",
+      "LicenseActivation",
+      "LicenseKey",
+      "ArtifactDeletionTask",
     ]) {
       expect(WORKSPACE_SCOPED_MODELS.has(m)).toBe(false)
     }
@@ -252,5 +258,6 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     expect(WORKSPACE_SCOPED_MODELS.has("AgentConnection")).toBe(true)
     expect(WORKSPACE_SCOPED_MODELS.has("AgentOperation")).toBe(true)
     expect(WORKSPACE_SCOPED_MODELS.has("LoopClosure")).toBe(true)
+    expect(WORKSPACE_SCOPED_MODELS.has("SyncCursor")).toBe(true)
   })
 })

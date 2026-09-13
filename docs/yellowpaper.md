@@ -89,7 +89,7 @@ Fifty controls routed through four coverage strategies:
 | Engine-led        |    28 | 4–13, 15–19, 21–26, 30, 33, 40–42, 44, 49 | Require auth, data-flow, live interaction, or business context |
 | Evidence-required |     7 | 34, 35, 36, 43, 46, 48, 50                | Need deployment/process/human proof a scan cannot establish    |
 
-Every scan records a `coverage_contract` event and one immutable receipt per control. Result language is honest: `DETECTED`, `NO_FINDING` (never "passed"), `INCONCLUSIVE`, `NOT_APPLICABLE`, `EVIDENCE_REQUIRED`. URL/API scans use the versioned `url-scan/2.0.0` capability registry (six released profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) and show only applicable deterministic receipts.
+Every scan records a `coverage_contract` event and one immutable receipt per control. Result language is honest: `DETECTED`, `NO_FINDING` (never "passed"), `INCONCLUSIVE`, `NOT_APPLICABLE`, `EVIDENCE_REQUIRED`. URL/API scans use the versioned `url-scan/3.0.0` capability registry (six released profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) and show only applicable deterministic receipts.
 
 Execution reuses the engine invocation plus deterministic SCA, secrets, URL, agent-configuration, AI data-exposure, and ML supply-chain phases. CVE-bearing dependency findings may receive bounded, cached enrichment from the CISA KEV catalog and FIRST EPSS; enrichment may fail without failing the scan and never changes severity or verification state.
 
@@ -148,7 +148,7 @@ Every workspace query is explicitly scoped by `workspaceId`; request context tra
 
 ### 5.2 Authorization
 
-Role order: `OWNER > ADMIN > SECURITY_ADMIN > APPSEC_MANAGER > BILLING_ADMIN > DEVELOPER > MEMBER > EXTERNAL_PENTESTER > AUDITOR > VIEWER`. Consequential actions require permission plus either exact-input approval (single-use, expiry-aware, bound to action name and input hash) or a browser-confirmed connection grant bound to workflow, target, profile, and idempotency key. Remote OAuth is read-only by default.
+Role order: `OWNER > ADMIN > SECURITY_ADMIN > APPSEC_MANAGER > BILLING_ADMIN > DEVELOPER > MEMBER > EXTERNAL_PENTESTER > AUDITOR > VIEWER`. Consequential actions require permission plus a browser-confirmed connection grant bound to workflow, target, profile, and idempotency key; write-scoped API-key calls on the remote MCP endpoint are refused with `connect_required` and exact-input approval (single-use, expiry-aware, bound to action name and input hash) remains only for legacy nondelegated hosted credentials. Remote OAuth is read-only by default.
 
 Platform administration sits outside workspace roles: a fixed email allowlist, verified `PLATFORM_OPERATOR` accounts, recent TOTP-stamped browser sessions, action-specific single-use elevation nonces, transaction-time authority revalidation, and atomic platform audit rows. Bearer credentials and workspace roles never cross this boundary.
 
@@ -218,8 +218,8 @@ Threat model covered: license forgery and tampering (signature over exact payloa
 | Contract                       | Version                                     | Surface                         |
 | ------------------------------ | ------------------------------------------- | ------------------------------- |
 | Vibe Security 50               | `vibe-security-50/1.1.0`                    | Full scans, dashboards, reports |
-| URL scan capability registry   | `url-scan/2.0.0`                            | WEB_APP/API targets             |
-| Launch Gate                    | `lyrashield-gate/1.0.0`                     | Verdicts, reports, CLI, badge   |
+| URL scan capability registry   | `url-scan/3.0.0`                            | WEB_APP/API targets             |
+| Launch Gate                    | `lyrashield-gate/2.3.0`                     | Verdicts, reports, CLI, badge   |
 | AI-Built Failure Taxonomy      | `ai-built-failure-taxonomy/1.0.0`           | Public read-only endpoint       |
 | WebMCP detector / inventory    | `webmcp-assurance/2` / `webmcp-inventory/1` | Lab, scans, CLI, Action         |
 | AI assurance framework mapping | `ai-assurance-mapping/1.0.0`                | OWASP LLM readiness mapping     |

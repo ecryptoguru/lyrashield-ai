@@ -503,8 +503,7 @@ export function validateArticle(article, programEntry, context = {}) {
     }
   }
 
-  if (/^## FAQ\s*$/m.test(body))
-    errors.push("body FAQ heading duplicates frontmatter FAQ")
+  if (/^## FAQ\s*$/m.test(body)) errors.push("body FAQ heading duplicates frontmatter FAQ")
 
   errors.push(...headingErrors(body))
 
@@ -947,12 +946,16 @@ export async function checkExternalLinks(articles, options = {}) {
               timeoutMs
             )
             if (response.status < 200 || response.status >= 400) {
-              response = await fetchWithTimeout(
-                fetchImpl,
-                url.href,
-                { method: "GET", headers: { Range: "bytes=0-0" } },
-                timeoutMs
-              )
+              // Some servers reject HEAD, so retry with GET — but a plain GET,
+              // never a ranged one: a CDN can answer `Range: bytes=0-0` with
+              // 206 while serving a 404 body, which masks the dead link.
+              // The status line is all we need; cancel the body immediately.
+              response = await fetchWithTimeout(fetchImpl, url.href, { method: "GET" }, timeoutMs)
+              try {
+                await response.body?.cancel()
+              } catch {
+                // Body cancellation is best-effort; the status is what matters.
+              }
             }
             return (response.status >= 200 && response.status < 400) ||
               response.status === 401 ||

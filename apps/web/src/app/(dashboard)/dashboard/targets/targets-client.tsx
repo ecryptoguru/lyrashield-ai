@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft, Info } from "lucide-react"
+import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft, Info, Trash2 } from "lucide-react"
 import {
   Button,
   Badge,
@@ -15,10 +15,12 @@ import {
   Select,
 } from "@lyrashield/ui"
 import { githubReposSchema, paginatedResponseSchema, targetSchema } from "@/lib/api-schemas"
-import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
+import { apiGet, apiGetPaginated, apiPost, apiDelete } from "@/lib/api-client"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TARGET_PLURAL, TARGET_SINGULAR, RUN_PLURAL, ISSUE_PLURAL } from "@/lib/terminology"
 import { getTargetTypeLabel } from "@/lib/enum-labels"
+import { humanizeToken } from "@/lib/labels"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
 interface Target {
@@ -68,6 +70,9 @@ export function TargetsClient({
   githubAccountLogin?: string | null
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const deletedNotice = searchParams.get("deleted")
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [targets, setTargets] = useState<Target[]>(initialData ?? [])
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null)
   const [loading, setLoading] = useState(!initialData)
@@ -169,6 +174,31 @@ export function TargetsClient({
     void fetchTargets()
   }, [fetchTargets, initialData])
 
+  useEffect(() => {
+    // One-shot notice after a detail-page delete navigates back here.
+    if (!deletedNotice) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("deleted")
+    router.replace(
+      params.size > 0 ? `/dashboard/targets?${params.toString()}` : "/dashboard/targets",
+      { scroll: false }
+    )
+  }, [deletedNotice, router, searchParams])
+
+  async function handleDeleteTarget(target: Target) {
+    setDeleteError(null)
+    try {
+      await apiDelete(
+        `/api/targets/${encodeURIComponent(target.id)}?workspaceId=${encodeURIComponent(workspaceId)}`
+      )
+      setTargets((prev) => prev.filter((t) => t.id !== target.id))
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : `Failed to delete ${TARGET_SINGULAR.toLowerCase()}`
+      )
+    }
+  }
+
   async function handleCreateRepo(e: React.FormEvent) {
     e.preventDefault()
     setCreating(true)
@@ -254,6 +284,16 @@ export function TargetsClient({
 
   return (
     <div className="min-w-0 max-w-full">
+      {deletedNotice && (
+        <p className="bg-primary/10 text-primary mb-4 rounded-lg px-4 py-3 text-sm" role="status">
+          {deletedNotice} was deleted. Its scans, findings, verdicts and reports are retained.
+        </p>
+      )}
+      {deleteError && (
+        <p className="text-destructive mb-4 text-sm" role="alert">
+          {deleteError}
+        </p>
+      )}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {filterProjectId && (
@@ -593,6 +633,9 @@ export function TargetsClient({
                 <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
                   <span className="sr-only">View</span>
                 </th>
+                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                  <span className="sr-only">Delete</span>
+                </th>
                 <th scope="col" className="sr-only">
                   <span className="sr-only">
                     {RUN_PLURAL} and {ISSUE_PLURAL} summary
@@ -652,7 +695,9 @@ export function TargetsClient({
                     )}
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
-                    <Badge variant={t.status === "active" ? "success" : "muted"}>{t.status}</Badge>
+                    <Badge variant={t.status === "active" ? "success" : "muted"}>
+                      {humanizeToken(t.status)}
+                    </Badge>
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
                     <Link
@@ -663,12 +708,21 @@ export function TargetsClient({
                       View
                     </Link>
                   </td>
+                  <td className="hidden px-4 py-3 sm:table-cell">
+                    <InlineConfirm
+                      triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+                      aria-label={`Delete ${TARGET_SINGULAR.toLowerCase()} ${t.name}`}
+                      message={`Delete ${t.name}? Scans, findings, verdicts and reports stay in the workspace.`}
+                      confirmLabel="Delete"
+                      onConfirm={() => handleDeleteTarget(t)}
+                    />
+                  </td>
                   {/* Mobile/AT fallback: Runs and Issues columns are hidden
                       below lg, so the primary row data is otherwise
                       unreachable on small screens. Announce counts + status
                       without affecting the visual layout. */}
                   <td className="sr-only">
-                    <span className="sr-only">{`${t.status}, ${t.scanCount} ${RUN_PLURAL.toLowerCase()}, ${t.findingCount} ${ISSUE_PLURAL.toLowerCase()}`}</span>
+                    <span className="sr-only">{`${humanizeToken(t.status)}, ${t.scanCount} ${RUN_PLURAL.toLowerCase()}, ${t.findingCount} ${ISSUE_PLURAL.toLowerCase()}`}</span>
                   </td>
                 </tr>
               ))}

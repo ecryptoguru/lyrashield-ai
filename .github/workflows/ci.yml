@@ -403,7 +403,7 @@ jobs:
         run: |
           bash .github/scripts/tests/test-promote-worker-vm.sh
           bash .github/scripts/tests/test-configure-cloud-billing-admission.sh
-          node --test .github/scripts/tests/parse-billing-receipt.test.mjs .github/scripts/tests/worker-preflight.test.mjs
+          node --test .github/scripts/tests/parse-billing-receipt.test.mjs .github/scripts/tests/worker-preflight.test.mjs .github/scripts/tests/worker-contract-worktree.test.mjs
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
           sh ops/worker/refresh-secrets.test.sh

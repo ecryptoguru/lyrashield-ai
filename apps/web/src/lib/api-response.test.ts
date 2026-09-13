@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { parsePaginationParams } from "./api-response"
+import { apiError, apiSuccess, parsePaginationParams } from "./api-response"
+import { withApiRequest } from "./api-auth"
 
 function params(entries: Record<string, string>): URLSearchParams {
   return new URLSearchParams(entries)
@@ -25,5 +26,29 @@ describe("parsePaginationParams", () => {
   it("passes the cursor through untouched", () => {
     expect(parsePaginationParams(params({ cursor: "abc" }), 25).cursor).toBe("abc")
     expect(parsePaginationParams(params({}), 25).cursor).toBeNull()
+  })
+})
+
+describe("request id correlation", () => {
+  it("echoes the inbound x-request-id on the response and inside the error envelope", async () => {
+    const handler = withApiRequest(async () => apiError("FORBIDDEN", "nope", 403))
+    const res = await handler(
+      new Request("http://localhost/api/x", { headers: { "x-request-id": "req_test_1" } })
+    )
+
+    expect(res.headers.get("x-request-id")).toBe("req_test_1")
+    const body = (await res.json()) as { error: { code: string; requestId?: string } }
+    expect(body.error.code).toBe("FORBIDDEN")
+    expect(body.error.requestId).toBe("req_test_1")
+  })
+
+  it("stamps a generated x-request-id on success responses too", async () => {
+    const handler = withApiRequest(async () => apiSuccess({ ok: true }))
+    const res = await handler(new Request("http://localhost/api/x"))
+
+    const stamped = res.headers.get("x-request-id")
+    expect(stamped).toBeTruthy()
+    const body = (await res.json()) as { success: boolean }
+    expect(body.success).toBe(true)
   })
 })

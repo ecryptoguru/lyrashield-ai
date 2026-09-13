@@ -526,6 +526,7 @@ describe("account deletion", () => {
         targetId: target.id,
         goal: "CHECK_PR",
         createdById: otherOwnerId,
+        sponsorAccountId: otherOwnerId,
       },
     })
     const snapshot = await prisma.scoreSnapshot.create({
@@ -690,6 +691,9 @@ describe("account deletion", () => {
       await prisma.scan.findFirst({ where: { workspaceId: retainWorkspaceId, id: scan.id } })
     ).toMatchObject({
       createdById: "deleted-user",
+      // The immutable billing identity is scrubbed too — NULL falls back to
+      // createdById (already the sentinel) for any legacy billing read.
+      sponsorAccountId: null,
     })
     expect(
       await prisma.scorecardShare.findUnique({ where: { slug: `share-${suffix}` } })

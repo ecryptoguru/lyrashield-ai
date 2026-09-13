@@ -739,7 +739,7 @@ export function ScanDetailClient({
                 primary content; the full checksum lives in technical disclosure. */}
             <Badge
               variant={scan.integrity.manifestChecksum ? "success" : "muted"}
-              title="The run result is sealed into a verifiable manifest"
+              title="The scan result is sealed into a verifiable manifest"
             >
               {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
             </Badge>
@@ -829,7 +829,7 @@ export function ScanDetailClient({
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-                Issues from this run
+                Findings from this scan
               </div>
               <p className="mt-1 text-lg font-semibold">{currentFindings.length}</p>
               <p className="text-muted-foreground mt-0.5 text-xs">
@@ -944,7 +944,7 @@ export function ScanDetailClient({
                           scan.errorCategory ? `${safeApiErrorMessage(scan.errorCategory)}: ` : "",
                           scan.status === "STOPPED_BUDGET" ||
                           scan.errorCategory === "BUDGET_EXCEEDED"
-                            ? "The protected run limit was reached."
+                            ? "The protected scan limit was reached."
                             : safeApiErrorMessage(scan.errorMessage),
                         ].join("")}
                   </p>
@@ -1073,7 +1073,7 @@ export function ScanDetailClient({
                     {reviewProfile.model ? "AI-assisted review" : "Deterministic scanners"}
                   </dd>
                   <p className="text-muted-foreground mt-1 text-xs">
-                    Exact execution provenance is retained in the sealed run manifest.
+                    Exact execution provenance is retained in the sealed scan manifest.
                   </p>
                 </div>
                 <div className="rounded-md border p-3">
@@ -1147,7 +1147,7 @@ export function ScanDetailClient({
                     </div>
                   ))}
                   {scan.integrity.manifestChecksum && (
-                    <p className="text-muted-foreground col-span-full font-mono text-xs">
+                    <p className="text-muted-foreground col-span-full break-all font-mono text-xs">
                       Manifest SHA-256: {scan.integrity.manifestChecksum}
                     </p>
                   )}
@@ -1231,7 +1231,7 @@ export function ScanDetailClient({
                     this issue. It is not an independent verification or a security guarantee.
                   </p>
                   <p className="text-muted-foreground mt-2 text-xs">
-                    “Inconclusive” is expected for many engine-led controls where the run completed
+                    “Inconclusive” is expected for many engine-led controls where the scan completed
                     but no explicit control mapping was returned. It indicates a coverage gap by
                     design, not a failed scan.
                   </p>
@@ -1290,7 +1290,7 @@ export function ScanDetailClient({
           {currentFindings.length > 0 && (
             <div className="mb-6">
               <h2 className="mb-1 text-lg font-semibold">
-                Issues from this run ({currentFindings.length})
+                Findings from this scan ({currentFindings.length})
               </h2>
               <p className="text-muted-foreground mb-3 text-xs">
                 Retained after scanner layers and deduplication. Detection is not verification. A

@@ -518,15 +518,23 @@ export function LaunchReadinessClient({
       {/* Verdict Card */}
       <Card className={`p-6 ${config.bg} ${config.border}`}>
         <div className="flex flex-col items-center gap-6 sm:flex-row">
-          <ScoreGauge score={report.triageScore} />
+          <ScoreGauge
+            score={report.triageScore}
+            grade="Triage"
+            neutral={report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"}
+          />
           <div className="flex-1 text-center sm:text-left">
             <div className="mb-2 flex items-center justify-center gap-2 sm:justify-start">
               <VerdictIcon className={`h-7 w-7 ${config.color}`} aria-hidden="true" />
               <h2 className={`text-2xl font-bold ${config.color}`}>{config.label}</h2>
             </div>
             <p className="text-muted-foreground mb-4 text-sm">{report.summary}</p>
+            <p className="text-muted-foreground mb-4 text-xs">
+              Triage counts open findings; it is not the launch verdict.
+            </p>
             <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
               <Badge variant={config.badgeVariant}>
+                Triage only — not a readiness score ·{" "}
                 {report.triageScore === null
                   ? "Triage score pending"
                   : `Triage score: ${report.triageScore}/100`}

@@ -154,6 +154,7 @@ export {
   TERMINAL_SCAN_STATUSES,
   VALID_TRANSITIONS,
 } from "./scan-transitions"
+export { softDeleteTarget, TargetHasActiveScanError, TargetNotFoundError } from "./target-service"
 export {
   completeScanWithScore,
   createScorecardShare,

@@ -139,7 +139,7 @@ async function patch(request: Request) {
         )
       }
       const target = await prisma.target.findFirst({
-        where: { id: parsed.data.targetId, workspaceId },
+        where: { id: parsed.data.targetId, workspaceId, deletedAt: null },
         select: { workspaceId: true },
       })
       const targetMembership = target

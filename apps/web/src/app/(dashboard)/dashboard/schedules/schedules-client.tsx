@@ -368,7 +368,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
               {selectedOption?.description}{" "}
               {selectedTargetId && !selectedTargetUsesEngine
                 ? "This target uses deterministic scanners."
-                : "A protected run limit is applied automatically."}
+                : "A protected scan limit is applied automatically."}
             </p>
             <div className="flex gap-2">
               <Button

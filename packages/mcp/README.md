@@ -16,6 +16,8 @@ This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol
 - Every tool publishes an input schema, output schema, title, safety annotations, and structured content.
 - Tool calls currently publish `execution.taskSupport: "forbidden"`. A returned LyraShield scan ID is a durable product job that clients poll with `lyrashield_get_scan_status`; it is not an MCP protocol task.
 - Hosted responses use `Cache-Control: no-store` and vary on authorization and MCP protocol version. The server does not advertise unsupported MCP list-cache metadata.
+- Call arguments are validated against each tool's advertised `inputSchema` before execution; violations return a structured `Invalid tool arguments` error naming the offending fields.
+- Tool results are capped at 256 KiB serialized (`MCP_RESULT_MAX_BYTES`). Oversized text content and `structuredContent` are truncated with an explicit `[… truncated]` marker / `truncated: true` flag so a partial result is never mistaken for a complete one.
 - The hosted transport remains stateless and fail-closed. It does not advertise durable MCP Tasks because an in-memory task store would make serverless polling, cancellation, and replay unreliable.
 
 See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported draft gaps. Tool annotations are client hints only; the server always enforces prompt-injection checks and the connection's server-side authorization independently.
@@ -179,9 +181,9 @@ The remote endpoint runs the same guard and tools as stdio. Hosted responses are
 
 - **New delegated OAuth connection:** Connect is the authorization. Matching hosted mutations require `idempotencyKey`; reuse it only for identical retries.
 - **Connection outside its grant:** the call fails closed. Reconnect to authorize the required access.
-- **Write-scoped API key or local stdio:** the REST API enforces the credential's scope, current role, target authorization, and budget without a second LyraShield prompt.
+- **API key or legacy token on the hosted endpoint:** one structured `connect_required` response naming the OAuth connect path. Nothing is queued and nothing executes — connect a client first.
+- **Local stdio with an API key:** the REST API enforces the credential's scope, current role, target authorization, and budget without a second LyraShield prompt.
 - **Read-only credential:** mutations are denied.
-- **Legacy hosted nondelegated credential:** historical exact-input approval remains supported; reconnect for automatic workflows.
 
 Coding-agent hosts may impose their own tool permission dialogs. LyraShield cannot suppress those controls. API-key and local stdio calls do not claim the hosted OAuth operation ledger's replay guarantee. Pull requests never auto-merge.
 

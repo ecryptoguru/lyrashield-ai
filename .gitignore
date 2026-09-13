@@ -80,8 +80,8 @@ gen/schemas/
 # TypeScript build info
 *.tsbuildinfo
 artifacts/
-!apps/web/src/app/api/scans/**/artifacts/
-!apps/web/src/app/api/scans/**/artifacts/**
+!apps/web/src/app/api/**/artifacts/
+!apps/web/src/app/api/**/artifacts/**
 /scripts/
 
 # Generated documentation build outputs (keep source .md; ignore rendered PDFs/images)

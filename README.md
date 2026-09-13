@@ -56,7 +56,7 @@ Run `npx lyrashield doctor` any time to check what's configured and what's missi
 }
 ```
 
-`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions) and both stdio and remote Streamable-HTTP transports. A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client (an API key) receives one structured `connect_required` response pointing at OAuth connect — no approval cycle and no execution. Full per-agent setup for 26 preferred client surfaces is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is now v0.1.27 with Cursor streamable-http support and the `packages/agent-registry` resolves its 30 install entries into those preferred surfaces.
+`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions) and both stdio and remote Streamable-HTTP transports. A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client — an API key or a legacy OAuth bearer — receives one structured `connect_required` response pointing at OAuth connect; nothing is queued and nothing executes. Full per-agent setup for 26 preferred client surfaces is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is now v0.1.27 with Cursor streamable-http support and the `packages/agent-registry` resolves its 30 install entries into those preferred surfaces.
 
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
@@ -82,7 +82,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
 - `packages/billing` — Polar + Razorpay dual-gateway billing, usage metering, entitlement gating, trial lifecycle, and grace period handling.
-- `packages/pricing` — cloud plan definitions (Trial, Starter $29, Pro $99, Launch Assurance $499, Enterprise from $1,500), minute packs, and local SKUs.
+- `packages/pricing` — cloud plan definitions (Trial, Starter $29, Pro $99, Agency $499, Enterprise from $1,500), minute packs, and local SKUs.
 - `packages/licenses` — ed25519 signed license sign/verify for the Local/Desktop app.
 - `packages/affiliate` — commission engine, attribution, fraud controls, and payout ledger (RazorpayX/Payoneer).
 - `packages/evidence-storage` — envelope encryption (AES-256-GCM) for scan artifacts.
@@ -156,10 +156,10 @@ The application pins an exact engine commit in `.github/workflows/deploy-azure.y
 
 - Workspace data is tenant-scoped; sensitive operations are audit-logged; and child tables (`ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `ScanCoverageReceipt`, `ScanResultManifest`, `ScorecardShare`, `ScorecardEvent`, `Ticket`) are protected by Postgres RLS.
 - Engine output is treated as untrusted; only independent verifier evidence can mark a finding verified.
-- URL/API targets use pinned deterministic URL scanners with a versioned `url-scan/2.0.0` capability registry (six profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) rather than the repository engine.
+- URL/API targets use pinned deterministic URL scanners with a versioned `url-scan/3.0.0` capability registry (six profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.
 - Public scorecard payloads are allowlisted and sharing is revocable.
-- The MCP server's mutating tools (start a scan, record a fix, queue a retest) run within the connection grant for a connected OAuth client — their authorized operations execute automatically without a per-action approval. A caller without a connected client receives one structured `connect_required` response pointing at OAuth connect. Historical approval records remain viewable and resolvable.
+- The MCP server's mutating tools (start a scan, record a fix, queue a retest) run within the connection grant for a connected OAuth client — their authorized operations execute automatically without a per-action approval. A caller without a connected client receives one structured `connect_required` response pointing at OAuth connect. The PENDING/approvalId cycle is retired on the remote path; historical approval records remain viewable and resolvable through the REST routes.
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
 - Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before any deploy. Operator promotion of that digest on the worker VM remains a separate manual action.
 

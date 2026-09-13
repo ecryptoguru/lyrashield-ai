@@ -198,14 +198,14 @@ Repository jobs are admitted only while a live worker heartbeat exists. Queue/da
 ### Remediation
 
 - User may create and inspect a fix proposal.
-- Consequential actions require current permission and either exact-input approval or a valid browser-confirmed connection grant bound to the workflow, target, profile, and idempotency key.
+- Consequential actions require current permission and a valid browser-confirmed connection grant bound to the workflow, target, profile, and idempotency key; write-scoped API-key calls on the remote MCP endpoint are refused with `connect_required` and exact-input approval survives only for legacy nondelegated hosted credentials.
 - Fix PR endpoint accepts no client patch, branch, title, or body.
 - The full fix-PR pipeline is wired end to end (v14): proposal creation enqueues deterministic patch generation from the engine's structured fix (`fix-generate` job, plan-tiered scope validation, encrypted evidence storage); findings carry the scanned `baseCommit` so patches apply against exactly the commit analyzed; a merged `lyrashield/fix-` branch triggers loop-closure — the PR is marked merged, a REAL retest scan is created and queued (bound to the NEW scan, never the finding's original terminal scan). Nothing auto-merges; every PR is an approval-gated proposal.
 - Retest scope derives from the server-owned source scan, never a client-selected replacement.
 
 ### Launch gate and assurance reporting
 
-- The Launch Gate is a named, versioned readiness standard (`lyrashield-gate/2.0.0`): a pure function over stored evidence producing READY / NOT_READY / INSUFFICIENT_EVIDENCE verdicts, persisted append-only per target (`GateVerdict`, RLS-protected). Coverage requirements derive from the scan registry; uncovered target types can never earn READY.
+- The Launch Gate is a named, versioned readiness standard (`lyrashield-gate/2.3.0`): a pure function over stored evidence producing READY / NOT_READY / INSUFFICIENT_EVIDENCE verdicts, persisted append-only per target (`GateVerdict`, RLS-protected). Coverage requirements derive from the scan registry; uncovered target types can never earn READY.
 - The verdict is refreshed after every terminal scan state, after a merged fix PR, and on demand via `POST /api/gate/[targetId]`.
 - The Launch Readiness Report renders the verdict as a shareable, verifiable artifact: frozen allowlisted payload (`buildLaunchReportPayload`), ed25519 signature over the checksum (server-owned key), 30-day share tokens, and a public verify endpoint. MEDIUM/LOW findings are disclosed as not gate-evaluated rather than counted as zero.
 - The AI-Built Failure Taxonomy (`ai-built-failure-taxonomy/1.0.0`) is the named, public, citable catalog of how AI-built apps characteristically fail, with every class traced to live controls; exposed read-only at `/api/taxonomy/ai-built-failures`.
@@ -316,7 +316,7 @@ Do not publish or change pricing without founder approval.
 - Model-facing inputs pass `normalizeInput()` and `PromptInjectionGuard`.
 - Read actions require permission; mutating actions require permission and, where consequential, approval.
 - Approval is atomic, single-use, expiry-aware, and bound to exact action name plus input hash.
-- Remote OAuth is read-only by default. A browser-confirmed, connection-bound delegation may authorize selected workflows, targets, and scan profiles without repeated review-queue prompts; execution still rechecks current membership, permission, scope, expiry, and idempotency. Legacy or out-of-grant writes remain fail-closed behind exact-input approval.
+- Remote OAuth is read-only by default. A browser-confirmed, connection-bound delegation may authorize selected workflows, targets, and scan profiles without repeated review-queue prompts; execution still rechecks current membership, permission, scope, expiry, and idempotency. Write-scoped API-key calls on the remote endpoint receive a `connect_required` response and out-of-grant delegated calls are denied; exact-input approval remains only for legacy nondelegated hosted credentials.
 - Fresh GitHub callback state alone cannot create an integration.
 - No automatic merge or client-authored patch execution.
 

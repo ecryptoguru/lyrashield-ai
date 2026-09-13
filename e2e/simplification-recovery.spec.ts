@@ -127,6 +127,8 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
     await page.getByRole("button", { name: "Resume", exact: true }).click()
     await expect(page.getByText("Reads and writes available", { exact: false })).toBeVisible()
     await page.getByRole("button", { name: "Disconnect", exact: true }).click()
+    // Inline confirm: the first click reveals the destructive confirm button.
+    await page.getByRole("button", { name: "Disconnect", exact: true }).click()
     await expect(page.getByText(/Reconnect from your coding agent/)).toBeVisible()
 
     const target = await prisma.target.create({

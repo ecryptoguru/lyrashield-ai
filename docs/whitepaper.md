@@ -123,7 +123,7 @@ A versioned coverage contract (`vibe-security-50/1.1.0`): 50 controls across det
 
 ### 5.2 Launch Gate
 
-A named, versioned readiness standard (`lyrashield-gate/1.0.0`): a pure function over stored evidence producing `READY`, `NOT_READY`, or `INSUFFICIENT_EVIDENCE`. Verdicts persist append-only per target under row-level security, refresh after every terminal scan state and every merged fix PR, and are exposed to CI through `lyrashield gate --verdict` with a stable 0/1/2 exit-code contract. Target types the coverage registry does not cover can never earn `READY`.
+A named, versioned readiness standard (`lyrashield-gate/2.3.0`): a pure function over stored evidence producing `READY`, `NOT_READY`, or `INSUFFICIENT_EVIDENCE`. Verdicts persist append-only per target under row-level security, refresh after every terminal scan state and every merged fix PR, and are exposed to CI through `lyrashield gate --verdict` with a stable 0/1/2 exit-code contract. Target types the coverage registry does not cover can never earn `READY`.
 
 ### 5.3 Launch Readiness Report
 
@@ -161,7 +161,7 @@ The free Lite Check returns a distinct result — never the official LyraShield 
 - **Audit.** Sensitive mutations write hash-chained audit events through a single advisory-locked transaction that owns chain ordering.
 - **Evidence storage.** Private, checksum-bound, encrypted (AES-256-GCM envelope encryption), workspace-isolated, and fail-closed.
 - **Network.** URL inputs pass SSRF validation; DNS is resolved, validated, and pinned at connection time; every redirect hop is revalidated. Worker public egress is denied by default; approved fetching goes through an authenticated SSRF-safe proxy. Repository execution is sandboxed: non-root, bounded resources, deny-by-default egress.
-- **Agents.** Model-facing inputs are normalized and injection-guarded. Mutating actions require permission and, where consequential, single-use approval bound to the exact action and input hash. Remote OAuth is read-only by default; delegated writes revalidate membership, permission, scope, expiry, and idempotency on every call.
+- **Agents.** Model-facing inputs are normalized and injection-guarded. Remote OAuth is read-only by default; delegated writes revalidate membership, permission, scope, expiry, and idempotency on every call. Write-scoped API-key calls on the remote endpoint receive a `connect_required` response; single-use approval bound to the exact action and input hash remains only for legacy nondelegated hosted credentials.
 - **Platform administration.** A hidden, noindex read console restricted to exactly two allowlisted, verified, TOTP-enrolled operators; bearer credentials and workspace roles never grant access.
 
 ## 8. Commercial model
@@ -256,10 +256,10 @@ Public-facing contracts are named and versioned so results are reproducible and 
 | Contract                           | Version                                    |
 | ---------------------------------- | ------------------------------------------ |
 | Vibe Security 50 coverage contract | `vibe-security-50/1.1.0`                   |
-| Launch Gate verdict standard       | `lyrashield-gate/1.0.0`                    |
+| Launch Gate verdict standard       | `lyrashield-gate/2.3.0`                    |
 | AI-Built Failure Taxonomy          | `ai-built-failure-taxonomy/1.0.0`          |
 | WebMCP detector / inventory        | `webmcp-assurance/2`, `webmcp-inventory/1` |
-| URL scan capability registry       | `url-scan/2.0.0`                           |
+| URL scan capability registry       | `url-scan/3.0.0`                           |
 | AI assurance framework mapping     | `ai-assurance-mapping/1.0.0`               |
 | Affiliate terms                    | `2026-08-18-v1`                            |
 

@@ -119,6 +119,12 @@ export async function createScan(
       throw new WorkspaceScanConcurrencyLimitError()
     }
 
+    const target = await tx.target.findFirst({
+      where: { id: params.targetId, workspaceId: params.workspaceId, deletedAt: null },
+      select: { id: true },
+    })
+    if (!target) throw new Error("Target not found in this workspace")
+
     const activeScans = await tx.scan.count({
       where: {
         targetId: params.targetId,
@@ -373,6 +379,10 @@ export async function getScanWithEvents(
         resultManifest: { select: { checksum: true } },
         coverageReceipts: {
           orderBy: { controlId: "asc" },
+          // Bounded like events: the receipt list ships on every scan-detail
+          // poll. 500 comfortably covers the full registry (~150 checks);
+          // a larger scan's receipt tail is not poll-critical.
+          take: 500,
         },
         aiSecurityScoreSnapshot: true,
         target: {
