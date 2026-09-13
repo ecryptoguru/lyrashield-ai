@@ -9,6 +9,7 @@ import {
   CreateWorkspaceSchema,
   CreateRepoTargetSchema,
   CreateUrlTargetSchema,
+  PatchTargetSchema,
   CreateProjectSchema,
   CreateReportSchema,
   ReportActionSchema,
@@ -134,6 +135,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
     CreateWorkspace: toJsonSchema(CreateWorkspaceSchema),
     CreateRepoTarget: toJsonSchema(CreateRepoTargetSchema),
     CreateUrlTarget: toJsonSchema(CreateUrlTargetSchema),
+    PatchTarget: toJsonSchema(PatchTargetSchema),
     CreateProject: toJsonSchema(CreateProjectSchema),
     CreateReport: toJsonSchema(CreateReportSchema),
     ReportAction: toJsonSchema(ReportActionSchema),
@@ -238,6 +240,26 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           },
         },
       },
+      "/scans/{id}/artifacts/sarif": {
+        post: {
+          summary: "Import a SARIF report into a scan",
+          description:
+            "Imports third-party SARIF 2.1.0 detections into an existing scan. Imported findings are tagged external_import and never count as scanner coverage or independently verified findings. Requires a write-scoped API key or browser session; delegated OAuth connections are refused.",
+          parameters: [idPathParam, workspaceIdParam],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+          responses: {
+            200: successResponse(genericItem, "SARIF findings imported"),
+            413: {
+              description: "SARIF payload exceeds the 5 MiB limit",
+              content: { "application/json": { schema: errorEnvelope } },
+            },
+            ...commonErrors,
+          },
+        },
+      },
       "/findings": {
         get: {
           summary: "List findings",
@@ -326,6 +348,42 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           responses: {
             200: successResponse(genericItem, "Target created"),
             ...commonErrors,
+          },
+        },
+      },
+      "/targets/{id}": {
+        patch: {
+          summary: "Update a target",
+          parameters: [idPathParam, workspaceIdParam],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: ref("PatchTarget") } },
+          },
+          responses: {
+            200: successResponse(genericItem, "Target updated"),
+            ...commonErrors,
+            409: {
+              description: "Repository ref is immutable after the first scan",
+              content: { "application/json": { schema: errorEnvelope } },
+            },
+          },
+        },
+        delete: {
+          summary: "Delete a target (soft delete)",
+          description:
+            "Marks the target deleted and frees its plan target slot. Scans, findings, verdicts, reports and evidence are retained in the workspace. Refused while a scan for the target is queued or running.",
+          parameters: [idPathParam, workspaceIdParam],
+          responses: {
+            204: { description: "Target deleted" },
+            ...commonErrors,
+            404: {
+              description: "Target not found or already deleted",
+              content: { "application/json": { schema: errorEnvelope } },
+            },
+            409: {
+              description: "Target has a queued or running scan",
+              content: { "application/json": { schema: errorEnvelope } },
+            },
           },
         },
       },
