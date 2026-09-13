@@ -4,7 +4,7 @@ import { VIBE_SECURITY_CONTROLS, VIBE_SECURITY_COVERAGE_VERSION } from "@lyrashi
 import type { UrlExecutionSummary } from "@lyrashield/types"
 import type { EngineVulnerability } from "./output-parser"
 import type { NormalizedFinding } from "./normalizer"
-import type { ScannerCoverageIssue } from "./scanner-coverage"
+import type { ScannerCoverageIssue, ScannerDiscovery } from "./scanner-coverage"
 import type {
   AiAppSecurityDiscoveryReceipt,
   WebMcpCoverageReceipt,
@@ -26,6 +26,8 @@ type ResultManifestInput = {
   sourceCheckoutAvailable: boolean
   engineFindingCount: number
   coverageIssues: ScannerCoverageIssue[]
+  /** Per-family discovery receipts — files scanned, bytes, bounded skips. */
+  scannerDiscovery?: ScannerDiscovery
   aiAppSecurityDiscovery?: AiAppSecurityDiscoveryReceipt
   webMcpCoverage?: WebMcpCoverageReceipt | null
   matchedControlRanks?: number[]
@@ -234,6 +236,7 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
           ...status,
           metadata: {
             sourceCheckoutAvailable: input.sourceCheckoutAvailable,
+            discovery: input.scannerDiscovery?.[scanner] ?? null,
             ...(scanner === "ai_app_security"
               ? {
                   discovery: input.aiAppSecurityDiscovery ?? null,
@@ -251,6 +254,7 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
       ...urlStatus,
       metadata: {
         configured: Boolean(input.target.url),
+        execution: input.urlExecution ?? null,
         ...urlStatus.metadata,
       },
     },

@@ -5,7 +5,11 @@ import { logger } from "@lyrashield/logger"
 import type { AdvisoryBatchResult } from "@lyrashield/db"
 import type { HostResolver } from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
-import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
+import {
+  recordCoverageIssue,
+  type ScannerCoverageIssue,
+  type ScannerDiscovery,
+} from "../scanner-coverage"
 import { fetchThreatSignals, type ThreatSignal } from "./threat-intelligence"
 import type { ResolvedDependencyInventory } from "./resolved-dependencies"
 
@@ -20,6 +24,7 @@ export interface ScaScanConfig {
   signal?: AbortSignal
   resolvedDependencyInventory?: ResolvedDependencyInventory
   advisoryBatch?: AdvisoryBatchResult
+  discovery?: ScannerDiscovery
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -684,12 +689,22 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     signal,
     resolvedDependencyInventory,
     advisoryBatch,
+    discovery,
   } = config
   throwIfAborted(signal)
   logger.info("Starting SCA scan", { repoPath })
 
   const allDeps: Dependency[] = []
+  let manifestFiles = 0
+  let manifestBytes = 0
+  let emptyManifests = 0
   if (resolvedDependencyInventory) {
+    manifestFiles = new Set([
+      resolvedDependencyInventory.evidenceFile.path,
+      ...resolvedDependencyInventory.packages.map((pkg) => pkg.filePath),
+    ]).size
+    manifestBytes = resolvedDependencyInventory.evidenceFile.size
+    emptyManifests = resolvedDependencyInventory.truncated ? 1 : 0
     allDeps.push(
       ...resolvedDependencyInventory.packages.map((pkg) => ({
         name: pkg.name,
@@ -707,14 +722,36 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
       coverageIssues,
       signal
     )
+    manifestFiles = depFiles.length
     if (depFiles.length === 0) {
       logger.info("No dependency files found", { repoPath })
+      if (discovery) {
+        discovery.sca = {
+          filesScanned: 0,
+          bytesScanned: 0,
+          skippedByReason: { noManifests: 1 },
+        }
+      }
       return []
     }
     for (const file of depFiles) {
       throwIfAborted(signal)
+      try {
+        const stat = await lstat(join(repoPath, file))
+        manifestBytes += stat.size
+      } catch {
+        // manifest may have been removed between walk and parse
+      }
       const deps = await parseDependencyFile(file, repoPath, coverageIssues)
+      if (deps.length === 0) emptyManifests++
       allDeps.push(...deps)
+    }
+  }
+  if (discovery) {
+    discovery.sca = {
+      filesScanned: manifestFiles,
+      bytesScanned: manifestBytes,
+      skippedByReason: { emptyOrTruncated: emptyManifests },
     }
   }
 

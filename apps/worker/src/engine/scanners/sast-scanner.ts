@@ -4,13 +4,20 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
-import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
+import {
+  recordCoverageIssue,
+  type ScannerCoverageIssue,
+  type ScannerDiscovery,
+} from "../scanner-coverage"
 
 export interface SastScanConfig {
   repoPath: string
   workspaceDir: string
   signal?: AbortSignal
   coverageIssues?: ScannerCoverageIssue[]
+  /** Scan tier — drives the file budget so receipts reflect the mode honestly. */
+  mode?: string
+  discovery?: ScannerDiscovery
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -57,6 +64,15 @@ const MAX_WALK_ENTRIES = 50_000
 const MAX_WALK_DEPTH = 40
 const MAX_FINDINGS_PER_FILE = 100
 const MAX_TOTAL_FINDINGS = 5_000
+// Matches ai-app-security's per-mode file budgets so mode breadth is honest
+// across deterministic source families.
+const MAX_FILES_BY_MODE = { QUICK: 200, STANDARD: 500, DEEP: 1_000 } as const
+const MAX_REPRESENTATIVE_SKIPPED_PATHS = 20
+
+function sastFileBudget(mode: string | undefined): number {
+  const key = (mode ?? "STANDARD").toUpperCase() as keyof typeof MAX_FILES_BY_MODE
+  return MAX_FILES_BY_MODE[key] ?? MAX_FILES_BY_MODE.STANDARD
+}
 
 /** Password-handling context — the only context where a weak hash evidences
  *  control 10 (unsafe password storage). */
@@ -302,13 +318,13 @@ async function walkDir(
 }
 
 export async function scanSast(config: SastScanConfig): Promise<EngineVulnerability[]> {
-  const { repoPath, workspaceDir, signal, coverageIssues } = config
+  const { repoPath, workspaceDir, signal, coverageIssues, mode, discovery } = config
   throwIfAborted(signal)
   logger.info("Starting SAST scan", { repoPath })
 
-  const files: string[] = []
+  const discovered: string[] = []
   const walkState = { entries: 0, bounded: false, oversizedFiles: 0 }
-  await walkDir(repoPath, files, walkState, 0, signal)
+  await walkDir(repoPath, discovered, walkState, 0, signal)
   if (walkState.bounded) {
     recordCoverageIssue(coverageIssues, {
       scanner: "sast",
@@ -324,6 +340,28 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
       reason: `Files exceeding the ${MAX_FILE_SIZE}-byte scanner limit were not inspected`,
     })
   }
+
+  // Per-mode file budget — deterministic order so repeat runs are identical.
+  const maxFiles = sastFileBudget(mode)
+  const ordered = [...discovered].sort()
+  const files = ordered.slice(0, maxFiles)
+  const skippedPaths = ordered.slice(maxFiles)
+  if (skippedPaths.length > 0) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "sast",
+      status: "bounded",
+      reason: `SAST scanned ${files.length} of ${ordered.length} eligible files; ${skippedPaths.length} exceeded the ${mode ?? "STANDARD"} file limit (${maxFiles})`,
+    })
+  }
+
+  const skippedByReason = {
+    fileLimit: skippedPaths.length,
+    oversized: walkState.oversizedFiles,
+    walkBounded: walkState.bounded ? 1 : 0,
+    unreadable: 0,
+    testFixture: 0,
+  }
+  let bytesScanned = 0
 
   const findings: EngineVulnerability[] = []
   const seenFindings = new Set<string>()
@@ -342,11 +380,16 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
     try {
       content = await readFile(filePath, "utf-8")
     } catch {
+      skippedByReason.unreadable++
       continue
     }
+    bytesScanned += Buffer.byteLength(content, "utf-8")
 
     const relPath = relative(workspaceDir, filePath)
-    if (isTestFixturePath(relPath)) continue
+    if (isTestFixturePath(relPath)) {
+      skippedByReason.testFixture++
+      continue
+    }
 
     const lines = content.split("\n")
     let findingsInFile = 0
@@ -418,6 +461,17 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
           ],
         })
       }
+    }
+  }
+
+  if (discovery) {
+    discovery.sast = {
+      filesScanned: files.length - skippedByReason.unreadable - skippedByReason.testFixture,
+      bytesScanned,
+      skippedByReason,
+      representativeSkippedPaths: skippedPaths
+        .slice(0, MAX_REPRESENTATIVE_SKIPPED_PATHS)
+        .map((p) => relative(workspaceDir, p)),
     }
   }
 

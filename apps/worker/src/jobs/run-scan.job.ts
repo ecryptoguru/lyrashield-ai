@@ -2069,6 +2069,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ],
             aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
             webMcpCoverage: orchestratorResult.webMcpCoverage,
+            scannerDiscovery: orchestratorResult.scannerDiscovery,
             matchedControlRanks: coverage.matchedControlRanks,
             urlExecution: orchestratorResult.urlExecution,
             engineExecution,

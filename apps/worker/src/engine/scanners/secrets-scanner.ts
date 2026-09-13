@@ -3,13 +3,18 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
-import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
+import {
+  recordCoverageIssue,
+  type ScannerCoverageIssue,
+  type ScannerDiscovery,
+} from "../scanner-coverage"
 
 export interface SecretsScanConfig {
   repoPath: string
   workspaceDir: string
   signal?: AbortSignal
   coverageIssues?: ScannerCoverageIssue[]
+  discovery?: ScannerDiscovery
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -336,7 +341,7 @@ function getLanguageFromExt(ext: string): string {
 }
 
 export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVulnerability[]> {
-  const { repoPath, workspaceDir, signal, coverageIssues } = config
+  const { repoPath, workspaceDir, signal, coverageIssues, discovery } = config
   throwIfAborted(signal)
   logger.info("Starting secrets scan", { repoPath })
 
@@ -363,6 +368,14 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
 
   const findings: EngineVulnerability[] = []
   const seenFindings = new Set<string>()
+  const skippedByReason = {
+    oversized: walkState.oversizedFiles,
+    walkBounded: walkState.bounded ? 1 : 0,
+    unreadable: 0,
+    testFixture: 0,
+  }
+  let bytesScanned = 0
+  let filesScanned = 0
 
   for (const filePath of files) {
     throwIfAborted(signal)
@@ -370,8 +383,10 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
     try {
       content = await readFile(filePath, "utf-8")
     } catch {
+      skippedByReason.unreadable++
       continue
     }
+    bytesScanned += Buffer.byteLength(content, "utf-8")
 
     const relPath = relative(workspaceDir, filePath)
     const ext = getFileExtension(filePath)
@@ -380,7 +395,11 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
 
     // Test vectors and test-only examples deliberately contain credential-shaped
     // strings. They prove scanner detection but are not deployable secrets.
-    if (isTestFixturePath(relPath)) continue
+    if (isTestFixturePath(relPath)) {
+      skippedByReason.testFixture++
+      continue
+    }
+    filesScanned++
 
     for (const pattern of SECRET_PATTERNS) {
       throwIfAborted(signal)
@@ -430,6 +449,10 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
         })
       }
     }
+  }
+
+  if (discovery) {
+    discovery.secrets = { filesScanned, bytesScanned, skippedByReason }
   }
 
   logger.info("Secrets scan complete", {

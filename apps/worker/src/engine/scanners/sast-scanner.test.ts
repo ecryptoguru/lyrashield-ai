@@ -141,4 +141,46 @@ describe("scanSast", () => {
     const findings = await scanSast({ repoPath: dir, workspaceDir: dir })
     expect(findings).toEqual([])
   })
+
+  it("emits a discovery receipt with file, byte, and skip accounting", async () => {
+    const dir = await setupRepo({
+      "index.ts": "export const a = 1",
+      "app.py": "x = 2",
+      "auth.test.ts": "const h = createHash('md5').update(password)",
+    })
+    const discovery: Record<string, unknown> = {}
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    await scanSast({ repoPath: dir, workspaceDir: dir, mode: "DEEP", coverageIssues, discovery })
+
+    const receipt = discovery.sast as {
+      filesScanned: number
+      bytesScanned: number
+      skippedByReason: Record<string, number>
+    }
+    expect(receipt.filesScanned).toBe(2)
+    expect(receipt.bytesScanned).toBeGreaterThan(0)
+    expect(receipt.skippedByReason.testFixture).toBe(1)
+    expect(receipt.skippedByReason.fileLimit).toBe(0)
+  })
+
+  it("bounds files by the mode's budget and reports the overflow", async () => {
+    const files: Record<string, string> = {}
+    for (let i = 0; i < 210; i++) files[`f${String(i).padStart(4, "0")}.ts`] = `export const v${i} = ${i}`
+    const dir = await setupRepo(files)
+
+    const discovery: Record<string, unknown> = {}
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    await scanSast({ repoPath: dir, workspaceDir: dir, mode: "QUICK", coverageIssues, discovery })
+
+    const receipt = discovery.sast as { filesScanned: number; skippedByReason: Record<string, number>; representativeSkippedPaths?: string[] }
+    expect(receipt.filesScanned).toBe(200)
+    expect(receipt.skippedByReason.fileLimit).toBe(10)
+    expect(receipt.representativeSkippedPaths).toContain("f0200.ts")
+    expect(coverageIssues.some((issue) => issue.reason.includes("200 of 210"))).toBe(true)
+
+    // STANDARD covers all 210 — the mode budget visibly widens coverage.
+    const wide: Record<string, unknown> = {}
+    await scanSast({ repoPath: dir, workspaceDir: dir, mode: "STANDARD", discovery: wide })
+    expect((wide.sast as { filesScanned: number }).filesScanned).toBe(210)
+  })
 })
