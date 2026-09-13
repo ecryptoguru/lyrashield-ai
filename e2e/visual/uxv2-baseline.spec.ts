@@ -206,8 +206,6 @@ test("authenticated post-login dashboard flow @visual", async ({ page }, testInf
       return { scanId: scan.id, findingId: finding.id }
     })
 
-    consoleErrors.length = 0
-    pageErrors.length = 0
     await page.goto("/dashboard")
     await capture(page, "dashboard-home-light.png")
     await expect
