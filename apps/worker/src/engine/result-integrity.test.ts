@@ -144,7 +144,7 @@ describe("result integrity", () => {
     expect(receipts.find((receipt) => receipt.scanner === "secrets")).toMatchObject({
       status: "COMPLETED",
     })
-    expect(receipts).toHaveLength(58)
+    expect(receipts).toHaveLength(59)
     expect(receipts.find((receipt) => receipt.controlId === "vibe-34")).toMatchObject({
       status: "BLOCKED",
       metadata: expect.objectContaining({ outcome: "EVIDENCE_REQUIRED" }),

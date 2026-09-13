@@ -88,21 +88,22 @@ const CONTROL_SCANNERS: Readonly<Record<number, readonly string[]>> = {
   1: ["engine"],
   2: ["engine"],
   10: ["engine", "sast"],
-  3: ["secrets", "url"],
+  3: ["secrets", "url", "iac"],
   14: ["url"],
   20: ["engine"],
   27: ["url"],
   28: ["url"],
   29: ["url", "sast"],
+  30: ["engine", "url", "iac"],
   31: ["url"],
   32: ["url"],
   33: ["engine", "ai_app_security"],
   37: ["sca"],
-  38: ["sca", "engine"],
+  38: ["sca", "engine", "iac"],
   39: ["sca", "engine", "ml_supply_chain"],
   40: ["engine", "ai_app_security"],
   42: ["engine", "ai_app_security"],
-  44: ["engine", "ai_app_security"],
+  44: ["engine", "ai_app_security", "iac"],
   45: ["agent_config"],
   47: ["agent_config", "engine"],
 }
@@ -223,7 +224,7 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
         ...engineStatus.metadata,
       },
     },
-    ...["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security", "sast"].map(
+    ...["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security", "sast", "iac"].map(
       (scanner) => {
         const status = scannerStatus(
           scanner,
@@ -265,7 +266,7 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
   const controlReceipts: FamilyReceipt[] = VIBE_SECURITY_CONTROLS.map((control) => {
     const controlId = `vibe-${String(control.rank).padStart(2, "0")}`
     const scanners =
-      control.strategy === "engine" ? ["engine"] : (CONTROL_SCANNERS[control.rank] ?? [])
+      CONTROL_SCANNERS[control.rank] ?? (control.strategy === "engine" ? ["engine"] : [])
     const applicableReceipts = scanners
       .map((scanner) => familyByScanner.get(scanner))
       .filter((receipt): receipt is FamilyReceipt => Boolean(receipt))
@@ -548,6 +549,7 @@ const DETERMINISTIC_RETEST_SCANNERS = new Set([
   "ai_app_security",
   "ml_supply_chain",
   "sast",
+  "iac",
 ])
 const SOURCE_REVISION_PATTERN = /^[0-9a-f]{40}$/i
 const URL_CHECKSUM_PATTERN = /^[0-9a-f]{64}$/i

@@ -8,7 +8,7 @@ describe("resolveRetestProfile", () => {
     )
   })
 
-  it.each(["ai_app_security", "ml_supply_chain", "sast"])(
+  it.each(["ai_app_security", "ml_supply_chain", "sast", "iac"])(
     "uses the bounded Safe cap for the %s deterministic scanner",
     (scannerSource) => {
       expect(resolveRetestProfile("DEEP", [scannerSource])).toEqual(

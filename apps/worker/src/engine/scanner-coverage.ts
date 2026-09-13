@@ -25,6 +25,7 @@ export interface ScannerCoverageIssue {
     | "ai_app_security"
     | "ml_supply_chain"
     | "sast"
+    | "iac"
   status: ScannerCoverageStatus
   subject?: string
   reason: string

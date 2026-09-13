@@ -22,7 +22,7 @@ export const AI_BUILT_TAXONOMY_VERSION = "ai-built-failure-taxonomy/1.0.0" as co
 
 /** The detection surface that covers a class (which scanner family owns it). */
 export type DetectionSurface =
-  "engine" | "sca" | "secrets" | "sast" | "agent_config" | "ai_app_security" | "url" | "webmcp"
+  "engine" | "sca" | "secrets" | "sast" | "iac" | "agent_config" | "ai_app_security" | "url" | "webmcp"
 
 export interface AiBuiltFailureClass {
   /** Stable class id, e.g. "AIB-01". */
@@ -53,7 +53,7 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
       "A privileged service key (database service role, server API key, admin token) is inlined into client-side JavaScript or shipped to the browser, where anyone can read it.",
     whyAiBuilt:
       "A generator optimising for a working demo reaches for the key that works, and nothing reviews the boundary between server-only and client-shipped code.",
-    coveredBy: ["secrets", "url"],
+    coveredBy: ["secrets", "url", "iac"],
     controlIds: ["vibe-03"],
     severity: "CRITICAL",
   },
@@ -86,8 +86,8 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
       "A token, service account, or agent tool is granted far wider scope than its task needs — read-write where read-only would do, all repos where one would do.",
     whyAiBuilt:
       "The fastest way to make an integration work is the broadest grant; least-privilege scoping is a separate pass that does not happen.",
-    coveredBy: ["agent_config", "ai_app_security"],
-    controlIds: ["vibe-42", "WEBMCP-04"],
+    coveredBy: ["agent_config", "ai_app_security", "iac"],
+    controlIds: ["vibe-42", "WEBMCP-04", "vibe-44"],
     severity: "HIGH",
   },
   {
@@ -130,8 +130,8 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
       "A package is added for a one-line task, sometimes hallucinated or typosquatted, carrying known vulnerabilities or an unsafe install script.",
     whyAiBuilt:
       "The model names a plausible package for the task; whether that package exists, is maintained, or is the real one is not checked.",
-    coveredBy: ["sca"],
-    controlIds: ["vibe-37", "vibe-39"],
+    coveredBy: ["sca", "iac"],
+    controlIds: ["vibe-37", "vibe-39", "vibe-38"],
     severity: "MEDIUM",
   },
 ] as const

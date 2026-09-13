@@ -16,6 +16,7 @@ const SCANNERS = new Set([
   "ai_app_security",
   "ml_supply_chain",
   "sast",
+  "iac",
 ])
 export function assertRetestFilesystemCapacity(filesystem: {
   type: number

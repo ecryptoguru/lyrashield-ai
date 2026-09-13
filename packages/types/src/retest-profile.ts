@@ -6,6 +6,7 @@ const DETERMINISTIC_SCANNERS = new Set([
   "ai_app_security",
   "ml_supply_chain",
   "sast",
+  "iac",
 ])
 
 export function resolveRetestProfile(sourceMode: string, scannerSources: readonly string[]) {

@@ -52,6 +52,7 @@ export interface EngineVulnerability {
     | "ai_app_security"
     | "ml_supply_chain"
     | "sast"
+    | "iac"
   /** Every detector that independently produced the normalized finding. */
   corroboratingSources?: Array<
     | "engine"
@@ -62,6 +63,7 @@ export interface EngineVulnerability {
     | "ai_app_security"
     | "ml_supply_chain"
     | "sast"
+    | "iac"
   >
 }
 

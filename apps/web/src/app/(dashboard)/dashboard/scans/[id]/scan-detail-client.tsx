@@ -279,6 +279,7 @@ const SCANNER_LABELS: Record<string, string> = {
   ai_app_security: "AI app security",
   ml_supply_chain: "ML supply chain",
   sast: "Static analysis",
+  iac: "Infrastructure config scan",
 }
 
 const ELAPSED_TIME_INTERVAL_MS = 1_000

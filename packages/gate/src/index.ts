@@ -23,7 +23,7 @@
  * actually run.
  */
 
-export const GATE_STANDARD_VERSION = "lyrashield-gate/2.2.0"
+export const GATE_STANDARD_VERSION = "lyrashield-gate/2.3.0"
 
 export {
   GATE_ASSESSMENT_VERSION,
