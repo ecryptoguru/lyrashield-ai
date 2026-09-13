@@ -1214,6 +1214,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           }
         }
 
+        if (job.data.focus) {
+          await addScanEvent(scanId, "scan_scope", "info", "Requested emphasis recorded", {
+            emphasis: job.data.focus,
+          })
+        }
+
         // Once the external engine begins, an automatic BullMQ replay could
         // spend twice for the same scan. Preflight remains retryable; the
         // billable phase is terminal and any rerun requires a fresh scan.
@@ -1263,6 +1269,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                       targetType: target.type as "WEB_APP" | "API",
                       environment: target.environment,
                       hasApiSpec: Boolean(target.apiSpecUrl),
+                      focus: job.data.focus,
                     }),
               maxBudgetUsd,
               ...(relayCtx ? { relay: relayCtx } : {}),

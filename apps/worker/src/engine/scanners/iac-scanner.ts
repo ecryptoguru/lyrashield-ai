@@ -156,7 +156,7 @@ const IAC_RULES: IacRule[] = [
     id: "iac-dockerfile-latest-base",
     name: "Unpinned or :latest base image",
     kinds: ["dockerfile"],
-    pattern: /^FROM\s+(?!scratch\b)[^\s:@]+(?::latest)?(?:\s+AS\s+\S+)?\s*$/im,
+    pattern: /^FROM\s+(?!scratch\b)[^\s:@#]+(?::latest)?(?:\s+AS\s+\S+)?\s*$/im,
     suppressIf: /:(?!latest\b)[0-9a-zA-Z@]/,
     severity: "medium",
     cwe: "CWE-1104",
@@ -215,7 +215,7 @@ const IAC_RULES: IacRule[] = [
     id: "iac-dockerfile-user-root",
     name: "Container runs as root — no USER directive",
     kinds: ["dockerfile"],
-    pattern: /^USER\s+root\s*$/im,
+    pattern: /^USER\s+root\b(?:\s+#.*)?$/im,
     severity: "medium",
     cwe: "CWE-250",
     description:
@@ -432,6 +432,22 @@ const IAC_RULES: IacRule[] = [
     remediation: "Move the value to a variable marked sensitive, or read it from a secret manager.",
     controlIds: [3],
   },
+  {
+    id: "iac-tf-variable-secret-default",
+    name: "Default literal on a secret-named variable",
+    kinds: ["terraform"],
+    pattern: /default\s*=\s*"[^"$\s][^"$]{6,}"/i,
+    fileContext:
+      /variable\s+"[^"]*(?:password|secret|token|api[_-]?key|private[_-]?key|access[_-]?key)[^"]*"\s*\{/i,
+    suppressIf: /var\.|data\.|local\.|each\.|module\.|random_|sensitive/i,
+    severity: "high",
+    cwe: "CWE-798",
+    description:
+      "A variable whose name marks it as a credential carries a hard-coded default literal in a separate attribute — the value is committed to version control and state.",
+    impact: "Credential defaults land in git history and tfstate in plaintext.",
+    remediation: "Remove the default; mark the variable sensitive and source it from a secret manager.",
+    controlIds: [3],
+  },
 ]
 
 /** Kubernetes rule that fires on file-level *absence* (no securityContext). */
@@ -506,7 +522,30 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
 
     let findingsInFile = 0
 
-    // File-level absence rule: workload with containers but no securityContext.
+    // File-level absence rules: a Dockerfile with no USER directive runs as
+    // root by default; a workload with containers but no securityContext has
+    // no declared privilege boundaries.
+    if (kind === "dockerfile" && !/^USER\s+\S+/im.test(content)) {
+      const rule = IAC_RULES.find((r) => r.id === "iac-dockerfile-user-root")
+      if (rule && findingsInFile < MAX_FINDINGS_PER_FILE) {
+        findingsInFile++
+        findings.push({
+          id: `${rule.id}-${relPath}-absent`,
+          title: `${rule.name} in ${relPath}`,
+          severity: rule.severity,
+          timestamp: new Date().toISOString(),
+          target: relPath,
+          cwe: rule.cwe,
+          description: rule.description,
+          technical_analysis: `${rule.name} — ${relPath} never sets a USER; the image runs as root by default.`,
+          impact: rule.impact,
+          remediation_steps: rule.remediation,
+          poc_description: `Inspect ${relPath}: no USER directive is present.`,
+          ...(rule.controlIds ? { control_ids: rule.controlIds } : {}),
+          code_locations: [{ file: relPath, start_line: 1, label: rule.name }],
+        })
+      }
+    }
     if (
       kind === "kubernetes" &&
       /^\s*containers\s*:/m.test(content) &&
@@ -542,9 +581,12 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
         if (rule.id === K8S_MISSING_SECURITY_CONTEXT) continue
         if (!rule.kinds.includes(kind)) continue
         if (rule.fileContext && !rule.fileContext.test(content)) continue
-        const match = rule.pattern.exec(line)
+        // Match and suppress on the code portion only — a trailing comment
+        // (or a corpus CASE marker) must neither trigger nor hide a violation.
+        const codePart = line.split("#")[0] ?? line
+        const match = rule.pattern.exec(codePart)
         if (!match) continue
-        if (rule.suppressIf?.test(line)) continue
+        if (rule.suppressIf?.test(codePart)) continue
 
         const lineNum = index + 1
         const findingId = `${rule.id}-${relPath}-${lineNum}`

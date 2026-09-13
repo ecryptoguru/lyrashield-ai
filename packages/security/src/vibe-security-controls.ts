@@ -371,8 +371,17 @@ export function buildUrlTargetInstruction(
     environment?: string | null
     hasCredentials?: boolean
     hasApiSpec?: boolean
+    /** Optional emphasis — steers attention, never reduces coverage. */
+    focus?: "auth" | "payments" | "llm_surface" | "file_handling" | "data_exposure" | null
   }
 ): string {
+  const FOCUS_HINTS: Record<string, string> = {
+    auth: "Prioritize authentication and session surface: login/session flows, token handling, authorization boundaries, and account-recovery paths.",
+    payments: "Prioritize payment and billing surface: checkout, refund, subscription, idempotency, and amount-handling paths.",
+    llm_surface: "Prioritize LLM/agent surface: prompt surfaces, tool calls, model-controlled output rendering, and context-flow boundaries.",
+    file_handling: "Prioritize file handling: upload, download, parsing, storage, and path-traversal surface.",
+    data_exposure: "Prioritize data exposure: verbose errors, debug surfaces, leaked secrets in responses, and over-broad data returns.",
+  }
   const base = buildVibeSecurityInstruction(goal)
   const lines = [
     base,
@@ -396,6 +405,11 @@ export function buildUrlTargetInstruction(
   if (opts.hasCredentials) {
     lines.push(
       "- Authenticated material is applied by the relay — you will not see it. Test the authenticated surface without handling credentials."
+    )
+  }
+  if (opts.focus && FOCUS_HINTS[opts.focus]) {
+    lines.push(
+      `- Requested emphasis: ${FOCUS_HINTS[opts.focus]} Emphasis steers attention only — it never reduces required coverage.`
     )
   }
   return lines.join("\n")

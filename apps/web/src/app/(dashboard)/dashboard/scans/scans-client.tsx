@@ -227,6 +227,7 @@ export function ScansClient({
   // several is the user's call, but being asked to pick the only option is not.
   const initialSelectedTarget = initialTargetId || (targets.length === 1 ? targets[0]!.id : "")
   const [selectedTarget, setSelectedTarget] = useState(initialSelectedTarget)
+  const [selectedFocus, setSelectedFocus] = useState<string | null>(null)
   const [selectedPreset, setSelectedPreset] = useState(() => {
     const target = targets.find((item) => item.id === initialSelectedTarget)
     return findRecoveryPreset(
@@ -370,11 +371,13 @@ export function ScansClient({
           targetId: selectedTarget,
           goal: selectedOption.goal,
           mode: selectedOption.mode,
+          ...(selectedFocus ? { focus: selectedFocus } : {}),
         },
         { schema: scanItemSchema }
       )
       setScans((prev) => [result, ...prev])
       setShowCreate(false)
+      setSelectedFocus(null)
       // Clear back to the preselect default (the sole target when there is
       // exactly one) rather than an unconditional blank.
       setSelectedTarget(initialSelectedTarget)
@@ -486,7 +489,6 @@ export function ScansClient({
   })
   const enabledOptions = availableOptions.filter((o) => o.available)
   const selectedOption = enabledOptions.find((o) => o.id === selectedPreset) ?? enabledOptions[0]
-  const selectedTargetUsesEngine = selectedTargetType === "REPO"
   const reviewSetupGuidance = selectedTargetDetails
     ? getReviewSetupGuidance({
         targetId: selectedTargetDetails.id,
@@ -951,14 +953,49 @@ export function ScansClient({
 
                 <p className="text-muted-foreground mt-2 text-xs">
                   {selectedOption?.hint}{" "}
-                  {selectedTarget && !selectedTargetUsesEngine
-                    ? "This target uses deterministic scanners."
-                    : "Your selected review sets the scope automatically."}
+                  {selectedOption && !selectedOption.usesAi
+                    ? "Deterministic surface checks only — no engine review."
+                    : "Engine review plus deterministic checks."}
                 </p>
                 {modeResetNotice && (
                   <p className="text-amber-600 mt-2 text-xs" role="status" aria-live="polite">
                     {modeResetNotice}
                   </p>
+                )}
+                {selectedOption?.usesAi && (
+                  <div className="mt-3" role="group" aria-label="Optional emphasis">
+                    <p className="text-muted-foreground mb-1.5 text-xs">
+                      Optional emphasis — steers engine attention, never reduces coverage.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(
+                        [
+                          ["auth", "Auth & sessions"],
+                          ["payments", "Payments"],
+                          ["llm_surface", "LLM surface"],
+                          ["file_handling", "File handling"],
+                          ["data_exposure", "Data exposure"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={selectedFocus === value}
+                          onClick={() =>
+                            setSelectedFocus((prev) => (prev === value ? null : value))
+                          }
+                          className={cn(
+                            "focus-visible:ring-ring min-h-9 rounded-full border px-3 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none",
+                            selectedFocus === value
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:bg-accent/50"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 {reviewSetupGuidance && (
                   <div

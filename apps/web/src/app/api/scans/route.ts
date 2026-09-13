@@ -378,6 +378,7 @@ async function post(request: Request) {
         goal: data.goal,
         mode: canonicalMode,
         policyId,
+        focus: data.focus,
       })
     } catch (enqueueErr) {
       logger.error("Failed to enqueue scan job", {

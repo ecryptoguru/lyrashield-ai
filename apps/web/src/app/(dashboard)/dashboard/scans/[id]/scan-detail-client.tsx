@@ -626,6 +626,26 @@ export function ScanDetailClient({
   const controlCoverage = scan.integrity.coverage.filter((receipt) =>
     receipt.controlId.startsWith("vibe-")
   )
+  const relayAuditEvent = [...scan.events].reverse().find((e) => e.stage === "relay_audit")
+  const relayScopeEvent = [...scan.events].reverse().find((e) => e.stage === "relay_scope")
+  const relayStats =
+    relayAuditEvent || relayScopeEvent
+      ? {
+          requests:
+            typeof relayAuditEvent?.metadata === "object" &&
+            relayAuditEvent.metadata &&
+            typeof (relayAuditEvent.metadata as Record<string, unknown>).entries === "number"
+              ? ((relayAuditEvent.metadata as Record<string, unknown>).entries as number)
+              : null,
+          hosts:
+            typeof relayScopeEvent?.metadata === "object" &&
+            relayScopeEvent.metadata &&
+            Array.isArray((relayScopeEvent.metadata as Record<string, unknown>).hosts)
+              ? ((relayScopeEvent.metadata as Record<string, unknown>).hosts as unknown[])
+                  .filter((h): h is string => typeof h === "string")
+              : [],
+        }
+      : null
   const incompleteCoverage = familyCoverage.filter(
     (receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status)
   )
@@ -949,6 +969,15 @@ export function ScanDetailClient({
                     Coverage limited: {scan.integrity.urlExecution.issueCodes.join(", ")}
                   </p>
                 )}
+              {relayStats && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Engine traffic ran through the scan-scoped relay
+                  {relayStats.hosts.length > 0 && ` to ${relayStats.hosts.join(", ")}`}
+                  {relayStats.requests !== null &&
+                    ` — ${relayStats.requests} audited request${relayStats.requests === 1 ? "" : "s"}`}
+                  .
+                </p>
+              )}
               <p className="text-muted-foreground mt-2 text-xs">
                 This public, non-mutating review did not authenticate or validate exploitability.
               </p>

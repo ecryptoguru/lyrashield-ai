@@ -57,6 +57,8 @@ export type ManualScanOption = {
   estimate: { low: number; high: number }
   available: boolean
   disabledReason?: string
+  /** Whether the engine runs for this option (deterministic tier = false). */
+  usesAi?: boolean
 }
 
 function repoOptions(): ManualScanOption[] {
@@ -71,17 +73,20 @@ function repoOptions(): ManualScanOption[] {
       mode: preset.mode,
       estimate: estimateRunMinutes(preset.mode),
       available: true,
+      usesAi: true,
     }
   })
 }
 
+// Engine-backed URL modes consume agent-minutes at repo-mode rates — the
+// deterministic tier stays cheap.
 const URL_ESTIMATES: Record<string, { low: number; high: number }> = {
   WEB_APP_SAFE: { low: 1, high: 2 },
-  WEB_APP_STANDARD: { low: 4, high: 6 },
-  WEB_APP_DEEP: { low: 8, high: 15 },
+  WEB_APP_STANDARD: { low: 8, high: 15 },
+  WEB_APP_DEEP: { low: 25, high: 40 },
   API_SAFE: { low: 1, high: 2 },
-  API_STANDARD: { low: 2, high: 4 },
-  API_DEEP: { low: 4, high: 8 },
+  API_STANDARD: { low: 8, high: 15 },
+  API_DEEP: { low: 25, high: 40 },
 }
 
 function goalForUrlMode(mode: UrlScanMode): string {
@@ -114,6 +119,7 @@ function urlOptions(targetType: UrlTargetType, hasApiSpec: boolean): ManualScanO
       estimate: URL_ESTIMATES[profile.id] ?? { low: 1, high: 2 },
       available: availability.available,
       disabledReason: availability.available ? undefined : availability.reason,
+      usesAi: mode !== "SAFE",
     })
   }
 
