@@ -86,11 +86,36 @@ export async function GET(request: Request) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
     }
 
+    // Resolve the canonical review profile exactly as POST does, so the
+    // preflight judges the review the run would actually perform — including
+    // whether the tier is engine-backed (which decides the consent gates).
+    let urlEngineBacked = false
+    if (target.type === "WEB_APP" || target.type === "API") {
+      const resolved = resolveTargetScanMode({
+        targetType: target.type,
+        mode,
+        hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
+      })
+      if (!resolved.ok) {
+        return eligibilityResponse({
+          allowed: false,
+          code: resolved.code,
+          message: resolved.reason,
+          plan: "UNKNOWN",
+          isTrial: false,
+          remainingMinutes: 0,
+        })
+      }
+      urlEngineBacked =
+        resolved.profile !== null && resolveScanProfile({ targetType: target.type, mode }).usesAi
+    }
+
     // Mirror the POST-only gates that apply BEFORE entitlement evaluation, so
     // the preflight's verdict matches what the run submission would actually
     // hit. Both checks are read-only here (the free-URL limiter consumes a
     // token; that is the same meter POST uses, so a preflight does not let a
-    // caller evade it — POST re-checks).
+    // caller evade it — POST re-checks). Domain verification is required only
+    // for engine-backed tiers; the deterministic tier needs no proof.
     if (target.type === "WEB_APP" || target.type === "API") {
       // The sponsor's effective plan decides — workspace.plan is a display
       // field under account-owned billing.
@@ -101,7 +126,7 @@ export async function GET(request: Request) {
       const sponsorPlan = sponsor?.agencyActive
         ? "LAUNCH_ASSURANCE"
         : (sponsorBilling?.effectivePlan ?? "FREE")
-      if (sponsorPlan === "FREE") {
+      if (sponsorPlan === "FREE" && !urlEngineBacked) {
         // Read-only peek: repeated preflight calls must not consume the
         // caller's hourly free-URL budget. The POST path consumes the token.
         const freeUrlLimit = await peekFreeUrlScanRateLimit(clientIpFromRequest(request))
@@ -117,7 +142,7 @@ export async function GET(request: Request) {
           })
         }
       }
-      if (sponsorPlan !== "FREE") {
+      if (sponsorPlan !== "FREE" && urlEngineBacked) {
         const domain = target.url ? normalizeDomainForProof(target.url) : null
         const proof = domain
           ? await prisma.targetDomainVerification.findFirst({
@@ -134,32 +159,16 @@ export async function GET(request: Request) {
           return eligibilityResponse({
             allowed: false,
             code: "DOMAIN_VERIFICATION_REQUIRED",
-            message: "Verify control of this domain once before starting a paid remote review.",
+            message: "Verify control of this domain once to enable engine-backed reviews.",
             plan: sponsorPlan,
             isTrial: false,
             remainingMinutes: 0,
+            remediation: {
+              txtName: domain ? `_lyrashield.${domain}` : null,
+              verifyPath: `/dashboard/targets/${target.id}`,
+            },
           })
         }
-      }
-    }
-
-    // Resolve the canonical review profile exactly as POST does, so the
-    // preflight judges the review the run would actually perform.
-    if (target.type === "WEB_APP" || target.type === "API") {
-      const resolved = resolveTargetScanMode({
-        targetType: target.type,
-        mode,
-        hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
-      })
-      if (!resolved.ok) {
-        return eligibilityResponse({
-          allowed: false,
-          code: resolved.code,
-          message: resolved.reason,
-          plan: "UNKNOWN",
-          isTrial: false,
-          remainingMinutes: 0,
-        })
       }
     }
 

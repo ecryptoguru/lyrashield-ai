@@ -14,6 +14,22 @@ vi.mock("@lyrashield/config", () => ({
 import { validatePolarWebhook } from "./webhooks"
 
 describe("validatePolarWebhook", () => {
+  it("rejects a signed body without an event object", () => {
+    const id = "msg_invalid_shape"
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const body = "null"
+    const signature = createHmac("sha256", testWebhook.key)
+      .update(`${id}.${timestamp}.${body}`)
+      .digest("base64")
+    expect(() =>
+      validatePolarWebhook(body, {
+        "webhook-id": id,
+        "webhook-timestamp": timestamp,
+        "webhook-signature": `v1,${signature}`,
+      })
+    ).toThrow("Polar webhook has invalid event shape")
+  })
+
   it("validates Standard Webhooks headers, Polar's raw endpoint secret, and a seconds timestamp", () => {
     const id = "msg_polar_smoke"
     const timestamp = String(Math.floor(Date.now() / 1000))

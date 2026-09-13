@@ -48,8 +48,8 @@ describe("getOnboardingReviewOptions", () => {
   it("uses URL-specific safe, standard, and deep choices", () => {
     expect(getOnboardingReviewOptions("url").map(({ label, mode }) => ({ label, mode }))).toEqual([
       { label: "Surface Review", mode: "SAFE" },
-      { label: "Expanded Surface Review", mode: "STANDARD" },
-      { label: "Behavioral Surface Review", mode: "DEEP" },
+      { label: "Engine Review", mode: "STANDARD" },
+      { label: "Deep Live Review", mode: "DEEP" },
     ])
   })
 

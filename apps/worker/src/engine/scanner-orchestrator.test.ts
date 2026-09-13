@@ -97,7 +97,7 @@ vi.mock("./scanners/url-scanner", () => ({
       },
     ],
     execution: {
-      contractVersion: "url-scan/2.0.0",
+      contractVersion: "url-scan/3.0.0",
       profile: "WEB_APP_SAFE",
       methods: ["GET"],
       subjectCount: 1,
@@ -108,6 +108,9 @@ vi.mock("./scanners/url-scanner", () => ({
     issues: [],
   }),
 }))
+
+vi.mock("./scanners/sast-scanner", () => ({ scanSast: vi.fn().mockResolvedValue([]) }))
+vi.mock("./scanners/iac-scanner", () => ({ scanIac: vi.fn().mockResolvedValue([]) }))
 
 vi.mock("./scanners/agent-config-scanner", () => ({
   scanAgentConfig: vi.fn().mockResolvedValue([]),
@@ -794,7 +797,7 @@ describe("runScannerOrchestrator", () => {
         },
       ],
       execution: {
-        contractVersion: "url-scan/2.0.0",
+        contractVersion: "url-scan/3.0.0",
         profile: "WEB_APP_SAFE",
         methods: ["GET"],
         subjectCount: 1,

@@ -38,7 +38,40 @@ describe("resolveScanProfile", () => {
       canonicalMode: "SAFE",
       maxBudgetUsd: 0,
       usesAi: false,
+      engineMode: null,
       label: "Surface Review",
+    })
+  })
+
+  it("makes URL Standard and Deep engine-backed at repository budgets", () => {
+    expect(resolveScanProfile({ targetType: "WEB_APP", mode: "STANDARD" })).toMatchObject({
+      id: "WEB_APP_STANDARD",
+      canonicalMode: "STANDARD",
+      engineMode: "standard",
+      maxBudgetUsd: 3.2,
+      maxEngineMinutes: 12,
+      scannerReserveMinutes: 3,
+      usesAi: true,
+      modelClass: "LUNA",
+      label: "Engine Review",
+    })
+    expect(resolveScanProfile({ targetType: "WEB_APP", mode: "DEEP" })).toMatchObject({
+      id: "WEB_APP_DEEP",
+      canonicalMode: "DEEP",
+      engineMode: "deep",
+      maxBudgetUsd: 5,
+      maxEngineMinutes: 40,
+      scannerReserveMinutes: 5,
+      usesAi: true,
+      modelClass: "TERRA",
+      label: "Deep Live Review",
+    })
+    // CUSTOM canonicalizes to DEEP, matching repository scans.
+    expect(resolveScanProfile({ targetType: "API", mode: "CUSTOM" })).toMatchObject({
+      id: "API_DEEP",
+      canonicalMode: "DEEP",
+      engineMode: "deep",
+      usesAi: true,
     })
   })
 
@@ -46,7 +79,7 @@ describe("resolveScanProfile", () => {
     expect(() => resolveScanProfile({ targetType: "REPO", mode: "EXPENSIVE" })).toThrow(
       "SCAN_MODE_UNSUPPORTED"
     )
-    expect(() => resolveScanProfile({ targetType: "API", mode: "CUSTOM" })).toThrow(
+    expect(() => resolveScanProfile({ targetType: "API", mode: "EXPENSIVE" })).toThrow(
       "URL_MODE_UNSUPPORTED"
     )
   })

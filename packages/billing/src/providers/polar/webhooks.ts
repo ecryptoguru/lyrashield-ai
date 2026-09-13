@@ -19,6 +19,7 @@
 
 import { createHmac } from "node:crypto"
 import { env } from "@lyrashield/config"
+import { z } from "zod"
 import { WebhookAuthError, WebhookPayloadError } from "../../webhook-errors"
 
 /** Default webhook tolerance in milliseconds (5 minutes). */
@@ -95,13 +96,17 @@ export function validatePolarWebhook(
     throw new WebhookAuthError("invalid_signature", "Invalid webhook signature")
   }
 
-  let parsed: PolarWebhookEvent
+  let parsed: unknown
   try {
-    parsed = JSON.parse(body) as PolarWebhookEvent
+    parsed = JSON.parse(body)
   } catch {
     throw new WebhookPayloadError("Polar webhook body is not valid JSON")
   }
-  return parsed
+  const event = z
+    .object({ type: z.string().min(1), data: z.record(z.string(), z.unknown()) })
+    .safeParse(parsed)
+  if (!event.success) throw new WebhookPayloadError("Polar webhook has invalid event shape")
+  return parsed as PolarWebhookEvent
 }
 
 function getHeader(headers: Record<string, string | string[] | undefined>, name: string): string {

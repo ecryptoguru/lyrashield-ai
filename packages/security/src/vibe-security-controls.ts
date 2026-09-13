@@ -1,6 +1,6 @@
 import { checkInstructionSafety } from "./instruction-safety"
 
-export const VIBE_SECURITY_COVERAGE_VERSION = "vibe-security-50/1.1.0"
+export const VIBE_SECURITY_COVERAGE_VERSION = "vibe-security-50/1.2.0"
 
 export type VibeCoverageStrategy = "deterministic" | "hybrid" | "engine" | "evidence"
 
@@ -74,7 +74,7 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   {
     rank: 10,
     title: "Unsafe password storage",
-    strategy: "engine",
+    strategy: "hybrid",
     keywords: ["password storage", "plaintext password", "weak password hash"],
   },
   { rank: 11, title: "SQL injection", strategy: "engine", keywords: ["sql injection", "sqli"] },
@@ -353,6 +353,70 @@ export function buildVibeSecurityInstruction(goal: string): string {
     checklist,
     `Controls ${evidenceControls.map((control) => control.rank).join(", ")} require separate deployment, operational, or accountable-human evidence and must not be inferred from source alone.`,
   ].join("\n")
+}
+
+/**
+ * Instruction preamble for engine-backed live targets (WEB_APP/API).
+ *
+ * The control checklist is identical — controls are target-agnostic — but a
+ * live deployment needs scope, safety, and evidence rules that a repository
+ * review does not. The relay enforces these at the network layer; this text
+ * keeps the model honest inside it.
+ */
+export function buildUrlTargetInstruction(
+  goal: string,
+  opts: {
+    host: string
+    targetType: "WEB_APP" | "API"
+    environment?: string | null
+    hasCredentials?: boolean
+    hasApiSpec?: boolean
+    /** Optional emphasis — steers attention, never reduces coverage. */
+    focus?: "auth" | "payments" | "llm_surface" | "file_handling" | "data_exposure" | null
+  }
+): string {
+  const FOCUS_HINTS: Record<string, string> = {
+    auth: "Prioritize authentication and session surface: login/session flows, token handling, authorization boundaries, and account-recovery paths.",
+    payments:
+      "Prioritize payment and billing surface: checkout, refund, subscription, idempotency, and amount-handling paths.",
+    llm_surface:
+      "Prioritize LLM/agent surface: prompt surfaces, tool calls, model-controlled output rendering, and context-flow boundaries.",
+    file_handling:
+      "Prioritize file handling: upload, download, parsing, storage, and path-traversal surface.",
+    data_exposure:
+      "Prioritize data exposure: verbose errors, debug surfaces, leaked secrets in responses, and over-broad data returns.",
+  }
+  const base = buildVibeSecurityInstruction(goal)
+  const lines = [
+    base,
+    "",
+    "Live target posture:",
+    `- Test only the verified scope: ${opts.host} and its subdomains. The relay denies anything outside it — treat denies as hard scope limits, never as retries.`,
+    "- This is a deployed system: prefer non-destructive, idempotent evidence. Do not bulk-submit forms, mass-create accounts, or trigger notification storms.",
+    "- Reproduce every finding and keep evidence excerpts minimal; redact secrets in transcripts.",
+    "- Absence of a finding is meaningful only when the test actually ran — report coverage honestly in the run summary.",
+  ]
+  if (opts.environment === "PRODUCTION") {
+    lines.push(
+      "- PRODUCTION target: availability takes precedence over coverage. Rate yourself conservatively and never attempt destructive methods."
+    )
+  }
+  if (opts.hasApiSpec) {
+    lines.push(
+      "- An OpenAPI document is provisioned as an authorized second target; its declared base URLs are in scope."
+    )
+  }
+  if (opts.hasCredentials) {
+    lines.push(
+      "- Authenticated material is applied by the relay — you will not see it. Test the authenticated surface without handling credentials."
+    )
+  }
+  if (opts.focus && FOCUS_HINTS[opts.focus]) {
+    lines.push(
+      `- Requested emphasis: ${FOCUS_HINTS[opts.focus]} Emphasis steers attention only — it never reduces required coverage.`
+    )
+  }
+  return lines.join("\n")
 }
 
 export function summarizeVibeSecurityCoverage(findings: readonly VibeCoverageFinding[]) {

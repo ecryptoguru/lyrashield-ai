@@ -110,16 +110,18 @@ function mockRepoRetestState(
   vi.mocked(prisma.finding.findMany).mockResolvedValue(
     (overrides.retestFindingIds ?? []).map((id) => ({ id })) as never
   )
-  vi.mocked(prisma.scanResultManifest.findUnique).mockImplementation(async ({ where }) => {
-    if (where.scanId === "scan-1") return baselineManifest as never
-    if (where.scanId === "scan-2") return retestManifest as never
+  vi.mocked(prisma.scanResultManifest.findUnique).mockImplementation((async (args: unknown) => {
+    const scanId = (args as { where?: { scanId?: unknown } } | undefined)?.where?.scanId
+    if (scanId === "scan-1") return baselineManifest
+    if (scanId === "scan-2") return retestManifest
     return null
-  })
-  vi.mocked(prisma.scanCoverageReceipt.findMany).mockImplementation(async ({ where }) => {
-    if (where.scanId === "scan-1") return baselineReceipts as never
-    if (where.scanId === "scan-2") return retestReceipts as never
+  }) as never)
+  vi.mocked(prisma.scanCoverageReceipt.findMany).mockImplementation((async (args: unknown) => {
+    const scanId = (args as { where?: { scanId?: unknown } } | undefined)?.where?.scanId
+    if (scanId === "scan-1") return baselineReceipts
+    if (scanId === "scan-2") return retestReceipts
     return []
-  })
+  }) as never)
 }
 
 describe("result integrity", () => {
@@ -144,7 +146,7 @@ describe("result integrity", () => {
     expect(receipts.find((receipt) => receipt.scanner === "secrets")).toMatchObject({
       status: "COMPLETED",
     })
-    expect(receipts).toHaveLength(57)
+    expect(receipts).toHaveLength(59)
     expect(receipts.find((receipt) => receipt.controlId === "vibe-34")).toMatchObject({
       status: "BLOCKED",
       metadata: expect.objectContaining({ outcome: "EVIDENCE_REQUIRED" }),
@@ -167,6 +169,46 @@ describe("result integrity", () => {
     expect(receipts.find((receipt) => receipt.scanner === "engine")).toMatchObject({
       status: "BLOCKED",
       reason: "Engine timed out",
+    })
+  })
+
+  it("marks the engine NOT_APPLICABLE on deterministic-only URL tiers and evaluates it when engine-backed", () => {
+    const base = {
+      scanId: "scan-url",
+      target: { id: "t1", type: "WEB_APP", url: "https://example.com" },
+      sourceCheckoutAvailable: false,
+      engineFindingCount: 0,
+      coverageIssues: [],
+    }
+
+    const safe = buildCoverageReceipts({ ...base, scanId: "scan-url-safe" })
+    expect(safe.find((receipt) => receipt.scanner === "engine")).toMatchObject({
+      status: "NOT_APPLICABLE",
+      reason: expect.stringContaining("Deterministic-only tier"),
+      metadata: expect.objectContaining({ outcome: "NOT_ASSESSED" }),
+    })
+
+    const backed = buildCoverageReceipts({
+      ...base,
+      scanId: "scan-url-std",
+      engineBacked: true,
+      engineFindingCount: 1,
+    })
+    expect(backed.find((receipt) => receipt.scanner === "engine")).toMatchObject({
+      status: "COMPLETED",
+    })
+
+    const blocked = buildCoverageReceipts({
+      ...base,
+      scanId: "scan-url-blocked",
+      engineBacked: true,
+      coverageIssues: [
+        { scanner: "engine", status: "bounded", reason: "Relay denied out-of-scope host" },
+      ],
+    })
+    expect(blocked.find((receipt) => receipt.scanner === "engine")).toMatchObject({
+      status: "BLOCKED",
+      reason: "Relay denied out-of-scope host",
     })
   })
 
@@ -201,9 +243,11 @@ describe("result integrity", () => {
       matchedControlRanks: [29, 31],
     })
 
+    // Control 29 gained deterministic source coverage from the sast family:
+    // on a repo with a checkout it is applicable and the matched rank detects.
     expect(receipts.find((receipt) => receipt.controlId === "vibe-29")).toMatchObject({
-      status: "NOT_APPLICABLE",
-      metadata: expect.objectContaining({ outcome: "NOT_APPLICABLE" }),
+      status: "COMPLETED",
+      metadata: expect.objectContaining({ outcome: "DETECTED" }),
     })
     expect(receipts.find((receipt) => receipt.controlId === "vibe-31")).toMatchObject({
       status: "NOT_APPLICABLE",
@@ -342,7 +386,7 @@ describe("result integrity", () => {
     vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
 
     const urlExecution: import("@lyrashield/types").UrlExecutionSummary = {
-      contractVersion: "url-scan/2.0.0",
+      contractVersion: "url-scan/3.0.0",
       profile: "WEB_APP_STANDARD",
       methods: ["GET"],
       subjectCount: 17,
@@ -440,7 +484,7 @@ describe("result integrity", () => {
         data: expect.objectContaining({
           manifest: expect.objectContaining({
             coverage: expect.any(Array),
-            scannerContractVersion: "2026-08-29",
+            scannerContractVersion: "2026-09-13a",
             engineExecution: expect.objectContaining({
               model: "azure_ai/gpt-5.6-luna",
               imageDigest: "sha256:abc",

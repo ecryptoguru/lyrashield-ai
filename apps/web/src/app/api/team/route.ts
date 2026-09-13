@@ -256,6 +256,19 @@ async function post(request: Request) {
       workspaceId,
       async (tx) => {
         await lockWorkspaceMembership(tx, workspaceId)
+        // Removal/demotion uses this same lock. An earlier session check must
+        // not authorize invitations after the actor's membership changes.
+        const actor = await tx.workspaceMember.findFirst({
+          where: { workspaceId, userId: session.userId, status: "active" },
+          select: { role: true },
+        })
+        if (
+          !actor ||
+          !hasPermission(actor.role, PERMISSIONS.member.invite) ||
+          !canGrantRole(actor.role, role)
+        ) {
+          return apiError("FORBIDDEN", "You no longer have permission to invite this role", 403)
+        }
         const workspaceRow = await tx.workspace.findUnique({
           where: { id: workspaceId },
           select: { name: true, agencySponsorAccountId: true },

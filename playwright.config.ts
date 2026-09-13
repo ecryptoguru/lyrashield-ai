@@ -49,7 +49,7 @@ export default defineConfig({
       // small set of simulated client IPs in rapid succession. Raise the
       // in-memory auth rate limit so the suite doesn't trip the 5/min default
       // and produce flaky cross-test interference. Production leaves this unset.
-      "RATE_LIMIT_AUTH_MAX=1000 RATE_LIMIT_LICENSE_API_MAX=1000; " +
+      "RATE_LIMIT_AUTH_MAX=1000 RATE_LIMIT_API_MAX=1000 RATE_LIMIT_LICENSE_API_MAX=1000; " +
       // Dev/test-only ed25519 signing key for the e2e license-activation flow.
       // Never used in production (production resolves from Azure Key Vault).
       // Generate a fresh throwaway key at webServer startup and write it to a

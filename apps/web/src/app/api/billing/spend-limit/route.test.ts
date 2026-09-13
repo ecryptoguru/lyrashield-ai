@@ -17,7 +17,9 @@ vi.mock("@lyrashield/db", () => ({
   prisma: { auditLog: { create: vi.fn() } },
   withAccountRLS: mocks.withAccountRLS,
 }))
-vi.mock("@lyrashield/logger", async () => (await import("@/__tests__/mocks")).loggerModule())
+vi.mock("@lyrashield/logger", async () =>
+  (await import("../../../../__tests__/mocks")).loggerModule()
+)
 vi.mock("@/lib/api-auth", () => ({
   withCookieMutation: (handler: (request: Request) => Promise<Response>) => handler,
   authErrorResponse: () => null,

@@ -8,9 +8,13 @@ import { vi } from "vitest"
  * is an async factory that imports this module at resolution time:
  *
  *   vi.mock("@lyrashield/logger", async () =>
- *     (await import("@/__tests__/mocks")).loggerModule()
+ *     (await import("../../__tests__/mocks")).loggerModule()
  *   )
- *   import { loggerSpies } from "@/__tests__/mocks"
+ *   import { loggerSpies } from "../../__tests__/mocks"
+ *
+ * Import this module with a relative path: `*.test.ts` files are excluded
+ * from tsconfig, so the "@/…" alias (a vitest-only resolve alias) does not
+ * resolve for the TypeScript checker.
  *
  * Per-file module isolation (vitest default) gives each test file its own
  * copy of these objects — `loggerSpies` is the same object the mock returned

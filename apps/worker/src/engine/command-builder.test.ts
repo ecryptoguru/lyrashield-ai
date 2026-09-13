@@ -71,6 +71,20 @@ describe("command-builder", () => {
       expect(cmd.args).toContain("standard")
     })
 
+    it("passes the OpenAPI document as a second engine target for API targets", () => {
+      const cmd = buildEngineCommand({
+        scanId: "scan-api-spec",
+        goal: "VULNERABILITY_SCAN",
+        mode: "STANDARD",
+        target: API_TARGET,
+        apiSpecUrl: "https://api.example.com/openapi.json",
+      })
+      const targetIdx = cmd.args.indexOf("--target")
+      expect(cmd.args[targetIdx + 1]).toBe("https://api.example.com")
+      const secondIdx = cmd.args.indexOf("--target", targetIdx + 1)
+      expect(cmd.args[secondIdx + 1]).toBe("https://api.example.com/openapi.json")
+    })
+
     it("builds command for API target", () => {
       const cmd = buildEngineCommand({
         scanId: "scan-3",
@@ -82,15 +96,15 @@ describe("command-builder", () => {
       expect(cmd.args).toContain("deep")
     })
 
-    it("builds command for IAC target", () => {
-      const cmd = buildEngineCommand({
-        scanId: "scan-iac",
-        goal: "VULNERABILITY_SCAN",
-        mode: "STANDARD",
-        target: IAC_TARGET,
-      })
-      expect(cmd.args).toContain("https://cloud.example.com/stack")
-      expect(cmd.args).toContain("standard")
+    it("rejects IAC targets until an IaC scan profile exists", () => {
+      expect(() =>
+        buildEngineCommand({
+          scanId: "scan-iac",
+          goal: "VULNERABILITY_SCAN",
+          mode: "STANDARD",
+          target: IAC_TARGET,
+        })
+      ).toThrow("TARGET_TYPE_UNSUPPORTED")
     })
 
     it("uses repoUrl if available over repoFullName", () => {
@@ -119,7 +133,7 @@ describe("command-builder", () => {
       const cmd = buildEngineCommand({
         scanId: "scan-5",
         goal: "VULNERABILITY_SCAN",
-        mode: "SAFE",
+        mode: "STANDARD",
         target: WEB_TARGET,
         instruction: "Focus on XSS",
       })
@@ -131,7 +145,7 @@ describe("command-builder", () => {
       const cmd = buildEngineCommand({
         scanId: "scan-6",
         goal: "VULNERABILITY_SCAN",
-        mode: "SAFE",
+        mode: "STANDARD",
         target: WEB_TARGET,
         maxBudgetUsd: 5.0,
       })
@@ -143,7 +157,7 @@ describe("command-builder", () => {
       const cmd = buildEngineCommand({
         scanId: "scan-7",
         goal: "VULNERABILITY_SCAN",
-        mode: "SAFE",
+        mode: "STANDARD",
         target: WEB_TARGET,
         maxBudgetUsd: 0,
       })
@@ -183,14 +197,25 @@ describe("command-builder", () => {
       ).toThrow("IAC target missing url")
     })
 
-    it("maps QUICK mode to quick", () => {
+    it("rejects QUICK on a web target — that tier is deterministic-only", () => {
+      expect(() =>
+        buildEngineCommand({
+          scanId: "scan-quick",
+          goal: "VULNERABILITY_SCAN",
+          mode: "QUICK",
+          target: WEB_TARGET,
+        })
+      ).toThrow("SCAN_MODE_UNSUPPORTED")
+    })
+
+    it("maps STANDARD mode to standard for a web target", () => {
       const cmd = buildEngineCommand({
-        scanId: "scan-quick",
+        scanId: "scan-std-web",
         goal: "VULNERABILITY_SCAN",
-        mode: "QUICK",
+        mode: "STANDARD",
         target: WEB_TARGET,
       })
-      expect(cmd.args).toContain("quick")
+      expect(cmd.args).toContain("standard")
     })
 
     it("maps DEEP mode to deep", () => {
@@ -211,7 +236,7 @@ describe("command-builder", () => {
           mode: "UNKNOWN",
           target: WEB_TARGET,
         })
-      ).toThrow("SCAN_MODE_UNSUPPORTED")
+      ).toThrow("URL_MODE_UNSUPPORTED")
     })
   })
 

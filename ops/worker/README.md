@@ -94,6 +94,16 @@ Roll out in this order: first promote the worker image that proxies CISA and ver
 
 This topology is the beta's bounded allowlist, not a general-purpose untrusted-target scanner. Expand endpoint scope only through a reviewed change and a repeated negative egress test.
 
+## Scan-scoped target relay
+
+The egress-proxy deployment also exposes a scoped forward relay (`/v1/relay` semantics: absolute-form HTTP plus `CONNECT` tunnels on the same listener) used by the engine for verified URL/API targets. The sandbox still has no arbitrary external route; the relay endpoint is the same pinned allowlist entry as the fetch proxy.
+
+The worker mints an HMAC-signed grant per engine-backed URL scan (`LYRASHIELD_RELAY_SIGNING_SECRET`, Key Vault `worker-relay-signing-secret`, injected alongside `LYRASHIELD_TARGET_RELAY_URL` by `refresh-secrets.sh`). The grant binds: scan id, verified host list (exact host or subdomain of the verified apex), method allowlist, denied path prefixes, request/byte caps, per-scan and per-path rate limits, and an expiry bounded to the scan. Grants authenticate to the relay as `x-lyra-relay-grant` or `Proxy-Authorization: Bearer`; the token is never forwarded to the target, and `CredentialSet` material in `injectHeaders` is applied server-side so credentials never enter the sandbox or LLM context.
+
+The relay fails closed: out-of-scope hosts/methods/paths, expired or revoked grants, and cap exhaustion are denied with a body-free audit entry. `CONNECT` accepts only ports 80/443 on scoped hosts and resolves+pins IPs at connect time. `POST /v1/revoke/<scanId>` (admin Bearer) revokes immediately on scan cancel/fail/timeout — never rely on grant expiry alone. `GET /v1/audit/<scanId>` returns the per-scan audit log (method/host/path/status/bytes/timing — never bodies) for evidence upload.
+
+Negative egress verification: the sandbox must reach only the pinned allowlist, and the relay must refuse every non-scoped host/method — re-run `refresh-egress.test.sh` plus a relay denial probe before promoting a relay-enabled worker image.
+
 ## Web Search (Parallel Search)
 
 Web search is an optional engine capability that calls `https://api.parallel.ai/v1/search`. When enabled, `refresh-secrets.sh` pulls the `worker-web-search-api-key` secret into `LYRASHIELD_WEB_SEARCH_API_KEY` and `refresh-egress.sh` adds `api.parallel.ai:443` to the worker's pinned allowlist. `run-worker.sh` enables the feature by default only when `LYRASHIELD_WEB_SEARCH_API_KEY` is present in the worker env file; set `LYRASHIELD_WEB_SEARCH_ENABLED=1` or `0` in `worker-runtime.conf` to override.

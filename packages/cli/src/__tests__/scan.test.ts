@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { Output } from "../output.js"
 import { handleScan } from "../commands/scan.js"
@@ -9,6 +10,8 @@ import {
   loadDefaultProject,
   saveDefaultProject,
 } from "../projects.js"
+
+vi.mock("node:fs/promises", () => ({ readFile: vi.fn() }))
 
 vi.mock("../client.js", () => ({
   createClient: vi.fn(),
@@ -209,5 +212,39 @@ describe("handleScan", () => {
     const code = await handleScan(["--repo", "not-a-repo"], output)
     expect(code).toBe(2)
     expect(output.error).toHaveBeenCalledWith("Invalid repo format: not-a-repo")
+  })
+})
+
+describe("SARIF submission", () => {
+  it("does not submit a billable scan for an unreadable SARIF file", async () => {
+    vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"))
+    const output = makeOutput()
+    expect(await handleScan(["--target", "t-1", "--sarif", "missing.sarif"], output)).toBe(2)
+    expect((await createClient()).request).not.toHaveBeenCalled()
+  })
+
+  it("imports into the existing scan on retry without creating another scan", async () => {
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ version: "2.1.0", runs: [] }))
+    const output = makeOutput()
+    expect(await handleScan(["--scan-id", "s-123", "--sarif", "report.sarif"], output)).toBe(0)
+    const client = await createClient()
+    expect(client.request).toHaveBeenCalledTimes(1)
+    expect(client.request).toHaveBeenCalledWith(
+      "POST",
+      "/scans/s-123/artifacts/sarif?workspaceId=ws-current",
+      expect.any(Object)
+    )
+  })
+
+  it("returns the created scan ID and a safe retry command when import fails", async () => {
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ version: "2.1.0", runs: [] }))
+    const client = await createClient()
+    vi.mocked(client.request)
+      .mockResolvedValueOnce({ id: "s-123" })
+      .mockRejectedValueOnce(new Error("unavailable"))
+    const output = makeOutput()
+    expect(await handleScan(["--target", "t-1", "--sarif", "report.sarif"], output)).toBe(2)
+    expect(output.error).toHaveBeenCalledWith(expect.stringContaining("--scan-id s-123"))
+    expect(client.request).toHaveBeenCalledTimes(2)
   })
 })

@@ -1,5 +1,5 @@
 import { resolve } from "node:path"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { logger } from "@lyrashield/logger"
 
 const completeUsage = vi.hoisted(() => ({
@@ -39,7 +39,11 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     auditLog: { create: vi.fn().mockResolvedValue({}) },
+    workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
     target: {
+      findFirst: vi.fn(),
+    },
+    targetDomainVerification: {
       findFirst: vi.fn(),
     },
     policy: {
@@ -67,6 +71,7 @@ vi.mock("@lyrashield/db", () => ({
   completeScanWithScore: vi.fn().mockResolvedValue({}),
   createAiSecurityScoreSnapshot: vi.fn().mockResolvedValue({}),
   qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),
+  evaluateGateForTarget: vi.fn().mockResolvedValue(undefined),
   addScanEvent: vi.fn().mockResolvedValue(undefined),
   withScanFinalizationClaim: vi.fn(
     async (_scanId: string, _workspaceId: string, finalize: () => Promise<unknown>) => ({
@@ -75,6 +80,7 @@ vi.mock("@lyrashield/db", () => ({
     })
   ),
   runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
+  runWithAccountContext: <T>(_accountId: string | null, fn: () => T): T => fn(),
 }))
 
 vi.mock("@lyrashield/logger", () => ({
@@ -86,6 +92,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("@lyrashield/billing", () => ({
+  evaluateScanEntitlement: vi.fn().mockResolvedValue({ allowed: true, accountId: "user-1" }),
   hasUnsettledScanIntent: vi.fn().mockResolvedValue(false),
   recordAgentMinutes: vi
     .fn()
@@ -162,6 +169,31 @@ vi.mock("../engine/evidence-storage", () => ({
   },
 }))
 
+vi.mock("@lyrashield/evidence-storage", () => ({
+  uploadEncryptedArtifact: vi.fn().mockResolvedValue({
+    storageUri: "evidence://ws-1/scan-1/relay_audit/audit-1",
+    checksum: "abc123",
+    encryptionKeyRef: "key-ref",
+  }),
+}))
+
+// Real grant minting stays exercised; only the relay's network edges are mocked.
+vi.mock("../engine/relay-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../engine/relay-client")>()
+  return {
+    ...actual,
+    fetchRelayAudit: vi
+      .fn()
+      .mockResolvedValue([
+        { ts: 1, type: "request", host: "example.com", method: "GET", path: "/", status: 200 },
+      ]),
+    registerRelayGrant: vi.fn().mockResolvedValue(undefined),
+    revokeRelayGrant: vi.fn().mockResolvedValue(undefined),
+    resolveSpecServerHosts: vi.fn().mockResolvedValue([]),
+  }
+})
+import { fetchRelayAudit, registerRelayGrant, revokeRelayGrant } from "../engine/relay-client"
+
 vi.mock("../engine/finding-persister", () => ({
   persistFindings: vi.fn().mockResolvedValue([]),
 }))
@@ -219,7 +251,11 @@ import {
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
-import { completeRetestsForScan, persistResultManifest } from "../engine/result-integrity"
+import {
+  failTerminalRetestsForScan,
+  completeRetestsForScan,
+  persistResultManifest,
+} from "../engine/result-integrity"
 import { resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import {
@@ -228,6 +264,7 @@ import {
 } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
 import {
+  evaluateScanEntitlement,
   debitOverage,
   enterGrace,
   recordAgentMinutes,
@@ -243,6 +280,7 @@ import {
   completeScanWithScore,
   qualifyReferralForWorkspace,
   updateScanStatus,
+  evaluateGateForTarget,
   addScanEvent,
   withScanFinalizationClaim,
   prisma,
@@ -267,6 +305,8 @@ function mockStoredScanAuthority(
     mode: string
     policyId: string | null
     determinismMode: string
+    sponsorAccountId: string | null
+    triggerType: string
   }> = {}
 ) {
   systemScanFindUnique.mockResolvedValue({
@@ -414,8 +454,12 @@ describe("resolveScanRuntimeBudgetMs", () => {
     expect(resolveScanRuntimeBudgetMs("SAFE", 8)).toBe(8 * 60 * 1000)
   })
 
-  it("uses the deterministic URL profile limit instead of repository limits", () => {
-    expect(resolveScanRuntimeBudgetMs("DEEP", 60, "WEB_APP")).toBe(3 * 60 * 1000)
+  it("uses the URL profile limit — deterministic for SAFE, engine-bounded for DEEP", () => {
+    // SAFE keeps the deterministic wall-clock profile budget.
+    expect(resolveScanRuntimeBudgetMs("SAFE", 60, "WEB_APP")).toBe(1 * 60 * 1000)
+    // STANDARD/DEEP URL are engine-backed at repository budgets.
+    expect(resolveScanRuntimeBudgetMs("STANDARD", 60, "WEB_APP")).toBe(15 * 60 * 1000)
+    expect(resolveScanRuntimeBudgetMs("DEEP", 60, "WEB_APP")).toBe(45 * 60 * 1000)
   })
 })
 
@@ -561,6 +605,155 @@ describe("engineRoutingCoverageIssue", () => {
 })
 
 describe("processScanJob", () => {
+  describe("engine-backed URL scans through the scoped relay", () => {
+    const standardUrlJob = {
+      ...mockJob,
+      data: { ...mockJob.data, mode: "STANDARD" },
+    } as never
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      process.env.LYRASHIELD_TARGET_RELAY_URL = "http://relay.test"
+      process.env.LYRASHIELD_RELAY_SIGNING_SECRET = "test-signing-secret"
+      process.env.LYRASHIELD_EGRESS_PROXY_SECRET = "test-egress-secret"
+      mockStoredScanAuthority({ mode: "STANDARD" })
+      vi.mocked(runEngine).mockImplementation(
+        ({ scanId }: { scanId: string }) =>
+          ({
+            exitCode: 0,
+            output: {
+              vulnerabilities: [],
+              findingsComplete: true,
+              runRecord: {
+                run_id: scanId,
+                run_name: scanId,
+                status: "completed",
+                llm_usage: completeUsage,
+              },
+              summary: "Scan completed with 0 findings",
+              findingCount: 0,
+            },
+          }) as never
+      )
+      vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
+    })
+
+    afterEach(() => {
+      delete process.env.LYRASHIELD_TARGET_RELAY_URL
+      delete process.env.LYRASHIELD_RELAY_SIGNING_SECRET
+      delete process.env.LYRASHIELD_EGRESS_PROXY_SECRET
+    })
+
+    it("keeps deterministic URL reviews non-billable without requiring a paid balance", async () => {
+      mockStoredScanAuthority({ mode: "SAFE" })
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      const result = await processScanJob(mockJob)
+      expect(result.status).toBe("completed")
+      expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+    })
+
+    it("does not execute or meter the engine when relay admission fails", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+      vi.mocked(registerRelayGrant).mockRejectedValueOnce(new Error("RELAY_REGISTRATION_FAILED"))
+      await processScanJob(standardUrlJob)
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+    })
+
+    it("runs the engine with a signed relay grant and revokes it afterward", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        status: "completed",
+      })
+
+      expect(runEngine).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relay: {
+            url: "http://relay.test",
+            grant: expect.stringMatching(/^lrg1\./),
+          },
+          instruction: expect.stringContaining("Live target posture"),
+        }),
+        "scan-1",
+        expect.any(Number),
+        expect.any(Function),
+        expect.any(Function)
+      )
+      expect(registerRelayGrant).toHaveBeenCalledWith(
+        "scan-1",
+        expect.stringMatching(/^lrg1\./),
+        expect.objectContaining({ url: "http://relay.test" })
+      )
+      expect(vi.mocked(registerRelayGrant).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(runEngine).mock.invocationCallOrder[0]!
+      )
+      expect(recordAgentMinutes).toHaveBeenCalled()
+      expect(fetchRelayAudit).toHaveBeenCalledWith(
+        "scan-1",
+        expect.objectContaining({ url: "http://relay.test" })
+      )
+      expect(revokeRelayGrant).toHaveBeenCalledWith(
+        "scan-1",
+        expect.objectContaining({ url: "http://relay.test" })
+      )
+      expect(addScanEvent).toHaveBeenCalledWith(
+        "scan-1",
+        "relay_audit",
+        "info",
+        "Relay audit trail captured",
+        expect.objectContaining({ entries: 1 })
+      )
+    })
+
+    it("fails closed when the domain is not verified for an engine-backed tier", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        status: "failed",
+        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+    })
+
+    it("fails closed when the relay is not configured for an engine-backed tier", async () => {
+      delete process.env.LYRASHIELD_TARGET_RELAY_URL
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        status: "failed",
+        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+    })
+
+    it("revokes the grant even when the engine throws", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+      vi.mocked(runEngine).mockRejectedValueOnce(new Error("engine blew up"))
+
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        status: "failed",
+      })
+      expect(revokeRelayGrant).toHaveBeenCalled()
+    })
+  })
+
   it("reserves the actual remaining scan time for deterministic scanners", () => {
     expect(resolveScannerPhaseTimeoutMs(15 * 60 * 1000, 7 * 60 * 1000 + 27 * 1000)).toBe(
       7 * 60 * 1000 + 33 * 1000
@@ -568,9 +761,81 @@ describe("processScanJob", () => {
     expect(resolveScannerPhaseTimeoutMs(30 * 60 * 1000, 0)).toBe(10 * 60 * 1000)
   })
 
+  it.each(["manual", "schedule", "retest"])(
+    "rechecks the persisted creator's entitlement for %s work before provider execution",
+    async (triggerType) => {
+      mockStoredScanAuthority({ triggerType, sponsorAccountId: "buyer-1" })
+      vi.mocked(evaluateScanEntitlement).mockResolvedValueOnce({
+        allowed: false,
+        code: "AGENCY_SUBSCRIPTION_REQUIRED",
+        message: "Agency subscription expired",
+        accountId: "buyer-1",
+      } as never)
+      const result = await processScanJob(mockJob)
+      expect(result).toMatchObject({
+        status: "failed",
+        errorCategory: "AGENCY_SUBSCRIPTION_REQUIRED",
+      })
+      expect(updateScanStatus).toHaveBeenCalledWith(
+        "scan-1",
+        "FAILED",
+        expect.objectContaining({ errorCategory: "AGENCY_SUBSCRIPTION_REQUIRED" })
+      )
+      expect(evaluateScanEntitlement).toHaveBeenCalledWith({
+        workspaceId: "ws-1",
+        mode: "SAFE",
+        sponsorAccountId: "user-1",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(evaluateGateForTarget).toHaveBeenCalledWith("ws-1", "target-1")
+      expect(failTerminalRetestsForScan).toHaveBeenCalledOnce()
+      expect(cleanupEngineWorkspace).toHaveBeenCalledWith(expect.any(String), "scan-1")
+    }
+  )
+
+  it.each([null, { role: "UNKNOWN" }])(
+    "denies removed creators or invalid roles before paid work: %j",
+    async (creator) => {
+      vi.mocked(prisma.workspaceMember.findFirst).mockResolvedValueOnce(creator as never)
+      expect(await processScanJob(mockJob)).toMatchObject({
+        status: "failed",
+        errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+    }
+  )
+
+  it("preserves current operational access for active Viewer members", async () => {
+    vi.mocked(prisma.workspaceMember.findFirst).mockResolvedValueOnce({ role: "VIEWER" } as never)
+    expect(await processScanJob(mockJob)).toMatchObject({ status: "completed" })
+    expect(evaluateScanEntitlement).toHaveBeenCalledOnce()
+    expect(runEngine).toHaveBeenCalledOnce()
+  })
+
+  it("does not replace a queued scan's immutable billing sponsor", async () => {
+    mockStoredScanAuthority({ sponsorAccountId: "original-buyer" })
+    vi.mocked(evaluateScanEntitlement).mockResolvedValueOnce({
+      allowed: true,
+      accountId: "replacement-buyer",
+    } as never)
+    expect(await processScanJob(mockJob)).toMatchObject({
+      status: "failed",
+      errorCategory: "SCAN_SPONSOR_CHANGED",
+    })
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockStoredScanAuthority()
+    vi.mocked(prisma.workspaceMember.findFirst).mockResolvedValue({ role: "OWNER" } as never)
+    vi.mocked(evaluateScanEntitlement).mockResolvedValue({
+      allowed: true,
+      accountId: "user-1",
+    } as never)
     // Restore default mock implementations after clearAllMocks
     vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
     vi.mocked(runEngine).mockImplementation(
@@ -759,7 +1024,7 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({
         maxBudgetUsd: 1.2,
-        instruction: expect.stringContaining("vibe-security-50/1.1.0"),
+        instruction: expect.stringContaining("vibe-security-50/1.2.0"),
       }),
       "scan-1",
       expect.any(Number),
@@ -1112,7 +1377,13 @@ describe("processScanJob", () => {
 
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "policy-1", workspaceId: "ws-1", deletedAt: null },
-      select: { maxBudgetUsd: true, maxDurationMinutes: true },
+      select: {
+        maxBudgetUsd: true,
+        maxDurationMinutes: true,
+        blockedPaths: true,
+        allowedDomains: true,
+        destructiveTestsAllowed: true,
+      },
     })
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 1.2 }),
@@ -1146,7 +1417,13 @@ describe("processScanJob", () => {
 
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "policy-deep", workspaceId: "ws-1", deletedAt: null },
-      select: { maxBudgetUsd: true, maxDurationMinutes: true },
+      select: {
+        maxBudgetUsd: true,
+        maxDurationMinutes: true,
+        blockedPaths: true,
+        allowedDomains: true,
+        destructiveTestsAllowed: true,
+      },
     })
     // DEEP caps at 45 min; the policy asked for 75, so the engine timeout is the
     // REMAINING wall-clock budget — a number bounded by (never exceeding) 45 min.
@@ -1500,7 +1777,7 @@ describe("processScanJob", () => {
     expect(result).toMatchObject({
       status: "failed",
       errorCategory: "API_SPEC_REQUIRED",
-      errorMessage: "Contract Review requires an OpenAPI document.",
+      errorMessage: "Engine Contract Review requires an OpenAPI document.",
     })
     expect(runEngine).not.toHaveBeenCalled()
     expect(runScannerOrchestrator).not.toHaveBeenCalled()

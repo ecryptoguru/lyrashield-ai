@@ -51,16 +51,16 @@ vi.mock("../../../lib/rate-limit", () => ({
   checkInvitationCreateRateLimit: (...args: unknown[]) => checkInvitationCreateRateLimit(...args),
 }))
 
-import { prisma } from "@lyrashield/db"
+import { lockWorkspaceMembership, prisma } from "@lyrashield/db"
 import { resolveAccountBilling } from "@lyrashield/billing"
 import { GET, POST } from "./route"
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 
-function inviteRequest() {
+function inviteRequest(role = "MEMBER") {
   return new Request("http://localhost/api/team", {
     method: "POST",
-    body: JSON.stringify({ workspaceId: "ws-1", email: "teammate@example.com", role: "MEMBER" }),
+    body: JSON.stringify({ workspaceId: "ws-1", email: "teammate@example.com", role }),
   })
 }
 
@@ -68,7 +68,7 @@ describe("POST /api/team", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPrisma.workspaceMember.findFirst.mockImplementation(async ({ where }) =>
-      where.role === "OWNER" ? { id: "owner-1" } : null
+      where.userId === "inviter-1" ? { id: "owner-1", role: "OWNER" } : null
     )
     mockPrisma.workspaceMember.count.mockResolvedValue(1)
     mockPrisma.invitation.findFirst.mockResolvedValue(null)
@@ -88,6 +88,32 @@ describe("POST /api/team", () => {
       retryAfter: 0,
     })
   })
+
+  it.each([
+    { actor: null, role: "MEMBER" },
+    { actor: { role: "VIEWER" }, role: "MEMBER" },
+    { actor: { role: "ADMIN" }, role: "ADMIN" },
+  ])(
+    "rejects a removed or demoted inviter after acquiring the membership lock: %j",
+    async ({ actor, role }) => {
+      mockPrisma.workspace.findUnique.mockResolvedValue({
+        name: "Agency",
+        agencySponsorAccountId: "buyer-1",
+      })
+      mockPrisma.workspaceMember.findFirst.mockImplementation(async ({ where }) =>
+        where.userId === "inviter-1"
+          ? actor
+          : where.role === "OWNER"
+            ? { id: "buyer-owner", role: "OWNER" }
+            : null
+      )
+      const response = await POST(inviteRequest(role))
+      expect(response.status).toBe(403)
+      expect(lockWorkspaceMembership).toHaveBeenCalledOnce()
+      expect(mockPrisma.invitation.create).not.toHaveBeenCalled()
+      expect(sendNotification).not.toHaveBeenCalled()
+    }
+  )
 
   it("sends the invitation email with an accept URL built from the invitation token", async () => {
     sendNotification.mockResolvedValue(true)

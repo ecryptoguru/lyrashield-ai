@@ -19,7 +19,7 @@ vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "acct_1" } }),
 }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
-vi.mock("@lyrashield/logger", async () => (await import("@/__tests__/mocks")).loggerModule())
+vi.mock("@lyrashield/logger", async () => (await import("../../../__tests__/mocks")).loggerModule())
 vi.mock("@lyrashield/affiliate", () => ({ resolveAttribution: vi.fn().mockResolvedValue(null) }))
 vi.mock("@/lib/rate-limit", () => ({
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: false })),

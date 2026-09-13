@@ -36,6 +36,7 @@ describe("AI-Built Failure Taxonomy (WP6)", () => {
       "sca",
       "secrets",
       "sast",
+      "iac",
       "agent_config",
       "ai_app_security",
       "url",

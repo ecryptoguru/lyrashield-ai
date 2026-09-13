@@ -28,6 +28,17 @@ describe("auth client", () => {
     expect(twoFactorClient).toHaveBeenCalledWith({ twoFactorPage: "/two-factor" })
   })
 
+  it("leaves redirect and two-factor navigation to the configured plugins", async () => {
+    const { authClientWillRedirect } = await import("./client")
+    expect(authClientWillRedirect({ redirect: true, url: "/dashboard" })).toBe(true)
+    expect(authClientWillRedirect({ twoFactorRedirect: true })).toBe(true)
+    expect(authClientWillRedirect({ redirect: false, url: "/dashboard" })).toBe(false)
+    expect(authClientWillRedirect({ token: ["session", "created"].join("-") })).toBe(false)
+    expect(authClientWillRedirect({ redirect: true })).toBe(false)
+    expect(authClientWillRedirect({ redirect: true, url: "" })).toBe(false)
+    expect(authClientWillRedirect(null)).toBe(false)
+  })
+
   it("accepts only local callback paths", async () => {
     const { safeAuthCallbackPath } = await import("./client")
 

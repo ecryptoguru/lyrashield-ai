@@ -330,7 +330,21 @@ const WEB_SEARCH_DEFAULTS: Record<string, string> = {
   LYRASHIELD_WEB_SEARCH_BUDGET_USD: "1.0",
 }
 
-export function buildEngineEnv(profile: EngineProfile, scanId?: string): Record<string, string> {
+const STRIX_RUN_TYPES: Record<string, string> = {
+  REPO: "repository",
+  WEB_APP: "web_application",
+  API: "api_spec",
+}
+
+export function buildEngineEnv(
+  profile: EngineProfile,
+  scanId?: string,
+  opts?: {
+    runType?: string
+    /** Scan-scoped relay for engine-backed URL/API targets. */
+    relay?: { url: string; grant: string }
+  }
+): Record<string, string> {
   const allow = new Set([
     "PATH",
     "HOME",
@@ -399,7 +413,13 @@ export function buildEngineEnv(profile: EngineProfile, scanId?: string): Record<
   filtered.LYRASHIELD_DELEGATE_REASONING_EFFORT = profile.delegateReasoningEffort
   if (scanId) {
     filtered.STRIX_RUN_ID = scanId
-    filtered.STRIX_RUN_TYPE = "repository"
+    filtered.STRIX_RUN_TYPE = opts?.runType ?? "repository"
+  }
+  // Per-scan relay credentials: never part of process.env (the allowlist above
+  // is for static config only), injected explicitly for engine-backed URL runs.
+  if (opts?.relay) {
+    filtered.STRIX_TARGET_RELAY_URL = opts.relay.url
+    filtered.STRIX_TARGET_RELAY_GRANT = opts.relay.grant
   }
   filtered.STRIX_DOCKER_SANDBOX_NETWORK = resolveEngineSandboxNetwork()
   filtered.STRIX_SANDBOX_MEM_LIMIT = env.STRIX_SANDBOX_MEM_LIMIT.trim() || "4g"
@@ -446,7 +466,9 @@ async function runEngineProcess(
   readProgressFingerprint?: () => Promise<string | null>,
   maxBudgetUsd?: number,
   readSpendUsd?: () => Promise<number | null>,
-  onAgentLoopTick?: (elapsedMs: number) => void
+  onAgentLoopTick?: (elapsedMs: number) => void,
+  relay?: { url: string; grant: string },
+  runType?: string
 ): Promise<{
   exitCode: number
   timedOut: boolean
@@ -458,7 +480,7 @@ async function runEngineProcess(
   return new Promise((resolvePromise, reject) => {
     const child: ChildProcess = spawn(cmd.executable, cmd.args, {
       cwd: absWorkDir,
-      env: buildEngineEnv(profile, scanId),
+      env: buildEngineEnv(profile, scanId, { runType, relay }),
       stdio: ["ignore", "pipe", "pipe"],
     })
 
@@ -1191,7 +1213,9 @@ export async function runEngine(
       () => readEngineProgressFingerprint(absWorkDir, scanId),
       config.maxBudgetUsd,
       () => readEngineSpendUsd(absWorkDir, scanId),
-      onAgentLoopTick
+      onAgentLoopTick,
+      config.relay,
+      STRIX_RUN_TYPES[config.target.type] ?? "repository"
     )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code

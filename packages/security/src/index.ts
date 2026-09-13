@@ -28,6 +28,19 @@ export {
 export { createEgressProxyFetchFn, type EgressProxyFetchFnOptions } from "./egress-proxy-client"
 
 export {
+  MAX_RELAY_GRANT_TTL_MS,
+  mintRelayGrant,
+  verifyRelayGrant,
+  relayHostAllowed,
+  relayMethodAllowed,
+  relayPathAllowed,
+  normalizeRelayHost,
+  normalizeRelayPath,
+  type RelayGrantScope,
+  type RelayDenyReason,
+} from "./relay-grant"
+
+export {
   normalizeDomainForProof,
   domainProofTxtName,
   hasDomainProofToken,
@@ -71,6 +84,7 @@ export {
   VIBE_SECURITY_CONTROLS,
   VIBE_SECURITY_COVERAGE_VERSION,
   buildVibeSecurityInstruction,
+  buildUrlTargetInstruction,
   summarizeVibeSecurityCoverage,
   type VibeCoverageFinding,
   type VibeCoverageStrategy,
@@ -169,3 +183,32 @@ export {
   type EngineTriageArtifact,
   type EngineTriageStatus,
 } from "./ai-security/engine-triage"
+
+export {
+  STANDARDS_REGISTRY,
+  STANDARDS_REGISTRY_VERSION,
+  defaultStandards,
+  getStandard,
+  type ScannerFamilyName,
+  type Standard,
+  type StandardCategory,
+} from "./standards/registry"
+
+export {
+  renderStandard,
+  renderStandards,
+  type RenderedCategory,
+  type ScanFindingInput,
+  type ScanReceiptInput,
+  type StandardCellState,
+  type StandardView,
+} from "./standards/render"
+
+export { computeDedupeKey, type DedupeIdentity } from "./finding-dedupe"
+export {
+  parseSarifReport,
+  sarifToFindingRecords,
+  SARIF_IMPORT_VERSION,
+  type ImportedFindingRecord,
+  type SarifParseResult,
+} from "./sarif-import"

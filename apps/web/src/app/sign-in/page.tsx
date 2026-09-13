@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   authClient,
+  authClientWillRedirect,
   getAuthErrorMessage,
   isEmailNotVerifiedError,
   safeAuthCallbackPath,
@@ -183,7 +184,9 @@ export default function SignInPage() {
         return
       }
 
-      if (data && "twoFactorRedirect" in data && data.twoFactorRedirect === true) return
+      // Better Auth's redirect plugin has already started a full navigation.
+      // Starting an RSC navigation too races it and aborts the response stream.
+      if (authClientWillRedirect(data)) return
 
       router.push(destination)
       router.refresh()
