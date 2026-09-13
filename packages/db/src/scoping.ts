@@ -56,6 +56,18 @@ export const SOFT_DELETE_MODELS = new Set<string>([
 //    workspace-scoped request, so RLS scoping would be both wrong (rows with
 //    NULL workspaceId are the normal case mid-fan-out) and useless (no
 //    workspace request path queries it).
+//  - License, LicenseActivation, LicenseKey: workspaceId is NULLABLE here —
+//    a license is issued and activated before it is bound to a workspace.
+//    Auto-injecting `workspaceId = ctx` on reads would hide every unbound
+//    license/activation/key the moment a request context is active (license
+//    activation runs under a workspace session and must see unbound rows).
+//    The license family is already FORCE-RLS in Postgres via its own
+//    policies, so tenant isolation does not depend on this extension.
+//  - ArtifactDeletionTask: server-owned deletion queue; the task must
+//    outlive its workspace's cascade until the external object is removed.
+//    Only system sweeps read it — never a workspace-scoped request.
+// `scoping-schema-sync.test.ts` asserts the scoped set plus these exclusions
+// equal every schema model that carries a workspaceId column.
 // Injecting `workspaceId` on a model without the column throws, so — as with
 // soft-delete — this set must match the schema exactly.
 export const WORKSPACE_SCOPED_MODELS = new Set<string>([
@@ -93,6 +105,23 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "AgentConnection",
   "AgentOperation",
   "LoopClosure",
+  "SyncCursor",
+])
+
+/**
+ * Models that carry a `workspaceId` column but are deliberately NOT
+ * auto-scoped. Every entry is justified in the header comment above
+ * WORKSPACE_SCOPED_MODELS; the schema-sync test fails if a model is added,
+ * removed, or renamed without updating exactly one of the two sets.
+ */
+export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
+  "WorkspaceMember",
+  "OnboardingState",
+  "WebhookEventTrack",
+  "License",
+  "LicenseActivation",
+  "LicenseKey",
+  "ArtifactDeletionTask",
 ])
 
 // Account-owned ledger models: subscriptions and usage belong to the account

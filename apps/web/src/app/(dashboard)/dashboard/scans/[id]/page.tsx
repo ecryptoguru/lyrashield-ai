@@ -44,67 +44,71 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     )
   }
 
-  const findings = await prisma.finding.findMany({
-    where: { scanId: id, workspaceId, deletedAt: null },
-    select: {
-      id: true,
-      title: true,
-      severity: true,
-      status: true,
-      cwe: true,
-      owaspCategory: true,
-      cvssScore: true,
-      summary: true,
-      verified: true,
-      verificationStatus: true,
-      verificationMethod: true,
-      verificationReason: true,
-      createdAt: true,
-    },
-    orderBy: { severity: "desc" },
-  })
-
-  const [scoreSnapshot, membership] =
-    scan.status === "COMPLETED" && findings.length === 0 && scan.targetId
-      ? await Promise.all([
-          prisma.scoreSnapshot.findFirst({
-            where: {
-              scanId: scan.id,
-              workspaceId,
-              targetId: scan.targetId,
-              shareEligible: true,
-              expiresAt: { gt: new Date() },
-            },
-            select: {
-              grade: true,
-              shares: {
-                where: { revokedAt: null, createdById: session.userId },
-                orderBy: { createdAt: "desc" },
-                take: 1,
-                select: {
-                  id: true,
-                  slug: true,
-                  publicPayload: true,
-                  viewCount: true,
-                  _count: { select: { events: { where: { eventType: "SHARE" } } } },
-                  referralCode: {
-                    select: { code: true, _count: { select: { attributions: true } } },
-                  },
+  // One parallel batch for the SSR payload: findings bounded to the same 100
+  // the client table pages, the one-time manifest detail, and the scorecard
+  // pair (gated on status only — findings.length refines the render below).
+  const wantsScorecard = scan.status === "COMPLETED" && !!scan.targetId
+  const [findings, manifestDetail, scoreSnapshot, membership] = await Promise.all([
+    prisma.finding.findMany({
+      where: { scanId: id, workspaceId, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        severity: true,
+        status: true,
+        cwe: true,
+        owaspCategory: true,
+        cvssScore: true,
+        summary: true,
+        verified: true,
+        verificationStatus: true,
+        verificationMethod: true,
+        verificationReason: true,
+        createdAt: true,
+      },
+      orderBy: { severity: "desc" },
+      take: 100,
+    }),
+    // One-time server fetch of the manifest detail (urlExecution lives inside
+    // the tens-of-KB manifest JSON, which getScanWithEvents deliberately
+    // excludes so the polling API does not ship it on every request).
+    getScanResultManifestDetail(id, workspaceId),
+    scan.status === "COMPLETED" && scan.targetId
+      ? prisma.scoreSnapshot.findFirst({
+          where: {
+            scanId: scan.id,
+            workspaceId,
+            targetId: scan.targetId,
+            shareEligible: true,
+            expiresAt: { gt: new Date() },
+          },
+          select: {
+            grade: true,
+            shares: {
+              where: { revokedAt: null, createdById: session.userId },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: {
+                id: true,
+                slug: true,
+                publicPayload: true,
+                viewCount: true,
+                _count: { select: { events: { where: { eventType: "SHARE" } } } },
+                referralCode: {
+                  select: { code: true, _count: { select: { attributions: true } } },
                 },
               },
             },
-          }),
-          prisma.workspaceMember.findFirst({
-            where: { workspaceId, userId: session.userId, status: "active" },
-            select: { role: true },
-          }),
-        ])
-      : [null, null]
-
-  // One-time server fetch of the manifest detail (urlExecution lives inside the
-  // tens-of-KB manifest JSON, which getScanWithEvents deliberately excludes so
-  // the polling API does not ship it on every request).
-  const manifestDetail = await getScanResultManifestDetail(id, workspaceId)
+          },
+        })
+      : null,
+    wantsScorecard
+      ? prisma.workspaceMember.findFirst({
+          where: { workspaceId, userId: session.userId, status: "active" },
+          select: { role: true },
+        })
+      : null,
+  ])
 
   const target = scan.target
 
@@ -202,7 +206,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
 
   const existingShare = scoreSnapshot?.shares[0]
   const scorecard =
-    scoreSnapshot && scan.targetId
+    findings.length === 0 && scoreSnapshot && scan.targetId
       ? {
           targetId: scan.targetId,
           grade: scoreSnapshot.grade,

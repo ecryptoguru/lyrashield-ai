@@ -23,22 +23,8 @@ vi.mock("@lyrashield/db", () => ({
   ),
 }))
 
-vi.mock("@lyrashield/pricing", () => ({
-  CLOUD_PLAN_MAP: {
-    FREE: { id: "FREE", deepAllowed: false, agentMinutes: 0, targetCaps: 3 },
-    TRIAL: { id: "TRIAL", deepAllowed: false, agentMinutes: 60, targetCaps: 3 },
-    STARTER: { id: "STARTER", deepAllowed: false, agentMinutes: 210, targetCaps: 5 },
-    PRO: { id: "PRO", deepAllowed: true, agentMinutes: 850, targetCaps: 15 },
-    LAUNCH_ASSURANCE: {
-      id: "LAUNCH_ASSURANCE",
-      deepAllowed: true,
-      agentMinutes: 4500,
-      targetCaps: 50,
-    },
-    ENTERPRISE: { id: "ENTERPRISE", deepAllowed: true, agentMinutes: 0, targetCaps: 0 },
-  },
-  STANDARD_OVERAGE_PER_MINUTE_USD: 0.15,
-}))
+// The real @lyrashield/pricing catalog is used — a mock once invented a FREE
+// entry that production CLOUD_PLAN_MAP does not have, hiding the cap bug.
 
 // Mock the account/usage/trial/grace modules so plan gating is exercised in
 // isolation without a full DB balance/trial computation.
@@ -376,6 +362,29 @@ describe("entitlements — protected-target cap on the acting account's plan", (
 
     expect(result.allowed).toBe(true)
     expect(result.targetCap).toBe(0)
+  })
+
+  it("caps a FREE account with no trial at the free allowance, not a paid-plan default", async () => {
+    // CLOUD_PLAN_MAP has no FREE entry; the cap must be the explicit free
+    // allowance (3, matching Trial) — not a fallback to a paid default.
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("FREE") as never)
+    vi.mocked(prisma.target.count).mockResolvedValue(1)
+
+    const result = await assertTargetAllowed("ws-free", "acct_1")
+
+    expect(result.allowed).toBe(true)
+    expect(result.targetCap).toBe(3)
+  })
+
+  it("blocks a FREE account with no trial once three targets exist", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("FREE") as never)
+    vi.mocked(prisma.target.count).mockResolvedValue(3)
+
+    const result = await assertTargetAllowed("ws-free-full", "acct_1")
+
+    expect(result.allowed).toBe(false)
+    expect(result.code).toBe("TARGET_LIMIT_REACHED")
+    expect(result.targetCap).toBe(3)
   })
 
   it("blocks an active account trial at the trial cap", async () => {

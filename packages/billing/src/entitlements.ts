@@ -367,7 +367,11 @@ export async function assertTargetAllowed(
   const plan = billing?.effectivePlan ?? "FREE"
   const isTrial = trial.isActive
   const cloudPlan = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
-  const targetCap = isTrial ? 3 : (cloudPlan?.targetCaps ?? 5)
+  // FREE has no CLOUD_PLAN_MAP entry — accounts with no active plan or trial
+  // get the same three-target allowance as a trial. Any other unmapped plan
+  // fails closed to the same cap (0 would read as "no limit" below).
+  const FREE_TARGET_CAP = 3
+  const targetCap = isTrial ? 3 : (cloudPlan?.targetCaps ?? FREE_TARGET_CAP)
 
   const targetCount = await prisma.target.count({
     where: { workspaceId, deletedAt: null },

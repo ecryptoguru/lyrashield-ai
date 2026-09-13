@@ -212,7 +212,6 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       LicenseKey: "Nullable workspace; privileged key lookup before workspace linkage",
       LicenseActivation: "Nullable workspace; privileged machine activation",
       LicenseRevocation: "Inherits workspace through License",
-      SyncCursor: "Explicit workspace transactions in sync routes",
     }
     const systemOnly = {
       ArtifactDeletionTask: "Owner-only durable deletion outbox survives workspace deletion",

@@ -495,7 +495,7 @@ export function projectGateReadinessReport(
       score: null,
       triageScore: triage.score,
       blockingFindings,
-      summary: `${insufficient.length} of ${targets.length} target assessment(s) could not be reused — their evidence is missing or out of date.`,
+      summary: `${insufficient.length} of ${targets.length} target(s) have no completed assessment yet.`,
       conditions:
         conditions.length > 0
           ? conditions

@@ -52,6 +52,10 @@ export const errorEnvelope = {
       properties: {
         code: { type: "string" as const, description: "Stable machine-readable error code" },
         message: { type: "string" as const, description: "Human-readable error description" },
+        requestId: {
+          type: "string" as const,
+          description: "Server correlation id — also returned in the x-request-id response header",
+        },
       },
       required: ["code", "message"],
     },

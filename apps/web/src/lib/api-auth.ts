@@ -37,7 +37,19 @@ export function withApiRequest<Req extends Request, Args extends unknown[], Resu
   return async (request, ...args) => {
     const upstreamId = request.headers.get("x-request-id")?.slice(0, 128)
     const requestId = upstreamId && /^[\w-]+$/.test(upstreamId) ? upstreamId : randomUUID()
-    return apiRequestStorage.run({ requestId }, () => handler(request, ...args))
+    return apiRequestStorage.run({ requestId }, async () => {
+      const result = await handler(request, ...args)
+      // Echo the correlation id on every response; pass-through responses
+      // with immutable headers (rare) keep working without the stamp.
+      if (result instanceof Response) {
+        try {
+          result.headers.set("x-request-id", requestId)
+        } catch {
+          /* immutable headers — skip the stamp */
+        }
+      }
+      return result
+    })
   }
 }
 
