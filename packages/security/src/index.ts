@@ -82,6 +82,7 @@ export {
   VIBE_SECURITY_CONTROLS,
   VIBE_SECURITY_COVERAGE_VERSION,
   buildVibeSecurityInstruction,
+  buildUrlTargetInstruction,
   summarizeVibeSecurityCoverage,
   type VibeCoverageFinding,
   type VibeCoverageStrategy,

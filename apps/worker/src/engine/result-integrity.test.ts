@@ -344,7 +344,7 @@ describe("result integrity", () => {
     vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
 
     const urlExecution: import("@lyrashield/types").UrlExecutionSummary = {
-      contractVersion: "url-scan/2.0.0",
+      contractVersion: "url-scan/3.0.0",
       profile: "WEB_APP_STANDARD",
       methods: ["GET"],
       subjectCount: 17,

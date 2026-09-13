@@ -9,6 +9,7 @@ import {
   type SurfaceSubject,
 } from "@lyrashield/security"
 import {
+  URL_SCAN_CONTRACT_VERSION,
   type UrlRequestMethod,
   type UrlScanProfile,
   type UrlExecutionSummary,
@@ -81,7 +82,7 @@ function buildEmptyExecution(
   issueCodes: string[] = []
 ): UrlExecutionSummary {
   return {
-    contractVersion: "url-scan/2.0.0",
+    contractVersion: URL_SCAN_CONTRACT_VERSION,
     profile: profile.id,
     methods: [...new Set(profile.allowedMethods)].sort() as UrlRequestMethod[],
     subjectCount: 0,
@@ -884,7 +885,7 @@ export async function scanOpenApi(options: {
   const originProbeSubjects = subjects.filter((s) => s.kind === "probe" && s.method === "GET")
 
   const execution: UrlExecutionSummary = {
-    contractVersion: "url-scan/2.0.0",
+    contractVersion: URL_SCAN_CONTRACT_VERSION,
     profile: profile.id,
     methods: [...new Set(profile.allowedMethods)].sort() as UrlRequestMethod[],
     subjectCount: subjects.length,

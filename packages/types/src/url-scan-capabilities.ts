@@ -1,13 +1,17 @@
 /**
  * Versioned URL and API scan capability registry.
  *
- * This is the single source of truth for the url-scan/2.0.0 contract:
+ * This is the single source of truth for the url-scan/3.0.0 contract:
  * profiles, limits, allowed methods, and release state. A change to any
  * numeric limit or allowed method is a contract change and must bump the
  * version and update fixtures.
+ *
+ * 3.0.0: STANDARD/DEEP are engine-backed (the sandbox reaches verified targets
+ * through the scoped relay); CUSTOM now normalizes to DEEP like repository
+ * scans. SAFE stays deterministic-only.
  */
 
-export const URL_SCAN_CONTRACT_VERSION = "url-scan/2.0.0" as const
+export const URL_SCAN_CONTRACT_VERSION = "url-scan/3.0.0" as const
 
 export type UrlTargetType = "WEB_APP" | "API"
 
@@ -201,15 +205,13 @@ function isUrlScanMode(value: string): value is UrlScanMode {
 }
 
 function normalizeMode(mode: string): string {
-  return mode === "QUICK" ? "SAFE" : mode
+  // QUICK names the deterministic-only tier; CUSTOM is the deepest tier, same
+  // as repository scans. Both map onto the released URL modes.
+  return mode === "QUICK" ? "SAFE" : mode === "CUSTOM" ? "DEEP" : mode
 }
 
 export function getUrlScanProfile(targetType: UrlTargetType, mode: string): UrlScanProfile {
   const normalized = normalizeMode(mode)
-
-  if (normalized === "CUSTOM") {
-    throw new Error("URL_MODE_UNSUPPORTED")
-  }
 
   if (!isUrlScanMode(normalized)) {
     throw new Error("URL_MODE_UNSUPPORTED")
@@ -232,14 +234,6 @@ export function getUrlModeAvailability(
   releasedIds: ReadonlySet<string> = RELEASED_URL_PROFILE_IDS
 ): UrlModeAvailability {
   const normalized = normalizeMode(mode)
-
-  if (normalized === "CUSTOM") {
-    return {
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "This URL review depth is not available yet. Use Surface Review.",
-    }
-  }
 
   if (!isUrlScanMode(normalized)) {
     return {

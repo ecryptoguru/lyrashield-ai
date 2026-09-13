@@ -1,5 +1,5 @@
 import { resolve } from "node:path"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { logger } from "@lyrashield/logger"
 
 const completeUsage = vi.hoisted(() => ({
@@ -40,6 +40,9 @@ vi.mock("@lyrashield/db", () => ({
   prisma: {
     auditLog: { create: vi.fn().mockResolvedValue({}) },
     target: {
+      findFirst: vi.fn(),
+    },
+    targetDomainVerification: {
       findFirst: vi.fn(),
     },
     policy: {
@@ -161,6 +164,30 @@ vi.mock("../engine/evidence-storage", () => ({
     }
   },
 }))
+
+vi.mock("@lyrashield/evidence-storage", () => ({
+  uploadEncryptedArtifact: vi.fn().mockResolvedValue({
+    storageUri: "evidence://ws-1/scan-1/relay_audit/audit-1",
+    checksum: "abc123",
+    encryptionKeyRef: "key-ref",
+  }),
+}))
+
+// Real grant minting stays exercised; only the relay's network edges are mocked.
+vi.mock("../engine/relay-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../engine/relay-client")>()
+  return {
+    ...actual,
+    fetchRelayAudit: vi
+      .fn()
+      .mockResolvedValue([
+        { ts: 1, type: "request", host: "example.com", method: "GET", path: "/", status: 200 },
+      ]),
+    revokeRelayGrant: vi.fn().mockResolvedValue(undefined),
+    resolveSpecServerHosts: vi.fn().mockResolvedValue([]),
+  }
+})
+import { fetchRelayAudit, revokeRelayGrant } from "../engine/relay-client"
 
 vi.mock("../engine/finding-persister", () => ({
   persistFindings: vi.fn().mockResolvedValue([]),
@@ -414,8 +441,12 @@ describe("resolveScanRuntimeBudgetMs", () => {
     expect(resolveScanRuntimeBudgetMs("SAFE", 8)).toBe(8 * 60 * 1000)
   })
 
-  it("uses the deterministic URL profile limit instead of repository limits", () => {
-    expect(resolveScanRuntimeBudgetMs("DEEP", 60, "WEB_APP")).toBe(3 * 60 * 1000)
+  it("uses the URL profile limit — deterministic for SAFE, engine-bounded for DEEP", () => {
+    // SAFE keeps the deterministic wall-clock profile budget.
+    expect(resolveScanRuntimeBudgetMs("SAFE", 60, "WEB_APP")).toBe(1 * 60 * 1000)
+    // STANDARD/DEEP URL are engine-backed at repository budgets.
+    expect(resolveScanRuntimeBudgetMs("STANDARD", 60, "WEB_APP")).toBe(15 * 60 * 1000)
+    expect(resolveScanRuntimeBudgetMs("DEEP", 60, "WEB_APP")).toBe(45 * 60 * 1000)
   })
 })
 
@@ -561,6 +592,127 @@ describe("engineRoutingCoverageIssue", () => {
 })
 
 describe("processScanJob", () => {
+
+  describe("engine-backed URL scans through the scoped relay", () => {
+    const standardUrlJob = {
+      ...mockJob,
+      data: { ...mockJob.data, mode: "STANDARD" },
+    } as never
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      process.env.LYRASHIELD_TARGET_RELAY_URL = "http://relay.test"
+      process.env.LYRASHIELD_RELAY_SIGNING_SECRET = "test-signing-secret"
+      process.env.LYRASHIELD_EGRESS_PROXY_SECRET = "test-egress-secret"
+      mockStoredScanAuthority({ mode: "STANDARD" })
+      vi.mocked(runEngine).mockImplementation(
+        ({ scanId }: { scanId: string }) =>
+          ({
+            exitCode: 0,
+            output: {
+              vulnerabilities: [],
+              findingsComplete: true,
+              runRecord: {
+                run_id: scanId,
+                run_name: scanId,
+                status: "completed",
+                llm_usage: completeUsage,
+              },
+              summary: "Scan completed with 0 findings",
+              findingCount: 0,
+            },
+          }) as never
+      )
+      vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
+    })
+
+    afterEach(() => {
+      delete process.env.LYRASHIELD_TARGET_RELAY_URL
+      delete process.env.LYRASHIELD_RELAY_SIGNING_SECRET
+      delete process.env.LYRASHIELD_EGRESS_PROXY_SECRET
+    })
+
+    it("runs the engine with a signed relay grant and revokes it afterward", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        status: "completed",
+      })
+
+      expect(runEngine).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relay: {
+            url: "http://relay.test",
+            grant: expect.stringMatching(/^lrg1\./),
+          },
+          instruction: expect.stringContaining("Live target posture"),
+        }),
+        "scan-1",
+        expect.any(Number),
+        expect.any(Function),
+        expect.any(Function)
+      )
+      expect(recordAgentMinutes).toHaveBeenCalled()
+      expect(fetchRelayAudit).toHaveBeenCalledWith(
+        "scan-1",
+        expect.objectContaining({ url: "http://relay.test" })
+      )
+      expect(revokeRelayGrant).toHaveBeenCalledWith(
+        "scan-1",
+        expect.objectContaining({ url: "http://relay.test" })
+      )
+      expect(addScanEvent).toHaveBeenCalledWith(
+        "scan-1",
+        "relay_audit",
+        "info",
+        "Relay audit trail captured",
+        expect.objectContaining({ entries: 1 })
+      )
+    })
+
+    it("fails closed when the domain is not verified for an engine-backed tier", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        status: "failed",
+        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+    })
+
+    it("fails closed when the relay is not configured for an engine-backed tier", async () => {
+      delete process.env.LYRASHIELD_TARGET_RELAY_URL
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        status: "failed",
+        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+    })
+
+    it("revokes the grant even when the engine throws", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+      vi.mocked(runEngine).mockRejectedValueOnce(new Error("engine blew up"))
+
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        status: "failed",
+      })
+      expect(revokeRelayGrant).toHaveBeenCalled()
+    })
+  })
+
   it("reserves the actual remaining scan time for deterministic scanners", () => {
     expect(resolveScannerPhaseTimeoutMs(15 * 60 * 1000, 7 * 60 * 1000 + 27 * 1000)).toBe(
       7 * 60 * 1000 + 33 * 1000
@@ -1112,7 +1264,13 @@ describe("processScanJob", () => {
 
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "policy-1", workspaceId: "ws-1", deletedAt: null },
-      select: { maxBudgetUsd: true, maxDurationMinutes: true },
+      select: {
+              maxBudgetUsd: true,
+              maxDurationMinutes: true,
+              blockedPaths: true,
+              allowedDomains: true,
+              destructiveTestsAllowed: true,
+            },
     })
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 1.2 }),
@@ -1146,7 +1304,13 @@ describe("processScanJob", () => {
 
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "policy-deep", workspaceId: "ws-1", deletedAt: null },
-      select: { maxBudgetUsd: true, maxDurationMinutes: true },
+      select: {
+              maxBudgetUsd: true,
+              maxDurationMinutes: true,
+              blockedPaths: true,
+              allowedDomains: true,
+              destructiveTestsAllowed: true,
+            },
     })
     // DEEP caps at 45 min; the policy asked for 75, so the engine timeout is the
     // REMAINING wall-clock budget — a number bounded by (never exceeding) 45 min.

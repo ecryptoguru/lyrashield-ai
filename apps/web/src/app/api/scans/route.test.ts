@@ -303,7 +303,7 @@ describe("POST /api/scans", () => {
     expect(enqueueScanJob).toHaveBeenCalledWith(expect.objectContaining({ mode: "SAFE" }))
   })
 
-  it("requires a current domain proof before a paid remote scan", async () => {
+  it("requires a current domain proof before an engine-backed remote scan", async () => {
     vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
     vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
@@ -318,7 +318,7 @@ describe("POST /api/scans", () => {
         workspaceId: "ws-paid-proof",
         targetId: "web-verified",
         goal: "TEST_APP",
-        mode: "SAFE",
+        mode: "STANDARD",
       })
     )
 
@@ -330,6 +330,65 @@ describe("POST /api/scans", () => {
         where: expect.objectContaining({ domain: "staging.example.com", status: "VERIFIED" }),
       })
     )
+  })
+
+  it("allows a paid deterministic surface review without domain proof", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "web-safe",
+      type: "WEB_APP",
+      url: "https://staging.example.com",
+      apiSpecUrl: null,
+    } as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-safe-noproof",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      targetId: "web-safe",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-safe-noproof",
+        targetId: "web-safe",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(prisma.targetDomainVerification.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("skips domain verification for the free plan on an engine-backed tier", async () => {
+    // FREE never reaches the verification gate for STANDARD/DEEP — the
+    // entitlement gate (minutes/DEEP plan) is the denial path instead.
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "web-free-std",
+      type: "WEB_APP",
+      url: "https://free.example.com",
+      apiSpecUrl: null,
+    } as never)
+    vi.mocked(assertScanAllowed).mockResolvedValue({
+      allowed: false,
+      code: "DEEP_NOT_ALLOWED",
+      message: "Upgrade required",
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-free-std",
+        targetId: "web-free-std",
+        goal: "TEST_APP",
+        mode: "STANDARD",
+      })
+    )
+
+    expect(prisma.targetDomainVerification.findFirst).not.toHaveBeenCalled()
+    expect((await res.json()).error.code).toBe("DEEP_NOT_ALLOWED")
   })
 
   /**
@@ -497,8 +556,16 @@ describe("POST /api/scans", () => {
     apiSpecUrl: null,
   }
 
-  it.each(["CUSTOM"])("rejects unavailable %s for a URL target", async (mode) => {
+  it.each(["CUSTOM"])("normalizes %s to DEEP for a URL target", async (mode) => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-web-custom",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "DEEP",
+      targetId: "web-1",
+      createdAt: new Date(),
+    } as never)
 
     const res = await POST(
       makeRequest({
@@ -509,10 +576,8 @@ describe("POST /api/scans", () => {
       })
     )
 
-    expect(res.status).toBe(400)
-    const json = await res.json()
-    expect(json.error.code).toBe("URL_MODE_UNAVAILABLE")
-    expect(enqueueScanJob).not.toHaveBeenCalled()
+    expect(res.status).toBe(201)
+    expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ mode: "DEEP" }))
   })
 
   it("allows Safe and legacy Quick for a web target", async () => {

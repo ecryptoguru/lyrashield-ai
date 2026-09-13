@@ -97,7 +97,7 @@ vi.mock("./scanners/url-scanner", () => ({
       },
     ],
     execution: {
-      contractVersion: "url-scan/2.0.0",
+      contractVersion: "url-scan/3.0.0",
       profile: "WEB_APP_SAFE",
       methods: ["GET"],
       subjectCount: 1,
@@ -794,7 +794,7 @@ describe("runScannerOrchestrator", () => {
         },
       ],
       execution: {
-        contractVersion: "url-scan/2.0.0",
+        contractVersion: "url-scan/3.0.0",
         profile: "WEB_APP_SAFE",
         methods: ["GET"],
         subjectCount: 1,

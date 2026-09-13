@@ -355,6 +355,52 @@ export function buildVibeSecurityInstruction(goal: string): string {
   ].join("\n")
 }
 
+/**
+ * Instruction preamble for engine-backed live targets (WEB_APP/API).
+ *
+ * The control checklist is identical — controls are target-agnostic — but a
+ * live deployment needs scope, safety, and evidence rules that a repository
+ * review does not. The relay enforces these at the network layer; this text
+ * keeps the model honest inside it.
+ */
+export function buildUrlTargetInstruction(
+  goal: string,
+  opts: {
+    host: string
+    targetType: "WEB_APP" | "API"
+    environment?: string | null
+    hasCredentials?: boolean
+    hasApiSpec?: boolean
+  }
+): string {
+  const base = buildVibeSecurityInstruction(goal)
+  const lines = [
+    base,
+    "",
+    "Live target posture:",
+    `- Test only the verified scope: ${opts.host} and its subdomains. The relay denies anything outside it — treat denies as hard scope limits, never as retries.`,
+    "- This is a deployed system: prefer non-destructive, idempotent evidence. Do not bulk-submit forms, mass-create accounts, or trigger notification storms.",
+    "- Reproduce every finding and keep evidence excerpts minimal; redact secrets in transcripts.",
+    "- Absence of a finding is meaningful only when the test actually ran — report coverage honestly in the run summary.",
+  ]
+  if (opts.environment === "PRODUCTION") {
+    lines.push(
+      "- PRODUCTION target: availability takes precedence over coverage. Rate yourself conservatively and never attempt destructive methods."
+    )
+  }
+  if (opts.hasApiSpec) {
+    lines.push(
+      "- An OpenAPI document is provisioned as an authorized second target; its declared base URLs are in scope."
+    )
+  }
+  if (opts.hasCredentials) {
+    lines.push(
+      "- Authenticated material is applied by the relay — you will not see it. Test the authenticated surface without handling credentials."
+    )
+  }
+  return lines.join("\n")
+}
+
 export function summarizeVibeSecurityCoverage(findings: readonly VibeCoverageFinding[]) {
   const explicitRanks = findings.flatMap((finding) => finding.control_ids ?? [])
   const matchedControlRanks = [

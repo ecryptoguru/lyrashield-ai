@@ -20,8 +20,12 @@ export interface ScanConfig {
   goal: string
   mode: string
   target: TargetInfo
+  /** OpenAPI document URL — passed as a second --target for API targets so the engine authorizes its declared base URLs as in-scope. */
+  apiSpecUrl?: string | null
   instruction?: string
   maxBudgetUsd?: number
+  /** Scan-scoped relay grant for engine-backed URL/API targets. */
+  relay?: { url: string; grant: string }
 }
 
 export interface EngineCommand {
@@ -38,8 +42,12 @@ export const PLATFORM_MAX_SCAN_BUDGET_USD = env.PLATFORM_MAX_SCAN_BUDGET_USD
  * An explicitly zero budget is a deliberate policy choice and must fail the
  * scan rather than silently falling back to the profile default.
  */
-export function resolveScanBudgetUsd(mode: string, policyMaxBudgetUsd?: number | null): number {
-  const profile = resolveScanProfile({ targetType: "REPO", mode })
+export function resolveScanBudgetUsd(
+  mode: string,
+  policyMaxBudgetUsd?: number | null,
+  targetType: string = "REPO"
+): number {
+  const profile = resolveScanProfile({ targetType, mode })
   if (typeof policyMaxBudgetUsd === "number" && Number.isFinite(policyMaxBudgetUsd)) {
     if (policyMaxBudgetUsd === 0) return 0
     if (policyMaxBudgetUsd > 0) {
@@ -88,10 +96,12 @@ function validateInstruction(instruction: string | undefined): string | undefine
 export function buildEngineCommand(config: ScanConfig): EngineCommand {
   const executable = resolveExecutable()
   const targetArg = resolveTargetArg(config.target)
-  // The external engine only has three native modes. Resolve through the
-  // repository profile even for direct command-builder callers so legacy
-  // aliases are normalized and invalid modes fail before a provider call.
-  const scanMode = resolveScanProfile({ targetType: "REPO", mode: config.mode }).engineMode
+  // Resolve through the target's own profile so URL/API modes normalize the
+  // same way as repository aliases and invalid modes fail before a provider call.
+  const scanMode = resolveScanProfile({
+    targetType: config.target.type,
+    mode: config.mode,
+  }).engineMode
   if (!scanMode) throw new Error("SCAN_MODE_UNSUPPORTED")
 
   const args: string[] = [
@@ -103,6 +113,12 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
     "--scan-mode",
     scanMode,
   ]
+
+  // API targets: the OpenAPI document is a second engine target — the engine
+  // authorizes the spec's declared base URLs as in-scope on its own side.
+  if (config.target.type === "API" && config.apiSpecUrl?.trim()) {
+    args.push("--target", config.apiSpecUrl.trim())
+  }
 
   const validatedInstruction = validateInstruction(config.instruction)
   if (validatedInstruction) {

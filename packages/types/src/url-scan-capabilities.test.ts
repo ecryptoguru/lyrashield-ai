@@ -8,7 +8,7 @@ import {
 
 describe("URL scan capabilities", () => {
   it("defines the contract version", () => {
-    expect(URL_SCAN_CONTRACT_VERSION).toBe("url-scan/2.0.0")
+    expect(URL_SCAN_CONTRACT_VERSION).toBe("url-scan/3.0.0")
   })
 
   it("defines reproducible web limits", () => {
@@ -118,22 +118,21 @@ describe("URL scan capabilities", () => {
     })
   })
 
-  it("maps legacy Quick to Safe and rejects Custom", () => {
+  it("maps legacy Quick to Safe and Custom to Deep", () => {
     expect(getUrlScanProfile("WEB_APP", "QUICK").id).toBe("WEB_APP_SAFE")
     expect(getUrlScanProfile("API", "QUICK").id).toBe("API_SAFE")
-    expect(() => getUrlScanProfile("WEB_APP", "CUSTOM")).toThrow("URL_MODE_UNSUPPORTED")
-    expect(() => getUrlScanProfile("API", "CUSTOM")).toThrow("URL_MODE_UNSUPPORTED")
+    expect(getUrlScanProfile("WEB_APP", "CUSTOM").id).toBe("WEB_APP_DEEP")
+    expect(getUrlScanProfile("API", "CUSTOM").id).toBe("API_DEEP")
   })
 
-  it("rejects unsupported and custom modes through availability", () => {
-    expect(getUrlModeAvailability("WEB_APP", "CUSTOM", false)).toMatchObject({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-    })
+  it("rejects only truly unsupported modes through availability", () => {
+    expect(getUrlModeAvailability("WEB_APP", "CUSTOM", false)).toEqual({ available: true })
+    // API Deep via Custom still requires an OpenAPI document.
     expect(getUrlModeAvailability("API", "CUSTOM", false)).toMatchObject({
       available: false,
-      code: "URL_MODE_UNAVAILABLE",
+      code: "API_SPEC_REQUIRED",
     })
+    expect(getUrlModeAvailability("API", "CUSTOM", true)).toEqual({ available: true })
     expect(getUrlModeAvailability("WEB_APP", "UNKNOWN", false)).toMatchObject({
       available: false,
       code: "URL_MODE_UNSUPPORTED",

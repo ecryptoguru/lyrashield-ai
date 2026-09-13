@@ -92,7 +92,22 @@ function extractGrantToken(headers: IncomingMessage["headers"]): string | undefi
   if (typeof direct === "string" && direct) return direct
   const proxyAuth = headers["proxy-authorization"]
   const value = Array.isArray(proxyAuth) ? proxyAuth[0] : proxyAuth
-  if (typeof value === "string" && value.startsWith("Bearer ")) return value.slice(7).trim()
+  if (typeof value !== "string") return undefined
+  if (value.startsWith("Bearer ")) return value.slice(7).trim()
+  // Standard tooling embeds the grant as proxy userinfo (http://<grant>@host or
+  // http://x:<grant>@host) and sends Proxy-Authorization: Basic. Accept the
+  // grant in either userinfo position.
+  if (value.startsWith("Basic ")) {
+    try {
+      const decoded = Buffer.from(value.slice(6).trim(), "base64").toString("utf8")
+      const [user, ...rest] = decoded.split(":")
+      const pass = rest.join(":")
+      if (user.startsWith("lrg1.")) return user
+      if (pass.startsWith("lrg1.")) return pass
+    } catch {
+      /* fall through */
+    }
+  }
   return undefined
 }
 

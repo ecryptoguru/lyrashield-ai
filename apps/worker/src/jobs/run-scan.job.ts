@@ -23,11 +23,20 @@ import {
 
 import {
   buildVibeSecurityInstruction,
+  buildUrlTargetInstruction,
+  normalizeDomainForProof,
   summarizeVibeSecurityCoverage,
   checkInstructionSafety,
   containsPromptInjection,
   applyEngineTriageArtifact,
 } from "@lyrashield/security"
+import {
+  fetchRelayAudit,
+  mintScanRelayGrant,
+  resolveRelayRuntimeConfig,
+  resolveSpecServerHosts,
+  revokeRelayGrant,
+} from "../engine/relay-client"
 import {
   updateScanStatus,
   addScanEvent,
@@ -73,6 +82,7 @@ import {
   assertEvidenceStorageConfigured,
   EvidenceStorageConfigurationError,
 } from "../engine/evidence-storage"
+import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import {
   completeRetestsForScan,
@@ -353,9 +363,13 @@ export function resolveEngineRuntimeBudgetMs(
   scanRuntimeBudgetMs: number,
   elapsedMs: number
 ): number {
-  if (targetType !== "REPO") return Math.max(0, scanRuntimeBudgetMs - elapsedMs)
   try {
     const profile = resolveScanProfile({ targetType, mode })
+    // Deterministic-only profiles carry no engine budget — the caller never
+    // reaches here for them.
+    if (!profile.usesAi || profile.maxEngineMinutes <= 0) {
+      return Math.max(0, scanRuntimeBudgetMs - elapsedMs)
+    }
     const engineCapMs = profile.maxEngineMinutes * 60 * 1000
     const scannerReserveMs = profile.scannerReserveMinutes * 60 * 1000
     return Math.max(0, Math.min(engineCapMs, scanRuntimeBudgetMs - elapsedMs - scannerReserveMs))
@@ -366,7 +380,7 @@ export function resolveEngineRuntimeBudgetMs(
 
 function requireEngineModel(model: string | undefined): string {
   if (!model) {
-    throw new Error("A GPT-5.6 Terra or Luna deployment must be configured for repository scans")
+    throw new Error("A GPT-5.6 Terra or Luna deployment must be configured for engine-backed scans")
   }
   return model
 }
@@ -877,6 +891,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           repoFullName: true,
           branch: true,
           apiSpecUrl: true,
+          environment: true,
           installationId: true,
           repoProvider: true,
         },
@@ -947,7 +962,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const policy = policyId
         ? await prisma.policy.findFirst({
             where: { id: policyId, workspaceId, deletedAt: null },
-            select: { maxBudgetUsd: true, maxDurationMinutes: true },
+            select: {
+              maxBudgetUsd: true,
+              maxDurationMinutes: true,
+              blockedPaths: true,
+              allowedDomains: true,
+              destructiveTestsAllowed: true,
+            },
           })
         : null
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
@@ -1013,6 +1034,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       let maxBudgetUsd = 0
       const deterministicRetest =
         target.type === "REPO" && scanRecord.determinismMode === "targeted_scanner"
+      const isUrlTarget = target.type === "WEB_APP" || target.type === "API"
+      const scanProfile = isUrlTarget
+        ? resolveScanProfile({ targetType: target.type, mode })
+        : null
+      // Engine-backed URL scans (STANDARD/DEEP) share the repository engine
+      // path; SAFE stays deterministic-only.
+      const urlEngineBacked = isUrlTarget && scanProfile?.usesAi === true
+      const engineBacked = target.type === "REPO" || urlEngineBacked
 
       if (deterministicRetest) {
         if (target.repoProvider !== "github") {
@@ -1048,8 +1077,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           "info",
           "Deterministic repository retest uses an independent checkout and no model calls"
         )
-      } else if (target.type === "REPO") {
-        maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
+      } else if (engineBacked) {
+        maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd, target.type)
         if (maxBudgetUsd <= 0) {
           const errorMessage = "Protected run limit is zero"
           log.warn("Scan rejected: zero budget", { scanId, workspaceId, policyMaxBudgetUsd })
@@ -1100,6 +1129,91 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           }
         }
 
+        // Engine-backed URL/API targets reach their host only through the
+        // scan-scoped relay. Everything here fails closed: no verified domain,
+        // no relay config, or an empty scope means no engine run — the coverage
+        // receipt records the gap instead of pretending the phase ran.
+        let relayCtx: { url: string; grant: string } | null = null
+        let relayConfigForCleanup: ReturnType<typeof resolveRelayRuntimeConfig> = null
+        if (urlEngineBacked) {
+          const relayConfig = resolveRelayRuntimeConfig()
+          relayConfigForCleanup = relayConfig
+          const verifiedDomain = target.url ? normalizeDomainForProof(target.url) : null
+          const verification = verifiedDomain
+            ? await prisma.targetDomainVerification.findFirst({
+                where: {
+                  workspaceId,
+                  domain: verifiedDomain,
+                  status: "VERIFIED",
+                  expiresAt: { gt: new Date() },
+                },
+                select: { id: true },
+              })
+            : null
+          if (!relayConfig || !verification || !target.url || !verifiedDomain) {
+            await addScanEvent(
+              scanId,
+              "engine_skipped",
+              "error",
+              "Engine-backed URL scan requires a verified domain and configured relay",
+              {
+                targetType: target.type,
+                relayConfigured: Boolean(relayConfig),
+                domainVerified: Boolean(verification),
+              }
+            )
+            return {
+              status: "failed",
+              errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+              errorMessage:
+                "This review depth requires a verified domain and the target relay. Verify the domain or run Surface Review.",
+            }
+          }
+
+          const engineTimeoutMsForGrant = resolveEngineRuntimeBudgetMs(
+            mode,
+            target.type,
+            scanRuntimeBudgetMs,
+            elapsedScanMs()
+          )
+          try {
+            const specServerHosts =
+              target.type === "API" && target.apiSpecUrl
+                ? await resolveSpecServerHosts(target.apiSpecUrl)
+                : []
+            const minted = mintScanRelayGrant(
+              {
+                scanId,
+                verifiedDomain,
+                targetUrl: target.url,
+                apiSpecUrl: target.apiSpecUrl,
+                specServerHosts,
+                engineBudgetMs: engineTimeoutMsForGrant,
+                destructiveTestsAllowed: policy?.destructiveTestsAllowed === true,
+                blockedPaths: policy?.blockedPaths ?? [],
+                allowedDomains: policy?.allowedDomains ?? [],
+              },
+              relayConfig
+            )
+            relayCtx = { url: relayConfig.url, grant: minted.grant }
+            await addScanEvent(scanId, "relay_scope", "info", "Relay scope granted", {
+              hosts: minted.scope.hosts,
+              methods: minted.scope.methods,
+              maxRequests: minted.scope.maxRequests,
+            })
+          } catch (grantErr) {
+            await addScanEvent(scanId, "engine_skipped", "error", "Relay grant could not be minted", {
+              targetType: target.type,
+              error: grantErr instanceof Error ? grantErr.message : String(grantErr),
+            })
+            return {
+              status: "failed",
+              errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+              errorMessage: "Could not establish relay scope for this verified target.",
+            }
+          }
+        }
+
         // Once the external engine begins, an automatic BullMQ replay could
         // spend twice for the same scan. Preflight remains retryable; the
         // billable phase is terminal and any rerun requires a fresh scan.
@@ -1126,35 +1240,75 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
 
         engineStartedAtMs = Date.now()
-        engineResult = await runEngine(
-          {
-            scanId,
-            goal,
-            mode,
-            target: {
-              id: target.id,
-              type: target.type as TargetType,
-              url: target.url,
-              repoFullName: target.repoFullName,
-              branch: target.branch,
-              name: target.name,
+        try {
+          engineResult = await runEngine(
+            {
+              scanId,
+              goal,
+              mode,
+              target: {
+                id: target.id,
+                type: target.type as TargetType,
+                url: target.url,
+                repoFullName: target.repoFullName,
+                branch: target.branch,
+                name: target.name,
+              },
+              apiSpecUrl: target.type === "API" ? target.apiSpecUrl : null,
+              instruction:
+                target.type === "REPO"
+                  ? buildVibeSecurityInstruction(goal)
+                  : buildUrlTargetInstruction(goal, {
+                      host: target.url ? new URL(target.url).hostname : "",
+                      targetType: target.type as "WEB_APP" | "API",
+                      environment: target.environment,
+                      hasApiSpec: Boolean(target.apiSpecUrl),
+                    }),
+              maxBudgetUsd,
+              ...(relayCtx ? { relay: relayCtx } : {}),
             },
-            instruction: buildVibeSecurityInstruction(goal),
-            maxBudgetUsd,
-          },
-          scanId,
-          engineTimeoutMs,
-          isScanCancelled,
-          // Sprint 10: metering hook — called on each agent-loop tick with
-          // wall-clock elapsed ms. The hook is a no-op for now; the final
-          // metering is done after the engine completes. This signal can be
-          // used for real-time balance checks in a future iteration.
-          (_elapsedMs: number) => {
-            // Real-time metering hook — intentionally empty for now.
-            // The final wall-clock duration is recorded after the engine exits.
+            scanId,
+            engineTimeoutMs,
+            isScanCancelled,
+            // Sprint 10: metering hook — called on each agent-loop tick with
+            // wall-clock elapsed ms. The hook is a no-op for now; the final
+            // metering is done after the engine completes. This signal can be
+            // used for real-time balance checks in a future iteration.
+            (_elapsedMs: number) => {
+              // Real-time metering hook — intentionally empty for now.
+              // The final wall-clock duration is recorded after the engine exits.
+            }
+          )
+        } finally {
+          // Relay hygiene runs on EVERY terminal path — success, failure,
+          // cancel, or throw. The grant's expiry is a backstop, not the
+          // mechanism; revocation is immediate.
+          if (relayConfigForCleanup) {
+            const entries = await fetchRelayAudit(scanId, relayConfigForCleanup)
+            if (entries.length > 0) {
+              try {
+                const uploaded = await uploadEncryptedArtifact({
+                  workspaceId,
+                  ownerId: scanId,
+                  type: "relay_audit",
+                  content: JSON.stringify(entries),
+                  contentType: "application/json",
+                })
+                await addScanEvent(scanId, "relay_audit", "info", "Relay audit trail captured", {
+                  entries: entries.length,
+                  storageUri: uploaded.storageUri,
+                })
+              } catch (auditErr) {
+                log.warn("Failed to persist relay audit", {
+                  scanId,
+                  error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+                })
+              }
+            }
+            await revokeRelayGrant(scanId, relayConfigForCleanup)
           }
-        )
-      } else if (target.type === "WEB_APP" || target.type === "API") {
+        }
+      } else if (isUrlTarget) {
         engineResult = {
           exitCode: 0,
           cancelled: false,
@@ -1164,7 +1318,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             vulnerabilities: [],
             runRecord: null,
             findingCount: 0,
-            summary: "URL target scanned through the pinned deterministic URL scanner.",
+            summary: "Deterministic surface review completed; the engine is not part of this tier.",
             findingsComplete: true,
           },
         }
@@ -1182,25 +1336,25 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return { status: "failed", errorCategory: "TIMEOUT", errorMessage: timeoutMessage }
       }
 
-      if (target.type !== "REPO") {
+      if (isUrlTarget && !urlEngineBacked) {
         await addScanEvent(
           scanId,
           "engine_skipped",
           "info",
-          "External engine skipped for URL targets until it supports pinned transport",
+          "Deterministic-only tier — engine runs are part of STANDARD and DEEP reviews",
           { targetType: target.type }
         )
       }
 
       const runRecord = engineResult.output.runRecord
       const routingCoverageIssue =
-        target.type === "REPO" && engineProfile
+        engineBacked && engineProfile
           ? engineRoutingCoverageIssue(engineProfile, runRecord)
           : null
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const cancelled = engineResult.cancelled === true
       const engineWorkObserved =
-        target.type === "REPO" &&
+        engineBacked &&
         shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord, { cancelled })
 
       // ─── Sprint 10: Agent-minute metering (wall-clock) ──────────────────
@@ -1222,7 +1376,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         finishEvidence?: () => Promise<void>
       ) => {
         const billableWork =
-          target.type === "REPO" &&
+          engineBacked &&
           shouldRecordAgentMinutes(
             scanId,
             billingOutcome === "partial" ? "PARTIAL" : exitInterpretation.status,
@@ -1337,7 +1491,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           maxBudgetUsd,
           llmUsage: engineResult.output.runRecord?.llm_usage,
           webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
-          usageExpected: target.type === "REPO" && !deterministicRetest,
+          usageExpected: engineBacked && !deterministicRetest,
         })
       const engineExecution =
         engineWorkObserved && engineProfile && engineModel
@@ -1515,7 +1669,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       if (
         !engineTerminalError &&
-        target.type === "REPO" &&
+        engineBacked &&
         exitInterpretation.status === "FAILED"
       ) {
         const stoppedForBudget = exitInterpretation.category === "BUDGET_EXCEEDED"
@@ -1544,7 +1698,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       } else if (
         !engineTerminalError &&
         !deterministicRetest &&
-        target.type === "REPO" &&
+        engineBacked &&
         (!engineResult.output.findingsComplete ||
           !runRecord ||
           runRecord.run_id !== scanId ||
@@ -1624,7 +1778,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         engineFindings: engineResult.output.vulnerabilities,
         workspaceDir: engineResult.sourceCheckoutPath ?? undefined,
         scannerPhaseTimeoutMs,
-        isCancelled: target.type === "REPO" ? isScanCancelled : isCancelledOrTimedOut,
+        isCancelled: engineBacked ? isScanCancelled : isCancelledOrTimedOut,
         urlProfile,
       })
 

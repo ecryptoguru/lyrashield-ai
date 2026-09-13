@@ -85,19 +85,30 @@ export function resolveScanProfile(input: { targetType: string; mode: string }):
 
   if (input.targetType === "WEB_APP" || input.targetType === "API") {
     const urlProfile = getUrlScanProfile(input.targetType, mode)
+    // SAFE stays deterministic-only and unverified. STANDARD/DEEP are
+    // engine-backed: the engine reaches the verified target through the
+    // scan-scoped relay with repository-mode budgets and model classes.
+    const engineBacked = urlProfile.mode !== "SAFE"
+    const deep = urlProfile.mode === "DEEP"
     return {
       id: urlProfile.id,
       targetType: input.targetType,
       canonicalMode: urlProfile.mode as UrlScanMode,
-      engineMode: null,
-      maxBudgetUsd: 0,
-      maxDurationMinutes: Math.ceil(urlProfile.maxWallTimeMs / 60_000),
-      scannerReserveMinutes: 0,
-      maxEngineMinutes: 0,
-      usesAi: false,
-      modelClass: "NONE",
-      label: urlProfile.label,
-      description: urlProfile.description,
+      engineMode: engineBacked ? (deep ? "deep" : "standard") : null,
+      maxBudgetUsd: engineBacked ? (deep ? 5 : 3.2) : 0,
+      maxDurationMinutes: engineBacked ? (deep ? 45 : 15) : Math.ceil(urlProfile.maxWallTimeMs / 60_000),
+      scannerReserveMinutes: engineBacked ? (deep ? 5 : 3) : 0,
+      maxEngineMinutes: engineBacked ? (deep ? 40 : 12) : 0,
+      usesAi: engineBacked,
+      modelClass: engineBacked ? (deep ? "TERRA" : "LUNA") : "NONE",
+      label: engineBacked
+        ? deep
+          ? "Deep Live Review"
+          : "Engine Review"
+        : urlProfile.label,
+      description: engineBacked
+        ? `${urlProfile.description} Engine-driven review of the verified target; deterministic surface checks run alongside.`
+        : urlProfile.description,
     }
   }
 

@@ -439,7 +439,7 @@ describe("report-generator", () => {
           checksum: "manifest-checksum",
           manifest: {
             urlExecution: {
-              contractVersion: "url-scan/2.0.0",
+              contractVersion: "url-scan/3.0.0",
               profile: "WEB_APP_STANDARD",
               methods: ["GET"],
               subjectCount: 17,
@@ -462,7 +462,7 @@ describe("report-generator", () => {
       const data = await gatherReportData("ws-1", "scan-1")
 
       expect(data.scanInfo?.urlExecution).toEqual({
-        contractVersion: "url-scan/2.0.0",
+        contractVersion: "url-scan/3.0.0",
         profile: "WEB_APP_STANDARD",
         methods: ["GET"],
         subjectCount: 17,
@@ -602,7 +602,7 @@ describe("report-generator", () => {
           manifestChecksum: "checksum",
           coverage: { completed: 1, limited: 0, notApplicable: 0 },
           urlExecution: {
-            contractVersion: "url-scan/2.0.0",
+            contractVersion: "url-scan/3.0.0",
             profile: "WEB_APP_STANDARD",
             methods: ["GET"],
             subjectCount: 17,
