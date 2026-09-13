@@ -89,7 +89,7 @@ needs an explicit founder call; this PR does not add that filter.
   The former `CI gating (SARIF)` line implied a plan-exclusive feature that
   code does not enforce. `lyrashield gate --verdict --commit <sha>` works with
   permission on every plan and exits 0/1/2 against
-  `lyrashield-gate/2.0.0`; blocking merges requires customers to configure
+  `lyrashield-gate/2.3.0`; blocking merges requires customers to configure
   that CI job as a required check in their repository settings.
 - The page names the free, account-less GitHub Action and the shared CLI,
   MCP, repository findings, Evidence Vault, retest, verdict, report and

@@ -61,8 +61,9 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
 - `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`
 - `status [scanId] [--watch]` — list scans or inspect one scan
 - `targets [--name ... --type ... --url ... --repo ...]` — list or create targets
+- `targets remove <targetId>` — soft-delete a target; its history is retained, it is hidden from readers and the plan cap slot is freed
 - `targets verify-domain <targetId> [--issue|--check]` — show domain-control status for a WEB_APP/API target in the configured workspace. `--issue` returns the DNS TXT host, value, and challenge expiry; publish that record, then use `--check`. Issuing replaces the previous token and verified status. The TXT value is returned only on issue; save it before exiting. All proof operations require target validation permission. Supports `--json`; invalid targets, permission failures, missing/expired proofs, and failed DNS checks exit nonzero. DNS control does not establish application security.
-- `readiness [--target <targetId>]` — get the launch-readiness verdict
+- `readiness [--target <targetId>]` — get the launch-readiness gate result (`READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`)
 
 ### Scan mode guide
 
@@ -109,6 +110,7 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 - `3` — authentication or authorization error (HTTP 401/403)
 - `4` — network or other API error
 - `5` — rate limited (HTTP 429)
+- `6` — plan or agent-minute balance refusal (HTTP 402); prints "Plan or agent-minute balance does not allow this. Open Billing."
 
 ## Global flags
 

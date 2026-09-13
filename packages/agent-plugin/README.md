@@ -71,12 +71,14 @@ The canonical, Claude, Cursor, and Codex artifacts connect to the hosted Streama
 endpoint without embedding a secret. The client follows hosted OAuth discovery, selects one
 workspace, and receives read scope by default. Write scope is optional. Consent can delegate named
 workflows for selected targets and scan profiles so matching calls need no additional LyraShield
-review; all other mutations fail closed or use the legacy exact-input approval path.
+review; mutating calls from API-key callers receive a `connect_required` response pointing at OAuth
+connect and the legacy exact-input approval path remains only for nondelegated hosted credentials.
 
 Kiro uses the local `npx -y @lyrashield/mcp@0.2.8` stdio adapter. Run `lyrashield login --oauth`
 first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
 variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
-Headless writes without an approval channel fail closed.
+Headless writes without an approval channel fail closed on the local stdio server; API-key writes
+against the remote endpoint receive `connect_required` instead.
 
 > **Note:** per the Agent Plugins v1.0.0 spec, the `mcp.json` `env` block must **not**
 > contain `PLUGIN_ROOT` or `PLUGIN_DATA`. Those keys are reserved for the host and are

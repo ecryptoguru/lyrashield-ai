@@ -156,7 +156,7 @@ The application pins an exact engine commit in `.github/workflows/deploy-azure.y
 
 - Workspace data is tenant-scoped; sensitive operations are audit-logged; and child tables (`ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `ScanCoverageReceipt`, `ScanResultManifest`, `ScorecardShare`, `ScorecardEvent`, `Ticket`) are protected by Postgres RLS.
 - Engine output is treated as untrusted; only independent verifier evidence can mark a finding verified.
-- URL/API targets use pinned deterministic URL scanners with a versioned `url-scan/2.0.0` capability registry (six profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) rather than the repository engine.
+- URL/API targets use pinned deterministic URL scanners with a versioned `url-scan/3.0.0` capability registry (six profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.
 - Public scorecard payloads are allowlisted and sharing is revocable.
 - The MCP server's mutating tools (start a scan, record a fix, queue a retest) run within the connection grant for a connected OAuth client — their authorized operations execute automatically without a per-action approval. A caller without a connected client receives one structured `connect_required` response pointing at OAuth connect. Historical approval records remain viewable and resolvable.

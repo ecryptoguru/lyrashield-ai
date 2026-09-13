@@ -112,8 +112,9 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>Remote authorization:</strong> Browser-confirmed OAuth delegations run matching actions
-    without repeated approval. Legacy credentials and out-of-grant requests fail closed or use
-    exact-input approval.
+    without repeated approval. Mutating calls authenticated with an API key receive a
+    connect_required response pointing at OAuth connect and out-of-grant delegated calls are denied.
+    Exact-input approval remains only for legacy nondelegated hosted credentials.
   </div>
 
   <h2>Verify the connection</h2>

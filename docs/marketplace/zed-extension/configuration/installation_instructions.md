@@ -53,8 +53,9 @@ stdio server starts. An explicit API URL override applies to subsequent LyraShie
 
 ## Available tools
 
-All tools call the LyraShield REST API with the OAuth credential or fallback key. Mutating tools ask
-for approval before running.
+All tools call the LyraShield REST API with the OAuth credential or fallback key. The extension runs
+the local stdio server where mutating tools execute under the credential's REST authorization; no
+approval prompt exists there.
 
 See the full tool list and behavior in the [`@lyrashield/mcp` README](https://www.npmjs.com/package/@lyrashield/mcp).
 
