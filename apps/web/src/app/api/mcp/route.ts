@@ -15,9 +15,10 @@ import { verifyOAuthBearer } from "@lyrashield/auth/server"
  * re-call the REST API with the same bearer, so workspace and scope enforcement
  * apply uniformly.
  *
- * API keys use their existing REST write authorization. OAuth mutations use
- * the connection grant and idempotency ledger; legacy OAuth retains its old
- * approval contract until the user reconnects.
+ * Remote mutations execute only through a connected OAuth client's delegated
+ * grant and idempotency ledger. A caller without a connection — an API key or
+ * a legacy OAuth bearer — receives one structured `connect_required` response
+ * pointing at OAuth connect; nothing executes and nothing is queued.
  *
  * Rate limiting is applied by the shared /api/* middleware bucket.
  */
@@ -115,8 +116,10 @@ async function handle(request: Request): Promise<Response> {
 
     return await handleRemoteMcpRequest(request, {
       toolContext,
-      // API-key creation already grants its REST permissions; MCP uses those same permissions.
-      allowMutations: authInfo.kind === "api-key" && authInfo.scopes.includes("write"),
+      // Remote mutations run only inside a connected OAuth client's delegated
+      // grant. Every other credential is gated to a single connect_required
+      // response — the retired approval queue is no longer reachable here.
+      allowMutations: false,
       delegatedAuthorization: authInfo.kind === "oauth" && !!authInfo.connection,
       remoteApprovalContext: {
         workspaceId: authInfo.workspaceId,
