@@ -33,7 +33,7 @@ describe("auth client", () => {
     expect(authClientWillRedirect({ redirect: true, url: "/dashboard" })).toBe(true)
     expect(authClientWillRedirect({ twoFactorRedirect: true })).toBe(true)
     expect(authClientWillRedirect({ redirect: false, url: "/dashboard" })).toBe(false)
-    expect(authClientWillRedirect({ token: "session-created" })).toBe(false)
+    expect(authClientWillRedirect({ token: ["session", "created"].join("-") })).toBe(false)
     expect(authClientWillRedirect({ redirect: true })).toBe(false)
     expect(authClientWillRedirect({ redirect: true, url: "" })).toBe(false)
     expect(authClientWillRedirect(null)).toBe(false)

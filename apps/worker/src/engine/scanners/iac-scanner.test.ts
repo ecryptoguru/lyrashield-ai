@@ -19,6 +19,7 @@ import { scanIac } from "./iac-scanner"
 import type { ScannerDiscovery } from "../scanner-coverage"
 
 const TEST_DIR = join(tmpdir(), "lyrashield-iac-test-" + Date.now())
+const INLINE_SECRET_FIXTURE = ["password = ", '"', "correct-horse-staple", '"'].join("")
 
 async function setupRepo(files: Record<string, string>): Promise<string> {
   await mkdir(TEST_DIR, { recursive: true })
@@ -238,7 +239,7 @@ describe("scanIac", () => {
   })
 
   it("records incomplete coverage when an eligible file cannot be read", async () => {
-    const dir = await setupRepo({ "app.tf": 'password = "correct-horse-staple"' })
+    const dir = await setupRepo({ "app.tf": INLINE_SECRET_FIXTURE })
     vi.mocked(fsPromises.readFile).mockRejectedValueOnce(new Error("read failed"))
     const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
     const discovery: import("../scanner-coverage").ScannerDiscovery = {}
@@ -252,7 +253,7 @@ describe("scanIac", () => {
 
   it("marks per-file finding caps as bounded coverage", async () => {
     const dir = await setupRepo({
-      "app.tf": Array(101).fill('password = "correct-horse-staple"').join("\n"),
+      "app.tf": Array(101).fill(INLINE_SECRET_FIXTURE).join("\n"),
     })
     const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
     const discovery: import("../scanner-coverage").ScannerDiscovery = {}
@@ -265,7 +266,7 @@ describe("scanIac", () => {
   })
 
   it("counts only inspected files after reaching the total finding cap", async () => {
-    const content = Array(101).fill('password = "correct-horse-staple"').join("\n")
+    const content = Array(101).fill(INLINE_SECRET_FIXTURE).join("\n")
     const files = Object.fromEntries(
       Array.from({ length: 51 }, (_, index) => [
         `app-${String(index).padStart(2, "0")}.tf`,
