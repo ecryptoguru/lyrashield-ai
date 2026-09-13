@@ -268,12 +268,24 @@ export const PatchRepoRefSchema = z.object({
 
 export const PatchTargetSchema = z.union([PatchApiSpecSchema.strict(), PatchRepoRefSchema.strict()])
 
+// Optional emphasis areas — steer engine attention without reducing coverage.
+// Emphasis is recorded on the scan and never restricts what detectors run.
+export const ScanFocusSchema = z.enum([
+  "auth",
+  "payments",
+  "llm_surface",
+  "file_handling",
+  "data_exposure",
+])
+export type ScanFocus = z.infer<typeof ScanFocusSchema>
+
 export const CreateScanSchema = z.object({
   workspaceId: z.string().min(1),
   targetId: z.string().min(1),
   goal: ScanGoalSchema,
   mode: ScanModeSchema.default("SAFE"),
   policyId: z.string().optional(),
+  focus: ScanFocusSchema.optional(),
 })
 
 export type CreateScanInput = z.infer<typeof CreateScanSchema>
@@ -408,6 +420,7 @@ export const ScanJobDataSchema = z.object({
   goal: ScanGoalSchema,
   mode: ScanModeSchema,
   policyId: z.string().optional(),
+  focus: ScanFocusSchema.optional(),
 })
 
 export type ScanJobData = z.infer<typeof ScanJobDataSchema>

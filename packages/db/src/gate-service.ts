@@ -157,6 +157,7 @@ export async function evaluateGateForTarget(
         id: true,
         endedAt: true,
         status: true,
+        mode: true,
         policyId: true,
         resultManifest: { select: { version: true, checksum: true, manifest: true } },
       },
@@ -269,6 +270,7 @@ export async function evaluateGateForTarget(
             id: latestCompletedScan.id,
             endedAtMs: toEpochMs(latestCompletedScan.endedAt),
             status: latestCompletedScan.status,
+            mode: latestCompletedScan.mode,
           }
         : null,
       coverageReceipts: coverageReceipts.map((r) => ({
@@ -292,7 +294,7 @@ export async function evaluateGateForTarget(
         lastSeenAtMs: entry.finding.lastSeenAt.getTime(),
       })),
       requiredScanners: isTargetTypeCovered(target.type)
-        ? requiredScannersForTarget(target.type)
+        ? requiredScannersForTarget(target.type, latestCompletedScan?.mode)
         : [],
       targetTypeCovered: isTargetTypeCovered(target.type),
       policyFingerprint,

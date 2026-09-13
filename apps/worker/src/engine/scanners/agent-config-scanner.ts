@@ -3,12 +3,17 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { join } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
-import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
+import {
+  recordCoverageIssue,
+  type ScannerCoverageIssue,
+  type ScannerDiscovery,
+} from "../scanner-coverage"
 
 export interface AgentConfigScanConfig {
   repoPath: string
   coverageIssues?: ScannerCoverageIssue[]
   signal?: AbortSignal
+  discovery?: ScannerDiscovery
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -164,13 +169,21 @@ async function findInstructionFiles(
 async function scanInstructionFiles(
   repoPath: string,
   coverageIssues?: ScannerCoverageIssue[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  counts?: { filesScanned: number; bytesScanned: number; unreadable: number }
 ): Promise<EngineVulnerability[]> {
   const findings: EngineVulnerability[] = []
   for (const file of await findInstructionFiles(repoPath, coverageIssues, signal)) {
     throwIfAborted(signal)
     const rawContent = await readBoundedFile(repoPath, file, coverageIssues)
-    if (!rawContent) continue
+    if (!rawContent) {
+      if (counts) counts.unreadable++
+      continue
+    }
+    if (counts) {
+      counts.filesScanned++
+      counts.bytesScanned += Buffer.byteLength(rawContent, "utf-8")
+    }
     const content = rawContent
     let inCodeFence = false
     for (const [index, line] of content.split("\n").entries()) {
@@ -232,7 +245,8 @@ function findWritePermissionLine(lines: string[]): number {
 
 async function scanWorkflows(
   repoPath: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  counts?: { filesScanned: number; bytesScanned: number; unreadable: number }
 ): Promise<EngineVulnerability[]> {
   throwIfAborted(signal)
   const directory = join(repoPath, ".github/workflows")
@@ -250,7 +264,14 @@ async function scanWorkflows(
     throwIfAborted(signal)
     const file = `.github/workflows/${fileName}`
     const content = await readBoundedFile(repoPath, file)
-    if (!content) continue
+    if (!content) {
+      if (counts) counts.unreadable++
+      continue
+    }
+    if (counts) {
+      counts.filesScanned++
+      counts.bytesScanned += Buffer.byteLength(content, "utf-8")
+    }
     const lines = content.split("\n")
 
     const writePermissionLine = findWritePermissionLine(lines)
@@ -302,10 +323,18 @@ export async function scanAgentConfig(
   config: AgentConfigScanConfig
 ): Promise<EngineVulnerability[]> {
   throwIfAborted(config.signal)
+  const counts = { filesScanned: 0, bytesScanned: 0, unreadable: 0 }
   const [instructionFindings, workflowFindings] = await Promise.all([
-    scanInstructionFiles(config.repoPath, config.coverageIssues, config.signal),
-    scanWorkflows(config.repoPath, config.signal),
+    scanInstructionFiles(config.repoPath, config.coverageIssues, config.signal, counts),
+    scanWorkflows(config.repoPath, config.signal, counts),
   ])
+  if (config.discovery) {
+    config.discovery.agent_config = {
+      filesScanned: counts.filesScanned,
+      bytesScanned: counts.bytesScanned,
+      skippedByReason: { unreadableOrOversized: counts.unreadable },
+    }
+  }
   const findings = [...instructionFindings, ...workflowFindings]
   logger.info("Agent configuration scan complete", {
     repoPath: config.repoPath,

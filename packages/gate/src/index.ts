@@ -6,7 +6,7 @@
  * @lyrashield/score: the math is pure and versioned; the database layer owns
  * persistence and never the verdict logic.
  *
- * Standard: lyrashield-gate/2.0.0.
+ * Standard: lyrashield-gate/2.3.0 — URL engine requirement is mode-conditional.
  *
  * Verdict states:
  * - READY — every check passes against current evidence.
@@ -23,7 +23,7 @@
  * actually run.
  */
 
-export const GATE_STANDARD_VERSION = "lyrashield-gate/2.0.0"
+export const GATE_STANDARD_VERSION = "lyrashield-gate/2.3.0"
 
 export {
   GATE_ASSESSMENT_VERSION,
@@ -84,6 +84,8 @@ export interface GateScanInput {
   /** endedAt as epoch ms — the freshness anchor for this scan. */
   endedAtMs: number | null
   status: string
+  /** Canonical mode — decides mode-conditional coverage (e.g. engine on URL). */
+  mode?: string | null
 }
 
 export interface GateEvidenceInput {

@@ -35,7 +35,7 @@ describe("POST /api/lite-scan", () => {
     collectPublicSurface.mockResolvedValue({
       seedUrl: "https://example.com/",
       finalOrigin: "https://example.com",
-      contractVersion: "url-scan/2.0.0",
+      contractVersion: "url-scan/3.0.0",
       profile: expect.anything(),
       subjects: [
         {
@@ -186,7 +186,7 @@ describe("POST /api/lite-scan", () => {
     collectPublicSurface.mockResolvedValue({
       seedUrl: "https://example.com/",
       finalOrigin: "https://example.com",
-      contractVersion: "url-scan/2.0.0",
+      contractVersion: "url-scan/3.0.0",
       profile: expect.anything(),
       subjects: [
         {

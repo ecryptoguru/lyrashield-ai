@@ -12,6 +12,7 @@ import {
 } from "./normalizer"
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
+import { scanSast } from "./scanners/sast-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanOpenApi } from "./scanners/openapi-scanner"
 import {
@@ -23,11 +24,16 @@ import {
 import type { UrlScanProfile, UrlExecutionSummary } from "@lyrashield/types"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
 import { scanMlSupplyChain } from "./scanners/ml-supply-chain-scanner"
+import { scanIac } from "./scanners/iac-scanner"
 import {
   resolveExactDependencies,
   type ResolvedDependencyInventory,
 } from "./scanners/resolved-dependencies"
-import { recordCoverageIssue, type ScannerCoverageIssue } from "./scanner-coverage"
+import {
+  recordCoverageIssue,
+  type ScannerCoverageIssue,
+  type ScannerDiscovery,
+} from "./scanner-coverage"
 import { engineWorkspacePath } from "./workspace-path"
 import {
   redactUrlForLogs,
@@ -68,6 +74,8 @@ export interface ScannerOrchestratorResult {
   urlFindings: NormalizedFinding[]
   agentConfigFindings: NormalizedFinding[]
   mlSupplyChainFindings: NormalizedFinding[]
+  sastFindings: NormalizedFinding[]
+  iacFindings: NormalizedFinding[]
   aiAppSecurityFindings: NormalizedFinding[]
   webMcpFindings: NormalizedFinding[]
   coverageIssues: ScannerCoverageIssue[]
@@ -80,6 +88,7 @@ export interface ScannerOrchestratorResult {
   ai03Coverage?: AiAppSecurityScanResult["ai03Coverage"]
   aiAppSecurityDiscovery?: AiAppSecurityDiscoveryReceipt
   webMcpCoverage?: WebMcpCoverageReceipt | null
+  scannerDiscovery?: ScannerDiscovery
 }
 
 async function withScannerPhaseTimeout(
@@ -137,7 +146,8 @@ async function runScaScan(
   signal: AbortSignal,
   resolvedDependencyInventory?: ResolvedDependencyInventory,
   advisoryBatch?: AdvisoryBatchResult,
-  cisaFetchFn?: typeof fetch
+  cisaFetchFn?: typeof fetch,
+  discovery?: ScannerDiscovery
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting SCA scan phase", { scanId })
@@ -149,6 +159,7 @@ async function runScaScan(
       resolvedDependencyInventory,
       advisoryBatch,
       cisaFetchFn,
+      discovery,
     })
     logger.info("SCA scan phase complete", { scanId, findingCount: findings.length })
     return findings
@@ -165,7 +176,8 @@ async function runSecretsScan(
   scanId: string,
   workspaceDir: string,
   coverageIssues: ScannerCoverageIssue[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  discovery?: ScannerDiscovery
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting secrets scan phase", { scanId })
@@ -174,6 +186,7 @@ async function runSecretsScan(
       workspaceDir,
       coverageIssues,
       signal,
+      discovery,
     })
     logger.info("Secrets scan phase complete", { scanId, findingCount: findings.length })
     return findings
@@ -238,15 +251,77 @@ async function runUrlScan(
   }
 }
 
+async function runSastScan(
+  scanId: string,
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[],
+  signal: AbortSignal,
+  mode: string,
+  discovery?: ScannerDiscovery
+): Promise<EngineVulnerability[]> {
+  try {
+    logger.info("Starting SAST scan phase", { scanId })
+    const findings = await scanSast({
+      repoPath: workspaceDir,
+      workspaceDir,
+      coverageIssues,
+      signal,
+      mode,
+      discovery,
+    })
+    logger.info("SAST scan phase complete", { scanId, findingCount: findings.length })
+    return findings
+  } catch (err) {
+    logger.warn("SAST scan phase failed", {
+      scanId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    throw err
+  }
+}
+
+async function runIacScan(
+  scanId: string,
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[],
+  signal: AbortSignal,
+  discovery?: ScannerDiscovery
+): Promise<EngineVulnerability[]> {
+  try {
+    logger.info("Starting IaC scan phase", { scanId })
+    const findings = await scanIac({
+      repoPath: workspaceDir,
+      workspaceDir,
+      coverageIssues,
+      signal,
+      discovery,
+    })
+    logger.info("IaC scan phase complete", { scanId, findingCount: findings.length })
+    return findings
+  } catch (err) {
+    logger.warn("IaC scan phase failed", {
+      scanId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    throw err
+  }
+}
+
 async function runAgentConfigScan(
   scanId: string,
   workspaceDir: string,
   coverageIssues: ScannerCoverageIssue[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  discovery?: ScannerDiscovery
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting agent configuration scan phase", { scanId })
-    const findings = await scanAgentConfig({ repoPath: workspaceDir, coverageIssues, signal })
+    const findings = await scanAgentConfig({
+      repoPath: workspaceDir,
+      coverageIssues,
+      signal,
+      discovery,
+    })
     logger.info("Agent configuration scan phase complete", {
       scanId,
       findingCount: findings.length,
@@ -299,11 +374,17 @@ async function runMlSupplyChainScan(
   scanId: string,
   workspaceDir: string,
   coverageIssues: ScannerCoverageIssue[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  discovery?: ScannerDiscovery
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting ML supply-chain scan phase", { scanId })
-    const findings = await scanMlSupplyChain({ repoPath: workspaceDir, coverageIssues, signal })
+    const findings = await scanMlSupplyChain({
+      repoPath: workspaceDir,
+      coverageIssues,
+      signal,
+      discovery,
+    })
     logger.info("ML supply-chain scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
@@ -363,6 +444,7 @@ export async function runScannerOrchestrator(
   }
   const hasSourceCheckout = target.type === "REPO" && Boolean(workspaceDir)
   const coverageIssues: ScannerCoverageIssue[] = []
+  const scannerDiscovery: ScannerDiscovery = {}
   if (target.type === "REPO" && !hasSourceCheckout) {
     const reason = "Validated engine source checkout unavailable for repository target"
     for (const scanner of [
@@ -371,6 +453,8 @@ export async function runScannerOrchestrator(
       "agent_config",
       "ml_supply_chain",
       "ai_app_security",
+      "sast",
+      "iac",
     ] as const) {
       coverageIssues.push({ scanner, status: "unsupported", reason })
     }
@@ -381,7 +465,15 @@ export async function runScannerOrchestrator(
       "SCA/secrets/AI app security skipped — validated source checkout unavailable for repository target",
       {
         targetType: target.type,
-        scanners: ["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security"],
+        scanners: [
+          "sca",
+          "secrets",
+          "agent_config",
+          "ml_supply_chain",
+          "ai_app_security",
+          "sast",
+          "iac",
+        ],
       }
     )
   } else if (!hasSourceCheckout) {
@@ -392,12 +484,21 @@ export async function runScannerOrchestrator(
       "SCA/secrets/AI app security skipped — no source checkout for this target type",
       {
         targetType: target.type,
-        scanners: ["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security"],
+        scanners: [
+          "sca",
+          "secrets",
+          "agent_config",
+          "ml_supply_chain",
+          "ai_app_security",
+          "sast",
+          "iac",
+        ],
       }
     )
   }
   // Detectors may ignore abort. Never expose their mutable buffers as final evidence.
   const phaseCoverageIssues: ScannerCoverageIssue[] = []
+  const phaseDiscovery: ScannerDiscovery = {}
   const scannerResults = await withScannerPhaseTimeout(
     scanId,
     (signal) => {
@@ -442,12 +543,13 @@ export async function runScannerOrchestrator(
                 signal,
                 dependencyInventory,
                 advisoryBatch,
-                egressProxyFetchFn
+                egressProxyFetchFn,
+                phaseDiscovery
               )
             })
           : Promise.resolve([] as EngineVulnerability[]),
         hasSourceCheckout
-          ? runSecretsScan(scanId, absWorkspace, coverageIssues, signal)
+          ? runSecretsScan(scanId, absWorkspace, coverageIssues, signal, phaseDiscovery)
           : Promise.resolve([] as EngineVulnerability[]),
         targetUrl && config.urlProfile
           ? runUrlScan(
@@ -462,7 +564,7 @@ export async function runScannerOrchestrator(
             )
           : Promise.resolve({ findings: [] as EngineVulnerability[], execution: undefined }),
         hasSourceCheckout
-          ? runAgentConfigScan(scanId, absWorkspace, coverageIssues, signal)
+          ? runAgentConfigScan(scanId, absWorkspace, coverageIssues, signal, phaseDiscovery)
           : Promise.resolve([] as EngineVulnerability[]),
         hasSourceCheckout
           ? dependencyPreparation.then(({ dependencyInventory, advisoryBatch }) => {
@@ -542,7 +644,13 @@ export async function runScannerOrchestrator(
               webMcpCoverage: null,
             } as AiAppSecurityScanResult),
         hasSourceCheckout
-          ? runMlSupplyChainScan(scanId, absWorkspace, coverageIssues, signal)
+          ? runMlSupplyChainScan(scanId, absWorkspace, coverageIssues, signal, phaseDiscovery)
+          : Promise.resolve([] as EngineVulnerability[]),
+        hasSourceCheckout
+          ? runSastScan(scanId, absWorkspace, coverageIssues, signal, config.mode, phaseDiscovery)
+          : Promise.resolve([] as EngineVulnerability[]),
+        hasSourceCheckout
+          ? runIacScan(scanId, absWorkspace, coverageIssues, signal, phaseDiscovery)
           : Promise.resolve([] as EngineVulnerability[]),
       ]
     },
@@ -550,6 +658,7 @@ export async function runScannerOrchestrator(
     config.isCancelled
   )
   coverageIssues.push(...structuredClone(phaseCoverageIssues))
+  Object.assign(scannerDiscovery, structuredClone(phaseDiscovery))
 
   const scannerNames = [
     "sca",
@@ -558,6 +667,8 @@ export async function runScannerOrchestrator(
     "agent_config",
     "ai_app_security",
     "ml_supply_chain",
+    "sast",
+    "iac",
   ] as const
   const rawFindings: EngineVulnerability[][] = []
   let urlExecution: UrlExecutionSummary | undefined
@@ -611,6 +722,8 @@ export async function runScannerOrchestrator(
   const agentConfigRaw = rawFindings[3] ?? []
   const aiAppSecurityRaw = rawFindings[4] ?? []
   const mlSupplyChainRaw = rawFindings[5] ?? []
+  const sastRaw = rawFindings[6] ?? []
+  const iacRaw = rawFindings[7] ?? []
 
   for (const issue of coverageIssues) {
     await addScanEvent(scanId, "scanner", "warning", "Deterministic scanner coverage incomplete", {
@@ -654,6 +767,16 @@ export async function runScannerOrchestrator(
     targetId,
     generateDedupeKey
   )
+  const sastNormalized = normalizeFindings(
+    sastRaw.map((finding) => ({ ...finding, scannerSource: "sast" as const })),
+    targetId,
+    generateDedupeKey
+  )
+  const iacNormalized = normalizeFindings(
+    iacRaw.map((finding) => ({ ...finding, scannerSource: "iac" as const })),
+    targetId,
+    generateDedupeKey
+  )
 
   // Filter false positives
   const engineFiltered = filterFalsePositives(engineNormalized)
@@ -663,6 +786,8 @@ export async function runScannerOrchestrator(
   const agentConfigFiltered = filterFalsePositives(agentConfigNormalized)
   const aiAppSecurityFiltered = filterFalsePositives(aiAppSecurityNormalized)
   const mlSupplyChainFiltered = filterFalsePositives(mlSupplyChainNormalized)
+  const sastFiltered = filterFalsePositives(sastNormalized)
+  const iacFiltered = filterFalsePositives(iacNormalized)
 
   const filteredFalsePositives =
     engineNormalized.length -
@@ -672,7 +797,9 @@ export async function runScannerOrchestrator(
     (urlNormalized.length - urlFiltered.length) +
     (agentConfigNormalized.length - agentConfigFiltered.length) +
     (aiAppSecurityNormalized.length - aiAppSecurityFiltered.length) +
-    (mlSupplyChainNormalized.length - mlSupplyChainFiltered.length)
+    (mlSupplyChainNormalized.length - mlSupplyChainFiltered.length) +
+    (sastNormalized.length - sastFiltered.length) +
+    (iacNormalized.length - iacFiltered.length)
 
   const webMcpFindings = aiAppSecurityFiltered.filter(
     (f) =>
@@ -693,6 +820,8 @@ export async function runScannerOrchestrator(
     ...agentConfigFiltered,
     ...aiAppSecurityFiltered,
     ...mlSupplyChainFiltered,
+    ...sastFiltered,
+    ...iacFiltered,
   ]) {
     const existing = merged.get(finding.dedupeKey)
     if (!existing) {
@@ -732,6 +861,8 @@ export async function runScannerOrchestrator(
     aiAppSecurity: aiAppSecurityFiltered.length,
     webMcp: webMcpFindings.length,
     mlSupplyChain: mlSupplyChainFiltered.length,
+    sast: sastFiltered.length,
+    iac: iacFiltered.length,
     falsePositivesFiltered: filteredFalsePositives,
     stats,
   })
@@ -745,8 +876,11 @@ export async function runScannerOrchestrator(
     agentConfigFindings: agentConfigFiltered,
     aiAppSecurityFindings: aiAppSecurityFiltered,
     mlSupplyChainFindings: mlSupplyChainFiltered,
+    sastFindings: sastFiltered,
+    iacFindings: iacFiltered,
     webMcpFindings,
     coverageIssues,
+    scannerDiscovery,
     stats,
     filteredFalsePositives,
     urlExecution,

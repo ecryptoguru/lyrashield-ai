@@ -161,6 +161,11 @@ const envSchema = z
       .positive()
       .max(300_000)
       .default(30_000),
+    // Scan-scoped target relay (engine → verified URL/API targets). The relay
+    // runs inside the egress-proxy deployment; the worker mints HMAC grants
+    // with this signing secret and points the engine sandbox at the relay URL.
+    LYRASHIELD_TARGET_RELAY_URL: z.string().url().optional().or(z.literal("")),
+    LYRASHIELD_RELAY_SIGNING_SECRET: z.string().optional().or(z.literal("")),
     PLATFORM_MAX_SCAN_BUDGET_USD: z.coerce.number().positive().max(1000).default(50),
     // Disabled by default. When enabled, eligible paid repository scans may
     // request an additive, redacted engine triage overlay within this cap.
@@ -418,6 +423,27 @@ const envSchema = z
       path: ["LYRASHIELD_EGRESS_PROXY_SECRET"],
       message:
         "LYRASHIELD_EGRESS_PROXY_URL and LYRASHIELD_EGRESS_PROXY_SECRET must be configured together",
+    }
+  )
+  .refine(
+    (val) =>
+      Boolean(val.LYRASHIELD_TARGET_RELAY_URL) === Boolean(val.LYRASHIELD_RELAY_SIGNING_SECRET),
+    {
+      path: ["LYRASHIELD_RELAY_SIGNING_SECRET"],
+      message:
+        "LYRASHIELD_TARGET_RELAY_URL and LYRASHIELD_RELAY_SIGNING_SECRET must be configured together",
+    }
+  )
+  .refine(
+    // The grant is a bearer credential. Cleartext is safe only on literal loopback.
+    (val) =>
+      !val.LYRASHIELD_TARGET_RELAY_URL ||
+      val.LYRASHIELD_TARGET_RELAY_URL.startsWith("https://") ||
+      /^http:\/\/(?:127\.0\.0\.1|\[::1\])(?::\d+)?\/?$/.test(val.LYRASHIELD_TARGET_RELAY_URL),
+    {
+      path: ["LYRASHIELD_TARGET_RELAY_URL"],
+      message:
+        "LYRASHIELD_TARGET_RELAY_URL requires HTTPS outside loopback — relay grants are bearer credentials",
     }
   )
   .refine(

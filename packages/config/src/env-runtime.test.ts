@@ -62,6 +62,17 @@ describe("runtime environment validation", () => {
     await expect(import("./env")).resolves.toBeDefined()
   })
 
+  it("keeps relay grants off cleartext remote transport in every environment", async () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://relay.example:8080")
+    vi.stubEnv("LYRASHIELD_RELAY_SIGNING_SECRET", "test-signing-secret")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+
+    vi.resetModules()
+    vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://127.0.0.1:8080")
+    await expect(import("./env")).resolves.toBeDefined()
+  })
+
   // VULN-I-001: secureCookies derives the session Secure flag from the
   // BETTER_AUTH_URL scheme — an http:// production origin ships cookies
   // transmittable in cleartext.

@@ -116,7 +116,7 @@ export async function debitOverage(input: DebitOverageInput): Promise<DebitOvera
             kind: "overage_minutes",
             quantity: allowedMinutes,
             idempotencyKey,
-            cycleStart: billingAccount.currentPeriodStart ?? null,
+            cycleStart,
             metadata: {
               scanId,
               phase,

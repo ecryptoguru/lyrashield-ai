@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { AlertCircle } from "lucide-react"
-import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
+import { authClient, authClientWillRedirect, getAuthErrorMessage } from "@lyrashield/auth"
 import {
   Button,
   Input,
@@ -136,6 +136,8 @@ export default function SignUpPage() {
       }
 
       track("account_created", { method: "email", ...attribution.current })
+
+      if (authClientWillRedirect(data)) return
 
       // When email verification is required the server returns token: null;
       // otherwise Better Auth signs the new user in immediately.

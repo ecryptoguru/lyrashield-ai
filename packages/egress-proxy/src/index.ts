@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url"
 import { z } from "zod"
 import { logger } from "@lyrashield/logger"
 import { redactUrlForLogs, safeFetchOnce, type SafeFetchOutcome } from "@lyrashield/security"
+import { createRelayHandler, type RelayDeps, type RelayHandler } from "./relay"
 
 const FetchRequestSchema = z
   .object({
@@ -18,11 +19,17 @@ export interface ProxyServer {
   port: number
   ready: Promise<void>
   close(): Promise<void>
+  /** Test/diagnostic access to the relay handler (undefined when disabled). */
+  relay?: RelayHandler
 }
 
 export interface ProxyOptions {
   token: string
   port?: number
+  /** HMAC secret for scan-scoped relay grants. Omit to disable the relay surface. */
+  relaySigningSecret?: string
+  /** Test-only dependency injection for the relay handler. */
+  relayDeps?: RelayDeps
 }
 
 /**
@@ -174,15 +181,82 @@ const REQUEST_TIMEOUT_MS = 30_000
 const MAX_CONNECTIONS = 256
 
 export function startProxy(options: ProxyOptions): ProxyServer {
-  const { token, port = 4000 } = options
+  const { token, port = 4000, relaySigningSecret, relayDeps } = options
+  const relay = relaySigningSecret ? createRelayHandler(relaySigningSecret, relayDeps) : null
 
   const server = createServer((request, response) => {
-    if (request.url === "/health") {
+    const reqUrl = request.url ?? ""
+
+    // Forward-proxy traffic: absolute-form requests are relay traffic.
+    if (relay && (reqUrl.startsWith("http://") || reqUrl.startsWith("https://"))) {
+      void relay.handleForward(request, response).catch((err) => {
+        logger.error("Relay forward handler error", { error: String(err) })
+        if (!response.headersSent) {
+          response.writeHead(502, { "Content-Type": "application/json" })
+        }
+        response.end(JSON.stringify({ ok: false, reason: "request_failed" }))
+      })
+      return
+    }
+
+    if (reqUrl === "/health") {
       response.writeHead(200, { "Content-Type": "text/plain" })
       response.end("ok")
       return
     }
-    if (request.url === "/fetch" || request.url === "/v1/fetch") {
+
+    // Relay administration: grant admission, audit retrieval and revocation.
+    if (
+      relay &&
+      (reqUrl.startsWith("/v1/audit/") ||
+        reqUrl.startsWith("/v1/revoke/") ||
+        reqUrl.startsWith("/v1/register/"))
+    ) {
+      if (!isAuthorized(request.headers, token)) {
+        sendJson(response, 401, { ok: false, reason: "request_failed", detail: "Unauthorized" })
+        return
+      }
+      const scanId = reqUrl.split("/")[3] ?? ""
+      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(scanId)) {
+        sendJson(response, 400, { ok: false, reason: "invalid_response", detail: "bad scanId" })
+        return
+      }
+      if (reqUrl.startsWith("/v1/register/")) {
+        if (request.method !== "POST") {
+          sendJson(response, 405, { ok: false, reason: "method_not_allowed" })
+          return
+        }
+        const grant = request.headers["x-lyra-relay-grant"]
+        const result = relay.register(scanId, typeof grant === "string" ? grant : undefined)
+        sendJson(response, result.ok ? 200 : 403, result)
+        return
+      }
+      if (reqUrl.startsWith("/v1/revoke/")) {
+        if (request.method !== "POST") {
+          sendJson(response, 405, {
+            ok: false,
+            reason: "request_failed",
+            detail: "Method not allowed",
+          })
+          return
+        }
+        relay.revoke(scanId)
+        sendJson(response, 200, { ok: true, revoked: scanId })
+        return
+      }
+      if (request.method !== "GET") {
+        sendJson(response, 405, {
+          ok: false,
+          reason: "request_failed",
+          detail: "Method not allowed",
+        })
+        return
+      }
+      sendJson(response, 200, { ok: true, entries: relay.getAudit(scanId) ?? [] })
+      return
+    }
+
+    if (reqUrl === "/fetch" || reqUrl === "/v1/fetch") {
       void handleFetch(request, response, token).catch((err) => {
         const detail = err instanceof Error ? err.message : String(err)
         logger.error("Unhandled egress proxy error", { error: detail })
@@ -199,6 +273,21 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       reason: "request_failed",
       detail: "Not found",
     })
+  })
+
+  // CONNECT arrives via the 'connect' event, not 'request'. Only registered
+  // when the relay is enabled; without it the socket is refused immediately.
+  server.on("connect", (request, clientSocket, head) => {
+    if (!relay) {
+      clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n", () => clientSocket.destroy())
+      return
+    }
+    try {
+      relay.handleConnect(request, clientSocket, head)
+    } catch (err) {
+      logger.error("Relay CONNECT handler error", { error: String(err) })
+      clientSocket.destroy()
+    }
   })
 
   server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS
@@ -238,6 +327,7 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       return (server.address() as { port: number } | null)?.port ?? port
     },
     ready,
+    relay: relay ?? undefined,
     close() {
       return new Promise<void>((resolve, reject) =>
         server.close((err) => (err ? reject(err) : resolve()))
@@ -252,8 +342,9 @@ function main() {
     logger.error("LYRASHIELD_EGRESS_PROXY_SECRET is required")
     process.exit(1)
   }
+  const relaySigningSecret = process.env.LYRASHIELD_RELAY_SIGNING_SECRET || undefined
   const port = Number(process.env.PORT || 4000)
-  startProxy({ token, port })
+  startProxy({ token, port, relaySigningSecret })
 }
 
 const entryFile = process.argv[1] ? pathToFileURL(process.argv[1]).href : ""

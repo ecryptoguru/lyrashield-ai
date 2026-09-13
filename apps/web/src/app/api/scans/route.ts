@@ -123,10 +123,29 @@ async function post(request: Request) {
 
     assertOAuthDelegatedScope(session, data.targetId, data.mode)
 
-    // Browser-local tools never enter this route. A paid remote review does,
-    // so require one current workspace proof before the first server-side
-    // request. DNS proof is deliberately reusable for the domain rather than
-    // creating an approval chore for every scan.
+    // Resolve the URL profile first so the consent gates track what the scan
+    // actually does: engine-backed tiers (STANDARD/DEEP) require a verified
+    // domain on paid plans, while the deterministic-only tier needs no proof —
+    // it only fetches what a browser could.
+    let urlEngineBacked = false
+    if (target.type === "WEB_APP" || target.type === "API") {
+      const resolved = resolveTargetScanMode({
+        targetType: target.type,
+        mode: data.mode,
+        hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
+      })
+      if (!resolved.ok) {
+        return apiError(resolved.code, resolved.reason, 400)
+      }
+      urlEngineBacked =
+        resolved.profile !== null &&
+        resolveScanProfile({ targetType: target.type, mode: data.mode }).usesAi
+    }
+
+    // Browser-local tools never enter this route. An engine-backed remote
+    // review does, so require one current workspace proof before the engine
+    // sends its first request. DNS proof is deliberately reusable for the
+    // domain rather than creating an approval chore for every scan.
     // The gate follows the SPONSOR's effective plan — workspace.plan is a
     // display field under account-owned billing and must never decide this.
     if (target.type === "WEB_APP" || target.type === "API") {
@@ -137,10 +156,10 @@ async function post(request: Request) {
       const sponsorPlan = sponsor?.agencyActive
         ? "LAUNCH_ASSURANCE"
         : (sponsorBilling?.effectivePlan ?? "FREE")
-      if (sponsorPlan === "FREE") {
-        // Free tier skips domain verification, so a free account could
-        // otherwise drive server-side reviews of arbitrary third-party
-        // sites. Bound it per client IP; Turnstile is the follow-up.
+      if (sponsorPlan === "FREE" && !urlEngineBacked) {
+        // Free tier's deterministic surface review could otherwise be used to
+        // drive server-side fetches of arbitrary third-party sites. Bound it
+        // per client IP; Turnstile is the follow-up.
         const freeUrlLimit = await checkFreeUrlScanRateLimit(clientIpFromRequest(request))
         if (freeUrlLimit.limited) {
           return apiError(
@@ -151,7 +170,7 @@ async function post(request: Request) {
           )
         }
       }
-      if (sponsorPlan !== "FREE") {
+      if (sponsorPlan !== "FREE" && urlEngineBacked) {
         const domain = target.url ? normalizeDomainForProof(target.url) : null
         const proof = domain
           ? await prisma.targetDomainVerification.findFirst({
@@ -167,21 +186,17 @@ async function post(request: Request) {
         if (!proof) {
           return apiError(
             "DOMAIN_VERIFICATION_REQUIRED",
-            "Verify control of this domain once before starting a paid remote review.",
-            403
+            "Verify control of this domain once to enable engine-backed reviews.",
+            403,
+            undefined,
+            {
+              remediation: {
+                txtName: domain ? `_lyrashield.${domain}` : null,
+                verifyPath: target.id ? `/dashboard/targets/${target.id}` : null,
+              },
+            }
           )
         }
-      }
-    }
-
-    if (target.type === "WEB_APP" || target.type === "API") {
-      const resolved = resolveTargetScanMode({
-        targetType: target.type,
-        mode: data.mode,
-        hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
-      })
-      if (!resolved.ok) {
-        return apiError(resolved.code, resolved.reason, 400)
       }
     }
 
@@ -363,6 +378,7 @@ async function post(request: Request) {
         goal: data.goal,
         mode: canonicalMode,
         policyId,
+        focus: data.focus,
       })
     } catch (enqueueErr) {
       logger.error("Failed to enqueue scan job", {

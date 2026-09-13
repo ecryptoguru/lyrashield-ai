@@ -8,6 +8,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "typecheck:e2e": "pnpm --filter @lyrashield/db exec tsc --noEmit -p ../../e2e/tsconfig.json",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,yml,yaml}\"",
     "format:check": "git ls-files -z -- '*.ts' '*.tsx' '*.md' '*.json' '*.yml' '*.yaml' | xargs -0 prettier --check",
     "db:generate": "pnpm --filter @lyrashield/db generate",

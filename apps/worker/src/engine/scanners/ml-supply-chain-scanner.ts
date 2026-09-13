@@ -3,7 +3,11 @@ import { lstat, readFile, readdir } from "fs/promises"
 import type { Dirent } from "fs"
 import { join } from "path"
 import type { EngineVulnerability } from "../output-parser"
-import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
+import {
+  recordCoverageIssue,
+  type ScannerCoverageIssue,
+  type ScannerDiscovery,
+} from "../scanner-coverage"
 
 const MAX_FILE_BYTES = 512 * 1024
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024
@@ -27,6 +31,7 @@ export interface MlSupplyChainScanConfig {
   repoPath: string
   coverageIssues?: ScannerCoverageIssue[]
   signal?: AbortSignal
+  discovery?: ScannerDiscovery
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -162,6 +167,8 @@ export async function scanMlSupplyChain(
 ): Promise<EngineVulnerability[]> {
   const findings: EngineVulnerability[] = []
   let totalBytes = 0
+  let filesScanned = 0
+  const skippedByReason = { oversizedOrTotalLimit: 0, unreadable: 0 }
   for (const file of await findCandidateFiles(
     config.repoPath,
     config.coverageIssues,
@@ -173,6 +180,7 @@ export async function scanMlSupplyChain(
       const stat = await lstat(fullPath)
       if (!stat.isFile() || stat.isSymbolicLink()) continue
       if (stat.size > MAX_FILE_BYTES || totalBytes + stat.size > MAX_TOTAL_BYTES) {
+        skippedByReason.oversizedOrTotalLimit++
         recordCoverageIssue(config.coverageIssues, {
           scanner: "ml_supply_chain",
           status: "bounded",
@@ -183,17 +191,26 @@ export async function scanMlSupplyChain(
       }
       const content = await readFile(fullPath, "utf8")
       totalBytes += Buffer.byteLength(content)
+      filesScanned++
       for (const [index, line] of content.split("\n").entries()) {
         throwIfAborted(config.signal)
         findings.push(...findingsForLine(file, line, index + 1))
       }
     } catch {
+      skippedByReason.unreadable++
       recordCoverageIssue(config.coverageIssues, {
         scanner: "ml_supply_chain",
         status: "partial",
         subject: file,
         reason: "Model source could not be read",
       })
+    }
+  }
+  if (config.discovery) {
+    config.discovery.ml_supply_chain = {
+      filesScanned,
+      bytesScanned: totalBytes,
+      skippedByReason,
     }
   }
   return findings

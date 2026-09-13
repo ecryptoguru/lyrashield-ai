@@ -23,6 +23,7 @@
 
 import { createHash, createHmac } from "node:crypto"
 import { env } from "@lyrashield/config"
+import { z } from "zod"
 import { WebhookAuthError, WebhookPayloadError } from "../../webhook-errors"
 
 export interface RazorpayWebhookEvent {
@@ -118,18 +119,23 @@ export function validateRazorpayWebhook(body: string, signature: string): Razorp
     throw new WebhookAuthError("invalid_signature", "Invalid Razorpay webhook signature")
   }
 
-  let parsed: RazorpayWebhookEvent
+  let parsed: unknown
   try {
-    parsed = JSON.parse(body) as RazorpayWebhookEvent
+    parsed = JSON.parse(body)
   } catch {
     throw new WebhookPayloadError("Razorpay webhook body is not valid JSON")
   }
+  const event = z
+    .object({ event: z.string().min(1), payload: z.record(z.string(), z.unknown()) })
+    .safeParse(parsed)
+  if (!event.success) throw new WebhookPayloadError("Razorpay webhook has invalid event shape")
+  const validated = parsed as RazorpayWebhookEvent
 
   // `created_at` is the original event time. Razorpay can retry a signed
   // payload for 24 hours and supports replay requests for 15 days. Accept that
   // documented window; stable provider event IDs and database uniqueness make
   // delayed duplicate deliveries idempotent.
-  const createdAt = parsed.created_at
+  const createdAt = validated.created_at
   if (typeof createdAt !== "number" || !Number.isSafeInteger(createdAt) || createdAt <= 0) {
     throw new WebhookPayloadError("Razorpay webhook missing valid created_at")
   }
@@ -141,7 +147,7 @@ export function validateRazorpayWebhook(body: string, signature: string): Razorp
     throw new WebhookAuthError("stale_timestamp", "Razorpay webhook exceeds replay window")
   }
 
-  return parsed
+  return validated
 }
 
 /**

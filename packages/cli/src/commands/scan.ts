@@ -1,4 +1,7 @@
+import { parseSarifReport } from "@lyrashield/security"
+/* eslint-disable security/detect-non-literal-fs-filename */
 import minimist from "minimist"
+import { readFile } from "fs/promises"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import type { Output } from "../output.js"
@@ -74,7 +77,7 @@ async function resolveTarget(
 
 export async function handleScan(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["target", "goal", "mode", "repo", "name", "idempotency-key"],
+    string: ["target", "goal", "mode", "repo", "name", "idempotency-key", "sarif", "scan-id"],
     boolean: ["watch", "auto"],
     default: { goal: "TEST_APP", mode: "STANDARD" },
     alias: { t: "target", g: "goal", m: "mode" },
@@ -83,17 +86,36 @@ export async function handleScan(args: string[], output: Output): Promise<number
   const client = await createClient()
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
 
+  const sarifPath = parsed.sarif as string | undefined
+  let sarifJson: unknown
+  if (parsed["scan-id"] && !sarifPath) {
+    output.error("--scan-id requires --sarif; it imports into an existing scan.")
+    return 2
+  }
+  if (sarifPath) {
+    try {
+      sarifJson = JSON.parse(await readFile(sarifPath, "utf-8"))
+      const checked = parseSarifReport(sarifJson, "cli-preflight")
+      if ("error" in checked) throw new Error(checked.error)
+    } catch {
+      output.error(`Cannot read a valid SARIF 2.1.0 file: ${sarifPath}; no scan was submitted.`)
+      return 2
+    }
+  }
+
   const [targetId] = parsed._ as string[]
-  const resolved = await resolveTarget(
-    {
-      targetId: (parsed.target as string) ?? targetId,
-      auto: parsed.auto as boolean,
-      repo: parsed.repo as string | undefined,
-      name: parsed.name as string | undefined,
-      workspaceId,
-    },
-    output
-  )
+  const resolved = parsed["scan-id"]
+    ? { targetId: "", isNew: false, repository: undefined }
+    : await resolveTarget(
+        {
+          targetId: (parsed.target as string) ?? targetId,
+          auto: parsed.auto as boolean,
+          repo: parsed.repo as string | undefined,
+          name: parsed.name as string | undefined,
+          workspaceId,
+        },
+        output
+      )
 
   if (!resolved) {
     output.error("No target specified.")
@@ -125,14 +147,40 @@ export async function handleScan(args: string[], output: Output): Promise<number
     return 2
   }
 
-  const res = (await client.request("POST", "/scans", {
-    body: { workspaceId, targetId: resolved.targetId, goal, mode },
-    headers: { "Idempotency-Key": parsed["idempotency-key"] ?? crypto.randomUUID() },
-  })) as { id: string }
+  const res = parsed["scan-id"]
+    ? { id: parsed["scan-id"] as string }
+    : ((await client.request("POST", "/scans", {
+        body: { workspaceId, targetId: resolved.targetId, goal, mode },
+        headers: { "Idempotency-Key": parsed["idempotency-key"] ?? crypto.randomUUID() },
+      })) as { id: string })
 
   if (resolved.isNew && resolved.repository) {
     output.log(`Resolved project ${resolved.repository} → target ${resolved.targetId}`)
   }
+
+  // --sarif <file> pushes a third-party SARIF 2.1.0 report against the new
+  // scan: findings land tagged external_import and never count as coverage.
+  if (sarifPath) {
+    try {
+      const importRes = (await client.request(
+        "POST",
+        `/scans/${encodeURIComponent(res.id)}/artifacts/sarif?workspaceId=${encodeURIComponent(workspaceId)}`,
+        { body: sarifJson }
+      )) as { imported: number; corroborated: number; rejected: number; toolName: string | null }
+      output.log(
+        `Imported ${importRes.imported} SARIF finding(s) from ${importRes.toolName ?? "external tool"}` +
+          (importRes.corroborated > 0 ? ` (${importRes.corroborated} corroborated)` : "") +
+          (importRes.rejected > 0 ? ` (${importRes.rejected} rejected)` : "")
+      )
+    } catch (err) {
+      // The scan was already created — say so; the import can be retried.
+      output.error(
+        `SARIF import failed (${err instanceof Error ? err.message : "request error"}); use the existing scan ${res.id}; retry without creating another scan: lyrashield scan --scan-id ${res.id} --sarif ${JSON.stringify(sarifPath)}`
+      )
+      return 2
+    }
+  }
+
   output.result(res)
 
   return 0

@@ -7,6 +7,7 @@ export {
   useSession,
   getClientSession,
   safeAuthCallbackPath,
+  authClientWillRedirect,
 } from "./client"
 export type { AuthClient } from "./client"
 export { getAuthErrorMessage, getAuthErrorCode, isEmailNotVerifiedError } from "./client"

@@ -8,7 +8,7 @@ import {
 import { getAiSecurityScoreSnapshot } from "./ai-security-score-service"
 import { getAiSystemProfile } from "./ai-system-profile-service"
 import { getThreatModel } from "./threat-model-service"
-import { VIBE_SECURITY_CONTROLS } from "@lyrashield/security"
+import { VIBE_SECURITY_CONTROLS, defaultStandards, renderStandards } from "@lyrashield/security"
 import {
   WEBMCP_CONTROLS,
   WEBMCP_CONTROL_IDS,
@@ -42,6 +42,9 @@ export interface ReportData {
     endedAt: Date | null
     manifestChecksum: string | null
     coverage: { completed: number; limited: number; notApplicable: number }
+    /** Per-scan standards matrix — the five defaultSurface standards rendered
+     * from this scan's coverage receipts and findings. */
+    standards?: import("@lyrashield/security").StandardView[]
     urlExecution?: {
       profile: string
       methods: string[]
@@ -451,6 +454,7 @@ export async function gatherReportData(
   let scanInfo: ReportData["scanInfo"] = null
   let targetId: string | null = null
   let webMcpCoverage: ReportWebMcpAssurance | undefined = undefined
+  let scanCoverageReceipts: Array<{ controlId: string; scanner: string; status: string }> = []
   let scanWhere: { workspaceId: string; deletedAt: null; scanId?: string }
 
   if (scanId) {
@@ -459,12 +463,13 @@ export async function gatherReportData(
       include: {
         target: { select: { name: true, type: true, url: true } },
         resultManifest: { select: { checksum: true, manifest: true } },
-        coverageReceipts: { select: { controlId: true, status: true } },
+        coverageReceipts: { select: { controlId: true, scanner: true, status: true } },
       },
     })
 
     if (scan) {
       targetId = scan.targetId
+      scanCoverageReceipts = scan.coverageReceipts ?? []
       const manifestRecord = scan.resultManifest?.manifest as
         { urlExecution?: NonNullable<ReportData["scanInfo"]>["urlExecution"] } | undefined
       const manifestCoverage = (
@@ -520,6 +525,7 @@ export async function gatherReportData(
       verificationStatus: true,
       confidence: true,
       cwe: true,
+      owaspCategory: true,
       cvssScore: true,
       category: true,
       summary: true,
@@ -539,6 +545,16 @@ export async function gatherReportData(
 
   const findingsTruncated = findings.length > FINDINGS_LIMIT
   const truncatedFindings = findingsTruncated ? findings.slice(0, FINDINGS_LIMIT) : findings
+
+  // Standards matrix — computed from this scan's receipts + findings so the
+  // report carries evidence, not a marketing claim.
+  if (scanInfo && scanCoverageReceipts.length > 0) {
+    scanInfo.standards = renderStandards(
+      defaultStandards(),
+      scanCoverageReceipts,
+      truncatedFindings.map((f) => ({ cwe: f.cwe, owaspCategory: f.owaspCategory }))
+    )
+  }
 
   const severityRank: Record<string, number> = {
     CRITICAL: 5,
@@ -1007,6 +1023,48 @@ export function generateReportHTML(data: ReportData): string {
       </div>`
     : ""
 
+  const standardsViews = data.scanInfo?.standards ?? []
+  const standardsSection =
+    standardsViews.length > 0
+      ? `<div class="section"><h2>Standards Coverage</h2>
+        <p style="color:#4b5563;font-size:13px;margin-bottom:12px;">
+          Per-category evidence states computed from this scan's coverage receipts and findings.
+          "Evaluated" means a mapped scanner produced evidence; "not evaluated" means nothing
+          ran that covers the category. Organizational attestation can still be required
+          when scanner evidence exists; it is not discharged by an evaluated state.
+        </p>
+        ${standardsViews
+          .map(
+            (
+              view
+            ) => `<h3 style="font-size:13px;font-weight:650;margin:14px 0 6px;">${escapeHtml(view.name)} <span style="color:#6b7280;font-weight:400;">${escapeHtml(view.version)}</span>${view.badge ? ` <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;">${escapeHtml(view.badge)}</span>` : ""}</h3>
+            <p style="font-size:12px;color:#6b7280;margin-bottom:6px;">${view.evaluated} evaluated · ${view.requiresAttestation} require attestation (including evaluated controls) · ${view.notEvaluated} not evaluated${view.violationSignals > 0 ? ` · <strong style="color:#b91c1c;">${view.violationSignals} violation signal${view.violationSignals === 1 ? "" : "s"}</strong>` : ""}</p>
+            <table>
+              ${view.categories
+                .map(
+                  (cat) => `<tr>
+                    <td style="padding:4px 8px 4px 0;font-family:monospace;font-size:11px;width:110px;">${escapeHtml(cat.id)}</td>
+                    <td style="padding:4px 8px 4px 0;font-size:12px;">${escapeHtml(cat.title)}</td>
+                    <td style="padding:4px 0;font-size:11px;width:150px;"><span style="display:inline-block;padding:1px 7px;border-radius:4px;${
+                      cat.state === "evaluated"
+                        ? cat.violationSignals > 0
+                          ? "background:#fee2e2;color:#b91c1c;"
+                          : cat.limited
+                            ? "background:#ccfbf1;color:#0f766e;"
+                            : "background:#dcfce7;color:#166534;"
+                        : cat.state === "requires-attestation"
+                          ? "background:#fef3c7;color:#92400e;"
+                          : "background:#f3f4f6;color:#6b7280;"
+                    }">${cat.state === "evaluated" ? (cat.violationSignals > 0 ? `evaluated · ${cat.violationSignals} signal${cat.violationSignals === 1 ? "" : "s"}` : cat.limited ? "evaluated · partial" : "evaluated") : cat.state === "requires-attestation" ? "requires attestation" : "not evaluated"}</span>${cat.attestable && cat.state !== "requires-attestation" ? ' <span style="color:#92400e;">attestation required</span>' : ""}</td>
+                  </tr>`
+                )
+                .join("")}
+            </table>`
+          )
+          .join("")}
+      </div>`
+      : ""
+
   const urlExecution = data.scanInfo?.urlExecution
   const urlExecutionSection = urlExecution
     ? `<div class="section"><h2>URL Execution Scope</h2>
@@ -1105,6 +1163,8 @@ export function generateReportHTML(data: ReportData): string {
     `
         : ""
     }
+
+    ${standardsSection}
 
     ${methodologySection}
 

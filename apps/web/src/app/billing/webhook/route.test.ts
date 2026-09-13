@@ -127,6 +127,17 @@ beforeEach(() => {
 })
 
 describe("POST /billing/webhook — event identity and idempotency", () => {
+  it("rejects oversized signed bodies before validation or persistence even without Content-Length", async () => {
+    const oversized = razorpayRequest("x".repeat(5 * 1024 * 1024 + 1))
+    oversized.headers.delete("content-length")
+
+    const response = await POST(oversized)
+
+    expect(response.status).toBe(413)
+    expect(validateRazorpayMock).not.toHaveBeenCalled()
+    expect(mockPrisma.webhookEvent.create).not.toHaveBeenCalled()
+  })
+
   it("rejects signed catalog mismatches before claiming a webhook row", async () => {
     const event = rzEvent("subscription.charged", "sub_UNDERPAID", 1_755_086_400)
     validateRazorpayMock.mockReturnValue(event)

@@ -332,6 +332,10 @@ jobs:
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm typecheck
 
+      - name: Typecheck browser fixtures
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        run: pnpm typecheck:e2e
+
       - name: Typecheck marketing
         if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: pnpm --filter @lyrashield/marketing typecheck

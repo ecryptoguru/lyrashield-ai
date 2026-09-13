@@ -77,6 +77,24 @@ interface ScanData {
       subject: string | null
       metadata: Record<string, unknown> | null
     }>
+    standards?: Array<{
+      standardId: string
+      name: string
+      version: string
+      badge?: string
+      evaluated: number
+      requiresAttestation: number
+      notEvaluated: number
+      violationSignals: number
+      categories: Array<{
+        id: string
+        title: string
+        state: "evaluated" | "requires-attestation" | "not-evaluated"
+        violationSignals: number
+        limited?: boolean
+        attestable?: boolean
+      }>
+    }>
   }
   aiSecurity: {
     score: number | null
@@ -276,6 +294,11 @@ const SCANNER_LABELS: Record<string, string> = {
   sca: "Dependency scan",
   secrets: "Secret scan",
   url: "URL scan",
+  ai_app_security: "AI app security",
+  ml_supply_chain: "ML supply chain",
+  sast: "Static analysis",
+  iac: "Infrastructure config scan",
+  external_import: "Imported scan (third-party)",
 }
 
 const ELAPSED_TIME_INTERVAL_MS = 1_000
@@ -605,6 +628,27 @@ export function ScanDetailClient({
   const controlCoverage = scan.integrity.coverage.filter((receipt) =>
     receipt.controlId.startsWith("vibe-")
   )
+  const relayAuditEvent = [...scan.events].reverse().find((e) => e.stage === "relay_audit")
+  const relayScopeEvent = [...scan.events].reverse().find((e) => e.stage === "relay_scope")
+  const relayStats =
+    relayAuditEvent || relayScopeEvent
+      ? {
+          requests:
+            typeof relayAuditEvent?.metadata === "object" &&
+            relayAuditEvent.metadata &&
+            typeof (relayAuditEvent.metadata as Record<string, unknown>).entries === "number"
+              ? ((relayAuditEvent.metadata as Record<string, unknown>).entries as number)
+              : null,
+          hosts:
+            typeof relayScopeEvent?.metadata === "object" &&
+            relayScopeEvent.metadata &&
+            Array.isArray((relayScopeEvent.metadata as Record<string, unknown>).hosts)
+              ? ((relayScopeEvent.metadata as Record<string, unknown>).hosts as unknown[]).filter(
+                  (h): h is string => typeof h === "string"
+                )
+              : [],
+        }
+      : null
   const incompleteCoverage = familyCoverage.filter(
     (receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status)
   )
@@ -928,6 +972,15 @@ export function ScanDetailClient({
                     Coverage limited: {scan.integrity.urlExecution.issueCodes.join(", ")}
                   </p>
                 )}
+              {relayStats && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Engine traffic ran through the scan-scoped relay
+                  {relayStats.hosts.length > 0 && ` to ${relayStats.hosts.join(", ")}`}
+                  {relayStats.requests !== null &&
+                    ` — ${relayStats.requests} audited request${relayStats.requests === 1 ? "" : "s"}`}
+                  .
+                </p>
+              )}
               <p className="text-muted-foreground mt-2 text-xs">
                 This public, non-mutating review did not authenticate or validate exploitability.
               </p>
@@ -1100,6 +1153,58 @@ export function ScanDetailClient({
                   )}
                 </div>
               </details>
+              {(scan.integrity.standards?.length ?? 0) > 0 && (
+                <details className="mt-4 rounded-md border">
+                  <summary className="hover:bg-muted/50 flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
+                    Standards coverage ({scan.integrity.standards!.length} frameworks)
+                    <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+                  </summary>
+                  <div className="grid gap-3 border-t p-4">
+                    {scan.integrity.standards!.map((view) => (
+                      <div key={view.standardId} className="rounded-md border p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium">
+                            {view.name}{" "}
+                            <span className="text-muted-foreground text-xs">{view.version}</span>
+                          </span>
+                          {view.badge && <Badge variant="warning">{view.badge}</Badge>}
+                        </div>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {view.evaluated} evaluated · {view.requiresAttestation} require
+                          attestation (including evaluated controls) · {view.notEvaluated} not
+                          evaluated
+                          {view.violationSignals > 0 &&
+                            ` · ${view.violationSignals} violation signal${view.violationSignals === 1 ? "" : "s"}`}
+                          {view.categories.some((c) => c.limited) && " · † partial coverage"}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {view.categories.map((cat) => (
+                            <span
+                              key={cat.id}
+                              title={`${cat.id} — ${cat.title}${cat.limited ? " (partial coverage)" : ""}`}
+                              className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                                cat.state === "evaluated"
+                                  ? cat.violationSignals > 0
+                                    ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
+                                    : cat.limited
+                                      ? "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200"
+                                      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                                  : cat.state === "requires-attestation"
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                                    : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {cat.id}
+                              {cat.limited ? "†" : ""}
+                              {cat.attestable ? " · attestation required" : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
               {controlCoverage.length > 0 && (
                 <div className="mt-5 border-t pt-5">
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">

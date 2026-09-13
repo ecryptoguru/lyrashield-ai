@@ -124,7 +124,7 @@ POST /api/scans
   → score, notifications, terminal state
 ```
 
-Only repository targets invoke the external engine. URL/API targets use deterministic, profile-bound scanners until an equivalent engine transport contract exists.
+Repository scans invoke the controlled engine. Under `url-scan/3.0.0`, URL/API Safe/Quick stay deterministic-only; Standard and Deep/Custom select engine-backed profiles through a verified-domain, scan-scoped relay and run deterministic checks alongside.
 Before execution, the worker binds every authority-bearing BullMQ field (`workspaceId`,
 `targetId`, `goal`, `mode`, and `policyId`) back to the stored scan; schema-valid queue
 data cannot upgrade routing, budget, or policy.
@@ -139,6 +139,8 @@ workspace concurrency limit, so terminal transitions do not become stale polling
 - Production URL fetching uses authenticated `packages/egress-proxy`.
 - Profiles bound documents, depth, bytes, concurrency, methods, origin probes, and wall time.
 - API Standard/Deep require validated public HTTPS OpenAPI input.
+- Engine-backed tiers require current domain verification, sponsor entitlement, and a signed grant bound to the scan, workspace, target, host, methods, and request budgets.
+- The remote relay supports explicit absolute-form HTTP/HTTPS requests and rejects opaque CONNECT tunnels. The engine sandbox-local TLS adapter uses the installed sandbox CA to convert ordinary HTTPS client traffic into inspectable relay requests. Composed local curl and Chromium navigation/fetch tests passed allowed requests and denied path/method/redirect requests without TLS bypass; invalid upstream certificates were rejected. This verifies bounded local transport, while exact-image production deployment and a paid URL engine scan remain unverified.
 
 ### Local/Desktop scan
 
@@ -235,10 +237,14 @@ Authorities:
 
 Safe/Quick/Standard use Luna/medium. Deep/Custom use Terra/medium root plus Luna/high specialists. The fallback model remains mandatory and policy values may only lower caps. Private receipts preserve actual model, requests, token buckets, cache reads/writes, long-context usage, provider cost, billed cost, and reconciliation status.
 
-Agent-minute wall time starts immediately before `runEngine()`. A repository run is
+Agent-minute wall time starts immediately before `runEngine()`. An engine-backed run is
 metered only after a scan-bound completed receipt or scan-bound affirmative provider usage proves
 model-backed work occurred. Deterministic URL/API runs and pre-provider failures do not
 consume agent-minutes; failed runs with positive provider usage remain billable.
+
+### Standards evidence
+
+`packages/security/src/standards` owns `standards-registry/1.1.0`; scan detail and report generation use the same renderer. Default entries pin OWASP Top 10 2021, API Top 10 2023, LLM Top 10 2025, CWE Top 25 2024, and selected ASVS 5.0.0 L1 requirements. Five unverified hidden mappings (ATLAS, CIS, AISVS, ISO 27001, and SLSA) are excluded until their identifiers, editions, and observable scope are reviewed. Family receipts provide bounded category evidence, not verification or certification. The renderer counts each finding once within a category and rejects explicit OWASP tags from a different edition. SAST completion credits its implemented crypto/TLS/JWT scope, not unrelated injection, memory-safety, or authorization categories.
 
 ### Findings and result integrity
 
@@ -524,7 +530,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 6. Never create `Evidence` without `uploadEvidence()`, checksum, and encryption key reference.
 7. Never interchange BullMQ `REDIS_URL` with Upstash REST rate-limit credentials.
 8. Never trust proxy headers unless ingress strips and overwrites them.
-9. Never invoke repository engine for URL/API targets.
+9. URL/API engine work must use a verified-domain, scan-scoped relay; Safe/Quick remain deterministic-only. Never bypass the relay for target traffic.
 10. Never persist raw engine output or trust model confidence as verification.
 11. Never auto-requeue ambiguous paid work or delete BullMQ keys directly.
 12. Never accept client-authored GitHub patch/branch/title/body.

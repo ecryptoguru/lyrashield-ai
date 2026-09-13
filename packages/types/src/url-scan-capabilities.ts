@@ -1,13 +1,17 @@
 /**
  * Versioned URL and API scan capability registry.
  *
- * This is the single source of truth for the url-scan/2.0.0 contract:
+ * This is the single source of truth for the url-scan/3.0.0 contract:
  * profiles, limits, allowed methods, and release state. A change to any
  * numeric limit or allowed method is a contract change and must bump the
  * version and update fixtures.
+ *
+ * 3.0.0: STANDARD/DEEP are engine-backed (the sandbox reaches verified targets
+ * through the scoped relay); CUSTOM now normalizes to DEEP like repository
+ * scans. SAFE stays deterministic-only.
  */
 
-export const URL_SCAN_CONTRACT_VERSION = "url-scan/2.0.0" as const
+export const URL_SCAN_CONTRACT_VERSION = "url-scan/3.0.0" as const
 
 export type UrlTargetType = "WEB_APP" | "API"
 
@@ -80,8 +84,9 @@ const PROFILES = {
     id: "WEB_APP_STANDARD",
     targetType: "WEB_APP",
     mode: "STANDARD",
-    label: "Expanded Surface Review",
-    description: "Up to 20 same-origin pages and 30 client assets; passive GET requests only.",
+    label: "Engine Review",
+    description:
+      "Engine-driven review of the verified host plus deterministic checks — surface crawl, transport/header analysis, and bounded active probing through the scan-scoped relay. Requires domain verification.",
     maxDocuments: 20,
     maxAssets: 30,
     maxDepth: 2,
@@ -99,9 +104,9 @@ const PROFILES = {
     id: "WEB_APP_DEEP",
     targetType: "WEB_APP",
     mode: "DEEP",
-    label: "Behavioral Surface Review",
+    label: "Deep Live Review",
     description:
-      "Expanded review plus bounded HEAD, OPTIONS, and CORS behavior checks; no state-changing requests.",
+      "Engine deep pass on the verified host — behavioral checks, bounded method probing, CORS/origin analysis, and full deterministic coverage through the scan-scoped relay. Requires domain verification.",
     maxDocuments: 40,
     maxAssets: 50,
     maxDepth: 3,
@@ -139,9 +144,9 @@ const PROFILES = {
     id: "API_STANDARD",
     targetType: "API",
     mode: "STANDARD",
-    label: "Contract Review",
+    label: "Engine Contract Review",
     description:
-      "Static review plus at most 10 parameter-free unauthenticated GET/HEAD operations; requires an OpenAPI document.",
+      "Engine-driven review against the verified host using the OpenAPI contract — bounded operation probing plus deterministic checks through the scan-scoped relay. Requires domain verification and an OpenAPI document.",
     maxDocuments: 0,
     maxAssets: 0,
     maxDepth: 0,
@@ -159,9 +164,9 @@ const PROFILES = {
     id: "API_DEEP",
     targetType: "API",
     mode: "DEEP",
-    label: "Contract Behavior Review",
+    label: "Deep Contract Review",
     description:
-      "At most 25 safe GET/HEAD/OPTIONS operations using documented parameter values; requires an OpenAPI document.",
+      "Engine deep pass on the verified host — behavioral contract testing, bounded method and origin probing, full deterministic coverage through the scan-scoped relay. Requires domain verification and an OpenAPI document.",
     maxDocuments: 0,
     maxAssets: 0,
     maxDepth: 0,
@@ -201,15 +206,13 @@ function isUrlScanMode(value: string): value is UrlScanMode {
 }
 
 function normalizeMode(mode: string): string {
-  return mode === "QUICK" ? "SAFE" : mode
+  // QUICK names the deterministic-only tier; CUSTOM is the deepest tier, same
+  // as repository scans. Both map onto the released URL modes.
+  return mode === "QUICK" ? "SAFE" : mode === "CUSTOM" ? "DEEP" : mode
 }
 
 export function getUrlScanProfile(targetType: UrlTargetType, mode: string): UrlScanProfile {
   const normalized = normalizeMode(mode)
-
-  if (normalized === "CUSTOM") {
-    throw new Error("URL_MODE_UNSUPPORTED")
-  }
 
   if (!isUrlScanMode(normalized)) {
     throw new Error("URL_MODE_UNSUPPORTED")
@@ -232,14 +235,6 @@ export function getUrlModeAvailability(
   releasedIds: ReadonlySet<string> = RELEASED_URL_PROFILE_IDS
 ): UrlModeAvailability {
   const normalized = normalizeMode(mode)
-
-  if (normalized === "CUSTOM") {
-    return {
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "This URL review depth is not available yet. Use Surface Review.",
-    }
-  }
 
   if (!isUrlScanMode(normalized)) {
     return {

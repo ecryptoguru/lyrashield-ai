@@ -439,7 +439,7 @@ describe("report-generator", () => {
           checksum: "manifest-checksum",
           manifest: {
             urlExecution: {
-              contractVersion: "url-scan/2.0.0",
+              contractVersion: "url-scan/3.0.0",
               profile: "WEB_APP_STANDARD",
               methods: ["GET"],
               subjectCount: 17,
@@ -462,7 +462,7 @@ describe("report-generator", () => {
       const data = await gatherReportData("ws-1", "scan-1")
 
       expect(data.scanInfo?.urlExecution).toEqual({
-        contractVersion: "url-scan/2.0.0",
+        contractVersion: "url-scan/3.0.0",
         profile: "WEB_APP_STANDARD",
         methods: ["GET"],
         subjectCount: 17,
@@ -602,7 +602,7 @@ describe("report-generator", () => {
           manifestChecksum: "checksum",
           coverage: { completed: 1, limited: 0, notApplicable: 0 },
           urlExecution: {
-            contractVersion: "url-scan/2.0.0",
+            contractVersion: "url-scan/3.0.0",
             profile: "WEB_APP_STANDARD",
             methods: ["GET"],
             subjectCount: 17,
@@ -630,6 +630,59 @@ describe("report-generator", () => {
       expect(html).toContain("Expanded Surface Review · 10 pages · 7 assets · GET")
       expect(html).toContain("Coverage limited: LIMIT_REACHED")
       expect(html).toContain("non-mutating review did not authenticate")
+    })
+
+    it("shows attestation obligations even for evaluated standards categories", () => {
+      const html = generateReportHTML({
+        title: "Standards Report",
+        type: "developer",
+        workspaceName: "Test Workspace",
+        scanInfo: {
+          scanId: "scan-1",
+          status: "COMPLETED",
+          summary: null,
+          targetName: "Test Repo",
+          targetType: "REPO",
+          targetUrl: null,
+          startedAt: null,
+          endedAt: null,
+          manifestChecksum: "checksum",
+          coverage: { completed: 1, limited: 0, notApplicable: 0 },
+          standards: [
+            {
+              standardId: "test",
+              name: "Organization controls",
+              version: "1.0",
+              evaluated: 1,
+              requiresAttestation: 1,
+              notEvaluated: 0,
+              violationSignals: 0,
+              categories: [
+                {
+                  id: "ORG-1",
+                  title: "Control with evidence",
+                  state: "evaluated",
+                  violationSignals: 0,
+                  limited: false,
+                  attestable: true,
+                },
+              ],
+            },
+          ],
+        },
+        findings: [],
+        findingsBySeverity: {},
+        totalFindings: 0,
+        verifiedCount: 0,
+        fixedCount: 0,
+        retestSummary: { passed: 0, failed: 0, pending: 0 },
+        findingsTruncated: false,
+        generatedAt: new Date("2026-09-13"),
+      })
+      expect(html).toContain("1 require attestation (including evaluated controls)")
+      expect(html).toContain(
+        '>evaluated</span> <span style="color:#92400e;">attestation required</span>'
+      )
     })
 
     it("renders versioned WebMCP coverage and checksum without raw source", () => {

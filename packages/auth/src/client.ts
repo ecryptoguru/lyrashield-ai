@@ -14,6 +14,19 @@ export const authClient = createAuthClient({
   ],
 })
 
+/** The configured Better Auth plugins already own these browser navigations. */
+export function authClientWillRedirect(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false
+  if ("twoFactorRedirect" in data && data.twoFactorRedirect === true) return true
+  return (
+    "redirect" in data &&
+    data.redirect === true &&
+    "url" in data &&
+    typeof data.url === "string" &&
+    data.url.length > 0
+  )
+}
+
 export function safeAuthCallbackPath(value: string | null | undefined): string {
   if (!value || /[\\\u0000-\u001f\u007f]/.test(value)) return "/dashboard"
   let decoded: string

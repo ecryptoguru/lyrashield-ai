@@ -109,6 +109,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Create audit rows through `prisma.auditLog.create()`. Do not nest them in another Prisma transaction; advisory lock owns chain order.
 - Every `Evidence` uses `uploadEvidence()` with checksum and valid encryption key reference. No `encrypted://` placeholders.
 - Engine output is untrusted and bounded. Confidence never means verification.
+- Standards registry `1.1.0` uses version-pinned categories and a selected ASVS L1 subset. Scanner-family completion is bounded category evidence, never proof of full-standard coverage or compliance. Missing, unreadable, or capped scanner inputs must remain incomplete.
 - Persist claims through manifest, coverage receipt, candidate, and verification receipt.
 - Only complete deterministic retest may produce `VALIDATED`; engine-only absence is `INCONCLUSIVE`.
 - Retest validation binds to stored immutable evidence: the finding's original source scan and the retest scan must both have stored manifests, exact repository revisions (which may differ after a fix) or matching URL checksums, and complete deterministic coverage. Missing identity stays `INCONCLUSIVE` and never sets `FIXED`.
@@ -129,7 +130,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Never create one-off queues, delete BullMQ keys directly, or auto-requeue ambiguous paid work.
 - Worker heartbeat and readiness use single-key Lua operations. Keep the admission-stop `EXISTS` check separate because its key is in a different Redis Cluster slot.
 - Reconcile unconditionally at worker start; on five-minute ticks, inspect BullMQ when the DB has nonterminal scans, at least hourly while idle, and whenever the DB preflight is uncertain. Never turn that uncertainty into a skipped reconciliation.
-- Invoke external engine only for `REPO`; URL/API use deterministic scanners.
+- Invoke the engine for `REPO` and the engine-backed URL/API Standard/Deep profiles; URL/API Safe/Quick remain deterministic-only. Engine target traffic requires current domain verification and a scan-scoped relay grant. The remote relay rejects opaque CONNECT tunnels; the sandbox-local TLS adapter uses the installed sandbox CA for HTTPS clients. Composed local curl and Chromium navigation/fetch tests passed allowed requests and denied path/method/redirect requests without disabling TLS validation. Exact-image production deployment and a paid URL engine scan remain unverified.
 - `REDIS_URL` is BullMQ TCP; `UPSTASH_REDIS_REST_URL/TOKEN` are rate limiting. Never interchange them.
 - Keep worker and engine child on the same protected, host-visible `TMPDIR`; pre-create
   local bind roots with restrictive permissions and never recursively chown a predictable

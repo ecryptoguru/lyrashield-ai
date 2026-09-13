@@ -36,7 +36,7 @@ function baseInput(overrides: Partial<GateEvidenceInput> = {}): GateEvidenceInpu
 
 describe("gate standard versioning", () => {
   it("is named and versioned", () => {
-    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/2.0.0")
+    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/2.3.0")
   })
 
   it("derives required scanners per target type", () => {
@@ -46,6 +46,17 @@ describe("gate standard versioning", () => {
     // Deferred target types report not-covered, never "nothing required".
     expect(isTargetTypeCovered("IAC")).toBe(false)
     expect(requiredScannersForTarget("IAC")).toEqual([])
+  })
+
+  it("requires the engine only for engine-backed URL tiers", () => {
+    expect(requiredScannersForTarget("WEB_APP", "SAFE")).not.toContain("engine")
+    expect(requiredScannersForTarget("WEB_APP", "STANDARD")).toContain("engine")
+    expect(requiredScannersForTarget("WEB_APP", "DEEP")).toContain("engine")
+    expect(requiredScannersForTarget("API", "STANDARD")).toContain("engine")
+    // CUSTOM normalizes to DEEP under url-scan/3.0.0 — same engine-backed depth.
+    expect(requiredScannersForTarget("WEB_APP", "CUSTOM")).toContain("engine")
+    // Missing/legacy mode stays deterministic-only — honest absence.
+    expect(requiredScannersForTarget("WEB_APP", null)).not.toContain("engine")
   })
 })
 

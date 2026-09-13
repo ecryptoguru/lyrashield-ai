@@ -262,15 +262,15 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   const targetSelect = page.getByLabel("Target", { exact: true })
   await targetSelect.selectOption({ label: "Example target (Web app)" })
   await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Expanded Surface Review:/ })).toBeEnabled()
-  const webDeep = page.getByRole("radio", { name: /^Behavioral Surface Review:/ })
+  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toBeEnabled()
+  const webDeep = page.getByRole("radio", { name: /^Deep Live Review:/ })
   await expect(webDeep).toBeEnabled()
   await webDeep.click()
 
   await targetSelect.selectOption({ label: "API without contract (API)" })
   await expect(page.getByRole("radio", { name: /^Endpoint Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Contract Review:/ })).toBeDisabled()
-  await expect(page.getByRole("radio", { name: /^Contract Behavior Review:/ })).toBeDisabled()
+  await expect(page.getByRole("radio", { name: /^Engine Contract Review:/ })).toBeDisabled()
+  await expect(page.getByRole("radio", { name: /^Deep Contract Review:/ })).toBeDisabled()
   await expect(page.getByRole("link", { name: "Add OpenAPI document" })).toHaveAttribute(
     "href",
     `/dashboard/targets/${apiTargetId}`
@@ -280,8 +280,8 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   )
 
   await targetSelect.selectOption({ label: "API with contract (API)" })
-  await expect(page.getByRole("radio", { name: /^Contract Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Contract Behavior Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Engine Contract Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Deep Contract Review:/ })).toBeEnabled()
 
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } })
   const fixture = await withWorkspaceRLS(workspaceId, async (tx) => {
@@ -314,6 +314,135 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
     })
     return { scan: created, finding }
   })
+  const importedReport = {
+    version: "2.1.0",
+    runs: [
+      {
+        tool: { driver: { name: "E2E external scanner" } },
+        results: [
+          {
+            ruleId: "external-check",
+            level: "warning",
+            message: { text: "External detection", id: "external-message" },
+            locations: [
+              {
+                physicalLocation: {
+                  artifactLocation: { uri: "src/example.ts", uriBaseId: "SRCROOT" },
+                  region: { startLine: 10, snippet: { text: "example()" } },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+  const importUrl = `/api/scans/${fixture.scan.id}/artifacts/sarif?workspaceId=${workspaceId}`
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const imported = await page.request.post(importUrl, {
+      data: importedReport,
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+    })
+    await expect(imported).toBeOK()
+    expect((await imported.json()).data).toMatchObject({
+      imported: attempt === 0 ? 1 : 0,
+      corroborated: attempt === 0 ? 0 : 1,
+    })
+  }
+  await withWorkspaceRLS(workspaceId, async (tx) => {
+    expect(
+      await tx.findingCandidate.count({
+        where: { workspaceId, scanId: fixture.scan.id, scannerSource: "external_import" },
+      })
+    ).toBe(1)
+    expect(
+      await tx.scanCoverageReceipt.count({
+        where: { scanId: fixture.scan.id, scan: { workspaceId } },
+      })
+    ).toBe(0)
+  })
+  const redetectionFixture = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const candidate = await tx.findingCandidate.findFirstOrThrow({
+      where: { workspaceId, scanId: fixture.scan.id, scannerSource: "external_import" },
+    })
+    expect(candidate.payload).toMatchObject({
+      sarifResult: importedReport.runs[0]!.results[0],
+    })
+    await tx.finding.update({
+      where: { id: candidate.findingId! },
+      data: { status: "FIXED_PENDING_RETEST" },
+    })
+    const newer = await tx.scan.create({
+      data: {
+        workspaceId,
+        targetId,
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        status: "QUEUED",
+        createdById: owner.id,
+        createdAt: new Date(fixture.scan.createdAt.getTime() + 1000),
+      },
+    })
+    return { candidate, newer }
+  })
+  const strongerReport = structuredClone(importedReport)
+  strongerReport.runs[0]!.results[0]!.level = "error"
+  const redetected = await page.request.post(
+    `/api/scans/${redetectionFixture.newer.id}/artifacts/sarif?workspaceId=${workspaceId}`,
+    {
+      data: strongerReport,
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+    }
+  )
+  await expect(redetected).toBeOK()
+  const oldReplay = await page.request.post(importUrl, {
+    data: importedReport,
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+  })
+  await expect(oldReplay).toBeOK()
+  const conflictingReport = structuredClone(strongerReport)
+  conflictingReport.runs[0]!.results.unshift({
+    ...conflictingReport.runs[0]!.results[0]!,
+    ruleId: "must-not-persist-conflict",
+  })
+  const conflict = await page.request.post(importUrl, {
+    data: conflictingReport,
+    headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+  })
+  expect(conflict.status()).toBe(409)
+  await withWorkspaceRLS(workspaceId, async (tx) => {
+    expect(
+      await tx.finding.count({
+        where: { workspaceId, targetId, sarifRuleId: "must-not-persist-conflict" },
+      })
+    ).toBe(0)
+    const finding = await tx.finding.findFirstOrThrow({
+      where: { workspaceId, id: redetectionFixture.candidate.findingId! },
+    })
+    expect(finding).toMatchObject({
+      scanId: redetectionFixture.newer.id,
+      severity: "HIGH",
+      status: "OPEN",
+      verified: false,
+      verificationStatus: "DETECTED",
+    })
+    const original = await tx.findingCandidate.findFirstOrThrow({
+      where: { workspaceId, id: redetectionFixture.candidate.id },
+    })
+    expect(original.payload).toEqual(redetectionFixture.candidate.payload)
+    expect(original.evidenceHash).toBe(redetectionFixture.candidate.evidenceHash)
+    expect(
+      await tx.findingCandidate.count({
+        where: { workspaceId, findingId: finding.id, scannerSource: "external_import" },
+      })
+    ).toBe(2)
+  })
+  const rejectedImport = await page.request.post(importUrl, {
+    data: importedReport,
+    headers: { Origin: "https://untrusted.example", "x-forwarded-for": forwardedFor },
+  })
+  expect(rejectedImport.status()).toBe(403)
+
   await page.goto(`/dashboard/scans/${fixture.scan.id}`)
   await expect(page.getByRole("heading", { name: "Scan queued", level: 1 })).toBeVisible()
 

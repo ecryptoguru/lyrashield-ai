@@ -111,7 +111,7 @@ export function getScanPresentation(
         label: "Partial",
         headline: "Scan completed with gaps",
         description:
-          "The engine stopped before finishing its full scope. Partial findings are available below, but coverage may be incomplete — do not treat this as a complete result.",
+          "The scan did not cover its full scope. Partial findings are available below, but coverage may be incomplete — do not treat this as a complete result.",
         badgeVariant: "warning",
         assuranceAvailable: false,
         showFailureDetails: true,
