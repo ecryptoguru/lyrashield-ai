@@ -373,6 +373,10 @@ export async function getScanWithEvents(
         resultManifest: { select: { checksum: true } },
         coverageReceipts: {
           orderBy: { controlId: "asc" },
+          // Bounded like events: the receipt list ships on every scan-detail
+          // poll. 500 comfortably covers the full registry (~150 checks);
+          // a larger scan's receipt tail is not poll-critical.
+          take: 500,
         },
         aiSecurityScoreSnapshot: true,
         target: {

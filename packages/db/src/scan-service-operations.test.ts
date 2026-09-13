@@ -357,6 +357,11 @@ describe("getScanWithEvents", () => {
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             take: 200,
           }),
+          // Receipts ship on every poll — bounded like events.
+          coverageReceipts: expect.objectContaining({
+            orderBy: { controlId: "asc" },
+            take: 500,
+          }),
         }),
       })
     )
