@@ -1664,7 +1664,7 @@ describe("processScanJob", () => {
     expect(result).toMatchObject({
       status: "failed",
       errorCategory: "API_SPEC_REQUIRED",
-      errorMessage: "Contract Review requires an OpenAPI document.",
+      errorMessage: "Engine Contract Review requires an OpenAPI document.",
     })
     expect(runEngine).not.toHaveBeenCalled()
     expect(runScannerOrchestrator).not.toHaveBeenCalled()

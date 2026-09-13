@@ -42,22 +42,25 @@ describe("getManualScanOptions", () => {
       mode: "SAFE",
       goal: "LAUNCH_REVIEW",
       estimate: { low: 1, high: 2 },
+      usesAi: false,
       available: true,
     })
     expect(options[1]).toMatchObject({
       id: "WEB_APP_STANDARD",
-      label: "Expanded Surface Review",
+      label: "Engine Review",
       mode: "STANDARD",
       goal: "TEST_APP",
-      estimate: { low: 4, high: 6 },
+      estimate: { low: 8, high: 15 },
+      usesAi: true,
       available: true,
     })
     expect(options[2]).toMatchObject({
       id: "WEB_APP_DEEP",
-      label: "Behavioral Surface Review",
+      label: "Deep Live Review",
       mode: "DEEP",
       goal: "FULL_PENTEST",
-      estimate: { low: 8, high: 15 },
+      estimate: { low: 25, high: 40 },
+      usesAi: true,
       available: true,
     })
   })
@@ -75,6 +78,7 @@ describe("getManualScanOptions", () => {
       mode: "SAFE",
       goal: "LAUNCH_REVIEW",
       estimate: { low: 1, high: 2 },
+      usesAi: false,
       available: true,
     })
   })
@@ -88,22 +92,25 @@ describe("getManualScanOptions", () => {
       mode: "SAFE",
       goal: "LAUNCH_REVIEW",
       estimate: { low: 1, high: 2 },
+      usesAi: false,
       available: true,
     })
     expect(options[1]).toMatchObject({
       id: "API_STANDARD",
-      label: "Contract Review",
+      label: "Engine Contract Review",
       mode: "STANDARD",
       goal: "TEST_APP",
-      estimate: { low: 2, high: 4 },
+      estimate: { low: 8, high: 15 },
+      usesAi: true,
       available: true,
     })
     expect(options[2]).toMatchObject({
       id: "API_DEEP",
-      label: "Contract Behavior Review",
+      label: "Deep Contract Review",
       mode: "DEEP",
       goal: "FULL_PENTEST",
-      estimate: { low: 4, high: 8 },
+      estimate: { low: 25, high: 40 },
+      usesAi: true,
       available: true,
     })
   })

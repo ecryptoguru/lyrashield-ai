@@ -64,12 +64,12 @@ describe("URL scan capabilities", () => {
     expect(getUrlModeAvailability("API", "STANDARD", false)).toEqual({
       available: false,
       code: "API_SPEC_REQUIRED",
-      reason: "Contract Review requires an OpenAPI document.",
+      reason: "Engine Contract Review requires an OpenAPI document.",
     })
     expect(getUrlModeAvailability("API", "DEEP", false)).toEqual({
       available: false,
       code: "API_SPEC_REQUIRED",
-      reason: "Contract Behavior Review requires an OpenAPI document.",
+      reason: "Deep Contract Review requires an OpenAPI document.",
     })
   })
 
@@ -86,7 +86,7 @@ describe("URL scan capabilities", () => {
     ).toEqual({
       ok: false,
       code: "API_SPEC_REQUIRED",
-      reason: "Contract Review requires an OpenAPI document.",
+      reason: "Engine Contract Review requires an OpenAPI document.",
     })
 
     const apiStandard = resolveTargetScanMode({
