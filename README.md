@@ -82,7 +82,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
 - `packages/billing` — Polar + Razorpay dual-gateway billing, usage metering, entitlement gating, trial lifecycle, and grace period handling.
-- `packages/pricing` — cloud plan definitions (Trial, Starter $29, Pro $99, Launch Assurance $499, Enterprise from $1,500), minute packs, and local SKUs.
+- `packages/pricing` — cloud plan definitions (Trial, Starter $29, Pro $99, Agency $499, Enterprise from $1,500), minute packs, and local SKUs.
 - `packages/licenses` — ed25519 signed license sign/verify for the Local/Desktop app.
 - `packages/affiliate` — commission engine, attribution, fraud controls, and payout ledger (RazorpayX/Payoneer).
 - `packages/evidence-storage` — envelope encryption (AES-256-GCM) for scan artifacts.
