@@ -20,6 +20,7 @@ Use this index to find the owning document and avoid duplicating current truth.
 - [`api-stability.md`](./api-stability.md) — public `/api/v1` compatibility and deprecation policy.
 - [`claims-policy.md`](./claims-policy.md) — public claims boundary, owner, review cadence, and open evidence obligations.
 - [`license-key-compromise-runbook.md`](./license-key-compromise-runbook.md) — signing-key incident response.
+- [`trial-claim-backfill-runbook.md`](./trial-claim-backfill-runbook.md) — founder-run backfill that clears wrongly stamped trial claims.
 - [`payout-operations.md`](./payout-operations.md) — approved affiliate payout model and unresolved provider, bank, and tax gates.
 - [`security-risk-register.md`](./security-risk-register.md) — active accepted security risks, owners, review dates, and required follow-up.
 - [`threat-model-template.md`](./threat-model-template.md) — customer-declared AI system threat-model worksheet.
