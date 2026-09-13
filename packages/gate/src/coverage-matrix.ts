@@ -23,13 +23,14 @@ export const SCANNER_FAMILIES = [
   "agent_config",
   "ml_supply_chain",
   "ai_app_security",
+  "sast",
   "url",
 ] as const
 
 export type ScannerFamily = (typeof SCANNER_FAMILIES)[number]
 
 /**
- * Required scanner classes per target type for lyrashield-gate/1.0.0.
+ * Required scanner classes per target type for lyrashield-gate/2.1.0.
  * A target counts as evaluated only when each required family reports
  * COMPLETED or NOT_APPLICABLE on the latest completed scan.
  *
@@ -39,7 +40,7 @@ export type ScannerFamily = (typeof SCANNER_FAMILIES)[number]
  *   INSUFFICIENT_EVIDENCE ("target type not yet covered by the gate standard").
  */
 const REQUIRED_BY_TARGET: Record<GateTargetType, readonly ScannerFamily[]> = {
-  REPO: ["engine", "sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security"],
+  REPO: ["engine", "sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security", "sast"],
   WEB_APP: ["url", "ai_app_security"],
   API: ["url", "ai_app_security"],
   CLOUD_ACCOUNT: [],

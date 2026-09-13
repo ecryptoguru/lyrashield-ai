@@ -67,7 +67,7 @@ type ResultManifestInput = {
 type FindingInput = EngineVulnerability | NormalizedFinding
 
 const MANIFEST_VERSION = 7
-const SCANNER_CONTRACT_VERSION = "2026-08-29"
+const SCANNER_CONTRACT_VERSION = "2026-09-13"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
 
@@ -83,12 +83,13 @@ type FamilyReceipt = {
 const CONTROL_SCANNERS: Readonly<Record<number, readonly string[]>> = {
   1: ["engine"],
   2: ["engine"],
+  10: ["engine", "sast"],
   3: ["secrets", "url"],
   14: ["url"],
   20: ["engine"],
   27: ["url"],
   28: ["url"],
-  29: ["url"],
+  29: ["url", "sast"],
   31: ["url"],
   32: ["url"],
   33: ["engine", "ai_app_security"],
@@ -211,28 +212,30 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
         ...engineStatus.metadata,
       },
     },
-    ...["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security"].map((scanner) => {
-      const status = scannerStatus(
-        scanner,
-        repositoryTarget && input.sourceCheckoutAvailable,
-        input.coverageIssues
-      )
-      return {
-        scanner,
-        controlId: scanner,
-        ...status,
-        metadata: {
-          sourceCheckoutAvailable: input.sourceCheckoutAvailable,
-          ...(scanner === "ai_app_security"
-            ? {
-                discovery: input.aiAppSecurityDiscovery ?? null,
-                webMcpCoverage: input.webMcpCoverage ?? null,
-              }
-            : {}),
-          ...status.metadata,
-        },
+    ...["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security", "sast"].map(
+      (scanner) => {
+        const status = scannerStatus(
+          scanner,
+          repositoryTarget && input.sourceCheckoutAvailable,
+          input.coverageIssues
+        )
+        return {
+          scanner,
+          controlId: scanner,
+          ...status,
+          metadata: {
+            sourceCheckoutAvailable: input.sourceCheckoutAvailable,
+            ...(scanner === "ai_app_security"
+              ? {
+                  discovery: input.aiAppSecurityDiscovery ?? null,
+                  webMcpCoverage: input.webMcpCoverage ?? null,
+                }
+              : {}),
+            ...status.metadata,
+          },
+        }
       }
-    }),
+    ),
     {
       scanner: "url",
       controlId: "url",
@@ -531,6 +534,7 @@ const DETERMINISTIC_RETEST_SCANNERS = new Set([
   "agent_config",
   "ai_app_security",
   "ml_supply_chain",
+  "sast",
 ])
 const SOURCE_REVISION_PATTERN = /^[0-9a-f]{40}$/i
 const URL_CHECKSUM_PATTERN = /^[0-9a-f]{64}$/i

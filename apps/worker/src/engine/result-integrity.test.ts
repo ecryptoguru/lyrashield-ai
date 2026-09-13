@@ -144,7 +144,7 @@ describe("result integrity", () => {
     expect(receipts.find((receipt) => receipt.scanner === "secrets")).toMatchObject({
       status: "COMPLETED",
     })
-    expect(receipts).toHaveLength(57)
+    expect(receipts).toHaveLength(58)
     expect(receipts.find((receipt) => receipt.controlId === "vibe-34")).toMatchObject({
       status: "BLOCKED",
       metadata: expect.objectContaining({ outcome: "EVIDENCE_REQUIRED" }),
@@ -201,9 +201,11 @@ describe("result integrity", () => {
       matchedControlRanks: [29, 31],
     })
 
+    // Control 29 gained deterministic source coverage from the sast family:
+    // on a repo with a checkout it is applicable and the matched rank detects.
     expect(receipts.find((receipt) => receipt.controlId === "vibe-29")).toMatchObject({
-      status: "NOT_APPLICABLE",
-      metadata: expect.objectContaining({ outcome: "NOT_APPLICABLE" }),
+      status: "COMPLETED",
+      metadata: expect.objectContaining({ outcome: "DETECTED" }),
     })
     expect(receipts.find((receipt) => receipt.controlId === "vibe-31")).toMatchObject({
       status: "NOT_APPLICABLE",
@@ -440,7 +442,7 @@ describe("result integrity", () => {
         data: expect.objectContaining({
           manifest: expect.objectContaining({
             coverage: expect.any(Array),
-            scannerContractVersion: "2026-08-29",
+            scannerContractVersion: "2026-09-13",
             engineExecution: expect.objectContaining({
               model: "azure_ai/gpt-5.6-luna",
               imageDigest: "sha256:abc",

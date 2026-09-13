@@ -12,6 +12,7 @@ import {
 } from "./normalizer"
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
+import { scanSast } from "./scanners/sast-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanOpenApi } from "./scanners/openapi-scanner"
 import {
@@ -68,6 +69,7 @@ export interface ScannerOrchestratorResult {
   urlFindings: NormalizedFinding[]
   agentConfigFindings: NormalizedFinding[]
   mlSupplyChainFindings: NormalizedFinding[]
+  sastFindings: NormalizedFinding[]
   aiAppSecurityFindings: NormalizedFinding[]
   webMcpFindings: NormalizedFinding[]
   coverageIssues: ScannerCoverageIssue[]
@@ -238,6 +240,31 @@ async function runUrlScan(
   }
 }
 
+async function runSastScan(
+  scanId: string,
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[],
+  signal: AbortSignal
+): Promise<EngineVulnerability[]> {
+  try {
+    logger.info("Starting SAST scan phase", { scanId })
+    const findings = await scanSast({
+      repoPath: workspaceDir,
+      workspaceDir,
+      coverageIssues,
+      signal,
+    })
+    logger.info("SAST scan phase complete", { scanId, findingCount: findings.length })
+    return findings
+  } catch (err) {
+    logger.warn("SAST scan phase failed", {
+      scanId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    throw err
+  }
+}
+
 async function runAgentConfigScan(
   scanId: string,
   workspaceDir: string,
@@ -371,6 +398,7 @@ export async function runScannerOrchestrator(
       "agent_config",
       "ml_supply_chain",
       "ai_app_security",
+      "sast",
     ] as const) {
       coverageIssues.push({ scanner, status: "unsupported", reason })
     }
@@ -381,7 +409,7 @@ export async function runScannerOrchestrator(
       "SCA/secrets/AI app security skipped — validated source checkout unavailable for repository target",
       {
         targetType: target.type,
-        scanners: ["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security"],
+        scanners: ["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security", "sast"],
       }
     )
   } else if (!hasSourceCheckout) {
@@ -392,7 +420,7 @@ export async function runScannerOrchestrator(
       "SCA/secrets/AI app security skipped — no source checkout for this target type",
       {
         targetType: target.type,
-        scanners: ["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security"],
+        scanners: ["sca", "secrets", "agent_config", "ml_supply_chain", "ai_app_security", "sast"],
       }
     )
   }
@@ -544,6 +572,9 @@ export async function runScannerOrchestrator(
         hasSourceCheckout
           ? runMlSupplyChainScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
+        hasSourceCheckout
+          ? runSastScan(scanId, absWorkspace, coverageIssues, signal)
+          : Promise.resolve([] as EngineVulnerability[]),
       ]
     },
     scannerPhaseTimeoutMs,
@@ -558,6 +589,7 @@ export async function runScannerOrchestrator(
     "agent_config",
     "ai_app_security",
     "ml_supply_chain",
+    "sast",
   ] as const
   const rawFindings: EngineVulnerability[][] = []
   let urlExecution: UrlExecutionSummary | undefined
@@ -611,6 +643,7 @@ export async function runScannerOrchestrator(
   const agentConfigRaw = rawFindings[3] ?? []
   const aiAppSecurityRaw = rawFindings[4] ?? []
   const mlSupplyChainRaw = rawFindings[5] ?? []
+  const sastRaw = rawFindings[6] ?? []
 
   for (const issue of coverageIssues) {
     await addScanEvent(scanId, "scanner", "warning", "Deterministic scanner coverage incomplete", {
@@ -654,6 +687,11 @@ export async function runScannerOrchestrator(
     targetId,
     generateDedupeKey
   )
+  const sastNormalized = normalizeFindings(
+    sastRaw.map((finding) => ({ ...finding, scannerSource: "sast" as const })),
+    targetId,
+    generateDedupeKey
+  )
 
   // Filter false positives
   const engineFiltered = filterFalsePositives(engineNormalized)
@@ -663,6 +701,7 @@ export async function runScannerOrchestrator(
   const agentConfigFiltered = filterFalsePositives(agentConfigNormalized)
   const aiAppSecurityFiltered = filterFalsePositives(aiAppSecurityNormalized)
   const mlSupplyChainFiltered = filterFalsePositives(mlSupplyChainNormalized)
+  const sastFiltered = filterFalsePositives(sastNormalized)
 
   const filteredFalsePositives =
     engineNormalized.length -
@@ -672,7 +711,8 @@ export async function runScannerOrchestrator(
     (urlNormalized.length - urlFiltered.length) +
     (agentConfigNormalized.length - agentConfigFiltered.length) +
     (aiAppSecurityNormalized.length - aiAppSecurityFiltered.length) +
-    (mlSupplyChainNormalized.length - mlSupplyChainFiltered.length)
+    (mlSupplyChainNormalized.length - mlSupplyChainFiltered.length) +
+    (sastNormalized.length - sastFiltered.length)
 
   const webMcpFindings = aiAppSecurityFiltered.filter(
     (f) =>
@@ -693,6 +733,7 @@ export async function runScannerOrchestrator(
     ...agentConfigFiltered,
     ...aiAppSecurityFiltered,
     ...mlSupplyChainFiltered,
+    ...sastFiltered,
   ]) {
     const existing = merged.get(finding.dedupeKey)
     if (!existing) {
@@ -732,6 +773,7 @@ export async function runScannerOrchestrator(
     aiAppSecurity: aiAppSecurityFiltered.length,
     webMcp: webMcpFindings.length,
     mlSupplyChain: mlSupplyChainFiltered.length,
+    sast: sastFiltered.length,
     falsePositivesFiltered: filteredFalsePositives,
     stats,
   })
@@ -745,6 +787,7 @@ export async function runScannerOrchestrator(
     agentConfigFindings: agentConfigFiltered,
     aiAppSecurityFindings: aiAppSecurityFiltered,
     mlSupplyChainFindings: mlSupplyChainFiltered,
+    sastFindings: sastFiltered,
     webMcpFindings,
     coverageIssues,
     stats,

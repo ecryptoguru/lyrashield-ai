@@ -1791,13 +1791,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           scanId,
           "scanners_complete",
           "info",
-          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
+          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, sast=${orchestratorResult.sastFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
           {
             engine: orchestratorResult.engineFindings.length,
             sca: orchestratorResult.scaFindings.length,
             secrets: orchestratorResult.secretsFindings.length,
             url: orchestratorResult.urlFindings.length,
             agentConfig: orchestratorResult.agentConfigFindings.length,
+            sast: orchestratorResult.sastFindings.length,
             falsePositivesFiltered: orchestratorResult.filteredFalsePositives,
             stats: orchestratorResult.stats,
           }

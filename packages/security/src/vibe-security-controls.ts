@@ -1,6 +1,6 @@
 import { checkInstructionSafety } from "./instruction-safety"
 
-export const VIBE_SECURITY_COVERAGE_VERSION = "vibe-security-50/1.1.0"
+export const VIBE_SECURITY_COVERAGE_VERSION = "vibe-security-50/1.2.0"
 
 export type VibeCoverageStrategy = "deterministic" | "hybrid" | "engine" | "evidence"
 
@@ -74,7 +74,7 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   {
     rank: 10,
     title: "Unsafe password storage",
-    strategy: "engine",
+    strategy: "hybrid",
     keywords: ["password storage", "plaintext password", "weak password hash"],
   },
   { rank: 11, title: "SQL injection", strategy: "engine", keywords: ["sql injection", "sqli"] },

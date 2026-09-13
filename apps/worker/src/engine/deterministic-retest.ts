@@ -9,7 +9,14 @@ import { env } from "@lyrashield/config"
 import { RETEST_CHECKOUT_ROOT, engineWorkspacePath } from "./workspace-path"
 
 const execute = promisify(execFile)
-const SCANNERS = new Set(["sca", "secrets", "agent_config", "ai_app_security", "ml_supply_chain"])
+const SCANNERS = new Set([
+  "sca",
+  "secrets",
+  "agent_config",
+  "ai_app_security",
+  "ml_supply_chain",
+  "sast",
+])
 export function assertRetestFilesystemCapacity(filesystem: {
   type: number
   blocks: number

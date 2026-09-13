@@ -6,7 +6,7 @@
  * @lyrashield/score: the math is pure and versioned; the database layer owns
  * persistence and never the verdict logic.
  *
- * Standard: lyrashield-gate/2.0.0.
+ * Standard: lyrashield-gate/2.1.0.
  *
  * Verdict states:
  * - READY — every check passes against current evidence.
@@ -23,7 +23,7 @@
  * actually run.
  */
 
-export const GATE_STANDARD_VERSION = "lyrashield-gate/2.0.0"
+export const GATE_STANDARD_VERSION = "lyrashield-gate/2.1.0"
 
 export {
   GATE_ASSESSMENT_VERSION,

@@ -44,10 +44,24 @@ export interface EngineVulnerability {
   agent_name?: string
   /** Internal detector provenance, attached by the orchestrator after parsing. */
   scannerSource?:
-    "engine" | "sca" | "secrets" | "url" | "agent_config" | "ai_app_security" | "ml_supply_chain"
+    | "engine"
+    | "sca"
+    | "secrets"
+    | "url"
+    | "agent_config"
+    | "ai_app_security"
+    | "ml_supply_chain"
+    | "sast"
   /** Every detector that independently produced the normalized finding. */
   corroboratingSources?: Array<
-    "engine" | "sca" | "secrets" | "url" | "agent_config" | "ai_app_security" | "ml_supply_chain"
+    | "engine"
+    | "sca"
+    | "secrets"
+    | "url"
+    | "agent_config"
+    | "ai_app_security"
+    | "ml_supply_chain"
+    | "sast"
   >
 }
 

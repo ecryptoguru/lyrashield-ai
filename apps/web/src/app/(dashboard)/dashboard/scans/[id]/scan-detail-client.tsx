@@ -276,6 +276,9 @@ const SCANNER_LABELS: Record<string, string> = {
   sca: "Dependency scan",
   secrets: "Secret scan",
   url: "URL scan",
+  ai_app_security: "AI app security",
+  ml_supply_chain: "ML supply chain",
+  sast: "Static analysis",
 }
 
 const ELAPSED_TIME_INTERVAL_MS = 1_000

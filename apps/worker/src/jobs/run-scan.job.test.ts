@@ -759,7 +759,7 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({
         maxBudgetUsd: 1.2,
-        instruction: expect.stringContaining("vibe-security-50/1.1.0"),
+        instruction: expect.stringContaining("vibe-security-50/1.2.0"),
       }),
       "scan-1",
       expect.any(Number),
