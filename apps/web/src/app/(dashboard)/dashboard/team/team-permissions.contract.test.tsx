@@ -79,6 +79,54 @@ describe("team permission projection (W1-08)", () => {
     }
   })
 
+  it("renders MemberRole labels, never raw role tokens", () => {
+    const html = renderToStaticMarkup(
+      <TeamClient
+        {...baseProps}
+        initialData={{
+          members: [
+            {
+              id: "m1",
+              userId: "u1",
+              name: "Ada",
+              email: "ada@example.com",
+              image: null,
+              role: "SECURITY_ADMIN" as MemberRole,
+              status: "active",
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              id: "m2",
+              userId: "u2",
+              name: "Grace",
+              email: "grace@example.com",
+              image: null,
+              role: "EXTERNAL_PENTESTER" as MemberRole,
+              status: "active",
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+          invitations: [
+            {
+              id: "inv-1",
+              email: "inv@example.com",
+              role: "BILLING_ADMIN",
+              expiresAt: "2026-02-01T00:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    )
+
+    expect(html).toContain("Security admin")
+    expect(html).toContain("External pentester")
+    expect(html).toContain("Billing admin")
+    // Raw enum tokens may persist as option values, never as rendered text.
+    for (const role of ALL_ROLES) {
+      expect(html).not.toContain(`>${role}<`)
+    }
+  })
+
   it.each(["VIEWER", "AUDITOR", "BILLING_ADMIN", "DEVELOPER", "MEMBER"] as MemberRole[])(
     "keeps %s out of membership administration in the projection",
     (role) => {
