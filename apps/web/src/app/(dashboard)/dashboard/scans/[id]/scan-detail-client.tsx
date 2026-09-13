@@ -1147,7 +1147,7 @@ export function ScanDetailClient({
                     </div>
                   ))}
                   {scan.integrity.manifestChecksum && (
-                    <p className="text-muted-foreground col-span-full font-mono text-xs">
+                    <p className="text-muted-foreground col-span-full break-all font-mono text-xs">
                       Manifest SHA-256: {scan.integrity.manifestChecksum}
                     </p>
                   )}
