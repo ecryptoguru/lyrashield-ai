@@ -239,6 +239,7 @@ describe("marketing SEO metadata", () => {
     expect(base).toContain("capture_pageview: false")
     expect(base).toContain("capture_pageleave: true")
     expect(base).toContain("disable_scroll_properties: false")
+    expect(base).toContain("if (posthogKey && !shouldOptOut())")
     expect(base).toContain('posthog.capture("$pageview"')
     expect(base).toContain("privacyBoundedPageUrl")
     expect(base).toContain("before_send:")

@@ -189,7 +189,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
         }
       }
 
-      if (posthogKey) {
+      if (posthogKey && !shouldOptOut()) {
         import("posthog-js")
           .then(({ default: posthog }) => {
             posthog.init(posthogKey, {

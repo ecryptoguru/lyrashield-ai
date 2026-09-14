@@ -7,8 +7,10 @@ admin metrics derived from Postgres (`platform-admin-overview` /
 
 Client events pass through a strict allowlist + property denylist
 (`apps/web/src/lib/analytics.ts`); marketing events are hand-rolled captures
-in `Base.astro` / `scan.astro`. DNT/GPC opt-out and query-string stripping are
-already in place on both.
+in `Base.astro` / `scan.astro`. DNT/GPC prevents SDK initialization on both
+surfaces. The app reduces URL metadata to origins and drops pathname properties
+before capture so scan and target identifiers in routes do not reach PostHog.
+Marketing strips query strings and fragments from public page URLs.
 
 ## Handoff name → implemented name
 

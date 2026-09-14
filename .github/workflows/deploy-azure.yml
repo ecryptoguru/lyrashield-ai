@@ -155,6 +155,15 @@ jobs:
             echo "egress_proxy_image=${{ env.EGRESS_PROXY_IMAGE }}:${{ env.DEPLOY_SHA }}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Verify production analytics project key
+        env:
+          POSTHOG_PUBLIC_PROJECT_KEY: ${{ vars.POSTHOG_PUBLIC_PROJECT_KEY }}
+        run: |
+          if [[ ! "$POSTHOG_PUBLIC_PROJECT_KEY" =~ ^phc_[A-Za-z0-9]+$ ]]; then
+            echo "::error::POSTHOG_PUBLIC_PROJECT_KEY is missing or malformed."
+            exit 1
+          fi
+
       - name: Build and push web image
         id: build-web
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -169,6 +178,7 @@ jobs:
             BUILD_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}
             BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
             BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}
+            BUILD_NEXT_PUBLIC_POSTHOG_KEY=${{ vars.POSTHOG_PUBLIC_PROJECT_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

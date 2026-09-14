@@ -40,11 +40,11 @@ function generateNonce(): string {
 function buildCspHeader(nonce: string, upgradeInsecureRequests: boolean): string {
   const directives = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com${isDev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com https://us-assets.i.posthog.com${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' blob: data: https://avatars.githubusercontent.com https://lh3.googleusercontent.com`,
     "font-src 'self'",
-    `connect-src 'self' https://api.razorpay.com${isDev ? " ws:" : ""}`,
+    `connect-src 'self' https://api.razorpay.com https://us.i.posthog.com https://us-assets.i.posthog.com${isDev ? " ws:" : ""}`,
     "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
     "object-src 'none'",
     "base-uri 'self'",

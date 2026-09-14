@@ -590,9 +590,14 @@ jobs:
 
       - name: Build production marketing Worker
         env:
-          PUBLIC_POSTHOG_KEY: ${{ secrets.PUBLIC_POSTHOG_KEY }}
+          PUBLIC_POSTHOG_KEY: ${{ vars.POSTHOG_PUBLIC_PROJECT_KEY }}
           LYRASHIELD_MARKETING_REVISION: ${{ github.sha }}
-        run: pnpm --filter @lyrashield/marketing build
+        run: |
+          if [[ ! "$PUBLIC_POSTHOG_KEY" =~ ^phc_[A-Za-z0-9]+$ ]]; then
+            echo "::error::POSTHOG_PUBLIC_PROJECT_KEY is missing or malformed."
+            exit 1
+          fi
+          pnpm --filter @lyrashield/marketing build
 
       - name: Verify generated marketing revision
         env:
