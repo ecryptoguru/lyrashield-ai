@@ -8,6 +8,7 @@ import {
   readSignupAttribution,
   signupErrorUrl,
   track,
+  flushQueuedAnalytics,
 } from "./analytics"
 
 describe("sanitizeProperties", () => {
@@ -67,6 +68,44 @@ describe("sanitizeProperties", () => {
 describe("track", () => {
   it("does not throw when posthog is not loaded", () => {
     expect(() => track("landing_view", { utm_source: "x" })).not.toThrow()
+  })
+
+  it("flushes an allowlisted first event after the SDK loads", () => {
+    const previousKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test"
+    vi.stubGlobal("window", {})
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    try {
+      track("signup_page_viewed", { source: "landing_hero", target_url: "https://private.example" })
+      const capture = vi.fn()
+      flushQueuedAnalytics(capture)
+      expect(capture).toHaveBeenCalledWith("signup_page_viewed", { source: "landing_hero" })
+    } finally {
+      flushQueuedAnalytics()
+      vi.unstubAllGlobals()
+      if (previousKey === undefined) delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+      else process.env.NEXT_PUBLIC_POSTHOG_KEY = previousKey
+    }
+  })
+
+  it("discards pending events if privacy opt-out appears before SDK load", () => {
+    const previousKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test"
+    vi.stubGlobal("window", {})
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    try {
+      track("results_viewed", { status: "COMPLETED" })
+      vi.stubGlobal("navigator", { doNotTrack: "1", globalPrivacyControl: false })
+      track("results_viewed", { status: "COMPLETED" })
+      const capture = vi.fn()
+      flushQueuedAnalytics(capture)
+      expect(capture).not.toHaveBeenCalled()
+    } finally {
+      flushQueuedAnalytics()
+      vi.unstubAllGlobals()
+      if (previousKey === undefined) delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+      else process.env.NEXT_PUBLIC_POSTHOG_KEY = previousKey
+    }
   })
 })
 

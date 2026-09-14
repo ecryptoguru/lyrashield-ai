@@ -35,6 +35,8 @@ export const EVENT_ALLOWLIST = {
 } as const
 
 export type EventName = keyof typeof EVENT_ALLOWLIST
+const pendingEvents: Array<[EventName, Record<string, unknown>]> = []
+const MAX_PENDING_EVENTS = 20
 
 const LANDING_ROUTES = new Set([
   "home",
@@ -256,16 +258,38 @@ export function sanitizeProperties<T extends EventName>(
 }
 
 export function track<T extends EventName>(event: T, properties?: Record<string, unknown>): void {
-  const sanitized = sanitizeProperties(event, properties)
-
   if (
-    typeof window !== "undefined" &&
-    typeof (window as unknown as { posthog?: { capture: (...args: unknown[]) => void } }).posthog
-      ?.capture === "function"
-  ) {
-    ;(window as unknown as { posthog: { capture: (...args: unknown[]) => void } }).posthog.capture(
-      event,
-      sanitized ?? {}
+    typeof window === "undefined" ||
+    typeof navigator === "undefined" ||
+    !process.env.NEXT_PUBLIC_POSTHOG_KEY
+  )
+    return
+  if (
+    analyticsOptedOut(
+      navigator.doNotTrack,
+      (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl
     )
+  ) {
+    flushQueuedAnalytics()
+    return
   }
+
+  const sanitized = sanitizeProperties(event, properties) ?? {}
+  const posthog = (
+    window as unknown as {
+      posthog?: { capture?: (name: EventName, props: Record<string, unknown>) => void }
+    }
+  ).posthog
+  if (posthog?.capture) {
+    posthog.capture(event, sanitized)
+  } else if (pendingEvents.length < MAX_PENDING_EVENTS) {
+    pendingEvents.push([event, sanitized])
+  }
+}
+
+export function flushQueuedAnalytics(
+  capture?: (event: EventName, properties: Record<string, unknown>) => void
+): void {
+  const events = pendingEvents.splice(0)
+  if (capture) for (const [event, properties] of events) capture(event, properties)
 }
