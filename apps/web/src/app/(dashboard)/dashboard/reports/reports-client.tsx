@@ -22,6 +22,7 @@ import { writeClipboard } from "@/components/scorecard-share-composer"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import { LocalTime } from "@/components/local-time"
 import { formatDateTime } from "@/lib/date-format"
+import { track } from "@/lib/analytics"
 import { gateReasonSentence } from "@/lib/launch-readiness"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -328,6 +329,7 @@ export function ReportsClient({
         type: reportType,
         ...(selectedScanId ? { scanId: selectedScanId } : {}),
       })
+      track("report_created", { report_kind: reportType })
       setShowCreateForm(false)
       setReportTitle("")
       setSelectedScanId("")

@@ -39,6 +39,7 @@ model User {
   affiliate          Affiliate?
   platformAdminElevations PlatformAdminElevation[]
   agentConnections   AgentConnection[]
+  accountAcquisition AccountAcquisition?
 
   @@map("users")
 }
@@ -1838,11 +1839,34 @@ model OnboardingState {
   workspaceId  String?
   targetId     String?
   selectedGoal String?
+  buildTool    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([userId])
   @@map("onboarding_states")
+}
+
+// First-touch acquisition context for an account (User.id). Written once —
+// claimed from the bounded sign-up cookie at first onboarding visit and never
+// overwritten, so the primary acquisition source stays stable for paid-account
+// attribution. Account-owned and account-RLS'd like the billing ledger; never
+// workspace-scoped and never exposed to coworkers.
+model AccountAcquisition {
+  id             String   @id @default(cuid())
+  accountId      String   @unique
+  source         String?
+  cta            String?
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+  utmContent     String?
+  landingRoute   String?
+  targetTypeHint String?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("account_acquisitions")
 }
 
 model NotificationPreference {

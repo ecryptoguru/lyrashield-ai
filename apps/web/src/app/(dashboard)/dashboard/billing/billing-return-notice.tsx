@@ -1,19 +1,39 @@
 "use client"
 
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { buttonVariants } from "@lyrashield/ui"
+import { track } from "@/lib/analytics"
 
 export function BillingReturnNotice({
   checkout,
   topup,
   provider,
+  plan,
+  trialActive,
 }: {
   checkout?: string
   topup?: string
   provider: "polar" | "razorpay"
+  plan: string
+  trialActive: boolean
 }) {
   const router = useRouter()
+
+  // This component mounts on every billing page render (it returns null when
+  // there is no return state), so it owns the page-level funnel events:
+  // billing_opened always; checkout_completed on a provider return. The
+  // entitlement itself lands only via the signed webhook — the event records
+  // the user's return, never a billing fact.
+  useEffect(() => {
+    track("billing_opened", { plan, trial_active: trialActive })
+    if (checkout === "success" || checkout === "processing") {
+      track("checkout_completed", { provider, outcome: checkout })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   if (![checkout, topup].some((value) => value === "success" || value === "processing")) return null
 
   const rail = provider === "razorpay" ? "Razorpay in INR" : "Polar in USD"

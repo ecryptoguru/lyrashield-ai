@@ -114,6 +114,8 @@ export default async function BillingPage({
           checkout={returns.checkout}
           topup={returns.topup}
           provider={checkoutProvider}
+          plan={plan}
+          trialActive={isTrial}
         />
         {canManageBilling && !purchasesAvailable && (
           <div

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const systemPrisma = {
-  user: { count: vi.fn() },
+  user: { count: vi.fn(), findMany: vi.fn() },
   workspace: { count: vi.fn() },
   target: { count: vi.fn() },
   scan: { groupBy: vi.fn() },
-  billingAccount: { groupBy: vi.fn() },
+  billingAccount: { groupBy: vi.fn(), findMany: vi.fn() },
   webhookEventTrack: { count: vi.fn() },
   affiliate: { count: vi.fn() },
   payout: { count: vi.fn() },
@@ -40,6 +40,29 @@ describe("getPlatformAdminOverview", () => {
       { status: "free", _count: { _all: 2 } },
     ])
     systemPrisma.webhookEventTrack.count.mockResolvedValue(1)
+    systemPrisma.billingAccount.findMany.mockResolvedValue([
+      {
+        accountId: "paid-1",
+        provider: "polar",
+        status: "active",
+        currentPlan: "PRO",
+        interval: "monthly",
+        currentPeriodEnd: new Date(Date.now() + 86400000),
+        canceledAt: null,
+        createdAt: new Date(Date.now() - 5 * 86400000),
+      },
+      {
+        accountId: "trial-1",
+        provider: "trial",
+        status: "trialing",
+        currentPlan: "FREE",
+        interval: null,
+        currentPeriodEnd: null,
+        canceledAt: null,
+        createdAt: new Date(),
+      },
+    ])
+    systemPrisma.user.findMany.mockResolvedValue([])
     systemPrisma.affiliate.count.mockResolvedValue(2)
     systemPrisma.payout.count.mockResolvedValue(1)
     systemPrisma.$queryRaw.mockResolvedValue([
@@ -97,6 +120,15 @@ describe("getPlatformAdminOverview", () => {
           sevenDays: { numerator: 8, denominator: 20, percent: 40 },
           twentyEightDays: { numerator: 14, denominator: 20, percent: 70 },
         },
+      },
+      growth: {
+        activePaidAccounts: 1,
+        paidAccountsInTerm: 1,
+        newPaidAccounts30d: 1,
+        canceled30d: 0,
+        mrrUsd: 99,
+        arrUsd: 1188,
+        planMix: { PRO: 1 },
       },
       generatedAt: expect.any(String),
     })

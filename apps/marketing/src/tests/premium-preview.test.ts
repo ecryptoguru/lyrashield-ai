@@ -42,17 +42,57 @@ describe("premium assurance-world homepage", () => {
   it("uses approved gateway copy and conversion anchors", () => {
     expect(hero).toContain("Release assurance for AI-built apps")
     expect(hero).toContain("Ship AI-built apps with evidence, not hope.")
-    expect(hero.indexOf("landing_hero&cta=create_account")).toBeLessThan(
+    expect(hero.indexOf("landing_hero&cta=review_app")).toBeLessThan(
       hero.indexOf('href="#free-scan"')
     )
     expect(hero).toContain("app.lyrashieldai.com/sign-up")
     expect(hero).toContain("Missing evidence stays visible")
   })
 
+  it("keeps the hero task-oriented and the artifact example honest", () => {
+    // EXP-001: task CTA outranks account creation; lite check is a real
+    // secondary action, not a buried text link.
+    expect(hero).toContain("Review my app")
+    expect(hero).toContain('data-cta-id="premium-hero-review-app"')
+    expect(hero).toContain("premium-hero__secondary")
+    expect(hero).toContain("Try free Lite Check")
+    expect(hero).not.toContain("Create account")
+    // The artifact is a synthetic example — it must never claim a verified or
+    // independently-reviewed state.
+    expect(hero).toContain("Example finding · Detected")
+    expect(hero).toContain("bounded to the checks that ran")
+    expect(hero).not.toMatch(/Verified finding|independent verification/i)
+  })
+
+  it("shows the release workflow as a labeled example strip", () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const flow = readFileSync(
+      new URL("../components/landing/ReleaseFlowSample.astro", import.meta.url),
+      "utf8"
+    )
+    expect(homepage).toContain("<ReleaseFlowSample />")
+    expect(homepage.indexOf("<ReleaseFlowSample")).toBeLessThan(homepage.indexOf("<ProblemStats"))
+    for (const label of [
+      "Target",
+      "Review",
+      "Finding",
+      "Evidence",
+      "Fix proposal",
+      "Retest",
+      "Release record",
+    ]) {
+      expect(flow).toContain(label)
+    }
+    expect(flow).toContain("Example output")
+    expect(flow).toContain("Detected")
+    expect(flow).toContain("Validated")
+    expect(flow).not.toMatch(/independent/i)
+  })
+
   it("keeps agent setup subordinate to existing homepage conversions", () => {
     const agentLink = hero.indexOf("premium-hero-agent-setup")
     expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-lite-check"))
-    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-create-account"))
+    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-review-app"))
   })
 
   it("builds one immutable desktop and portrait track with seven timed chapters", () => {

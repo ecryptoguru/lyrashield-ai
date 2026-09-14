@@ -129,7 +129,12 @@ export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
 // consumption attribution only. An explicit `accountId` in `where` therefore
 // opts the query out of workspaceId auto-injection — the PostgreSQL account
 // policy (app.current_account_id) is the real boundary.
-export const ACCOUNT_OWNED_MODELS = new Set<string>(["BillingAccount", "UsageRecord", "MinutePack"])
+export const ACCOUNT_OWNED_MODELS = new Set<string>([
+  "BillingAccount",
+  "UsageRecord",
+  "MinutePack",
+  "AccountAcquisition",
+])
 
 export const READ_OPS = new Set<string>([
   "findMany",

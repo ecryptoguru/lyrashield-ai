@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { openRazorpaySubscriptionCheckout } from "@/lib/razorpay-checkout"
 import { apiPost, ApiError } from "@/lib/api-client"
 import { parsePlanIntent } from "@/lib/plan-intent"
+import { track } from "@/lib/analytics"
 
 interface BillingActionsProps {
   plan: string
@@ -59,7 +60,9 @@ export function BillingActions({
 
   function handleCheckout(targetPlan: string, interval: string) {
     if (!canStartSubscription) return
+    track("upgrade_clicked", { plan: targetPlan, interval })
     return act(`checkout-${targetPlan}-${interval}`, async () => {
+      track("checkout_started", { plan: targetPlan, interval })
       const data = await apiPost<{ url?: string; subscriptionId?: string; keyId?: string }>(
         "/billing/checkout",
         { workspaceId, plan: targetPlan, interval }
@@ -101,6 +104,7 @@ export function BillingActions({
             onClick={() =>
               act("trial", async () => {
                 await apiPost("/api/billing/trial/start", { workspaceId })
+                track("trial_started", { surface: "billing" })
                 router.refresh()
               })
             }

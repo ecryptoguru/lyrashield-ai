@@ -9,8 +9,11 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { InvitationAcceptBridge } from "@/components/invitation-accept-bridge"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
 import { cookies } from "next/headers"
+import { headers } from "next/headers"
 import { parsePlanIntent, planIntentPath, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
 import { verifyOAuthOnboardingReturn } from "@/lib/oauth-onboarding-return"
+import { ACQUISITION_COOKIE, analyticsOptedOut, parseAcquisitionCookie } from "@/lib/analytics"
+import { claimAccountAcquisition } from "@/lib/account-acquisition"
 
 export default async function OnboardingPage({
   searchParams,
@@ -37,6 +40,25 @@ export default async function OnboardingPage({
     oauthReturn && oauthReturn.valid && oauthReturn.userId === session.userId
       ? oauthReturn.oauthQuery
       : null
+
+  // First-touch acquisition claim: the sign-up cookie is read once, written
+  // to durable account state (never overwritten), and cleared client-side by
+  // the wizard. The claim is fire-and-forget-safe — a failure never blocks
+  // onboarding.
+  const acquisitionCookie = (await cookies()).get(ACQUISITION_COOKIE)?.value
+  const requestHeaders = await headers()
+  const optedOut = analyticsOptedOut(
+    requestHeaders.get("dnt"),
+    requestHeaders.get("sec-gpc") === "1"
+  )
+  const acquisitionClaim = await claimAccountAcquisition(
+    session.userId,
+    optedOut ? null : parseAcquisitionCookie(acquisitionCookie)
+  ).then(
+    (hint) => ({ ok: true, hint }),
+    () => ({ ok: false, hint: null })
+  )
+  const claimedHint = acquisitionClaim.hint
 
   let state = await getOrCreateOnboardingState(session.userId)
 
@@ -97,6 +119,7 @@ export default async function OnboardingPage({
     workspaceId,
     targetId: state.targetId,
     selectedGoal: state.selectedGoal,
+    buildTool: state.buildTool,
     targetType: target?.type ?? null,
     targetName: target?.name ?? null,
   }
@@ -121,6 +144,12 @@ export default async function OnboardingPage({
         key={state.updatedAt.toISOString()}
         initialState={{ ...initialState, updatedAt: state.updatedAt.toISOString() }}
         selectedPlan={selectedPlan}
+        acquisitionCookiePresent={Boolean(acquisitionCookie) && (acquisitionClaim.ok || optedOut)}
+        targetTypeHint={
+          claimedHint?.targetTypeHint === "url" || claimedHint?.targetTypeHint === "api"
+            ? claimedHint.targetTypeHint
+            : null
+        }
         suggestedWorkspaceName={
           session.userName?.trim() ? `${session.userName.trim()}'s workspace` : "My workspace"
         }

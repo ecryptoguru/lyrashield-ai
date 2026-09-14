@@ -42,8 +42,10 @@ describe("Lite Check marketing surface", () => {
   it("routes users from a Lite result into the live authenticated app", () => {
     expect(page).toContain("PUBLIC_APP_URL")
     expect(page).toContain("Full loop · open registration")
-    expect(page).toContain("Create free account")
-    expect(page).toContain("href={`${dashboardOrigin}/sign-up`}")
+    expect(page).toContain("Review this app for real")
+    expect(page).toContain(
+      "href={`${dashboardOrigin}/sign-up?source=lite_check&cta=review_app&from=scan&target=url`}"
+    )
     expect(page).not.toContain("Want us to run it when it's live?")
   })
 

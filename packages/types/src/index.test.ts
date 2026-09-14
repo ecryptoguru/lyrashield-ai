@@ -145,6 +145,14 @@ describe("UpdateOnboardingSchema", () => {
     expect(UpdateOnboardingSchema.safeParse({ selectedGoal: "INVALID_GOAL" }).success).toBe(false)
   })
 
+  it("accepts only bounded buildTool values", () => {
+    for (const tool of ["codex", "cursor", "claude_code", "lovable", "copilot", "other"]) {
+      expect(UpdateOnboardingSchema.safeParse({ buildTool: tool }).success).toBe(true)
+    }
+    expect(UpdateOnboardingSchema.safeParse({ buildTool: "emacs" }).success).toBe(false)
+    expect(UpdateOnboardingSchema.safeParse({ buildTool: null }).success).toBe(true)
+  })
+
   it("accepts full valid update", () => {
     const update = {
       currentStep: 3,

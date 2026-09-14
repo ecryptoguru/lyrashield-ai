@@ -316,6 +316,16 @@ export const OnboardingStepSchema = z.enum([
   "FIX",
 ])
 
+/** Bounded enum for the "how are you building?" onboarding context selector. */
+export const BuildToolSchema = z.enum([
+  "codex",
+  "cursor",
+  "claude_code",
+  "lovable",
+  "copilot",
+  "other",
+])
+
 export const UpdateOnboardingSchema = z.object({
   expectedUpdatedAt: z.string().datetime().optional(),
   currentStep: z.number().int().min(0).max(6).optional(),
@@ -324,6 +334,7 @@ export const UpdateOnboardingSchema = z.object({
   workspaceId: z.string().optional().nullable(),
   targetId: z.string().optional().nullable(),
   selectedGoal: ScanGoalSchema.optional().nullable(),
+  buildTool: BuildToolSchema.optional().nullable(),
 })
 
 export type OnboardingStep = z.infer<typeof OnboardingStepSchema>

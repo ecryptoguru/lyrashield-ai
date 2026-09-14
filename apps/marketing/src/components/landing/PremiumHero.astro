@@ -36,28 +36,28 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     <div class="premium-hero__actions">
       <a
         class="premium-hero__primary"
-        href="https://app.lyrashieldai.com/sign-up?source=landing_hero&cta=create_account"
-        data-cta-id="premium-hero-create-account"
+        href="https://app.lyrashieldai.com/sign-up?source=landing_hero&cta=review_app"
+        data-cta-id="premium-hero-review-app"
       >
-        Create account
+        Review my app
+      </a>
+      <a
+        class="premium-hero__secondary"
+        href="#free-scan" data-cta-id="premium-hero-lite-check"
+      >
+        Try free Lite Check
       </a>
     </div>
     <p class="premium-hero__trial-note">
-      No card needed. The trial includes 60 agent-minutes, enough for a full review of one repo
-      or live URL.
+      No card needed. The trial includes 60 agent-minutes over 7 days — coverage depends on
+      target size and review depth.
     </p>
-    <a
-      class="premium-hero__lite-link"
-      href="#free-scan" data-cta-id="premium-hero-lite-check"
-    >
-      Or try the free Lite Check first — no account needed
-    </a>
     <a
       class="premium-hero__agent-link"
       href="/agents"
       data-cta-id="premium-hero-agent-setup"
     >
-      Using a coding agent? Set up LyraShield →
+      Using a coding agent? Use LyraShield from it →
     </a>
     <p class="premium-hero__boundary">
       Evidence is limited to the authorized scope and checks that ran. No security guarantee.
@@ -68,11 +68,11 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     <div class="premium-hero__artifact-card">
       <div class="premium-hero__artifact-header">
         <span class="premium-hero__artifact-dot"></span>
-        <span class="premium-hero__artifact-status">Verified finding</span>
+        <span class="premium-hero__artifact-status">Example finding · Detected</span>
       </div>
       <p class="premium-hero__artifact-title">Server credential referenced by client build</p>
       <p class="premium-hero__artifact-meta">Target: mock-app.example</p>
-      <p class="premium-hero__artifact-meta">Evidence: independent verification</p>
+      <p class="premium-hero__artifact-meta">Evidence: bounded to the checks that ran</p>
     </div>
   </div>
 
@@ -240,23 +240,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     line-height: 1.55;
   }
 
-  .premium-hero__lite-link {
-    display: flex;
-    width: fit-content;
-    margin-top: 0.55rem;
-    color: var(--hero-cyan);
-    font-size: 0.85rem;
-    font-weight: 650;
-    text-decoration: underline;
-    text-decoration-color: rgba(84, 214, 223, 0.45);
-    text-underline-offset: 0.3rem;
-  }
-
-  .premium-hero__lite-link:hover,
-  .premium-hero__lite-link:focus-visible {
-    color: #edf6fb;
-  }
-
   .premium-hero__agent-link {
     display: flex;
     width: fit-content;
@@ -377,16 +360,12 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       order: 5;
     }
 
-    .premium-hero__lite-link {
+    .premium-hero__agent-link {
       order: 6;
     }
 
-    .premium-hero__agent-link {
-      order: 7;
-    }
-
     .premium-hero__boundary {
-      order: 8;
+      order: 7;
     }
   }
 
@@ -554,11 +533,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
 
   :global(:root[data-theme="light"]) .premium-hero__trial-note {
     color: #3c5568;
-  }
-
-  :global(:root[data-theme="light"]) .premium-hero__lite-link:hover,
-  :global(:root[data-theme="light"]) .premium-hero__lite-link:focus-visible {
-    color: #102235;
   }
 
   :global(:root[data-theme="light"]) .premium-hero__artifact-card {

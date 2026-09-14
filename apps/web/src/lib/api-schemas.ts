@@ -27,6 +27,7 @@ export const onboardingDataSchema = z
     workspaceId: z.string().nullable(),
     targetId: z.string().nullable(),
     selectedGoal: z.string().nullable(),
+    buildTool: z.string().nullable().optional(),
   })
   .passthrough()
 
