@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, type ReactNode } from "react"
+import { analyticsOptedOut, flushQueuedAnalytics } from "@/lib/analytics"
 
 const URL_PROPERTIES = ["$current_url", "$referrer", "$initial_referrer", "referrer"]
 const PATH_PROPERTIES = ["$pathname", "$prev_pageview_pathname", "$prev_pageview_url"]
@@ -24,10 +25,16 @@ export function privacyBoundedPostHogEvent<T extends { properties: Record<string
 export function PostHogProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_POSTHOG_KEY
-    if (!key || typeof window === "undefined") return
+    if (!key || typeof window === "undefined") {
+      flushQueuedAnalytics()
+      return
+    }
     const dnt = navigator.doNotTrack
     const gpc = (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl
-    if (gpc === true || dnt === "1" || dnt === "yes") return
+    if (analyticsOptedOut(dnt, gpc)) {
+      flushQueuedAnalytics()
+      return
+    }
 
     // Avoid double init on hot reload.
     const win = window as unknown as { posthog?: { __loaded?: boolean } }
@@ -50,9 +57,12 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
             const currentDnt = navigator.doNotTrack
             const currentGpc = (navigator as Navigator & { globalPrivacyControl?: boolean })
               .globalPrivacyControl
-            if (currentGpc === true || currentDnt === "1" || currentDnt === "yes") {
+            if (analyticsOptedOut(currentDnt, currentGpc)) {
               ph.opt_out_capturing()
+              flushQueuedAnalytics()
+              return
             }
+            flushQueuedAnalytics((event, properties) => ph.capture(event, properties))
           },
         })
 
@@ -60,6 +70,7 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         // Silently skip analytics if posthog-js fails to load.
+        flushQueuedAnalytics()
       })
   }, [])
 
