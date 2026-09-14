@@ -24,8 +24,9 @@ signup conversion numerator. The checkout-return panel reports browser flow
 only; `outcome=success` is not payment or entitlement proof.
 
 The pinned [growth dashboard](https://us.posthog.com/project/605869/dashboard/2095018)
-currently has three verified panels: marketing CTA event rate, daily landing
-views and CTA clicks, and site pageviews. These counts include setup visits.
+currently has four verified panels: marketing CTA event rate, daily landing
+views and CTA clicks, site pageviews, and signup page visits. These counts
+include setup visits.
 Add the remaining product funnel panels only after their events arrive from
 real user flows; zero or missing events are not conversion evidence.
 
