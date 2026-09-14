@@ -30,9 +30,11 @@ config check, not a payment test.
 
 ## Step 1 — canary admission
 
-1. If moving a rail from its current `public` posture to `canary`, record the
-   founder-approved workspace IDs in `BILLING_CANARY_WORKSPACE_IDS` and set
-   only that rail's Cloud admission to `canary`.
+1. If moving Cloud admission from its current `public` posture to `canary`,
+   record the founder-approved workspace IDs in `BILLING_CANARY_WORKSPACE_IDS`.
+   The protected `Configure Cloud billing admission` workflow changes **both**
+   Polar and Razorpay Cloud flags together. Record both resulting values; do
+   not assume this workflow can change one provider alone.
 2. Redeploy web through the protected release path and read back the revision,
    traffic, flags, and allowlist before purchase.
 3. With an authenticated billing manager session and valid Origin header,
@@ -60,6 +62,24 @@ Evidence to retain per purchase:
 - A repeat checkout attempt no longer hits `CHECKOUT_IN_PROGRESS` after the
   90-second Redis lock expires; there is no checkout-claim database row.
 - Screenshot of `/dashboard/billing` post-webhook (success notice + plan).
+
+Use privileged, read-only, account-bound queries when collecting application
+receipts; parameterize the exact provider event and founder account IDs, and
+do not select `WebhookEvent.payload` or payment credentials:
+
+```sql
+SELECT id, provider, "eventType", "externalId", processed, "processedAt"
+FROM "WebhookEvent" WHERE provider = $1 AND "externalId" = $2;
+
+SELECT track, status, attempts, "completedAt"
+FROM "WebhookEventTrack" WHERE "webhookEventId" = $1;
+
+SELECT provider, status, "currentPlan", "currentPeriodEnd", "externalId"
+FROM "BillingAccount" WHERE "accountId" = $1 AND provider = $2 AND "deletedAt" IS NULL;
+
+SELECT kind, quantity, "cycleStart", "createdAt"
+FROM "UsageRecord" WHERE "accountId" = $1 AND "createdAt" >= $2;
+```
 
 Then immediately test cancellation from the customer portal and retain the
 `canceled` webhook evidence. **Refund path is a separate live check** — retain
