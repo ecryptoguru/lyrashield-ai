@@ -40,7 +40,7 @@
     "PUBLIC_MOTION_RENDER_HASH": "65fc3ecb6416b366",
     "PUBLIC_X_URL": "",
     "PUBLIC_INDEXABLE": "true",
-    "PUBLIC_POSTHOG_HOST": "https://pulse.lyrashieldai.com",
+    "PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com",
     "PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAD2y2YIoipDqDHsM",
     "PUBLIC_ABUSE_EMAIL": "abuse@lyrashieldai.com",
   },
