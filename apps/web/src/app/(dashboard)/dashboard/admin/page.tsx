@@ -1,6 +1,14 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { Activity, Building2, CircleDollarSign, ListTodo, Radar, Users } from "lucide-react"
+import {
+  Activity,
+  Building2,
+  CircleDollarSign,
+  ListTodo,
+  Radar,
+  TrendingUp,
+  Users,
+} from "lucide-react"
 import { Badge, Card, buttonVariants } from "@lyrashield/ui"
 import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { notFound } from "next/navigation"
@@ -130,6 +138,64 @@ export default async function PlatformAdminPage() {
           <Datum label="Pending payouts" value={overview.affiliates.pendingPayouts} />
         </AdminCard>
       </section>
+
+      {overview.growth && (
+        <section aria-labelledby="growth-heading">
+          <div className="mb-3">
+            <h2 id="growth-heading" className="text-lg font-semibold">
+              Growth
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              Derived from provider-backed billing rows (Polar/Razorpay, status active, paid plan).
+              Trial markers, complimentary rows, platform-admin accounts, and refunded or lapsed
+              rows never count.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <Card className="p-5">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="text-primary size-4" aria-hidden="true" />
+                <h3 className="font-semibold">Active paid accounts</h3>
+              </div>
+              <p className="mt-2 text-xl font-semibold tabular-nums">
+                {overview.growth.activePaidAccounts.toLocaleString()}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                {overview.growth.paidAccountsInTerm.toLocaleString()} still paying through current
+                term (includes past-due and canceled-but-in-term).
+              </p>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-semibold">New / canceled (30d)</h3>
+              <p className="mt-2 text-xl font-semibold tabular-nums">
+                +{overview.growth.newPaidAccounts30d.toLocaleString()} / −
+                {overview.growth.canceled30d.toLocaleString()}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                New counts still-active paid accounts created in the window; canceled counts
+                provider-backed rows canceled in the window.
+              </p>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-semibold">MRR (catalog USD)</h3>
+              <p className="mt-2 text-xl font-semibold tabular-nums">
+                ${Math.round(overview.growth.mrrUsd).toLocaleString()}
+                <span className="text-muted-foreground text-sm font-normal">
+                  {" "}
+                  · ARR ${Math.round(overview.growth.arrUsd).toLocaleString()}
+                </span>
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Monthly-equivalent at published USD prices (annual/12). INR purchases count at USD
+                catalog price — reporting convention, not settlement. Plan mix:{" "}
+                {Object.entries(overview.growth.planMix)
+                  .map(([plan, n]) => `${plan} ${n}`)
+                  .join(" · ") || "none"}
+              </p>
+            </Card>
+          </div>
+        </section>
+      )}
 
       {overview.activation && (
         <section aria-labelledby="activation-heading">

@@ -30,6 +30,7 @@ import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/e
 import { ScanInProgress } from "./scan-in-progress"
 import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel } from "@/lib/labels"
+import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
@@ -413,6 +414,17 @@ export function ScanDetailClient({
   // merge, so a failed or aborted poll re-delivers the same tail next tick.
   const eventCursorRef = useRef<string | null>(initialScan.events.at(-1)?.id ?? null)
 
+  // Results landing: opening an already-terminal scan is a results view.
+  // Status only — no finding detail, severity, or target coordinates.
+  useEffect(() => {
+    if (isActiveScan(initialScan.status)) return
+    track("results_viewed", {
+      status: initialScan.status,
+      had_findings: findings.length > 0,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Announce the active→terminal transition. Polling swaps the in-progress view
   // for the stat grid silently otherwise, so users who looked away (or use a
   // screen reader) never learn the scan finished.
@@ -420,6 +432,7 @@ export function ScanDetailClient({
     const prevStatus = prevStatusRef.current
     prevStatusRef.current = scan.status
     if (!isActiveScan(prevStatus) || isActiveScan(scan.status)) return
+    track("review_completed", { status: scan.status })
     setCompletionNotice({
       status: scan.status,
       message:

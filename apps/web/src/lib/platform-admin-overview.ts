@@ -1,5 +1,7 @@
 import { getSystemPrisma } from "@lyrashield/db"
+import { env } from "@lyrashield/config"
 import { getScanQueue, isScanWorkerAvailable } from "@lyrashield/integrations"
+import { computePaidAccountMetrics } from "./growth-metrics"
 
 export type PlatformHealthStatus = "healthy" | "degraded" | "unknown"
 export const ACTIVATION_MINIMUM_SAMPLE = 20
@@ -197,11 +199,41 @@ export async function getPlatformAdminOverview() {
     prisma.affiliate.count({ where: { status: "PENDING" } }),
     prisma.payout.count({ where: { status: { in: ["PENDING", "PROCESSING"] } } }),
   ])
+  const growthPromise = (async () => {
+    const [billingRows, admins] = await Promise.all([
+      prisma.billingAccount.findMany({
+        where: { deletedAt: null, provider: { in: ["polar", "razorpay"] } },
+        select: {
+          accountId: true,
+          provider: true,
+          status: true,
+          currentPlan: true,
+          interval: true,
+          currentPeriodEnd: true,
+          canceledAt: true,
+          createdAt: true,
+        },
+      }),
+      prisma.user.findMany({
+        where: {
+          email: {
+            in: env.PLATFORM_ADMIN_EMAILS.split(",")
+              .map((email) => email.trim().toLowerCase())
+              .filter(Boolean),
+          },
+        },
+        select: { id: true },
+      }),
+    ])
+    return computePaidAccountMetrics(billingRows, {
+      excludedAccountIds: new Set(admins.map((admin) => admin.id)),
+    })
+  })()
   const workerPromise = isScanWorkerAvailable()
   const queuePromise = getScanQueue().getJobCounts("wait", "active", "delayed", "failed")
   const activationPromise = getActivationMetrics(prisma)
 
-  const [database, scans, billing, affiliates, worker, queue, activation] =
+  const [database, scans, billing, affiliates, worker, queue, activation, growth] =
     await Promise.allSettled([
       databasePromise,
       scansPromise,
@@ -210,6 +242,7 @@ export async function getPlatformAdminOverview() {
       workerPromise,
       queuePromise,
       activationPromise,
+      growthPromise,
     ])
 
   const databaseCard =
@@ -308,6 +341,7 @@ export async function getPlatformAdminOverview() {
     worker: workerCard,
     queue: queueCard,
     activation: activation.status === "fulfilled" ? activation.value : null,
+    growth: growth.status === "fulfilled" ? growth.value : null,
     generatedAt: new Date().toISOString(),
   }
 }

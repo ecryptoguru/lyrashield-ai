@@ -19,7 +19,9 @@ import { AuthSplitLayout } from "@/components/auth-split-layout"
 import { PasswordInput } from "@/components/password-input"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
+  attributionProps,
   readSignupAttribution,
+  rememberAcquisition,
   signupErrorUrl,
   track,
   type SignupAttribution,
@@ -77,7 +79,10 @@ export default function SignUpPage() {
     const nextAttribution = readSignupAttribution(window.location.search)
     const oauthError = params.get("error")
     attribution.current = nextAttribution
-    track("signup_page_viewed", nextAttribution)
+    // First-touch acquisition survives OAuth redirects via the acq cookie;
+    // the onboarding page claims it into durable account state once.
+    rememberAcquisition(nextAttribution)
+    track("signup_page_viewed", attributionProps(nextAttribution))
     let oauthErrorTimer: number | undefined
     if (oauthError) {
       oauthErrorTimer = window.setTimeout(() => {
@@ -120,7 +125,7 @@ export default function SignUpPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    track("signup_started", { method: "email", ...attribution.current })
+    track("signup_started", { method: "email", ...attributionProps(attribution.current) })
 
     try {
       const { data, error: signUpError } = await authClient.signUp.email({
@@ -135,7 +140,7 @@ export default function SignUpPage() {
         return
       }
 
-      track("account_created", { method: "email", ...attribution.current })
+      track("account_created", { method: "email", ...attributionProps(attribution.current) })
 
       if (authClientWillRedirect(data)) return
 
@@ -164,7 +169,7 @@ export default function SignUpPage() {
   async function handleGitHub() {
     setLoading(true)
     setError(null)
-    track("signup_started", { method: "github", ...attribution.current })
+    track("signup_started", { method: "github", ...attributionProps(attribution.current) })
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "github",
@@ -184,7 +189,7 @@ export default function SignUpPage() {
   async function handleGoogle() {
     setLoading(true)
     setError(null)
-    track("signup_started", { method: "google", ...attribution.current })
+    track("signup_started", { method: "google", ...attributionProps(attribution.current) })
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "google",
@@ -204,7 +209,7 @@ export default function SignUpPage() {
   async function handleMicrosoft() {
     setLoading(true)
     setError(null)
-    track("signup_started", { method: "microsoft", ...attribution.current })
+    track("signup_started", { method: "microsoft", ...attributionProps(attribution.current) })
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "microsoft",

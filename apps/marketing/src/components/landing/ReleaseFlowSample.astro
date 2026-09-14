@@ -1,0 +1,156 @@
+---
+/**
+ * ReleaseFlowSample — compact, honest walk through the release loop.
+ * Seven nodes, each named for the artifact it produces. Synthetic example,
+ * labeled as such; evidence states shown truthfully (Detected / Validated —
+ * never a blanket "verified").
+ */
+const NODES = [
+  { step: "01", label: "Target", detail: "Repo · URL · API" },
+  { step: "02", label: "Review", detail: "Bounded scope" },
+  { step: "03", label: "Finding", detail: "State: Detected" },
+  { step: "04", label: "Evidence", detail: "Scope kept" },
+  { step: "05", label: "Fix proposal", detail: "Approval-gated" },
+  { step: "06", label: "Retest", detail: "State: Validated" },
+  { step: "07", label: "Release record", detail: "Shareable" },
+] as const
+---
+
+<section class="release-flow" aria-labelledby="release-flow-title">
+  <div class="release-flow__head">
+    <p class="release-flow__eyebrow">Example output</p>
+    <h2 id="release-flow-title">What a run actually produces</h2>
+    <p class="release-flow__lede">
+      Every review ends in the same seven artifacts — including the honest ones. Missing or
+      inconclusive evidence stays on the record; it is never rounded up to a pass.
+    </p>
+  </div>
+  <ol class="release-flow__track">
+    {
+      NODES.map((node) => (
+        <li class="release-flow__node">
+          <span class="release-flow__index">{node.step}</span>
+          <span class="release-flow__label">{node.label}</span>
+          <span class="release-flow__detail">{node.detail}</span>
+        </li>
+      ))
+    }
+  </ol>
+  <p class="release-flow__note">
+    Fix proposals never apply themselves and retests run fresh — a finding only reaches
+    “Validated” after a bounded, evidence-bound retest.
+  </p>
+</section>
+
+<style>
+  .release-flow {
+    width: min(100% - 2rem, 1280px);
+    margin: 0 auto;
+    padding-block: clamp(2.5rem, 6vw, 4.5rem);
+  }
+
+  .release-flow__head {
+    max-width: 44rem;
+  }
+
+  .release-flow__eyebrow {
+    margin: 0 0 0.5rem;
+    color: var(--accent);
+    font: 600 0.72rem/1 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .release-flow h2 {
+    margin: 0;
+    font-family: "Bricolage Grotesque Variable", sans-serif;
+    font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  .release-flow__lede {
+    margin: 0.75rem 0 0;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  .release-flow__track {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0;
+    margin: 1.75rem 0 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--bg-raised);
+    overflow: hidden;
+  }
+
+  .release-flow__node {
+    position: relative;
+    padding: 1rem 0.9rem 1.15rem;
+  }
+
+  .release-flow__node + .release-flow__node {
+    border-left: 1px solid var(--border);
+  }
+
+  .release-flow__node + .release-flow__node::before {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-top: 1px solid var(--accent);
+    border-right: 1px solid var(--accent);
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  .release-flow__index {
+    display: block;
+    color: var(--accent);
+    font: 600 0.68rem/1 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.1em;
+  }
+
+  .release-flow__label {
+    display: block;
+    margin-top: 0.5rem;
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  .release-flow__detail {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--text-muted);
+    font: 500 0.7rem/1.45 "JetBrains Mono Variable", monospace;
+  }
+
+  .release-flow__note {
+    margin: 0.85rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.55;
+  }
+
+  @media (max-width: 960px) {
+    .release-flow__track {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .release-flow__node + .release-flow__node {
+      border-left: none;
+      border-top: 1px solid var(--border);
+    }
+
+    .release-flow__node + .release-flow__node::before {
+      display: none;
+    }
+  }
+</style>

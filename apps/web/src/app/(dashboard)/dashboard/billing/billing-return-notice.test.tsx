@@ -8,7 +8,9 @@ import { BillingReturnNotice } from "./billing-return-notice"
 
 describe("BillingReturnNotice", () => {
   it("renders a truthful, accessible Razorpay processing state with a manual refresh", () => {
-    const html = renderToString(<BillingReturnNotice checkout="processing" provider="razorpay" />)
+    const html = renderToString(
+      <BillingReturnNotice checkout="processing" provider="razorpay" plan="FREE" trialActive />
+    )
 
     expect(html).toContain('role="status"')
     expect(html).toContain('aria-live="polite"')
@@ -18,6 +20,15 @@ describe("BillingReturnNotice", () => {
   })
 
   it("does not invent a completed payment state", () => {
-    expect(renderToString(<BillingReturnNotice checkout="cancelled" provider="polar" />)).toBe("")
+    expect(
+      renderToString(
+        <BillingReturnNotice
+          checkout="cancelled"
+          provider="polar"
+          plan="FREE"
+          trialActive={false}
+        />
+      )
+    ).toBe("")
   })
 })

@@ -29,6 +29,7 @@ export async function GET() {
         workspaceId: state.workspaceId,
         targetId: state.targetId,
         selectedGoal: state.selectedGoal,
+        buildTool: state.buildTool,
       },
     })
   } catch (error) {
@@ -163,6 +164,7 @@ async function patch(request: Request) {
     if (parsed.data.workspaceId !== undefined) updateData.workspaceId = parsed.data.workspaceId
     if (parsed.data.targetId !== undefined) updateData.targetId = parsed.data.targetId
     if (parsed.data.selectedGoal !== undefined) updateData.selectedGoal = parsed.data.selectedGoal
+    if (parsed.data.buildTool !== undefined) updateData.buildTool = parsed.data.buildTool
 
     await getOrCreateOnboardingState(session.userId)
     if (parsed.data.expectedUpdatedAt) {
@@ -197,6 +199,7 @@ async function patch(request: Request) {
         workspaceId: state.workspaceId,
         targetId: state.targetId,
         selectedGoal: state.selectedGoal,
+        buildTool: state.buildTool,
       },
     })
   } catch (error) {

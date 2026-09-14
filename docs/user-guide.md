@@ -424,7 +424,7 @@ Other integration types exist in the internal schema and roadmap, but the curren
 
 These are the configured commercial terms. Live checkout and charging remain disabled until the founder activates the production providers.
 
-LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Standard and Quick scans only (no Deep), and no card required. When the trial ends, pick a paid plan or let it lapse.
+LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Safe, Quick, and Standard scans only (no Deep or Custom), and no card required. When the trial ends, pick a paid plan or let it lapse.
 
 | Plan       | Price       | Minutes/mo | Targets | Deep | Notes                                      |
 | ---------- | ----------- | ---------: | ------: | ---- | ------------------------------------------ |

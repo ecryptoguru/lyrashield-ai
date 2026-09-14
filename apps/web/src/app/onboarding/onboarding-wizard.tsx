@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
@@ -12,7 +13,8 @@ import {
 } from "@/lib/api-schemas"
 import { z } from "zod"
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
-import { track } from "@/lib/analytics"
+import { ACQUISITION_COOKIE, track } from "@/lib/analytics"
+import { presentOperationFailure, type OperationFailurePresentation } from "@/lib/operation-failure"
 import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
 import {
   RUN_SINGULAR,
@@ -42,9 +44,20 @@ interface OnboardingData {
   workspaceId: string | null
   targetId: string | null
   selectedGoal: string | null
+  buildTool?: string | null
   targetType?: string | null
   targetName?: string | null
 }
+
+/** Bounded "how are you building?" options — context only, never gates flow. */
+const BUILD_TOOLS = [
+  ["codex", "Codex"],
+  ["cursor", "Cursor"],
+  ["claude_code", "Claude Code"],
+  ["lovable", "Lovable"],
+  ["copilot", "Copilot"],
+  ["other", "Other"],
+] as const
 
 interface Repo {
   id: number
@@ -63,11 +76,25 @@ export function OnboardingWizard({
   suggestedWorkspaceName,
   oauthReturnQuery,
   oauthReturnState,
+  acquisitionCookiePresent,
+  targetTypeHint,
 }: {
   initialState: OnboardingData
   selectedPlan?: string | null
   /** Used to name a default workspace when the user has none (W2-01). */
   suggestedWorkspaceName?: string
+  /**
+   * Whether the sign-up acquisition cookie was still present when the page
+   * rendered — the server already claimed it; this only drives client-side
+   * cookie cleanup.
+   */
+  acquisitionCookiePresent?: boolean
+  /**
+   * Bounded target-type hint carried through signup (e.g. a Lite Check user
+   * arrives wanting a URL review). Preselects the chooser path only when the
+   * user has not already progressed — never a redirect, never a raw URL.
+   */
+  targetTypeHint?: "url" | "api" | null
   /**
    * W2-05: server-verified OAuth return state. When present, onboarding
    * completion returns the user to /oauth/consent with the preserved
@@ -81,7 +108,12 @@ export function OnboardingWizard({
   const router = useRouter()
   useEffect(() => {
     rememberPlanIntent(selectedPlan)
-  }, [selectedPlan])
+    // The acquisition snapshot is already in durable account state server-side;
+    // the cookie has done its job.
+    if (acquisitionCookiePresent) {
+      document.cookie = `${ACQUISITION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
+    }
+  }, [selectedPlan, acquisitionCookiePresent])
   // W2-05: where completion lands. An OAuth-arriving user returns to the
   // consent screen (their memberships are re-checked there); everyone else
   // keeps the existing destinations. The plan intent is dropped on the OAuth
@@ -95,11 +127,27 @@ export function OnboardingWizard({
   // target chooser; a workspace is created lazily (with a sensible default
   // name) only when the user picks a path that needs one. A stale persisted
   // step 0 cannot reappear.
-  const [step, setStep] = useState(Math.max(initialState.currentStep ?? 1, 1))
+  // A lite-check arrival (targetTypeHint) preselects its path and lands
+  // straight on target details — the chooser stays one Back away. Never
+  // overrides a persisted step or an existing target.
+  const hintedPath: OnboardingPath =
+    targetTypeHint && !initialState.targetId && !initialState.targetType ? targetTypeHint : null
+  const persistedStep = Math.max(initialState.currentStep ?? 1, 1)
+  const [step, setStep] = useState(
+    hintedPath && persistedStep <= 1
+      ? (nextStepForPath(hintedPath) ?? persistedStep)
+      : persistedStep
+  )
   const [data, setData] = useState(initialState)
   const persistedState = useRef(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Structured operation failure (cause/effect/recovery + retry) — preferred
+  // over the plain string when the server returned a mappable reason code.
+  const [failure, setFailure] = useState<{
+    presentation: OperationFailurePresentation
+    retry: (() => void) | null
+  } | null>(null)
 
   const [repos, setRepos] = useState<Repo[]>([])
   const [reposLoaded, setReposLoaded] = useState(false)
@@ -116,10 +164,11 @@ export function OnboardingWizard({
   // If the user already created a target (targetId is set) but we don't know
   // which path they took, leave path null — the step is already past step 2.
   const [path, setPath] = useState<OnboardingPath>(
-    onboardingPathForTargetType(initialState.targetType ?? null)
+    onboardingPathForTargetType(initialState.targetType ?? null) ?? hintedPath
   )
   const [githubUnavailable, setGithubUnavailable] = useState(false)
   const [urlForm, setUrlForm] = useState({ url: "", ownershipAttested: false })
+  const [buildTool, setBuildTool] = useState<string | null>(initialState.buildTool ?? null)
   const autoFetchAttempted = useRef(false)
   const repoRequest = useRef("")
   const reviewOptions = getOnboardingReviewOptions(path)
@@ -160,6 +209,21 @@ export function OnboardingWizard({
     return cause instanceof Error ? cause.message : "Could not start the review."
   }
 
+  /**
+   * Structured failure boundary (W1-07): a mappable reason code renders as
+   * cause/effect/recovery with a one-click retry; anything else falls back to
+   * the plain message. Nothing here auto-retries or creates approvals.
+   */
+  function presentFailure(cause: unknown, retry: (() => void) | null, targetName?: string) {
+    if (cause instanceof ApiError && cause.code) {
+      setError(null)
+      setFailure({ presentation: presentOperationFailure(cause.code, { targetName }), retry })
+      return
+    }
+    setFailure(null)
+    setError(friendlyTargetError(cause))
+  }
+
   const fetchRepos = useCallback(() => {
     if (!data.workspaceId) return Promise.resolve<Repo[]>([])
     return apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${data.workspaceId}`, {
@@ -171,6 +235,7 @@ export function OnboardingWizard({
     if (!data.workspaceId) return
     setLoading(true)
     setError(null)
+    setFailure(null)
     const startedAt = performance.now()
     const requestId = crypto.randomUUID()
     repoRequest.current = requestId
@@ -249,8 +314,11 @@ export function OnboardingWizard({
       const workspace = await apiPost(
         "/api/workspaces",
         { name: suggestedWorkspaceName?.trim() || "My workspace", mode: "VIBE" },
-        { schema: idSchema }
+        { schema: z.object({ id: z.string(), trialStarted: z.boolean().optional() }) }
       )
+      // The trial grant lands inside the workspace-creation transaction —
+      // only fire when the account actually claimed it (never on re-use).
+      if (workspace.trialStarted) track("trial_started", { surface: "onboarding" })
       await persist({ workspaceId: workspace.id, currentStep: Math.max(step, 1), skipped: false })
       return workspace.id
     } catch (cause) {
@@ -275,6 +343,7 @@ export function OnboardingWizard({
   async function connectGitHub() {
     setLoading(true)
     setError(null)
+    setFailure(null)
     try {
       const workspaceId = await ensureWorkspace()
       const res = await apiPost(
@@ -308,6 +377,7 @@ export function OnboardingWizard({
 
   async function choosePath(next: Exclude<OnboardingPath, null>) {
     setError(null)
+    setFailure(null)
     track("onboarding_path_chosen", { path: next })
     if (next === "skip") {
       void skipOnboarding()
@@ -342,6 +412,7 @@ export function OnboardingWizard({
   async function skipOnboarding() {
     setLoading(true)
     setError(null)
+    setFailure(null)
     try {
       await persist({ skipped: true, currentStep: 0 })
       router.push(completionPath)
@@ -375,6 +446,7 @@ export function OnboardingWizard({
       return
     }
     setError(null)
+    setFailure(null)
     const next = nextStepForPath(payload.type === "API" ? "api" : "url")
     if (next !== null) setStep(next)
   }
@@ -429,6 +501,7 @@ export function OnboardingWizard({
 
     setLoading(true)
     setError(null)
+    setFailure(null)
     try {
       const targetId = await ensureOnboardingTargetId(data.targetId, async () => {
         if (needsRepo && selectedRepo) {
@@ -490,7 +563,7 @@ export function OnboardingWizard({
       router.push(oauthReturnQuery ? completionPath : `/dashboard/scans/${scan.id}`)
       router.refresh()
     } catch (cause) {
-      setError(friendlyTargetError(cause))
+      presentFailure(cause, continueWithUrlTarget, productName.trim() || undefined)
     } finally {
       setLoading(false)
     }
@@ -539,7 +612,47 @@ export function OnboardingWizard({
         Step {displayStep + 1} of {steps.length}
       </p>
 
-      {error && (
+      {failure && (
+        <div
+          role="alert"
+          className="border-destructive bg-destructive/10 mb-4 space-y-2 border-l-2 p-4 text-sm"
+        >
+          <p className="font-medium">{failure.presentation.cause}</p>
+          <p className="text-muted-foreground">{failure.presentation.effect}</p>
+          <p>{failure.presentation.recovery}</p>
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            {failure.retry && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={loading}
+                onClick={() => {
+                  setFailure(null)
+                  failure.retry?.()
+                }}
+              >
+                Try again
+              </Button>
+            )}
+            {failure.presentation.recoveryHref && (
+              <Link
+                href={failure.presentation.recoveryHref}
+                className="text-primary text-xs font-medium underline underline-offset-4"
+              >
+                Open the recovery page
+              </Link>
+            )}
+            <a
+              href="mailto:support@lyrashieldai.com"
+              className="text-muted-foreground text-xs underline underline-offset-4"
+            >
+              Contact support
+            </a>
+          </div>
+        </div>
+      )}
+      {error && !failure && (
         <p
           role="alert"
           className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm"
@@ -561,6 +674,36 @@ export function OnboardingWizard({
                 API, or set this up later.
               </p>
             </div>
+
+            {/* Optional context — which agent built the app. Never blocks a
+                path choice; persists best-effort only. */}
+            <fieldset className="space-y-2">
+              <legend className="text-muted-foreground text-xs">
+                How are you building? <span className="italic">(optional)</span>
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {BUILD_TOOLS.map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={buildTool === value}
+                    onClick={() => {
+                      const next = buildTool === value ? null : value
+                      setBuildTool(next)
+                      if (next) track("onboarding_context", { tool: next })
+                      persist({ buildTool: next }).catch(() => {})
+                    }}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      buildTool === value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "hover:bg-accent text-muted-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
 
             <div className="grid gap-2 sm:grid-cols-2">
               <button
