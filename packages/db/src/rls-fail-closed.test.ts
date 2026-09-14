@@ -219,6 +219,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       PlatformAdminElevation: "Owner-only cross-workspace action elevation",
       PlatformAdminChallengeLimit: "Owner-only operator challenge rate limit",
     }
+    const accountTables = ["account_acquisitions"]
     const rows = await restricted.$queryRaw<
       Array<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>
     >`
@@ -238,7 +239,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         .filter((row) => row.relrowsecurity)
         .map((row) => row.relname)
         .sort()
-    ).toEqual([...tenantTables, ...Object.keys(systemOnly)].sort())
+    ).toEqual([...tenantTables, ...accountTables, ...Object.keys(systemOnly)].sort())
     for (const table of tenantTables) {
       expect(
         rows.find((row) => row.relname === table),
@@ -250,6 +251,15 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         rows.find((row) => row.relname === table),
         table
       ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: false })
+    }
+    for (const table of accountTables) {
+      expect(
+        rows.find((row) => row.relname === table),
+        table
+      ).toMatchObject({
+        relrowsecurity: true,
+        relforcerowsecurity: true,
+      })
     }
   })
 
