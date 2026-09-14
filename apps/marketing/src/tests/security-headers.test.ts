@@ -5,12 +5,15 @@ import { describe, expect, it } from "vitest"
 const headers = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8")
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const middleware = readFileSync(new URL("../middleware.ts", import.meta.url), "utf8")
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const wrangler = readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8")
 
 describe("Cloudflare marketing security headers", () => {
   it("applies a defensive browser policy to every public route", () => {
     expect(headers).toContain("/*")
     expect(headers).toContain("Content-Security-Policy:")
-    expect(headers).toContain("https://pulse.lyrashieldai.com")
+    expect(headers).toContain("https://us.i.posthog.com")
+    expect(headers).not.toContain("https://pulse.lyrashieldai.com")
     expect(headers).toContain("https://us-assets.i.posthog.com")
     expect(headers).toContain("https://static.cloudflareinsights.com")
     expect(headers).toContain("https://cloudflareinsights.com")
@@ -23,6 +26,10 @@ describe("Cloudflare marketing security headers", () => {
     expect(headers).toContain("Permissions-Policy:")
     expect(headers).toContain("tools=(self)")
     expect(headers).toContain("Origin-Agent-Cluster: ?1")
+  })
+
+  it("sends production analytics to the signed-in US project endpoint", () => {
+    expect(wrangler).toContain('"PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com"')
   })
 
   it("applies the same defensive policy and no-store indexing boundary to Worker API responses", () => {
