@@ -295,6 +295,8 @@ Primary locations:
 - `packages/billing/src/usage`: balance, meter, grants, packs, expiry, overage, refund.
 - `packages/billing/src/entitlements.ts`: scan/target admission.
 - `apps/web/src/app/billing`: checkout, webhook, portal, UI.
+- `apps/worker/src/operations/verify-checkout-readiness.ts`: read-only Cloud/Local admission, credential, and catalog preflight. It does not prove a live charge.
+- `apps/web/src/lib/account-acquisition.ts` and `apps/web/src/lib/growth-metrics.ts`: first-touch account acquisition under account RLS and server-derived paid-account metrics; platform administrators are excluded from the paid aggregate.
 
 Billing webhook inserts `WebhookEvent` before synchronous Track A/B/C processing. Money uses `Decimal(19,4)`, never Float. Usage, pack purchase, subscription, refund, commission, and payout operations are idempotent. Agent-minute recording and FIFO pack debit share one workspace+account advisory-locked serializable transaction; each tick debits only its incremental spill beyond the monthly pool, and conditional pack updates prevent negative balances.
 

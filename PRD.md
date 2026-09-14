@@ -404,7 +404,7 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 - Dedicated worker compute, immutable worker promotion, readiness heartbeat, and rollback image.
 - Backup/restore drill.
 - Billing code retains signed-webhook, replay, catalog-map, and disposable-account coverage. Restricted Polar Sandbox and Razorpay Test Mode proof completed in isolated Azure staging on product `5e6c68ba` under run `33438477364`, including hosted checkout, provider-delivered signed webhooks, application/database effects, replay idempotency, immediate cancellation, redacted receipts, and cleanup. Live charge, settlement, payout, tax, and universal payment-method coverage remain unproven.
-- Read-only Brave provider review on 2026-08-26: Razorpay Live is activated with six matching INR Cloud plans and one enabled eight-event webhook. Polar Live has a production token, fifteen private Cloud/pack/Local products, and an enabled lifecycle webhook. No provider mutation or payment was performed; every purchase admission remains `off`.
+- Read-only Brave provider review on 2026-08-26: Razorpay Live was activated with six matching INR Cloud plans and one enabled eight-event webhook. Polar Live had a production token, fifteen private Cloud/pack/Local products, and an enabled lifecycle webhook. That review performed no provider mutation or payment. Direct Azure readback on 2026-09-14 instead found both Cloud purchase admissions `public` and both Local admissions `off`; no live charge, settlement, refund, or payout proof followed from that configuration.
 - Cloud billing, usage, Local/Desktop, and affiliate implementations merged.
 - The single adaptive dashboard and the bounded platform-admin console are implemented. Exact-two preflight/apply passed, and both named administrators completed fresh independent Google-plus-TOTP browser proof across every admin destination; bearer-only and workspace-only access remained denied.
 - Production evidence-storage round-trip/fail-closed, actionable notification acknowledgment, terminal-cost disposition, queue-orphan recovery, and Key Vault managed-identity signing proofs passed. Exact receipts and limitations live in git history (`docs/ops/launch-assurance-status-2026-08-26.md`, removed 2026-09-09).
@@ -441,7 +441,7 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 
 - Trademark clearance for LyraShield AI and `lyrashieldai.com`.
 - Public paid-launch timing and final publishable pricing.
-- Enable production Polar/Razorpay purchase admissions.
+- Confirm the intended current public Cloud-admission posture and authorize bounded live checkout/refund proof per rail; Local admissions remain off.
 - Authorized provider/model and target for first controlled Deep/Terra scan.
 
 ## 11. Success measures

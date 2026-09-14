@@ -1,13 +1,13 @@
 # Update review and remediation plan — 2026-09-14
 
-This began as a read-only review. The subsequent "let's do all" request authorized work on the plan; code and documentation fixes below are now in the working tree. No production deployment, admission change, live checkout, PostHog dashboard mutation, payment, payout, or tax action has yet been performed.
+This began as a read-only review. The subsequent "let's do all" request authorized work on the plan; code and documentation fixes merged in PR #677 (`9cde77d2`). The merged-SHA CI and production release were pending at this documentation update. No admission change, live checkout, PostHog dashboard mutation, payment, payout, or tax action had been performed.
 
 ## Implementation progress
 
 - Fixed acquisition deletion cascade, cuid creation, first-touch cookie handling, DNT/GPC behavior, retry retention, cancellation counting, and checkout preflight false positives.
 - Corrected the checkout runbook's deployed posture, POST contract, webhook-track evidence, admin-canary metric expectation, and dead-letter recovery. Added a PostHog measurement specification; dashboard configuration remains a separate external action.
 - Focused tests and the sequential full suite pass; raw lint, typecheck, and build pass. Isolated migration diff reported no difference. In the disposable database, runtime-role owner/other/unbound acquisition RLS and user-delete cascade passed. Local Playwright: 33 targeted app/marketing checks passed (desktop and mobile included). The disposable database was removed.
-- Remaining gates: commit/PR, fresh CI, merge/deploy and live readback if authorized, external PostHog configuration, and real-money/provider/payout/tax proof with exact accounts and rails. An earlier shared-shadow diff failed because that database had a pre-existing function; the isolated shadow check succeeded.
+- Remaining gates: merged-SHA CI, production release and live readback, external PostHog configuration, and real-money/provider/payout/tax proof with exact accounts and rails. An earlier shared-shadow diff failed because that database had a pre-existing function; the isolated shadow check succeeded.
 
 ## Evidence snapshot
 
@@ -17,7 +17,7 @@ This began as a read-only review. The subsequent "let's do all" request authoriz
 - Current Azure readback: app `lyrashield-app--0000357`, scanner `lyrashield-scanner--0000332`, proxy `lyrashield-egress-proxy--0000198`; each at 100% traffic. App/scanner image digest: `sha256:74d5f7293b1651c7ffb0bedc99a125f4ef9bca0f5a64471caf55af4e95f65efa`. Proxy: `sha256:51e03d6e9645290f2d7760867752e46ff12e93c83b133ce8ddebbf46a576b842`.
 - Release-record worker digest: `sha256:555a1b5d5f9232a4bbddd0c53f458a78ee6416033c821a1aee3525e50b5c527e`. Direct current VM digest was not queried. Product pins engine `8fe5736c84288a48aa8cd584e96f54e068a70a85`; that engine pins product contract `1cc291a962732a67c9cb6e6f55654239cb454945`. Release contract verification passed. Engine origin/main is now `353abde0c8c7488ce5937f15a6d32d7b5e1146d5` with a subsequent packaging-only commit; do not mechanically advance either deliberate pin.
 - Live GET `/api/ready/scans` returned `{"status":"ready","checks":{"worker":true}}`. Scheduled readiness run `34816743798` and backup run `34818465793` succeeded. Backup success does not establish a fresh restore drill.
-- **Current Azure app environment: POLAR_BILLING_ADMISSION=public and RAZORPAY_BILLING_ADMISSION=public; both Local admissions=off; BILLING_CANARY_WORKSPACE_IDS empty.** This contradicts `docs/checkout-verification.md:7` and must be reconciled before using that runbook. No flag was changed. This configuration is not proof that a live purchase or settlement succeeds.
+- **Azure app environment at the initial review: POLAR_BILLING_ADMISSION=public and RAZORPAY_BILLING_ADMISSION=public; both Local admissions=off; BILLING_CANARY_WORKSPACE_IDS empty.** The stale runbook was corrected in PR #677. Refresh deployed flags before using it. This configuration is not proof that a live purchase or settlement succeeds.
 
 ## Standards review
 
@@ -57,4 +57,4 @@ The acquisition migration enables and forces account RLS, but mocked unit tests 
 - This is a bounded update review, not an exhaustive audit of every repository or provider. No fresh browser E2E, real-provider checkout, provider-console settlement/payout/tax audit, PostHog dashboard readback, fresh restore drill, or direct worker-VM provenance inspection was performed. Skipped integration tests remain gaps. No migration was applied as a review action.
 - Raw local logs: `/tmp/lyra-review-tests-20260914.log`, `/tmp/lyra-review-db-retest-20260914.log`, `/tmp/lyra-review-tests-final-20260914.log`, `/tmp/lyra-review-types-20260914.log`, `/tmp/lyra-review-lint-20260914.log`, `/tmp/lyra-review-build-20260914.log`, `/tmp/lyra-review-format-20260914.log`. These are temporary local evidence, not durable release receipts.
 
-Recommendation: fix the documented blockers in focused PRs before treating the uncommitted growth/readiness work as deployable. Existing runtime readiness does not close commercial proof.
+The documented code and runbook blockers were fixed in PR #677. Deployment and commercial proof remain separate evidence gates.
