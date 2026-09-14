@@ -168,6 +168,8 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
       }
     </script>
     <script>
+      import { privacyBoundedMarketingEvent } from "../lib/posthog-privacy"
+
       const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY
       const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"
       const posthogUiHost = "https://us.posthog.com"
@@ -176,17 +178,6 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
         const dnt = navigator.doNotTrack
         const gpc = (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl
         return gpc === true || dnt === "1" || dnt === "yes"
-      }
-
-      function withoutQueryOrFragment(value: unknown): unknown {
-        if (typeof value !== "string") return value
-
-        try {
-          const url = new URL(value)
-          return `${url.origin}${url.pathname}`
-        } catch {
-          return value
-        }
       }
 
       if (posthogKey && !shouldOptOut()) {
@@ -202,15 +193,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
               disable_session_recording: true,
               persistence: "localStorage",
               respect_dnt: true,
-              before_send: (event) => {
-                if (!event) return null
-
-                for (const property of ["$current_url", "$referrer", "$initial_referrer", "referrer"]) {
-                  event.properties[property] = withoutQueryOrFragment(event.properties[property])
-                }
-
-                return event
-              },
+              before_send: (event) => (event ? privacyBoundedMarketingEvent(event) : null),
               loaded: (ph) => {
                 if (shouldOptOut()) {
                   ph.opt_out_capturing()
