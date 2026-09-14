@@ -6,7 +6,7 @@ sequential (before/after) unless a flag mechanism is added.
 
 ## EXP-001 — Hero task-oriented CTAs
 
-- **Status:** merged in PR #677 (`9cde77d2`); exact-SHA deployment and measured outcome pending (in-place; no flag)
+- **Status:** merged in PR #677 (`9cde77d2`) and deployed in production release `34842662910`; measured outcome pending (in-place; no flag)
 - **Surface:** `apps/marketing/src/components/landing/PremiumHero.astro`
 - **Hypothesis:** task-oriented CTAs ("Review my app" + secondary "Try free
   Lite Check") convert to `account_created` and `first_run_started` better than
