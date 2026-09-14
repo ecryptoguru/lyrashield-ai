@@ -1,6 +1,6 @@
 # Growth measurement specification
 
-Status: project `605869` connected; initial dashboard live. Assessment survey remains draft pending results-page deployment and verification.
+Status: project `605869` connected; initial dashboard and assessment survey live.
 Do not count checkout-return events as successful payment.
 Use the existing single PostHog project, anonymous device IDs, DNT/GPC opt-out,
 and the event/property allowlists in `apps/web/src/lib/analytics.ts` and
@@ -47,7 +47,8 @@ The project has a [one-time, two-question survey](https://us.posthog.com/project
 `/dashboard/scans/` results pages. Target the `#scan-results-ready` element,
 which appears only when a scan completes. It asks for a usefulness rating
 (1–5) and one improvement category. It has no free-text answer, account
-linkage, target URL, or finding detail. Keep it draft
-until the shared project key, privacy notice, and results-page selector are
-deployed and read back. DNT/GPC browsers must not initialize PostHog or see the
-prompt. Survey responses are feedback, not independent finding verification.
+linkage, target URL, or finding detail. It was activated on 2026-09-14 after
+release `274df8d1` deployed and live app event privacy was read back. DNT/GPC
+browsers must not initialize PostHog or see the prompt. An authenticated
+completed-scan display and response remain unverified. Survey responses are
+feedback, not independent finding verification.
