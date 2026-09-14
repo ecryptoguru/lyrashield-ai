@@ -241,6 +241,7 @@ describe("marketing SEO metadata", () => {
     expect(base).toContain("disable_scroll_properties: false")
     expect(base).toContain("if (posthogKey && !shouldOptOut())")
     expect(base).toContain('posthog.capture("$pageview"')
+    expect(base).toContain('send_instantly: true, transport: "sendBeacon"')
     expect(base).toContain("privacyBoundedPageUrl")
     expect(base).toContain("before_send:")
     expect(base).toContain('"$current_url", "$referrer", "$initial_referrer", "referrer"')
