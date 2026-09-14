@@ -185,7 +185,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
           const url = new URL(value)
           return `${url.origin}${url.pathname}`
         } catch {
-          return value
+          return undefined
         }
       }
 
@@ -205,7 +205,14 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
               before_send: (event) => {
                 if (!event) return null
 
-                for (const property of ["$current_url", "$referrer", "$initial_referrer", "referrer"]) {
+                for (const property of [
+                  "$current_url",
+                  "$referrer",
+                  "$initial_referrer",
+                  "$session_entry_url",
+                  "$session_entry_referrer",
+                  "referrer",
+                ]) {
                   event.properties[property] = withoutQueryOrFragment(event.properties[property])
                 }
 

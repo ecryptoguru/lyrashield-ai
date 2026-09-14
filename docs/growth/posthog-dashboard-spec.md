@@ -23,6 +23,12 @@ person. The email-only `account_created` event is diagnostic, not the all-method
 signup conversion numerator. The checkout-return panel reports browser flow
 only; `outcome=success` is not payment or entitlement proof.
 
+The pinned [growth dashboard](https://us.posthog.com/project/605869/dashboard/2095018)
+currently has three verified panels: marketing CTA event rate, daily landing
+views and CTA clicks, and site pageviews. These counts include setup visits.
+Add the remaining product funnel panels only after their events arrive from
+real user flows; zero or missing events are not conversion evidence.
+
 ## Durable admin panels
 
 Use server-derived `AccountAcquisition`/User and BillingAccount data for
@@ -36,11 +42,11 @@ permissions are reviewed.
 
 ## Optional assessment feedback
 
-The project has a draft, one-time, two-question survey for completed
+The project has a [one-time, two-question survey](https://us.posthog.com/project/605869/surveys/01a0a038-8708-0000-65d6-111a067d7aee) for completed
 `/dashboard/scans/` results pages. Target the `#scan-results-ready` element,
 which appears only when a scan completes. It asks for a usefulness rating
-(1–5) and one improvement category. It has no
-free-text answer, account linkage, target URL, or finding detail. Keep it draft
+(1–5) and one improvement category. It has no free-text answer, account
+linkage, target URL, or finding detail. Keep it draft
 until the shared project key, privacy notice, and results-page selector are
 deployed and read back. DNT/GPC browsers must not initialize PostHog or see the
 prompt. Survey responses are feedback, not independent finding verification.

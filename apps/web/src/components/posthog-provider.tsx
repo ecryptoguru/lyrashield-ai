@@ -3,8 +3,20 @@
 import { useEffect, type ReactNode } from "react"
 import { analyticsOptedOut, flushQueuedAnalytics } from "@/lib/analytics"
 
-const URL_PROPERTIES = ["$current_url", "$referrer", "$initial_referrer", "referrer"]
-const PATH_PROPERTIES = ["$pathname", "$prev_pageview_pathname", "$prev_pageview_url"]
+const URL_PROPERTIES = [
+  "$current_url",
+  "$referrer",
+  "$initial_referrer",
+  "$session_entry_url",
+  "$session_entry_referrer",
+  "referrer",
+]
+const PATH_PROPERTIES = [
+  "$pathname",
+  "$prev_pageview_pathname",
+  "$prev_pageview_url",
+  "$session_entry_pathname",
+]
 
 export function privacyBoundedPostHogEvent<T extends { properties: Record<string, unknown> }>(
   event: T

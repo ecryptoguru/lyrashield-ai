@@ -244,7 +244,9 @@ describe("marketing SEO metadata", () => {
     expect(base).toContain('send_instantly: true, transport: "sendBeacon"')
     expect(base).toContain("privacyBoundedPageUrl")
     expect(base).toContain("before_send:")
-    expect(base).toContain('"$current_url", "$referrer", "$initial_referrer", "referrer"')
+    expect(base).toContain('"$session_entry_url"')
+    expect(base).toContain('"$session_entry_referrer"')
+    expect(base).toContain("return undefined")
     expect(base).not.toContain("$current_url: location.href")
   })
 
