@@ -239,7 +239,8 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
             document.querySelectorAll("[data-cta-id]").forEach((el) => {
               el.addEventListener("click", () => {
                 const ctaId = el.getAttribute("data-cta-id")
-                if (ctaId) posthog.capture("cta_click", { cta_id: ctaId })
+                if (ctaId)
+                  posthog.capture("cta_click", { cta_id: ctaId }, { send_instantly: true, transport: "sendBeacon" })
               })
             })
 
