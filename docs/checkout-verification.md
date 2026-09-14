@@ -5,7 +5,8 @@
 
 ## Current state (read back 2026-09-14)
 
-- Azure app revision `lyrashield-app--0000357` has
+- Azure app revision `lyrashield-app--0000358` (release `34842662910`, product
+  `9cde77d2`, 100% traffic) has
   `POLAR_BILLING_ADMISSION=public` and `RAZORPAY_BILLING_ADMISSION=public`;
   both Local admissions are `off` and the canary allowlist is empty. Refresh
   deployed configuration before each run. An admission change requires an

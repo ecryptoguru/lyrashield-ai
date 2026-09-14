@@ -295,6 +295,8 @@ Primary locations:
 - `packages/billing/src/usage`: balance, meter, grants, packs, expiry, overage, refund.
 - `packages/billing/src/entitlements.ts`: scan/target admission.
 - `apps/web/src/app/billing`: checkout, webhook, portal, UI.
+- `apps/worker/src/operations/verify-checkout-readiness.ts`: read-only Cloud/Local admission, credential, and catalog preflight. It does not prove a live charge.
+- `apps/web/src/lib/account-acquisition.ts` and `apps/web/src/lib/growth-metrics.ts`: first-touch account acquisition under account RLS and server-derived paid-account metrics; platform administrators are excluded from the paid aggregate.
 
 Billing webhook inserts `WebhookEvent` before synchronous Track A/B/C processing. Money uses `Decimal(19,4)`, never Float. Usage, pack purchase, subscription, refund, commission, and payout operations are idempotent. Agent-minute recording and FIFO pack debit share one workspace+account advisory-locked serializable transaction; each tick debits only its incremental spill beyond the monthly pool, and conditional pack updates prevent negative balances.
 
@@ -464,6 +466,7 @@ Current command output is authoritative; never copy historical test counts forwa
 - Both administrators acknowledged the Azure test notification. The controlled orphan drill failed synthetic scan `cmta574d50004fef1nbydufai` as `QUEUE_ORPHANED` without execution or replay, then restored the exact worker and reconciled both queues to zero.
 - Exact-two preflight `32925726620` and apply `32925979621` passed. Both operators then completed independent Google-plus-TOTP browser proof across every bounded admin destination; unauthenticated, bearer-only, and workspace-header-only requests remained denied.
 - Production includes PR #432 Redis/egress efficiency and PR #450 secure scan-owned checkout recovery. Provider catalog/webhook readiness was observed separately on 2026-08-26; deployment still does not prove hosted checkout or entitlement/usage events. The isolated billing test deployment, its application exception, and its Azure/GitHub control plane were removed on 2026-09-08 after the accepted provider receipts were retained.
+- PR #677 (`9cde77d2`) deployed through release `34842662910` on 2026-09-14. The release applied the account-acquisition migration, passed candidate and production smoke, and promoted worker digest `sha256:bf87b85d6fe93bfa4fa7178e0ec52f0b9dfefd6537663294e83e8fc2399b62da`. Direct Azure readback found app `lyrashield-app--0000358`, scanner `lyrashield-scanner--0000333`, and egress proxy `lyrashield-egress-proxy--0000199`, each at 100% traffic. Cloud billing admission remained public on both rails; Local remained off. This is deployment and configuration evidence, not live payment proof.
 
 ### Current Standard scan proof
 

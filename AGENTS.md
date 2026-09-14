@@ -23,7 +23,10 @@ Repository ownership:
 
 Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not rename `@lyrashield/*` or `LYRASHIELD_*` without founder approval.
 
-## Current verified state — 2026-09-11
+## Current verified state — 2026-09-14
+
+- PR #677 merged growth attribution and checkout-readiness work into main `9cde77d2`. It adds account-owned first-touch acquisition under forced RLS and user-delete cascade, DNT/GPC opt-out, corrected 30-day cancellation counting, and a read-only checkout configuration verifier. Main CI `34841775897` and production release `34842662910` passed on the merged SHA. The release applied migration `20260914000000_account_acquisition`, passed candidate and production smoke, and promoted worker digest `sha256:bf87b85d6fe93bfa4fa7178e0ec52f0b9dfefd6537663294e83e8fc2399b62da`; no live payment proof followed.
+- Direct Azure readback on 2026-09-14 found app `lyrashield-app--0000358`, scanner `lyrashield-scanner--0000333`, and egress proxy `lyrashield-egress-proxy--0000199` on `9cde77d2`, each at 100% traffic. Polar and Razorpay Cloud purchase admissions were both `public`, both Local admissions `off`, and the canary allowlist empty. Live `/api/ready/scans` returned `200` with worker ready. `docs/checkout-verification.md` is the controlled canary/live runbook. Refresh deployed flags before any action. The protected Cloud-admission workflow changes both providers together.
 
 - Open beta with open registration at `https://app.lyrashieldai.com/sign-up`; never call it pre-launch or a waitlist.
 - Marketing, passive Lite Scanner, authenticated app origin, Cloudflare bindings, TLS, sitemap/robots/`llms.txt`, security headers, and open-registration CTAs are live.
@@ -73,7 +76,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 
 - Trademark clearance.
 - Public paid-launch timing and publishable pricing.
-- Enable production Polar/Razorpay purchase admissions.
+- Confirm intended current public Cloud-admission posture and authorize each live checkout/refund proof; Local admissions remain off.
 - Provider/model and target for first Deep/Terra acceptance.
 
 ## Non-negotiable implementation rules

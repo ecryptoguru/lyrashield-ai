@@ -6,7 +6,7 @@ sequential (before/after) unless a flag mechanism is added.
 
 ## EXP-001 — Hero task-oriented CTAs
 
-- **Status:** candidate in working tree (in-place; no flag)
+- **Status:** merged in PR #677 (`9cde77d2`) and deployed in production release `34842662910`; measured outcome pending (in-place; no flag)
 - **Surface:** `apps/marketing/src/components/landing/PremiumHero.astro`
 - **Hypothesis:** task-oriented CTAs ("Review my app" + secondary "Try free
   Lite Check") convert to `account_created` and `first_run_started` better than
@@ -22,7 +22,7 @@ sequential (before/after) unless a flag mechanism is added.
   (`scan_started`), agent-page CTR. Marketing and app anonymous device IDs are
   not assumed to join across origins.
 - **Comparison:** sequential vs prior `premium-hero-create-account` window.
-- **Decision rule:** keep if account_created per landing_view does not regress
+- **Decision rule:** keep if durable attributed account creation per landing_view does not regress
   and first-run activation rises; revisit if lite-check cannibalization drops
   signups >15% without activation gain.
 
