@@ -9,6 +9,7 @@ describe("privacyBoundedMarketingEvent", () => {
         $session_entry_url: "https://example.test/path?secret=1#fragment",
         $session_entry_referrer: "https://example.test/path?secret=1#fragment",
         $initial_referrer: "/relative?secret=1",
+        $referrer: "file:///private/secret.txt",
         cta_id: "hero",
       },
     })

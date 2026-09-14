@@ -15,6 +15,10 @@ export function privacyBoundedMarketingEvent<T extends { properties: Record<stri
     if (typeof value !== "string") continue
     try {
       const url = new URL(value)
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        delete event.properties[property]
+        continue
+      }
       event.properties[property] = `${url.origin}${url.pathname}`
     } catch {
       delete event.properties[property]
