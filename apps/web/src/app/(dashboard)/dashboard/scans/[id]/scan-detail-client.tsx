@@ -829,7 +829,10 @@ export function ScanDetailClient({
               </Button>
             </div>
           )}
-          <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            id={scan.status === "COMPLETED" ? "scan-results-ready" : undefined}
+            className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-4"
+          >
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <Clock className="h-4 w-4" aria-hidden="true" />
