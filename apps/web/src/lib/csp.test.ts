@@ -165,6 +165,12 @@ describe("CSP nonce proxy", () => {
     expect(csp).toContain("https://api.razorpay.com")
   })
 
+  it("allows the configured US PostHog ingestion and assets hosts", async () => {
+    const csp = (await proxy(makeRequest("/dashboard"))).headers.get("Content-Security-Policy")!
+    expect(csp).toContain("https://us-assets.i.posthog.com")
+    expect(csp).toContain("connect-src 'self' https://api.razorpay.com https://us.i.posthog.com")
+  })
+
   it("allows only Razorpay checkout frames needed by subscription management", async () => {
     const res = await proxy(makeRequest("/dashboard/billing"))
     const csp = res.headers.get("Content-Security-Policy")!
