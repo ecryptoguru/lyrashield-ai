@@ -412,7 +412,6 @@ const envSchema = z
     MYRA_AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
     // Fallback chat deployment when MYRA_MODEL_FAST/DEEP are unset.
     MYRA_AZURE_OPENAI_DEPLOYMENT: z.string().optional().or(z.literal("")),
-    MYRA_AZURE_API_VERSION: z.string().optional().or(z.literal("")),
     // Model deployment names (Azure OpenAI/Foundry). Optional until generation
     // is enabled; the service fails closed when unset.
     MYRA_MODEL_FAST: z.string().optional().or(z.literal("")),

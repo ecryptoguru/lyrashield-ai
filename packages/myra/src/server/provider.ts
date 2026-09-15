@@ -180,17 +180,20 @@ export class AzureProvider implements ModelProvider {
     const deployment =
       (input.tier === "deep" ? process.env.MYRA_MODEL_DEEP : process.env.MYRA_MODEL_FAST) ??
       process.env.MYRA_AZURE_OPENAI_DEPLOYMENT
-    const apiVersion = process.env.MYRA_AZURE_API_VERSION ?? "2024-10-21"
     if (!endpoint || !apiKey || !deployment) {
       throw err("PROVIDER_ERROR", "Generation provider is not configured.")
     }
+    // v1 GA surface: works on both legacy `*.openai.azure.com` and Foundry
+    // `*.services.ai.azure.com` endpoints — the deployment goes in the body's
+    // `model` field and no dated api-version is required.
     const res = await fetch(
-      `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`,
+      `${endpoint.replace(/\/$/, "")}/openai/v1/chat/completions`,
       {
         method: "POST",
         signal: AbortSignal.timeout(30_000),
         headers: { "content-type": "application/json", "api-key": apiKey },
         body: JSON.stringify({
+          model: deployment,
           messages: [
             { role: "system", content: input.system },
             ...input.messages.map((m) => ({ role: m.role, content: m.content })),
