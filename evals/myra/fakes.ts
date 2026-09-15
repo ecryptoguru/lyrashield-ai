@@ -218,7 +218,7 @@ export class FakeTable<T extends Row = Row> {
       ...q.data,
       createdAt: (q.data.createdAt as Date) ?? now,
       updatedAt: (q.data.updatedAt as Date) ?? now,
-    } as T
+    } as unknown as T
     this.rows.set(row.id, row)
     return project(row, q.select)
   }
@@ -230,7 +230,7 @@ export class FakeTable<T extends Row = Row> {
   }): Promise<Row> {
     const found = await this.findUnique({ where: q.where })
     if (!found) throw new Error("FakeMyraStore: update target not found")
-    const row = this.rows.get(found.id)!
+    const row = this.rows.get(found.id)! as unknown as Record<string, unknown>
     for (const [k, v] of Object.entries(q.data)) {
       if (isPlainObject(v) && typeof (v as { increment?: unknown }).increment === "number") {
         row[k] = (Number(row[k]) || 0) + (v as { increment: number }).increment
@@ -239,21 +239,22 @@ export class FakeTable<T extends Row = Row> {
       }
     }
     row.updatedAt = new Date()
-    return project(row, q.select)
+    return project(row as T, q.select)
   }
 
   async updateMany(q: { where?: Where; data: Record<string, unknown> }): Promise<{ count: number }> {
     let count = 0
     for (const row of this.rows.values()) {
       if (!rowMatches(row, q.where)) continue
+      const r = row as unknown as Record<string, unknown>
       for (const [k, v] of Object.entries(q.data)) {
         if (isPlainObject(v) && typeof (v as { increment?: unknown }).increment === "number") {
-          row[k] = (Number(row[k]) || 0) + (v as { increment: number }).increment
+          r[k] = (Number(r[k]) || 0) + (v as { increment: number }).increment
         } else {
-          row[k] = v
+          r[k] = v
         }
       }
-      row.updatedAt = new Date()
+      r.updatedAt = new Date()
       count++
     }
     return { count }

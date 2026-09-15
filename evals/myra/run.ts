@@ -352,10 +352,10 @@ async function loadPipeline(): Promise<PipelineStatus> {
           conversationId: args.conversationId,
           workspaceId: args.workspaceId,
           deps: args.deps,
-        },
-        args.proposalId,
-        executor,
-        args.db
+        } as never,
+        args.proposalId as never,
+        executor as never,
+        args.db as never
       )
     }
   } else {
@@ -369,29 +369,32 @@ async function loadPipeline(): Promise<PipelineStatus> {
   const svcSuggest = (mod.suggest ?? mod.handleSuggest ?? mod.instantSuggest) as AnyFn | undefined
   if (typeof svcSuggest === "function" && svcSuggest.length >= 5) {
     bound.push("suggest(db-injectable)")
-    suggest = async (a) =>
-      svcSuggest(
+    suggest = async (a) => {
+      const p = a.principal as MyraPrincipal
+      return svcSuggest(
         {
-          principal: a.principal,
-          workspaceId: a.principal.kind === "user" ? (a.principal.workspaceId ?? null) : null,
-          role: a.principal.kind === "user" ? a.principal.role : null,
+          principal: p,
+          workspaceId: p.kind === "user" ? (p.workspaceId ?? null) : null,
+          role: p.kind === "user" ? p.role : null,
         } as never,
         a.text as never,
         a.surface as never,
         (a.routeContext ?? undefined) as never,
         { db: a.db } as never
       )
+    }
   } else if (typeof mod.runInstantSuggest === "function") {
     bound.push("runInstantSuggest")
     const fn = mod.runInstantSuggest
     const kb = mod.searchKnowledge
     suggest = async (a) => {
+      const p = a.principal as MyraPrincipal
       const toolCtx = {
-        principal: a.principal,
+        principal: p,
         surface: a.surface,
         conversationId: null,
-        workspaceId: a.principal.kind === "user" ? (a.principal.workspaceId ?? null) : null,
-        role: a.principal.kind === "user" ? a.principal.role : null,
+        workspaceId: p.kind === "user" ? (p.workspaceId ?? null) : null,
+        role: p.kind === "user" ? p.role : null,
         routeContext: a.routeContext,
         db: a.db,
       }
@@ -433,7 +436,10 @@ async function loadPipeline(): Promise<PipelineStatus> {
         a.text as never,
         {
           limit: 3,
-          role: a.principal.kind === "user" ? a.principal.role : null,
+          role:
+            (a.principal as MyraPrincipal).kind === "user"
+              ? (a.principal as { role?: string | null }).role
+              : null,
         } as never,
         a.db as never
       )) as { entryId: string; title: string; snippet: string; sourceUrl: string | null }[]).map(
@@ -955,6 +961,8 @@ async function main(): Promise<number> {
   for (const file of files) {
     let raw: unknown
     try {
+      // Scenario filenames come from the on-disk corpus directory listing.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       raw = JSON.parse(readFileSync(join(SCENARIO_DIR, file), "utf8"))
     } catch (err) {
       results.push({
