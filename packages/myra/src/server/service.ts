@@ -60,8 +60,10 @@ function toolContext(
 ): MyraToolContext {
   return {
     principal: ctx.principal,
+    // Anonymous principals are clamped to MARKETING — a claimed DASHBOARD
+    // surface must never widen a public session into app-surface starters.
     surface:
-      surface ?? (ctx.principal.kind === "user" ? "DASHBOARD" : "MARKETING"),
+      ctx.principal.kind === "user" ? (surface ?? "DASHBOARD") : "MARKETING",
     conversationId,
     workspaceId: ctx.workspaceId,
     role: ctx.role,
@@ -141,9 +143,11 @@ export async function* handleMessage(
 
   let conversation
   try {
+    const clampedSurface =
+      ctx.principal.kind === "user" ? input.surface : "MARKETING"
     conversation = input.conversationId
       ? await loadOwnedConversation(ctx, input.conversationId)
-      : await createConversation(ctx, input.surface, input.routeContext)
+      : await createConversation(ctx, clampedSurface, input.routeContext)
   } catch (e) {
     yield { type: "error", error: toMyraError(e) }
     return
@@ -245,7 +249,13 @@ export async function* handleMessage(
 export async function confirmProposal(
   ctx: ResolvedMyraRequest,
   proposalId: string
-): Promise<{ status: string; result: unknown; component: MyraComponent }> {
+): Promise<{
+  status: string
+  result: unknown
+  /** Private values (e.g. manage tokens) — returned to the caller only, never persisted. */
+  privateResult?: Record<string, unknown>
+  component: MyraComponent
+}> {
   if (
     process.env.MYRA_WRITES_DISABLED === "1" ||
     process.env.MYRA_WRITES_DISABLED === "true"
@@ -298,7 +308,12 @@ export async function confirmProposal(
       metadata: { operationName: proposal.operationName },
     }
   )
-  return { status: outcome.status, result: outcome.result, component }
+  return {
+    status: outcome.status,
+    result: outcome.result,
+    privateResult: outcome.privateResult,
+    component,
+  }
 }
 
 export async function cancelProposal(
@@ -595,7 +610,12 @@ export async function operatorReply(
   const supportCase = await db.supportCase.findUnique({ where: { id: caseId } })
   if (!supportCase) throw err("NOT_FOUND", "Case not found.")
   const reply = await db.supportCaseReply.create({
-    data: { caseId, authorType: "OPERATOR", authorUserId: operatorId, body },
+    data: {
+      caseId,
+      authorType: "OPERATOR",
+      authorUserId: operatorId,
+      body: screenSecrets(body).text,
+    },
     select: { id: true, createdAt: true },
   })
   await db.supportCase.update({

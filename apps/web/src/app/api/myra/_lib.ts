@@ -250,8 +250,18 @@ export function myraSseResponse(
   request: Request,
   events: AsyncIterable<MyraStreamEvent>
 ): Response {
+  const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      // Keepalive comment every 15s — long model calls otherwise risk idle
+      // cutoffs at intermediary proxies.
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(`: hb\n\n`))
+        } catch {
+          /* stream closed */
+        }
+      }, 15_000)
       try {
         for await (const event of events) {
           controller.enqueue(encodeEvent(event))
@@ -263,6 +273,7 @@ export function myraSseResponse(
         }
         controller.enqueue(encodeEvent({ type: "error", error: mapped }))
       } finally {
+        clearInterval(heartbeat)
         controller.close()
       }
     },

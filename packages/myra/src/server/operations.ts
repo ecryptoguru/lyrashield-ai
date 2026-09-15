@@ -139,7 +139,11 @@ export async function confirm(
   proposalId: string,
   executor: OperationExecutor,
   db: MyraDb = prisma
-): Promise<{ status: MyraOperationStatus; result: unknown }> {
+): Promise<{
+  status: MyraOperationStatus
+  result: unknown
+  privateResult?: Record<string, unknown>
+}> {
   // Phase 1 (owner-scoped tx): verify + claim EXECUTING.
   const payload = await withOwnerScope(
     ctx.principal,
@@ -151,21 +155,19 @@ export async function confirm(
       }
       // Re-validate workspace membership at execution time: a role revoked
       // (or removed) between proposal and confirmation must not execute the
-      // write. WorkspaceMember is intentionally unscoped at the DB level;
-      // principal.role is re-resolved per request, so null means revoked.
+      // write. The member row is the authority — principal.role is
+      // contractually null on MyraPrincipalUser (the resolved role lives on
+      // ResolvedMyraRequest), so do not read it here.
       if (proposal.workspaceId && ctx.principal.kind === "user") {
-        const roleRevoked = ctx.principal.role === null
-        const member = roleRevoked
-          ? null
-          : await tx.workspaceMember.findUnique({
-              where: {
-                workspaceId_userId: {
-                  workspaceId: proposal.workspaceId,
-                  userId: ctx.principal.accountId,
-                },
-              },
-              select: { status: true },
-            })
+        const member = await tx.workspaceMember.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId: proposal.workspaceId,
+              userId: ctx.principal.accountId,
+            },
+          },
+          select: { status: true },
+        })
         if (!member || member.status !== "active") {
           await tx.myraOperation.updateMany({
             where: { id: proposalId, status: "AWAITING_CONFIRMATION" },
@@ -254,10 +256,10 @@ export async function confirm(
   )
   return {
     status: "COMPLETED",
-    result:
-      outcome.privateResult !== undefined
-        ? { result: outcome.result, ...outcome.privateResult }
-        : outcome.result,
+    result: outcome.result,
+    // Caller-only values (manage tokens, one-time links) — never persisted
+    // on the operation row, never merged into the stored result.
+    privateResult: outcome.privateResult,
   }
 }
 

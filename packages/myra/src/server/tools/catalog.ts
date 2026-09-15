@@ -24,7 +24,7 @@ export async function runReadProductCatalog(
     plans: CLOUD_PLANS.map((p) => ({
       id: p.id,
       name: p.name,
-      monthlyUsd: p.selfServe || p.id === "TRIAL" ? p.price.usd.monthly : p.price.usd.monthly || null,
+      monthlyUsd: p.price.usd.monthly || null,
       monthlyInr: p.price.inr.monthly || null,
       agentMinutes: p.agentMinutes || null,
       targetCaps: p.targetCaps || null,

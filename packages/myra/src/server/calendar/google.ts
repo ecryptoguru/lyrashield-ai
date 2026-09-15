@@ -32,7 +32,14 @@ function googleEnv(): GoogleEnv | null {
   }
 }
 
+let cachedToken: { token: string; expiresAt: number } | null = null
+
 async function accessToken(env: GoogleEnv): Promise<string> {
+  // Refresh tokens mint 1-hour access tokens; cache with a 5-minute margin so
+  // each calendar call doesn't pay a token round-trip.
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 5 * 60_000) {
+    return cachedToken.token
+  }
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     signal: AbortSignal.timeout(10_000),
@@ -45,8 +52,12 @@ async function accessToken(env: GoogleEnv): Promise<string> {
     }),
   })
   if (!res.ok) throw new MyraServiceError("PROVIDER_ERROR", "Calendar auth failed.")
-  const body = (await res.json()) as { access_token?: string }
+  const body = (await res.json()) as { access_token?: string; expires_in?: number }
   if (!body.access_token) throw new MyraServiceError("PROVIDER_ERROR", "Calendar auth failed.")
+  cachedToken = {
+    token: body.access_token,
+    expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
+  }
   return body.access_token
 }
 

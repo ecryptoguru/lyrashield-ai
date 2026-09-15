@@ -36,9 +36,27 @@ export interface LoopArgs {
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]{2,}/
 const NAME_RE = /(?:my name is|i am|i'm|this is)\s+([A-Za-z][A-Za-z .'-]{1,60})/i
 
-/** References to resources that may not belong to the caller. */
-const FOREIGN_RESOURCE_RE =
-  /\b(ws_[a-z0-9_]+|another (workspace|account|user|org)|other (workspace|account|user|org)s?'?s?\b|their (workspace|account|plan|sponsor|billing|scan)|someone else'?s)\b/i
+/**
+ * Foreign-resource asks. Deliberately narrow: "add another user to my
+ * workspace" or "switch to another account" are legitimate self-service
+ * requests — the pattern only fires on possessive third-party phrasing
+ * (their/someone else's/another workspace's) attached to a data noun, or an
+ * explicit `ws_*` id that isn't the caller's own.
+ */
+const FOREIGN_ID_RE = /\bws_[a-z0-9_]+\b/gi
+const FOREIGN_ASK_RE =
+  /\b(their|someone else'?s|another|other)\s+(workspace|account|org|user'?s?|plan'?s?|sponsor'?s?)\b[^.?\n]{0,80}\b(data|scan|result|finding|plan|billing|sponsor|case|booking|usage|minutes|detail|status)\b/i
+const POSSESSIVE_FOREIGN_RE =
+  /\b(their|someone else'?s)\s+(workspace|account|plan|sponsor|billing|scan|booking|case)\b/i
+
+function isForeignResourceAsk(text: string, ownWorkspaceId: string | null): boolean {
+  for (const m of text.matchAll(FOREIGN_ID_RE)) {
+    const id = m[0]
+    if (ownWorkspaceId && id !== ownWorkspaceId) return true
+    if (!ownWorkspaceId) return true // anonymous callers have no workspace
+  }
+  return FOREIGN_ASK_RE.test(text) || POSSESSIVE_FOREIGN_RE.test(text)
+}
 
 export function classifyIntent(text: string, isUser: boolean): string {
   const t = text.toLowerCase()
@@ -140,26 +158,15 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
   // Cross-boundary asks are denied before any tool runs — a workspace id the
   // caller named that isn't their own, or "their/another workspace's" state.
   // The denial never confirms whether the target exists.
-  if (FOREIGN_RESOURCE_RE.test(text)) {
-    const namedIds = [...text.matchAll(/\bws_[a-z0-9_]+\b/gi)].map((m) => m[0])
-    const foreignId = namedIds.some(
-      (id) => ctx.workspaceId && id !== ctx.workspaceId
-    )
-    if (
-      foreignId ||
-      /another (workspace|account|user|org)|other (workspace|account|user|org)s?'?s?\b|their (workspace|account|plan|sponsor|billing|scan)|someone else'?s/i.test(
-        text
-      )
-    ) {
-      yield {
-        type: "error",
-        error: {
-          code: "FORBIDDEN",
-          message: "I can only look at your own workspace and account.",
-        },
-      }
-      return
+  if (isForeignResourceAsk(text, ctx.workspaceId)) {
+    yield {
+      type: "error",
+      error: {
+        code: "FORBIDDEN",
+        message: "I can only look at your own workspace and account.",
+      },
     }
+    return
   }
 
   const intent = classifyIntent(text, isUser)

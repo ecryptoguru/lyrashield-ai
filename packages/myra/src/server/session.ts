@@ -47,12 +47,18 @@ export async function verifyPublicToken(
   const now = new Date()
   const row = await db.myraPublicSession.findUnique({
     where: { tokenHash },
-    select: { id: true, expiresAt: true },
+    select: { id: true, expiresAt: true, lastSeenAt: true },
   })
   if (!row || row.expiresAt <= now) return null
-  await db.myraPublicSession.update({
-    where: { id: row.id },
-    data: { lastSeenAt: now, expiresAt: new Date(now.getTime() + SESSION_TTL_MS) },
-  })
+  // Slide the expiry at most once an hour — the session stays valid either
+  // way; per-request UPDATEs are pure churn on the verify hot path.
+  const stale =
+    !row.lastSeenAt || now.getTime() - row.lastSeenAt.getTime() > 60 * 60 * 1000
+  if (stale) {
+    await db.myraPublicSession.update({
+      where: { id: row.id },
+      data: { lastSeenAt: now, expiresAt: new Date(now.getTime() + SESSION_TTL_MS) },
+    })
+  }
   return row.id
 }

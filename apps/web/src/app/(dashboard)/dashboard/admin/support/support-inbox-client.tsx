@@ -121,6 +121,8 @@ async function readError(res: Response): Promise<never> {
 export function SupportInbox() {
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "">("")
   const [rows, setRows] = useState<CaseRow[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [loadingList, setLoadingList] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -134,24 +136,35 @@ export function SupportInbox() {
 
   // setState only inside promise callbacks — an effect may call these, but
   // never synchronously set state (react-hooks/set-state-in-effect).
-  const loadList = useCallback(() => {
-    const qs = statusFilter ? `?status=${statusFilter}` : ""
-    return fetch(`/api/myra/operator/cases${qs}`, { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) await readError(res)
-        const body = (await res.json()) as {
-          data?: CaseRow[] | { cases?: CaseRow[] }
-        }
-        const data = body.data
-        setRows(Array.isArray(data) ? data : (data?.cases ?? []))
-        setListError(null)
-      })
-      .catch((e) => {
-        setListError(e instanceof Error ? e.message : "Could not load cases.")
-        setRows([])
-      })
-      .finally(() => setLoadingList(false))
-  }, [statusFilter])
+  const loadList = useCallback(
+    (cursor?: string) => {
+      const params = new URLSearchParams()
+      if (statusFilter) params.set("status", statusFilter)
+      if (cursor) params.set("cursor", cursor)
+      const qs = params.toString()
+      return fetch(`/api/myra/operator/cases${qs ? `?${qs}` : ""}`, { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) await readError(res)
+          const body = (await res.json()) as {
+            data?: CaseRow[] | { cases?: CaseRow[]; nextCursor?: string | null }
+          }
+          const data = body.data
+          const page = Array.isArray(data) ? data : (data?.cases ?? [])
+          setNextCursor(Array.isArray(data) ? null : (data?.nextCursor ?? null))
+          setRows((prev) => (cursor ? [...prev, ...page] : page))
+          setListError(null)
+        })
+        .catch((e) => {
+          setListError(e instanceof Error ? e.message : "Could not load cases.")
+          if (!cursor) setRows([])
+        })
+        .finally(() => {
+          setLoadingList(false)
+          setLoadingMore(false)
+        })
+    },
+    [statusFilter]
+  )
 
   const loadDetail = useCallback((id: string) => {
     return fetch(`/api/myra/operator/cases/${id}`, { cache: "no-store" })
@@ -334,6 +347,20 @@ export function SupportInbox() {
             ))}
           </ul>
         )}
+
+        {nextCursor ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={loadingMore}
+            onClick={() => {
+              setLoadingMore(true)
+              void loadList(nextCursor)
+            }}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </Button>
+        ) : null}
       </section>
 
       <section aria-label="Case detail" aria-live="off">

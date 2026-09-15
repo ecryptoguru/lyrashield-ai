@@ -664,7 +664,14 @@ async function runAction(
       return
     }
     case "revokeRole": {
-      if (principal.kind === "user") principal.role = null
+      // Model revocation faithfully: the member row is the authority — clear
+      // the resolved role AND deactivate membership (revoked in the DB).
+      if (principal.kind === "user") {
+        principal.role = null
+        for (const m of store.workspaceMember.rows.values()) {
+          if (m.userId === principal.accountId) m.status = "revoked"
+        }
+      }
       return
     }
     case "switchWorkspace": {

@@ -44,12 +44,9 @@ async function loadOwnedFlowSession(
           : ctx.principal.kind === "anonymous" &&
             conversation?.publicSessionId === ctx.principal.publicSessionId
       if (!owns) throw err("FORBIDDEN", "This flow belongs to a different session.")
-      // A flow never survives a workspace switch without re-validation.
-      if (
-        conversation?.workspaceId &&
-        ctx.workspaceId &&
-        conversation.workspaceId !== ctx.workspaceId
-      ) {
+      // A flow never survives a workspace switch — including losing workspace
+      // access entirely (ctx.workspaceId null) — without re-validation.
+      if (conversation?.workspaceId && conversation.workspaceId !== ctx.workspaceId) {
         await tx.myraFlowSession.update({
           where: { id: session.id },
           data: { status: "ABANDONED" },
@@ -157,11 +154,7 @@ export async function runStartGuidedFlow(
         where: { id: session.conversationId },
         select: { workspaceId: true },
       })
-      if (
-        conversation?.workspaceId &&
-        ctx.workspaceId &&
-        conversation.workspaceId !== ctx.workspaceId
-      ) {
+      if (conversation?.workspaceId && conversation.workspaceId !== ctx.workspaceId) {
         await tx.myraFlowSession.update({
           where: { id: session.id },
           data: { status: "ABANDONED" },

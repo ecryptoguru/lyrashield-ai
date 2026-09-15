@@ -734,7 +734,12 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
   const send = useCallback(
     async (rawText: string) => {
       const text = rawText.trim().slice(0, MYRA_LIMITS.messageMaxChars)
-      if (!text || streamAbortRef.current) return
+      if (!text) return
+      if (streamAbortRef.current) {
+        // A turn is in flight — keep the draft, tell the user why.
+        announce("Myra is still answering — wait a moment or press Stop.")
+        return
+      }
       setSuggestions([])
       setSuggestActive(-1)
       setInput("")
@@ -745,12 +750,14 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
       announce("Message sent.")
       const abort = new AbortController()
       streamAbortRef.current = abort
+      let received = false
       try {
         for await (const ev of getClient().sendMessage({
           text,
           conversationId: conversationIdRef.current,
           signal: abort.signal,
         })) {
+          received = true
           handleEvent(ev, turnId)
         }
       } catch (err) {
@@ -759,12 +766,18 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
         } else {
           const code = (err as { code?: string }).code
           setActivity(null)
+          if (!received) {
+            // Send never reached the server — keep the draft rather than lose it.
+            setInput(text)
+          }
           updateTurn(turnId, (t) => ({
             ...t,
             error:
               code === "PROPOSAL_EXPIRED"
                 ? "That request expired — ask Myra to prepare it again."
-                : "Something went wrong. Try again or talk to a person.",
+                : !received
+                  ? "Something went wrong before Myra replied. Your message is back in the composer."
+                  : "Something went wrong. Try again or talk to a person.",
           }))
           announce("Message failed.")
         }

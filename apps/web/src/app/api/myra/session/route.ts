@@ -81,7 +81,11 @@ async function post(request: Request): Promise<Response> {
 
   try {
     const issued = await issuePublicSession(parsed.data.surface)
-    return myraOk(request, { principal: "anonymous", publicToken: issued.token })
+    return myraOk(request, {
+      principal: "anonymous",
+      publicToken: issued.token,
+      sessionId: issued.publicSessionId,
+    })
   } catch (error) {
     logger.error("Myra public session issue failed", {
       error: error instanceof Error ? error.name : "unknown_error",

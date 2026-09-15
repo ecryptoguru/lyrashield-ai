@@ -859,7 +859,13 @@ export function initMyraPanel() {
 
   async function send(text: string) {
     const trimmed = text.trim().slice(0, MYRA_LIMITS.messageMaxChars)
-    if (!trimmed || streamAbort) return
+    if (!trimmed) return
+    if (streamAbort) {
+      // A turn is in flight — keep the draft, tell the user why nothing sent.
+      announce("Myra is still answering — wait a moment or press Stop.")
+      inputEl.value = trimmed
+      return
+    }
     hideSuggest()
     inputEl.value = ""
     const turn = addTurn(trimmed)
