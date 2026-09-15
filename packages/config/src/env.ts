@@ -399,6 +399,20 @@ const envSchema = z
     // Calendar provider adapter for demo booking. "google" requires the
     // MYRA_GOOGLE_* credentials below; "mock" never touches a real calendar.
     MYRA_CALENDAR_PROVIDER: z.enum(["mock", "google"]).optional().default("mock"),
+    // Model provider: "mock" (default, deterministic local composition) or
+    // "azure" (Azure OpenAI/Foundry chat deployments). "azure" without
+    // endpoint+key fails closed.
+    MYRA_PROVIDER: z.enum(["mock", "azure"]).optional().default("mock"),
+    // Azure OpenAI/Foundry account endpoint + key. The endpoint is the
+    // account URL (https://<account>.openai.azure.com or a Foundry
+    // services endpoint); the key belongs in a secret store in deployed
+    // environments. API key auth is the v1 path — managed-identity auth can
+    // replace it without a contract change.
+    MYRA_AZURE_OPENAI_ENDPOINT: z.string().url().optional().or(z.literal("")),
+    MYRA_AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
+    // Fallback chat deployment when MYRA_MODEL_FAST/DEEP are unset.
+    MYRA_AZURE_OPENAI_DEPLOYMENT: z.string().optional().or(z.literal("")),
+    MYRA_AZURE_API_VERSION: z.string().optional().or(z.literal("")),
     // Model deployment names (Azure OpenAI/Foundry). Optional until generation
     // is enabled; the service fails closed when unset.
     MYRA_MODEL_FAST: z.string().optional().or(z.literal("")),
@@ -424,6 +438,9 @@ const envSchema = z
     MYRA_GOOGLE_CLIENT_SECRET: z.string().optional().or(z.literal("")),
     MYRA_GOOGLE_REFRESH_TOKEN: z.string().optional().or(z.literal("")),
     MYRA_GOOGLE_TOKEN_JSON: z.string().optional().or(z.literal("")),
+    // Calendar ID to book on; "primary" targets the OAuth user's primary
+    // calendar (ankit@lyrashieldai.com).
+    MYRA_GOOGLE_CALENDAR_ID: z.string().optional().or(z.literal("")),
     // Destination for support-case notifications (spec §6). Best-effort
     // wording only — no SLA is implied by configuring this.
     MYRA_SUPPORT_NOTIFY_EMAIL: z.string().optional().default("support@lyrashieldai.com"),
