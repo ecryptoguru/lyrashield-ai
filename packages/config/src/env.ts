@@ -427,9 +427,13 @@ const envSchema = z
     MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: z.enum(["0", "1"]).optional().default("0"),
     MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: z.enum(["0", "1"]).optional().default("0"),
     // Per-1K-token USD rates for the configured deployments — the monthly
-    // budget cap derives real spend from usage tokens against these.
+    // budget cap derives real spend from usage tokens against these. The
+    // generic pair prices the fast tier; MYRA_DEEP_* overrides price the
+    // deep tier (falls back to the generic pair when unset).
     MYRA_COST_PER_1K_INPUT_USD: z.string().optional().or(z.literal("")),
     MYRA_COST_PER_1K_OUTPUT_USD: z.string().optional().or(z.literal("")),
+    MYRA_DEEP_COST_PER_1K_INPUT_USD: z.string().optional().or(z.literal("")),
+    MYRA_DEEP_COST_PER_1K_OUTPUT_USD: z.string().optional().or(z.literal("")),
     // Founder-only Google Calendar OAuth for ankit@lyrashieldai.com. Refresh
     // token storage is encrypted by the service layer; TOKEN_JSON is a
     // dev-only convenience for a full provider token blob.

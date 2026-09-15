@@ -177,18 +177,21 @@ export class AzureProvider implements ModelProvider {
     }
     const endpoint = process.env.MYRA_AZURE_OPENAI_ENDPOINT
     const apiKey = process.env.MYRA_AZURE_OPENAI_API_KEY
+    const isDeep = input.tier === "deep"
     const deployment =
-      (input.tier === "deep" ? process.env.MYRA_MODEL_DEEP : process.env.MYRA_MODEL_FAST) ??
+      (isDeep ? process.env.MYRA_MODEL_DEEP : process.env.MYRA_MODEL_FAST) ??
       process.env.MYRA_AZURE_OPENAI_DEPLOYMENT
     if (!endpoint || !apiKey || !deployment) {
       throw err("PROVIDER_ERROR", "Generation provider is not configured.")
     }
     // v1 GA surface: works on both legacy `*.openai.azure.com` and Foundry
     // `*.services.ai.azure.com` endpoints — the deployment goes in the body's
-    // `model` field and no dated api-version is required.
-    const res = await fetch(
-      `${endpoint.replace(/\/$/, "")}/openai/v1/chat/completions`,
-      {
+    // `model` field and no dated api-version is required. One retry on
+    // transient 429/5xx keeps a blip from failing the whole support turn.
+    const url = `${endpoint.replace(/\/$/, "")}/openai/v1/chat/completions`
+    let res: Response | null = null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      res = await fetch(url, {
         method: "POST",
         signal: AbortSignal.timeout(30_000),
         headers: { "content-type": "application/json", "api-key": apiKey },
@@ -200,11 +203,11 @@ export class AzureProvider implements ModelProvider {
           ],
           max_completion_tokens: 4000,
         }),
-      }
-    ).catch(() => {
-      throw err("PROVIDER_ERROR", "Generation provider request failed.")
-    })
-    if (!res.ok) throw err("PROVIDER_ERROR", "Generation provider request failed.")
+      }).catch(() => null)
+      if (res && (res.ok || (res.status !== 429 && res.status < 500))) break
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 1_000))
+    }
+    if (!res?.ok) throw err("PROVIDER_ERROR", "Generation provider request failed.")
     const body = (await res.json()) as {
       choices?: { message?: { content?: string } }[]
       usage?: { prompt_tokens?: number; completion_tokens?: number }
@@ -212,10 +215,21 @@ export class AzureProvider implements ModelProvider {
     const text = body.choices?.[0]?.message?.content ?? ""
     const inTokens = body.usage?.prompt_tokens ?? 0
     const outTokens = body.usage?.completion_tokens ?? 0
-    // Cost is derived from configured per-1K rates so the monthly budget cap
+    // Cost is derived from per-tier per-1K rates so the monthly budget cap
     // actually enforces on real usage — zero here would silently bypass it.
-    const inRate = Number(process.env.MYRA_COST_PER_1K_INPUT_USD ?? 0) || 0
-    const outRate = Number(process.env.MYRA_COST_PER_1K_OUTPUT_USD ?? 0) || 0
+    // Deep-tier rates fall back to the generic pair when unset.
+    const inRate =
+      Number(
+        (isDeep ? process.env.MYRA_DEEP_COST_PER_1K_INPUT_USD : undefined) ??
+          process.env.MYRA_COST_PER_1K_INPUT_USD ??
+          0
+      ) || 0
+    const outRate =
+      Number(
+        (isDeep ? process.env.MYRA_DEEP_COST_PER_1K_OUTPUT_USD : undefined) ??
+          process.env.MYRA_COST_PER_1K_OUTPUT_USD ??
+          0
+      ) || 0
     const costUsd = (inTokens * inRate + outTokens * outRate) / 1000
     return {
       text,
