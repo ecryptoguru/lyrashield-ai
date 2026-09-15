@@ -1,6 +1,29 @@
 import { z } from "zod"
 import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
 
+/**
+ * Literal-loopback http check for bearer-grant URLs: the host must be exactly
+ * 127.0.0.1 or [::1], with an optional port and at most a bare trailing slash —
+ * no path, query, fragment or userinfo. Parsed structurally rather than by
+ * regex so the rule cannot be bypassed by crafted strings.
+ */
+function isLiteralLoopbackHttpUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw)
+    return (
+      url.protocol === "http:" &&
+      (url.hostname === "127.0.0.1" || url.hostname === "[::1]") &&
+      url.pathname === "/" &&
+      url.search === "" &&
+      url.hash === "" &&
+      url.username === "" &&
+      url.password === ""
+    )
+  } catch {
+    return false
+  }
+}
+
 const envSchema = z
   .object({
     // Database
@@ -484,7 +507,7 @@ const envSchema = z
     (val) =>
       !val.LYRASHIELD_TARGET_RELAY_URL ||
       val.LYRASHIELD_TARGET_RELAY_URL.startsWith("https://") ||
-      /^http:\/\/(?:127\.0\.0\.1|\[::1\])(?::\d+)?\/?$/.test(val.LYRASHIELD_TARGET_RELAY_URL),
+      isLiteralLoopbackHttpUrl(val.LYRASHIELD_TARGET_RELAY_URL),
     {
       path: ["LYRASHIELD_TARGET_RELAY_URL"],
       message:

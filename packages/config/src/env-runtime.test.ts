@@ -71,6 +71,19 @@ describe("runtime environment validation", () => {
     vi.resetModules()
     vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://127.0.0.1:8080")
     await expect(import("./env")).resolves.toBeDefined()
+
+    vi.resetModules()
+    vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://[::1]:8080/")
+    await expect(import("./env")).resolves.toBeDefined()
+
+    // A loopback-looking authority that is actually a remote host must fail.
+    vi.resetModules()
+    vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://127.0.0.1.evil.example")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+
+    vi.resetModules()
+    vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://user@127.0.0.1:8080")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
   })
 
   // VULN-I-001: secureCookies derives the session Secure flag from the
