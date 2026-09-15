@@ -205,6 +205,16 @@ export async function runBookDemo(
   input: unknown
 ): Promise<MyraToolResult> {
   const payload = bookDemoInput.parse(input)
+  // Fail fast at proposal time — the executor re-checks regardless.
+  const start = new Date(payload.slotStart)
+  const end = new Date(start.getTime() + D.durationMinutes * 60_000)
+  if (
+    Number.isNaN(start.valueOf()) ||
+    !isOnGrid(start, end) ||
+    start.getTime() < Date.now() + D.minNoticeHours * 3_600_000
+  ) {
+    throw err("SLOT_UNAVAILABLE", MYRA_COPY.demoConflict)
+  }
   await verifyAttendee(ctx, payload.email)
   const proposal = await createProposal(
     {
@@ -577,7 +587,7 @@ export async function runManageOwnDemo(
         operationName: "manage_own_demo",
         title: action === "cancel" ? "Cancel demo" : "Reschedule demo",
         description: `${action} booking for ${booking.startsAt.toISOString()}`,
-        payloadPreview: { bookingId, action, newSlotStart: newSlotStart ?? null },
+        payloadPreview: { bookingId: booking.id, action, newSlotStart: newSlotStart ?? null },
         expiresAt: proposal.expiresAt.toISOString(),
       },
     ],
@@ -697,14 +707,20 @@ export async function executeManageDemo(
     throw new OutcomeUnknownError(MYRA_COPY.demoUnknown)
   }
 
-  // Replacement confirmed — now release the original.
-  if (booking.providerEventId) {
-    await adapter.cancelEvent(booking.providerEventId).catch(() => {})
+  // Replacement confirmed — now release the original. A failure here must
+  // not fail the operation: the new booking is already valid; the stale
+  // original is retried by the retention/reconcile path.
+  try {
+    if (booking.providerEventId) {
+      await adapter.cancelEvent(booking.providerEventId).catch(() => {})
+    }
+    await db.demoBooking.update({
+      where: { id: booking.id },
+      data: { status: "CANCELED", canceledAt: new Date() },
+    })
+  } catch {
+    /* best-effort release — the confirmed replacement stands */
   }
-  await db.demoBooking.update({
-    where: { id: booking.id },
-    data: { status: "CANCELED", canceledAt: new Date() },
-  })
   return {
     result: {
       bookingId: newBookingId,

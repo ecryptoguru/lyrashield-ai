@@ -209,9 +209,14 @@ export class AzureProvider implements ModelProvider {
     const text = body.choices?.[0]?.message?.content ?? ""
     const inTokens = body.usage?.prompt_tokens ?? 0
     const outTokens = body.usage?.completion_tokens ?? 0
+    // Cost is derived from configured per-1K rates so the monthly budget cap
+    // actually enforces on real usage — zero here would silently bypass it.
+    const inRate = Number(process.env.MYRA_COST_PER_1K_INPUT_USD ?? 0) || 0
+    const outRate = Number(process.env.MYRA_COST_PER_1K_OUTPUT_USD ?? 0) || 0
+    const costUsd = (inTokens * inRate + outTokens * outRate) / 1000
     return {
       text,
-      usage: { inTokens, outTokens, costUsd: 0 },
+      usage: { inTokens, outTokens, costUsd },
     }
   }
 }

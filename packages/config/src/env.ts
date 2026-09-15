@@ -385,10 +385,15 @@ const envSchema = z
     // bounds model calls alongside the per-turn caps.
     MYRA_MONTHLY_BUDGET_USD: z.string().optional().or(z.literal("")),
     // Mock-calendar fault injection for tests/dev only: simulate an insert
-    // timeout (outcome_unknown reconciliation) or a permanently pending Meet
-    // conference. Never enable in production.
-    MYRA_MOCK_CALENDAR_TIMEOUT_INSERT: z.enum(["0", "1"]).optional().default("0"),
+    // timeout (outcome_unknown reconciliation), a permanently pending Meet
+    // conference, or an external slot conflict. Never enable in production.
+    MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT: z.enum(["0", "1"]).optional().default("0"),
     MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: z.enum(["0", "1"]).optional().default("0"),
+    MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: z.enum(["0", "1"]).optional().default("0"),
+    // Per-1K-token USD rates for the configured deployments — the monthly
+    // budget cap derives real spend from usage tokens against these.
+    MYRA_COST_PER_1K_INPUT_USD: z.string().optional().or(z.literal("")),
+    MYRA_COST_PER_1K_OUTPUT_USD: z.string().optional().or(z.literal("")),
     // Founder-only Google Calendar OAuth for ankit@lyrashieldai.com. Refresh
     // token storage is encrypted by the service layer; TOKEN_JSON is a
     // dev-only convenience for a full provider token blob.

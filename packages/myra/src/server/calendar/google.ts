@@ -22,7 +22,18 @@ interface GoogleEnv {
 function googleEnv(): GoogleEnv | null {
   const clientId = process.env.MYRA_GOOGLE_CLIENT_ID
   const clientSecret = process.env.MYRA_GOOGLE_CLIENT_SECRET
-  const refreshToken = process.env.MYRA_GOOGLE_REFRESH_TOKEN
+  // Dev convenience: a full OAuth token blob can stand in for the refresh env.
+  let refreshToken = process.env.MYRA_GOOGLE_REFRESH_TOKEN
+  if (!refreshToken && process.env.MYRA_GOOGLE_TOKEN_JSON) {
+    try {
+      const blob = JSON.parse(process.env.MYRA_GOOGLE_TOKEN_JSON) as {
+        refresh_token?: string
+      }
+      refreshToken = blob.refresh_token
+    } catch {
+      refreshToken = undefined
+    }
+  }
   if (!clientId || !clientSecret || !refreshToken) return null
   return {
     clientId,

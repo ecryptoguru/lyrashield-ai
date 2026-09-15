@@ -23,6 +23,25 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
   const bookingCutoff = new Date(now.getTime() - MYRA_LIMITS.bookingRetentionDays * 86_400_000)
   const opCutoff = new Date(now.getTime() - MYRA_LIMITS.conversationRetentionDays * 86_400_000)
 
+  // Expire pending confirmations past their TTL and fail EXECUTING rows
+  // wedged by a crashed process — otherwise both would linger forever.
+  await db.myraOperation.updateMany({
+    where: { status: "AWAITING_CONFIRMATION", expiresAt: { lt: now } },
+    data: { status: "EXPIRED" },
+  })
+  await db.myraOperation.updateMany({
+    where: { status: "EXECUTING", updatedAt: { lt: dayAgo } },
+    data: { status: "FAILED", error: "Execution did not finish." },
+  })
+  // A HELD booking that never resolved (process died between hold and
+  // insert) keeps holding its slot. Move it to OUTCOME_UNKNOWN — the
+  // deterministic provider event id lets reconcile sort out what happened.
+  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+  await db.demoBooking.updateMany({
+    where: { status: "HELD", createdAt: { lt: hourAgo } },
+    data: { status: "OUTCOME_UNKNOWN" },
+  })
+
   const [conversations, publicSessions, verifications, supportCases, demoBookings, operations] =
     await Promise.all([
       db.myraConversation.deleteMany({ where: { expiresAt: { lt: now } } }),
